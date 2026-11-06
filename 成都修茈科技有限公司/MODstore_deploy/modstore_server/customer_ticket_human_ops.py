@@ -15,7 +15,14 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from modstore_server.customer_issue_delivery_contract import issue_resolution, repair_verification
-from modstore_server.customer_service_tools import audit, build_action, execute_action, json_dumps, json_loads
+from modstore_server.customer_service_tools import (
+    audit,
+    begin_immediate_write,
+    build_action,
+    execute_action,
+    json_dumps,
+    json_loads,
+)
 from modstore_server.models import User
 from modstore_server.models_cs import CustomerServiceTicket
 
@@ -38,9 +45,11 @@ def _cas(
     assignee: int | None = None,
     set_assignee: bool = False,
 ) -> CustomerServiceTicket:
+    begin_immediate_write(db)
     before = str(ticket.status or "")
     if before != expected:
         raise HTTPException(409, f"工单当前是{before}，不能执行{event}")
+    expected_version = int(getattr(ticket, "lock_version", 0) or 0)
     now = datetime.now(UTC)
     history = [row for row in evidence.get("handling_history") or [] if isinstance(row, dict)]
     history.append(
@@ -60,6 +69,7 @@ def _cas(
         "status": new_status,
         "updated_at": now,
         "evidence_json": json_dumps(evidence),
+        "lock_version": expected_version + 1,
     }
     if set_assignee:
         values["assigned_admin_id"] = assignee
@@ -68,6 +78,7 @@ def _cas(
         .filter(
             CustomerServiceTicket.id == ticket.id,
             CustomerServiceTicket.status == expected,
+            CustomerServiceTicket.lock_version == expected_version,
         )
         .update(values, synchronize_session=False)
     )
@@ -194,7 +205,13 @@ def request_sensitive_action(
         action_type="ticket.apply_change",
         target_type="ticket",
         target_id="gated",
-        request={"change": change[:200], "reason": reason[:2000], "operator_id": int(user.id)},
+        request={
+            "change": change[:200],
+            "reason": reason[:2000],
+            "operator_id": int(user.id),
+            "ticket_status": str(ticket.status or ""),
+            "ticket_lock_version": int(getattr(ticket, "lock_version", 0) or 0),
+        },
     )
     execute_action(db, action, user)
     audit(
@@ -221,6 +238,7 @@ def decide_sensitive_action(
 ) -> dict[str, Any]:
     from modstore_server.models_cs import CustomerServiceAction
 
+    begin_immediate_write(db)
     action = (
         db.query(CustomerServiceAction)
         .filter_by(id=int(action_id), ticket_id=ticket.id, action_type="ticket.apply_change")
@@ -228,21 +246,43 @@ def decide_sensitive_action(
     )
     if action is None:
         raise HTTPException(404, "没有这张敏感操作申请")
-    if int(user.id) == int(action.user_id or 0):
-        raise HTTPException(403, "申请人不能审批自己的敏感操作")
     request = json_loads(action.request_json, {})
     if not isinstance(request, dict):
         request = {}
+    if (
+        str(action.status or "") == "rejected"
+        or str(action.error or "") == "approval_rejected"
+        or str((request.get("approval") or {}).get("decision") or "") == "rejected"
+        or request.get("consumed_approval_id")
+    ):
+        if str((request.get("approval") or {}).get("decision") or "") == "rejected" or str(
+            action.error or ""
+        ) == "approval_rejected":
+            action.status = "rejected"
+            action.error = "approval_rejected"
+        db.commit()
+        raise HTTPException(409, "这张审批已经处理过，不能再次决定")
+    if str(action.status or "") != "waiting_approval":
+        raise HTTPException(409, "只有等待审批的操作可以批准或拒绝")
+    if int(user.id) == int(action.user_id or 0):
+        raise HTTPException(403, "申请人不能审批自己的敏感操作")
+    if decision not in {"approved", "rejected"}:
+        raise HTTPException(422, "审批决定无效")
+    bound_status = str(request.get("ticket_status") or "")
+    if bound_status and bound_status != str(ticket.status or ""):
+        raise HTTPException(409, "工单状态已变化，这次审批已经失效")
     request["approval"] = {
         "id": f"human-{action.id}-{decision}",
         "decision": decision,
         "approver_id": int(user.id),
         "reason": reason[:2000],
+        "ticket_status": str(ticket.status or ""),
         "at": datetime.now(UTC).isoformat(),
     }
     action.request_json = json_dumps(request)
-    action.status = "pending"
-    execute_action(db, action, user)
+    from modstore_server.customer_service_tools import claim_gated_decision
+
+    claim_gated_decision(db, action, user, request)
     audit(
         db,
         event_type="sensitive_action_decided",

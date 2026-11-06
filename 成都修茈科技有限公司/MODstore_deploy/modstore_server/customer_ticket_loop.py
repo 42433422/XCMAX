@@ -243,9 +243,10 @@ def approve_ticket_loop(
     request["approval"] = {"id": approval_id, "decision": "approved"}
     action.request_json = json_dumps(request)
     execute_action(db, action, user)
-    if action.status != "completed":
+    if action.status == "completed":
+        run_ticket_loop(db, ticket, user, after_approval=True)
+    elif action.status != "pending_execution":
         return {"changed": False, "status": action.status, "result": action.result_json}
-    run_ticket_loop(db, ticket, user, after_approval=True)
     db.flush()
     return {"changed": True, "result": action.result_json, "previous": before}
 

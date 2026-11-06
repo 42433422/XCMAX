@@ -142,7 +142,7 @@ def test_human_loop_blocks_false_close_and_keeps_history(client):
         json={"action_id": requested.json()["action_id"], "decision": "rejected", "reason": "没有充分理由"},
     )
     assert rejected.json()["executed"] is False
-    assert rejected.json()["status"] == "failed"
+    assert rejected.json()["status"] == "rejected"
 
     _as(first)
     self_check = http.post(

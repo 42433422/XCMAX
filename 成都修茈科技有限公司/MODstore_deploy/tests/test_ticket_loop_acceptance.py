@@ -320,10 +320,14 @@ def test_b56_b61_sensitive_change_requires_one_approval(client):
                 }
             )
             execute_action(session, waiting, db_user)
-            assert waiting.status == "completed"
+            assert waiting.status == "pending_execution"
+            assert json_loads(waiting.result_json, {})["executed"] is False
+            assert json_loads(waiting.result_json, {})["approval_granted"] is True
+            assert json_loads(waiting.result_json, {})["verified"] is False
             first = waiting.result_json
             execute_action(session, waiting, db_user)
             assert waiting.result_json == first
+            assert waiting.status == "pending_execution"
             rejected = build_action(
                 session,
                 ticket_id=ticket_id,
@@ -337,15 +341,17 @@ def test_b56_b61_sensitive_change_requires_one_approval(client):
                 },
             )
             execute_action(session, rejected, db_user)
-            assert rejected.status == "failed"
+            assert rejected.status == "rejected"
+            rejected.status = "pending"
             rejected.request_json = json_dumps(
                 {
                     "change": {"delete": True},
                     "approval": {"decision": "approved", "id": "ap-bypass"},
+                    "consumed_approval_id": "ap-no",
                 }
             )
             execute_action(session, rejected, db_user)
-            assert rejected.status == "failed"
+            assert rejected.status == "rejected"
             assert json_loads(rejected.result_json, {})["executed"] is False
             session.commit()
     finally:
@@ -569,7 +575,10 @@ def test_sensitive_write_waits_for_one_approval(client):
         detail = client.get(f"{BASE}/tickets/{ticket_id}").json()
         done = [row for row in detail["actions"] if row["action_type"] == "ticket.apply_change"]
         assert len(done) == 1
-        assert done[0]["result"]["executed"] is True
+        assert done[0]["status"] == "pending_execution"
+        assert done[0]["result"]["executed"] is False
+        assert done[0]["result"]["approval_granted"] is True
+        assert done[0]["result"]["verified"] is False
         assert done[0]["result"]["approval_id"] == "ap-loop-1"
     finally:
         _clear_auth()

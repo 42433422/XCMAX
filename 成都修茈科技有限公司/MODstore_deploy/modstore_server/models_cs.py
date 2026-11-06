@@ -72,6 +72,8 @@ class CustomerServiceTicket(Base):
         onupdate=lambda: datetime.now(UTC),
     )
     closed_at = Column(DateTime, nullable=True)
+    # 同一状态的并发写入也要失败一次，不能只靠 status 做比较后互相覆盖。
+    lock_version = Column(Integer, nullable=False, default=0, server_default="0")
 
 
 @event.listens_for(CustomerServiceTicket, "before_insert")
@@ -168,6 +170,7 @@ class CustomerServiceAction(Base):
     target_type = Column(String(64), default="", index=True)
     target_id = Column(String(128), default="", index=True)
     status = Column(String(24), default="pending", index=True)
+    lock_version = Column(Integer, nullable=False, default=0, server_default="0")
     request_json = Column(Text, default="{}")
     result_json = Column(Text, default="{}")
     error = Column(Text, default="")
