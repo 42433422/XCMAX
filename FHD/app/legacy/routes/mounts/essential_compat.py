@@ -63,6 +63,14 @@ def register_essential_compat_routes(app: FastAPI) -> None:
         logger.warning("essential tools_execute skipped: %s", e)
 
     try:
+        from app.fastapi_routes.agent_tool_lifecycle import router as agent_tool_router
+
+        app.include_router(agent_tool_router)
+        logger.info("Registered agent tool lifecycle (/api/agent-tools)")
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("essential agent tool lifecycle skipped: %s", e)
+
+    try:
         from app.legacy.routes.product.compat_routes import router as product_compat_router
 
         app.include_router(product_compat_router, prefix="/api")

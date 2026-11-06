@@ -1,5 +1,5 @@
 {
-  "lines": 2422098,
+  "lines": 2423649,
   "updated": "2026-11-06",
-  "note": "变基到 #3027 后重测任务生命周期验收的净删除基线"
+  "note": "fix tool lifecycle typing, raw-sql, and timeout mock"
 }

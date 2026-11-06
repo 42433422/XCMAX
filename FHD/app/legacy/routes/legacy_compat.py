@@ -249,6 +249,11 @@ def _register_ai_routes(app: FastAPI) -> None:
         "app.fastapi_routes.tools_execute",
         log_name="tools_execute (/api/tools/execute, /api/skills/execute)",
     )
+    _mount_router(
+        app,
+        "app.fastapi_routes.agent_tool_lifecycle",
+        log_name="agent_tool_lifecycle (/api/agent-tools)",
+    )
 
     _mount_router(
         app,

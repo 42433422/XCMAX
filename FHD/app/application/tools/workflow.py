@@ -260,6 +260,15 @@ def execute_workflow_tool(
     db_write_token: str | None = None,
     runtime_context: Payload | None = None,
 ) -> str:
+    try:
+        from app.application.agent_tool_lifecycle import execute_if_registered
+
+        registered = execute_if_registered(name, args, runtime_context)
+    except RECOVERABLE_ERRORS:
+        logger.debug("agent tool lifecycle dispatch skipped", exc_info=True)
+        registered = None
+    if registered is not None:
+        return registered
     workbooks = WorkbookOperations(
         _excel_io(),
         lambda path: pd.read_excel(path),

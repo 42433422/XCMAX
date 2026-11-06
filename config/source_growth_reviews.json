@@ -13,6 +13,18 @@
       "follow_up": "Extract preclaim finalization helpers from catalog_product_edit once the queue-state machine is stable.",
       "review_owner": "@42433422"
     },
+    "FHD/app/application/agent_tool_lifecycle.py": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "b93a6ed7e84bcdc9736440525035aa04a61eaccf",
+      "before_lines": 0,
+      "after_lines": 1632,
+      "reason": "New tenant-scoped tool registry, publish, discovery, and invoke flow cannot fit under the 800-line advisory cap without splitting a still-moving lifecycle contract.",
+      "boundary": "Only the new agent_tool_lifecycle application module; HTTP routes stay in fastapi_routes/agent_tool_lifecycle.py.",
+      "validation": "Acceptance coverage for register, publish, discovery, invoke, secret redaction, and tenant isolation.",
+      "follow_up": "Split persistence, permission, and invoke helpers from agent_tool_lifecycle once the lifecycle contract is stable.",
+      "review_owner": "@42433422"
+    },
     "FHD/app/application/employee_runtime/task_continuity.py": {
       "base_file": null,
       "base_blob": null,
