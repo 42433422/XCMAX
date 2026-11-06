@@ -141,6 +141,11 @@ class DeterministicPlanner:
         rejected = rejected_sql_plan(message, plan_id)
         if rejected is not None:
             return rejected
+        from app.application.workflow.tool_turn_catalog import plan_graph_for_registry
+
+        tool_turn = plan_graph_for_registry(plan_id, message, tool_registry)
+        if tool_turn is not None:
+            return tool_turn
         restore = database_maintenance_plan(message, plan_id, tool_registry)
         if restore is not None:
             return restore
