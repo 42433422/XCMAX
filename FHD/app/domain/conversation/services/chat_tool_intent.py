@@ -205,11 +205,13 @@ def looks_like_explicit_workflow_tool_intent(text: str) -> bool:
     if employee_mentioned and employee_action:
         return True
 
-    # 「查询客户库，不要修改」是只读查询，不是修改工作流。
-    from app.application.ai_chat.dialogue_arbitration import explicit_read_with_write_guard
-
-    if explicit_read_with_write_guard(value) and re.search(
-        r"(?:不要|不用|别|禁止|不准|不允许).{0,8}(?:修改|更新|写入|删除)", value
+    # A read of the customer database that also refuses writes is not a mutation
+    # workflow. Keep this predicate in the domain module so it does not import
+    # the application layer.
+    if (
+        any(marker in value for marker in ("客户库", "企业数据库", "业务数据库", "业务库"))
+        and re.search(r"(查询|查一下|查下|看看|查看|列出|读取|只读查询)", value)
+        and re.search(r"(?:不要|不用|别|禁止|不准|不允许).{0,8}(?:修改|更新|写入|删除)", value)
     ):
         return False
 

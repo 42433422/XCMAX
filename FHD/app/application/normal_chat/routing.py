@@ -192,9 +192,7 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
         and not explicit_read_with_write_guard(text)
         and (
             ports.is_negated_action(text)
-            or re.search(
-                r"(?:不要|别|禁止|不准)[^，,。；;]{0,30}(?:出货|发货|送货)", text
-            )
+            or re.search(r"(?:不要|别|禁止|不准)[^，,。；;]{0,30}(?:出货|发货|送货)", text)
         )
     ):
         return {"intent": "unknown", "slots": {}}
