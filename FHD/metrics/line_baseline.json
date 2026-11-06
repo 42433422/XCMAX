@@ -1,5 +1,5 @@
 {
-  "lines": 2419890,
+  "lines": 2419917,
   "updated": "2026-11-06",
-  "note": "A31–A40 反钻空子：验收改走 execute_employee_task_local，工具必须命中工作区脚本或 execute_workflow_tool，重启要在独立进程死亡后从 employee_task_ledger.json 重载。相比上一版内存回声账本，新增跨线程文件锁、工具子进程和崩溃恢复断言，净增 381 行。"
+  "note": "变基到 main 4e62f298（#3022 ERP 侧栏/连点）后重测净删除基线。本 PR A31–A40 多轮交接连续性保留；2419890 → 2419917。"
 }
