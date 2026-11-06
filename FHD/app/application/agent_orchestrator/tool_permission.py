@@ -79,6 +79,26 @@ def _denial(
 ) -> dict[str, Any]:
     user_id = str(context.get("user_id") or "")
     task_id = str(context.get("task_id") or context.get("run_id") or "")
+    audit = {
+        "reason": reason,
+        "user_id": user_id,
+        "tool_id": tool_id,
+        "task_id": task_id,
+        "tenant_id": str(context.get("tenant_id") or ""),
+        "action": action,
+    }
+    try:
+        from app.utils.logging.audit_logger import audit_log
+
+        audit_log(
+            "security.tool_permission_denied",
+            user_id=user_id or None,
+            success=False,
+            severity="warning",
+            details=audit,
+        )
+    except RECOVERABLE_ERRORS:
+        pass
     return {
         "success": False,
         "error_code": code,
@@ -90,12 +110,7 @@ def _denial(
         "reason": reason,
         "user_id": user_id,
         "task_id": task_id,
-        "audit": {
-            "reason": reason,
-            "user_id": user_id,
-            "tool_id": tool_id,
-            "task_id": task_id,
-        },
+        "audit": audit,
     }
 
 

@@ -222,9 +222,13 @@ class CustomerTransferMixin:
 
             session = self._get_session()
             try:
+                from app.application.customer_crud_mixin import _scoped_units
                 from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
 
-                query = session.query(PurchaseUnitModel).filter(PurchaseUnitModel.is_active == True)
+                query = _scoped_units(
+                    session.query(PurchaseUnitModel).filter(PurchaseUnitModel.is_active == True),
+                    PurchaseUnitModel,
+                )
 
                 if keyword:
                     pattern = f"%{keyword}%"

@@ -62,6 +62,11 @@ def _registered_router_customers(
         return execute_customer_create_like(
             action, params, svc=svc, resolve_targets=_resolve_target_candidates()
         )
+    if action == "export":
+        keyword = str(params.get("keyword") or unit_name or "").strip() or None
+        return dict(
+            svc.export_to_excel(keyword=keyword, template_id=params.get("template_id")) or {}
+        )
     if action == "query":
         keyword = str(params.get("keyword") or unit_name or "").strip()
         result = svc.get_all(keyword=keyword, page=1, per_page=20)
