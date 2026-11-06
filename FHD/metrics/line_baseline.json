@@ -1,5 +1,5 @@
 {
-  "lines": 2441255,
+  "lines": 2441868,
   "updated": "2026-11-06",
-  "note": "闭环验收 harness 将当次判定写入新证据，不再覆盖 2026-11-06 记录。测试净增约 198 行。closed-loop harness records live verdicts separately from the 2026-11-06 evidence"
+  "note": "approval executor gate read-back for E10 and server deny for E11"
 }
