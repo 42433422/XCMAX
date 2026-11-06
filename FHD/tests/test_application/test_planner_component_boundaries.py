@@ -94,6 +94,31 @@ def test_refinement_never_probes_writes_or_nodes_with_missing_required_input():
     repair.assert_not_called()
 
 
+def test_failed_second_generation_keeps_the_first_model_plan():
+    candidate = PlanGraph(
+        plan_id="plan-1",
+        intent="sales_query",
+        nodes=[
+            WorkflowNode(
+                node_id="query_orders",
+                tool_id="sales",
+                action="query",
+                params={"payment_state": "unpaid"},
+                idempotent=True,
+            )
+        ],
+    )
+    generate = Mock(side_effect=[candidate, None])
+    repair = Mock()
+    loop = PlanningLoop(generate, repair, Mock(), validate_plan_graph, validate_required_params)
+
+    with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=None):
+        result = loop.plan("plan-1", "owner", "查询未付款订单", {}, {})
+
+    assert result is candidate
+    repair.assert_not_called()
+
+
 def test_invalid_critic_output_is_rejected_after_one_repair_attempt():
     candidate = PlanGraph(plan_id="plan-1", intent="candidate")
     invalid = PlanGraph(plan_id="plan-1", intent="invalid")

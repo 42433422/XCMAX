@@ -215,6 +215,18 @@ class TestGetClientAlreadyOpen:
         returned = await adapter._get_client()
         assert returned is mock_client
 
+    @pytest.mark.asyncio
+    async def test_get_client_rebuilds_after_the_event_loop_changes(self):
+        adapter = _make_adapter()
+        old = MagicMock(spec=httpx.AsyncClient)
+        old.is_closed = False
+        old.aclose = AsyncMock(side_effect=RuntimeError("Event loop is closed"))
+        adapter._client = old
+        adapter._client_loop_id = 0
+        fresh = await adapter._get_client()
+        assert fresh is not old
+        await fresh.aclose()
+
 
 # ===========================================================================
 # L517: stream_chat_completion raises when platform_url falsy

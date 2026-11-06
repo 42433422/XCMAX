@@ -245,7 +245,8 @@ class PlanningLoop:
             context=context_for_compose,
         )
         if final_plan is None:
-            return None
+            logger.warning("二次规划没有返回计划，保留第一次模型计划")
+            final_plan = candidate
         err = self.validate(final_plan)
         if err is None:
             err = self.validate_params(final_plan, tool_registry)
