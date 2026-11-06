@@ -1,4 +1,4 @@
-import type { Event as ElectronEvent, Input } from 'electron'
+import type { BrowserWindow, Event as ElectronEvent, Input } from 'electron'
 
 type WriteLog = (line: string) => void
 
@@ -18,25 +18,12 @@ export function bitmapLooksUniformBlank(bitmap: Uint8Array): boolean {
   return samples > 0 && max - min < 3 && min >= 230
 }
 
-interface SurfaceWindow {
-  isDestroyed: () => boolean
-  isVisible?: () => boolean
-  on: (event: string, listener: () => void) => void
-  webContents: {
-    on: (event: string, listener: (...args: unknown[]) => void) => void
-    capturePage?: () => Promise<{ toBitmap: () => Uint8Array }>
-    reload: () => void
-    invalidate?: () => void
-    setBackgroundThrottling?: (allowed: boolean) => void
-  }
-}
-
 /**
  * Linux/VM Electron drops the GPU front buffer when the window is unmapped.
  * Ctrl+R and a resize then hit a renderer that is no longer presenting frames.
  * Reload from the main process, and do not loop if a second blank arrives immediately.
  */
-export function attachRendererSurfaceRecovery(win: SurfaceWindow, writeLog: WriteLog): void {
+export function attachRendererSurfaceRecovery(win: BrowserWindow, writeLog: WriteLog): void {
   let lastReloadAt = 0
   let probeTimer: ReturnType<typeof setTimeout> | undefined
   const reloadOnce = (reason: string) => {

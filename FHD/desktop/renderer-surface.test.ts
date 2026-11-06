@@ -1,3 +1,4 @@
+import type { BrowserWindow } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
 import { attachRendererSurfaceRecovery, bitmapLooksUniformBlank } from './renderer-surface'
 
@@ -42,7 +43,7 @@ describe('attachRendererSurfaceRecovery', () => {
       },
     }
     const log = vi.fn()
-    attachRendererSurfaceRecovery(win, log)
+    attachRendererSurfaceRecovery(win as unknown as BrowserWindow, log)
     return { win, listeners, winListeners, reload, log }
   }
 
