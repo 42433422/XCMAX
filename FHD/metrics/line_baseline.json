@@ -1,5 +1,5 @@
 {
-  "lines": 2416964,
+  "lines": 2416968,
   "updated": "2026-11-06",
-  "note": "rebase #2988 onto #3019 tip 20dfeaf3"
+  "note": "rebuild capability pages for #2988 after #3019 rebase"
 }
