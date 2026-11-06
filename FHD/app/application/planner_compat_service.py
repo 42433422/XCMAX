@@ -446,13 +446,23 @@ async def compat_chat_stream_async(
                                 )
                                 last_metadata = metadata
                             if item.get("type") == "done" and isinstance(item.get("result"), dict):
+                                result = item["result"]
                                 if metadata:
-                                    item["result"]["route_metadata"] = metadata
-                                _persist_compat_chat_turn(body, item["result"])
-                                outcome = (
-                                    "completed" if item["result"].get("success", True) else "failed"
-                                )
-                                _settle_dialogue_turn(body, item["result"], outcome)
+                                    result["route_metadata"] = metadata
+                                explicit = result.get("success") if "success" in result else None
+                                reply = str(result.get("response") or result.get("message") or "").strip()
+                                if explicit is True or (explicit is None and reply):
+                                    _persist_compat_chat_turn(body, result)
+                                    _settle_dialogue_turn(body, result, "completed")
+                                elif explicit is False:
+                                    _persist_compat_chat_turn(body, result)
+                                    _settle_dialogue_turn(body, result, "failed")
+                                else:
+                                    _settle_dialogue_turn(
+                                        body,
+                                        {"success": False, "data": {"status": "unknown"}},
+                                        "unknown",
+                                    )
                                 settled = True
                             elif item.get("type") == "error":
                                 if metadata:

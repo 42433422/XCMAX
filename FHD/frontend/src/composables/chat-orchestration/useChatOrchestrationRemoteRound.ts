@@ -21,6 +21,7 @@ import { extractLikelyProductQueryKeyword } from '../useChatPersistence'
 import { persistDetachedPlannerResult, recordProductFastPathTask } from '../useChatSessionActivity'
 import { asPlannerPayload, errorMessage } from './chatOrchestrationShared'
 import { classifyRawError } from '@/utils/networkStability'
+import { droppedRoundPresentation } from '@/utils/droppedRoundPresentation'
 import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDeliveryApi'
 import type { UiChatMessageExtras } from '@/types/chat-ui'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
@@ -489,7 +490,28 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
                 ? stallText
                 : `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')
-        if (round.isActive()) {
+        const dropped = /failed to fetch|networkerror|econnrefused|econnreset|err_connection|socket hang up/i.test(errText)
+        if (dropped && round.isActive()) {
+          let presentation = droppedRoundPresentation({ reachable: false })
+          try {
+            const convo = await chatApi.getConversation(String(requestScope.sessionId || ''))
+            const rows = asArray(asRecord(asRecord(convo).data).messages)
+            const match = rows.map(asRecord).find((row) => String(row.turn_id || '') === String(requestScope.turnId || '') && /assistant|ai/.test(String(row.role || '')))
+            presentation = droppedRoundPresentation({
+              reachable: true,
+              serverStatus: match ? asString(match.status) || (asString(match.content) ? 'completed' : '') : '',
+              serverText: match ? asString(match.content) : '',
+            })
+          } catch {
+            presentation = droppedRoundPresentation({ reachable: false })
+          }
+          applyPlainTextToMessageIndex(msgIndex, presentation.text)
+          if (streamMessage) {
+            streamMessage.workflowAction = presentation.workflowAction
+            delete streamMessage.streamingShell
+            delete streamMessage.waitingHint
+          }
+        } else if (round.isActive()) {
           const transport = /failed to fetch|networkerror|econnrefused|offline/i.test(errText) ? classifyRawError(errText) : null
           const visibleError = err instanceof IncompletePlannerSseError
             ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] ${errText}`
