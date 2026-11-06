@@ -12,6 +12,7 @@ import pandas as pd  # noqa: F401 - compatibility patch point for existing tests
 from sqlalchemy import func
 
 from app.db.models import (
+    Customer,
     InventoryLedger,
     InventoryTransaction,
     Product,
@@ -24,6 +25,20 @@ from app.db.models import (
 from app.db.session import get_db
 from app.domain.shared_services.report_export import export_report_to_excel
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+
+
+def _inclusive_bound(value: Any, *, end: bool) -> datetime | None:
+    if value is None or isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    if len(text) == 10:
+        day = datetime.fromisoformat(text)
+        if end:
+            return day.replace(hour=23, minute=59, second=59)
+        return day
+    return datetime.fromisoformat(text)
 
 
 class ReportService(NeuroEventPublisherMixin):
@@ -42,6 +57,9 @@ class ReportService(NeuroEventPublisherMixin):
         group_by: str = "product",
         customer_id: int | None = None,
         source: str = "sales_order",
+        payment_state: str | None = None,
+        min_amount_exclusive: Any = None,
+        region: str | None = None,
     ) -> dict[str, Any]:
         """销售报表。
 
@@ -55,7 +73,15 @@ class ReportService(NeuroEventPublisherMixin):
             return self._get_sales_report_from_shipments(
                 start_date, end_date, group_by, customer_id
             )
-        return self._get_sales_report_from_orders(start_date, end_date, group_by, customer_id)
+        return self._get_sales_report_from_orders(
+            _inclusive_bound(start_date, end=False),
+            _inclusive_bound(end_date, end=True),
+            group_by,
+            customer_id,
+            payment_state,
+            min_amount_exclusive,
+            region,
+        )
 
     def _get_sales_report_from_orders(
         self,
@@ -63,6 +89,9 @@ class ReportService(NeuroEventPublisherMixin):
         end_date: datetime | None,
         group_by: str,
         customer_id: int | None,
+        payment_state: str | None = None,
+        min_amount_exclusive: Any = None,
+        region: str | None = None,
     ) -> dict[str, Any]:
         """SalesOrder 正交读模型聚合（主源）。
 
@@ -81,6 +110,14 @@ class ReportService(NeuroEventPublisherMixin):
                 query = query.filter(SalesOrder.created_at <= end_date)
             if customer_id:
                 query = query.filter(SalesOrder.customer_id == customer_id)
+            if payment_state:
+                query = query.filter(SalesOrder.payment_state == payment_state)
+            if min_amount_exclusive is not None:
+                query = query.filter(SalesOrder.total_amount > Decimal(str(min_amount_exclusive)))
+            if region:
+                query = query.join(Customer, SalesOrder.customer_id == Customer.id).filter(
+                    Customer.contact_address.contains(str(region))
+                )
 
             pairs = [(item, order) for item, order in query.all()]
 

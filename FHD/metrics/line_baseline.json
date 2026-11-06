@@ -1,5 +1,5 @@
 {
-  "lines": 2419527,
+  "lines": 2420762,
   "updated": "2026-11-06",
-  "note": "保留 dataset_rag 契约里的 tenant_id：tool_executor.py 净增 9 行，避免入库落到 default 租户后查询答案为空。本次 CI 修复要求基线必须移动时记录原因。"
+  "note": "变基到 #3027 后重测工具调用验收的净删除基线"
 }

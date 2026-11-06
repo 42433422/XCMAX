@@ -222,7 +222,8 @@ class TestFallbackPlanTwoLevelRouting:
             return_value={"tool_key": "customers", "is_negated": True},
         ):
             plan = planner._fallback_plan("pid", "不要查客户", _full_registry())
-        assert plan.intent == "clarify_ask"
+        assert plan.intent == "refused"
+        assert plan.nodes == []
 
     def test_mapped_tool_missing_from_registry_clarifies(self) -> None:
         plan = self._fallback("客户列表", registry={"products": _full_registry()["products"]})

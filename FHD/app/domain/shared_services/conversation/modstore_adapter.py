@@ -122,6 +122,7 @@ class ModstorePlatformAdapter:
         self._default_route_lock = threading.Lock()
         self._source = "env"
         self._client: Optional[httpx.AsyncClient] = None
+        self._client_loop_id: int | None = None
         logger.info(
             "初始化修茈市场平台代理: %s, default=%s/%s, user_id=%s",
             self.platform_url,
@@ -209,15 +210,25 @@ class ModstorePlatformAdapter:
         return bool(self.platform_url)
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """获取HTTP客户端"""
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
+        """获取HTTP客户端。规划器每次 asyncio.run 都是新循环，旧连接不能复用。"""
+        loop_id = id(asyncio.get_running_loop())
+        client = self._client
+        bound = self._client_loop_id
+        if client is None or client.is_closed or (bound is not None and bound != loop_id):
+            if client is not None and not client.is_closed:
+                try:
+                    await client.aclose()
+                except RuntimeError:
+                    pass
+            client = httpx.AsyncClient(
                 timeout=httpx.Timeout(self.timeout, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
                 headers={"Content-Type": "application/json", "Accept": "application/json"},
                 trust_env=False,
             )
-        return self._client
+            self._client = client
+            self._client_loop_id = loop_id
+        return client
 
     def _build_headers(self) -> Dict[str, str]:
         """构建请求头"""
@@ -534,6 +545,7 @@ class ModstorePlatformAdapter:
     async def close(self):
         """关闭连接"""
         client, self._client = (self._client, None)
+        self._client_loop_id = None
         if client is not None and (not client.is_closed):
             await client.aclose()
 

@@ -61,8 +61,26 @@ class SalesAppService:
         keyword: str | None = None,
         page: int = 1,
         per_page: int = 20,
+        *,
+        start_date: Any = None,
+        end_date: Any = None,
+        payment_state: str | None = None,
+        min_amount_exclusive: Any = None,
+        region: str | None = None,
     ) -> dict[str, Any]:
-        return self._quotes().query(status, customer_id, customer_name, keyword, page, per_page)
+        return self._quotes().query(
+            status,
+            customer_id,
+            customer_name,
+            keyword,
+            page,
+            per_page,
+            start_date=start_date,
+            end_date=end_date,
+            payment_state=payment_state,
+            min_amount_exclusive=min_amount_exclusive,
+            region=region,
+        )
 
     def quote(self, data: dict[str, Any], *, db: Any = None) -> dict[str, Any]:
         return self._quotes().quote(data, db=db)
