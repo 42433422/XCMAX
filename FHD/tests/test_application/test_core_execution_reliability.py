@@ -685,21 +685,18 @@ def test_approval_http_returns_while_dispatcher_owns_the_queue(tmp_path, monkeyp
         assert _product_models(env) == []
         release.set()
         assert started.wait(5)
-        # The import commits before the dispatcher finishes the lease.
+        # Product rows commit before the dispatcher releases the lease. Poll the
+        # queue only; another HTTP request on this shared SQLite connection can
+        # tear the import.
         deadline = time.monotonic() + 10
         finished = None
-        task_status = ""
         while time.monotonic() < deadline:
             finished = env["queue"].get(created["data"]["run_id"])
-            task_status = env["client"].get("/api/agent/tasks/task-http-handoff").json()["data"][
-                "status"
-            ]
             if (
                 _product_models(env) == ["HAND-1", "HAND-2"]
                 and finished is not None
                 and finished.state == "succeeded"
                 and finished.execution_count == 1
-                and task_status == "completed"
             ):
                 break
             time.sleep(0.05)
@@ -707,7 +704,8 @@ def test_approval_http_returns_while_dispatcher_owns_the_queue(tmp_path, monkeyp
         assert finished is not None
         assert finished.state == "succeeded"
         assert finished.execution_count == 1
-        assert task_status == "completed"
+        task = env["client"].get("/api/agent/tasks/task-http-handoff")
+        assert task.json()["data"]["status"] == "completed"
         assert finished.state != "waiting_approval"
     finally:
         release.set()
