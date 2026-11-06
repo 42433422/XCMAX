@@ -13,6 +13,30 @@
       "follow_up": "Extract preclaim finalization helpers from catalog_product_edit once the queue-state machine is stable.",
       "review_owner": "@42433422"
     },
+    "FHD/app/application/agent_orchestrator/orchestrator.py": {
+      "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
+      "base_blob": "040044d50a8243beb8a10ff81e101c880aa9f424",
+      "head_blob": "20d2379adc81acc88bec8e7a98d040ce9f3f7d16",
+      "before_lines": 678,
+      "after_lines": 816,
+      "reason": "A41-A50 approval and permission handling stays in the orchestrator run loop so medium-risk tools pause for confirmation before a sealed actor is checked.",
+      "boundary": "Agent run continuation only. Tool contracts, catalog receipts, and route handlers stay in their existing modules.",
+      "validation": "A41-A50 acceptance tests plus chat import confirmation, employee workflow, and system maintenance route tests.",
+      "follow_up": "Move the confirmation and permission pause into a dedicated run-phase module once the acceptance suite stays green.",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
+      "base_file": "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py",
+      "base_blob": "3aaa9ac32bb154416fe348d9e581dae3f6581672",
+      "head_blob": "821ff1dfef3057760f940bba8e16acaa72652db1",
+      "before_lines": 1143,
+      "after_lines": 1151,
+      "reason": "excel_analysis export needs its own input schema so the medium-risk file write is validated before execution.",
+      "boundary": "Only the excel_analysis export schema entry. Other tool input schemas are unchanged.",
+      "validation": "Tool spec contract tests and the A41-A50 excel export acceptance checks.",
+      "follow_up": "Split input_schemas by tool family when the next schema addition would grow this module again.",
+      "review_owner": "@42433422"
+    },
     "FHD/app/application/agent_tool_lifecycle.py": {
       "base_file": null,
       "base_blob": null,

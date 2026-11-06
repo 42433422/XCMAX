@@ -1788,6 +1788,15 @@
             "file_path"
           ],
           "availability": "shared"
+        },
+        "export": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": [
+            "file_path",
+            "rows"
+          ],
+          "availability": "shared"
         }
       }
     },

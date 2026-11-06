@@ -290,7 +290,21 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 ],
             }
             if not any(event.event_type == "run.cancelled" for event in run.events):
-                run.add_event("run.cancelled", "Agent run 已取消", {"requested_by": requested_by})
+                run.add_event(
+                    "run.cancelled",
+                    "Agent run 已取消",
+                    {
+                        "requested_by": requested_by,
+                        "execution_status": "cancelled",
+                        "task_id": str(
+                            (run.metadata.get("runtime_context") or {}).get("task_id") or run.run_id
+                        ),
+                        "tenant_id": str(
+                            (run.metadata.get("runtime_context") or {}).get("tenant_id") or ""
+                        ),
+                        "trace_id": run.run_id,
+                    },
+                )
             return
         run.status = "paused"
         run.metadata["control"] = {

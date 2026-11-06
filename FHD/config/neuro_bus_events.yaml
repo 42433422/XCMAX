@@ -42,6 +42,8 @@ streams:
         - { type: "step.blocked",          const: STEP_BLOCKED }
         - { type: "step.waiting_user",      const: STEP_WAITING_USER }
         - { type: "step.approved",         const: STEP_APPROVED }
+        - { type: "approval.rejected",     const: APPROVAL_REJECTED }
+        - { type: "approval.timed_out",    const: APPROVAL_TIMED_OUT }
         - { type: "step.repair_applied",    const: STEP_REPAIR_APPLIED }
         - { type: "step.retry_scheduled",   const: STEP_RETRY_SCHEDULED }
         - { type: "step.llm_repair_requested", const: STEP_LLM_REPAIR_REQUESTED }
@@ -51,6 +53,7 @@ streams:
         - { type: "tool.started",          const: TOOL_STARTED }
         - { type: "tool.completed",        const: TOOL_COMPLETED }
         - { type: "tool.failed",           const: TOOL_FAILED }
+        - { type: "tool.permission_denied", const: TOOL_PERMISSION_DENIED }
         - { type: "tool.receipt_observed", const: TOOL_RECEIPT_OBSERVED, payload_fields: [sequence] }
       llm:
         - { type: "llm.completed",         const: LLM_COMPLETED }
