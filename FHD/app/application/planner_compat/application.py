@@ -80,7 +80,7 @@ class CompatChatApplication:
             return self._attach(
                 prepared, ChatTurn(body, body.message, context, "compat_chat_dialogue_memory")
             )
-        dialogue = dialogue_reply(body.message, context)
+        dialogue = await dialogue_reply(body.message, context)
         if dialogue is not None:
             return self._attach(
                 dialogue, ChatTurn(body, body.message, context, "compat_chat_dialogue_memory")

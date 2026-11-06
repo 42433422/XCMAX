@@ -73,7 +73,7 @@ class CompatStream:
             )
             yield self.encode_event({"type": "done", "result": traced})
             return
-        dialogue = dialogue_reply(body.message, context)
+        dialogue = await dialogue_reply(body.message, context)
         if dialogue is not None:
             reply = str(dialogue.get("response") or "")
             sent: list[str] = []
