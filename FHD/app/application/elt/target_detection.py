@@ -23,8 +23,13 @@ def _joined(values: Iterable[Any]) -> str:
     return " ".join(str(value).strip() for value in values if value not in (None, ""))[:4000]
 
 
+def _compact_cjk(text: str) -> str:
+    """Join characters that printouts split with spaces, such as 产 品 名 称."""
+    return re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])", "", text)
+
+
 def _classify(lines: list[str], *, suffix: str) -> dict[str, Any]:
-    text = "\n".join(lines)
+    text = _compact_cjk("\n".join(lines))
     if _DELIVERY_RE.search(text) and _PRODUCT_RE.search(text) and _QUANTITY_RE.search(text):
         return {
             "target_type": "shipment_records",
@@ -47,6 +52,14 @@ def _classify(lines: list[str], *, suffix: str) -> dict[str, Any]:
             "reason": "attendance_sheet_names" if confirmed_sheets else "attendance_headers",
             "confirmed": True,
         }
+    if re.search(r"考勤", text) and re.search(r"(?:日一二三四五六|一二三四五六日)", text):
+        return {
+            "target_type": "attendance",
+            "document_type": "attendance_calendar",
+            "confidence": 0.9,
+            "reason": "attendance_calendar_grid",
+            "confirmed": True,
+        }
     if _ATTENDANCE_RE.search(text):
         return {
             "target_type": "abnormal",
@@ -54,6 +67,26 @@ def _classify(lines: list[str], *, suffix: str) -> dict[str, Any]:
             "confidence": 0.4,
             "reason": "unconfirmed_attendance_headers",
             "confirmed": False,
+        }
+    if re.search(r"生产单", text) and re.search(r"产品编号|原材料编号|原料数量", text):
+        return {
+            "target_type": "products",
+            "document_type": "production_order",
+            "confidence": 0.9,
+            "reason": "production_order_layout",
+            "confirmed": True,
+        }
+    if (
+        re.search(r"厂名", text)
+        and re.search(r"品名|产品名称", text)
+        and re.search(r"数量|单价|金额", text)
+        and not _DELIVERY_RE.search(text)
+    ):
+        return {
+            "target_type": "customer_products",
+            "document_type": "factory_product_table",
+            "confidence": 0.88,
+            "reason": "factory_product_columns",
         }
     if _PURCHASE_RE.search(text) and _PRODUCT_RE.search(text):
         return {
@@ -75,6 +108,20 @@ def _classify(lines: list[str], *, suffix: str) -> dict[str, Any]:
             "document_type": "customer_table",
             "confidence": 0.74,
             "reason": "customer_headers",
+        }
+    if re.search(r"厂名", text) and re.search(r"日期|单号", text):
+        return {
+            "target_type": "customers",
+            "document_type": "factory_customer_table",
+            "confidence": 0.8,
+            "reason": "factory_customer_column",
+        }
+    if re.search(r"销售应收款|应付款", text) and re.search(r"日期", text):
+        return {
+            "target_type": "customers",
+            "document_type": "amount_block_table",
+            "confidence": 0.78,
+            "reason": "amount_block_customers",
         }
     if _PRODUCT_RE.search(text):
         return {

@@ -370,6 +370,12 @@ def parse_file(
                 "ELT_KNOWLEDGE_ONLY_FILE",
                 "Word/PPT 仅可导入知识库，不支持结构化业务写入",
             )
+        if suffix == ".docx":
+            from app.application.elt.parser_sme_layouts import parse_statement_docx
+
+            statement = parse_statement_docx(source)
+            if statement is not None:
+                return statement
         return ParsedDataset(
             headers=["document_path"],
             rows=[
@@ -393,6 +399,22 @@ def parse_file(
         from app.application.elt.attendance_pipeline import parse_attendance_dataset
 
         return parse_attendance_dataset(source, max_rows=max_rows)
+    if suffix in STRUCTURED_SUFFIXES and target_type in {"customers", "products"}:
+        from app.application.elt.parser_sme_layouts import (
+            parse_amount_blocks,
+            parse_factory_customers,
+            parse_label_product_card,
+            parse_production_order,
+        )
+
+        specialized = (
+            parse_production_order(source, max_rows=max_rows) or parse_label_product_card(source)
+            if target_type == "products"
+            else parse_factory_customers(source, max_rows=max_rows)
+            or parse_amount_blocks(source, max_rows=max_rows)
+        )
+        if specialized is not None and covers_required_target_fields(specialized, target_type):
+            return specialized
     if suffix in STRUCTURED_SUFFIXES:
         if compatibility_preset_id and target_type not in {
             "customer_products",

@@ -41,10 +41,15 @@ class ProductAdapter(TargetAdapter):
             "unit",
             "购买单位",
             required=True,
-            aliases=("单位", "购买单位", "购货单位", "客户"),
+            aliases=("单位", "购买单位", "购货单位", "客户", "厂名", "产品编号"),
         ),
         TargetField("model_number", "型号", aliases=("型号", "产品型号")),
-        TargetField("name", "产品名称", required=True, aliases=("品名", "产品", "名称")),
+        TargetField(
+            "name",
+            "产品名称",
+            required=True,
+            aliases=("品名", "产品", "名称", "原材料编号", "原料"),
+        ),
         TargetField("specification", "规格", aliases=("规格", "规格型号"), updatable=True),
         TargetField(
             "price",

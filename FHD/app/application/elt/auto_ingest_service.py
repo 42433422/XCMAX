@@ -17,7 +17,7 @@ from contextvars import copy_context
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
@@ -153,6 +153,17 @@ def _resolve_auto_ingest_source(
             "ETL_AUTO_INGEST_PATH_INVALID",
             f"自动入库路径无效：{exc}",
         ) from exc
+
+
+def _valid_batch_id(value: str | None) -> bool:
+    raw = str(value or "").strip()
+    if not raw:
+        return False
+    try:
+        UUID(raw)
+    except ValueError:
+        return False
+    return True
 
 
 class AutoIngestService:
@@ -315,7 +326,7 @@ class AutoIngestService:
             raise EltError("ELT_INTAKE_FORBIDDEN", "上传文件不属于当前用户", status_code=403)
         path = _resolve_auto_ingest_source(source_path, owner_user_id=resolve_owner)
         safe_name = (file_name or path.name).strip() or path.name
-        batch_id = batch_id or f"aib-{uuid4().hex[:16]}"
+        batch_id = str(uuid4()) if not _valid_batch_id(batch_id) else str(batch_id).strip()
         run_token = f"auto-ingest:{batch_id}"
         batch = {
             "batch_id": batch_id,
@@ -493,7 +504,7 @@ class AutoIngestService:
         if resolve_owner is not None and resolve_owner != owner_user_id:
             raise EltError("ELT_INTAKE_FORBIDDEN", "上传文件不属于当前用户", status_code=403)
         path = _resolve_auto_ingest_source(source_path, owner_user_id=resolve_owner)
-        batch_id = f"aib-{uuid4().hex[:16]}"
+        batch_id = str(uuid4())
         safe_name = (file_name or path.name).strip() or path.name
         batch = {
             "batch_id": batch_id,

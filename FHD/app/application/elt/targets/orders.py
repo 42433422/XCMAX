@@ -206,7 +206,10 @@ class ShipmentAdapter(TargetAdapter):
     reversible = True
     fields = (
         TargetField(
-            "purchase_unit", "购买单位", required=True, aliases=("购货单位", "客户", "单位")
+            "purchase_unit",
+            "购买单位",
+            required=True,
+            aliases=("购货单位", "客户", "单位", "厂名"),
         ),
         TargetField("external_order_no", "外部单号", aliases=("单号", "订单号")),
         TargetField("source_fingerprint", "源单据指纹", aliases=("源指纹",)),

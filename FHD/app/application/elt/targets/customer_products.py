@@ -50,7 +50,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
             "customer_name",
             "客户/购买单位",
             required=True,
-            aliases=("客户", "客户名称", "单位", "购买单位", "购货单位"),
+            aliases=("客户", "客户名称", "单位", "购买单位", "购货单位", "厂名"),
         ),
         TargetField("contact_person", "联系人", aliases=("联系人", "姓名"), updatable=True),
         TargetField(

@@ -38,6 +38,7 @@ def parse_customer_product_regions(
     same_date_source_conflicts = 0
     model_identity_ambiguity_count = 0
     sheet_domain_hints: dict[str, str] = {}
+    shipment_history_lines: list[ParsedRow] = []
     try:
         for worksheet in workbook.worksheets:
             recent: deque[tuple[int, tuple[Any, ...]]] = _facade().deque(maxlen=5)
@@ -94,7 +95,16 @@ def parse_customer_product_regions(
                         "status": "selected" if role == "delivery_note" else "excluded",
                     }
                     regions.append(region)
-                    if role == "delivery_note" and meta.get("customer_name"):
+                    column_customer = (
+                        "customer_name" in candidate["by_field"] and "name" in candidate["by_field"]
+                    )
+                    if column_customer and role != "delivery_note":
+                        role = "customer_product_column"
+                        region["role"] = role
+                        region["status"] = "selected"
+                    if (role == "delivery_note" and meta.get("customer_name")) or (
+                        role == "customer_product_column" and target_type == "customer_products"
+                    ):
                         active = {
                             "region": region,
                             "meta": meta,
@@ -103,6 +113,7 @@ def parse_customer_product_regions(
                                 dict(candidate["source_by_col"])
                             ),
                             "max_col": candidate["last_col"],
+                            "customer_from_column": role == "customer_product_column",
                         }
                     recent.append((row_number, values))
                     continue
@@ -123,9 +134,20 @@ def parse_customer_product_regions(
                         if _facade()._NON_PRODUCT_RE.fullmatch(business_name):
                             excluded_charge_rows.append(f"{worksheet.title}:{row_number}")
                         else:
-                            projected_input: dict[str, Any] = {
-                                "customer_name": active["meta"]["customer_name"]
-                            }
+                            customer_name = str(active["meta"].get("customer_name") or "")
+                            if active.get("customer_from_column"):
+                                customer_name = _facade().clean_cell_text(
+                                    _facade()._value_at(values, mapping.get("customer_name"))
+                                )
+                            if not customer_name or _facade().semantic_key(customer_name) in {
+                                "厂名",
+                                "客户",
+                                "客户名称",
+                                "购货单位",
+                            }:
+                                recent.append((row_number, values))
+                                continue
+                            projected_input: dict[str, Any] = {"customer_name": customer_name}
                             if active["meta"].get("contact_person"):
                                 projected_input["contact_person"] = active["meta"]["contact_person"]
                             if active["meta"].get("contact_phone"):
@@ -279,6 +301,8 @@ def parse_customer_product_regions(
                         }
                     )
                     continue
+                if target_type == "shipment_records":
+                    shipment_history_lines.append(row)
                 key = _facade().product_match_key(row.values)
                 if target_type == "customer_products":
                     existing = customer_product_latest.get(key)
@@ -305,6 +329,50 @@ def parse_customer_product_regions(
                     else:
                         companion_stale_records_skipped += 1
         companion_candidate_count = len(history_latest)
+        if target_type == "shipment_records" and shipment_history_lines:
+            seen_rows = {(row.sheet, int(row.row_number)) for row in parsed_rows}
+            for row in shipment_history_lines:
+                row_key = (row.sheet, int(row.row_number))
+                if row_key in seen_rows:
+                    continue
+                fragment = row.provenance.get("original_fragment") or {}
+                projected = _facade().project_delivery_region(
+                    {
+                        "customer_name": row.values.get("customer_name"),
+                        "name": row.values.get("name"),
+                        "model_number": row.values.get("model_number")
+                        or fragment.get("model_number"),
+                        "quantity_tins": fragment.get("quantity_tins"),
+                        "quantity_kg": fragment.get("quantity_kg"),
+                        "specification": row.values.get("specification")
+                        or fragment.get("specification"),
+                        "price": row.values.get("price") or fragment.get("price"),
+                        "amount": fragment.get("amount"),
+                    },
+                    target_type="shipment_records",
+                    meta={"order_date": row.provenance.get("source_date") or ""},
+                )
+                if not projected.get("purchase_unit") or not projected.get("product_name"):
+                    continue
+                if projected.get("quantity_kg") in (None, "") and projected.get(
+                    "quantity_tins"
+                ) in (
+                    None,
+                    "",
+                ):
+                    continue
+                row.values = projected
+                fragment_key = f"{row.sheet}:{row.row_number}:{projected.get('product_name')}:{projected.get('quantity_kg')}:{projected.get('quantity_tins')}"
+                row.values["source_fingerprint"] = (
+                    __import__("hashlib").sha256(fragment_key.encode()).hexdigest()
+                )
+                row.provenance["source_kind"] = "shipment_history_line"
+                parsed_rows.append(row)
+                seen_rows.add(row_key)
+                for header in projected:
+                    if header not in all_headers:
+                        all_headers.append(header)
+            _facade()._attach_delivery_fingerprints(parsed_rows)
         if target_type == "customer_products":
             selected_rows: list[ParsedRow] = []
             seen_rows: set[tuple[str, int]] = set()
@@ -424,7 +492,7 @@ def parse_customer_product_regions(
         warnings.append(
             {
                 "code": "ELT_COMPANION_CUSTOMER_PRODUCT_DATA_FOUND",
-                "message": f"已在附表发现 {companion_candidate_count} 个客户产品候选。它们不会写入当前发货记录预演；可新建客户及产品预演后确认。",
+                "message": f"已把附表中 {companion_candidate_count} 个客户产品对应的出货行写入发货记录；同一行不会重复。",
                 "count": companion_candidate_count,
             }
         )

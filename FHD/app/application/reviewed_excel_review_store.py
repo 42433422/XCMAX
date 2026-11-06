@@ -402,8 +402,11 @@ def _intake_selection_key(run, proposal_version, candidate_id, selected, name, n
 
 
 def _require_private_model(request, proposal, tenant, owner):
+    model = proposal.get("model") or {}
+    # Rule proposals stay usable when the platform model session is absent.
+    if model.get("status") == "not_called":
+        return
     require_model_session(request, tenant, owner)
-    model = proposal.get("model", {})
     if model.get("status") != "returned":
         raise HTTPException(
             status_code=409,

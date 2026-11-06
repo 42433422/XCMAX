@@ -56,9 +56,10 @@ _NON_PRODUCT_RE = re.compile(
     re.I,
 )
 _BUYER_LABEL_RE = re.compile(
-    r"(?:(?:购货单位|购买单位|采购单位)(?:（[^）]*）|\([^)]*\))?"
-    r"|(?:客户(?:名称)?|买方|buyer|bill\s*to|sold\s*to))"
-    r"\s*[:：]\s*(.+?)(?=\s+(?:联系人|电话|手机|日期|订单|单号|编号|20\d{2})|$)",
+    r"(?:(?:购\s*货\s*单\s*位|购\s*买\s*单\s*位|采\s*购\s*单\s*位|收\s*货\s*单\s*位)"
+    r"(?:（[^）]*）|\([^)]*\))?"
+    r"|(?:客\s*户(?:\s*名\s*称)?|厂\s*名|买方|buyer|bill\s*to|sold\s*to))"
+    r"\s*[:：]?\s*(.+?)(?=\s+(?:联系人|电话|手机|日期|订单|单号|编号|20\d{2})|$)",
     re.I,
 )
 _CONTACT_RE = re.compile(
@@ -85,6 +86,8 @@ def _field_for_header(value: Any) -> str:
         return "name"
     if key in {"品名", "名称", "产品", "货品"}:
         return "name"
+    if key in {"厂名", "客户名称", "购货单位", "购买单位", "收货单位", "客户"}:
+        return "customer_name"
     if "数量kg" in key or "总重量" in key or "重量kg" in key:
         return "quantity_kg"
     if any(token in key for token in ("数量件", "数量桶", "件数", "桶数", "pcscount")):
@@ -162,6 +165,31 @@ def _extract_meta(
         if not result["customer_name"] and (match := _BUYER_LABEL_RE.search(text)):
             result["customer_name"] = clean_cell_text(match.group(1))[:160]
             matched = True
+        if not result["customer_name"]:
+            cells = [clean_cell_text(value) for value in values]
+            for index, cell in enumerate(cells):
+                if semantic_key(cell) not in {
+                    "购货单位",
+                    "购买单位",
+                    "收货单位",
+                    "客户名称",
+                    "客户",
+                    "厂名",
+                }:
+                    continue
+                for neighbor in cells[index + 1 : index + 3]:
+                    if neighbor and semantic_key(neighbor) not in {
+                        "日期",
+                        "电话",
+                        "联系人",
+                        "单号",
+                        "订单编号",
+                    }:
+                        result["customer_name"] = neighbor[:160]
+                        matched = True
+                        break
+                if result["customer_name"]:
+                    break
         if not result["contact_person"] and (match := _CONTACT_RE.search(text)):
             result["contact_person"] = clean_cell_text(match.group(1))[:160]
             matched = True

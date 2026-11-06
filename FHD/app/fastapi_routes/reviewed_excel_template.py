@@ -1061,7 +1061,13 @@ async def reviewed_excel_preview(
 ):
     _expected_actor(expected_actor, user)
     tenant, owner = _identity(user)
-    model_session = require_model_session(request, tenant, owner)
+    model_session = None
+    try:
+        model_session = require_model_session(request, tenant, owner)
+    except HTTPException as exc:
+        # A missing platform-model login must not block a confirmed rule region.
+        if exc.status_code not in {401, 503} or auto_slice_index >= 0:
+            raise
     if not classification_id or not classification_version:
         raise HTTPException(status_code=409, detail="请先建立文件分类记录，再生成候选")
     _dock_cm = _docking_channel()
@@ -1249,19 +1255,20 @@ async def reviewed_excel_preview(
                 _classification_cas(db, classification, old, state)
         try:
             request.state.elt_stage = "model_candidates"
-            with (
-                tenant_scope(tenant),
-                bind_model_session(model_session),
-            ):
-                proposal = await run_in_threadpool(
-                    refine_proposal,
-                    review,
-                    proposal["version"],
-                    "生成三个清理候选，保留固定说明和公式",
-                    owner_id=owner,
-                    initial=True,
-                )
-            versions.append(proposal)
+            if model_session is not None:
+                with (
+                    tenant_scope(tenant),
+                    bind_model_session(model_session),
+                ):
+                    proposal = await run_in_threadpool(
+                        refine_proposal,
+                        review,
+                        proposal["version"],
+                        "生成三个清理候选，保留固定说明和公式",
+                        owner_id=owner,
+                        initial=True,
+                    )
+                versions.append(proposal)
         except ValueError as exc:
             # Release claim when the model was never sent OR the provider gave a
             # definite config/404 failure so retry is not stuck on inflight.
@@ -1280,13 +1287,14 @@ async def reviewed_excel_preview(
                         # Claim already moved; still surface the model failure.
                         pass
             raise _model_processing_failure(exc) from None
-        proposal["model"]["authorization"] = template_model_authorization(
-            model_session,
-            tenant,
-            owner,
-            review["sha256"],
-            selected_region or {},
-        )
+        if model_session is not None:
+            proposal["model"]["authorization"] = template_model_authorization(
+                model_session,
+                tenant,
+                owner,
+                review["sha256"],
+                selected_region or {},
+            )
         request.state.elt_stage = "render_candidates"
         for version in versions:
             _build_candidate_previews(body, review, version)

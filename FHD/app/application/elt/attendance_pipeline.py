@@ -20,6 +20,7 @@ from typing import Any
 from openpyxl import Workbook, load_workbook
 
 from app.application.elt.errors import EltError
+from app.application.elt.parser_structure import clean_cell_text, semantic_key
 from app.application.elt.parser_types import ParsedDataset, ParsedRow
 
 _DATE_RE = re.compile(r"(20\d{2}|\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})")
@@ -59,6 +60,21 @@ def parse_attendance_dataset(path: Path, *, max_rows: int) -> ParsedDataset:
             }
             sheet_identity.append(identity)
             header_row, columns = _header(sheet)
+            if header_row is None:
+                calendar_rows = _calendar_rows(
+                    sheet,
+                    source_sha=source_sha,
+                    source_size=source_size,
+                    uploaded_at=uploaded_at,
+                    path=path,
+                    sheet_index=index,
+                    max_rows=max_rows - len(rows),
+                )
+                if calendar_rows:
+                    rows.extend(calendar_rows)
+                    identity["status"] = "calendar_grid"
+                    identity["blank"] = False
+                    continue
             if primary and sheet.title != primary:
                 identity["status"] = "sliced_not_business_table"
                 identity["blank"] = header_row is None and _sheet_blank(sheet)
@@ -429,6 +445,111 @@ def _business_id(cleaned: dict[str, Any]) -> str:
     )
     material = f"{employee_key}|{cleaned.get('work_date') or ''}"
     return hashlib.sha256(material.encode()).hexdigest()[:32]
+
+
+_WEEKDAYS = {"日", "一", "二", "三", "四", "五", "六"}
+_MONTH_RE = re.compile(r"(20\d{2})\D{0,4}(\d{1,2})")
+
+
+def _calendar_rows(
+    sheet,
+    *,
+    source_sha: str,
+    source_size: int,
+    uploaded_at: str,
+    path: Path,
+    sheet_index: int,
+    max_rows: int,
+) -> list[ParsedRow]:
+    """One attendance row per filled day on a 考勤 calendar grid."""
+    if max_rows <= 0:
+        return []
+    matrix = [tuple(row) for row in sheet.iter_rows(values_only=True)]
+    parsed: list[ParsedRow] = []
+    for index, row in enumerate(matrix):
+        tokens = [clean_cell_text(value) for value in row]
+        if sum(token in _WEEKDAYS for token in tokens) < 5 or index + 1 >= len(matrix):
+            continue
+        day_row = matrix[index + 1]
+        day_columns = {
+            column: int(value)
+            for column, value in enumerate(day_row)
+            if isinstance(value, int) and 1 <= value <= 31
+        }
+        if len(day_columns) < 5:
+            continue
+        month_match = None
+        for earlier in range(index - 1, max(-1, index - 4), -1):
+            month_match = _MONTH_RE.search(
+                " ".join(clean_cell_text(value) for value in matrix[earlier])
+            )
+            if month_match:
+                break
+        if month_match is None:
+            continue
+        year, month = int(month_match.group(1)), int(month_match.group(2))
+        if not 1 <= month <= 12:
+            continue
+        end = index + 2
+        while (
+            end < len(matrix)
+            and sum(clean_cell_text(value) in _WEEKDAYS for value in matrix[end]) < 5
+        ):
+            end += 1
+        for row_number, values in enumerate(matrix[index + 2 : end], start=index + 3):
+            name = clean_cell_text(values[0] if values else "")
+            if not name or semantic_key(name) in {"姓名", "合计", "考勤", "日期"}:
+                continue
+            for column, day in day_columns.items():
+                if column >= len(values) or values[column] in (None, ""):
+                    continue
+                try:
+                    work_date = date(year, month, day).isoformat()
+                except ValueError:
+                    continue
+                mark = clean_cell_text(values[column])
+                clock_in = mark if re.search(r"\d{1,2}:\d{2}", mark) else ""
+                parsed.append(
+                    ParsedRow(
+                        sheet=sheet.title,
+                        row_number=row_number * 100 + column,
+                        values={
+                            "employee_name": name[:80],
+                            "work_date": work_date,
+                            "clock_in": clock_in,
+                            "business_id": hashlib.sha256(
+                                f"{name}|{work_date}|{column}".encode()
+                            ).hexdigest()[:32],
+                        },
+                        provenance={
+                            "sheet": sheet.title,
+                            "row": row_number,
+                            "source_kind": "attendance_calendar",
+                            "slice": {
+                                "slice_id": f"{source_sha[:12]}:{sheet.title}:{row_number}:{column}",
+                                "source_sha256": source_sha,
+                                "source_size": source_size,
+                                "uploaded_at": uploaded_at,
+                                "template_type": "attendance_calendar",
+                                "status": "identified",
+                            },
+                            "clean": {
+                                "business_id": hashlib.sha256(
+                                    f"{name}|{work_date}".encode()
+                                ).hexdigest()[:32],
+                                "validation_result": [],
+                            },
+                            "workbook": {
+                                "filename": path.name,
+                                "sha256": source_sha,
+                                "sheet_index": sheet_index,
+                            },
+                        },
+                    )
+                )
+                if len(parsed) >= max_rows:
+                    return parsed
+    return parsed
 
 
 def _header(sheet) -> tuple[int | None, dict[str, int]]:

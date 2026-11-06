@@ -84,6 +84,10 @@ def test_auto_ingest_writes_knowledge_and_records_business(
         )
 
     assert batch["status"] == "applied"
+    from uuid import UUID
+
+    UUID(batch["batch_id"])
+    UUID(fake_etl.save_upload.call_args.kwargs["batch_id"])
     assert batch["detection"]["target_type"] == "shipment_records"
     assert batch["knowledge"]["match_ref"]
     assert batch["knowledge"]["action"] in {"new", "update"}
