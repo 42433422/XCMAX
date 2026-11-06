@@ -154,8 +154,24 @@ def try_deterministic_chat_reply(
     if not text:
         return None
 
+    from app.application.ai_chat.dialogue_arbitration import (
+        is_client_version_question,
+        is_dialogue_fact_message,
+    )
+
+    # Fact and version questions belong to the conversation ledger, never smalltalk.
+    if is_dialogue_fact_message(text) or is_client_version_question(text):
+        return None
+
     smalltalk = _try_smalltalk_reply(text)
     if smalltalk is not None:
+        from app.application.ai_chat.confirmed_facts import confirmed_continuity_reply
+
+        # A conversation that already has confirmed facts must not fall back to
+        # the new-user greeting as the transcript grows.
+        kept = confirmed_continuity_reply(runtime_context)
+        if kept is not None:
+            return kept
         return smalltalk
 
     numeric_only = _wants_numeric_only(text)

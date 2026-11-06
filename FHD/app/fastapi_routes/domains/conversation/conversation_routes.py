@@ -66,6 +66,21 @@ def _history_actor(request: Request) -> str:
     return str(actor)
 
 
+@router.get("/api/conversations/active")
+def conversations_active(request: Request):
+    """The conversation this owner last finished, so a restart reopens that id."""
+    from app.application.ai_chat.active_conversation import active_conversation_for
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
+    context = request_runtime_context(request, {})
+    conversation_id = active_conversation_for(
+        context.get("local_user_id") or context.get("actor_id") or context.get("user_id"),
+        tenant_id=str(context.get("tenant_id") or ""),
+        mod_id=str(context.get("mod_id") or ""),
+    )
+    return {"success": True, "conversation_id": conversation_id}
+
+
 @router.get("/api/conversations/{session_id}")
 def conversations_get(request: Request, session_id: str, limit: int = Query(default=50)):
     from app.application.ai_chat.conversation_history import apply_history_fault

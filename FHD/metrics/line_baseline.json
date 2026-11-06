@@ -1,5 +1,5 @@
 {
-  "lines": 2440298,
+  "lines": 2440611,
   "updated": "2026-11-06",
-  "note": "P0 确认事实分支并入只读客户库查询修复后的实际行数。产品负责人要求的验收修复。"
+  "note": "The live conversation router must expose the last finished conversation before the session-id path."
 }
