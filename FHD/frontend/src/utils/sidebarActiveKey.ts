@@ -1,4 +1,5 @@
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
+import { MOD_MENU_ID_TO_HOST_NAV_KEY } from '@/constants/genericModPack'
 
 /** 宿主侧栏「智能对话」项 key */
 export const SIDEBAR_CHAT_NAV_KEY = 'chat'
@@ -19,12 +20,19 @@ export function isChatLikePath(path: string): boolean {
 }
 
 /** 将 Mod 对话路由归一为侧栏 ``chat``，便于高亮与悬浮钮互斥 */
+export function hostNavKeyForRouteName(routeName: string): string {
+  const name = String(routeName || '').trim()
+  return MOD_MENU_ID_TO_HOST_NAV_KEY[name] || ''
+}
+
 export function normalizeSidebarActiveKey(rawKey: string, route?: Pick<RouteLocationNormalizedLoaded, 'name' | 'path'>): string {
   const key = String(rawKey || '').trim()
   const routeName = String(route?.name || '').trim()
-  if (CHAT_SIDEBAR_KEYS.has(key) || CHAT_ROUTE_NAMES.has(routeName)) return SIDEBAR_CHAT_NAV_KEY
+  const mapped = hostNavKeyForRouteName(key) || hostNavKeyForRouteName(routeName)
+  const resolved = mapped || key
+  if (CHAT_SIDEBAR_KEYS.has(resolved) || CHAT_ROUTE_NAMES.has(routeName) || CHAT_ROUTE_NAMES.has(resolved)) return SIDEBAR_CHAT_NAV_KEY
   if (route && isChatLikePath(route.path)) return SIDEBAR_CHAT_NAV_KEY
-  return key || routeName || SIDEBAR_CHAT_NAV_KEY
+  return resolved || routeName || SIDEBAR_CHAT_NAV_KEY
 }
 
 export function isChatSidebarActive(sidebarKey: string, route: Pick<RouteLocationNormalizedLoaded, 'name' | 'path'>): boolean {

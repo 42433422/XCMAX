@@ -232,16 +232,28 @@ const activeParentKeys = computed(() => {
 })
 
 const lastSelectViewAt = new Map()
+let queuedViewKey = ''
+let viewFlushQueued = false
 
 const selectView = (key) => {
   if (draggingKey.value) return
   const normalized = String(key || '').trim()
   if (!normalized) return
-  const now = Date.now()
-  const last = lastSelectViewAt.get(normalized) || 0
-  if (now - last < 80) return
-  lastSelectViewAt.set(normalized, now)
-  emit('change-view', normalized)
+  // 同一帧内的连点只保留最后一次，避免旧点击在微任务之后覆盖新页面。
+  queuedViewKey = normalized
+  if (viewFlushQueued) return
+  viewFlushQueued = true
+  queueMicrotask(() => {
+    viewFlushQueued = false
+    const nextKey = queuedViewKey
+    queuedViewKey = ''
+    if (!nextKey) return
+    const now = Date.now()
+    const last = lastSelectViewAt.get(nextKey) || 0
+    if (now - last < 80) return
+    lastSelectViewAt.set(nextKey, now)
+    emit('change-view', nextKey)
+  })
 }
 
 /** 有子菜单的父项：进入父路由（如 other-tools → 员工工作流管理）并展开子菜单 */

@@ -15,6 +15,12 @@ describe('sidebarActiveKey', () => {
     expect(normalizeSidebarActiveKey('inventory', { name: 'products', path: '/products' })).toBe('inventory')
   })
 
+  it('normalizeSidebarActiveKey maps enterprise ERP mod routes back to the host sidebar key', () => {
+    expect(normalizeSidebarActiveKey('mod-erp-customers', { name: 'mod-erp-customers', path: '/mod/xcagi-erp-domain-bridge/customers' })).toBe('customers')
+    expect(normalizeSidebarActiveKey('mod-erp-products', { name: 'mod-erp-products', path: '/mod/xcagi-erp-domain-bridge/products' })).toBe('products')
+    expect(normalizeSidebarActiveKey('mod-erp-orders', { name: 'mod-erp-orders', path: '/mod/xcagi-erp-domain-bridge/orders' })).toBe('orders')
+  })
+
   it('isChatSidebarActive checks normalized key', () => {
     expect(isChatSidebarActive('mod-planner-chat', { name: 'mod-planner-chat', path: '/chat' })).toBe(true)
     expect(isChatSidebarActive('settings', { name: 'settings', path: '/settings' })).toBe(false)
