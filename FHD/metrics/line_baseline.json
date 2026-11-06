@@ -1,5 +1,5 @@
 {
-  "lines": 2441868,
+  "lines": 2441934,
   "updated": "2026-11-06",
-  "note": "approval executor gate read-back for E10 and server deny for E11"
+  "note": "真实员工交接：注册 handoff_commit 并调用 start_employee_handoff，补上父任务上下文、子任务回链和 E25 测试。净增 66 行（2441868→2441934），用户要求本项交付。"
 }
