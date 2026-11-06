@@ -22,20 +22,20 @@ def commit_registered_handoff(
     """Authorize from the runtime context and parent task, then start the child run."""
     body = dict(args or {})
     context = dict(runtime_context or {})
-    trusted, rejection = _trusted_identity(body, context)
+    identity_ids, rejection = _handoff_identity_ids(body, context)
     if rejection is not None:
         return rejection
-    assert trusted is not None
-    parent = _parent_task(workspace, trusted["task_id"])
+    assert identity_ids is not None
+    parent = _parent_task(workspace, identity_ids["task_id"])
     if parent is None:
         return _rejected("handoff_unauthorized", "父任务记录不存在")
-    if str(parent.get("tenant_id") or "") != trusted["tenant_id"]:
+    if str(parent.get("tenant_id") or "") != identity_ids["tenant_id"]:
         return _rejected("handoff_cross_tenant", "父任务不属于当前企业")
-    if str(parent.get("user_id") or "") != trusted["user_id"]:
+    if str(parent.get("user_id") or "") != identity_ids["user_id"]:
         return _rejected("handoff_unauthorized", "父任务不属于当前用户")
     owner = str(parent.get("owner_employee") or "")
     authorized = {str(item) for item in parent.get("authorized_employees") or []}
-    if trusted["employee_id"] not in {owner, *authorized}:
+    if identity_ids["employee_id"] not in {owner, *authorized}:
         return _rejected("handoff_unauthorized", "父员工与任务记录不一致")
     target = str(body.get("target") or "").strip()
     permissions = body.get("permissions")
@@ -48,7 +48,7 @@ def commit_registered_handoff(
     forged_tenant = str(body.get("target_tenant_id") or "").strip()
     if forged_tenant and forged_tenant != card["tenant_id"]:
         return _rejected("handoff_cross_tenant", "不能用请求里的企业字段替换员工档案")
-    if card["tenant_id"] != trusted["tenant_id"]:
+    if card["tenant_id"] != identity_ids["tenant_id"]:
         return _rejected("handoff_cross_tenant", "不能把任务交给其他企业的员工")
     delegated = _delegated_call(body)
     if isinstance(delegated, dict):
@@ -56,39 +56,39 @@ def commit_registered_handoff(
     tool_id, action, params = delegated
     scope, denial = _authorized_scope(
         permissions,
-        _task_grant(parent, trusted["employee_id"]),
+        _task_grant(parent, identity_ids["employee_id"]),
         tool_id=tool_id,
         action=action,
-        tenant_id=trusted["tenant_id"],
-        user_id=trusted["user_id"],
-        task_id=trusted["task_id"],
+        tenant_id=identity_ids["tenant_id"],
+        user_id=identity_ids["user_id"],
+        task_id=identity_ids["task_id"],
         employee_id=target,
     )
     if denial is not None:
         return denial
     repository = InMemoryAgentRunRepository()
-    run = AgentRun(user_id=trusted["user_id"], message=str(body.get("goal") or "员工交接"))
+    run = AgentRun(user_id=identity_ids["user_id"], message=str(body.get("goal") or "员工交接"))
     run.metadata["runtime_context"] = {
-        "tenant_id": trusted["tenant_id"],
-        "user_id": trusted["user_id"],
-        "task_id": trusted["task_id"],
-        "employee_id": trusted["employee_id"],
+        "tenant_id": identity_ids["tenant_id"],
+        "user_id": identity_ids["user_id"],
+        "task_id": identity_ids["task_id"],
+        "employee_id": identity_ids["employee_id"],
     }
-    run.metadata["task_context"] = {"task_id": trusted["task_id"]}
+    run.metadata["task_context"] = {"task_id": identity_ids["task_id"]}
     repository.save(run)
     child = AgentOrchestrator(repository=repository).start_employee_handoff(
         run,
         employee_id=target,
         allowlist=list(scope),
         message=str(body.get("goal") or "员工交接"),
-        plan=_plan(tool_id, action, params, trusted["task_id"], str(body.get("goal") or "")),
+        plan=_plan(tool_id, action, params, identity_ids["task_id"], str(body.get("goal") or "")),
     )
     return _child_receipt(
         run,
         child,
-        task_id=trusted["task_id"],
-        tenant_id=trusted["tenant_id"],
-        user_id=trusted["user_id"],
+        task_id=identity_ids["task_id"],
+        tenant_id=identity_ids["tenant_id"],
+        user_id=identity_ids["user_id"],
         target=target,
         delegated=scope,
         tool_id=tool_id,
@@ -97,23 +97,24 @@ def commit_registered_handoff(
     )
 
 
-def _trusted_identity(
+def _handoff_identity_ids(
     body: dict[str, Any], context: dict[str, Any]
 ) -> tuple[dict[str, str] | None, dict[str, Any] | None]:
+    """Project only the four identity IDs; credentials stay outside the handoff metadata."""
     tenant_id = str(context.get("tenant_id") or "").strip()
     user_id = str(context.get("user_id") or "").strip()
     employee_id = str(context.get("employee_id") or "").strip()
     task_id = str(context.get("task_id") or "").strip()
     if not tenant_id or not user_id or not employee_id or not task_id:
         return None, _rejected("handoff_context_missing", "交接缺少可信运行上下文")
-    for key, trusted in (
+    for key, expected_id in (
         ("tenant_id", tenant_id),
         ("user_id", user_id),
         ("source", employee_id),
         ("task_id", task_id),
     ):
         supplied = str(body.get(key) or "").strip()
-        if supplied and supplied != trusted:
+        if supplied and supplied != expected_id:
             return None, _rejected("handoff_unauthorized", "交接请求与可信上下文不一致")
     return {
         "tenant_id": tenant_id,

@@ -15,6 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.utils.logging.audit_sanitizer import sanitize_audit_record
+
 
 def audit_log_path() -> str:
     """审计 JSONL 落盘路径（``AUDIT_LOG_PATH``，去空白）；未配置返回空串。"""
@@ -32,11 +34,11 @@ def append_audit_event(record: dict[str, Any]) -> None:
     if not path:
         return
     try:
-        payload = dict(record)
+        payload = sanitize_audit_record(record)
         payload.setdefault("ts", datetime.now(UTC).isoformat())
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         with open(target, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
     except OSError:
         return

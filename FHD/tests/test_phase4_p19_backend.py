@@ -38,6 +38,7 @@ def _unit(**kw) -> SimpleNamespace:
         "address": "北京",
         "discount_rate": 1.0,
         "is_active": True,
+        "version": 1,
         "created_at": datetime(2024, 1, 1),
         "updated_at": None,
     }
@@ -66,6 +67,7 @@ def test_get_all_with_keyword(svc) -> None:
     assert out["success"] is True
     assert out["total"] == 1
     assert out["data"][0]["customer_name"] == "七彩乐园"
+    assert out["data"][0]["version"] == 1
     s.close.assert_called_once()
 
 
@@ -79,11 +81,12 @@ def test_get_all_error(svc) -> None:
 
 
 def test_get_by_id_found(svc) -> None:
-    s = _session([_fluent(first=_unit())])
+    s = _session([_fluent(first=_unit(version=4))])
     with _bind(svc, s):
         out = svc.get_by_id(1)
     assert out["success"] is True
     assert out["data"]["id"] == 1
+    assert out["data"]["version"] == 4
 
 
 def test_get_by_id_missing(svc) -> None:

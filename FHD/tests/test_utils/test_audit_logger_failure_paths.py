@@ -144,3 +144,79 @@ def test_append_audit_event_open_failure_silent(tmp_path, monkeypatch: pytest.Mo
     monkeypatch.setattr(audit_events, "audit_log_path", lambda: "/dev/null/forbidden/path")
     # open 必定失败；append_audit_event 必须吞掉
     append_audit_event({"action": "x"})  # 不抛错
+
+
+@pytest.mark.parametrize("argument", ["details", "payload"])
+def test_audit_sinks_remove_credentials_and_keep_event_identity(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, caplog, argument
+):
+    from app.utils.logging.audit_logger import audit_log
+
+    path = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("AUDIT_LOG_PATH", str(path))
+    details = {
+        "tenant_id": "tenant-a",
+        "task_id": "task-a",
+        "tool_id": "customers",
+        "reason": "permission_denied",
+        "PASSWORD": "audit-test-password",
+        "nested": [{"X-API-Key": "audit-test-key", "count": 2}],
+        "extra": ({"session_id": "audit-test-session", "success": False},),
+        "note": "Authorization: Bearer audit-test-bearer",
+    }
+    audit_id = audit_log(
+        "security.tool_permission_denied",
+        actor_id="user-a",
+        ip="127.0.0.1",
+        success=False,
+        severity="warning",
+        **{argument: details},
+    )
+    logged = json.loads(caplog.records[0].getMessage())
+    stored = json.loads(path.read_text())
+    assert logged["audit_id"] == stored["audit_id"] == audit_id
+    assert logged["event_type"] == stored["action"] == "security.tool_permission_denied"
+    assert logged["user_id"] == stored["actor"] == "user-a"
+    assert logged["ip_address"] == stored["client_host"] == "127.0.0.1"
+    assert logged["success"] is stored["success"] is False
+    assert logged["severity"] == stored["severity"] == "warning"
+    assert logged["details"] == stored["details"]
+    assert "<redacted>" in logged["details"].pop("note")
+    assert logged["details"] == {
+        "tenant_id": "tenant-a",
+        "task_id": "task-a",
+        "tool_id": "customers",
+        "reason": "permission_denied",
+        "nested": [{"count": 2}],
+        "extra": [{"success": False}],
+    }
+    for value in ("password", "key", "session", "bearer"):
+        assert f"audit-test-{value}" not in caplog.text + path.read_text()
+    assert details["PASSWORD"] == "audit-test-password"
+    assert details["nested"][0]["X-API-Key"] == "audit-test-key"
+
+
+def test_direct_audit_append_sanitizes_nested_credentials_without_object_repr(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    from app.utils.logging.audit_events import append_audit_event
+
+    class Opaque:
+        def __str__(self):
+            raise AssertionError("arbitrary audit objects must not be stringified")
+
+    path = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("AUDIT_LOG_PATH", str(path))
+    append_audit_event(
+        {
+            "action": "handoff",
+            "actor": "user-a",
+            "cookie": "audit-test-cookie",
+            "details": {"authorization": "audit-test-authorization", "object": Opaque()},
+        }
+    )
+    stored = json.loads(path.read_text())
+    assert stored["action"] == "handoff"
+    assert stored["actor"] == "user-a"
+    assert "cookie" not in stored
+    assert stored["details"] == {"object": "<omitted>"}

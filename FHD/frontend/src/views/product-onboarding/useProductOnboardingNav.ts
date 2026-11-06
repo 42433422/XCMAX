@@ -33,9 +33,8 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
     }
     if (fromTutorial.value) query.from = 'tutorial'
     const redirect = router.resolve({ name: 'product-onboarding', query }).fullPath
-    // The existing login error gate also disables provisional desktop resume;
-    // a stale one-shot cookie hint must not bounce this explicit login back.
-    void router.push({ name: 'login', query: { redirect, error: '请先登录，登录后将返回当前设置步骤。' } })
+    // This explicit credential entry must not reuse a stale desktop cookie hint.
+    void router.push({ name: 'login', query: { redirect, reauthenticate: '1', error: '请先登录，登录后将返回当前设置步骤。' } })
   }
 
   function returnFromTutorial() {

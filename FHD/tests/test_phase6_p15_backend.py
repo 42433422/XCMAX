@@ -2376,13 +2376,41 @@ class TestTWRCustomers:
     def test_customers_create_success(self) -> None:
         with patch("app.application.get_customer_app_service") as mock_get:
             svc = MagicMock()
-            svc.create.return_value = {"success": True}
+            row = {"id": 17, "customer_name": "u1"}
+            svc.create.return_value = {"success": True, "data": row}
+            svc.get_by_id.return_value = {"success": True, "data": row}
             mock_get.return_value = svc
             result = twr._registered_router_customers(
                 "create", {"unit_name": "u1"}, {}, "normal", ""
             )
             assert result["success"] is True
             assert result["created"] is True
+            assert result["id"] == 17 and result["data"] == row
+            svc.get_by_id.assert_called_once_with(17)
+
+    @pytest.mark.parametrize("has_receipt", [False, True])
+    def test_customers_create_requires_matching_independent_receipt(self, has_receipt) -> None:
+        with patch("app.application.get_customer_app_service") as mock_get:
+            svc = MagicMock()
+            svc.create.return_value = {
+                "success": True,
+                "data": {"id": 17} if has_receipt else {},
+            }
+            svc.get_by_id.return_value = {
+                "success": True,
+                "data": {"id": 17, "customer_name": "different"},
+            }
+            mock_get.return_value = svc
+            result = twr._registered_router_customers(
+                "create", {"unit_name": "u1"}, {}, "normal", ""
+            )
+            assert result["success"] is False and result["outcome"] == "unknown"
+            assert result["retryable"] is False and result["reconciliation_required"] is True
+            svc.create.assert_called_once()
+            if has_receipt:
+                svc.get_by_id.assert_called_once_with(17)
+            else:
+                svc.get_by_id.assert_not_called()
 
     def test_customers_create_no_unit_name(self) -> None:
         with patch("app.application.get_customer_app_service") as mock_get:

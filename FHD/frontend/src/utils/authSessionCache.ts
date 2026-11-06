@@ -94,6 +94,7 @@ export async function canResumeRecentDesktopSession(
   query: Record<string, unknown>,
 ): Promise<boolean> {
   if (!isDesktop || !isEnterprise || query.oidc || query.oidc_error) return false
+  if (query.reauthenticate === '1') return false
   // A stale ?error= on the login URL is not a new credential failure.
   return hasRecentEnterpriseSessionHint() || (await consumeDesktopSessionBootstrapHint())
 }

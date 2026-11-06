@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from evals import run_agent_eval as eval_module
 from evals.run_agent_eval import DEFAULT_TASKS_PATH, run_eval
 
 
-def test_agent_eval_harness_baseline_passes() -> None:
+def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
     from app.application.agent_orchestrator import orchestrator
 
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     original_executor = orchestrator.AgentToolExecutor
     result = run_eval(DEFAULT_TASKS_PATH)
 
@@ -24,6 +27,51 @@ def test_agent_eval_harness_baseline_passes() -> None:
     )
     assert missing_spec["details"]["response"]["error_code"] == "SHIPMENT_SPEC_REQUIRED"
     assert missing_spec["details"]["publish_call_count"] == 0
+
+
+@pytest.mark.parametrize("fail_task", [False, True])
+def test_eval_owns_real_approval_queue_and_restores_it(monkeypatch, fail_task) -> None:
+    from app.application.agent_orchestrator import task_execution_repository as queues
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    original_queue = queues._task_execution_repository
+    original_open = queues._OPEN_REPOSITORIES
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+
+    def run_task(_task):
+        repository = queues.get_task_execution_repository()
+        assert isinstance(repository, queues.SQLAlchemyTaskExecutionRepository)
+        assert repository is not original_queue
+        run = AgentRun(user_id="7", message="requires approval")
+        run.metadata["runtime_context"] = {"tenant_id": "7", "task_id": run.run_id}
+        repository.enqueue(run)
+        assert repository.claim("fixture-worker", lease_seconds=30) is not None
+        repository.request_approval(run.run_id, "fixture-manager")
+        result = AgentToolExecutor().execute(
+            AgentStep(
+                node_id="create",
+                tool_id="customers",
+                action="create",
+                params={"unit_name": "Blocked fixture customer"},
+            ),
+            runtime_context={"tenant_id": "7", "task_id": run.run_id, "run_id": run.run_id},
+        )
+        assert result["success"] is False
+        assert result["reason"] == "approval_required", result
+        if fail_task:
+            raise RuntimeError("evaluation failure")
+        return {"passed": True}
+
+    monkeypatch.setattr(eval_module, "load_tasks", lambda _path: [{}])
+    monkeypatch.setattr(eval_module, "run_task", run_task)
+    if fail_task:
+        with pytest.raises(RuntimeError, match="evaluation failure"):
+            run_eval()
+    else:
+        assert run_eval()["passed"] == 1
+    assert queues._task_execution_repository is original_queue
+    assert queues._OPEN_REPOSITORIES is original_open
 
 
 def test_agent_eval_cli_prints_only_public_summary(monkeypatch, capsys) -> None:

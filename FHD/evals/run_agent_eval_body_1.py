@@ -75,6 +75,7 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
         }
         with (
             patch.dict(os.environ, isolated_env, clear=False),
+            _isolated_task_execution_queue(tmp_path),
             patch(
                 "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
                 FixtureToolExecutor,
@@ -93,6 +94,28 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
         "score": round(passed / total, 4) if total else 0.0,
         "results": results,
     }
+
+
+@contextmanager
+def _isolated_task_execution_queue(root: Path):
+    """Keep the production approval lookup inside this evaluation's real database."""
+    import weakref
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.agent_orchestrator import task_execution_repository as queues
+
+    engine = create_engine("sqlite:///" + str(root / "task-execution.sqlite"))
+    try:
+        with patch.object(queues, "_OPEN_REPOSITORIES", weakref.WeakSet()):
+            repository = queues.SQLAlchemyTaskExecutionRepository(
+                session_factory=sessionmaker(bind=engine)
+            )
+            with patch.object(queues, "_task_execution_repository", repository):
+                yield repository
+    finally:
+        engine.dispose()
 
 
 @contextmanager

@@ -7,6 +7,7 @@ import multiprocessing
 import os
 import sqlite3
 import tempfile
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,31 @@ def _prepare(tmp: Path):
 
     customers.get_customers_session = factory
     return engine
+
+
+@contextmanager
+def _prepared_fixture(prefix: str):
+    import app.application.customer_app_service as customers
+
+    original_session = customers.get_customers_session
+    keys = ("XCAGI_TOOL_IDEMPOTENCY_PATH", "AUDIT_LOG_PATH", "SECRET_KEY")
+    original_env = {key: os.environ.get(key) for key in keys}
+    with tempfile.TemporaryDirectory(prefix=prefix) as raw:
+        engine = None
+        try:
+            tmp = Path(raw)
+            engine = _prepare(tmp)
+            yield tmp, engine
+        finally:
+            customers.get_customers_session = original_session
+            for key, value in original_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+            permissions.drop_process_idempotency_memory()
+            if engine is not None:
+                engine.dispose()
 
 
 def _rows(engine, name: str) -> list[dict]:
@@ -162,9 +188,7 @@ def _recover_once(db_path: str, idem_path: str, name: str, key: str, barrier, se
 
 def test_e23_kill_after_commit_returns_the_same_row():
     ctx = multiprocessing.get_context("spawn")
-    with tempfile.TemporaryDirectory(prefix="e23-readback-") as raw:
-        tmp = Path(raw)
-        engine = _prepare(tmp)
+    with _prepared_fixture("e23-readback-") as (tmp, engine):
         worker = ctx.Process(
             target=_die_after_commit,
             args=(
@@ -195,9 +219,7 @@ def test_e23_kill_after_commit_returns_the_same_row():
 
 def test_e24_live_owner_is_not_cleared():
     ctx = multiprocessing.get_context("spawn")
-    with tempfile.TemporaryDirectory(prefix="e24-live-") as raw:
-        tmp = Path(raw)
-        engine = _prepare(tmp)
+    with _prepared_fixture("e24-live-") as (tmp, engine):
         started, release = ctx.Event(), ctx.Event()
         holder = ctx.Process(
             target=_hold_claim,
@@ -223,9 +245,7 @@ def test_e24_live_owner_is_not_cleared():
 
 def test_e24_two_recoveries_leave_one_row():
     ctx = multiprocessing.get_context("spawn")
-    with tempfile.TemporaryDirectory(prefix="e24-race-") as raw:
-        tmp = Path(raw)
-        engine = _prepare(tmp)
+    with _prepared_fixture("e24-race-") as (tmp, engine):
         crashed = ctx.Process(
             target=_die_before_commit,
             args=(
@@ -273,9 +293,7 @@ def test_e24_two_recoveries_leave_one_row():
 
 def test_e24_second_crash_can_still_recover():
     ctx = multiprocessing.get_context("spawn")
-    with tempfile.TemporaryDirectory(prefix="e24-again-") as raw:
-        tmp = Path(raw)
-        engine = _prepare(tmp)
+    with _prepared_fixture("e24-again-") as (tmp, engine):
         db_path = str(tmp / "business.sqlite")
         idem_path = str(tmp / "idempotency.sqlite")
         first = ctx.Process(
@@ -301,9 +319,7 @@ def test_e24_second_crash_can_still_recover():
 
 def test_same_key_with_different_phone_does_not_reuse_the_row():
     ctx = multiprocessing.get_context("spawn")
-    with tempfile.TemporaryDirectory(prefix="e23-mismatch-") as raw:
-        tmp = Path(raw)
-        engine = _prepare(tmp)
+    with _prepared_fixture("e23-mismatch-") as (tmp, engine):
         worker = ctx.Process(
             target=_die_after_commit,
             args=(
@@ -326,9 +342,7 @@ def test_same_key_with_different_phone_does_not_reuse_the_row():
 
 def test_crash_before_create_does_not_claim_an_existing_customer():
     ctx = multiprocessing.get_context("spawn")
-    with tempfile.TemporaryDirectory(prefix="e24-existing-") as raw:
-        tmp = Path(raw)
-        engine = _prepare(tmp)
+    with _prepared_fixture("e24-existing-") as (tmp, engine):
         with Session(engine) as db:
             db.add(PurchaseUnit(unit_name="之前的客户", tenant_id=11, is_active=True))
             db.commit()
@@ -354,9 +368,7 @@ def test_crash_before_create_does_not_claim_an_existing_customer():
 
 def test_legacy_claim_without_a_transaction_receipt_remains_unknown():
     ctx = multiprocessing.get_context("spawn")
-    with tempfile.TemporaryDirectory(prefix="e24-legacy-") as raw:
-        tmp = Path(raw)
-        engine = _prepare(tmp)
+    with _prepared_fixture("e24-legacy-") as (tmp, engine):
         worker = ctx.Process(
             target=_die_before_commit,
             args=(
@@ -379,9 +391,7 @@ def test_legacy_claim_without_a_transaction_receipt_remains_unknown():
 
 
 def test_customer_and_operation_receipt_commit_atomically():
-    with tempfile.TemporaryDirectory(prefix="e23-receipt-rollback-") as raw:
-        tmp = Path(raw)
-        engine = _prepare(tmp)
+    with _prepared_fixture("e23-receipt-rollback-") as (tmp, engine):
         with sqlite3.connect(tmp / "business.sqlite") as db:
             db.execute(
                 "CREATE TRIGGER reject_receipt BEFORE INSERT ON task_lifecycle_records "
@@ -396,9 +406,7 @@ def test_customer_and_operation_receipt_commit_atomically():
 def test_post_commit_disconnect_keeps_the_original_claim_and_receipt(monkeypatch, fault):
     import app.application.customer_app_service as customers
 
-    with tempfile.TemporaryDirectory(prefix="e23-committed-disconnect-") as raw:
-        tmp = Path(raw)
-        engine = _prepare(tmp)
+    with _prepared_fixture("e23-committed-disconnect-") as (tmp, engine):
         factory = customers.get_customers_session
 
         def disconnected_session():
@@ -449,3 +457,22 @@ def test_post_commit_disconnect_keeps_the_original_claim_and_receipt(monkeypatch
                 ).fetchone()[0]
                 == receipt
             )
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_recovery_fixture_restores_database_and_environment_after_exit(fail):
+    import app.application.customer_app_service as customers
+
+    original_session = customers.get_customers_session
+    keys = ("XCAGI_TOOL_IDEMPOTENCY_PATH", "AUDIT_LOG_PATH", "SECRET_KEY")
+    original_env = {key: os.environ.get(key) for key in keys}
+    with pytest.raises(RuntimeError, match="fixture failure") if fail else nullcontext():
+        with _prepared_fixture("e23-owned-") as (tmp, engine):
+            with customers.get_customers_session() as session:
+                assert session.get_bind() is engine
+                assert session.get_bind().url.database == str(tmp / "business.sqlite")
+            if fail:
+                raise RuntimeError("fixture failure")
+    assert customers.get_customers_session is original_session
+    assert {key: os.environ.get(key) for key in keys} == original_env
+    assert not tmp.exists()

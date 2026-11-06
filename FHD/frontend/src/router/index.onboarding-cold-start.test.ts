@@ -182,6 +182,7 @@ it('also offers login when the session disappears between validation and the pro
   await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('login'))
   await flushPromises()
   expect(router.currentRoute.value.name).toBe('login')
+  expect(router.currentRoute.value.query.reauthenticate).toBe('1')
   expect(wrapper!.find('#lv-username').exists()).toBe(true)
   expect(consumeBootstrapSessionHint).not.toHaveBeenCalled()
 })

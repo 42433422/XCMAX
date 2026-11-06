@@ -125,6 +125,18 @@ describe('authSessionCache', () => {
     await expect(canResumeRecentDesktopSession(true, true, { error: '用户名或密码错误' })).resolves.toBe(true)
   })
 
+  it.each([false, true])('requires explicit login without consuming a desktop hint (local hint: %s)', async (localHint) => {
+    const consumeBootstrapSessionHint = vi.fn().mockResolvedValue(true)
+    vi.stubGlobal('xcagiDesktop', { consumeBootstrapSessionHint })
+    try {
+      if (localHint) localStorage.setItem(LS_ENTERPRISE_SESSION_HINT, String(Date.now()))
+      await expect(canResumeRecentDesktopSession(true, true, { reauthenticate: '1' })).resolves.toBe(false)
+      expect(consumeBootstrapSessionHint).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('sends the shell to login when the server says the session is gone, and not on a network miss', async () => {
     const events: string[] = []
     const onInvalid = () => events.push('invalid')

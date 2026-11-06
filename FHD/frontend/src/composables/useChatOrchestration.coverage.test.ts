@@ -33,6 +33,7 @@ const {
   mockIsChatStreamEnabled,
   mockReadPlannerSseResponse,
   mockSendChatStream,
+  mockGetConversation,
   mockParseChatStreamErrorResponse,
   mockSearchProducts,
   mockFetchShipmentRecordsForUnit,
@@ -82,6 +83,7 @@ const {
   mockIsChatStreamEnabled: vi.fn(() => false),
   mockReadPlannerSseResponse: vi.fn(),
   mockSendChatStream: vi.fn(),
+  mockGetConversation: vi.fn(),
   mockParseChatStreamErrorResponse: vi.fn().mockResolvedValue('流式错误'),
   mockSearchProducts: vi.fn(),
   mockFetchShipmentRecordsForUnit: vi.fn(),
@@ -350,7 +352,7 @@ vi.mock('@/stores/mods', () => ({
   }),
 }))
 vi.mock('@/api/chat', () => ({
-  default: { sendChatStream: mockSendChatStream },
+  default: { sendChatStream: mockSendChatStream, getConversation: mockGetConversation },
   parseChatStreamErrorResponse: mockParseChatStreamErrorResponse,
 }))
 vi.mock('@/api/products', () => ({
@@ -420,6 +422,7 @@ function resetMockState() {
   mockGetLastAiMessageRef.mockReturnValue('0')
   mockBuildPlannerChatRequestPayload.mockReturnValue({ body: { message: 'hello' } })
   mockResolveChatTimeoutMs.mockReturnValue(30_000)
+  mockGetConversation.mockRejectedValue(new Error('history unavailable'))
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1561,12 +1564,33 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
     expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('模型不可用'))
   })
 
-  it('流式 HTTP 非 ok 时报告错误', async () => {
+  it('流式 HTTP 502 且无法核对回执时保持结果未知，不重复提交', async () => {
     mockSendChatStream.mockResolvedValue({ ok: false, status: 502 })
     mockParseChatStreamErrorResponse.mockResolvedValue('服务不可用')
     const api = createApi()
+    api.messages.value.push({ role: 'ai', content: '', time: '', streamingShell: true })
     await api.sendMessage('hello')
-    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('处理失败'))
+    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(0, '连接中断，结果未知。请核对原任务后再决定是否重试，未标记为成功。')
+    expect(api.messages.value[0].workflowAction).toBe('unknown')
+    expect(mockGetConversation).toHaveBeenCalledExactlyOnceWith('test-session')
+    expect(mockSendChatStream).toHaveBeenCalledOnce()
+    expect(mockRequestChatByModeWithTimeout).not.toHaveBeenCalled()
+    expect(mockSaveMessage).not.toHaveBeenCalled()
+    expect(api.isLoading.value).toBe(false)
+    expect(api.isStreamingReply.value).toBe(false)
+  })
+
+  it('流式 HTTP 400 明确拒绝请求时报告失败', async () => {
+    mockSendChatStream.mockResolvedValue({ ok: false, status: 400 })
+    mockParseChatStreamErrorResponse.mockResolvedValue('请求参数错误')
+    const api = createApi()
+    api.messages.value.push({ role: 'ai', content: '', time: '', streamingShell: true })
+    await api.sendMessage('hello')
+    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(0, '处理失败：请求参数错误')
+    expect(api.messages.value[0].workflowAction).toBe('failed')
+    expect(mockGetConversation).not.toHaveBeenCalled()
+    expect(mockSendChatStream).toHaveBeenCalledOnce()
+    expect(mockSaveMessage).not.toHaveBeenCalled()
   })
 })
 

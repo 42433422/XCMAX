@@ -6,8 +6,10 @@ import multiprocessing
 import os
 import sqlite3
 import tempfile
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
+import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -101,6 +103,7 @@ def _update(unit_id: int, phone: str, key: str, expected) -> dict:
 
 
 def _race_worker(db_path: str, idem_path: str, unit_id: int, phone: str, key: str, barrier, sender):
+    engine = None
     try:
         engine = _bind(db_path, idem_path)
         permissions.drop_process_idempotency_memory()
@@ -116,29 +119,49 @@ def _race_worker(db_path: str, idem_path: str, unit_id: int, phone: str, key: st
             }
         )
     finally:
+        if engine is not None:
+            engine.dispose()
         sender.close()
 
 
-def _prepare(tmp: Path) -> object:
-    os.environ["XCAGI_TOOL_IDEMPOTENCY_PATH"] = str(tmp / "idempotency.sqlite")
-    os.environ["AUDIT_LOG_PATH"] = str(tmp / "audit.jsonl")
-    os.environ["SECRET_KEY"] = "e22-version-conflict-secret-32bytes"
-    permissions.clear_idempotent_replay_for_tests()
-    permissions.drop_process_idempotency_memory()
-    engine = _engine(tmp / "business.sqlite")
-    PurchaseUnit.__table__.create(engine)
-    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+@contextmanager
+def _prepare(tmp: Path):
     import app.application.customer_app_service as customers
 
-    customers.get_customers_session = factory
-    return engine
+    previous_session = customers.get_customers_session
+    environment = {
+        "XCAGI_TOOL_IDEMPOTENCY_PATH": str(tmp / "idempotency.sqlite"),
+        "AUDIT_LOG_PATH": str(tmp / "audit.jsonl"),
+        "SECRET_KEY": "e22-version-conflict-secret-32bytes",
+    }
+    previous_env = {key: os.environ.get(key) for key in environment}
+    engine = None
+    try:
+        os.environ.update(environment)
+        permissions.clear_idempotent_replay_for_tests()
+        permissions.drop_process_idempotency_memory()
+        engine = _engine(tmp / "business.sqlite")
+        PurchaseUnit.__table__.create(engine)
+        customers.get_customers_session = sessionmaker(
+            bind=engine, autoflush=False, expire_on_commit=False
+        )
+        yield engine
+    finally:
+        customers.get_customers_session = previous_session
+        for key, value in previous_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        permissions.drop_process_idempotency_memory()
+        if engine is not None:
+            engine.dispose()
 
 
 def test_two_processes_one_version_conflict():
     ctx = multiprocessing.get_context("spawn")
-    with tempfile.TemporaryDirectory(prefix="e22-race-") as raw:
+    with tempfile.TemporaryDirectory(prefix="e22-race-") as raw, _prepare(Path(raw)) as engine:
         tmp = Path(raw)
-        engine = _prepare(tmp)
         unit_id = _seed(engine, "并发客户甲", "13800000000", 11)
         parent_version = _version(engine, unit_id)
         barrier = ctx.Barrier(2)
@@ -185,9 +208,8 @@ def test_two_processes_one_version_conflict():
 
 def test_different_customers_both_succeed():
     ctx = multiprocessing.get_context("spawn")
-    with tempfile.TemporaryDirectory(prefix="e22-pair-") as raw:
+    with tempfile.TemporaryDirectory(prefix="e22-pair-") as raw, _prepare(Path(raw)) as engine:
         tmp = Path(raw)
-        engine = _prepare(tmp)
         left_id = _seed(engine, "并发客户乙", "13800000001", 11)
         right_id = _seed(engine, "并发客户丙", "13800000002", 11)
         barrier = ctx.Barrier(2)
@@ -218,8 +240,7 @@ def test_different_customers_both_succeed():
 
 
 def test_update_without_version_stays_compatible():
-    with tempfile.TemporaryDirectory(prefix="e22-plain-") as raw:
-        engine = _prepare(Path(raw))
+    with tempfile.TemporaryDirectory(prefix="e22-plain-") as raw, _prepare(Path(raw)) as engine:
         unit_id = _seed(engine, "旧接口客户", "13800000007", 11)
         first = _update(unit_id, "13800006666", "e22-plain-1", None)
         second = _update(unit_id, "13800007777", "e22-plain-2", None)
@@ -230,8 +251,7 @@ def test_update_without_version_stays_compatible():
 
 
 def test_duplicate_name_does_not_write_phone():
-    with tempfile.TemporaryDirectory(prefix="e22-name-") as raw:
-        engine = _prepare(Path(raw))
+    with tempfile.TemporaryDirectory(prefix="e22-name-") as raw, _prepare(Path(raw)) as engine:
         kept = _seed(engine, "保留客户", "13800000008", 11)
         other = _seed(engine, "另一客户", "13800000009", 11)
         result = CustomerApplicationService().update(
@@ -249,8 +269,7 @@ def test_duplicate_name_does_not_write_phone():
 
 
 def test_commit_failure_leaves_no_partial_write(monkeypatch):
-    with tempfile.TemporaryDirectory(prefix="e22-rollback-") as raw:
-        engine = _prepare(Path(raw))
+    with tempfile.TemporaryDirectory(prefix="e22-rollback-") as raw, _prepare(Path(raw)) as engine:
         unit_id = _seed(engine, "回滚客户", "13800000010", 11)
         import app.application.customer_app_service as customers
 
@@ -265,18 +284,18 @@ def test_commit_failure_leaves_no_partial_write(monkeypatch):
             session.commit = fail_commit
             return session
 
-        monkeypatch.setattr(customers, "get_customers_session", open_session)
-        result = CustomerApplicationService().update(
-            unit_id, {"contact_phone": "13800009999", "expected_version": 1}
-        )
+        with monkeypatch.context() as fault:
+            fault.setattr(customers, "get_customers_session", open_session)
+            result = CustomerApplicationService().update(
+                unit_id, {"contact_phone": "13800009999", "expected_version": 1}
+            )
         assert result.get("success") is False
         assert _phone(engine, unit_id) == "13800000010"
         assert _version(engine, unit_id) == 1
 
 
 def test_cross_tenant_update_stays_blocked():
-    with tempfile.TemporaryDirectory(prefix="e22-tenant-") as raw:
-        engine = _prepare(Path(raw))
+    with tempfile.TemporaryDirectory(prefix="e22-tenant-") as raw, _prepare(Path(raw)) as engine:
         foreign = _seed(engine, "租户乙客户", "13900000016", 22)
         result = _update(foreign, "13900000999", "e22-cross", _version(engine, foreign))
         assert result.get("success") is not True
@@ -311,8 +330,7 @@ def test_desktop_sqlite_adds_default_version_without_rewriting_phone(tmp_path: P
 
 
 def test_stale_version_is_not_success():
-    with tempfile.TemporaryDirectory(prefix="e22-stale-") as raw:
-        engine = _prepare(Path(raw))
+    with tempfile.TemporaryDirectory(prefix="e22-stale-") as raw, _prepare(Path(raw)) as engine:
         unit_id = _seed(engine, "过期版本客户", "13800000011", 11)
         won = _update(unit_id, "13800001111", "e22-won", 1)
         lost = _update(unit_id, "13800002222", "e22-lost", 1)
@@ -328,11 +346,10 @@ def test_alembic_rollback_preserves_version_and_rejects_stale_write(tmp_path, mo
 
     from alembic import command
 
-    engine = _prepare(tmp_path)
-    monkeypatch.setenv("DATABASE_URL", str(engine.url))
-    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
-    revision = "2026_11_06_purchase_unit_version"
-    try:
+    with _prepare(tmp_path) as engine, monkeypatch.context() as migration:
+        migration.setenv("DATABASE_URL", str(engine.url))
+        config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+        revision = "2026_11_06_purchase_unit_version"
         unit_id = _seed(engine, "迁移回退客户", "13800007777", 11)
         with engine.begin() as db:
             db.execute(
@@ -352,5 +369,29 @@ def test_alembic_rollback_preserves_version_and_rejects_stale_write(tmp_path, mo
         assert current.get("success") is True
         assert _version(engine, unit_id) == 8
         assert _phone(engine, unit_id) == "13800008888"
-    finally:
-        engine.dispose()
+
+
+@pytest.mark.parametrize("fail_body", [False, True])
+def test_prepare_restores_runtime_and_closes_database(tmp_path, fail_body):
+    import app.application.customer_app_service as customers
+
+    previous_session = customers.get_customers_session
+    previous_env = {
+        key: os.environ.get(key)
+        for key in ("XCAGI_TOOL_IDEMPOTENCY_PATH", "AUDIT_LOG_PATH", "SECRET_KEY")
+    }
+    expected_error = (
+        pytest.raises(RuntimeError, match="fixture failure") if fail_body else nullcontext()
+    )
+    with expected_error:
+        with _prepare(tmp_path) as engine:
+            assert customers.get_customers_session is not previous_session
+            with engine.connect() as connection:
+                pooled_connection = connection.connection.driver_connection
+                assert pooled_connection.execute("SELECT 1").fetchone() == (1,)
+            if fail_body:
+                raise RuntimeError("fixture failure")
+    assert customers.get_customers_session is previous_session
+    assert {key: os.environ.get(key) for key in previous_env} == previous_env
+    with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+        pooled_connection.execute("SELECT 1")

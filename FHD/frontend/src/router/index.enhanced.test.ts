@@ -120,7 +120,8 @@ vi.mock('@/utils/productSku', () => ({
   isEnterpriseEdition: mockIsEnterpriseEdition,
 }))
 
-vi.mock('@/utils/authSessionCache', () => ({
+vi.mock('@/utils/authSessionCache', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/utils/authSessionCache')>(),
   consumeDesktopSessionBootstrapHint: mockConsumeDesktopSessionBootstrapHint,
   hasRecentEnterpriseSessionHint: mockHasRecentEnterpriseSessionHint,
   validateEnterpriseSessionCached: mockValidateEnterpriseSession,

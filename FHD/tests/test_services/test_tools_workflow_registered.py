@@ -175,11 +175,17 @@ class TestCustomersRouter:
     def test_create_action_success(self):
         mock_svc = MagicMock()
         mock_svc.create.return_value = {"success": True, "data": {"id": 1}}
+        mock_svc.get_by_id.return_value = {
+            "success": True,
+            "data": {"id": 1, "customer_name": "NewCo"},
+        }
         with patch("app.application.get_customer_app_service", return_value=mock_svc):
             result = _registered_router_customers(
                 "create", {"unit_name": "NewCo"}, {}, "normal", ""
             )
             assert result["success"] is True
+        assert result["id"] == 1 and result["data"]["customer_name"] == "NewCo"
+        mock_svc.get_by_id.assert_called_once_with(1)
 
     def test_create_action_failure(self):
         mock_svc = MagicMock()

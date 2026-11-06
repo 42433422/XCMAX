@@ -28,6 +28,31 @@ from app.db.models.task_lifecycle import TaskLifecycleRecord
 CUSTOMER = "交接客户甲"
 
 
+def test_handoff_identity_projects_only_ids_and_keeps_scope_checks():
+    from app.application.employee_runtime.handoff_commit import _handoff_identity_ids
+
+    expected = {
+        "tenant_id": "tenant-a",
+        "user_id": "user-a",
+        "employee_id": "employee-a",
+        "task_id": "task-a",
+    }
+    context = {
+        **expected,
+        "password": "test-password",
+        "token": "test-token",
+        "cookie": "test-cookie",
+    }
+    identity_ids, rejection = _handoff_identity_ids({}, context)
+    assert rejection is None
+    assert identity_ids == expected
+    assert context["token"] == "test-token"
+    for key in ("tenant_id", "user_id", "task_id", "source"):
+        identity_ids, rejection = _handoff_identity_ids({key: "another-identity"}, context)
+        assert identity_ids is None
+        assert rejection["error_code"] == "handoff_unauthorized"
+
+
 @pytest.fixture()
 def customers_db(tmp_path, monkeypatch):
     engine = create_engine(

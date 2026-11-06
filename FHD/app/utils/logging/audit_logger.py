@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.utils.logging.audit_events import append_audit_event
+from app.utils.logging.audit_sanitizer import sanitize_audit_record
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _audit_logger = logging.getLogger("audit")
@@ -47,7 +48,7 @@ def audit_log(
         "success": success,
         "severity": severity,
     }
-    _audit_logger.info(json.dumps(entry, ensure_ascii=False, default=str))
+    _audit_logger.info(json.dumps(sanitize_audit_record(entry), ensure_ascii=False))
     # 可选落盘（AUDIT_LOG_PATH 未配置即 no-op）；落盘失败绝不可中断主流程。
     try:
         append_audit_event(

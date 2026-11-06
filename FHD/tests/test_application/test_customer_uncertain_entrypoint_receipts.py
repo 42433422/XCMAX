@@ -17,9 +17,9 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.mark.parametrize("entrypoint", ["chat", "voice"])
-@pytest.mark.parametrize("fault", ["refresh", "readback"])
+@pytest.mark.parametrize("failure", [OperationalError, RuntimeError])
 def test_committed_customer_uncertainty_survives_real_entrypoint(
-    trusted_actor, monkeypatch, entrypoint, fault
+    trusted_actor, monkeypatch, entrypoint, failure
 ):
     from app.application import get_ai_chat_app_service
     from app.application.workflow.planner import LLMWorkflowPlanner
@@ -35,7 +35,7 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
             "client": ("synthetic", 0),
         }
     )
-    name = f"uncertain-{entrypoint}-{fault}"
+    name = f"uncertain-{entrypoint}-{failure.__name__}"
     message = f"新增单位 {name}"
     # Real service composition, authentication, dispatcher, customer store and
     # response formatting remain intact. No model/server request is performed.
@@ -90,21 +90,11 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
             and "purchase_units" in statement
         ):
             state["postcommit_reads"] += 1
-            if fault == "readback" and state["postcommit_reads"] >= 2:
-                state["faults"] += 1
-                raise OperationalError(
-                    "synthetic customer readback", {}, RuntimeError("unavailable")
-                )
-
-    original_refresh = Session.refresh
-
-    def refresh(session, instance, *args, **kwargs):
-        if fault == "refresh" and isinstance(instance, PurchaseUnit) and state["committed"]:
             state["faults"] += 1
-            raise OperationalError("synthetic customer refresh", {}, RuntimeError("unavailable"))
-        return original_refresh(session, instance, *args, **kwargs)
+            if failure is OperationalError:
+                raise failure("synthetic customer readback", {}, RuntimeError("unavailable"))
+            raise failure("synthetic customer readback unavailable")
 
-    monkeypatch.setattr(Session, "refresh", refresh)
     event.listen(Engine, "after_cursor_execute", after_sql)
     event.listen(Engine, "before_cursor_execute", before_sql)
     event.listen(Session, "after_commit", committed)
@@ -135,6 +125,7 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
         assert receipt["outcome"] == "unknown"
         assert receipt["retryable"] is False and receipt["reconciliation_required"] is True
         assert state["committed"] and state["faults"] == 1
+        assert state["postcommit_reads"] == 1
         assert state["inserts"] == 1  # No automatic duplicate within this request.
     finally:
         event.remove(Engine, "after_cursor_execute", after_sql)
