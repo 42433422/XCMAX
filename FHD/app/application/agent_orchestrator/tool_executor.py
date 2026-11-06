@@ -233,6 +233,12 @@ class AgentToolExecutor:
                 "execution_status": "cancelled",
                 "message": "工具调用已取消",
             }
+        spec = get_tool_action_spec(step.tool_id, step.action)
+        schema_properties: set[str] = set()
+        if spec is not None and isinstance(spec.input_schema, dict):
+            raw_properties = spec.input_schema.get("properties")
+            if isinstance(raw_properties, dict):
+                schema_properties = {str(key) for key in raw_properties}
         for control_key in (
             "skip_approval",
             "auto_approve",
@@ -245,9 +251,12 @@ class AgentToolExecutor:
             "tenant_id",
             "user_id",
         ):
+            # Dataset tools declare tenant_id as a scoped business field.
+            # Identity fields that are not in the tool schema stay stripped.
+            if control_key in {"tenant_id", "user_id"} and control_key in schema_properties:
+                continue
             params.pop(control_key, None)
         context = dict(runtime_context or {})
-        spec = get_tool_action_spec(step.tool_id, step.action)
         required = (
             set((spec.input_schema or {}).get("required") or []) if spec is not None else set()
         )
