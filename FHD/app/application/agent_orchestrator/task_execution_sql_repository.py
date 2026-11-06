@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import random
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, cast
 
 from sqlalchemy import Table, and_, or_
@@ -27,9 +29,15 @@ class SQLAlchemyTaskExecutionRepository:
         *,
         session_factory: Callable[[], Session] | None = None,
         auto_create: bool = True,
+        jitter_ratio: float = 0.2,
+        approval_timeout_seconds: float = 86400.0,
+        rng: random.Random | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._auto_create = auto_create
+        self._jitter_ratio = jitter_ratio
+        self._approval_timeout_seconds = approval_timeout_seconds
+        self._rng = rng or random.Random()
         self._schema_ready = False
         self._schema_bind: object | None = None
         self._schema_lock = threading.RLock()
@@ -40,11 +48,25 @@ class SQLAlchemyTaskExecutionRepository:
         *,
         requested_by: str = "",
         priority: int = 100,
+        idempotency_key: str = "",
+        fingerprint: str = "",
     ) -> AgentTaskExecution:
         self._ensure_schema()
+        prior = ""
         with self._session_scope() as db:
-            self.enqueue_in_session(db, run, requested_by=requested_by, priority=priority)
-        return cast(AgentTaskExecution, self.get(run.run_id))
+            if idempotency_key:
+                from app.domain.task_lifecycle.control import SessionBook
+
+                prior = SessionBook(db).claim_key(
+                    "agent",
+                    tenant_id_of_run(run),
+                    idempotency_key,
+                    fingerprint or run.message,
+                    run.run_id,
+                )
+            if not prior:
+                self.enqueue_in_session(db, run, requested_by=requested_by, priority=priority)
+        return cast(AgentTaskExecution, self.get(prior or run.run_id))
 
     def enqueue_in_session(
         self, db: Session, run: AgentRun, *, requested_by: str = "", priority: int = 100
@@ -140,10 +162,32 @@ class SQLAlchemyTaskExecutionRepository:
                 .limit(8)
                 .all()
             )
+            from app.domain.task_lifecycle.control import SessionBook
+
+            book = SessionBook(db)
+            self._expire_approvals(db, book, current)
             for candidate in candidates:
                 recovered = candidate.state == "claimed"
                 from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
 
+                if recovered and book.get(
+                    "agent", str(candidate.tenant_id or ""), str(candidate.run_id)
+                ).get("effects"):
+                    db.query(AgentTaskExecutionRecord).filter(
+                        AgentTaskExecutionRecord.run_id == candidate.run_id,
+                        AgentTaskExecutionRecord.state == "claimed",
+                    ).update(
+                        {
+                            AgentTaskExecutionRecord.state: "failed",
+                            AgentTaskExecutionRecord.lease_owner: None,
+                            AgentTaskExecutionRecord.lease_expires_at: None,
+                            AgentTaskExecutionRecord.last_error_code: "needs_verification",
+                            AgentTaskExecutionRecord.finished_at: current,
+                            AgentTaskExecutionRecord.updated_at: current,
+                        },
+                        synchronize_session=False,
+                    )
+                    continue
                 if recovered and int(candidate.execution_count or 0) + 1 > DEFAULT_MAX_ATTEMPTS:
                     db.query(AgentTaskExecutionRecord).filter(
                         AgentTaskExecutionRecord.run_id == candidate.run_id,
@@ -276,6 +320,44 @@ class SQLAlchemyTaskExecutionRepository:
                 str(existing.state), str(state)
             ):
                 return None
+            from app.domain.task_lifecycle.control import (
+                SessionBook,
+                failure_retries,
+                jittered_delay,
+                remember,
+            )
+
+            book = SessionBook(db)
+            body = book.get("agent", str(existing.tenant_id or ""), str(existing.run_id))
+            visible = str(state)
+            available_at = None
+            if visible == "failed" and failure_retries(
+                int(existing.execution_count or 0), str(error_code or "")
+            ):
+                visible = "queued"
+                available_at = _deadline(
+                    now,
+                    jittered_delay(
+                        int(existing.execution_count or 0),
+                        jitter_ratio=self._jitter_ratio,
+                        rng=self._rng,
+                    ),
+                )
+            previous = str(existing.state)
+            remember(
+                body,
+                at=now,
+                source=previous,
+                target=visible,
+                code=str(error_code or ""),
+                actor="",
+            )
+            body["effects"] = []
+            if visible in {"paused", "blocked"}:
+                body["approval_requested_at"] = now
+            if available_at:
+                body["available_at"] = available_at
+            book.put("agent", str(existing.tenant_id or ""), str(existing.run_id), body)
 
             query = db.query(AgentTaskExecutionRecord).filter(
                 AgentTaskExecutionRecord.run_id == str(run_id or "")
@@ -287,14 +369,17 @@ class SQLAlchemyTaskExecutionRepository:
                     AgentTaskExecutionRecord.lease_expires_at > now,
                 )
             values: dict[Any, Any] = {
-                AgentTaskExecutionRecord.state: str(state),
+                AgentTaskExecutionRecord.state: visible,
                 AgentTaskExecutionRecord.lease_owner: None,
                 AgentTaskExecutionRecord.lease_expires_at: None,
                 AgentTaskExecutionRecord.heartbeat_at: None,
                 AgentTaskExecutionRecord.last_error_code: str(error_code or "")[:64] or None,
                 AgentTaskExecutionRecord.updated_at: now,
             }
-            if state in {"completed", "failed", "cancelled", "blocked"}:
+            if available_at:
+                values[AgentTaskExecutionRecord.available_at] = available_at
+                values[AgentTaskExecutionRecord.finished_at] = None
+            elif visible in {"completed", "failed", "cancelled", "blocked", "rejected"}:
                 values[AgentTaskExecutionRecord.finished_at] = now
             # Ownership must be checked by the UPDATE itself. Reading the owner
             # then flushing an ORM object permits an expired worker to overwrite
@@ -302,6 +387,101 @@ class SQLAlchemyTaskExecutionRepository:
             if query.update(values, synchronize_session=False) != 1:
                 return None
         return self.get(run_id)
+
+    def mark_open_effect(self, run_id: str, effect_id: str = "dispatch") -> None:
+        self._ensure_schema()
+        with self._session_scope() as db:
+            from app.db.models.agent import AgentTaskExecutionRecord
+            from app.domain.task_lifecycle.control import SessionBook
+
+            record = db.get(AgentTaskExecutionRecord, str(run_id or ""))
+            if record is None or record.state != "claimed":
+                return
+            book = SessionBook(db)
+            body = book.get("agent", str(record.tenant_id or ""), str(record.run_id))
+            effects = set(body.get("effects") or [])
+            effects.add(str(effect_id or "dispatch"))
+            body["effects"] = sorted(effects)
+            book.put("agent", str(record.tenant_id or ""), str(record.run_id), body)
+
+    def request_approval(self, run_id: str, approver: str) -> AgentTaskExecution | None:
+        self._ensure_schema()
+        with self._session_scope() as db:
+            from app.db.models.agent import AgentTaskExecutionRecord
+            from app.domain.task_lifecycle.control import SessionBook
+
+            record = db.get(AgentTaskExecutionRecord, str(run_id or ""))
+            if record is None:
+                return None
+            book = SessionBook(db)
+            body = book.get("agent", str(record.tenant_id or ""), str(record.run_id))
+            body["approver"] = str(approver or "")
+            book.put("agent", str(record.tenant_id or ""), str(record.run_id), body)
+        return self.transition(run_id, "paused", error_code="approval_requested")
+
+    def resolve_approval(self, run_id: str, decision: str, actor: str) -> AgentTaskExecution | None:
+        from app.domain.task_lifecycle.control import TaskLifecycleError, approval_actor_allowed
+
+        self._ensure_schema()
+        with self._session_scope() as db:
+            from app.db.models.agent import AgentTaskExecutionRecord
+            from app.domain.task_lifecycle.control import SessionBook
+
+            record = db.get(AgentTaskExecutionRecord, str(run_id or ""))
+            if record is None:
+                return None
+            book = SessionBook(db)
+            body = book.get("agent", str(record.tenant_id or ""), str(record.run_id))
+            if not approval_actor_allowed(body, actor):
+                raise TaskLifecycleError("无权审批该任务")
+            if decision not in {"approve", "reject"}:
+                raise TaskLifecycleError("未知审批决定")
+        if decision == "approve":
+            return self.transition(run_id, "queued", error_code="approved")
+        return self.transition(run_id, "rejected", error_code="approval_rejected")
+
+    def lifecycle(self, run_id: str) -> dict[str, Any]:
+        self._ensure_schema()
+        with self._session_scope() as db:
+            from app.db.models.agent import AgentTaskExecutionRecord
+            from app.domain.task_lifecycle.control import SessionBook
+
+            record = db.get(AgentTaskExecutionRecord, str(run_id or ""))
+            tenant = str(record.tenant_id or "") if record is not None else ""
+            return SessionBook(db).get("agent", tenant, str(run_id or ""))
+
+    def _expire_approvals(self, db: Session, book: Any, current: str) -> None:
+        from app.db.models.agent import AgentTaskExecutionRecord
+        from app.domain.task_lifecycle.control import remember
+
+        moment = datetime.fromisoformat(current.replace("Z", "+00:00"))
+        rows = (
+            db.query(AgentTaskExecutionRecord)
+            .filter(AgentTaskExecutionRecord.state.in_(("paused", "blocked")))
+            .all()
+        )
+        for record in rows:
+            body = book.get("agent", str(record.tenant_id or ""), str(record.run_id))
+            started = str(body.get("approval_requested_at") or record.updated_at or "")
+            if not started:
+                continue
+            age = (moment - datetime.fromisoformat(started.replace("Z", "+00:00"))).total_seconds()
+            if age < self._approval_timeout_seconds:
+                continue
+            previous = str(record.state)
+            record.state = "rejected"
+            record.last_error_code = "approval_timeout"
+            record.finished_at = current
+            record.updated_at = current
+            remember(
+                body,
+                at=current,
+                source=previous,
+                target="rejected",
+                code="approval_timeout",
+                actor="",
+            )
+            book.put("agent", str(record.tenant_id or ""), str(record.run_id), body)
 
     def clear(self) -> None:
         self._ensure_schema()

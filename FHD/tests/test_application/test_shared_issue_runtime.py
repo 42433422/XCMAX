@@ -114,6 +114,27 @@ async def test_list_flags_only_fixes_running_here_and_decision_forwards_owner_no
 
 
 @pytest.mark.asyncio
+async def test_rejected_ticket_is_not_executed_and_repeat_decision_is_idempotent(host):
+    request, remote, _, _ = host
+    remote.return_value = {"success": True, "decision": "reject"}
+    first = await bridge.decide_issue(
+        request, 8, decision="reject", note="导出还是报错", idempotency_key="reject-key"
+    )
+    assert first["decision"] == "reject"
+    assert remote.await_count == 1
+    replay = await bridge.decide_issue(
+        request, 8, decision="reject", note="导出还是报错", idempotency_key="reject-key"
+    )
+    assert replay == first and remote.await_count == 1
+    with pytest.raises(HTTPException) as caught:
+        await bridge.decide_issue(
+            request, 8, decision="reopen", note="导出还是报错", idempotency_key="reopen-key"
+        )
+    assert caught.value.status_code == 409
+    assert remote.await_count == 1
+
+
+@pytest.mark.asyncio
 async def test_route_surfaces_market_refusal_instead_of_internal_error(host):
     from app.fastapi_routes import issue_runtime_routes as routes
 

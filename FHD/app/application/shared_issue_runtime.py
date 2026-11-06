@@ -98,12 +98,111 @@ async def decide_issue(
 ) -> dict[str, Any]:
     if len(note.strip()) < 4:
         raise HTTPException(400, "请说明原问题现在的使用结果（至少4个字）")
-    return await custom_delivery_remote_json(
+    owner = _owner(request)
+    gate = _ticket_gate(owner, ticket_id, decision, idempotency_key, note.strip())
+    if gate.get("action") == "deny":
+        raise HTTPException(409, str(gate.get("reason") or "工单状态不允许该决定"))
+    if gate.get("action") == "replay":
+        return dict(gate.get("result") or {})
+    result = await custom_delivery_remote_json(
         await _market_token(request),
         f"/api/customer-service/issues/{int(ticket_id)}/decision",
         method="POST",
         payload={"decision": decision, "note": note.strip(), "idempotency_key": idempotency_key},
     )
+    _ticket_commit(owner, ticket_id, decision, idempotency_key, note.strip(), result)
+    return result
+
+
+def _ticket_path(owner: str):
+    from app.application.mod_delivery_receipt_outbox import _digest
+    from app.utils.path_io.path_utils import get_app_data_dir
+
+    directory = Path(get_app_data_dir()) / "shared-issue-receipts" / _digest(owner)
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return directory / "decisions.json"
+
+
+def _ticket_load(owner: str) -> dict[str, Any]:
+    path = _ticket_path(owner)
+    if not path.exists():
+        return {"tickets": {}, "idem": {}}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"tickets": {}, "idem": {}}
+    if not isinstance(loaded, dict):
+        return {"tickets": {}, "idem": {}}
+    loaded.setdefault("tickets", {})
+    loaded.setdefault("idem", {})
+    return loaded
+
+
+def _ticket_save(owner: str, payload: dict[str, Any]) -> None:
+    path = _ticket_path(owner)
+    path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+
+
+def _ticket_gate(
+    owner: str, ticket_id: int, decision: str, idempotency_key: str, note: str
+) -> dict[str, Any]:
+    from app.domain.task_lifecycle.adapters import legacy_transition_allowed
+
+    book = _ticket_load(owner)
+    idem = book["idem"].get(idempotency_key)
+    fingerprint = json.dumps([ticket_id, decision, note], ensure_ascii=False)
+    if isinstance(idem, dict):
+        if idem.get("fingerprint") != fingerprint:
+            return {"action": "deny", "reason": "幂等键与已有工单决定冲突"}
+        return {"action": "replay", "result": idem.get("result") or {}}
+    targets = {
+        "approve": "queued",
+        "approved": "queued",
+        "reject": "rejected",
+        "rejected": "rejected",
+        "reopen": "queued",
+        "cancel": "cancelled",
+        "resolve": "succeeded",
+    }
+    target = targets.get(decision)
+    current = str((book["tickets"].get(str(ticket_id)) or {}).get("status") or "waiting_approval")
+    if target is not None and not legacy_transition_allowed(
+        "ticket", current, target, retryable=decision == "reopen"
+    ):
+        return {"action": "deny", "reason": f"工单不能从 {current} 改为 {decision}"}
+    return {"action": "allow"}
+
+
+def _ticket_commit(
+    owner: str,
+    ticket_id: int,
+    decision: str,
+    idempotency_key: str,
+    note: str,
+    result: dict[str, Any],
+) -> None:
+    targets = {
+        "approve": "queued",
+        "approved": "queued",
+        "reject": "rejected",
+        "rejected": "rejected",
+        "reopen": "queued",
+        "cancel": "cancelled",
+        "resolve": "succeeded",
+    }
+    book = _ticket_load(owner)
+    current = book["tickets"].get(str(ticket_id)) or {"status": "created", "history": []}
+    target = targets.get(decision, current.get("status") or "created")
+    current.setdefault("history", []).append(
+        {"from": current.get("status"), "to": target, "decision": decision}
+    )
+    current["status"] = target
+    book["tickets"][str(ticket_id)] = current
+    book["idem"][idempotency_key] = {
+        "fingerprint": json.dumps([ticket_id, decision, note], ensure_ascii=False),
+        "result": result,
+    }
+    _ticket_save(owner, book)
 
 
 async def report_issue(

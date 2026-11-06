@@ -170,4 +170,202 @@ def test_workflow_cancel_uses_the_shared_machine() -> None:
     pending = service.start_run(created["id"])
     assert pending["status"] == WorkflowRunStatus.PENDING.value
     assert service.cancel_run(pending["id"])["status"] == WorkflowRunStatus.CANCELLED.value
+    assert service.lifecycle(pending["id"])["history"][-1]["to"] == "cancelled"
+    engine.dispose()
+
+
+def test_sql_queue_retries_open_effect_and_idempotency(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'retry.db'}")
+    repo = SQLAlchemyTaskExecutionRepository(
+        session_factory=sessionmaker(bind=engine), jitter_ratio=0.0
+    )
+    run = _run("sql-retry")
+    stored = repo.enqueue(run, idempotency_key="sql-1", fingerprint="body")
+    assert (
+        repo.enqueue(_run("copy"), idempotency_key="sql-1", fingerprint="body").run_id
+        == stored.run_id
+    )
+    claimed = repo.claim("worker", lease_seconds=30)
+    assert claimed is not None
+    retried = repo.finish(run.run_id, "worker", "failed", error_code="timeout")
+    assert retried is not None and retried.state == "queued"
+    assert repo.claim("worker", lease_seconds=5, now=claimed.updated_at) is None
+    again = repo.claim("worker", lease_seconds=5, now=retried.available_at)
+    assert again is not None and again.execution_count == 2
+    repo.mark_open_effect(run.run_id, "write-order")
+    start = datetime.fromisoformat(again.updated_at.replace("Z", "+00:00"))
+    assert (
+        repo.claim("other", lease_seconds=5, now=(start + timedelta(seconds=30)).isoformat())
+        is None
+    )
+    assert repo.get(run.run_id).last_error_code == "needs_verification"
+    assert repo.lifecycle(run.run_id)["history"]
+    engine.dispose()
+
+
+def test_queue_retries_with_backoff_then_stops() -> None:
+    repo = InMemoryTaskExecutionRepository(jitter_ratio=0.0, rng=__import__("random").Random(1))
+    run = _run("backoff")
+    queued = repo.enqueue(run)
+    start = datetime.fromisoformat(queued.available_at.replace("Z", "+00:00"))
+    claimed = repo.claim("worker", lease_seconds=30, now=start.isoformat())
+    assert claimed is not None
+    retried = repo.finish(run.run_id, "worker", "failed", error_code="timeout")
+    assert retried is not None and retried.state == "queued"
+    assert retried.available_at > start.isoformat()
+    assert repo.claim("worker", lease_seconds=30, now=start.isoformat()) is None
+    again = repo.claim("worker", lease_seconds=30, now=(start + timedelta(seconds=2)).isoformat())
+    assert again is not None and again.execution_count == 2
+    repo.finish(run.run_id, "worker", "failed", error_code="timeout")
+    third = repo.claim("worker", lease_seconds=30, now=(start + timedelta(seconds=10)).isoformat())
+    assert third is not None and third.execution_count == 3
+    stopped = repo.finish(run.run_id, "worker", "failed", error_code="timeout")
+    assert stopped is not None and stopped.state == "failed"
+    assert [event["to"] for event in repo.lifecycle(run.run_id)["history"]][-1] == "failed"
+
+
+def test_open_effect_is_verified_instead_of_replayed() -> None:
+    repo = InMemoryTaskExecutionRepository()
+    run = _run("effect")
+    queued = repo.enqueue(run)
+    start = datetime.fromisoformat(queued.available_at.replace("Z", "+00:00"))
+    assert repo.claim("worker", lease_seconds=5, now=start.isoformat()) is not None
+    repo.mark_open_effect(run.run_id, "write-order")
+    assert (
+        repo.claim("other", lease_seconds=5, now=(start + timedelta(seconds=30)).isoformat())
+        is None
+    )
+    stored = repo.get(run.run_id)
+    assert stored.state == "failed" and stored.last_error_code == "needs_verification"
+
+
+def test_approval_resumes_the_same_task_and_timeout_rejects() -> None:
+    repo = InMemoryTaskExecutionRepository(approval_timeout_seconds=30)
+    run = _run("approval")
+    repo.enqueue(run)
+    claimed = repo.claim("worker", lease_seconds=30)
+    assert claimed is not None
+    paused = repo.request_approval(run.run_id, "boss")
+    assert paused is not None and paused.state == "paused" and paused.run_id == run.run_id
+    with pytest.raises(Exception):
+        repo.resolve_approval(run.run_id, "approve", "stranger")
+    resumed = repo.resolve_approval(run.run_id, "approve", "boss")
+    assert resumed is not None and resumed.state == "queued" and resumed.run_id == run.run_id
+    assert repo.claim("worker", lease_seconds=30) is not None
+    paused = repo.request_approval(run.run_id, "boss")
+    assert paused is not None
+    moment = datetime.fromisoformat(paused.updated_at.replace("Z", "+00:00"))
+    assert (
+        repo.claim("worker", lease_seconds=5, now=(moment + timedelta(seconds=31)).isoformat())
+        is None
+    )
+    assert repo.get(run.run_id).state == "rejected"
+    assert repo.get(run.run_id).last_error_code == "approval_timeout"
+
+
+def test_idempotent_enqueue_does_not_create_a_second_task() -> None:
+    repo = InMemoryTaskExecutionRepository()
+    first = _run("same")
+    second = _run("same")
+    stored = repo.enqueue(first, idempotency_key="order-1", fingerprint="body")
+    again = repo.enqueue(second, idempotency_key="order-1", fingerprint="body")
+    assert again.run_id == stored.run_id
+    with pytest.raises(Exception):
+        repo.enqueue(_run("other"), idempotency_key="order-1", fingerprint="other-body")
+
+
+def test_employee_retry_approval_and_rejection(monkeypatch) -> None:
+    from contextlib import contextmanager
+
+    engine = create_engine(
+        "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
+    )
+    EmployeeRunLog.__table__.create(engine)
+
+    @contextmanager
+    def database():
+        with Session(engine) as db:
+            yield db
+
+    monkeypatch.setattr(run_ledger, "get_db", database)
+    run_id = run_ledger.create_employee_run_log(employee_id="worker", tenant_id=1)
+    run_ledger.finish_employee_run_log(
+        run_id, tenant_id=1, status="failed", error_code="timeout", attempts=1, jitter_ratio=0
+    )
+    with Session(engine) as db:
+        row = db.get(EmployeeRunLog, run_id)
+        assert row.status == "pending" and row.attempts == 2
+        row.status = "running"
+        db.commit()
+    run_ledger.finish_employee_run_log(
+        run_id, tenant_id=1, status="failed", error_code="timeout", attempts=3, jitter_ratio=0
+    )
+    with Session(engine) as db:
+        assert db.get(EmployeeRunLog, run_id).status == "failed"
+    waiting = run_ledger.create_employee_run_log(employee_id="worker", tenant_id=1)
+    run_ledger.request_employee_approval(waiting, tenant_id=1, approver="boss")
+    with pytest.raises(ValueError):
+        run_ledger.decide_employee_run_log(
+            waiting, tenant_id=1, decision="approve", actor="stranger"
+        )
+    run_ledger.decide_employee_run_log(waiting, tenant_id=1, decision="approve", actor="boss")
+    with Session(engine) as db:
+        assert db.get(EmployeeRunLog, waiting).status == "pending"
+        assert db.get(EmployeeRunLog, waiting).id == waiting
+    rejected = run_ledger.create_employee_run_log(employee_id="worker", tenant_id=1)
+    run_ledger.request_employee_approval(rejected, tenant_id=1, approver="boss")
+    assert run_ledger.expire_employee_approvals(tenant_id=1, timeout_seconds=0) == 1
+    with Session(engine) as db:
+        assert db.get(EmployeeRunLog, rejected).status == "rejected"
+    with pytest.raises(ValueError):
+        run_ledger.finish_employee_run_log(rejected, tenant_id=1, status="success")
+    engine.dispose()
+
+
+def test_workflow_retry_approval_and_history() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    service = WorkflowDefinitionAppService(session_factory=factory)
+    created = service.create_definition(
+        tenant_id=1,
+        name="lifecycle",
+        nodes=[
+            {
+                "node_id": "n1",
+                "tool_id": "products",
+                "action": "query",
+                "params": {},
+                "risk": "low",
+                "idempotent": True,
+                "description": "查询",
+                "depends_on": [],
+            }
+        ],
+    )
+    run = service.start_run(created["id"])
+    service._move_run(run["id"], "running", code="dispatch")
+    scheduled = service.fail_run(run["id"], error_code="timeout", attempts=1)
+    assert scheduled["status"] == "pending" and scheduled["id"] == run["id"]
+    service._move_run(run["id"], "running", code="dispatch")
+    assert service.fail_run(run["id"], error_code="timeout", attempts=3)["status"] == "failed"
+    waiting = service.start_run(created["id"])
+    service._move_run(waiting["id"], "running", code="dispatch")
+    assert service.request_approval(waiting["id"], "boss")["status"] == "awaiting_approval"
+    with pytest.raises(WorkflowError):
+        service.decide_run(waiting["id"], "approve", "stranger")
+    assert service.decide_run(waiting["id"], "approve", "boss")["id"] == waiting["id"]
+    assert service.decide_run(waiting["id"], "approve", "boss")["status"] == "pending"
+    timed = service.start_run(created["id"])
+    service._move_run(timed["id"], "running", code="dispatch")
+    service.request_approval(timed["id"], "boss")
+    assert service.expire_approvals(timeout_seconds=0) >= 1
+    assert service.get_run(timed["id"])["status"] == "rejected"
+    with pytest.raises(WorkflowError) as exc:
+        service.fail_run(timed["id"], error_code="timeout", attempts=1)
+    assert exc.value.status_code == 409
     engine.dispose()

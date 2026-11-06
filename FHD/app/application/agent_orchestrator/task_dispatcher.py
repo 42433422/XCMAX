@@ -204,6 +204,9 @@ class AgentTaskDispatcher:
             repository = ClaimedRunRepository(repository, execution, owner_id)
         error_code = ""
         state = "failed"
+        marker = getattr(self._execution_repo, "mark_open_effect", None)
+        if marker is not None:
+            marker(execution.run_id)
         try:
             orchestrator = self._orchestrator_factory(repository)
             scope = (
@@ -232,6 +235,9 @@ class AgentTaskDispatcher:
         except WorkerLeaseLost:
             error_code = "worker_lease_lost"
             logger.info("worker stopped after lease loss for run %s", execution.run_id)
+        except TimeoutError:
+            error_code = "timeout"
+            logger.exception("agent task worker timed out for run %s", execution.run_id)
         except (
             RECOVERABLE_ERRORS
         ):  # thread boundary: preserve the worker pool and persist safe evidence
