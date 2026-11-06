@@ -1,0 +1,1504 @@
+"""Durable multi-turn task continuity for employee handoff and recovery.
+
+Business success is taken only from tool and handoff execution records.
+Dialogue, model text, and compression summaries are not execution results.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import contextvars
+import hashlib
+import json
+import threading
+import uuid
+from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from app.application.agent_orchestrator.context_window_manager import (
+    ContextWindowManager,
+    estimate_messages_tokens,
+)
+
+SOURCE = "employee_runtime.task_continuity"
+CONTINUE_TEXT = "继续执行剩余任务"
+_TERMINAL_OK = "completed"
+_OPEN = {"pending", "running", "blocked", "recovering", "failed"}
+_REGISTRY: dict[str, TaskContinuityRuntime] = {}
+_CURRENT: contextvars.ContextVar[TaskContinuityRuntime | None] = contextvars.ContextVar(
+    "task_continuity_runtime", default=None
+)
+ToolFn = Callable[[dict[str, Any], str], dict[str, Any]]
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex}"
+
+
+def _clone(value: Any) -> Any:
+    return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def _empty_state() -> dict[str, Any]:
+    return {
+        "tasks": {},
+        "handoffs": {},
+        "tool_calls": {},
+        "events": [],
+        "recoveries": [],
+        "restarts": [],
+        "side_effects": {},
+        "conversations": {},
+    }
+
+
+class _SummaryCache:
+    def __init__(self) -> None:
+        self.conversation_history: list[dict[str, str]] = []
+        self.summary = ""
+        self.summary_covered_until = -1
+        self.summary_fingerprint = ""
+
+
+class TaskContinuityRuntime:
+    """Process runtime with a JSON ledger. Restart drops memory and reloads the file."""
+
+    def __init__(self, path: str | Path, *, compress_budget: int = 700) -> None:
+        self.path = Path(path)
+        self.runtime_id = _new_id("rt")
+        self.compress_budget = compress_budget
+        self.tools: dict[str, ToolFn] = {}
+        self.employees: dict[str, dict[str, Any]] = {}
+        self.summary_provider: Any | None = None
+        self._session_cache: dict[str, str] = {}
+        self._lock = threading.RLock()
+        self.state = _empty_state()
+        _REGISTRY[self.runtime_id] = self
+        if self.path.is_file():
+            self._read()
+
+    def register_tool(self, name: str, fn: ToolFn) -> None:
+        self.tools[name] = fn
+
+    def dispatch(
+        self,
+        employee_id: str,
+        text: str,
+        payload: dict[str, Any],
+        *,
+        user_id: Any = "",
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        op = str(payload.get("op") or "").strip()
+        actor = str(employee_id or "").strip()
+        user = str(payload["user_id"] if payload.get("user_id") is not None else user_id)
+        tenant = str(payload.get("tenant_id") or "")
+        session = str(payload.get("session_id") or session_id or "")
+        with self._lock:
+            handler = {
+                "start": self._start,
+                "pause": self._pause,
+                "resume": self._resume,
+                "append_requirements": self._append_requirements,
+                "leave": self._leave,
+                "reenter": self._reenter,
+                "read": self._read_task,
+                "handoff": self._handoff,
+                "retry_handoff": self._retry_handoff,
+                "set_employee": self._set_employee,
+                "split": self._split,
+                "child_return": self._child_return,
+                "run_tools": self._run_tools,
+                "retry_step": self._retry_step,
+                "append_turn": self._append_turn,
+                "compress": self._compress,
+                "continue_compressed": self._continue_compressed,
+                "seed_inflight": self._seed_inflight,
+                "restart": self._restart,
+                "chain": self._chain,
+                "metrics": self._metrics_op,
+            }.get(op)
+            if handler is None:
+                return self._fail(None, "unknown_op", f"不支持的连续性操作: {op}")
+            return handler(actor, text, payload, user=user, tenant=tenant, session=session)
+
+    def pollution_findings(self) -> list[dict[str, str]]:
+        tasks = list(self.state["tasks"].values())
+        findings: list[dict[str, str]] = []
+        for task in tasks:
+            blob = json.dumps(
+                {
+                    "business_data": task["business_data"],
+                    "conditions": task["conditions"],
+                    "requirements": task["requirements"],
+                    "steps": [
+                        {"params": step.get("params"), "result": step.get("result_payload")}
+                        for step in task["steps"]
+                    ],
+                    "snapshot": task["context_snapshot"],
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+            for other in tasks:
+                if other["task_id"] == task["task_id"]:
+                    continue
+                marker = str(other["business_data"].get("isolation_marker") or "")
+                if not marker or marker not in blob:
+                    continue
+                same_owner = (
+                    other["tenant_id"] == task["tenant_id"]
+                    and other["user_id"] == task["user_id"]
+                    and other.get("root_task_id") == task.get("root_task_id")
+                )
+                if not same_owner:
+                    findings.append(
+                        {
+                            "task_id": task["task_id"],
+                            "foreign_task_id": other["task_id"],
+                            "marker": marker,
+                        }
+                    )
+        return findings
+
+    def duplicate_side_effects(self) -> list[str]:
+        return [
+            key
+            for key, item in self.state["side_effects"].items()
+            if int(item.get("invocations") or 0) > 1
+        ]
+
+    def orphans(self) -> list[str]:
+        ids = set(self.state["tasks"])
+        bad: list[str] = []
+        for task in self.state["tasks"].values():
+            parent = str(task.get("parent_task_id") or "")
+            if parent and parent not in ids:
+                bad.append(task["task_id"])
+            for child_id in task.get("child_task_ids") or []:
+                if child_id not in ids:
+                    bad.append(str(child_id))
+        return bad
+
+    def _start(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task_id = _new_id("task")
+        steps = [
+            _step_from(task_id, raw, index) for index, raw in enumerate(payload.get("steps") or [])
+        ]
+        task: dict[str, Any] = {
+            "task_id": task_id,
+            "parent_task_id": str(payload.get("parent_task_id") or ""),
+            "root_task_id": str(payload.get("root_task_id") or task_id),
+            "child_task_ids": [],
+            "conversation_id": str(payload.get("conversation_id") or _new_id("conv")),
+            "tenant_id": scope["tenant"],
+            "user_id": scope["user"],
+            "session_id": scope["session"],
+            "owner_employee": actor,
+            "holder_employee": actor,
+            "authorized_employees": [actor],
+            "grants": {actor: ["*"]},
+            "goal": str(payload.get("goal") or text or ""),
+            "conditions": dict(payload.get("conditions") or {}),
+            "constraints": list(payload.get("constraints") or []),
+            "business_data": dict(payload.get("business_data") or {}),
+            "requirements": list(payload.get("requirements") or []),
+            "steps": steps,
+            "status": "running",
+            "error_code": "",
+            "error_message": "",
+            "retry_count": 0,
+            "context_version": 1,
+            "context_snapshot": {},
+            "completed_steps": [],
+            "remaining_steps": [step["step_id"] for step in steps],
+            "messages": [],
+            "confirmed_facts": {},
+            "speculative": [],
+            "rejected_claims": [],
+            "prior_results": [],
+            "result_payload": {},
+            "aggregate": {},
+            "completion_condition": str(payload.get("completion_condition") or "all_steps_success"),
+            "handoff_ids": [],
+            "compression_strategy": "",
+            "compression_count": 0,
+            "compressed_summary": "",
+            "facts_after_first_compression": None,
+            "created_at": _now(),
+            "updated_at": _now(),
+        }
+        if task["goal"]:
+            task["confirmed_facts"]["goal"] = task["goal"]
+        if payload.get("fact_params") is not None:
+            task["confirmed_facts"]["params"] = payload["fact_params"]
+        if task["constraints"]:
+            task["confirmed_facts"]["constraints"] = list(task["constraints"])
+        self.state["tasks"][task_id] = task
+        key = _conv_key(task)
+        self.state["conversations"][key] = task_id
+        self._session_cache[key] = task_id
+        self._touch(task)
+        limit = payload.get("execute_limit")
+        if limit is not None:
+            self._execute_pending(task, actor, limit=int(limit))
+            self._touch(task)
+        self._event("task_created", task)
+        self._write()
+        return self._envelope(task)
+
+    def _pause(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        task["status"] = "paused"
+        self._touch(task)
+        self._event("task_paused", task)
+        self._write()
+        return self._envelope(task, business=False)
+
+    def _resume(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        phrase = str(payload.get("text") or text or "").strip()
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        if phrase != CONTINUE_TEXT:
+            return self._fail(task, "resume_phrase_mismatch", "恢复必须使用「继续执行剩余任务」")
+        if task["status"] != "paused":
+            return self._fail(task, "not_paused", "只有暂停中的原任务可以继续")
+        task["status"] = "running"
+        self._execute_pending(task, actor, limit=None)
+        self._touch(task)
+        self._event("task_resumed", task)
+        self._write()
+        return self._envelope(task)
+
+    def _append_requirements(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        for req in payload.get("requirements") or []:
+            item = str(req)
+            if item and item not in task["requirements"]:
+                task["requirements"].append(item)
+                task["steps"].append(
+                    _step_from(
+                        task["task_id"],
+                        {"name": item, "tool": str(payload.get("tool") or "note"), "params": {}},
+                        len(task["steps"]),
+                    )
+                )
+        if isinstance(payload.get("conditions"), dict):
+            task["conditions"] = _merge_conditions(task["conditions"], payload["conditions"])
+        for constraint in payload.get("constraints") or []:
+            if constraint not in task["constraints"]:
+                task["constraints"].append(constraint)
+        if any(step["status"] != "success" for step in task["steps"]):
+            task["status"] = "paused"
+        self._touch(task)
+        self._event("requirements_merged", task)
+        self._write()
+        return self._envelope(task, business=False)
+
+    def _leave(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=False)
+        if not _is_task(task):
+            return task
+        self._session_cache.pop(_conv_key(task), None)
+        self._event("conversation_left", task)
+        return self._envelope(task, business=False)
+
+    def _reenter(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        key = f"{scope['tenant']}:{scope['user']}:{payload.get('conversation_id') or ''}"
+        if key in self._session_cache:
+            return self._fail(None, "session_still_active", "会话尚未离开")
+        task_id = self.state["conversations"].get(key)
+        task = self.state["tasks"].get(task_id or "")
+        if task is None or not self._allows(task, actor, scope):
+            return self._fail(None, "conversation_not_found", "找不到可恢复的原会话任务")
+        self._session_cache[key] = task["task_id"]
+        self._event("conversation_reentered", task)
+        return self._envelope(task, business=task["status"] == _TERMINAL_OK)
+
+    def _read_task(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=False)
+        if not _is_task(task):
+            return task
+        self._event("context_read", task)
+        return self._envelope(task, business=task["status"] == _TERMINAL_OK)
+
+    def _handoff(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        target = str(payload.get("target_employee") or "")
+        if not target:
+            return self._fail(task, "missing_target", "交接必须指定目标员工")
+        record = self._perform_handoff(
+            task,
+            source=actor,
+            target=target,
+            permissions=list(payload.get("permissions") or []),
+            new_conditions=dict(payload.get("conditions") or {}),
+            idempotency_key=str(
+                payload.get("idempotency_key") or f"{task['task_id']}:handoff:{actor}:{target}"
+            ),
+            effect=dict(payload.get("effect") or {"action": "execute"}),
+            policy=str(payload.get("policy") or "retry"),
+        )
+        self._event("handoff_recorded", task)
+        self._write()
+        return self._envelope(task, extra={"handoff": record})
+
+    def _retry_handoff(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        previous_id = str(
+            payload.get("handoff_id") or (task["handoff_ids"][-1] if task["handoff_ids"] else "")
+        )
+        previous = self.state["handoffs"].get(previous_id)
+        if previous is None:
+            return self._fail(task, "handoff_not_found", "没有可重试的交接")
+        task["retry_count"] = int(task["retry_count"]) + 1
+        inherited = _clone(previous["context_snapshot"])
+        policy = str(payload.get("policy") or previous.get("policy") or "retry")
+        if policy == "rollback":
+            key = str(previous["idempotency_key"])
+            effect = self.state["side_effects"].get(key)
+            if effect is not None:
+                effect["rolled_back"] = True
+                self.state["side_effects"].pop(key, None)
+            task["status"] = "failed"
+            task["error_code"] = "rolled_back"
+            task["error_message"] = "交接已按策略回滚，未重复执行副作用"
+            recovery = self._recovery(task, previous_id, "rollback", task["error_message"])
+            self._event("handoff_rolled_back", task)
+            self._write()
+            return self._envelope(
+                task, business=False, extra={"recovery_record": recovery, "inherited": inherited}
+            )
+        flags = self._flags(str(previous["target_employee"]))
+        if flags.get("unrecoverable"):
+            task["status"] = "failed"
+            task["error_code"] = str(previous.get("error_code") or "employee_unrecoverable")
+            task["error_message"] = str(previous.get("error_message") or "目标员工不可恢复")
+            recovery = self._recovery(task, previous_id, "unrecoverable", task["error_message"])
+            self._event("handoff_unrecoverable", task)
+            self._write()
+            return self._envelope(
+                task, business=False, extra={"recovery_record": recovery, "inherited": inherited}
+            )
+        record = self._perform_handoff(
+            task,
+            source=str(previous["source_employee"]),
+            target=str(previous["target_employee"]),
+            permissions=list(previous.get("permissions") or []),
+            new_conditions={},
+            idempotency_key=str(previous["idempotency_key"]),
+            effect=dict(previous.get("effect") or {}),
+            policy=policy,
+            retry_of=previous_id,
+            inherited=inherited,
+        )
+        record["retry_count"] = int(task["retry_count"])
+        self._event("handoff_retried", task)
+        self._write()
+        return self._envelope(task, extra={"handoff": record, "inherited": inherited})
+
+    def _set_employee(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        target = str(payload.get("target_employee") or actor)
+        flags = self._flags(target)
+        for key in ("available", "timeout", "crash", "unrecoverable"):
+            if key in payload:
+                flags[key] = bool(payload[key])
+        return {
+            "success": True,
+            "business_success": False,
+            "source": SOURCE,
+            "employee": target,
+            "flags": dict(flags),
+            "evidence": _blank_evidence(),
+        }
+
+    def _split(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        parent = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(parent):
+            return parent
+        specs = list(payload.get("children") or [])
+        if len(specs) < 3:
+            return self._fail(parent, "insufficient_children", "父任务至少要拆成 3 个子任务")
+        for spec in specs:
+            if not isinstance(spec, dict):
+                continue
+            child_id = _new_id("task")
+            employee = str(spec.get("employee_id") or "")
+            child = {
+                **_clone(parent),
+                "task_id": child_id,
+                "parent_task_id": parent["task_id"],
+                "root_task_id": parent["root_task_id"],
+                "child_task_ids": [],
+                "conversation_id": f"{parent['conversation_id']}:{child_id}",
+                "owner_employee": employee,
+                "holder_employee": employee,
+                "authorized_employees": [employee, parent["owner_employee"]],
+                "grants": {employee: ["*"], parent["owner_employee"]: ["*"]},
+                "steps": [],
+                "status": "running",
+                "error_code": "",
+                "error_message": "",
+                "business_data": dict(spec.get("business_data") or {}),
+                "result_payload": {},
+                "aggregate": {},
+                "handoff_ids": [],
+                "messages": [],
+                "prior_results": [],
+                "created_at": _now(),
+            }
+            child["business_data"]["isolation_marker"] = str(
+                spec.get("isolation_marker") or child_id
+            )
+            self._touch(child)
+            self.state["tasks"][child_id] = child
+            parent["child_task_ids"].append(child_id)
+            self._event("child_created", child)
+        parent["status"] = "running"
+        self._touch(parent)
+        self._event("task_split", parent)
+        self._write()
+        return self._envelope(parent, business=False)
+
+    def _child_return(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        child = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(child):
+            return child
+        if not child["parent_task_id"]:
+            return self._fail(child, "not_a_child", "只有子任务可以回传")
+        ok = bool(payload.get("ok"))
+        child["result_payload"] = {
+            "token": payload.get("token"),
+            "output": payload.get("output"),
+            "confirmed": ok,
+        }
+        child["status"] = _TERMINAL_OK if ok else "failed"
+        child["error_code"] = "" if ok else str(payload.get("error_code") or "child_failed")
+        child["error_message"] = "" if ok else str(payload.get("error_message") or "子任务失败")
+        self._touch(child)
+        parent = self.state["tasks"].get(child["parent_task_id"])
+        if parent is not None:
+            self._aggregate_parent(parent)
+            self._touch(parent)
+        self._event("child_returned", child)
+        self._write()
+        business = child["status"] == _TERMINAL_OK
+        return self._envelope(child, business=business)
+
+    def _run_tools(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        probe = str(payload.get("probe_tool") or "")
+        probe_denied = False
+        if probe:
+            grant = list(task["grants"].get(actor) or [])
+            probe_denied = "*" not in grant and probe not in grant
+        if payload.get("model_text"):
+            task["messages"].append(
+                {
+                    "role": "assistant",
+                    "content": str(payload["model_text"]),
+                    "fact": {"confidence": "speculative", "kind": "model_text"},
+                }
+            )
+            task["speculative"].append(str(payload["model_text"]))
+        only = set(payload["only_steps"]) if "only_steps" in payload else None
+        if probe and only is None:
+            only = set()
+        self._execute_pending(task, actor, limit=None, only=only)
+        self._touch(task)
+        self._event("tools_executed", task)
+        self._write()
+        return self._envelope(
+            task,
+            extra={"execution_summary": _summary(task), "probe_denied": probe_denied},
+        )
+
+    def _retry_step(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        step = _find_step(task, str(payload.get("step_id") or ""))
+        if step is None:
+            return self._fail(task, "step_not_found", "没有该步骤")
+        task["retry_count"] = int(task["retry_count"]) + 1
+        if step["status"] == "success":
+            self._event("retry_skipped_completed", task)
+            self._write()
+            return self._envelope(task, business=False, extra={"skipped": step["step_id"]})
+        if step["status"] not in {"failed", "blocked"}:
+            return self._fail(task, "retry_not_failed", "只能重试失败步骤")
+        if not _deps_ok(task, step):
+            step["status"] = "blocked"
+            step["error_code"] = "dependency_not_met"
+            self._rollup_steps(task)
+            self._write()
+            return self._envelope(task, business=False)
+        step["status"] = "pending"
+        step["error_code"] = ""
+        self._invoke(task, step, actor)
+        self._rollup_steps(task)
+        self._touch(task)
+        self._event("step_retried", task)
+        self._write()
+        return self._envelope(task, extra={"execution_summary": _summary(task)})
+
+    def _append_turn(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        fact = dict(payload.get("fact") or {})
+        message = {
+            "role": str(payload.get("role") or "user"),
+            "content": str(payload.get("content") or text or ""),
+            "fact": fact,
+        }
+        task["messages"].append(message)
+        self._apply_fact(task, fact)
+        self._touch(task)
+        self._event("turn_recorded", task)
+        self._write()
+        return self._envelope(task, business=False)
+
+    def _compress(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        before = _clone(task["confirmed_facts"])
+        messages = [
+            {"role": str(item.get("role") or "user"), "content": str(item.get("content") or "")}
+            for item in task["messages"]
+        ]
+        estimated = estimate_messages_tokens(messages)
+        # Sit just under the framed history so the real summarizer runs, while the
+        # summary request (a single prompt) still fits. Facts are not taken from it.
+        budget = int(payload.get("token_budget") or max(estimated - 1, 1))
+        manager = ContextWindowManager(
+            token_budget=budget,
+            recent_keep=2,
+            summarize_threshold=4,
+            enabled=True,
+        )
+        compressed = _await(
+            manager.compress(
+                messages,
+                user_id=str(task["user_id"]),
+                trace_id=task["task_id"],
+                provider=self.summary_provider,
+                context=_SummaryCache(),
+            )
+        )
+        summary = ""
+        for item in compressed.messages:
+            content = str(item.get("content") or "")
+            if item.get("role") == "system" and content.startswith("对话历史摘要："):
+                summary = content
+        task["compressed_summary"] = summary
+        task["compression_strategy"] = compressed.strategy
+        task["compression_count"] = int(task["compression_count"]) + 1
+        task["confirmed_facts"] = before
+        if task["compression_count"] == 1:
+            task["facts_after_first_compression"] = _clone(before)
+        stable = task["facts_after_first_compression"] == task["confirmed_facts"]
+        self._touch(task)
+        self._event("history_compressed", task)
+        self._write()
+        return self._envelope(
+            task,
+            business=False,
+            extra={
+                "compression_strategy": compressed.strategy,
+                "pre_message_count": compressed.pre_message_count,
+                "post_message_count": compressed.post_message_count,
+                "facts_before": before,
+                "facts_after": task["confirmed_facts"],
+                "facts_stable": stable,
+                "summary_is_not_execution": True,
+            },
+        )
+
+    def _continue_compressed(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        completed = [
+            item
+            for item in self.state["tool_calls"].values()
+            if item["task_id"] == task["task_id"] and item["status"] == "success"
+        ]
+        restatement = {
+            "goal": task["confirmed_facts"].get("goal"),
+            "params": task["confirmed_facts"].get("params"),
+            "constraints": task["confirmed_facts"].get("constraints"),
+            "completed_ops": [
+                {"tool_call_id": item["tool_call_id"], "status": item["status"]}
+                for item in completed
+            ],
+        }
+        for step in task["steps"]:
+            if step["status"] == "pending":
+                self._invoke(task, step, actor)
+                break
+        self._rollup_steps(task)
+        self._touch(task)
+        self._event("continued_after_compression", task)
+        self._write()
+        return self._envelope(
+            task, extra={"restatement": restatement, "execution_summary": _summary(task)}
+        )
+
+    def _seed_inflight(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        step = _find_step(task, str(payload.get("step_id") or ""))
+        if step is None:
+            return self._fail(task, "step_not_found", "没有该步骤")
+        call_id = _new_id("tool")
+        step["status"] = "running"
+        step["tool_call_id"] = call_id
+        self.state["tool_calls"][call_id] = {
+            "tool_call_id": call_id,
+            "task_id": task["task_id"],
+            "step_id": step["step_id"],
+            "idempotency_key": step["idempotency_key"],
+            "status": "running",
+            "result_payload": {},
+            "error_code": "",
+            "error_message": "",
+            "resubmitted": False,
+            "submitted": True,
+        }
+        self._touch(task)
+        self._event("tool_inflight", task)
+        self._write()
+        return self._envelope(task, business=False)
+
+    def _restart(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        cause = str(payload.get("cause") or "backend_restart")
+        before = self._fingerprint()
+        self._write()
+        self.state = _empty_state()
+        self._session_cache.clear()
+        self._read()
+        recovered: list[str] = []
+        for call in self.state["tool_calls"].values():
+            if call["status"] != "running":
+                continue
+            call["status"] = "recovering"
+            call["resubmitted"] = False
+            recovered.append(call["tool_call_id"])
+            task = self.state["tasks"].get(call["task_id"])
+            step = _find_step(task, call["step_id"]) if task else None
+            if step is not None:
+                step["status"] = "recovering"
+        for task in self.state["tasks"].values():
+            if task["status"] == _TERMINAL_OK:
+                continue
+            if any(step["status"] == "recovering" for step in task["steps"]):
+                task["status"] = "recovering"
+                task["error_code"] = task.get("error_code") or "restart_inflight"
+                task["error_message"] = "重启时有未完成工具，未重复提交"
+        after = self._fingerprint()
+        record = {
+            "restart_id": _new_id("restart"),
+            "cause": cause,
+            "before_fingerprint": before,
+            "after_fingerprint": after,
+            "inflight_recovered": recovered,
+            "memory_dropped": True,
+            "timestamp": _now(),
+            "orphan_count": len(self.orphans()),
+        }
+        self.state["restarts"].append(record)
+        focus_id = str(payload.get("task_id") or "")
+        focus = self.state["tasks"].get(focus_id)
+        if focus is not None:
+            self._event("restart_recovered", focus)
+        self._write()
+        if focus is None:
+            return {
+                "success": True,
+                "business_success": False,
+                "source": SOURCE,
+                "restart": record,
+                "evidence": _blank_evidence() | {"E16_restart_recovery_record": record},
+            }
+        return self._envelope(focus, business=False, extra={"restart": record})
+
+    def _chain(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        task = self._authorized(payload, actor, scope, write=True)
+        if not _is_task(task):
+            return task
+        employees = [str(item) for item in payload.get("employees") or []]
+        if employees[:1] != [actor] or len(employees) != 4:
+            return self._fail(task, "chain_shape", "交接链必须是发起员工起的 4 人链")
+        task["prior_results"].append(
+            {
+                "employee": actor,
+                "result": {"stage": "analysis", "goal": task["goal"]},
+                "confirmed": True,
+            }
+        )
+        self._touch(task)
+        for source, target in zip(employees, employees[1:]):
+            record = self._perform_handoff(
+                task,
+                source=source,
+                target=target,
+                permissions=list(payload.get("permissions") or ["continue"]),
+                new_conditions={},
+                idempotency_key=f"{task['task_id']}:chain:{source}:{target}",
+                effect={
+                    "stage": target,
+                    "saw_prior": _clone(task["prior_results"]),
+                    "goal": task["goal"],
+                },
+                policy="retry",
+            )
+            if record["status"] != _TERMINAL_OK:
+                self._write()
+                return self._envelope(task, business=False, extra={"handoff": record})
+        task["result_payload"] = _clone(task["prior_results"][-1])
+        task["holder_employee"] = employees[-1]
+        task["status"] = _TERMINAL_OK
+        task["error_code"] = ""
+        task["error_message"] = ""
+        self._touch(task)
+        self._event("chain_completed", task)
+        self._write()
+        return self._envelope(task)
+
+    def _metrics_op(
+        self, actor: str, text: str, payload: dict[str, Any], **scope: str
+    ) -> dict[str, Any]:
+        pollution = self.pollution_findings()
+        duplicates = self.duplicate_side_effects()
+        return {
+            "success": True,
+            "business_success": not pollution and not duplicates,
+            "source": SOURCE,
+            "pollution": len(pollution),
+            "pollution_findings": pollution,
+            "duplicate_side_effects": len(duplicates),
+            "duplicate_keys": duplicates,
+            "orphan_count": len(self.orphans()),
+            "evidence": _blank_evidence(),
+        }
+
+    def _perform_handoff(
+        self,
+        task: dict[str, Any],
+        *,
+        source: str,
+        target: str,
+        permissions: list[str],
+        new_conditions: dict[str, Any],
+        idempotency_key: str,
+        effect: dict[str, Any],
+        policy: str,
+        retry_of: str = "",
+        inherited: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if new_conditions:
+            task["conditions"] = _merge_conditions(task["conditions"], new_conditions)
+        if target not in task["authorized_employees"]:
+            task["authorized_employees"].append(target)
+        task["grants"][target] = list(permissions)
+        task["holder_employee"] = target
+        flags = self._flags(target)
+        record = {
+            "handoff_id": _new_id("handoff"),
+            "task_id": task["task_id"],
+            "source_employee": source,
+            "target_employee": target,
+            "permissions": list(permissions),
+            "requirements": list(task["requirements"]),
+            "goal": task["goal"],
+            "idempotency_key": idempotency_key,
+            "policy": policy,
+            "retry_of": retry_of,
+            "retry_count": int(task["retry_count"]),
+            "effect": effect,
+            "status": "pending",
+            "error_code": "",
+            "error_message": "",
+            "result_payload": {},
+            "duplicate_prevented": False,
+            "context_version": task["context_version"],
+            "context_snapshot": inherited if inherited is not None else {},
+            "created_at": _now(),
+        }
+        self._touch(task)
+        record["context_snapshot"] = (
+            inherited if inherited is not None else _clone(task["context_snapshot"])
+        )
+        record["context_version"] = task["context_version"]
+        failure = _availability_failure(flags)
+        if failure:
+            code, message = failure
+            record["status"] = "failed"
+            record["error_code"] = code
+            record["error_message"] = message
+            task["status"] = "failed"
+            task["error_code"] = code
+            task["error_message"] = message
+            self._recovery(task, record["handoff_id"], code, message)
+        elif idempotency_key in self.state["side_effects"]:
+            record["status"] = _TERMINAL_OK
+            record["duplicate_prevented"] = True
+            record["result_payload"] = _clone(self.state["side_effects"][idempotency_key]["result"])
+        else:
+            result = {"applied": True, "by": target, "effect": effect, "goal": task["goal"]}
+            self.state["side_effects"][idempotency_key] = {
+                "invocations": 1,
+                "result": result,
+                "task_id": task["task_id"],
+            }
+            record["status"] = _TERMINAL_OK
+            record["result_payload"] = result
+            task["prior_results"].append(
+                {
+                    "employee": target,
+                    "result": result,
+                    "handoff_id": record["handoff_id"],
+                    "confirmed": True,
+                }
+            )
+            open_steps = [step for step in task["steps"] if step["status"] != "success"]
+            if not open_steps:
+                task["status"] = _TERMINAL_OK
+                task["error_code"] = ""
+                task["error_message"] = ""
+            elif task["status"] == "failed":
+                task["status"] = "running"
+                task["error_code"] = ""
+                task["error_message"] = ""
+        self.state["handoffs"][record["handoff_id"]] = record
+        task["handoff_ids"].append(record["handoff_id"])
+        self._touch(task)
+        return record
+
+    def _execute_pending(
+        self, task: dict[str, Any], actor: str, *, limit: int | None, only: set[str] | None = None
+    ) -> None:
+        ran = 0
+        for step in task["steps"]:
+            if only is not None and step["step_id"] not in only:
+                continue
+            if step["status"] == "blocked" and _deps_ok(task, step):
+                step["status"] = "pending"
+                step["error_code"] = ""
+            if step["status"] != "pending":
+                continue
+            if limit is not None and ran >= limit:
+                break
+            self._invoke(task, step, actor)
+            ran += 1
+        self._rollup_steps(task)
+
+    def _invoke(self, task: dict[str, Any], step: dict[str, Any], actor: str) -> None:
+        grant = list(task["grants"].get(actor) or [])
+        if "*" not in grant and step["tool"] not in grant:
+            step["status"] = "failed"
+            step["error_code"] = "unauthorized_tool"
+            step["error_message"] = "员工无权调用该工具"
+            return
+        if step["status"] == "success" or step["idempotency_key"] in self.state["side_effects"]:
+            if step["idempotency_key"] in self.state["side_effects"]:
+                step["status"] = "success"
+                step["result_payload"] = _clone(
+                    self.state["side_effects"][step["idempotency_key"]]["result"]
+                )
+                step["skipped_duplicate"] = True
+            return
+        if step["status"] == "running":
+            return
+        if not _deps_ok(task, step):
+            step["status"] = "blocked"
+            step["error_code"] = "dependency_not_met"
+            step["error_message"] = "前置步骤未成功，依赖步骤不继续"
+            return
+        call_id = _new_id("tool")
+        call = {
+            "tool_call_id": call_id,
+            "task_id": task["task_id"],
+            "step_id": step["step_id"],
+            "idempotency_key": step["idempotency_key"],
+            "status": "running",
+            "result_payload": {},
+            "error_code": "",
+            "error_message": "",
+            "resubmitted": False,
+            "submitted": True,
+        }
+        step["tool_call_id"] = call_id
+        step["status"] = "running"
+        self.state["tool_calls"][call_id] = call
+        self._write()
+        fn = self.tools.get(step["tool"])
+        try:
+            result = (
+                fn(_clone(step["params"]), task["task_id"])
+                if fn
+                else {"ok": True, "echo": step["params"]}
+            )
+        except Exception as exc:
+            result = {"ok": False, "error_code": "tool_exception", "error_message": str(exc)}
+        if not isinstance(result, dict) or result.get("ok") is False:
+            call["status"] = "failed"
+            call["error_code"] = str((result or {}).get("error_code") or "tool_failed")
+            call["error_message"] = str((result or {}).get("error_message") or "工具失败")
+            step["status"] = "failed"
+            step["error_code"] = call["error_code"]
+            step["error_message"] = call["error_message"]
+            step["result_payload"] = {}
+            return
+        self.state["side_effects"][step["idempotency_key"]] = {
+            "invocations": 1,
+            "result": result,
+            "task_id": task["task_id"],
+        }
+        call["status"] = "success"
+        call["result_payload"] = result
+        step["status"] = "success"
+        step["error_code"] = ""
+        step["error_message"] = ""
+        step["result_payload"] = result
+
+    def _apply_fact(self, task: dict[str, Any], fact: dict[str, Any]) -> None:
+        confidence = str(fact.get("confidence") or "")
+        kind = str(fact.get("kind") or "")
+        if confidence != "confirmed":
+            if fact:
+                task["speculative"].append(fact)
+            return
+        if kind == "tool_result":
+            call = self.state["tool_calls"].get(str(fact.get("tool_call_id") or ""))
+            if call is None or call["status"] != "success" or call["task_id"] != task["task_id"]:
+                task["rejected_claims"].append(fact)
+                return
+        key = str(fact.get("key") or kind or "")
+        if not key:
+            task["rejected_claims"].append(fact)
+            return
+        value = fact.get("value")
+        current = task["confirmed_facts"]
+        if key in current and current[key] != value:
+            current.setdefault("_preserved", []).append(
+                {"key": key, "kept": current[key], "added": value}
+            )
+            return
+        current[key] = value
+
+    def _aggregate_parent(self, parent: dict[str, Any]) -> None:
+        children = [
+            self.state["tasks"][cid]
+            for cid in parent["child_task_ids"]
+            if cid in self.state["tasks"]
+        ]
+        aggregate = {
+            "success": sum(child["status"] == _TERMINAL_OK for child in children),
+            "failure": sum(child["status"] == "failed" for child in children),
+            "incomplete": sum(
+                child["status"] not in {_TERMINAL_OK, "failed"} for child in children
+            ),
+        }
+        parent["aggregate"] = aggregate
+        if parent["completion_condition"] != "all_children_success":
+            return
+        if aggregate["failure"]:
+            parent["status"] = "failed"
+            parent["error_code"] = "child_failed"
+            parent["error_message"] = "子任务失败，父任务不能记为成功"
+        elif aggregate["incomplete"] or aggregate["success"] != len(children):
+            parent["status"] = "running"
+        elif children:
+            parent["status"] = _TERMINAL_OK
+            parent["error_code"] = ""
+            parent["error_message"] = ""
+            parent["result_payload"] = {
+                "children": [
+                    {
+                        "task_id": child["task_id"],
+                        "status": child["status"],
+                        "token": child["result_payload"].get("token"),
+                    }
+                    for child in children
+                ]
+            }
+
+    def _rollup_steps(self, task: dict[str, Any]) -> None:
+        if not task["steps"] or task["completion_condition"] == "all_children_success":
+            task["completed_steps"] = [
+                step["step_id"] for step in task["steps"] if step["status"] == "success"
+            ]
+            task["remaining_steps"] = [
+                step["step_id"] for step in task["steps"] if step["status"] != "success"
+            ]
+            return
+        statuses = {step["status"] for step in task["steps"]}
+        if statuses == {"success"}:
+            task["status"] = _TERMINAL_OK
+            task["error_code"] = ""
+            task["error_message"] = ""
+        elif "failed" in statuses or "blocked" in statuses:
+            task["status"] = "partial_success" if "success" in statuses else "failed"
+            if task["status"] == "failed":
+                task["error_code"] = task.get("error_code") or "step_failed"
+        elif statuses <= {"pending", "running", "success", "recovering"}:
+            if task["status"] not in {"paused", "recovering"}:
+                task["status"] = "running"
+        task["completed_steps"] = [
+            step["step_id"] for step in task["steps"] if step["status"] == "success"
+        ]
+        task["remaining_steps"] = [
+            step["step_id"] for step in task["steps"] if step["status"] != "success"
+        ]
+
+    def _authorized(
+        self, payload: dict[str, Any], actor: str, scope: dict[str, str], *, write: bool
+    ) -> dict[str, Any]:
+        found = self.state["tasks"].get(str(payload.get("task_id") or ""))
+        if not isinstance(found, dict):
+            return self._fail(None, "task_not_found", "任务不存在")
+        if self._allows(found, actor, scope):
+            return found
+        return self._fail(found, "unauthorized", "无权读取其他员工或用户的任务上下文", redact=True)
+
+    def _allows(self, task: dict[str, Any], actor: str, scope: dict[str, str]) -> bool:
+        if task["tenant_id"] != scope["tenant"] or task["user_id"] != scope["user"]:
+            return False
+        return actor == task["owner_employee"] or actor in task["authorized_employees"]
+
+    def _flags(self, employee_id: str) -> dict[str, Any]:
+        return self.employees.setdefault(
+            employee_id,
+            {"available": True, "timeout": False, "crash": False, "unrecoverable": False},
+        )
+
+    def _recovery(
+        self, task: dict[str, Any], handoff_id: str, action: str, reason: str
+    ) -> dict[str, Any]:
+        record = {
+            "recovery_id": _new_id("recovery"),
+            "task_id": task["task_id"],
+            "handoff_id": handoff_id,
+            "action": action,
+            "reason": reason,
+            "retry_count": task["retry_count"],
+            "status": task["status"],
+            "timestamp": _now(),
+        }
+        self.state["recoveries"].append(record)
+        return record
+
+    def _touch(self, task: dict[str, Any]) -> None:
+        task["context_version"] = int(task.get("context_version") or 0) + 1
+        task["updated_at"] = _now()
+        task["context_snapshot"] = {
+            "goal": task["goal"],
+            "conditions": _clone(task["conditions"]),
+            "constraints": list(task["constraints"]),
+            "business_data": _clone(task["business_data"]),
+            "requirements": list(task["requirements"]),
+            "completed_steps": list(task["completed_steps"]),
+            "remaining_steps": list(task["remaining_steps"]),
+            "confirmed_facts": _clone(task["confirmed_facts"]),
+            "prior_results": _clone(task["prior_results"]),
+            "context_version": task["context_version"],
+        }
+        task["completed_steps"] = [
+            step["step_id"] for step in task["steps"] if step["status"] == "success"
+        ]
+        task["remaining_steps"] = [
+            step["step_id"] for step in task["steps"] if step["status"] != "success"
+        ]
+        task["context_snapshot"]["completed_steps"] = list(task["completed_steps"])
+        task["context_snapshot"]["remaining_steps"] = list(task["remaining_steps"])
+
+    def _event(self, kind: str, task: dict[str, Any]) -> None:
+        self.state["events"].append(
+            {
+                "kind": kind,
+                "task_id": task["task_id"],
+                "evidence": self._evidence(task),
+                "timestamp": _now(),
+            }
+        )
+
+    def _evidence(self, task: dict[str, Any] | None, *, redact: bool = False) -> dict[str, Any]:
+        if task is None:
+            return _blank_evidence()
+        handoff = (
+            self.state["handoffs"].get(task["handoff_ids"][-1]) if task.get("handoff_ids") else None
+        )
+        calls = [
+            item for item in self.state["tool_calls"].values() if item["task_id"] == task["task_id"]
+        ]
+        call = calls[-1] if calls else None
+        recoveries = [
+            item for item in self.state["recoveries"] if item["task_id"] == task["task_id"]
+        ]
+        restarts = list(self.state["restarts"])
+        snapshot = {} if redact else _clone(task.get("context_snapshot") or {})
+        return {
+            "E01_task_id": "" if redact else task["task_id"],
+            "E02_parent_task_id": "" if redact else task.get("parent_task_id") or "",
+            "E02_child_task_id": ""
+            if redact or not task.get("child_task_ids")
+            else task["child_task_ids"][-1],
+            "E03_handoff_id": "" if handoff is None else handoff["handoff_id"],
+            "E04_source_employee": "" if handoff is None else handoff["source_employee"],
+            "E04_target_employee": "" if handoff is None else handoff["target_employee"],
+            "E05_context_snapshot": snapshot,
+            "E06_context_version": 0 if redact else task.get("context_version") or 0,
+            "E07_conversation_id": "" if redact else task.get("conversation_id") or "",
+            "E08_tool_call_id": "" if call is None else call["tool_call_id"],
+            "E09_execution_status": task.get("status") or "",
+            "E10_retry_count": task.get("retry_count") or 0,
+            "E11_idempotency_key": (call or handoff or {}).get("idempotency_key") or "",
+            "E12_result_payload": {}
+            if redact
+            else _clone(task.get("result_payload") or (call or {}).get("result_payload") or {}),
+            "E13_error_code": task.get("error_code") or "",
+            "E13_error_message": task.get("error_message") or "",
+            "E14_recovery_record": recoveries[-1] if recoveries else {},
+            "E15_event_timestamp": task.get("updated_at") or "",
+            "E16_restart_recovery_record": restarts[-1] if restarts else {},
+        }
+
+    def _envelope(
+        self,
+        task: dict[str, Any],
+        *,
+        business: bool | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        business_success = task["status"] == _TERMINAL_OK if business is None else business
+        if task["status"] != _TERMINAL_OK:
+            business_success = False
+        body = {
+            "success": True,
+            "business_success": business_success,
+            "source": SOURCE,
+            "employee_id": task.get("holder_employee") or task.get("owner_employee"),
+            "task_id": task["task_id"],
+            "task": _public_task(task),
+            "evidence": self._evidence(task),
+            "error_code": task.get("error_code") or "",
+            "error_message": task.get("error_message") or "",
+            "events": [item for item in self.state["events"] if item["task_id"] == task["task_id"]],
+        }
+        if extra:
+            body.update(extra)
+        return body
+
+    def _fail(
+        self, task: dict[str, Any] | None, code: str, message: str, *, redact: bool = False
+    ) -> dict[str, Any]:
+        return {
+            "success": False,
+            "business_success": False,
+            "source": SOURCE,
+            "error_code": code,
+            "error_message": message,
+            "task_id": "" if task is None or redact else task.get("task_id") or "",
+            "evidence": self._evidence(task, redact=redact),
+        }
+
+    def _fingerprint(self) -> str:
+        view: list[Any] = []
+        for task_id in sorted(self.state["tasks"]):
+            task = self.state["tasks"][task_id]
+            view.append(
+                {
+                    "task_id": task_id,
+                    "parent": task["parent_task_id"],
+                    "children": task["child_task_ids"],
+                    "status": task["status"],
+                    "goal": task["goal"],
+                    "steps": [(step["step_id"], step["status"]) for step in task["steps"]],
+                    "messages": len(task["messages"]),
+                    "requirements": task["requirements"],
+                }
+            )
+        view.append(
+            sorted(
+                (item["tool_call_id"], item["status"]) for item in self.state["tool_calls"].values()
+            )
+        )
+        view.append(sorted(self.state["handoffs"]))
+        encoded = json.dumps(view, ensure_ascii=False, sort_keys=True).encode()
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _write(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.path.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(self.state, ensure_ascii=False, default=str), encoding="utf-8"
+        )
+        temporary.replace(self.path)
+
+    def _read(self) -> None:
+        if not self.path.is_file():
+            self.state = _empty_state()
+            return
+        loaded = json.loads(self.path.read_text(encoding="utf-8"))
+        state = _empty_state()
+        state.update(loaded if isinstance(loaded, dict) else {})
+        self.state = state
+
+
+def _step_from(task_id: str, raw: dict[str, Any], index: int) -> dict[str, Any]:
+    step_id = str(raw.get("step_id") or f"s{index + 1}")
+    return {
+        "step_id": step_id,
+        "name": str(raw.get("name") or step_id),
+        "tool": str(raw.get("tool") or "note"),
+        "params": dict(raw.get("params") or {}),
+        "depends_on": list(raw.get("depends_on") or []),
+        "idempotency_key": str(raw.get("idempotency_key") or f"{task_id}:{step_id}"),
+        "idempotent": bool(raw.get("idempotent") or False),
+        "status": "pending",
+        "error_code": "",
+        "error_message": "",
+        "result_payload": {},
+        "tool_call_id": "",
+        "skipped_duplicate": False,
+    }
+
+
+def _find_step(task: dict[str, Any] | None, step_id: str) -> dict[str, Any] | None:
+    if task is None:
+        return None
+    for step in task["steps"]:
+        if isinstance(step, dict) and step.get("step_id") == step_id:
+            return step
+    return None
+
+
+def _deps_ok(task: dict[str, Any], step: dict[str, Any]) -> bool:
+    by_id = {item["step_id"]: item for item in task["steps"]}
+    return all(by_id[dep]["status"] == "success" for dep in step["depends_on"] if dep in by_id)
+
+
+def _merge_conditions(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(old)
+    for key, value in new.items():
+        if key not in merged or merged[key] == value:
+            merged[key] = value
+            continue
+        merged[key] = {"kept": merged[key], "added": value, "merge": "preserve_both"}
+    return merged
+
+
+def _availability_failure(flags: dict[str, Any]) -> tuple[str, str] | None:
+    if not flags.get("available", True):
+        return "employee_unavailable", "目标员工不可用"
+    if flags.get("timeout"):
+        return "employee_timeout", "目标员工超时"
+    if flags.get("crash"):
+        return "employee_crashed", "目标员工执行中崩溃"
+    if flags.get("unrecoverable"):
+        return "employee_unrecoverable", "目标员工不可恢复"
+    return None
+
+
+def _conv_key(task: dict[str, Any]) -> str:
+    return f"{task['tenant_id']}:{task['user_id']}:{task['conversation_id']}"
+
+
+def _summary(task: dict[str, Any]) -> list[dict[str, str]]:
+    return [
+        {
+            "step_id": step["step_id"],
+            "status": step["status"],
+            "tool_call_id": step.get("tool_call_id") or "",
+        }
+        for step in task["steps"]
+    ]
+
+
+def _public_task(task: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "task_id",
+        "parent_task_id",
+        "child_task_ids",
+        "root_task_id",
+        "conversation_id",
+        "tenant_id",
+        "user_id",
+        "owner_employee",
+        "holder_employee",
+        "goal",
+        "conditions",
+        "constraints",
+        "business_data",
+        "requirements",
+        "status",
+        "error_code",
+        "error_message",
+        "retry_count",
+        "context_version",
+        "context_snapshot",
+        "completed_steps",
+        "remaining_steps",
+        "confirmed_facts",
+        "speculative",
+        "rejected_claims",
+        "prior_results",
+        "result_payload",
+        "aggregate",
+        "completion_condition",
+        "handoff_ids",
+        "steps",
+        "compression_strategy",
+        "compression_count",
+        "compressed_summary",
+    )
+    return {key: _clone(task.get(key)) for key in keys}
+
+
+def _blank_evidence() -> dict[str, Any]:
+    return {
+        "E01_task_id": "",
+        "E02_parent_task_id": "",
+        "E02_child_task_id": "",
+        "E03_handoff_id": "",
+        "E04_source_employee": "",
+        "E04_target_employee": "",
+        "E05_context_snapshot": {},
+        "E06_context_version": 0,
+        "E07_conversation_id": "",
+        "E08_tool_call_id": "",
+        "E09_execution_status": "",
+        "E10_retry_count": 0,
+        "E11_idempotency_key": "",
+        "E12_result_payload": {},
+        "E13_error_code": "",
+        "E13_error_message": "",
+        "E14_recovery_record": {},
+        "E15_event_timestamp": "",
+        "E16_restart_recovery_record": {},
+    }
+
+
+def _is_task(value: dict[str, Any]) -> bool:
+    return "task_id" in value and value.get("source") != SOURCE
+
+
+def _await(coro: Any) -> Any:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    box: dict[str, Any] = {}
+
+    def _runner() -> None:
+        box["value"] = asyncio.run(coro)
+
+    thread = threading.Thread(target=_runner)
+    thread.start()
+    thread.join()
+    return box["value"]
+
+
+def resolve_runtime(payload: dict[str, Any] | None) -> TaskContinuityRuntime | None:
+    runtime_id = str((payload or {}).get("continuity_runtime_id") or "")
+    if runtime_id and runtime_id in _REGISTRY:
+        return _REGISTRY[runtime_id]
+    return _CURRENT.get()
+
+
+def execute_continuity_turn(
+    employee_id: str,
+    task: str,
+    payload: dict[str, Any] | None,
+    *,
+    user_id: Any = "",
+    session_id: str | None = None,
+) -> dict[str, Any] | None:
+    """EmployeeAgent entry. Returns None when this turn is not a continuity turn."""
+    body = payload or {}
+    if str(body.get("invoke_mode") or "") != "task_continuity":
+        return None
+    runtime = resolve_runtime(body)
+    if runtime is None:
+        return {
+            "success": False,
+            "business_success": False,
+            "source": SOURCE,
+            "error_code": "continuity_runtime_missing",
+            "error_message": "任务连续性运行时未绑定",
+            "evidence": _blank_evidence(),
+        }
+    return runtime.dispatch(employee_id, task, body, user_id=user_id, session_id=session_id)
+
+
+@contextlib.contextmanager
+def bound_continuity_runtime(path: str | Path) -> Iterator[TaskContinuityRuntime]:
+    runtime = TaskContinuityRuntime(path)
+    token = _CURRENT.set(runtime)
+    try:
+        yield runtime
+    finally:
+        _CURRENT.reset(token)
+        _REGISTRY.pop(runtime.runtime_id, None)

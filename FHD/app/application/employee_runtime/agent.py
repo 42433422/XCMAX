@@ -215,6 +215,13 @@ class EmployeeAgent:
         payload = dict(input_data or {})
         if workspace_root and "workspace_root" not in payload:
             payload["workspace_root"] = workspace_root
+        from app.application.employee_runtime.task_continuity import execute_continuity_turn
+
+        routed = execute_continuity_turn(
+            employee_id, task, payload, user_id=user_id, session_id=session_id
+        )
+        if routed is not None:
+            return routed
         logger.info("employee_agent_run task_len=%s", len(task or ""))
         try:
             pack = load_employee_pack_from_disk(employee_id)

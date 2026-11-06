@@ -200,6 +200,7 @@ ignore = [
 "app/infrastructure/documents/shipment_document_generator_impl.py" = ["BLE001"]
 "app/services/deepseek_intent_service.py" = ["BLE001"]
 "app/services/tools_execution/order_parser.py" = ["BLE001"]
+"app/application/employee_runtime/task_continuity.py" = ["BLE001"]
 "app/services/skills/label_template_generator/label_template_generator.py" = ["BLE001"]
 "resources/tools_legacy/**" = ["BLE001", "E722"]
 "app/infrastructure/gateways/product.py" = ["F822"]
