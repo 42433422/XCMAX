@@ -125,9 +125,7 @@ class CustomerTickets:
             request, ticket_id, "sensitive-action/decision"
         )
 
-    async def admin_customer_ticket_command(
-        self, request: Request, ticket_id: int, command: str
-    ):
+    async def admin_customer_ticket_command(self, request: Request, ticket_id: int, command: str):
         try:
             body = await request.json()
         except self._errors.recoverable():

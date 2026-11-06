@@ -102,7 +102,11 @@ async def list_issues(request: Request) -> dict[str, Any]:
         saved = local.get(str(row.get("id"))) if isinstance(local, dict) else None
         remote_status = str((saved or {}).get("status") or row.get("status") or "")
         items.append(
-            {**row, "ready": row.get("id") in ready, "state": _customer_visible_state(row, remote_status)}
+            {
+                **row,
+                "ready": row.get("id") in ready,
+                "state": _customer_visible_state(row, remote_status),
+            }
         )
     return {
         "items": items,

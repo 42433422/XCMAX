@@ -591,7 +591,12 @@ def test_labeled_title_is_not_cut_to_the_first_hundred_characters(intake_env, mo
             request=object(),
             tenant_id=2,
             customer_message=message,
-            triage={"type": "product_defect", "confidence": 0.95, "expected": "正常显示员工节点、关系和图谱结构", "actual": "页面空白或员工节点无法显示"},
+            triage={
+                "type": "product_defect",
+                "confidence": 0.95,
+                "expected": "正常显示员工节点、关系和图谱结构",
+                "actual": "页面空白或员工节点无法显示",
+            },
         )
     )
     assert result["state"] == "ROUTED"

@@ -33,9 +33,7 @@ def test_customer_logs_in_zip_do_not_contain_secrets(tmp_path, monkeypatch):
         ]
     ).encode()
 
-    blob = support_bundle.build_support_bundle_zip(
-        customer_logs=[("client.log", secret_log)]
-    )
+    blob = support_bundle.build_support_bundle_zip(customer_logs=[("client.log", secret_log)])
     archive = zipfile.ZipFile(io.BytesIO(blob))
     packed = "\n".join(
         archive.read(name).decode("utf-8", errors="replace") for name in archive.namelist()
