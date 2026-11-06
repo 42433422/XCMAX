@@ -4,6 +4,7 @@
  */
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { routerDevtoolsNullGuard } from './vite/routerDevtoolsGuard.js'
 import VueI18n from '@intlify/unplugin-vue-i18n/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
@@ -119,6 +120,7 @@ export default defineConfig(() => ({
     }),
     AutoImport({ resolvers: [ElementPlusResolver()], dts: false }),
     Components({ resolvers: [ElementPlusResolver({ importStyle: 'css' })], dts: false }),
+    routerDevtoolsNullGuard(),
   ],
   define: {
     'import.meta.env.VITE_XCMAX_ADMIN_CONSOLE': JSON.stringify('1'),
@@ -254,7 +256,7 @@ export default defineConfig(() => ({
   optimizeDeps: {
     include: ['vue'],
     // mermaid@11 parser uses modern destructuring that breaks chrome87 prebundle target
-    exclude: ['mermaid', '@mermaid-js/parser'],
+    exclude: ['mermaid', '@mermaid-js/parser', 'vue-router'],
     esbuildOptions: {
       target: 'esnext',
     },
