@@ -72,14 +72,14 @@ def _build_workbook(lead: list[str], tables: list[list[list[str]]]) -> bytes:
     book = Workbook()
     first = True
     if not tables:
-        sheet = book.active
+        sheet = book.worksheets[0]
         sheet.title = "文档"
         for index, line in enumerate(lead[:200], start=1):
             sheet.cell(index, 1, line)
         first = False
     for table_index, rows in enumerate(tables, start=1):
         if first:
-            sheet = book.active
+            sheet = book.worksheets[0]
             first = False
         else:
             sheet = book.create_sheet()
