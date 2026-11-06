@@ -100,7 +100,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="ews" aria-labelledby="ews-heading" data-tour="employee-workspace-desks">
+  <section class="ews" aria-labelledby="ews-heading" data-tour="employee-workspace-desks" data-page-ready="true">
     <h3 id="ews-heading" class="ews-sr-only">员工工作流：入口与工位实况</h3>
 
     <router-link :to="panoramaLocation" class="ews-entry" :class="{ 'ews-entry--admin': showManagementLoopPanels }" role="link" :aria-label="entryCtaText">

@@ -169,7 +169,7 @@ function onSceneError() {
 
 @media (prefers-reduced-motion: no-preference) {
   .yiw-img--bob {
-    animation: yiw-bob 1.4s ease-in-out infinite;
+    animation: yiw-bob 1.4s ease-in-out 1;
   }
 }
 

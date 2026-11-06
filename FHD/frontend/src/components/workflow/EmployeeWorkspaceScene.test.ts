@@ -149,6 +149,7 @@ describe('EmployeeWorkspaceScene.vue', () => {
     const wrapper = await mountComponent()
     await flushPromises()
     expect(wrapper.find('.ews-entry').exists()).toBe(true)
+    expect(wrapper.find('[data-page-ready="true"]').exists()).toBe(true)
     expect(wrapper.find('.ews-entry-kicker').text()).toContain('企业版全景')
     expect(wrapper.find('.ews-entry-cta-text').text()).toBe('进入企业全景')
   })

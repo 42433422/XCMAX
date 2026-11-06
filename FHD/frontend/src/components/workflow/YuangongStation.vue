@@ -171,7 +171,7 @@ function onStaffError() {
 
 @media (prefers-reduced-motion: no-preference) {
   .yuangong-composed-figure--bob {
-    animation: yuangong-bob-composed 1.1s ease-in-out infinite;
+    animation: yuangong-bob-composed 1.1s ease-in-out 1;
   }
 }
 
@@ -199,7 +199,7 @@ function onStaffError() {
 
 @media (prefers-reduced-motion: no-preference) {
   .yuangong-staff--bob {
-    animation: yuangong-bob 1.1s ease-in-out infinite;
+    animation: yuangong-bob 1.1s ease-in-out 1;
   }
 }
 
