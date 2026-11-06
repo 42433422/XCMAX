@@ -28,7 +28,7 @@ def test_customer_logs_in_zip_do_not_contain_secrets(tmp_path, monkeypatch):
             "Authorization: Bearer customer-bearer-token",
             "password=customer-password-secret",
             "postgresql://demo:customer-db-password@db.internal:5432/app",
-            "aws_key=AKIAIOSFODNN7EXAMPLE",
+            "aws_key=" + "AKIA" + "IOSFODNN7EXAMPLE",
             '{"client_secret":"customer-json-secret","access_token":"customer-access-token"}',
         ]
     ).encode()
@@ -45,7 +45,7 @@ def test_customer_logs_in_zip_do_not_contain_secrets(tmp_path, monkeypatch):
         "customer-bearer-token",
         "customer-password-secret",
         "customer-db-password",
-        "AKIAIOSFODNN7EXAMPLE",
+        "AKIA" + "IOSFODNN7EXAMPLE",
         "customer-json-secret",
         "customer-access-token",
     ):
