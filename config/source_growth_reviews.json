@@ -1,4 +1,41 @@
 {
   "schema_version": 1,
-  "reviews": {}
+  "reviews": {
+    "FHD/app/application/elt/auto_ingest_service.py": {
+      "base_file": "FHD/app/application/elt/auto_ingest_service.py",
+      "base_blob": "ac9db20fb0f02e9c87131c9794b55e8e534ca908",
+      "head_blob": "c611409270667973ab87be7869cf610cb0928d24",
+      "before_lines": 943,
+      "after_lines": 975,
+      "reason": "ELT 入库预演改为原件路径，prepared_path 与清理副本拆分，服务内补接线导致行数增长。",
+      "boundary": "仅 FHD/app/application/elt/auto_ingest_service.py；不扩大到其他 ingest 入口。",
+      "validation": "pytest FHD/tests/test_application/test_elt_intake_four_fixes.py 与 CI arch-fitness。",
+      "follow_up": "后续可把 prepared_path 接线抽到更小 helper，避免服务继续膨胀。",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/fastapi_routes/reviewed_excel_template.py": {
+      "base_file": "FHD/app/fastapi_routes/reviewed_excel_template.py",
+      "base_blob": "addf509026383c6c93ddd9ca8f304643471d1a9e",
+      "head_blob": "50f148433afe741af0249c9185faa543b9f1e629",
+      "before_lines": 2024,
+      "after_lines": 2026,
+      "reason": "入库确认路由补 0 行回执与原件路径字段，路由层少量增长以对齐四问题修复。",
+      "boundary": "仅 FHD/app/fastapi_routes/reviewed_excel_template.py 相关回执字段。",
+      "validation": "相关 pytest 与 CI arch-fitness/source-growth。",
+      "follow_up": "若继续膨胀，把确认回执拼装抽到独立 helper。",
+      "review_owner": "@42433422"
+    },
+    "FHD/frontend/src/components/template/ReviewedExcelTemplate.vue": {
+      "base_file": "FHD/frontend/src/components/template/ReviewedExcelTemplate.vue",
+      "base_blob": "62ca47a9c0e969822b6b9d26d60f9d0ebc1328e9",
+      "head_blob": "88f2ed94b708f081ec867ef7398c6c7337fa82d0",
+      "before_lines": 2024,
+      "after_lines": 2060,
+      "reason": "预览缩放恢复 A4、宽屏 4 列网格与 0 行写入提示，需在模板组件内补 UI。",
+      "boundary": "仅 ReviewedExcelTemplate.vue 预览与提示相关；不改其他模板页。",
+      "validation": "相关前端用例、手工预览与 CI arch-fitness/source-growth。",
+      "follow_up": "若继续膨胀，把缩放与网格抽成独立组件。",
+      "review_owner": "@42433422"
+    }
+  }
 }

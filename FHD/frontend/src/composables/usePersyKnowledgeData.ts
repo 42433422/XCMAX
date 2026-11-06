@@ -62,7 +62,15 @@ export function usePersyKnowledgeData(options: { viewMode: Ref<PersyKnowledgeVie
       omniscient.value?.semantic_embedding_available === true ||
       omniscient.value?.embedder_available === true,
   )
-  const retrievalModeText = computed(() => (semanticAvailable.value ? '语义召回' : '关键词召回'))
+  const retrievalModeText = computed(() => {
+    const docs = documentCount.value
+    const embeddings = Number(status.value?.index?.embedding_count || 0)
+    if (semanticAvailable.value) return '语义召回'
+    // Vector index off/empty is not "no documents", and hash mode is not a default product path.
+    if (docs > 0 && embeddings <= 0) return '文档已入库 · 向量索引未建立'
+    if (docs > 0) return '文档已入库 · 语义检索未启用'
+    return '暂无语义索引'
+  })
   const knowledgeNodes = computed(() => (graph.value?.nodes || []).filter((node) => node.type !== 'core'))
 
   const omniscientHint = computed(() => {

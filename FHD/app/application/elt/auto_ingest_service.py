@@ -22,6 +22,10 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltError
+from app.application.elt.knowledge_index_meta import (
+    business_completion_from_run,
+    enrich_knowledge_progress,
+)
 from app.application.elt.target_detection import detect_etl_target
 from app.application.shipment_excel_etl_security import (
     ShipmentEtlPathError,
@@ -123,9 +127,22 @@ def _extract_text(path: Path, *, owned_upload_user_id: int | None = None) -> str
         return text.read(80_000)
 
 
-def _resolve_auto_ingest_source(source_path: str | Path) -> Path:
-    """Jail auto-ingest inputs under ETL trusted roots (CodeQL path-injection)."""
+def _resolve_auto_ingest_source(
+    source_path: str | Path, *, owner_user_id: int | None = None
+) -> Path:
+    """Jail auto-ingest inputs under ETL trusted roots (CodeQL path-injection).
+
+    Staged intake uploads live under ``etl/uploads/<tenant>/<owner>`` and require
+    ``owner_user_id`` so open_etl_input_file pins that owned root. Public auto-ingest
+    must omit owner and stay on resolve_etl_path trusted roots only.
+    """
+    import os
+
     try:
+        if owner_user_id is not None:
+            path = Path(os.path.normpath(str(source_path)))
+            with open_etl_input_file(path, owner_user_id=owner_user_id):
+                return path
         path = resolve_etl_path(source_path)
         with open_etl_input_file(path):
             return path
@@ -288,8 +305,15 @@ class AutoIngestService:
         labels: list[str] | None = None,
         batch_id: str | None = None,
         prepared_plan: dict[str, Any] | None = None,
+        owned_upload_user_id: int | None = None,
     ) -> dict[str, Any]:
-        path = _resolve_auto_ingest_source(source_path)
+        # Prepared intake uploads are under etl/uploads; pin with owner after ownership checks.
+        resolve_owner = owned_upload_user_id
+        if resolve_owner is None and prepared_plan is not None:
+            resolve_owner = owner_user_id
+        if resolve_owner is not None and resolve_owner != owner_user_id:
+            raise EltError("ELT_INTAKE_FORBIDDEN", "上传文件不属于当前用户", status_code=403)
+        path = _resolve_auto_ingest_source(source_path, owner_user_id=resolve_owner)
         safe_name = (file_name or path.name).strip() or path.name
         batch_id = batch_id or f"aib-{uuid4().hex[:16]}"
         run_token = f"auto-ingest:{batch_id}"
@@ -327,6 +351,7 @@ class AutoIngestService:
                     owner_user_id=owner_user_id,
                     tenant_id=tenant_id,
                     preview_revision=prepared_plan["preview_revision"],
+                    owned_upload_user_id=resolve_owner,
                 )
             _patch_batch(
                 tenant_id,
@@ -334,9 +359,11 @@ class AutoIngestService:
                 kb_progress=_progress("extracting", 10, message="提取文档正文"),
                 business_progress=_progress("waiting_kb", 0, message="等待知识库完成"),
             )
-            text = _extract_text(path)
+            text = _extract_text(path, owned_upload_user_id=resolve_owner)
             detection = (
-                prepared_plan["detection"] if prepared_plan else self.detect_target(path, labels)
+                prepared_plan["detection"]
+                if prepared_plan
+                else self.detect_target(path, labels, owned_upload_user_id=resolve_owner)
             )
             _patch_batch(
                 tenant_id,
@@ -355,10 +382,8 @@ class AutoIngestService:
                 tenant_id=tenant_id,
                 expected_plan=prepared_plan.get("knowledge") if prepared_plan else None,
             )
-            kb_done = _progress(
-                "done" if kb_receipt.get("action") != "skip" else "skipped",
-                100,
-                message=str(kb_receipt.get("reason") or "知识库已写入"),
+            kb_receipt, kb_done, _rag_meta = enrich_knowledge_progress(
+                kb_receipt, tenant_id, _progress
             )
             _patch_batch(
                 tenant_id,
@@ -459,9 +484,15 @@ class AutoIngestService:
         composer_note: str = "",
         labels: list[str] | None = None,
         prepared_plan: dict[str, Any] | None = None,
+        owned_upload_user_id: int | None = None,
     ) -> dict[str, Any]:
         """Create ledger row and finish ingest off-request so FE can poll true progress."""
-        path = _resolve_auto_ingest_source(source_path)
+        resolve_owner = owned_upload_user_id
+        if resolve_owner is None and prepared_plan is not None:
+            resolve_owner = owner_user_id
+        if resolve_owner is not None and resolve_owner != owner_user_id:
+            raise EltError("ELT_INTAKE_FORBIDDEN", "上传文件不属于当前用户", status_code=403)
+        path = _resolve_auto_ingest_source(source_path, owner_user_id=resolve_owner)
         batch_id = f"aib-{uuid4().hex[:16]}"
         safe_name = (file_name or path.name).strip() or path.name
         batch = {
@@ -509,6 +540,7 @@ class AutoIngestService:
                         labels=labels,
                         batch_id=batch_id,
                         prepared_plan=prepared_plan,
+                        owned_upload_user_id=resolve_owner,
                     )
                     db.commit()
             except BOUNDARY_ERRORS:
@@ -541,7 +573,7 @@ class AutoIngestService:
                 )
             status = str(run.get("status") or "")
             if status == "completed":
-                batch_status, progress = "applied", _progress("done", 100, message="业务写入已完成")
+                batch_status, progress = business_completion_from_run(run, _progress)
             elif status in {"failed", "interrupted", "outcome_unknown"}:
                 batch_status, progress = (
                     "failed",

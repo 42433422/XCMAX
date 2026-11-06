@@ -1,5 +1,5 @@
 {
-  "lines": 2415090,
+  "lines": 2415476,
   "updated": "2026-11-06",
-  "note": "refresh line_baseline after CI net-deletion DRIFT on tip 73ca5256"
+  "note": "ELT intake/preview split growth after rebase onto #3018"
 }

@@ -172,6 +172,28 @@ function selectDocumentCandidate(index: number) {
 function documentLayout(index: number) {
   return index < 0 ? activeDocument.value?.review?.layout?.[0] : activeDocumentProposal.value?.result_previews?.[index]?.layout?.[0]
 }
+const a4ScaleObservers = new Map<number, ResizeObserver>()
+function bindA4Scale(el: Element | { $el?: unknown } | null, index: number) {
+  const prev = a4ScaleObservers.get(index)
+  if (prev) { prev.disconnect(); a4ScaleObservers.delete(index) }
+  const node = el && typeof el === 'object' && !(el instanceof Element) ? el.$el : el
+  if (!(node instanceof HTMLElement)) return
+  const scaleLayer = node.querySelector('.reviewed-template__a4-scale') as HTMLElement | null
+  const table = node.querySelector('table') as HTMLElement | null
+  if (!scaleLayer || !table) return
+  const apply = () => {
+    const natural = table.scrollWidth || table.offsetWidth || 1
+    const available = node.clientWidth || 1
+    const scale = Math.min(1, available / natural)
+    scaleLayer.style.transform = `scale(${scale})`
+    scaleLayer.style.width = `${100 / scale}%`
+  }
+  apply()
+  if (typeof ResizeObserver === 'undefined') return
+  const observer = new ResizeObserver(apply)
+  observer.observe(node)
+  a4ScaleObservers.set(index, observer)
+}
 async function saveActiveDocument() {
   const doc = activeDocument.value
   if (!doc) return
@@ -211,6 +233,16 @@ function resetIntake() {
   intakeTimer = null; intakePlan.value = null; intakePending.value = false; intakeError.value = ''; intakeValidRowsOnly.value = false
   preparedSelectionKey = ''
 }
+const intakeWritableRows = computed(() => {
+  const run = intakePlan.value?.business
+  if (!run?.summary) return 0
+  return Number(run.summary.new || 0) + Number(run.summary.update || 0)
+})
+const intakeZeroRowWarning = computed(() => (
+  !!intakePlan.value && !intakePending.value && !intakeError.value
+  && intakePlan.value.business?.status === 'preview_ready'
+  && intakeWritableRows.value <= 0
+))
 const canConfirmIntake = computed(() => {
   const run = intakePlan.value?.business
   return canCommitSelectedTemplate() && !intakePending.value && !intakeError.value
@@ -267,7 +299,7 @@ watch(() => [review.value?.review_id, proposal.value?.version, candidateIndex.va
   if (review.value && canCommitSelectedTemplate()) void prepareIntake()
 }, { flush: 'post' })
 const ingestBatchId = ref('')
-const kbProgress = ref<{ stage?: string; pct?: number; message?: string; error?: string } | null>(null)
+const kbProgress = ref<{ stage?: string; pct?: number; message?: string; error?: string; document_written?: boolean; rag_enabled?: boolean; embedding_count?: number } | null>(null)
 const businessProgress = ref<{ stage?: string; pct?: number; message?: string; error?: string } | null>(null)
 let ingestPollTimer: ReturnType<typeof setInterval> | null = null
 let ingestPollGeneration = 0
@@ -1230,7 +1262,7 @@ async function downloadCandidate(index: number) {
               <div class="reviewed-document-picker__options" role="list" aria-label="三个候选与只读原件">
                 <article v-for="index in [-1, 0, 1, 2]" :key="index < 0 ? 'source' : activeDocumentProposal.candidates[index].id" class="reviewed-template__preview reviewed-template__preview--a4" :class="{ 'reviewed-template__preview--selected': index >= 0 && activeDocument.candidateIndex === index, 'reviewed-document-picker__original': index < 0 }" role="listitem" @click="documentOriginalPreview = index < 0; expandedCandidateIndex = index">
                   <button type="button" class="reviewed-template__a4-open" aria-haspopup="dialog" @click.stop="documentOriginalPreview = index < 0; expandedCandidateIndex = index"><span>{{ index < 0 ? '原件（只读）' : activeDocumentProposal.candidates[index].label }}</span><small>放大预览</small></button>
-                  <div class="reviewed-template__a4-page"><table v-if="documentLayout(index)"><colgroup><col v-for="(width, col) in documentLayout(index)!.widths" :key="col" :style="{ width: `${width * 7}px` }"></colgroup><tbody><tr v-for="(row, rowIndex) in documentLayout(index)!.rows" :key="rowIndex" :style="{ height: `${row.height * 1.333}px` }"><td v-for="cell in row.cells" :key="cell.cell" :rowspan="cell.rowspan" :colspan="cell.colspan" :style="cellStyle(cell)">{{ cell.value }}</td></tr></tbody></table></div>
+                  <div class="reviewed-template__a4-page" :ref="(el) => bindA4Scale(el, index)"><div class="reviewed-template__a4-scale"><table v-if="documentLayout(index)"><colgroup><col v-for="(width, col) in documentLayout(index)!.widths" :key="col" :style="{ width: `${width * 7}px` }"></colgroup><tbody><tr v-for="(row, rowIndex) in documentLayout(index)!.rows" :key="rowIndex" :style="{ height: `${row.height * 1.333}px` }"><td v-for="cell in row.cells" :key="cell.cell" :rowspan="cell.rowspan" :colspan="cell.colspan" :style="cellStyle(cell)">{{ cell.value }}</td></tr></tbody></table></div></div>
                   <button v-if="index >= 0" type="button" class="reviewed-template__select-candidate" :aria-pressed="activeDocument.candidateIndex === index" :disabled="!!activeDocument.phase || activeDocument.unknown || documentWorkspace.saved(activeDocument)" @click.stop="selectDocumentCandidate(index)">{{ activeDocument.candidateIndex === index ? '已选用' : '选用' }}</button>
                 </article>
               </div>
@@ -1481,13 +1513,14 @@ async function downloadCandidate(index: number) {
           <p>知识库：{{ actionLabel(intakePlan.knowledge.action) }} {{ intakePlan.knowledge.documents }} 份文档。</p>
           <p v-if="intakePlan.business.target_type === 'knowledge'">业务数据：仅知识资料，无业务记录写入。</p>
           <p v-else>业务目标：{{ targetLabel(intakePlan.business.target_type) }}；预计新增 {{ intakePlan.business.summary.new }} 行、更新 {{ intakePlan.business.summary.update }} 行、跳过 {{ intakePlan.business.summary.skip }} 行、错误 {{ intakePlan.business.summary.error }} 行。</p>
+          <p v-if="intakeZeroRowWarning" role="alert">预演可写入行为 0：确认入库也不会写入业务行（无报错≠已入库）。请核对原件与候选后再保存。</p>
           <label v-if="intakePlan.business.summary.error"><input v-model="intakeValidRowsOnly" type="checkbox" :disabled="busy"> 我已核对错误行，确认仅写入正确行；错误行不会写入。</label>
           <p>确认后保存 1 份模板到当前企业模板库，并按上方同一预演写入；重复数据跳过，更新范围以预演为准。撤回仅回退本批知识和业务写入，原件和模板保留。</p>
         </template>
         <button type="button" :disabled="busy || intakePending || !canCommitSelectedTemplate()" @click="prepareIntake">重新预演入库范围</button>
       </section>
       <template v-if="archiveOnSelect">
-        <p class="reviewed-template__intake-note">本次处理 1 份所选文档（{{ file?.name }}{{ selectedRegion ? ` / ${selectedRegion}` : '' }}）。点击下方按钮会保存到当前企业模板库（同一业务空间内按模板权限可见），并将清理后的文档写入知识库及自动识别的业务域；目标和数量以上方预演为准。请先下载候选核对。撤回仅回退本批知识与业务写入，保留原件和模板。</p>
+        <p class="reviewed-template__intake-note">本次处理 1 份所选文档（{{ file?.name }}{{ selectedRegion ? ` / ${selectedRegion}` : '' }}）。点击下方按钮会把清理后的模板保存到当前企业模板库（同一业务空间内按模板权限可见），并用原件写入知识库及自动识别的业务域；目标和数量以上方预演为准。请先下载候选核对。撤回仅回退本批知识与业务写入，保留原件和模板。</p>
         <button type="button" :disabled="!canConfirmIntake" @click="save">使用此模板并入库</button>
       </template>
       <template v-else>
@@ -1503,7 +1536,7 @@ async function downloadCandidate(index: number) {
         <div class="elt-ingest-progress__track" role="progressbar" :aria-valuenow="Number(kbProgress?.pct || 0)" aria-valuemin="0" aria-valuemax="100">
           <div class="elt-ingest-progress__fill elt-ingest-progress__fill--kb" :style="{ width: `${Number(kbProgress?.pct || 0)}%` }" />
         </div>
-        <small>{{ Number(kbProgress?.pct || 0) }}% · {{ kbProgress?.message || kbProgress?.stage || '…' }}</small>
+        <small>{{ Number(kbProgress?.pct || 0) }}% · {{ kbProgress?.message || kbProgress?.stage || '…' }}<template v-if="kbProgress && ('document_written' in kbProgress || 'embedding_count' in kbProgress)"> · 文档{{ kbProgress.document_written ? '已写入' : '未写入' }} / 向量索引 {{ Number(kbProgress.embedding_count || 0) }}（{{ kbProgress.rag_enabled ? '语义检索开' : '语义检索关' }}）</template></small>
       </div>
       <div class="elt-ingest-progress__row">
         <span>业务域</span>
@@ -1668,15 +1701,18 @@ async function downloadCandidate(index: number) {
 .reviewed-template .reviewed-template__candidate-capsule--saved { border-color: var(--xc-color-success); background: color-mix(in srgb, var(--xc-color-success) 8%, var(--xc-color-surface)); }
 .reviewed-documents { display: flex; flex-wrap: wrap; gap: var(--xc-space-2); }
 .reviewed-template__candidate-capsule small { color: var(--xc-color-muted); }
-.reviewed-document-picker__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--xc-space-3); }
+.reviewed-document-picker__options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--xc-space-3); }
 .reviewed-document-picker .elt-template-picker__bar { position: sticky; top: 0; z-index: 1; background: var(--xc-color-surface); padding-bottom: var(--xc-space-2); }
+@media (max-width: 1100px) { .reviewed-document-picker__options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .reviewed-document-picker__options { grid-template-columns: 1fr; } }
 .elt-template-picker__layer { position: fixed; inset: 0; z-index: 10040; display: grid; place-items: center; padding: var(--xc-space-4); background: color-mix(in srgb, var(--xc-color-text) 45%, transparent); }
 .elt-template-picker__panel { min-width: 0; }
-.elt-template-picker__layer .elt-template-picker__panel { width: min(56rem, 100%); max-height: 88dvh; overflow: auto; overscroll-behavior: contain; box-sizing: border-box; padding: var(--xc-space-4); border: 1px solid var(--xc-color-border); border-radius: var(--xc-radius-lg); background: var(--xc-color-surface); box-shadow: var(--xc-shadow-lg); }
+.elt-template-picker__layer .elt-template-picker__panel { width: min(72rem, 100%); max-height: 88dvh; overflow: auto; overscroll-behavior: contain; box-sizing: border-box; padding: var(--xc-space-4); border: 1px solid var(--xc-color-border); border-radius: var(--xc-radius-lg); background: var(--xc-color-surface); box-shadow: var(--xc-shadow-lg); }
 .elt-template-picker__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--xc-space-3); margin-bottom: var(--xc-space-3); }
 .elt-template-picker__bar h3 { margin: 0; color: var(--xc-color-text); }
-.elt-template-picker__layer .reviewed-template__a4-page { height: 7rem; aspect-ratio: auto; box-sizing: border-box; }
+.elt-template-picker__layer .reviewed-template__a4-page { aspect-ratio: 210 / 297; height: auto; width: 100%; overflow: hidden; position: relative; box-sizing: border-box; }
+.elt-template-picker__layer .reviewed-template__a4-scale { transform-origin: top left; will-change: transform; }
+.elt-template-picker__layer .reviewed-template__a4-page table { width: max-content; max-width: none; }
 .elt-template-picker__layer .reviewed-template__a4-meta { display: none; }
 .elt-template-picker__layer .reviewed-template__a4-actions { gap: var(--xc-space-2); }
 .elt-template-picker__layer .reviewed-template__a4-actions details { width: 100%; box-sizing: border-box; }
