@@ -280,8 +280,6 @@ def _ensure_columns(engine: Engine) -> None:
         ("ai_model_prices", "official_min_charge", "FLOAT"),
         ("ai_model_prices", "official_source", "VARCHAR(512) DEFAULT ''"),
         ("ai_model_prices", "official_synced_at", "DATETIME"),
-        ("customer_service_tickets", "lock_version", "INTEGER NOT NULL DEFAULT 0"),
-        ("customer_service_actions", "lock_version", "INTEGER NOT NULL DEFAULT 0"),
     ]
     for table, column, ddl in patches:
         _add_column_if_missing(engine, table, column, ddl)

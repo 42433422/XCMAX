@@ -199,7 +199,7 @@ def test_merge_upgrades_either_existing_head_without_losing_data(
     command.upgrade(cfg, "head")
     with engine.connect() as conn:
         assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalars().all() == [
-            "20261020_merge_ticket_incident"
+            "20261107_ticket_lock_version"
         ]
         expected_eta = (
             "2026-10-21 03:30:00"
