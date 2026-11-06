@@ -33,8 +33,8 @@ class Authentication:
         """Authenticate against the market server and return a normalized token payload."""
         market_base = self.base_url()
         demo_shim = self.try_demo(username, password)
-        if demo_shim and self.is_local_base(market_base):
-            return self.demo_payload(demo_shim, market_base_url=market_base)
+        # A reachable local market is the source of the ticket token. The demo shim
+        # is only a fallback when that market cannot answer.
         payload = await self.proxy(
             "POST", "/api/auth/login", json_body={"username": username, "password": password}
         )

@@ -1857,9 +1857,17 @@ class TestLoginMarketWithPassword:
             return_value=demo_shim,
         ):
             with patch.object(ma, "_is_local_market_base", return_value=True):
-                result = await ma.login_market_with_password("demouser", "demopass")
+                with patch.object(
+                    ma, "_proxy_json", new=AsyncMock(return_value={"access_token": "real_tok"})
+                ):
+                    with patch.object(
+                        ma,
+                        "_normalize_market_auth_payload",
+                        new=AsyncMock(return_value={"success": True, "token": "real_tok"}),
+                    ):
+                        result = await ma.login_market_with_password("demouser", "demopass")
         assert result["success"] is True
-        assert result["token"] == "demo_tok"
+        assert result["token"] == "real_tok"
 
     @pytest.mark.asyncio
     async def test_demo_shim_fallback_on_json_response_error(self):

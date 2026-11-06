@@ -261,7 +261,7 @@ async function postHandle(command: string, body: Row) {
     const pending = [...(detail.value?.actions || [])].reverse().find((row) => row.action_type === 'ticket.apply_change' && row.status === 'waiting_approval')
     if (pending) sensitiveActionId.value = Number(pending.id || 0)
   } catch (err) {
-    handleError.value = err instanceof Error ? err.message : '操作没有完成'
+    handleError.value = apiError(err)
   } finally {
     saving.value = false
   }
@@ -284,6 +284,11 @@ function submitResult(faultRemains: boolean) {
 const audits = computed(() => auditItems(detail.value?.audit_logs || []))
 const rawOrEmpty = (rows: unknown[]) => rows.length ? prettyJson(rows) : '暂无记录'
 const message = (cause: unknown) => cause instanceof Error ? cause.message : String(cause)
+function apiError(cause: unknown) {
+  const detail = (cause as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  return message(cause)
+}
 
 function backToList() { void router.push({ name: 'customer-service-tickets' }) }
 
@@ -378,6 +383,8 @@ async function load() {
     if (request !== generation) return
     if (Number(result.ticket?.id) !== id || !Array.isArray(result.decisions) || !Array.isArray(result.actions) || !Array.isArray(result.audit_logs)) throw new Error('客服详情响应不完整')
     detail.value = result as Detail
+    const pending = [...(result.actions || [])].reverse().find((row) => row.action_type === 'ticket.apply_change' && row.status === 'waiting_approval')
+    sensitiveActionId.value = pending ? Number(pending.id || 0) : 0
     expectedCompletionInput.value = toBeijingInput(result.ticket?.expected_completion_at)
   } catch (cause) { if (request === generation) error.value = message(cause) }
   finally { if (request === generation) loading.value = false }
