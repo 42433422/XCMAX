@@ -1,5 +1,5 @@
 {
-  "lines": 2440718,
+  "lines": 2441027,
   "updated": "2026-11-06",
-  "note": "Cross-module imports now persist queue state, rejection, and the original HTTP body, and tests prove claim races plus real SQLite commit recovery."
+  "note": "审批请求不再在线程上 sleep 等待执行：认领执行与幂等响应拆到 cross_module_execution.py（约 493 行，两文件均低于 40KB 与 800 行），审批交接与状态映射测试约净增 309 行。G11 大文件基线未改。用户要求本 PR 收口时若净增则按此脚本抬行数基线。"
 }
