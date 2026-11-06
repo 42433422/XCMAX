@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 import app.db.models
-import app.db.models.purchase_unit  # noqa: F401  customers.query 读购买单位表
+import app.db.models.purchase_unit  # customers.query 读购买单位表
 from app.application.agent_orchestrator.tool_spec import validate_tool_call
 from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
