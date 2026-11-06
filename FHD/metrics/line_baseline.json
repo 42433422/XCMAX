@@ -1,5 +1,5 @@
 {
-  "lines": 2416968,
+  "lines": 2418107,
   "updated": "2026-11-06",
-  "note": "rebuild capability pages for #2988 after #3019 rebase"
+  "note": "C21-C30 网络稳定性：失败分类、单飞刷新、副作用去重、请求号追踪与确定性测试，净增约 1139 行，现有机制上补齐验收缺口。"
 }
