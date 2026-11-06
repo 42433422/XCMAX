@@ -529,6 +529,22 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 return
             if pause_for_clarification(run, step, node_outputs):
                 return
+            step_is_approved = bool(approved and approved in {step.step_id, step.node_id})
+            if not self._can_auto_execute(step) and (not step_is_approved):
+                step.status = "waiting_user"
+                run.status = "waiting_user"
+                run.add_event(
+                    "step.waiting_user",
+                    f"步骤 {step.node_id} 需要用户确认",
+                    {
+                        "step_id": step.step_id,
+                        "tool_id": step.tool_id,
+                        "action": step.action,
+                        "risk": step.risk,
+                        "idempotent": step.idempotent,
+                    },
+                )
+                return
             from app.application.agent_orchestrator.tool_permission import actor_tool_denial
 
             denial = actor_tool_denial(step.tool_id, step.action, runtime_context)
@@ -567,22 +583,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     },
                 )
                 self._repo.save(run)
-                return
-            step_is_approved = bool(approved and approved in {step.step_id, step.node_id})
-            if not self._can_auto_execute(step) and (not step_is_approved):
-                step.status = "waiting_user"
-                run.status = "waiting_user"
-                run.add_event(
-                    "step.waiting_user",
-                    f"步骤 {step.node_id} 需要用户确认",
-                    {
-                        "step_id": step.step_id,
-                        "tool_id": step.tool_id,
-                        "action": step.action,
-                        "risk": step.risk,
-                        "idempotent": step.idempotent,
-                    },
-                )
                 return
             while True:
                 budget_payload = budget_exceeded_payload(

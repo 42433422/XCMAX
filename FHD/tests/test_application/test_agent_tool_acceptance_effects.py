@@ -33,6 +33,7 @@ from app.application.agent_orchestrator.tool_permission import (
     register_tenant_tool,
 )
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from app.utils.operational_errors import BOUNDARY_ERRORS
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 _TRACE_FIELDS = {
@@ -90,7 +91,7 @@ def business(tmp_path, monkeypatch, trusted_actor):
         try:
             yield session
             session.commit()
-        except Exception:
+        except BOUNDARY_ERRORS:
             session.rollback()
             raise
         finally:
@@ -631,7 +632,7 @@ def test_trace_handoff_and_audit_isolation(business, local_tools):
     for event in run.events:
         if event.event_type != "tool.completed":
             continue
-        assert _TRACE_FIELDS <= set(event.data)
+        assert set(event.data) >= _TRACE_FIELDS
         assert event.data["parent_task_id"] == "parent-task"
         assert event.data["tenant_id"] == str(actor.context["tenant_id"])
         assert event.data["execution_status"] == "succeeded"

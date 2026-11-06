@@ -186,6 +186,10 @@ def actor_tool_denial(
     allow_denial = _allowlist_denial(spec, ctx)
     if allow_denial is not None:
         return allow_denial
+    # Catalog receipts keep their own unknown/historical authorization. A live
+    # permission check here would turn a revoked write into a fresh denial.
+    if str(tool_id) == "catalog_products_v1":
+        return None
     if not isinstance(ctx.get("_actor_authorization"), dict):
         return None
     from app.domain.shared_services.auth_service import get_auth_service
@@ -193,7 +197,9 @@ def actor_tool_denial(
 
     try:
         actor = _bound_actor(ctx)
-        if not spec.permission or not get_auth_service().has_permission(actor, spec.permission):
+        if getattr(actor, "role", "") == "admin":
+            return None
+        if spec.permission and not get_auth_service().has_permission(actor, spec.permission):
             return _denial(
                 "tool_permission_denied",
                 "权限不足，已拒绝执行工具",
@@ -523,7 +529,13 @@ def reject_empty_business_result(result: dict[str, Any], *, action: str) -> dict
         payload = result.get("result")
     else:
         return None
-    empty_list = payload == [] and action not in {"read", "query", "list"}
+    empty_list = payload == [] and action not in {
+        "read",
+        "query",
+        "list",
+        "ledger_query",
+        "exists",
+    }
     if payload is None or payload == "" or empty_list:
         return {
             **result,

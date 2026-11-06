@@ -17,7 +17,7 @@ from app.application.agent_orchestrator.runtime_dependencies import (
 )
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -100,17 +100,19 @@ class StepExecution:
         )
         self.repository.save(run)
         ctx = dict(runtime_context or {})
-        ctx.update(
-            {
-                "run_id": run.run_id,
-                "step_id": step.step_id,
-                "node_id": step.node_id,
-                "message": run.message,
-                "user_id": run.user_id,
-                "node_outputs": dict(node_outputs),
-                **task_execution_context(run, step),
-            }
-        )
+        execution_scope = {
+            "run_id": run.run_id,
+            "step_id": step.step_id,
+            "node_id": step.node_id,
+            "message": run.message,
+            "node_outputs": dict(node_outputs),
+            **task_execution_context(run, step),
+        }
+        # Chat runs are keyed by the conversation owner. A sealed session binding
+        # already carries the account id, and replacing it makes the binding fail.
+        if not isinstance(ctx.get("_actor_authorization"), dict):
+            execution_scope["user_id"] = run.user_id
+        ctx.update(execution_scope)
         tool_call.metadata["idempotency_key"] = ctx["idempotency_key"]
         validation = self.dependencies.validate(step.tool_id, step.action, step.params)
         if not validation.ok:
@@ -148,7 +150,7 @@ class StepExecution:
                     "error_code": "tool_exception",
                     "message": "工具执行失败",
                 }
-            except Exception:
+            except BOUNDARY_ERRORS:
                 logger.exception("agent tool execution failed")
                 output = {
                     "success": False,

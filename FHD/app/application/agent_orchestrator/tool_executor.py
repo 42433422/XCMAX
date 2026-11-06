@@ -14,6 +14,7 @@ from app.application.agent_orchestrator.param_references import (
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_spec import (
     ToolActionSpecV2,
+    get_tool_action_spec,
     validate_tool_call,
     validate_tool_result,
 )
@@ -211,7 +212,9 @@ class AgentToolExecutor:
     ) -> dict[str, Any]:
         from app.application.facades.tools_facade import execute_registered_workflow_tool
 
-        params = dict(step.params or {})
+        raw_params = dict(step.params or {})
+        client_identity = bool(_QUERY_IDENTITY_FIELDS.intersection(raw_params))
+        params = dict(raw_params)
         deadline = (runtime_context or {}).get("deadline_monotonic")
         if isinstance(deadline, (int, float)) and time.monotonic() > float(deadline):
             return {
@@ -243,6 +246,13 @@ class AgentToolExecutor:
             "user_id",
         ):
             params.pop(control_key, None)
+        context = dict(runtime_context or {})
+        spec = get_tool_action_spec(step.tool_id, step.action)
+        required = set((spec.input_schema or {}).get("required") or []) if spec is not None else set()
+        if "user_id" in required and context.get("user_id") not in (None, ""):
+            params["user_id"] = str(context["user_id"])
+        if "tenant_id" in required and context.get("tenant_id") not in (None, ""):
+            params["tenant_id"] = context["tenant_id"]
         validation = validate_tool_call(step.tool_id, step.action, params)
         if not validation.ok:
             return {
@@ -271,6 +281,8 @@ class AgentToolExecutor:
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
         reviewed_query = (validation.tool_id, validation.action) in _REVIEWED_QUERY_ACTIONS
+        if reviewed_query and client_identity:
+            return _query_failure("tool_identity_override")
         query_tenant = None
         if reviewed_query:
             query_tenant, denied = _reviewed_query_tenant(
@@ -285,15 +297,7 @@ class AgentToolExecutor:
         action = validation.action or step.action
         runtime_tenant_raw = params["_runtime_context"].get("tenant_id")
         runtime_tenant_id: int | None = query_tenant
-        if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS:
-            if runtime_tenant_raw in (None, ""):
-                return {
-                    "success": False,
-                    "error_code": "invalid_tenant_context",
-                    "message": "任务租户上下文无效，已拒绝执行工具",
-                    "tool_id": validation.tool_id,
-                    "action": action,
-                }
+        if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS and runtime_tenant_raw not in (None, ""):
             try:
                 if isinstance(runtime_tenant_raw, bool) or not str(runtime_tenant_raw).isdigit():
                     raise ValueError
@@ -309,11 +313,12 @@ class AgentToolExecutor:
                     "action": action,
                 }
 
+        from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
         from app.infrastructure.auth.agent_mod_scope import (
             AgentModAuthorizationError,
             agent_mod_execution_scope,
         )
-        from app.infrastructure.tenant_scope import owned_tenant_scope
+        from app.infrastructure.tenant_scope import owned_tenant_scope, tenant_scope
 
         result: Any = None
         idem_key = ""
@@ -323,11 +328,14 @@ class AgentToolExecutor:
             # runtime_context so repository/raw-SQL boundaries keep their fail-closed
             # isolation. Dataset/document tools deliberately keep their own opaque
             # string tenant keys and must not be coerced here.
+            scope = (
+                owned_tenant_scope(runtime_tenant_id)
+                if (validation.tool_id, action) == ("products", "exists")
+                else tenant_scope(runtime_tenant_id)
+            )
             with (
                 agent_mod_execution_scope(params["_runtime_context"].get("_mod_authorization")),
-                owned_tenant_scope(runtime_tenant_id)
-                if runtime_tenant_id is not None
-                else nullcontext(),
+                scope if runtime_tenant_id is not None else nullcontext(),
             ):
                 from app.application.agent_orchestrator.tool_permission import (
                     begin_idempotent_replay,
@@ -351,11 +359,12 @@ class AgentToolExecutor:
                         if reviewed_query
                         else execute_registered_workflow_tool(step.tool_id, action, params)
                     )
+                except (WorkerLeaseLost, TimeoutError, PermissionError, RuntimeError):
+                    raise
                 except RECOVERABLE_ERRORS as exc:
                     result = {
                         "success": False,
                         "error_code": "tool_exception",
-                        "retryable": False,
                         "message": "工具执行失败",
                         "exception_type": type(exc).__name__,
                     }

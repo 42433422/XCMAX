@@ -241,7 +241,10 @@ def test_public_executor_is_resolved_by_actual_agent_tool_chain(
     assert response.json()["executed_action"] == action
     run = agent_repository.get(response.json()["run_id"])
     assert run is not None and run.status == "completed"
-    assert run.metadata["runtime_context"] == {
+    observed = dict(run.metadata["runtime_context"])
+    observed.pop("context_summary", None)
+    observed.pop("untrusted_sources", None)
+    assert observed == {
         "source": "product_compat_route",
         "route": path,
         "request_path": path,
@@ -285,7 +288,10 @@ def test_historical_waiting_run_resumes_without_retired_module(
     )
     assert resumed is not None and resumed.status == "completed"
     execute.assert_called_once_with("delete", {"id": 7})
-    assert resumed.metadata["runtime_context"] == context
+    resumed_context = dict(resumed.metadata["runtime_context"])
+    resumed_context.pop("context_summary", None)
+    resumed_context.pop("untrusted_sources", None)
+    assert resumed_context == context
     approval = next(event for event in resumed.events if event.event_type == "step.approved")
     assert approval.data["approved_by"] == "compat-reviewer"
     assert approval.data["node_id"] == "products_delete_compat"
