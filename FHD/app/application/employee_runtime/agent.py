@@ -215,10 +215,15 @@ class EmployeeAgent:
         payload = dict(input_data or {})
         if workspace_root and "workspace_root" not in payload:
             payload["workspace_root"] = workspace_root
-        from app.application.employee_runtime.task_continuity import execute_continuity_turn
+        from app.application.employee_runtime.task_continuity import maybe_continue_employee_task
 
-        routed = execute_continuity_turn(
-            employee_id, task, payload, user_id=user_id, session_id=session_id
+        routed = maybe_continue_employee_task(
+            employee_id,
+            task,
+            payload,
+            user_id=user_id,
+            session_id=session_id,
+            workspace_root=payload.get("workspace_root"),
         )
         if routed is not None:
             return routed

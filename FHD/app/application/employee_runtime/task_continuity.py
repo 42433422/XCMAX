@@ -7,13 +7,14 @@ Dialogue, model text, and compression summaries are not execution results.
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import contextvars
+import fcntl
 import hashlib
 import json
+import os
+import subprocess
+import sys
 import threading
 import uuid
-from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -26,12 +27,30 @@ from app.application.agent_orchestrator.context_window_manager import (
 SOURCE = "employee_runtime.task_continuity"
 CONTINUE_TEXT = "继续执行剩余任务"
 _TERMINAL_OK = "completed"
-_OPEN = {"pending", "running", "blocked", "recovering", "failed"}
-_REGISTRY: dict[str, TaskContinuityRuntime] = {}
-_CURRENT: contextvars.ContextVar[TaskContinuityRuntime | None] = contextvars.ContextVar(
-    "task_continuity_runtime", default=None
-)
-ToolFn = Callable[[dict[str, Any], str], dict[str, Any]]
+_LOCKS_GUARD = threading.Lock()
+_PATH_LOCKS: dict[str, threading.RLock] = {}
+_ACTIONS = {
+    "start",
+    "pause",
+    "resume",
+    "append_requirements",
+    "leave",
+    "reenter",
+    "read",
+    "handoff",
+    "retry_handoff",
+    "split",
+    "child_return",
+    "run_tools",
+    "retry_step",
+    "append_turn",
+    "compress",
+    "continue_compressed",
+    "restart",
+    "chain",
+    "metrics",
+}
+_EMPLOYEE_FLAGS = ("available", "timeout", "crash", "unrecoverable")
 
 
 def _now() -> str:
@@ -70,22 +89,10 @@ class _SummaryCache:
 class TaskContinuityRuntime:
     """Process runtime with a JSON ledger. Restart drops memory and reloads the file."""
 
-    def __init__(self, path: str | Path, *, compress_budget: int = 700) -> None:
+    def __init__(self, path: str | Path, *, workspace: str | Path | None = None) -> None:
         self.path = Path(path)
-        self.runtime_id = _new_id("rt")
-        self.compress_budget = compress_budget
-        self.tools: dict[str, ToolFn] = {}
-        self.employees: dict[str, dict[str, Any]] = {}
-        self.summary_provider: Any | None = None
-        self._session_cache: dict[str, str] = {}
-        self._lock = threading.RLock()
+        self.workspace = Path(workspace) if workspace is not None else self.path.parent
         self.state = _empty_state()
-        _REGISTRY[self.runtime_id] = self
-        if self.path.is_file():
-            self._read()
-
-    def register_tool(self, name: str, fn: ToolFn) -> None:
-        self.tools[name] = fn
 
     def dispatch(
         self,
@@ -101,7 +108,8 @@ class TaskContinuityRuntime:
         user = str(payload["user_id"] if payload.get("user_id") is not None else user_id)
         tenant = str(payload.get("tenant_id") or "")
         session = str(payload.get("session_id") or session_id or "")
-        with self._lock:
+        with _path_lock(self.path), self._exclusive():
+            self._read()
             handler = {
                 "start": self._start,
                 "pause": self._pause,
@@ -112,7 +120,6 @@ class TaskContinuityRuntime:
                 "read": self._read_task,
                 "handoff": self._handoff,
                 "retry_handoff": self._retry_handoff,
-                "set_employee": self._set_employee,
                 "split": self._split,
                 "child_return": self._child_return,
                 "run_tools": self._run_tools,
@@ -120,7 +127,6 @@ class TaskContinuityRuntime:
                 "append_turn": self._append_turn,
                 "compress": self._compress,
                 "continue_compressed": self._continue_compressed,
-                "seed_inflight": self._seed_inflight,
                 "restart": self._restart,
                 "chain": self._chain,
                 "metrics": self._metrics_op,
@@ -245,8 +251,7 @@ class TaskContinuityRuntime:
             task["confirmed_facts"]["constraints"] = list(task["constraints"])
         self.state["tasks"][task_id] = task
         key = _conv_key(task)
-        self.state["conversations"][key] = task_id
-        self._session_cache[key] = task_id
+        self.state["conversations"][key] = {"task_id": task_id, "active": True}
         self._touch(task)
         limit = payload.get("execute_limit")
         if limit is not None:
@@ -321,22 +326,27 @@ class TaskContinuityRuntime:
         task = self._authorized(payload, actor, scope, write=False)
         if not _is_task(task):
             return task
-        self._session_cache.pop(_conv_key(task), None)
+        key = _conv_key(task)
+        record = self._conversation(key) or {"task_id": task["task_id"], "active": True}
+        record["active"] = False
+        self.state["conversations"][key] = record
         self._event("conversation_left", task)
+        self._write()
         return self._envelope(task, business=False)
 
     def _reenter(
         self, actor: str, text: str, payload: dict[str, Any], **scope: str
     ) -> dict[str, Any]:
         key = f"{scope['tenant']}:{scope['user']}:{payload.get('conversation_id') or ''}"
-        if key in self._session_cache:
+        record = self._conversation(key)
+        if record is not None and record.get("active"):
             return self._fail(None, "session_still_active", "会话尚未离开")
-        task_id = self.state["conversations"].get(key)
-        task = self.state["tasks"].get(task_id or "")
+        task = self.state["tasks"].get("" if record is None else str(record.get("task_id") or ""))
         if task is None or not self._allows(task, actor, scope):
             return self._fail(None, "conversation_not_found", "找不到可恢复的原会话任务")
-        self._session_cache[key] = task["task_id"]
+        self.state["conversations"][key] = {"task_id": task["task_id"], "active": True}
         self._event("conversation_reentered", task)
+        self._write()
         return self._envelope(task, business=task["status"] == _TERMINAL_OK)
 
     def _read_task(
@@ -431,23 +441,6 @@ class TaskContinuityRuntime:
         self._write()
         return self._envelope(task, extra={"handoff": record, "inherited": inherited})
 
-    def _set_employee(
-        self, actor: str, text: str, payload: dict[str, Any], **scope: str
-    ) -> dict[str, Any]:
-        target = str(payload.get("target_employee") or actor)
-        flags = self._flags(target)
-        for key in ("available", "timeout", "crash", "unrecoverable"):
-            if key in payload:
-                flags[key] = bool(payload[key])
-        return {
-            "success": True,
-            "business_success": False,
-            "source": SOURCE,
-            "employee": target,
-            "flags": dict(flags),
-            "evidence": _blank_evidence(),
-        }
-
     def _split(
         self, actor: str, text: str, payload: dict[str, Any], **scope: str
     ) -> dict[str, Any]:
@@ -473,7 +466,17 @@ class TaskContinuityRuntime:
                 "holder_employee": employee,
                 "authorized_employees": [employee, parent["owner_employee"]],
                 "grants": {employee: ["*"], parent["owner_employee"]: ["*"]},
-                "steps": [],
+                "steps": [
+                    _step_from(
+                        child_id,
+                        {
+                            "step_id": "work",
+                            "tool": str(spec.get("tool") or "child_work"),
+                            "params": dict(spec.get("params") or {}),
+                        },
+                        0,
+                    )
+                ],
                 "status": "running",
                 "error_code": "",
                 "error_message": "",
@@ -506,15 +509,15 @@ class TaskContinuityRuntime:
             return child
         if not child["parent_task_id"]:
             return self._fail(child, "not_a_child", "只有子任务可以回传")
-        ok = bool(payload.get("ok"))
-        child["result_payload"] = {
-            "token": payload.get("token"),
-            "output": payload.get("output"),
-            "confirmed": ok,
-        }
+        self._execute_pending(child, actor, limit=None)
+        step = child["steps"][0] if child["steps"] else None
+        ok = step is not None and step["status"] == "success"
+        child["result_payload"] = {} if step is None else _clone(step.get("result_payload") or {})
         child["status"] = _TERMINAL_OK if ok else "failed"
-        child["error_code"] = "" if ok else str(payload.get("error_code") or "child_failed")
-        child["error_message"] = "" if ok else str(payload.get("error_message") or "子任务失败")
+        child["error_code"] = "" if ok else str((step or {}).get("error_code") or "child_failed")
+        child["error_message"] = (
+            "" if ok else str((step or {}).get("error_message") or "子任务失败")
+        )
         self._touch(child)
         parent = self.state["tasks"].get(child["parent_task_id"])
         if parent is not None:
@@ -633,7 +636,6 @@ class TaskContinuityRuntime:
                 messages,
                 user_id=str(task["user_id"]),
                 trace_id=task["task_id"],
-                provider=self.summary_provider,
                 context=_SummaryCache(),
             )
         )
@@ -698,54 +700,27 @@ class TaskContinuityRuntime:
             task, extra={"restatement": restatement, "execution_summary": _summary(task)}
         )
 
-    def _seed_inflight(
-        self, actor: str, text: str, payload: dict[str, Any], **scope: str
-    ) -> dict[str, Any]:
-        task = self._authorized(payload, actor, scope, write=True)
-        if not _is_task(task):
-            return task
-        step = _find_step(task, str(payload.get("step_id") or ""))
-        if step is None:
-            return self._fail(task, "step_not_found", "没有该步骤")
-        call_id = _new_id("tool")
-        step["status"] = "running"
-        step["tool_call_id"] = call_id
-        self.state["tool_calls"][call_id] = {
-            "tool_call_id": call_id,
-            "task_id": task["task_id"],
-            "step_id": step["step_id"],
-            "idempotency_key": step["idempotency_key"],
-            "status": "running",
-            "result_payload": {},
-            "error_code": "",
-            "error_message": "",
-            "resubmitted": False,
-            "submitted": True,
-        }
-        self._touch(task)
-        self._event("tool_inflight", task)
-        self._write()
-        return self._envelope(task, business=False)
-
     def _restart(
         self, actor: str, text: str, payload: dict[str, Any], **scope: str
     ) -> dict[str, Any]:
         cause = str(payload.get("cause") or "backend_restart")
-        before = self._fingerprint()
         self._write()
         self.state = _empty_state()
-        self._session_cache.clear()
         self._read()
+        before = self._fingerprint()
         recovered: list[str] = []
         for call in self.state["tool_calls"].values():
             if call["status"] != "running":
+                continue
+            pid = int(call.get("submit_pid") or 0)
+            if _pid_alive(pid):
                 continue
             call["status"] = "recovering"
             call["resubmitted"] = False
             recovered.append(call["tool_call_id"])
             task = self.state["tasks"].get(call["task_id"])
             step = _find_step(task, call["step_id"]) if task else None
-            if step is not None:
+            if step is not None and step["status"] == "running":
                 step["status"] = "recovering"
         for task in self.state["tasks"].values():
             if task["status"] == _TERMINAL_OK:
@@ -762,6 +737,7 @@ class TaskContinuityRuntime:
             "after_fingerprint": after,
             "inflight_recovered": recovered,
             "memory_dropped": True,
+            "reloaded_from": str(self.path),
             "timestamp": _now(),
             "orphan_count": len(self.orphans()),
         }
@@ -790,13 +766,14 @@ class TaskContinuityRuntime:
         employees = [str(item) for item in payload.get("employees") or []]
         if employees[:1] != [actor] or len(employees) != 4:
             return self._fail(task, "chain_shape", "交接链必须是发起员工起的 4 人链")
-        task["prior_results"].append(
-            {
-                "employee": actor,
-                "result": {"stage": "analysis", "goal": task["goal"]},
-                "confirmed": True,
-            }
+        opened = self._execute_named_tool(
+            "handoff_commit",
+            {"stage": actor, "goal": task["goal"], "source": actor, "target": actor},
+            task["task_id"],
         )
+        if not opened.get("ok"):
+            return self._fail(task, "chain_tool_failed", "交接链起点没有工具执行记录")
+        task["prior_results"].append({"employee": actor, "result": opened, "confirmed": True})
         self._touch(task)
         for source, target in zip(employees, employees[1:]):
             record = self._perform_handoff(
@@ -906,31 +883,67 @@ class TaskContinuityRuntime:
             record["duplicate_prevented"] = True
             record["result_payload"] = _clone(self.state["side_effects"][idempotency_key]["result"])
         else:
-            result = {"applied": True, "by": target, "effect": effect, "goal": task["goal"]}
-            self.state["side_effects"][idempotency_key] = {
-                "invocations": 1,
-                "result": result,
-                "task_id": task["task_id"],
-            }
-            record["status"] = _TERMINAL_OK
-            record["result_payload"] = result
-            task["prior_results"].append(
+            result = self._execute_named_tool(
+                "handoff_commit",
                 {
-                    "employee": target,
-                    "result": result,
-                    "handoff_id": record["handoff_id"],
-                    "confirmed": True,
-                }
+                    "effect": effect,
+                    "goal": task["goal"],
+                    "source": source,
+                    "target": target,
+                    "idempotency_key": idempotency_key,
+                },
+                task["task_id"],
             )
-            open_steps = [step for step in task["steps"] if step["status"] != "success"]
-            if not open_steps:
-                task["status"] = _TERMINAL_OK
-                task["error_code"] = ""
-                task["error_message"] = ""
-            elif task["status"] == "failed":
-                task["status"] = "running"
-                task["error_code"] = ""
-                task["error_message"] = ""
+            call_id = _new_id("tool")
+            call_status = "success" if result.get("ok") else "failed"
+            self.state["tool_calls"][call_id] = {
+                "tool_call_id": call_id,
+                "task_id": task["task_id"],
+                "step_id": f"handoff:{target}",
+                "idempotency_key": idempotency_key,
+                "status": call_status,
+                "result_payload": result,
+                "error_code": "" if result.get("ok") else str(result.get("error_code") or ""),
+                "error_message": "" if result.get("ok") else str(result.get("error_message") or ""),
+                "resubmitted": False,
+                "submitted": True,
+                "submit_pid": os.getpid(),
+            }
+            if not result.get("ok"):
+                record["status"] = "failed"
+                record["error_code"] = str(result.get("error_code") or "handoff_tool_failed")
+                record["error_message"] = str(result.get("error_message") or "交接工具没有成功记录")
+                task["status"] = "failed"
+                task["error_code"] = record["error_code"]
+                task["error_message"] = record["error_message"]
+                self._recovery(
+                    task, record["handoff_id"], record["error_code"], record["error_message"]
+                )
+            else:
+                self.state["side_effects"][idempotency_key] = {
+                    "invocations": 1,
+                    "result": result,
+                    "task_id": task["task_id"],
+                }
+                record["status"] = _TERMINAL_OK
+                record["result_payload"] = result
+                task["prior_results"].append(
+                    {
+                        "employee": target,
+                        "result": result,
+                        "handoff_id": record["handoff_id"],
+                        "confirmed": True,
+                    }
+                )
+                open_steps = [step for step in task["steps"] if step["status"] != "success"]
+                if not open_steps:
+                    task["status"] = _TERMINAL_OK
+                    task["error_code"] = ""
+                    task["error_message"] = ""
+                elif task["status"] == "failed":
+                    task["status"] = "running"
+                    task["error_code"] = ""
+                    task["error_message"] = ""
         self.state["handoffs"][record["handoff_id"]] = record
         task["handoff_ids"].append(record["handoff_id"])
         self._touch(task)
@@ -988,20 +1001,13 @@ class TaskContinuityRuntime:
             "error_message": "",
             "resubmitted": False,
             "submitted": True,
+            "submit_pid": os.getpid(),
         }
         step["tool_call_id"] = call_id
         step["status"] = "running"
         self.state["tool_calls"][call_id] = call
         self._write()
-        fn = self.tools.get(step["tool"])
-        try:
-            result = (
-                fn(_clone(step["params"]), task["task_id"])
-                if fn
-                else {"ok": True, "echo": step["params"]}
-            )
-        except Exception as exc:
-            result = {"ok": False, "error_code": "tool_exception", "error_message": str(exc)}
+        result = self._execute_named_tool(step["tool"], _clone(step["params"]), task["task_id"])
         if not isinstance(result, dict) or result.get("ok") is False:
             call["status"] = "failed"
             call["error_code"] = str((result or {}).get("error_code") or "tool_failed")
@@ -1009,7 +1015,8 @@ class TaskContinuityRuntime:
             step["status"] = "failed"
             step["error_code"] = call["error_code"]
             step["error_message"] = call["error_message"]
-            step["result_payload"] = {}
+            step["result_payload"] = result if isinstance(result, dict) else {}
+            call["result_payload"] = step["result_payload"]
             return
         self.state["side_effects"][step["idempotency_key"]] = {
             "invocations": 1,
@@ -1129,10 +1136,109 @@ class TaskContinuityRuntime:
         return actor == task["owner_employee"] or actor in task["authorized_employees"]
 
     def _flags(self, employee_id: str) -> dict[str, Any]:
-        return self.employees.setdefault(
-            employee_id,
-            {"available": True, "timeout": False, "crash": False, "unrecoverable": False},
-        )
+        path = self.workspace / "employees" / f"{employee_id}.json"
+        flags = {key: key == "available" for key in _EMPLOYEE_FLAGS}
+        if not path.is_file():
+            return flags
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return flags
+        if not isinstance(loaded, dict):
+            return flags
+        for key in _EMPLOYEE_FLAGS:
+            if key in loaded:
+                flags[key] = bool(loaded[key])
+        return flags
+
+    def _conversation(self, key: str) -> dict[str, Any] | None:
+        raw = self.state["conversations"].get(key)
+        if isinstance(raw, dict) and raw.get("task_id"):
+            return dict(raw)
+        if isinstance(raw, str) and raw:
+            return {"task_id": raw, "active": False}
+        return None
+
+    def _exclusive(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self.path.with_suffix(".lock")
+        handle = lock_path.open("a+")
+
+        class _Guard:
+            def __enter__(self_inner):
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                return self_inner
+
+            def __exit__(self_inner, exc_type, exc, tb):
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                handle.close()
+                return False
+
+        return _Guard()
+
+    def _execute_named_tool(
+        self, name: str, params: dict[str, Any], task_id: str
+    ) -> dict[str, Any]:
+        script = self.workspace / "tools" / f"{name}.py"
+        if script.is_file():
+            try:
+                proc = subprocess.run(
+                    [sys.executable, str(script)],
+                    input=json.dumps(
+                        {"params": params, "task_id": task_id, "workspace": str(self.workspace)},
+                        ensure_ascii=False,
+                    ),
+                    capture_output=True,
+                    text=True,
+                    timeout=8,
+                    cwd=str(self.workspace),
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return {"ok": False, "error_code": "tool_timeout", "error_message": "工具超时"}
+            if proc.returncode != 0:
+                return {
+                    "ok": False,
+                    "error_code": "tool_crashed",
+                    "error_message": (proc.stderr or proc.stdout or "工具进程失败")[-400:],
+                }
+            try:
+                data = json.loads(proc.stdout or "")
+            except json.JSONDecodeError:
+                return {
+                    "ok": False,
+                    "error_code": "tool_output",
+                    "error_message": "工具没有返回 JSON",
+                }
+            if not isinstance(data, dict):
+                return {
+                    "ok": False,
+                    "error_code": "tool_output",
+                    "error_message": "工具结果不是对象",
+                }
+            return data
+        try:
+            from app.application.tools.workflow import execute_workflow_tool
+
+            raw = execute_workflow_tool(name, params, str(self.workspace))
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            return {"ok": False, "error_code": "tool_missing", "error_message": str(exc)}
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except json.JSONDecodeError:
+            return {"ok": False, "error_code": "tool_missing", "error_message": str(raw)[:300]}
+        if not isinstance(data, dict):
+            return {"ok": False, "error_code": "tool_missing", "error_message": f"没有工具 {name}"}
+        if data.get("ok") is False or data.get("success") is False or data.get("error"):
+            return {
+                "ok": False,
+                "error_code": str(data.get("error_code") or data.get("error") or "tool_failed"),
+                "error_message": str(
+                    data.get("error_message") or data.get("message") or data.get("error") or ""
+                ),
+            }
+        data["ok"] = True
+        return data
 
     def _recovery(
         self, task: dict[str, Any], handoff_id: str, action: str, reason: str
@@ -1461,44 +1567,89 @@ def _await(coro: Any) -> Any:
     return box["value"]
 
 
-def resolve_runtime(payload: dict[str, Any] | None) -> TaskContinuityRuntime | None:
-    runtime_id = str((payload or {}).get("continuity_runtime_id") or "")
-    if runtime_id and runtime_id in _REGISTRY:
-        return _REGISTRY[runtime_id]
-    return _CURRENT.get()
+def ledger_path(workspace_root: str | Path) -> Path:
+    return Path(workspace_root) / ".xcmax" / "employee_task_ledger.json"
 
 
-def execute_continuity_turn(
+def load_employee_task_ledger(workspace_root: str | Path) -> dict[str, Any]:
+    path = ledger_path(workspace_root)
+    if not path.is_file():
+        return _empty_state()
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    state = _empty_state()
+    state.update(loaded if isinstance(loaded, dict) else {})
+    return state
+
+
+def audit_employee_task_ledger(workspace_root: str | Path) -> dict[str, Any]:
+    """Read the durable ledger from disk. Does not trust an in-memory object."""
+    runtime = TaskContinuityRuntime(ledger_path(workspace_root), workspace=workspace_root)
+    runtime._read()
+    pollution = runtime.pollution_findings()
+    duplicates = runtime.duplicate_side_effects()
+    return {
+        "pollution": len(pollution),
+        "duplicate_side_effects": len(duplicates),
+        "orphan_count": len(runtime.orphans()),
+    }
+
+
+def _path_lock(path: Path) -> threading.RLock:
+    key = os.path.abspath(path)
+    with _LOCKS_GUARD:
+        lock = _PATH_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _PATH_LOCKS[key] = lock
+        return lock
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def maybe_continue_employee_task(
     employee_id: str,
     task: str,
     payload: dict[str, Any] | None,
     *,
     user_id: Any = "",
     session_id: str | None = None,
+    workspace_root: str | Path | None = None,
 ) -> dict[str, Any] | None:
-    """EmployeeAgent entry. Returns None when this turn is not a continuity turn."""
-    body = payload or {}
-    if str(body.get("invoke_mode") or "") != "task_continuity":
+    """Entry used by EmployeeAgent.run. Ordinary chat returns None."""
+    body = dict(payload or {})
+    action = str(body.get("continuity_action") or "").strip()
+    text = str(task or "").strip()
+    if not action and "steps" not in body and text != CONTINUE_TEXT:
         return None
-    runtime = resolve_runtime(body)
-    if runtime is None:
+    workspace = workspace_root or body.get("workspace_root")
+    if not workspace:
         return {
             "success": False,
             "business_success": False,
             "source": SOURCE,
-            "error_code": "continuity_runtime_missing",
-            "error_message": "任务连续性运行时未绑定",
+            "error_code": "continuity_workspace_missing",
+            "error_message": "任务连续性需要工作区以写入持久账本",
             "evidence": _blank_evidence(),
         }
-    return runtime.dispatch(employee_id, task, body, user_id=user_id, session_id=session_id)
-
-
-@contextlib.contextmanager
-def bound_continuity_runtime(path: str | Path) -> Iterator[TaskContinuityRuntime]:
-    runtime = TaskContinuityRuntime(path)
-    token = _CURRENT.set(runtime)
-    try:
-        yield runtime
-    finally:
-        _CURRENT.reset(token)
-        _REGISTRY.pop(runtime.runtime_id, None)
+    if not action:
+        action = "start" if "steps" in body else "resume"
+    if action not in _ACTIONS:
+        return {
+            "success": False,
+            "business_success": False,
+            "source": SOURCE,
+            "error_code": "unknown_op",
+            "error_message": f"不支持的连续性操作: {action}",
+            "evidence": _blank_evidence(),
+        }
+    body["op"] = action
+    runtime = TaskContinuityRuntime(ledger_path(workspace), workspace=workspace)
+    return runtime.dispatch(employee_id, text or task, body, user_id=user_id, session_id=session_id)
