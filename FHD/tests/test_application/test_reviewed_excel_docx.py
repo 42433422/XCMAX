@@ -15,7 +15,10 @@ from app.application.reviewed_excel_legacy import prepare_archive_workbook
 from tests.test_application.test_reviewed_excel_template import (
     account_session_client as account_session_client,
 )
-from tests.test_application.test_reviewed_excel_template import review_store as review_store
+from tests.test_application.test_reviewed_excel_template import (
+    review_store as review_store,
+)
+
 
 def _derived_from_classification(client, classification_id: str) -> bytes:
     source = client.get(f"/api/templates/reviewed-excel/classifications/{classification_id}/source")

@@ -655,7 +655,10 @@ def prepare_archive_workbook(body: bytes, *, legacy_test_only=False, legacy_sour
         if legacy_test_only is not True or legacy_source_sha256 != digest:
             _error("请明确确认仅数据/模板测试并绑定原件 SHA-256；打印未验证，不可正式发布")
         return _convert_legacy_body(body, purpose="data_template_test_only")
-    from app.application.reviewed_excel_docx import convert_docx_to_xlsx_for_archive, is_docx_package
+    from app.application.reviewed_excel_docx import (
+        convert_docx_to_xlsx_for_archive,
+        is_docx_package,
+    )
 
     if is_docx_package(body):
         return convert_docx_to_xlsx_for_archive(body)

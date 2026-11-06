@@ -1,5 +1,5 @@
 {
-  "lines": 2440061,
+  "lines": 2440067,
   "updated": "2026-11-07",
-  "note": "feat(docking): accept Word .docx in 数据对接中心; derive workbook for model analyze; keep model-required writes"
+  "note": "ruff import formatting for Word docking archive-classify"
 }
