@@ -1,5 +1,5 @@
 {
-  "lines": 2440611,
+  "lines": 2446019,
   "updated": "2026-11-06",
-  "note": "The live conversation router must expose the last finished conversation before the session-id path."
+  "note": "对话收口集成：合并已确认事实、长对话连续性和桌面会话恢复。服务端上次完成的会话优先于过期 localStorage。净增为三条产品线叠加加上重启优先级测试。"
 }

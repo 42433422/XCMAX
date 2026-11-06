@@ -36,10 +36,15 @@ vi.mock('@/utils/workspacePrefsApi', () => ({
   fetchWorkspacePrefs: vi.fn(),
 }))
 
+vi.mock('@/api/chat', () => ({
+  default: { getConversations: vi.fn(async () => ({ success: true, sessions: [] })) },
+}))
+
 import { authApi } from '@/api/auth'
 import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
 import { fetchProductSku } from '@/utils/productSku'
 import { fetchWorkspacePrefs } from '@/utils/workspacePrefsApi'
+import chatApi from '@/api/chat'
 
 function industryCatalog(selectedIndustryId = '涂料'): OnboardingIndustryCatalog {
   return {
@@ -65,6 +70,7 @@ describe('hostPackOnboardingGate', () => {
       success: true,
       data: { account_kind: 'enterprise', market_is_admin: false },
     })
+    vi.mocked(chatApi.getConversations).mockResolvedValue({ success: true, sessions: [] } as never)
   })
 
   afterEach(() => {
@@ -83,6 +89,19 @@ describe('hostPackOnboardingGate', () => {
 
   it('requires host pack when enterprise baseline not ready', async () => {
     await expect(needsHostPackCompletion(true)).resolves.toBe(true)
+  })
+
+  it('does not send a completed workspace back to setup when the baseline is missing', async () => {
+    vi.mocked(fetchWorkspacePrefs).mockResolvedValue({
+      success: true, owner_id: 'tenant:10', data: { product_flow_completed: true },
+    })
+    vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue(industryCatalog(''))
+    await expect(resolveHostPackOnboardingStep(true)).resolves.toBeNull()
+  })
+
+  it('does not send an account that already has conversations through first-run setup', async () => {
+    vi.mocked(chatApi.getConversations).mockResolvedValue({ success: true, sessions: [{ session_id: 'kept' }] } as never)
+    await expect(needsHostPackCompletion(true)).resolves.toBe(false)
   })
 
   it('does not require host pack when baseline ready', async () => {

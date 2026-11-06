@@ -229,7 +229,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, onDeactivated } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onDeactivated } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
@@ -256,9 +256,10 @@ import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
-import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { chooseActiveConversationId } from '@/utils/activeConversation'
 import chatApi from '@/api/chat'
+import { conversationIdAfterRestart, isDurableChatScope } from '@/utils/chatSessionRestore'
 import { resolveWorkspaceSessionId, useRoutedTaskWorkspace, useTaskApprovalFeedback } from '@/composables/useRoutedTaskWorkspace'
 
 const props = withDefaults(
@@ -287,13 +288,28 @@ function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
 }
 
-const _storedSessionId = readAiSessionIdFromStorage()
 const initialWorkspaceSessionId = resolveWorkspaceSessionId(props)
-const currentSessionId = ref(initialWorkspaceSessionId || _storedSessionId || generateSessionId())
+const openedScope = resolveChatStorageScope()
+const openedStoredId = isDurableChatScope(openedScope) ? readAiSessionIdFromStorage() : ''
+const currentSessionId = ref(initialWorkspaceSessionId || openedStoredId || generateSessionId())
 const messageSessionKey = computed(() => JSON.stringify([currentSessionId.value, modsStore.activeModId, productReadAccountEpoch.value]))
-if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
+if (isDurableChatScope(openedScope) && !openedStoredId) writeAiSessionIdToStorage(currentSessionId.value)
+const chatScope = computed(() => resolveChatStorageScope())
 
 const chatViewApi = useChatView({ sessionId: currentSessionId })
+const serverActiveId = ref('')
+watch(chatScope, (scope) => {
+  const decision = conversationIdAfterRestart(
+    scope,
+    readAiSessionIdFromStorage(),
+    currentSessionId.value,
+    serverActiveId.value,
+  )
+  if (!isDurableChatScope(scope)) return
+  if (decision.id && decision.id !== currentSessionId.value) currentSessionId.value = decision.id
+  if (decision.persistLocal) writeAiSessionIdToStorage(decision.id)
+  void chatViewApi.syncSessionMessages().catch(() => undefined)
+}, { flush: 'post' })
 const chatRefBag = {
   chatMessagesRef: chatViewApi.chatMessagesRef,
   excelAnalyzeInputRef: chatViewApi.excelAnalyzeInputRef,
@@ -468,8 +484,9 @@ async function adoptServerActiveConversation() {
   try {
     const data = await chatApi.getActiveConversation()
     const body = data as { conversation_id?: string; data?: { conversation_id?: string } }
-    const serverId = String(body.conversation_id || body.data?.conversation_id || '')
-    const chosen = chooseActiveConversationId(currentSessionId.value, serverId)
+    const serverId = String(body.conversation_id || body.data?.conversation_id || '').trim()
+    if (serverId) serverActiveId.value = serverId
+    const chosen = chooseActiveConversationId(currentSessionId.value, serverActiveId.value)
     if (!chosen || chosen === currentSessionId.value) return
     currentSessionId.value = chosen
     writeAiSessionIdToStorage(chosen)

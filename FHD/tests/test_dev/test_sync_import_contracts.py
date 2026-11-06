@@ -23,6 +23,11 @@ def test_sync_contracts_allow_dal_but_reject_bypasses(tmp_path, violation):
         "app/domain/shared_services",
         "app/application",
         "app/services",
+        # The real contract names these entrypoints. The isolated tree must
+        # contain them or import-linter aborts before it can keep or break
+        # the sync contracts.
+        "app/fastapi_routes",
+        "app/fastapi_app",
     ):
         directory = tmp_path / package
         directory.mkdir(parents=True, exist_ok=True)

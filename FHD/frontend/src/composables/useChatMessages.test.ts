@@ -40,6 +40,7 @@ vi.mock('@/constants/industryPresets', () => ({
 
 vi.mock('@/utils/chatStorageKeys', () => ({
   resolveChatIdentity: (modId = '') => `identity:${modId}`,
+  resolveChatStorageScope: () => 'local',
   buildChatMessagesKey: (sid: string, modId: string) => `chat_${sid}_${modId}`,
   buildChatSessionMetaKey: (sid: string, modId: string) => `chat_meta_${sid}_${modId}`,
 }))
