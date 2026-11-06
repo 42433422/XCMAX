@@ -126,6 +126,8 @@ export interface RequestOptions extends RequestInit {
   skipDefaultJsonHeader?: boolean
   responseType?: 'json' | 'blob'
   timeoutMs?: number
+  /** 后台轮询类请求：失败时由调用方静默降级，不弹全局稳定性提示。 */
+  quiet?: boolean
   /** 显式预算的读请求（如登录行业 8s）不再自动再等一轮。 */
   retry?: boolean
   /** 同一键的写入只执行一次。结果未知时必须显式确认后才允许再提交。 */
@@ -232,7 +234,7 @@ async function requestOnce<T = unknown>(
   accountEpoch = productReadAccountEpoch.value,
 ): Promise<T | Response> {
   const fullUrl = buildApiUrl(url)
-  const { skipDefaultJsonHeader = false, responseType = 'json', timeoutMs, signal: callerSignal, ...requestOptions } = options
+  const { skipDefaultJsonHeader = false, responseType = 'json', timeoutMs, quiet = false, signal: callerSignal, ...requestOptions } = options
   const timeoutController = typeof timeoutMs === 'number' && timeoutMs > 0 ? new AbortController() : null
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   let detachCallerAbort: (() => void) | null = null
@@ -350,7 +352,7 @@ async function requestOnce<T = unknown>(
     const message = timedOut
       ? `请求超时（>${Math.ceil(Number(timeoutMs) / 1000)}s）。该请求未成功。`
       : stability.message
-    publishStabilityNotice(message)
+    if (!quiet) publishStabilityNotice(message)
     throw new ApiError(message, 0, { success: false, stability })
   } finally {
     if (timeoutId) clearTimeout(timeoutId)
