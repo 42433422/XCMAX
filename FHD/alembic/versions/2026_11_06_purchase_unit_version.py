@@ -34,12 +34,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    if not inspector.has_table("purchase_units"):
-        return
-    existing = {str(row.get("name") or "") for row in inspector.get_columns("purchase_units")}
-    if "version" not in existing:
-        return
-    with op.batch_alter_table("purchase_units") as batch:
-        batch.drop_column("version")
+    # Resetting a version on re-upgrade would make stale pending writes valid
+    # again. Older code can ignore the column; keep its concurrency history.
+    pass

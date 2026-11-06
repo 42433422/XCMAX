@@ -321,3 +321,36 @@ def test_stale_version_is_not_success():
         assert lost.get("error_code") == "version_conflict"
         assert _phone(engine, unit_id) == "13800001111"
         assert _version(engine, unit_id) == 2
+
+
+def test_alembic_rollback_preserves_version_and_rejects_stale_write(tmp_path, monkeypatch):
+    from alembic.config import Config
+
+    from alembic import command
+
+    engine = _prepare(tmp_path)
+    monkeypatch.setenv("DATABASE_URL", str(engine.url))
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    revision = "2026_11_06_purchase_unit_version"
+    try:
+        unit_id = _seed(engine, "迁移回退客户", "13800007777", 11)
+        with engine.begin() as db:
+            db.execute(
+                PurchaseUnit.__table__.update().where(PurchaseUnit.id == unit_id).values(version=7)
+            )
+        command.stamp(config, "2026_11_06_task_lifecycle")
+        command.upgrade(config, revision)
+        for attempt in range(2):
+            command.downgrade(config, "2026_11_06_task_lifecycle")
+            command.upgrade(config, revision)
+            assert _version(engine, unit_id) == 7
+            stale = _update(unit_id, "13800001111", f"e22-migration-stale-{attempt}", 1)
+            assert stale.get("success") is False
+            assert stale.get("error_code") == "version_conflict"
+            assert _phone(engine, unit_id) == "13800007777"
+        current = _update(unit_id, "13800008888", "e22-migration-current", 7)
+        assert current.get("success") is True
+        assert _version(engine, unit_id) == 8
+        assert _phone(engine, unit_id) == "13800008888"
+    finally:
+        engine.dispose()
