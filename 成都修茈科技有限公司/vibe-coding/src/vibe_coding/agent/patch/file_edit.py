@@ -52,13 +52,8 @@ class FileEdit:
         elif self.operation == "delete":
             if self.hunks or self.contents is not None:
                 raise ValueError(f"FileEdit({self.path!r}): delete must not carry hunks/contents")
-        elif self.operation == "rename":
-            if not self.new_path:
-                raise ValueError(f"FileEdit({self.path!r}): rename needs new_path")
-        elif self.operation == "modify":
-            if self.contents is not None:
-                # Tolerated for round-tripping but warned via empty hunks rule.
-                pass
+        elif self.operation == "rename" and not self.new_path:
+            raise ValueError(f"FileEdit({self.path!r}): rename needs new_path")
 
     def to_dict(self) -> dict[str, Any]:
         return {
