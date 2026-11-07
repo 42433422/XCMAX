@@ -116,6 +116,7 @@
   "/api/elt/owned-mixed-v1/products/{product_id}",
   "/api/elt/owned-mixed-v1/products/{product_id}/edits",
   "/api/elt/runs/{run_id}",
+  "/api/elt/runs/{run_id}/download",
   "/api/elt/sources",
   "/api/elt/sources/{asset_id}",
   "/api/elt/sources/{asset_id}/revisions",

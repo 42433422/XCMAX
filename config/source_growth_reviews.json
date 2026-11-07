@@ -105,8 +105,8 @@
       "after_lines": 1376,
       "reason": "Read formula cache presence and retain supported Word/table structure without dropping rows.",
       "boundary": "Existing source inspection limits remain bounded; derived sources remain review candidates.",
-      "validation": "Formula cache, Word conversion and large-table synthetic regression tests.",
-      "follow_up": "Keep source inspection separate from confirmed candidate persistence and audit.",
+      "validation": "From FHD, python -m pytest -q -o addopts='' over all changed tests relative to origin/main: 790 passed in 433.05s on frozen integrated tree 740eff8 (including this structural/candidate path). Ruff and full CI mypy passed. Final updated head CI and human architecture review remain pending; synthetic fixtures only.",
+      "follow_up": "@42433422: Keep source inspection separate from confirmed candidate persistence and audit.",
       "review_owner": "@42433422"
     },
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
@@ -117,8 +117,8 @@
       "after_lines": 2039,
       "reason": "Return per-row slice disposition and preserve each parallel region review state.",
       "boundary": "Existing reviewed Excel endpoints only; old direct execute endpoint stays removed.",
-      "validation": "Auto-slice row coverage and selected candidate confirmation route tests.",
-      "follow_up": "Review response compatibility without adding a second import execution path.",
+      "validation": "From FHD, python -m pytest -q -o addopts='' over all changed tests relative to origin/main: 790 passed in 433.05s on frozen integrated tree 740eff8 (including this structural/candidate path). Ruff and full CI mypy passed. Final updated head CI and human architecture review remain pending; synthetic fixtures only.",
+      "follow_up": "@42433422: Review response compatibility without adding a second import execution path.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/ai_chat_app_service.py": {
@@ -177,8 +177,8 @@
       "after_lines": 935,
       "reason": "Keep deterministic merged-cell, parallel-table and row-kind segmentation in one cohesive parser; ambiguous names must not become totals.",
       "boundary": "Pure structural analysis only; no persistence, model authorization or new API endpoint.",
-      "validation": "Synthetic tables cover merged headers, parallel regions, totals versus customer names and exact provenance.",
-      "follow_up": "Review this new parser as a coherent unit; do not mechanically split it solely to hide the advisory size.",
+      "validation": "From FHD, python -m pytest -q -o addopts='' over all changed tests relative to origin/main: 790 passed in 433.05s on frozen integrated tree 740eff8 (including this structural/candidate path). Ruff and full CI mypy passed. Final updated head CI and human architecture review remain pending; synthetic fixtures only.",
+      "follow_up": "@42433422: Review this new parser as a coherent unit; do not mechanically split it solely to hide the advisory size.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/reviewed_excel_structural_index.py": {
@@ -189,8 +189,8 @@
       "after_lines": 909,
       "reason": "Preserve overflow table evidence instead of silently truncating after eighty structural candidates.",
       "boundary": "Existing structural index and projection contract only; no import execution.",
-      "validation": "Table segmentation and reviewed Excel structural-index regression tests.",
-      "follow_up": "Review candidate overflow representation together with its consumer contract.",
+      "validation": "From FHD, python -m pytest -q -o addopts='' over all changed tests relative to origin/main: 790 passed in 433.05s on frozen integrated tree 740eff8 (including this structural/candidate path). Ruff and full CI mypy passed. Final updated head CI and human architecture review remain pending; synthetic fixtures only.",
+      "follow_up": "@42433422: Review candidate overflow representation together with its consumer contract.",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/components/template/ReviewedExcelTemplate.vue": {
@@ -201,8 +201,8 @@
       "after_lines": 2069,
       "reason": "Expose structural regions and exclusion reasons before candidate confirmation.",
       "boundary": "Existing data docking component only; no routing, authentication or write-authorization change.",
-      "validation": "Existing reviewed Excel component tests and final required frontend CI.",
-      "follow_up": "Keep UI evidence tied to server structural results; future extraction must follow a real responsibility boundary.",
+      "validation": "GitHub Actions 42357888889 at integrated head 740eff8: frontend-quality, all four frontend-test-shard jobs, merged coverage gate and frontend-e2e passed. Final updated head CI and human architecture review remain pending; no real customer data tested.",
+      "follow_up": "@42433422: Keep UI evidence tied to server structural results; future extraction must follow a real responsibility boundary.",
       "review_owner": "@42433422"
     }
   }
