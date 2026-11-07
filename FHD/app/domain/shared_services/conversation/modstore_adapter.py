@@ -346,7 +346,7 @@ class ModstorePlatformAdapter:
         except (ValueError, TypeError):
             return data
         if isinstance(payload, dict):
-            metadata = routing.route_metadata(payload.get("route_metadata") or {})
+            metadata = routing.route_metadata(payload.get("route_metadata") or payload)
             if metadata:
                 self.last_route_metadata = metadata
         return data
@@ -441,6 +441,39 @@ class ModstorePlatformAdapter:
             messages, (provider, model), self._model_vision_support
         )
 
+    def _absorb_stream_payload(self, data: str, status_cb, pieces: list[str]) -> None:
+        try:
+            payload = json.loads(data)
+        except (ValueError, TypeError):
+            if data:
+                pieces.append(str(data))
+            return
+        if not isinstance(payload, dict):
+            return
+        if payload.get("status") == "processing":
+            if status_cb is not None:
+                status_cb()
+            return
+        delta = payload.get("delta")
+        content = delta if isinstance(delta, str) and delta else payload.get("content")
+        if isinstance(content, str) and content:
+            pieces.append(content)
+            return
+        for choice in payload.get("choices") or []:
+            message = choice.get("delta") if isinstance(choice, dict) else None
+            if isinstance(message, dict) and message.get("content"):
+                pieces.append(str(message["content"]))
+
+    def _normalize_collected(self, pieces: list[str], provider, model) -> Dict[str, Any]:
+        route = self.last_route_metadata if isinstance(self.last_route_metadata, dict) else {}
+        raw = {
+            "content": "".join(pieces),
+            "provider": route.get("provider") or provider or self.default_provider,
+            "model": route.get("model") or model or self.default_model,
+            **{key: value for key, value in route.items() if key not in {"provider", "model"}},
+        }
+        return normalize_market_chat_response(raw, str(raw["provider"]), str(raw["model"]))
+
     async def chat_completion(
         self,
         messages: List[Dict[str, Any]],
@@ -450,16 +483,15 @@ class ModstorePlatformAdapter:
         model: str | None = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        """执行异步平台补全，沿已配置候选链处理可重试的配额错误并返回 OpenAI 响应。"""
-        connection = self._connection()
-        route = await self._resolve_provider_model_async(provider, model, connection)
-        with self._route_observation():
-            return await completions.complete_async(
-                connection,
-                route,
-                self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
-                self._completion_ports(connection),
-            )
+        """同一条流式调用收成完整响应。处理中的状态不另开请求。"""
+        kwargs.pop("_stream_status", None)
+        status_cb = kwargs.pop("_processing_status", None)
+        pieces: list[str] = []
+        async for data in self.stream_chat_completion(
+            messages, temperature, max_tokens, provider, model, **kwargs
+        ):
+            self._absorb_stream_payload(data, status_cb, pieces)
+        return self._normalize_collected(pieces, provider, model)
 
     async def stream_chat_completion(
         self,
@@ -477,6 +509,7 @@ class ModstorePlatformAdapter:
             SSE数据行
         """
         connection = self._connection()
+        authentication.validate_demo_destination(connection)
         route = await self._resolve_provider_model_async(provider, model, connection)
         source = streaming.stream_async(
             connection,
@@ -498,16 +531,15 @@ class ModstorePlatformAdapter:
         model: str | None = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        """同步版平台补全，用于现有 Planner 的 OpenAI SDK 兼容调用栈。"""
-        connection = self._connection()
-        route = self._resolve_provider_model(provider, model, connection=connection)
-        with self._route_observation():
-            return completions.complete_sync(
-                connection,
-                route,
-                self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
-                self._completion_ports(connection),
-            )
+        """同步版也走同一条流，收成完整响应。处理中的状态不另开请求。"""
+        kwargs.pop("_stream_status", None)
+        status_cb = kwargs.pop("_processing_status", None)
+        pieces: list[str] = []
+        for data in self.stream_chat_completion_sync(
+            messages, temperature, max_tokens, provider, model, **kwargs
+        ):
+            self._absorb_stream_payload(data, status_cb, pieces)
+        return self._normalize_collected(pieces, provider, model)
 
     def stream_chat_completion_sync(
         self,
@@ -520,6 +552,7 @@ class ModstorePlatformAdapter:
     ) -> Iterator[str]:
         """同步版平台流式补全，逐条产出 SSE data payload。"""
         connection = self._connection()
+        authentication.validate_demo_destination(connection)
         route = self._resolve_provider_model(provider, model, connection=connection)
         with self._route_observation():
             for data in streaming.stream_sync(

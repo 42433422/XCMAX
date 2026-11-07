@@ -35,6 +35,12 @@ class AttendanceAdapter(TargetAdapter):
         TargetField("clock_out", "下班打卡", aliases=("下班1打卡时间", "下班打卡时间", "下班时间")),
         TargetField("department", "部门", aliases=("部门",)),
         TargetField("attendance_group", "考勤组", aliases=("考勤组",)),
+        TargetField("work_month", "考勤月份", aliases=("work_month",)),
+        TargetField("days_in_month", "当月天数", type="integer", aliases=("days_in_month",)),
+        TargetField("absent_dates", "缺勤日期", aliases=("absent_dates",)),
+        TargetField("present_marked_dates", "标记出勤日期", aliases=("present_marked_dates",)),
+        TargetField("unmarked_days", "未标记天数", type="integer", aliases=("unmarked_days",)),
+        TargetField("month_notes", "月度备注", aliases=("month_notes",)),
         TargetField("business_id", "业务主键", aliases=("business_id",)),
         TargetField("document_path", "考勤文件", aliases=("document_path",)),
     )
@@ -139,15 +145,13 @@ class AttendanceAdapter(TargetAdapter):
         db_path = self._db_path()
         if not db_path.is_file():
             return False
+        from app.application.elt.attendance_pipeline import _business_exists
+
         try:
             with sqlite3.connect(str(db_path)) as conn:
-                row = conn.execute(
-                    "SELECT 1 FROM attendance_daily_records WHERE business_id = ?",
-                    (business_id,),
-                ).fetchone()
+                return _business_exists(conn, business_id)
         except sqlite3.OperationalError:
             return False
-        return row is not None
 
     @staticmethod
     def require_complete_selection(
@@ -178,7 +182,7 @@ class AttendanceAdapter(TargetAdapter):
         if not materialized:
             from app.application.elt.attendance_pipeline import _write_output
 
-            output = _write_output(source_path, str(context["run_id"]), [])
+            output = _write_output(str(context["run_id"]), [])
             digest = __import__("hashlib").sha256(output.read_bytes()).hexdigest()
             return {
                 "receipt": {
@@ -218,6 +222,7 @@ class AttendanceAdapter(TargetAdapter):
             deleted = 0
             for statement in (
                 "DELETE FROM attendance_daily_records WHERE source_file = ?",
+                "DELETE FROM attendance_monthly_marks WHERE source_file = ?",
                 "DELETE FROM attendance_employees WHERE source_file = ?",
                 "DELETE FROM attendance_departments WHERE source_file = ?",
                 "DELETE FROM products WHERE source_file = ?",

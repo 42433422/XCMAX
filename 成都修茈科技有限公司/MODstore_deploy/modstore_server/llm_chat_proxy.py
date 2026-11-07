@@ -68,10 +68,12 @@ _LLM_TIMEOUT = httpx.Timeout(
 _STREAM_LIMITS = httpx.Limits(max_connections=1000, max_keepalive_connections=200)
 _STREAM_TIMEOUT = httpx.Timeout(
     connect=15.0,
-    read=_timeout_seconds("MODSTORE_LLM_STREAM_READ_TIMEOUT", 120.0),
+    read=_timeout_seconds("MODSTORE_LLM_STREAM_READ_TIMEOUT", 180.0),
     write=60.0,
     pool=30.0,
 )
+# 同一条上游流还没吐出下一块时，按这个间隔回「仍在处理」，不另开调用。
+_STATUS_INTERVAL_S = 15.0
 
 
 def _primary_max_attempts() -> int:
@@ -351,6 +353,50 @@ async def chat_dispatch(
     return fb_result
 
 
+async def _with_processing_status(
+    source: AsyncIterator[Dict[str, Any]], interval: float = _STATUS_INTERVAL_S
+) -> AsyncIterator[Dict[str, Any]]:
+    """同一迭代器还在等下一块时回报处理中，不取消这条调用。"""
+    import asyncio
+
+    agen = source.__aiter__()
+    pending: asyncio.Task | None = None
+    try:
+        pending = asyncio.create_task(agen.__anext__())
+        while True:
+            done, _pending = await asyncio.wait({pending}, timeout=interval)
+            if pending not in done:
+                yield {"type": "status", "state": "processing"}
+                continue
+            try:
+                item = pending.result()
+            except StopAsyncIteration:
+                return
+            yield item
+            pending = asyncio.create_task(agen.__anext__())
+    finally:
+        if pending is not None and not pending.done():
+            pending.cancel()
+        closer = getattr(agen, "aclose", None)
+        if closer is not None:
+            await closer()
+
+
+async def _events_from_completion(result: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
+    if not result.get("ok"):
+        yield {
+            "type": "error",
+            "error": result.get("error") or "upstream error",
+            "status": result.get("status"),
+        }
+        return
+    content = str(result.get("content") or "")
+    if content:
+        yield {"type": "delta", "delta": content}
+    if result.get("usage"):
+        yield {"type": "usage", "usage": result.get("usage") or {}}
+
+
 async def chat_dispatch_stream(
     provider: str,
     *,
@@ -378,6 +424,40 @@ async def chat_dispatch_stream(
         }
         return
     if provider == "minimax" and is_minimax_token_plan_key(api_key):
+
+        async def _minimax():
+            result = await chat_dispatch(
+                provider,
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+            )
+            async for ev in _events_from_completion(result):
+                yield ev
+
+        async for ev in _with_processing_status(_minimax()):
+            yield ev
+        return
+    if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
+        b = _normalize_openai_base(provider, base_url, api_key)
+        async for ev in _with_processing_status(
+            stream_openai_compatible(
+                b,
+                api_key,
+                model,
+                messages,
+                provider=provider,
+                max_tokens=max_tokens,
+                tools=tools,
+                tool_choice=tool_choice,
+            )
+        ):
+            yield ev
+        return
+
+    async def _once():
         result = await chat_dispatch(
             provider,
             api_key=api_key,
@@ -386,43 +466,9 @@ async def chat_dispatch_stream(
             messages=messages,
             max_tokens=max_tokens,
         )
-        if not result.get("ok"):
-            yield {"type": "error", "error": result.get("error") or "upstream error"}
-            return
-        content = str(result.get("content") or "")
-        if content:
-            yield {"type": "delta", "delta": content}
-        if result.get("usage"):
-            yield {"type": "usage", "usage": result.get("usage") or {}}
-        return
-    if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
-        b = _normalize_openai_base(provider, base_url, api_key)
-        async for ev in stream_openai_compatible(
-            b,
-            api_key,
-            model,
-            messages,
-            provider=provider,
-            max_tokens=max_tokens,
-            tools=tools,
-            tool_choice=tool_choice,
-        ):
+        async for ev in _events_from_completion(result):
             yield ev
-        return
+
     # Anthropic / Google 后续可接各自原生 stream；当前保持兼容，回退成一次性结果。
-    result = await chat_dispatch(
-        provider,
-        api_key=api_key,
-        base_url=base_url,
-        model=model,
-        messages=messages,
-        max_tokens=max_tokens,
-    )
-    if not result.get("ok"):
-        yield {"type": "error", "error": result.get("error") or "upstream error"}
-        return
-    content = str(result.get("content") or "")
-    if content:
-        yield {"type": "delta", "delta": content}
-    if result.get("usage"):
-        yield {"type": "usage", "usage": result.get("usage") or {}}
+    async for ev in _with_processing_status(_once()):
+        yield ev

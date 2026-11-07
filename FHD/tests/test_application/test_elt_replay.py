@@ -7,8 +7,6 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -21,7 +19,6 @@ from app.application.elt.service_support import dump_json, load_json
 from app.db.db_base import Base
 from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.db.models.purchase_unit import PurchaseUnit
-from app.fastapi_routes import elt as api
 from app.infrastructure.tenant_scope import tenant_scope
 
 
@@ -195,28 +192,6 @@ def test_replay_submission_failure_keeps_retryable_source_snapshot(replay_store,
     assert run.status == "failed" and run.error_code == "ELT_INTERNAL_ERROR"
     assert store.service._load_source_snapshot(store.db, run).rows[0].values == {"客户": "重放客户"}
     assert store.source.status == "completed"
-
-
-def test_replay_route_uses_execute_permission_and_returns_accepted(monkeypatch):
-    app = FastAPI()
-    app.include_router(api.router)
-    replay = Mock(return_value={"id": "new-run", "status": "queued"})
-    monkeypatch.setattr(api, "get_elt_service", lambda: SimpleNamespace(replay=replay))
-    app.dependency_overrides[api._feature_gate] = lambda: None
-    app.dependency_overrides[api._execute] = lambda: SimpleNamespace(id=7)
-    app.dependency_overrides[api.get_db_dependency] = lambda: "owned-db"
-    client = TestClient(app)
-    response = client.post("/api/elt/runs/source/replay")
-    assert response.status_code == 202 and response.json()["data"]["id"] == "new-run"
-    replay.assert_called_once_with("owned-db", run_id="source", owner_user_id=7)
-
-    def denied():
-        raise HTTPException(status_code=403, detail="etl.execute required")
-
-    app.dependency_overrides[api._execute] = denied
-    replay.reset_mock()
-    assert client.post("/api/elt/runs/source/replay").status_code == 403
-    replay.assert_not_called()
 
 
 def test_replay_chain_cannot_extend_original_snapshot_retention(replay_store, monkeypatch):

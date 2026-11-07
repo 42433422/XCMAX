@@ -156,11 +156,12 @@ def standard_login(tmp_path, monkeypatch):
                     "route_token": "synthetic-route-snapshot",
                 },
             )
-        assert request.method == "POST" and request.url.path == "/api/llm/chat"
+        assert request.method == "POST" and request.url.path == "/api/llm/chat/stream"
         payload = json.loads(request.content)
         assert payload["provider"] == "synthetic" and payload["model"] == "synthetic-account-model"
         assert payload["user_id"] == 7 and payload["allow_failover"] is False
         assert payload["route_token"] == "synthetic-route-snapshot"
+        assert payload["stream"] is True
         task = json.loads(payload["messages"][1]["content"])
         data = (
             {"candidates": [{"clear": [], "reason": "synthetic model result"} for _ in range(3)]}
@@ -169,18 +170,13 @@ def standard_login(tmp_path, monkeypatch):
         )
         return httpx.Response(
             200,
-            json={
-                "id": "synthetic-response",
-                "model": "synthetic-account-model",
-                "choices": [
-                    {
-                        "message": {"role": "assistant", "content": json.dumps(data)},
-                        "finish_reason": "stop",
-                    }
-                ],
-                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-            },
-            headers={"x-request-id": "synthetic-response"},
+            text=(
+                'event: status\ndata: {"state":"processing"}\n\n'
+                + "data: "
+                + json.dumps({"choices": [{"delta": {"content": json.dumps(data)}}]})
+                + "\n\ndata: [DONE]\n\n"
+            ),
+            headers={"content-type": "text/event-stream", "x-request-id": "synthetic-response"},
         )
 
     monkeypatch.setattr(

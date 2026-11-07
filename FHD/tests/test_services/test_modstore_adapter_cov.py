@@ -7,6 +7,7 @@ Each test is focused on a single uncovered branch path.
 
 from __future__ import annotations
 
+import json
 import os
 from types import SimpleNamespace
 from typing import Any, Dict, Iterator
@@ -410,7 +411,9 @@ class TestStreamChatCompletionSSELines:
 class TestChatCompletionSyncDemoTokenBranch:
     """L563 True branch: demo token + non-local base URL → ValueError."""
 
-    def test_demo_token_with_remote_url_raises(self):
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("mode", ["sync", "async", "stream_sync", "stream_async"])
+    async def test_demo_token_with_remote_url_raises(self, monkeypatch, mode):
         adapter = _make_adapter(auth_token="demo_token_xyz", platform_url="https://api.remote.com")
 
         mock_surface = MagicMock()
@@ -425,8 +428,21 @@ class TestChatCompletionSyncDemoTokenBranch:
                 "app.fastapi_routes.market_account": mock_account,
             },
         ):
+
+            def no_network(*args, **kwargs):
+                pytest.fail("demo credentials must be rejected before discovery or HTTP")
+
+            monkeypatch.setattr(httpx, "Client", no_network)
+            monkeypatch.setattr(httpx, "AsyncClient", no_network)
             with pytest.raises(ValueError, match="本地演示令牌"):
-                adapter.chat_completion_sync([{"role": "user", "content": "hi"}])
+                if mode == "sync":
+                    adapter.chat_completion_sync([])
+                elif mode == "async":
+                    await adapter.chat_completion([])
+                elif mode == "stream_sync":
+                    list(adapter.stream_chat_completion_sync([]))
+                else:
+                    [chunk async for chunk in adapter.stream_chat_completion([])]
 
     def test_demo_token_with_local_url_does_not_raise(self):
         """L563 False branch: demo token + local base → no raise."""
@@ -453,11 +469,12 @@ class TestChatCompletionSyncDemoTokenBranch:
                 cm = MagicMock()
                 cm.__enter__ = MagicMock(return_value=cm)
                 cm.__exit__ = MagicMock(return_value=False)
-                cm.post.return_value = mock_response
+                cm.stream.return_value.__enter__.return_value = mock_response
+                mock_response.iter_lines.return_value = iter(['data: {"content":"ok"}'])
                 mock_httpx_client.return_value = cm
 
                 result = adapter.chat_completion_sync([{"role": "user", "content": "hi"}])
-        assert "choices" in result
+        assert result["choices"][0]["message"]["content"] == "ok"
 
 
 # ===========================================================================
@@ -466,64 +483,33 @@ class TestChatCompletionSyncDemoTokenBranch:
 
 
 class TestChatCompletionSyncUserIdBranch:
-    """L583 True/False: user_id in payload for sync call."""
+    @pytest.mark.parametrize("user_id", [99, None])
+    def test_user_id_payload(self, monkeypatch, user_id):
+        adapter = _make_adapter(user_id=user_id)
+        calls = []
+        client_type = httpx.Client
 
-    def _mock_httpx_client(self, response_json):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = response_json
-        cm = MagicMock()
-        cm.__enter__ = MagicMock(return_value=cm)
-        cm.__exit__ = MagicMock(return_value=False)
-        cm.post.return_value = mock_response
-        return cm
+        def respond(request):
+            if request.method == "GET":
+                return httpx.Response(200, json={})
+            calls.append(request)
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                text='data: {"content":"ok"}\n\ndata: [DONE]\n\n',
+            )
 
-    def test_with_user_id_adds_to_payload(self):
-        """L583→L584 (True): user_id is set."""
-        adapter = _make_adapter(user_id=99)
-        cm = self._mock_httpx_client({"content": "ok"})
-        with patch.dict(
-            "sys.modules",
-            {
-                "app.application.surface_audit_demo_account": MagicMock(
-                    is_local_demo_market_token=MagicMock(return_value=False)
-                ),
-                "app.fastapi_routes.market_account": MagicMock(
-                    _is_local_market_base=MagicMock(return_value=True)
-                ),
-                "app.neuro_bus.application_neuro_bridge": MagicMock(),
-            },
-        ):
-            with patch("httpx.Client") as mock_cls:
-                mock_cls.return_value = cm
-                result = adapter.chat_completion_sync([{"role": "user", "content": "hi"}])
-
-        # Check user_id was included in the POST payload
-        called_json = cm.post.call_args.kwargs.get("json") or cm.post.call_args[1].get("json") or {}
-        assert called_json.get("user_id") == 99
-
-    def test_without_user_id_no_payload_key(self):
-        """L583→next (False): user_id is None."""
-        adapter = _make_adapter(user_id=None)
-        cm = self._mock_httpx_client({"content": "ok"})
-        with patch.dict(
-            "sys.modules",
-            {
-                "app.application.surface_audit_demo_account": MagicMock(
-                    is_local_demo_market_token=MagicMock(return_value=False)
-                ),
-                "app.fastapi_routes.market_account": MagicMock(
-                    _is_local_market_base=MagicMock(return_value=True)
-                ),
-                "app.neuro_bus.application_neuro_bridge": MagicMock(),
-            },
-        ):
-            with patch("httpx.Client") as mock_cls:
-                mock_cls.return_value = cm
-                result = adapter.chat_completion_sync([{"role": "user", "content": "hi"}])
-
-        called_json = cm.post.call_args.kwargs.get("json") or cm.post.call_args[1].get("json") or {}
-        assert "user_id" not in called_json
+        monkeypatch.setattr(
+            httpx,
+            "Client",
+            lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs),
+        )
+        result = adapter.chat_completion_sync([{"role": "user", "content": "hi"}])
+        assert result["choices"][0]["message"]["content"] == "ok"
+        assert len(calls) == 1 and calls[0].url.path == "/api/llm/chat/stream"
+        payload = json.loads(calls[0].content)
+        assert payload.get("user_id") == user_id
+        assert ("user_id" in payload) == (user_id is not None)
 
 
 # ===========================================================================

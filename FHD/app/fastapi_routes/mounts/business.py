@@ -25,7 +25,6 @@ _DESKTOP_REQUIRED_ROUTES = {
     "mod_store",
     "elt_api",
     "elt_sources",
-    "elt_targets",
 }
 
 
@@ -243,13 +242,6 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
         registry,
         "elt_auto_ingest",
         lambda: __import__("app.fastapi_routes.elt_auto_ingest", fromlist=["router"]).router,
-        priority=13,
-        required_in_ci=True,
-    )
-    _mount(
-        registry,
-        "elt_targets",
-        lambda: __import__("app.fastapi_routes.elt_targets", fromlist=["router"]).router,
         priority=13,
         required_in_ci=True,
     )

@@ -426,7 +426,7 @@ async def test_async_explicit_no_failover_never_discovers_or_sends_backup(
 async def test_audited_completion_keeps_hook_local_and_captures_exact_raw_before_parse(
     monkeypatch, mode, status
 ):
-    raw = b' { "content" : "synthetic reply", "usage" : { "total_tokens" : 3 } } \n'
+    raw = b'data: {"delta":"synthetic reply"}\n\n'
     events, captured, posted = [], [], []
 
     class Response(httpx.Response):
@@ -471,7 +471,7 @@ async def test_audited_completion_keeps_hook_local_and_captures_exact_raw_before
         else:
             result = await call([], **kwargs) if mode == "async" else call([], **kwargs)
             assert result["choices"][0]["message"]["content"] == "synthetic reply"
-            assert events == ["capture", "parse"]
+            assert events == ["capture"]
         assert captured == [(raw, status, "synthetic-request")]
         assert len(posted) == 1 and posted[0]["allow_failover"] is False
     finally:

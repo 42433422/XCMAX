@@ -583,6 +583,7 @@ async def test_real_sync_wrapper_catches_guard_timeout_and_delivers_error(monkey
     stubs = {
         "app.application": NS(get_ai_chat_app_service=lambda: NS(_pending_workflows={})),
         "app.application.ai_chat.workflow_session": NS(CANCEL_WORDS=set(), CONFIRM_WORDS=set()),
+        "app.application.ai_chat.dialogue_memory": NS(prepare_chat_turn=lambda *a: None),
         "app.application.normal_chat_dispatch": NS(route_normal_mode_message=lambda _: {}),
         "app.application.workflow.planner": NS(_looks_like_business_db_write=lambda *a: False),
         "app.domain.conversation.services.chat_tool_intent": NS(
@@ -699,7 +700,7 @@ async def test_real_modstore_generator_http_response_interrupts_blocked_mocktran
         sync_payloads=lambda response: response.iter_lines(),
     )
     connection = NS(platform_url="https://synthetic.invalid", timeout=1, headers=lambda: {})
-    request = NS(messages=[], payload=lambda *a, **k: {})
+    request = NS(messages=[], extra={}, payload=lambda *a, **k: {})
     adapter = NS(
         chat_completion_sync=lambda **k: pytest.fail("must not replay completion"),
         stream_chat_completion_sync=lambda **k: native(

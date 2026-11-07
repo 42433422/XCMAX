@@ -111,7 +111,9 @@ RANGE_GROUP_PROMPT = (
     "This step groups existing ranges only; do not change source data or make cleaning, numbering, printing or template decisions. Return exactly output_schema."
 )
 DRAWING_IDENTIFY_PROMPT = LEGACY_IDENTIFY_PROMPT + (
-    " When drawing_evidence is present, use only supplied drawing_id values in drawing_ids. "
+    " cells[] entries are cell objects; only their evidence_id may be used in evidence_ids, dependency_ids, and primary_id. "
+    "drawing_evidence[] entries are not cell objects: put drawing_id only in drawing_ids and do not rewrite a drawing_id as an evidence_id. "
+    "sheets[].merged values are layout ranges, not cell objects. "
     "Drawing text and anchors are source evidence; last_col and last_row are conservative outer bounds resolved from worksheet dimension records when available — geometry facts, not document suggestions. "
     "Every drawing must be wholly inside one region; do not cut objects horizontally or vertically. "
     "Widen each physical_region rectangle so every cited drawing's full last_col/last_row outer bounds lie inside that same rectangle; never cite a drawing whose outer bounds stick outside. "

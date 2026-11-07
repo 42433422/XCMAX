@@ -72,6 +72,7 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
         template_id: str | None = None,
         compatibility_preset_id: str | None = None,
         target_config_id: str | None = None,
+        source_dataset: ParsedDataset | None = None,
     ) -> dict[str, Any]:
         upload = self._owned_upload(db, upload_id, owner_user_id)
         target_detection: dict[str, Any] | None = None
@@ -163,6 +164,11 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
                     "relative_path": upload.relative_path or upload.file_name,
                     "requested_target_type": "auto" if target_detection else target_type,
                     "target_detection": target_detection or {},
+                    **(
+                        {"intake_source": "reviewed_candidate"}
+                        if source_dataset is not None
+                        else {}
+                    ),
                 }
             ),
             draft_json=dump_json(draft),
@@ -182,7 +188,10 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
         # the same uploaded evidence without making the user discover a hidden
         # second "预演客户及产品" step.
         is_auto_shipment_preview = bool(
-            target_detection and adapter.type == "shipment_records" and not template_id
+            source_dataset is None
+            and target_detection
+            and adapter.type == "shipment_records"
+            and not template_id
         )
         if is_auto_shipment_preview and upload.suffix.lower() in {".xlsx", ".xlsm"}:
             companion_adapter = get_adapter("customer_products")
@@ -234,6 +243,8 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
             }
             run.summary_json = dump_json(primary_summary)
         db.commit()
+        if source_dataset is not None:
+            self._persist_source_snapshot(db, run, source_dataset)
         self._submit_preview(run_id, tenant_id, owner_user_id)
         if companion_run is not None:
             self._submit_preview(companion_run.id, tenant_id, owner_user_id)

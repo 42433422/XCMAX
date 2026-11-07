@@ -586,7 +586,9 @@ class AutoIngestService:
             elif status == "preview_ready":
                 batch_status, progress = (
                     "awaiting_confirmation",
-                    _progress("pending", 70, message="业务预演待确认；请到历史导入任务核对"),
+                    _progress(
+                        "pending", 70, message="业务预演待确认；请在当前导入里核对所选模板后再入库"
+                    ),
                 )
             else:
                 batch_status, progress = (
@@ -835,8 +837,6 @@ class AutoIngestService:
         prepared_plan: dict[str, Any] | None = None,
         progress_cb=None,
     ) -> dict[str, Any]:
-        import time
-
         from app.application.elt.service import get_elt_service
 
         def _notify(stage: str, pct: int, message: str = "") -> None:
@@ -865,52 +865,13 @@ class AutoIngestService:
                     "ELT_PREVIEW_STALE", "已确认的业务预演已变化，未执行", status_code=409
                 )
         else:
-            _notify("uploading", 20, "上传业务文件")
-            with open_etl_input_file(path) as handle:
-                upload = service.save_upload(
-                    db,
-                    owner_user_id=owner_user_id,
-                    file_name=file_name,
-                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    stream=handle,
-                    batch_id=batch_id,
-                    relative_path=file_name,
-                )
-            upload_id = str(upload.get("upload_id") or "")
-            _notify("preview", 45, "生成业务预演")
-            run = service.create_preview(
-                db,
-                owner_user_id=owner_user_id,
-                upload_id=upload_id,
-                target_type=target_type,
+            with open_etl_input_file(path):
+                pass
+            raise EltError(
+                "ELT_CANDIDATE_REQUIRED",
+                "请先在数据对接中心选中候选并完成预演",
+                status_code=409,
             )
-            run_id = str(run.get("id") or "")
-            deadline = time.monotonic() + max(1.0, float(poll_seconds))
-            current = run
-            while time.monotonic() < deadline:
-                status = str(current.get("status") or "")
-                if status == "preview_ready":
-                    break
-                if status in {"failed", "interrupted"}:
-                    return {
-                        "target_type": target_type,
-                        "upload_id": upload_id,
-                        "run_id": run_id,
-                        "status": status,
-                        "error": current.get("error"),
-                        "failed": True,
-                    }
-                time.sleep(0.2)
-                current = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
-            if str(current.get("status") or "") != "preview_ready":
-                return {
-                    "target_type": target_type,
-                    "upload_id": upload_id,
-                    "run_id": run_id,
-                    "status": current.get("status"),
-                    "pending_preview": True,
-                    "message": "业务预演尚未完成；知识库已写入，可稍后在历史任务中执行或撤回",
-                }
         preview_revision = current.get("preview_revision")
         _notify("executing", 80, "执行业务写入")
         _patch_batch(

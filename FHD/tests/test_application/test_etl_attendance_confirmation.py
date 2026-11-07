@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from pathlib import Path
 
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from app.application.attendance_import_app_service import _ensure_schema
 from app.application.elt.errors import EltError
@@ -173,3 +174,33 @@ def test_attendance_adapter_writes_only_the_rows_it_is_given(attendance_store):
         ]
         assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0
         assert db.execute("SELECT COUNT(*) FROM customers").fetchone()[0] == 0
+
+
+def test_attendance_batch_all_skipped_still_returns_verified_workbook(attendance_store):
+    store = attendance_store
+    before = attendance_contents(store)
+    source = store.workbook.read_bytes()
+    result = AttendanceAdapter().execute_batch(
+        (),
+        {
+            "upload_path": str(store.workbook),
+            "file_sha256": hashlib.sha256(source).hexdigest(),
+            "run_id": "all-skipped",
+            "total_rows": 2,
+            "skip_rows": 2,
+        },
+    )
+    receipt = result["receipt"]
+    assert result["executed"] == receipt["executed"] == 0
+    assert receipt["idempotent_replay"] is True
+    output = Path(receipt["output_path"])
+    assert output.name == receipt["file_name"] == "etl-all-skipped.xlsx"
+    assert hashlib.sha256(output.read_bytes()).hexdigest() == receipt["sha256"]
+    workbook = load_workbook(output, read_only=True)
+    try:
+        rows = list(workbook.active.iter_rows(values_only=True))
+        assert len(rows) == 1 and rows[0][0] == "员工姓名"
+    finally:
+        workbook.close()
+    assert store.workbook.read_bytes() == source
+    assert attendance_contents(store) == before

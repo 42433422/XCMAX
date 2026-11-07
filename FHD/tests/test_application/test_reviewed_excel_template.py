@@ -335,6 +335,56 @@ def test_template_platform_uses_account_provider_once_and_never_retries(monkeypa
     assert calls.count("timeout") == 1
 
 
+def test_template_platform_keeps_the_same_call_while_status_arrives(monkeypatch):
+    import asyncio
+    import json
+
+    from app.application.reviewed_excel_template import make_proposals, refine_proposal
+
+    calls = []
+
+    class _Provider:
+        is_configured = True
+
+        async def chat_completion(self, *args, **kwargs):
+            calls.append("once")
+            kwargs["_processing_status"]()
+            await asyncio.sleep(0.08)
+            return {
+                "model": "account-default",
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "candidates": [
+                                        {"clear": [], "reason": "synthetic"} for _ in range(3)
+                                    ]
+                                }
+                            )
+                        },
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
+        lambda timeout_seconds: _Provider(),
+    )
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_budget.template_timeout_seconds", lambda: 0.04
+    )
+    from app.application.reviewed_excel_template import inspect_workbook
+
+    review = inspect_workbook(sample())
+    proposal = refine_proposal(
+        review, make_proposals(review)["version"], "synthetic feedback", owner_id=7, initial=True
+    )
+    assert calls == ["once"]
+    assert proposal["model"]["status"] == "returned"
+
+
 def test_template_preview_requires_permission_without_extra_consent(monkeypatch, review_store):
     from unittest.mock import Mock
 

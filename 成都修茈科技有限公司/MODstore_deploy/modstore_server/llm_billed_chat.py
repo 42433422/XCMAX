@@ -435,6 +435,12 @@ async def stream_billed_llm_chat(
                                 break
                         yield _route_error(route, last_error, status_code)
                         return
+                    if ev.get("type") == "status":
+                        yield _sse(
+                            "status",
+                            {"state": "processing", "request_id": request_id},
+                        )
+                        continue
                     if ev.get("type") == "usage":
                         upstream_usage = ev.get("usage") or {}
                         continue

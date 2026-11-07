@@ -10,46 +10,22 @@
     </div>
   </header>
 
-  <nav class="etl-workspaces" aria-label="数据对接工作区">
-    <button type="button" :class="{ active: workspace === 'archive' }" :aria-pressed="workspace === 'archive'" @click="returnToArchive">导入</button>
-    <button type="button" :class="{ active: workspace === 'history' }" :aria-pressed="workspace === 'history'" @click="workspace = 'history'">历史导入任务</button>
-  </nav>
-
-  <section v-show="workspace === 'archive'" class="etl-intake-shell" aria-label="导入会话">
+  <section class="etl-intake-shell" aria-label="导入会话">
     <ol class="etl-workflow-steps etl-workflow-steps--quiet" aria-label="导入流程">
       <li v-for="(step, index) in steps" :key="step.id" :aria-current="currentStep === step.id ? 'step' : undefined" :class="{ active: currentStep === step.id }"><span>{{ index + 1 }}</span>{{ step.label }}</li>
     </ol>
     <ReviewedExcelTemplate archive-on-select @stage="setStage" @saved="onTemplateSaved" />
   </section>
-  <EltRunHistory v-if="workspace === 'history'" @return-to-import="returnToArchive" />
 </main>
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref } from 'vue'
 import ReviewedExcelTemplate from '@/components/template/ReviewedExcelTemplate.vue'
 import { ETL_CENTER_TABS } from './eltCenter/eltCenterState'
 
-const EltRunHistory = defineAsyncComponent(() => import('./eltCenter/EltRunHistory.vue'))
-const route = useRoute()
-const router = useRouter()
-const workspace = ref(route.query.run_id ? 'history' : 'archive')
 const steps = ETL_CENTER_TABS
 const currentStep = ref('archive')
-
-watch(() => route.query.run_id, (id) => {
-  if (id) workspace.value = 'history'
-})
-
-function returnToArchive() {
-  workspace.value = 'archive'
-  if (route.query.run_id) {
-    const query = { ...route.query }
-    delete query.run_id
-    void router.replace({ query })
-  }
-}
 
 function setStage(stage: string) {
   currentStep.value = stage === 'archive' ? 'archive' : stage === 'template' || stage === 'cleaning' ? 'template' : 'classification'

@@ -211,3 +211,22 @@ def test_chat_dispatch_stream_forwards_tools_to_openai_branch():
 
     assert captured.get("tools") == tools
     assert captured.get("tool_choice") == "auto"
+
+
+def test_same_stream_reports_processing_without_a_second_call():
+    from modstore_server.llm_chat_proxy import _with_processing_status
+
+    calls = {"n": 0}
+
+    async def one_call():
+        calls["n"] += 1
+        await asyncio.sleep(0.03)
+        yield {"type": "delta", "delta": "一次"}
+
+    async def _run():
+        return [item async for item in _with_processing_status(one_call(), interval=0.01)]
+
+    events = asyncio.run(_run())
+    assert calls["n"] == 1
+    assert {"type": "status", "state": "processing"} in events
+    assert events[-1] == {"type": "delta", "delta": "一次"}
