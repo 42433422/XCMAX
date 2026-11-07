@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -17,6 +17,8 @@ ALLOWED_TRANSFORMS = frozenset(
         "trim",
         "cast",
         "date",
+        "datetime",
+        "time",
         "number",
         "default",
         "map",
@@ -46,12 +48,20 @@ def neutralize_spreadsheet_formula(value: Any) -> Any:
     return value
 
 
+def _is_blank(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and value == "")
+
+
 def _decimal(value: Any) -> Decimal:
-    if value is None or value == "":
-        return Decimal("0")
+    if isinstance(value, bool):
+        raise EltError("ELT_TRANSFORM_NUMBER_INVALID", f"布尔值不能当作数字: {value}")
     if isinstance(value, Decimal):
         return value
-    text = _clean_string(str(value))
+    # Excel stores doubles but shows 15 significant digits; that is the business value.
+    text = _clean_string(format(value, ".15g") if isinstance(value, float) else str(value))
+    percent = text.endswith(("%", "％"))
+    if percent:
+        text = text[:-1]
     negative = (text.startswith("(") and text.endswith(")")) or (
         text.startswith("（") and text.endswith("）")
     )
@@ -63,65 +73,137 @@ def _decimal(value: Any) -> Decimal:
     if negative:
         text = "-" + text
     try:
-        return Decimal(text)
+        number = Decimal(text)
     except InvalidOperation as exc:
         raise EltError("ELT_TRANSFORM_NUMBER_INVALID", f"无法转换为数字: {value}") from exc
+    if not number.is_finite():
+        raise EltError("ELT_TRANSFORM_NUMBER_INVALID", f"无法转换为数字: {value}")
+    return number.scaleb(-2) if percent else number
 
 
-def _date(value: Any, formats: list[str] | None = None) -> str:
-    if value in (None, ""):
-        return ""
+_EXCEL_SERIAL_RANGE = (1, 2958465)
+_TIME_FORMATS = ("%H:%M:%S", "%H:%M", "%H:%M:%S.%f", "%H时%M分%S秒", "%H时%M分", "%H点%M分")
+
+
+def _excel_serial(value: Any) -> datetime | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        return None
+    if not _EXCEL_SERIAL_RANGE[0] <= value <= _EXCEL_SERIAL_RANGE[1]:
+        return None
+    from openpyxl.utils.datetime import from_excel
+
+    converted = from_excel(float(value))
+    return converted if isinstance(converted, datetime) else None
+
+
+def _parse_time(text: str) -> time | None:
+    for fmt in _TIME_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).time()
+        except ValueError:
+            continue
+    return None
+
+
+def _datetime(value: Any, formats: list[str] | None = None) -> datetime:
+    """Parse dates, datetimes, Excel serials and text dates without dropping the time."""
     if isinstance(value, datetime):
-        return value.date().isoformat()
+        return value
     if isinstance(value, date):
-        return value.isoformat()
+        return datetime.combine(value, time())
+    serial = _excel_serial(value)
+    if serial is not None:
+        return serial
     text = _clean_string(str(value))
     text = text.replace("－", "-").replace("／", "/").replace("．", ".").replace("。", ".")
     if re.fullmatch(r"(?:19|20)\d{6}", text):
         text = f"{text[:4]}-{text[4:6]}-{text[6:]}"
-    candidates = formats or [
-        "%Y-%m-%d",
-        "%Y/%m/%d",
-        "%Y.%m.%d",
-        "%Y年%m月%d日",
-        "%d/%m/%Y",
-        "%m/%d/%Y",
-    ]
-    for fmt in candidates:
-        try:
-            return datetime.strptime(text, fmt).date().isoformat()
-        except ValueError:
-            continue
     try:
-        return datetime.fromisoformat(text).date().isoformat()
-    except ValueError as exc:
-        raise EltError("ELT_TRANSFORM_DATE_INVALID", f"无法转换为日期: {value}") from exc
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+    date_part, _, time_part = text.partition("T" if "T" in text else " ")
+    clock = _parse_time(time_part.strip()) if time_part.strip() else time()
+    if clock is not None:
+        for fmt in formats or [
+            "%Y-%m-%d",
+            "%Y/%m/%d",
+            "%Y.%m.%d",
+            "%Y年%m月%d日",
+            "%d/%m/%Y",
+            "%m/%d/%Y",
+        ]:
+            try:
+                return datetime.combine(datetime.strptime(date_part.strip(), fmt).date(), clock)
+            except ValueError:
+                continue
+    raise EltError("ELT_TRANSFORM_DATE_INVALID", f"无法转换为日期: {value}")
+
+
+def _date(value: Any, formats: list[str] | None = None) -> Any:
+    if _is_blank(value):
+        return value
+    return _datetime(value, formats).date().isoformat()
+
+
+def _datetime_text(value: Any, formats: list[str] | None = None) -> Any:
+    if _is_blank(value):
+        return value
+    return _datetime(value, formats).isoformat(sep=" ")
+
+
+def _time_text(value: Any) -> Any:
+    if _is_blank(value):
+        return value
+    if isinstance(value, time):
+        return value.isoformat()
+    if isinstance(value, datetime):
+        return value.time().isoformat()
+    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool) and 0 <= value < 1:
+        from openpyxl.utils.datetime import from_excel
+
+        converted = from_excel(float(value))
+        if isinstance(converted, time):
+            return converted.isoformat()
+    clock = _parse_time(_clean_string(str(value)))
+    if clock is None:
+        return _datetime(value).time().isoformat()
+    return clock.isoformat()
+
+
+def _text(value: Any) -> str:
+    return "" if value is None else str(value)
 
 
 def _cast(value: Any, kind: str) -> Any:
     key = str(kind or "string").lower()
+    if _is_blank(value):
+        return value
     if key == "string":
-        return "" if value is None else str(value)
+        return str(value)
     if key in {"number", "decimal", "float"}:
-        if value in (None, ""):
-            return ""
         number = _decimal(value)
         return float(number) if key == "float" else str(number)
     if key in {"integer", "int"}:
-        if value in (None, ""):
-            return ""
-        return int(_decimal(value))
+        number = _decimal(value)
+        if number != number.to_integral_value():
+            raise EltError("ELT_TRANSFORM_INTEGER_PRECISION", f"整数转换不能截断小数: {value}")
+        return int(number)
     if key in {"boolean", "bool"}:
         if isinstance(value, bool):
             return value
-        text = str(value or "").strip().lower()
+        text = str(value).strip().lower()
         if text in {"1", "true", "yes", "y", "是", "有"}:
             return True
-        if text in {"0", "false", "no", "n", "否", "无", ""}:
+        if text in {"0", "false", "no", "n", "否", "无"}:
             return False
         raise EltError("ELT_TRANSFORM_BOOLEAN_INVALID", f"无法转换为布尔值: {value}")
     if key == "date":
         return _date(value)
+    if key == "datetime":
+        return _datetime_text(value)
+    if key == "time":
+        return _time_text(value)
     raise EltError("ELT_TRANSFORM_CAST_UNSUPPORTED", f"不支持的类型转换: {kind}")
 
 
@@ -145,6 +227,8 @@ def _formula(rule: dict[str, Any], row: dict[str, Any]) -> Any:
     values = [_operand(item, row) for item in operands]
     if operator == "coalesce":
         return next((value for value in values if value not in (None, "")), "")
+    if any(_is_blank(value) for value in values):
+        return None
     numbers = [_decimal(value) for value in values]
     result = numbers[0]
     for number in numbers[1:]:
@@ -172,9 +256,14 @@ def apply_transform(value: Any, rule: dict[str, Any], row: dict[str, Any]) -> An
     if op == "date":
         formats = rule.get("formats")
         return _date(value, formats if isinstance(formats, list) else None)
+    if op == "datetime":
+        formats = rule.get("formats")
+        return _datetime_text(value, formats if isinstance(formats, list) else None)
+    if op == "time":
+        return _time_text(value)
     if op == "number":
-        if value in (None, ""):
-            return ""
+        if _is_blank(value):
+            return value
         return str(_decimal(value))
     if op == "default":
         return rule.get("value") if value in (None, "") else value
@@ -187,14 +276,14 @@ def apply_transform(value: Any, rule: dict[str, Any], row: dict[str, Any]) -> An
     if op == "split":
         delimiter = str(rule.get("delimiter") or ",")
         index = int(rule.get("index") or 0)
-        parts = _cast(value, "string").split(delimiter)
+        parts = _text(value).split(delimiter)
         return parts[index].strip() if -len(parts) <= index < len(parts) else ""
     if op == "concat":
         fields = rule.get("fields")
         if not isinstance(fields, list):
             raise EltError("ELT_TRANSFORM_CONCAT_INVALID", "合并操作必须提供 fields")
         separator = str(rule.get("separator") or "")
-        return separator.join(_cast(row.get(str(field)), "string") for field in fields)
+        return separator.join(_text(row.get(str(field))) for field in fields)
     return _formula(rule, row)
 
 
