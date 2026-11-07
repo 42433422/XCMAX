@@ -23,6 +23,8 @@ DOCUMENT_LABELS = frozenset(
         "material",
         "inspection",
         "template",
+        "ledger",
+        "calculation",
         "unknown",
     }
 )

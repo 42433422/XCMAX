@@ -463,20 +463,20 @@ def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False)
         for region in sheet.get("regions", [])
         if region.get("range_source") == "model"
     ]
-    return (
-        derive_classified_documents(
-            body,
-            {
-                "source_sha256": run.file_sha256,
-                "model_status": latest["model_status"],
-                "regions": regions,
-                "suggested_documents": latest.get("suggested_documents", []),
-                "coverage": latest.get("coverage", []),
-            },
-        ),
-        latest.get("coverage", []),
-        [],
+    slices = derive_classified_documents(
+        body,
+        {
+            "source_sha256": run.file_sha256,
+            "model_status": latest["model_status"],
+            "regions": regions,
+            "suggested_documents": latest.get("suggested_documents", []),
+            "coverage": latest.get("coverage", []),
+        },
     )
+    from app.application.reviewed_excel_sheet_names import annotate_slice_titles
+
+    annotate_slice_titles(slices, latest.get("sheets") or [])
+    return slices, latest.get("coverage", []), []
 
 
 @router.get(
@@ -498,7 +498,8 @@ def reviewed_excel_auto_slices(classification_id: str, version: str, user=Depend
                 {
                     **{key: value for key, value in item.items() if key != "workbook"},
                     "index": index,
-                    "display_name": Path(item["filename"]).stem,
+                    "display_name": item.get("display_name") or Path(item["filename"]).stem,
+                    "type_label": item.get("type_label") or "",
                     "sha256": hashlib.sha256(item["workbook"]).hexdigest(),
                 }
                 for index, item in enumerate(slices)
@@ -1027,6 +1028,9 @@ async def _reviewed_excel_classification_analyze_body(
                         unresolved_fragments(candidate, regions, dimensions["merged_regions"])
                     )
                 sheets.append({**rule_sheet, "regions": regions})
+            from app.application.reviewed_excel_sheet_names import apply_unknown_sheet_names
+
+            apply_unknown_sheet_names(sheets, review["cells"], owner_id=owner)
             actual_providers = sorted(
                 {item.get("provider", "unreported") for item in result["input_summaries"]}
             )

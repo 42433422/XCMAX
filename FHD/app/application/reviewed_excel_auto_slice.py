@@ -383,7 +383,7 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
             }
             for i, (frags, _basis, reason) in enumerate(groups)
         ],
-        resplit=True,
+        resplit=False,
     )
     groups = [
         (item["fragments"], "model_group", item.get("reason") or "") for item in verified["groups"]

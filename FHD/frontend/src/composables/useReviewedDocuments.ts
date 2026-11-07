@@ -8,11 +8,11 @@ export type DocumentLayout = { sheet: string; widths: number[]; rows: { height: 
 export type DocumentCandidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
 export type DocumentProposal = { version: string; parent_version: string | null; candidates: DocumentCandidate[]; result_previews?: { candidate_id: string; sha256: string; layout: DocumentLayout[]; layout_truncated: boolean }[]; evidence: unknown[]; model: { status: string; [key: string]: unknown } }
 export type DocumentReview = { review_id: string; sha256: string; proposal: DocumentProposal; versions?: DocumentProposal[]; layout?: DocumentLayout[]; usage_restrictions?: string[]; [key: string]: unknown }
-export type DocumentSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; fragments: { sheet: string; range: string }[] }
+export type DocumentSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; type_label?: string; fragments: { sheet: string; range: string }[] }
 type Intake = { run_id: string; mod_id: string; candidate_sha256: string; knowledge: { action: string; documents: number }; business: EltRun }
 type Receipt = { review_id: string; proposal_version: string; template_id: string; candidate_id: string }
 export type ReviewedDocument = {
-  key: string; classificationId: string; classificationVersion: string; slice: DocumentSlice; source: File; displayName: string
+  key: string; classificationId: string; classificationVersion: string; slice: DocumentSlice; source: File; displayName: string; typeLabel: string
   review: DocumentReview | null; proposals: DocumentProposal[]; selectedVersion: number; candidateIndex: number
   phase: '' | 'generating' | 'refining' | 'saving'; error: string; unknown: boolean; dirty: boolean; generation: number
   requirements: string[]; receipts: Receipt[]; intake: Intake | null; intakePending: boolean; intakeError: string; intakeKey: string; intakeGeneration: number
@@ -42,6 +42,7 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
     const key = JSON.stringify([classificationId, classificationVersion, slice.index, slice.sha256])
     if (!records.value[key]) records.value[key] = { key, classificationId, classificationVersion, slice, source,
       displayName: slice.display_name?.trim() || slice.filename.replace(/\.(xlsx|xls|docx)$/i, ''),
+      typeLabel: slice.type_label?.trim() || '',
       review: null, proposals: [], selectedVersion: 0, candidateIndex: -1, phase: '', error: '', unknown: false, dirty: false, generation: 0,
       requirements: [], receipts: [], intake: null, intakePending: false, intakeError: '', intakeKey: '', intakeGeneration: 0 }
     const doc = records.value[key]

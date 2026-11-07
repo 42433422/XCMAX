@@ -24,7 +24,7 @@ type ClassificationSheet = { sheet: string; sheet_state?: string; processable?: 
 type FragmentLinks = { items: { sheet: string; first: string; second: string; shared_dependencies: { sheet: string; cell: string }[]; repeated_header_observed: boolean; model_group_suggested?: boolean; status: string; selected?: boolean }[]; omitted: number }
 type LogicalDocument = { logical_document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type SuggestedDocument = { document_id: string; fragments: { sheet: string; range: string }[]; status: string }
-type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; fragments: { sheet: string; range: string }[] }
+type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; type_label?: string; fragments: { sheet: string; range: string }[] }
 type Checkpoint = { phase: 'ready' | 'paused' | 'inflight' | 'failed'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; remaining_in_round?: number; message: string }
 type ConversionReceipt = { converter: string; source_sha256: string; derived_sha256: string; purpose?: string; print_layout_verified?: boolean; warnings?: string[] }
 type Classification = { usage_restrictions?: string[]; original_sha256?: string; conversion_receipt?: ConversionReceipt | null; template_write_state?: string; independent_confirmed?: boolean; confirmed_document_count?: number | null; document_count_status?: string; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; read_only_print_areas?: { sheet: string; value: string }[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; checkpoint?: Checkpoint | null; name: string; status: string; sha256?: string; message?: string; classification_id?: string; version?: string; confirmed?: boolean; model_status?: string; budget?: { calls: number; max_calls: number; unread: number }; input_messages?: unknown[]; input_summaries?: unknown[]; coverage?: { sheet: string; total: number; sent: number; unread: string[]; unassigned: string[]; model_unassigned?: string[]; value_truncated: string[]; deferred_large_values?: string[]; deferred_oversized_rows?: string[]; merged_sent: number; merged_omitted: number }[]; sheets: ClassificationSheet[] }
@@ -101,7 +101,7 @@ const previewSelectionReady = computed(() => {
 })
 const selectedPrintArea = ref(false)
 const batchLabel = ref('unknown')
-const labelNames: Record<string, string> = { quotation: '报价', delivery: '送货', purchase: '采购', attendance: '考勤', production: '生产', process: '工艺', material: '原料', inspection: '检验', template: '模板', unknown: '未知/待理解' }
+const labelNames: Record<string, string> = { quotation: '报价', delivery: '送货', purchase: '采购', attendance: '考勤', production: '生产', process: '工艺', material: '原料', inspection: '检验', template: '模板', ledger: '借还台账', calculation: '测算表', unknown: '未知/待理解' }
 function classificationStatus(item: { confirmed?: boolean; model_status?: string; sheets: ClassificationSheet[] } | null) {
   if (!item) return '待确认'
   const unknown = item.sheets.some((sheet) => sheet.regions.some((region) => region.labels.includes('unknown')))
@@ -1276,7 +1276,7 @@ async function downloadCandidate(index: number) {
             <div class="workbook-node__body">
               <p v-if="workbookReports.length" class="workbook-node__who">模板导入员</p>
               <div class="reviewed-documents">
-                <button v-for="doc in documentWorkspace.documents.value" :key="doc.key" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
+                <button v-for="doc in documentWorkspace.documents.value" :key="doc.key" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${doc.typeLabel ? '，' + doc.typeLabel : ''}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="doc.typeLabel">{{ doc.typeLabel }}</small><small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
               </div>
             </div>
           </div>
@@ -1472,7 +1472,7 @@ async function downloadCandidate(index: number) {
     </details>
     <button v-if="!archiveOnSelect || !review" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (archiveOnSelect && modelFlow)" @click="preview()">预览清理候选</button>
     <button v-if="archiveOnSelect && error.includes('请明确选择所选片段作为派生打印区域')" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy" @click="retrySelectedPrintArea">按所选片段生成副本并重试（原件不变）</button>
-    <button v-if="archiveOnSelect" ref="candidateCapsule" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--selected': !!chosenCandidate }" aria-haspopup="dialog" :aria-expanded="templatePickerOpen" :aria-controls="candidatePickerId" :disabled="busy || !proposal?.candidates.length" @click="openCandidatePicker">{{ chosenCandidate?.label || (busy ? '模板处理中…' : proposal?.candidates.length ? '选择模板' : '暂无可选模板') }} <span aria-hidden="true">⌄</span></button>
+    <button v-if="archiveOnSelect && !documentWorkspace.documents.value.length" ref="candidateCapsule" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--selected': !!chosenCandidate }" aria-haspopup="dialog" :aria-expanded="templatePickerOpen" :aria-controls="candidatePickerId" :disabled="busy || !proposal?.candidates.length" @click="openCandidatePicker">{{ chosenCandidate?.label || (busy ? '模板处理中…' : proposal?.candidates.length ? '选择模板' : '暂无可选模板') }} <span aria-hidden="true">⌄</span></button>
     <div v-if="!archiveOnSelect && workbookReports.length" class="workbook-thread workbook-thread--live" aria-label="工作情况回报">
       <span class="workbook-thread__spine" aria-hidden="true"></span>
       <WorkbookEmployeeReport v-for="report in workbookReports" :key="report.employee" v-bind="report" />

@@ -109,7 +109,7 @@ def test_rejects_cross_sheet_model_group_and_flattens_cut_merged_cell():
 
 
 def test_resplit_ledger_fragments_resolve_to_their_model_region():
-    """verify-after-cut may resplit one model region; export must not crash on range lookup."""
+    """Template export keeps the model's document. Resplit stays available for a direct check."""
     from app.application.reviewed_excel_evidence import bounded_range
 
     book = Workbook()
@@ -134,11 +134,30 @@ def test_resplit_ledger_fragments_resolve_to_their_model_region():
             "suggested_documents": [{"fragments": [{"sheet": "客户档案", "range": "A1:H42"}]}],
         },
     )
-    assert len(result) >= 2
+    assert len(result) == 1
     for item in result:
         for fragment in item["fragments"]:
             c1, r1, c2, r2 = bounded_range(fragment["range"])
             assert fragment["sheet"] == "客户档案"
+            assert c1 >= 1 and c2 <= 8 and r1 >= 1 and r2 <= 42
+    from app.application.reviewed_excel_verify_cut import verify_after_cut
+
+    verified = verify_after_cut(
+        inspect_workbook(body),
+        [
+            {
+                "document_id": "export-0",
+                "fragments": [{"sheet": "客户档案", "range": "A1:H42"}],
+                "evidence": [],
+                "reason": "",
+            }
+        ],
+        resplit=True,
+    )
+    assert verified["groups"]
+    for group in verified["groups"]:
+        for fragment in group["fragments"]:
+            c1, r1, c2, r2 = bounded_range(fragment["range"])
             assert c1 >= 1 and c2 <= 8 and r1 >= 1 and r2 <= 42
 
 

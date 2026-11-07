@@ -525,6 +525,10 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
                 "rows 的字段只能是 customer_name、purchase_unit、product_name、quantity、"
                 "unit_price、amount、model。只放货品明细。表头、合计、空行不要放入。"
                 "购买单位用单据上的客户，不要用列名。"
+                "每一张表都要扫，这一本有几张就扫几张，每一行货品单独成一条，不要在第一张送货单结束后停止。"
+                "行内没有购买单位时，用整本表头上的客户，不要留空。"
+                "合计、表头、协议文字不要放入。"
+                "借还台账和测算表不要导入，除非明确要求。"
                 "JSON 必须是单个对象、以 rows 开头、不要 markdown 代码块、不要解释文字。"
             ),
         },

@@ -466,12 +466,6 @@ def test_platform_fenced_three_plans_and_strict_nested_contract(monkeypatch):
         {"candidates": plans, "extra": True},
         {
             "candidates": [
-                {"clear": [{"sheet": "报价", "cell": "C3"}], "reason": "公式"},
-                *plans[1:],
-            ]
-        },
-        {
-            "candidates": [
                 {
                     "clear": [{"sheet": "报价", "cell": "B2", "action": "clear"}],
                     "reason": "多余属性",
@@ -484,6 +478,20 @@ def test_platform_fenced_three_plans_and_strict_nested_contract(monkeypatch):
         responses.append(json.dumps(item, ensure_ascii=False))
         with pytest.raises(ValueError):
             refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
+    responses.append(
+        json.dumps(
+            {
+                "candidates": [
+                    {"clear": [{"sheet": "报价", "cell": "C3"}], "reason": "公式"},
+                    *plans[1:],
+                ]
+            },
+            ensure_ascii=False,
+        )
+    )
+    dropped = refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
+    assert dropped["candidates"][0]["clear"] == []
+    assert dropped["candidates"][1]["clear"] == plans[1]["clear"]
 
 
 @pytest.fixture
@@ -2230,12 +2238,14 @@ def test_model_feedback_is_versioned_and_rejects_unknown_or_protected_cells(monk
     assert revised["parent_version"] == base["version"] and revised["version"] != base["version"]
     assert revised["candidates"][2]["clear"] == [{"sheet": "报价", "cell": "B2"}]
     assert revised["model"]["status"] == "returned"
-    fake.data["clear"] = [{"sheet": "报价", "cell": "C3"}]
-    with pytest.raises(ValueError):
-        service.refine_proposal(review, base["version"], "清除公式", owner_id=7)
-    fake.data["clear"] = [{"sheet": "报价", "cell": "A1"}]
-    with pytest.raises(ValueError):
-        service.refine_proposal(review, base["version"], "清除固定说明", owner_id=7)
+    fake.data["clear"] = [
+        {"sheet": "报价", "cell": "B2"},
+        {"sheet": "报价", "cell": "C3"},
+        {"sheet": "报价", "cell": "A1"},
+    ]
+    kept = service.refine_proposal(review, base["version"], "清除公式和说明", owner_id=7)
+    assert kept["model"]["status"] == "returned"
+    assert kept["candidates"][2]["clear"] == [{"sheet": "报价", "cell": "B2"}]
     monkeypatch.setattr(
         "app.application.reviewed_excel_template._template_llm_complete",
         lambda *args, **kwargs: LlmAssistResult(),
@@ -3624,6 +3634,47 @@ def test_semantic_finish_length_rejected_without_retry(monkeypatch):
     with pytest.raises(ValueError, match="不完整"):
         classify_semantic_workbook(inspect_workbook(sample()))
     assert len(seen) == 1 and 3000 <= seen[0] <= 4000
+
+
+def test_preview_length_raises_the_token_cap_once(monkeypatch):
+    import json
+
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.application.reviewed_excel_template import make_proposals, refine_proposal
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    seen = []
+    plans = [
+        {"clear": [], "reason": "保留"},
+        {"clear": [{"sheet": "报价", "cell": "B2"}], "reason": "清除客户"},
+        {"clear": [{"sheet": "报价", "cell": "B2"}], "reason": "同样清除客户"},
+    ]
+
+    async def fake(self, messages, **kwargs):
+        seen.append(kwargs["max_tokens"])
+        if kwargs["max_tokens"] == 1400:
+            return {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
+        return {
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {"content": json.dumps({"candidates": plans})},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
+    monkeypatch.setattr(
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
+        lambda **_: SessionMarketProvider(7, "synthetic-market", timeout_seconds=1),
+    )
+    review = inspect_workbook(sample())
+    output = refine_proposal(
+        review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
+    )
+    assert seen == [1400, 4096]
+    assert output["candidates"][1]["clear"] == [{"sheet": "报价", "cell": "B2"}]
+    assert output["model"]["input_summary"]["max_output_tokens"] == 4096
 
 
 def test_real_failure_outside_region_evidence_is_rejected(monkeypatch):

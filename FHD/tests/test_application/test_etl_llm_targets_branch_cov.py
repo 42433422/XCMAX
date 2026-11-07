@@ -216,6 +216,8 @@ def test_archived_sheet_import_uses_full_sheet_timeout(monkeypatch):
     assert seen["max_repairs"] == 1
     assert seen["timeout_seconds"] == 180.0
     prompt = seen["messages"][0]["content"]
+    assert "每一张表都要扫" in prompt and "不要在第一张送货单结束后停止" in prompt
+    assert "借还台账和测算表不要导入" in prompt
     assert "JSON 必须是单个对象、以 rows 开头、不要 markdown 代码块、不要解释文字。" in prompt
     llm_assist.advise_knowledge_import("sheet")
     assert seen["lane"] == "knowledge"
