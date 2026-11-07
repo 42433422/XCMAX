@@ -120,6 +120,7 @@ def test_is_auxiliary_sheet_name():
 def test_is_footer_or_note_row():
     assert is_footer_or_note_row(["合计", "100"]) is True
     assert is_footer_or_note_row(["备注：测试"]) is True
+    assert is_footer_or_note_row(["本合同一式两份，双方签字盖章后生效"]) is True
     assert is_footer_or_note_row(["签字"]) is True
     assert is_footer_or_note_row(["A", "B", "C"]) is False
     assert is_footer_or_note_row([]) is False
