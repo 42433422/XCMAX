@@ -1,5 +1,5 @@
 {
   "lines": 2443606,
   "updated": "2026-11-07",
-  "note": "Integrate unmerged ELT fixes #3085-#3092 and delivery-note fill d4195b730 onto main after #3087. Upload gate, value-fidelity cleaning, preview validation, slice coverage, audit, snapshot export, table segmentation, and shipment layout fill are the required behavior and cannot be removed without dropping those fixes. Files over 800 lines stay bound in source_growth_reviews.json; that record is a review request, not approval."
+  "note": "合入未合并的数据对接修复 #3085–#3092 与送货单版式填充 d4195b730。相对 origin/main 净增 1968 行：上传校验、清洗保真、预览校验、切片覆盖、审计、快照导出、表格结构识别和送货单填充是要保留的行为，不能靠删掉这些修复来满足净删除。超过 800 行的文件已在 source_growth_reviews.json 绑定，该记录只是审查请求，不代表已批准。"
 }
