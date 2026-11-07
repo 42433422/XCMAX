@@ -29,8 +29,14 @@ _EMPLOYEE_NAME_RE = re.compile(r"[\u4e00-\u9fa5·]{2,6}")
 _WEEKDAYS = "一二三四五六日"
 # Baseline v1 (agreed for monthly mark sheets): a mark is recorded verbatim;
 # blank is "unmarked", never inferred as present or absent.
-_MARKS = {"√": "present_marked", "✓": "present_marked", "✔": "present_marked",
-          "✘": "absent", "✗": "absent", "×": "absent"}
+_MARKS = {
+    "√": "present_marked",
+    "✓": "present_marked",
+    "✔": "present_marked",
+    "✘": "absent",
+    "✗": "absent",
+    "×": "absent",
+}
 _MATRIX_FIELDS = (
     "work_month",
     "days_in_month",
@@ -391,18 +397,41 @@ def _write_output(upload_path: Path, run_id: str, rows: list[dict[str, Any]]) ->
     if monthly:
         month_sheet = book.create_sheet("月度考勤")
         month_sheet.append(
-            ["员工姓名", "月份", "当月天数", "缺勤天数", "缺勤日期", "标记出勤天数",
-             "标记出勤日期", "未标记天数", "月度备注", "业务主键", "来源工作表", "来源行"]
+            [
+                "员工姓名",
+                "月份",
+                "当月天数",
+                "缺勤天数",
+                "缺勤日期",
+                "标记出勤天数",
+                "标记出勤日期",
+                "未标记天数",
+                "月度备注",
+                "业务主键",
+                "来源工作表",
+                "来源行",
+            ]
         )
         for row in monthly:
             absent = [item for item in str(row.get("absent_dates") or "").split(",") if item]
-            marked = [item for item in str(row.get("present_marked_dates") or "").split(",") if item]
+            marked = [
+                item for item in str(row.get("present_marked_dates") or "").split(",") if item
+            ]
             month_sheet.append(
-                [row.get("employee_name") or "", row.get("work_month") or "",
-                 int(row.get("days_in_month") or 0), len(absent), ",".join(absent), len(marked),
-                 ",".join(marked), int(row.get("unmarked_days") or 0),
-                 neutralize_spreadsheet_formula(row.get("month_notes") or ""), row.get("business_id") or "",
-                 row.get("source_sheet") or "", row.get("source_row") or ""]
+                [
+                    row.get("employee_name") or "",
+                    row.get("work_month") or "",
+                    int(row.get("days_in_month") or 0),
+                    len(absent),
+                    ",".join(absent),
+                    len(marked),
+                    ",".join(marked),
+                    int(row.get("unmarked_days") or 0),
+                    neutralize_spreadsheet_formula(row.get("month_notes") or ""),
+                    row.get("business_id") or "",
+                    row.get("source_sheet") or "",
+                    row.get("source_row") or "",
+                ]
             )
     for row in rows:
         if row.get("work_month"):
@@ -693,9 +722,13 @@ def _committed_rows(db_path: Path, rows: list[dict[str, Any]]) -> list[dict[str,
             chunk = (json.dumps(ids[start : start + 500]),)
             for record in conn.execute(
                 "SELECT * FROM attendance_monthly_marks "
-                "WHERE business_id IN (SELECT value FROM json_each(?))", chunk
+                "WHERE business_id IN (SELECT value FROM json_each(?))",
+                chunk,
             ):
-                found[record["business_id"]] = {**dict(record), "source_sheet": record["source_sheet"]}
+                found[record["business_id"]] = {
+                    **dict(record),
+                    "source_sheet": record["source_sheet"],
+                }
             for record in conn.execute(
                 "SELECT business_id, employee_name, employee_no, user_id, work_date, source_row, "
                 "daily_times_json FROM attendance_daily_records "
@@ -704,7 +737,9 @@ def _committed_rows(db_path: Path, rows: list[dict[str, Any]]) -> list[dict[str,
             ):
                 times = json.loads(record["daily_times_json"] or "[]") + [None, None]
                 found[record["business_id"]] = {
-                    **dict(record), "clock_in": times[0], "clock_out": times[1]
+                    **dict(record),
+                    "clock_in": times[0],
+                    "clock_out": times[1],
                 }
     finally:
         conn.close()
@@ -819,22 +854,26 @@ class _MatrixBlock:
                 meaning = _MARKS.get(raw)
                 iso = date(self.year, self.month, day).isoformat()
                 if day in self.mismatched_days:
-                    issues.append({
-                        "field": "absent_dates",
-                        "code": "ELT_DATE_AMBIGUOUS",
-                        "message": f"{_column_letter(column)}{row_number} 的标记落在"
-                        + self.mismatched_days[day],
-                    })
+                    issues.append(
+                        {
+                            "field": "absent_dates",
+                            "code": "ELT_DATE_AMBIGUOUS",
+                            "message": f"{_column_letter(column)}{row_number} 的标记落在"
+                            + self.mismatched_days[day],
+                        }
+                    )
                 if meaning == "absent":
                     absent.append(iso)
                 elif meaning == "present_marked":
                     marked.append(iso)
                 else:
-                    issues.append({
-                        "field": "absent_dates",
-                        "code": "ELT_ATTENDANCE_MARK_UNKNOWN",
-                        "message": f"{_column_letter(column)}{row_number} 标记“{raw}”含义未确认",
-                    })
+                    issues.append(
+                        {
+                            "field": "absent_dates",
+                            "code": "ELT_ATTENDANCE_MARK_UNKNOWN",
+                            "message": f"{_column_letter(column)}{row_number} 标记“{raw}”含义未确认",
+                        }
+                    )
             cleaned = {
                 "employee_name": name,
                 "work_month": work_month,
@@ -844,8 +883,8 @@ class _MatrixBlock:
                 "unmarked_days": days_in_month - len(absent) - len(marked),
                 "month_notes": "；".join(self.notes),
             }
-            business_id = "" if issues else _business_id(
-                {"employee_name": name, "work_date": work_month}
+            business_id = (
+                "" if issues else _business_id({"employee_name": name, "work_date": work_month})
             )
             slice_id = f"{source_sha[:12]}:{self.sheet.title}:{row_number}"
             yield ParsedRow(
@@ -855,9 +894,10 @@ class _MatrixBlock:
                 provenance={
                     "sheet": self.sheet.title,
                     "row": row_number,
-                    "columns": {"employee_name": 1, **{
-                        f"day_{day}": column for column, day in self.day_columns.items()
-                    }},
+                    "columns": {
+                        "employee_name": 1,
+                        **{f"day_{day}": column for column, day in self.day_columns.items()},
+                    },
                     "slice": {
                         "slice_id": slice_id,
                         "source_file_id": source_sha,
@@ -876,7 +916,10 @@ class _MatrixBlock:
                     "clean": {
                         "record_id": slice_id,
                         "business_id": business_id,
-                        "mapping_result": {"employee_name": name, "month_title_row": self.title_row},
+                        "mapping_result": {
+                            "employee_name": name,
+                            "month_title_row": self.title_row,
+                        },
                         "cleaning_result": cleaned,
                         "validation_result": issues,
                         "duplicate_status": "unique",
@@ -932,24 +975,39 @@ def _fill_block(block: _MatrixBlock) -> None:
         if not texts:
             block.blank_rows.append(row_number)
             continue
-        days = [(column, value) for column, value in cells if isinstance(value, int)
-                and not isinstance(value, bool) and 1 <= value <= 31]
+        days = [
+            (column, value)
+            for column, value in cells
+            if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 31
+        ]
         weekdays = [(column, text) for column, text in texts if text in _WEEKDAYS]
         if not block.day_columns and len(days) >= 28:
             block.header_rows.append(row_number)
             block.day_columns = {column: int(value) for column, value in days}
             for column, day in block.day_columns.items():
                 if day > days_in_month:
-                    block.issues.append({"field": "work_month", "code": "ELT_DATE_AMBIGUOUS",
-                                         "message": f"{block.year}年{block.month}月没有{day}日"})
-                expected = _WEEKDAYS[date(block.year, block.month, min(day, days_in_month)).weekday()]
+                    block.issues.append(
+                        {
+                            "field": "work_month",
+                            "code": "ELT_DATE_AMBIGUOUS",
+                            "message": f"{block.year}年{block.month}月没有{day}日",
+                        }
+                    )
+                expected = _WEEKDAYS[
+                    date(block.year, block.month, min(day, days_in_month)).weekday()
+                ]
                 written = weekday_by_column.get(column)
                 if written and written != expected and day <= days_in_month:
                     message = f"{block.month}月{day}日表头写“{written}”，日历为“{expected}”"
                     block.mismatched_days[day] = message + "，需确认日期"
-                    block.warnings.append({"code": "ELT_ATTENDANCE_WEEKDAY_MISMATCH",
-                                           "month": f"{block.year:04d}-{block.month:02d}",
-                                           "row": row_number, "message": message})
+                    block.warnings.append(
+                        {
+                            "code": "ELT_ATTENDANCE_WEEKDAY_MISMATCH",
+                            "month": f"{block.year:04d}-{block.month:02d}",
+                            "row": row_number,
+                            "message": message,
+                        }
+                    )
             continue
         if not block.day_columns and len(weekdays) >= 28:
             block.header_rows.append(row_number)

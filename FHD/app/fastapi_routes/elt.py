@@ -73,7 +73,6 @@ def capabilities(_user: Any = Depends(_read)):
     return {"success": True, "data": get_elt_service().capabilities()}
 
 
-
 @router.get("/runs/{run_id}")
 def get_run(
     run_id: str,

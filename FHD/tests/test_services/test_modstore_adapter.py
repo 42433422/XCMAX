@@ -641,7 +641,8 @@ class TestChatCompletionSync:
             )
 
         monkeypatch.setattr(
-            httpx, "Client",
+            httpx,
+            "Client",
             lambda **kwargs: real_client(**kwargs, transport=httpx.MockTransport(respond)),
         )
         if status == 200:

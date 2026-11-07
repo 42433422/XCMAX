@@ -287,9 +287,13 @@ def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_creden
             is_stream = self.path == "/api/llm/chat/stream"
             if is_stream:
                 reply["choices"][0]["delta"] = reply["choices"][0].pop("message")
-            data = (f"data: {json.dumps(reply)}\n\ndata: [DONE]\n\n" if is_stream else json.dumps(reply)).encode()
+            data = (
+                f"data: {json.dumps(reply)}\n\ndata: [DONE]\n\n" if is_stream else json.dumps(reply)
+            ).encode()
             self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream" if is_stream else "application/json")
+            self.send_header(
+                "Content-Type", "text/event-stream" if is_stream else "application/json"
+            )
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)

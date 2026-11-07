@@ -586,7 +586,9 @@ class AutoIngestService:
             elif status == "preview_ready":
                 batch_status, progress = (
                     "awaiting_confirmation",
-                    _progress("pending", 70, message="业务预演待确认；请在当前导入里核对所选模板后再入库"),
+                    _progress(
+                        "pending", 70, message="业务预演待确认；请在当前导入里核对所选模板后再入库"
+                    ),
                 )
             else:
                 batch_status, progress = (

@@ -51,6 +51,8 @@ async def _acompletion_payloads(response, sse_payloads):
         return
     async for data in sse_payloads(_Replay(lines)):
         yield data
+
+
 from .protocols import ChatInput, Connection, Route, StreamPorts
 from .responses import market_response_error
 
@@ -136,9 +138,7 @@ async def stream_async(
     if not connection.platform_url:
         raise ValueError("修茈市场平台URL未配置")
     allow_failover = request.extra.get("allow_failover") is not False
-    candidates = (
-        await asyncio.to_thread(ports.candidates, *route) if allow_failover else [route]
-    )
+    candidates = await asyncio.to_thread(ports.candidates, *route) if allow_failover else [route]
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
         messages = await ports.prepare_async(request.messages, *candidate)

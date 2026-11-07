@@ -419,4 +419,3 @@ def test_process_control_exceptions_are_not_translated_to_application_failure(
     result = snapshot(preview_store, run_id)
     assert result["status"] == "previewing" and result["error_code"] is None
     assert run_id not in service_preview.SUBMITTED
-

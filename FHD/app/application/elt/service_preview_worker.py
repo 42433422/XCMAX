@@ -103,7 +103,10 @@ class PreviewWorkerMixin:
             draft = load_json(run.draft_json, {})
             compatibility_preset_id = str(draft.get("compatibility_preset_id") or "").strip()
             dataset = self._load_source_snapshot(db, run)
-            if dataset is None and load_json(run.summary_json, {}).get("intake_source") == "reviewed_candidate":
+            if (
+                dataset is None
+                and load_json(run.summary_json, {}).get("intake_source") == "reviewed_candidate"
+            ):
                 raise EltError(
                     "ELT_CANDIDATE_SOURCE_MISSING",
                     "所选候选没有可预演的记录",

@@ -230,7 +230,15 @@ def _matrix_book(path, *, marks=("√", "✘"), extra_rows=()):
     for year, month in ((2026, 2), (2026, 3)):
         days = calendar.monthrange(year, month)[1]
         sheet.append([f"{year}年{month}月考勤表"])
-        sheet.append(["", *("一二三四五六日"[calendar.weekday(year, month, day)] for day in range(1, days + 1))])
+        sheet.append(
+            [
+                "",
+                *(
+                    "一二三四五六日"[calendar.weekday(year, month, day)]
+                    for day in range(1, days + 1)
+                ),
+            ]
+        )
         sheet.append(["姓名", *range(1, days + 1)])
         sheet.append(["张三", marks[0], marks[1]])
         sheet.append(["李四"])
@@ -248,8 +256,12 @@ def test_monthly_matrix_reaches_every_row_and_reconciles_monthly_records(tmp_pat
     report = evaluate_workbook(
         path,
         {
-            "version": "v", "task_id": "matrix", "confirmed": True,
-            "business_records": 4, "absent_days": 2, "present_marked_days": 2,
+            "version": "v",
+            "task_id": "matrix",
+            "confirmed": True,
+            "business_records": 4,
+            "absent_days": 2,
+            "present_marked_days": 2,
             "exception_rows": 0,
         },
         data_dir=tmp_path / "gate",
@@ -265,8 +277,10 @@ def test_monthly_matrix_reaches_every_row_and_reconciles_monthly_records(tmp_pat
             "ORDER BY work_month, employee_name"
         ).fetchall()
     assert stored == [
-        ("张三", "2026-02", "2026-02-02"), ("李四", "2026-02", ""),
-        ("张三", "2026-03", "2026-03-02"), ("李四", "2026-03", ""),
+        ("张三", "2026-02", "2026-02-02"),
+        ("李四", "2026-02", ""),
+        ("张三", "2026-03", "2026-03-02"),
+        ("李四", "2026-03", ""),
     ]
 
 
@@ -276,7 +290,13 @@ def test_monthly_matrix_wrong_manual_total_fails(tmp_path, monkeypatch):
     _matrix_book(path)
     report = evaluate_workbook(
         path,
-        {"version": "v", "task_id": "m", "confirmed": True, "business_records": 4, "absent_days": 3},
+        {
+            "version": "v",
+            "task_id": "m",
+            "confirmed": True,
+            "business_records": 4,
+            "absent_days": 3,
+        },
         data_dir=tmp_path / "gate",
     )
     assert report["status"] == "FAIL"
@@ -292,9 +312,7 @@ def test_unknown_mark_is_an_exception_not_a_silent_value(tmp_path):
     issues = [row.provenance["clean"]["validation_result"] for row in dataset.rows]
     assert len(dataset.rows) == 4
     assert sum(1 for item in issues if item) == 2
-    assert all(
-        issue["code"] == "ELT_ATTENDANCE_MARK_UNKNOWN" for item in issues for issue in item
-    )
+    assert all(issue["code"] == "ELT_ATTENDANCE_MARK_UNKNOWN" for item in issues for issue in item)
     assert all(not row.values["business_id"] for row, item in zip(dataset.rows, issues) if item)
 
 

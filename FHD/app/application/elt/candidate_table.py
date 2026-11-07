@@ -42,22 +42,26 @@ def read_candidate_table(path: str | Path) -> ParsedDataset:
                     index
                     for index, (_, raw) in enumerate(occupied)
                     if sum(bool(_cell_text(cell)) for cell in raw) >= 2
-                    and all(not _cell_text(cell).replace(".", "", 1).isdigit() for cell in raw if _cell_text(cell))
+                    and all(
+                        not _cell_text(cell).replace(".", "", 1).isdigit()
+                        for cell in raw
+                        if _cell_text(cell)
+                    )
                 ),
                 None,
             )
             if header_at is None:
                 continue
             header_row = occupied[header_at][1]
-            named = [(pos, _cell_text(cell)) for pos, cell in enumerate(header_row) if _cell_text(cell)]
+            named = [
+                (pos, _cell_text(cell)) for pos, cell in enumerate(header_row) if _cell_text(cell)
+            ]
             for name in (item[1] for item in named):
                 if name not in headers:
                     headers.append(name)
             for number, raw in occupied[header_at + 1 :]:
                 values = {
-                    name: raw[pos]
-                    for pos, name in named
-                    if pos < len(raw) and _cell_text(raw[pos])
+                    name: raw[pos] for pos, name in named if pos < len(raw) and _cell_text(raw[pos])
                 }
                 if not values:
                     continue

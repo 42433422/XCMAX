@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import sqlite3
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 from xml.etree.ElementTree import ParseError
@@ -21,6 +22,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from app.application.elt.attendance_pipeline import _hours, persist_attendance_rows
 from app.application.elt.errors import EltError, ReviewedExcelError
+from app.application.elt.parser_types import ParsedRow
 from app.application.elt.parsers import parse_file
 
 GATE_ID = "B31"
@@ -159,14 +161,16 @@ def _payload(dataset) -> list[dict[str, Any]]:
     return rows
 
 
-def _row_destinations(sheets: list[dict], rows: list) -> dict[str, dict[int, str]]:
+def _row_destinations(sheets: list[dict], rows: Iterable[ParsedRow]) -> dict[str, dict[int, str]]:
     """Every non-empty source row must land in exactly one named role."""
     roles: dict[str, dict[int, str]] = {}
     for item in sheets:
         name = str(item.get("name"))
         target = roles.setdefault(name, {})
         if item.get("status") == "sliced_not_business_table":
-            target.update(dict.fromkeys(range(1, int(item.get("max_row") or 0) + 1), "non_business_sheet"))
+            target.update(
+                dict.fromkeys(range(1, int(item.get("max_row") or 0) + 1), "non_business_sheet")
+            )
         header_row = int(item.get("header_row") or 0)
         if header_row:
             target.update(dict.fromkeys(range(1, header_row), "title"))
@@ -241,7 +245,8 @@ def _monthly_rows(db_path: Path) -> dict[str, tuple]:
             return {
                 row[0]: tuple(row[1:])
                 for row in conn.execute(
-                    "SELECT business_id, source_row, " + ", ".join(_MONTHLY_FIELDS)
+                    "SELECT business_id, source_row, "
+                    + ", ".join(_MONTHLY_FIELDS)
                     + " FROM attendance_monthly_marks"
                 )
             }
@@ -254,7 +259,8 @@ def _expected_monthly_rows(rows: list[dict[str, Any]]) -> dict[str, tuple]:
         row["business_id"]: (
             int(row.get("source_row") or 0),
             *(
-                int(row.get(field) or 0) if field in {"days_in_month", "unmarked_days"}
+                int(row.get(field) or 0)
+                if field in {"days_in_month", "unmarked_days"}
                 else row.get(field) or ""
                 for field in _MONTHLY_FIELDS
             ),
@@ -322,7 +328,8 @@ def evaluate_workbook(
                     cell.row
                     for line in sheet.iter_rows()
                     for cell in line
-                    if str(cell.value if cell.value is not None else "").strip()
+                    if cell.row is not None
+                    and str(cell.value if cell.value is not None else "").strip()
                 }
                 for sheet in book.worksheets
             }
@@ -396,7 +403,9 @@ def evaluate_workbook(
     blanks = [item.get("name") for item in recorded if item.get("blank")]
     if blanks:
         _mark(
-            checks, "12", all(not destinations.get(name) or not content_rows.get(name) for name in blanks)
+            checks,
+            "12",
+            all(not destinations.get(name) or not content_rows.get(name) for name in blanks),
         )
 
     slices = [row.provenance.get("slice") or {} for row in rows]
@@ -521,12 +530,10 @@ def evaluate_workbook(
             try:
                 if not reopened.worksheets:
                     raise ReviewedExcelError("结果文件缺少工作表")
-                sheet = reopened.worksheets[0]
-                header = [cell.value for cell in next(sheet.iter_rows(max_row=1), ())]
-                body_rows = list(sheet.iter_rows(min_row=2, values_only=True))
-                monthly_sheet = (
-                    reopened["月度考勤"] if "月度考勤" in reopened.sheetnames else None
-                )
+                output_sheet = reopened.worksheets[0]
+                header = [cell.value for cell in next(output_sheet.iter_rows(max_row=1), ())]
+                body_rows = list(output_sheet.iter_rows(min_row=2, values_only=True))
+                monthly_sheet = reopened["月度考勤"] if "月度考勤" in reopened.sheetnames else None
                 monthly_body = (
                     list(monthly_sheet.iter_rows(min_row=2, values_only=True))
                     if monthly_sheet is not None
@@ -591,9 +598,7 @@ def evaluate_workbook(
             rows_ok and metrics_ok if expected_rows is not None and wanted_metrics else None,
         )
         _mark(checks, "47", rows_ok and opened if expected_rows is not None else None)
-        _mark(
-            checks, "48", rows_ok and metrics_ok and baseline.get("manual_reconciled") is True
-        )
+        _mark(checks, "48", rows_ok and metrics_ok and baseline.get("manual_reconciled") is True)
         fault_rows = {**_daily_rows(fault_db), **_monthly_rows(fault_db)}
         _mark(checks, "54", fields_match and fault_rows == stored_rows)
         _mark(

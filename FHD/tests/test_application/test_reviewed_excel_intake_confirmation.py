@@ -64,9 +64,7 @@ def intake_store(review_store, rag_service, monkeypatch, account_session_client)
     def old_parser_must_not_run(*_args, **_kwargs):
         raise AssertionError("旧解析器不能参与所选候选的入库")
 
-    monkeypatch.setattr(
-        "app.application.elt.service_preview.parse_file", old_parser_must_not_run
-    )
+    monkeypatch.setattr("app.application.elt.service_preview.parse_file", old_parser_must_not_run)
     monkeypatch.setattr(ais, "get_app_data_dir", lambda: str(store.root))
     monkeypatch.setattr(path_utils, "get_app_data_dir", lambda **_: str(store.root))
     monkeypatch.setattr(ais, "get_auto_ingest_service", lambda: store.intake)
@@ -183,9 +181,7 @@ def test_auto_ingest_start_failure_keeps_safe_diagnostics_and_saved_receipt(
     assert replay["replayed"] and replay["auto_ingest"] == failure
 
 
-def test_exact_prepared_run_ingests_the_selected_candidate(
-    intake_store, monkeypatch
-):
+def test_exact_prepared_run_ingests_the_selected_candidate(intake_store, monkeypatch):
     store = intake_store
     data, plan, business = prepare(store)
     assert plan["target_type"] == "customers"
@@ -249,10 +245,18 @@ def test_selected_candidate_clears_are_not_recovered_from_original(intake_store,
     monkeypatch.setattr(
         "app.application.reviewed_excel_template._template_llm_complete",
         lambda *_args, **_kwargs: LlmAssistResult(
-            used_llm=True, provider="platform", model="synthetic",
-            data={"candidates": [{"clear": [
-                {"sheet": "客户", "cell": cell} for cell in ("B2", "A3", "B3")
-            ], "reason": "Remove one record and one private field"} for _ in range(3)]},
+            used_llm=True,
+            provider="platform",
+            model="synthetic",
+            data={
+                "candidates": [
+                    {
+                        "clear": [{"sheet": "客户", "cell": cell} for cell in ("B2", "A3", "B3")],
+                        "reason": "Remove one record and one private field",
+                    }
+                    for _ in range(3)
+                ]
+            },
         ),
     )
     data, plan, business = prepare(store)
