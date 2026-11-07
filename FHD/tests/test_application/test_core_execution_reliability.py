@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import threading
 import time
-import weakref
 from datetime import timedelta
 from pathlib import Path
 
@@ -20,20 +19,20 @@ from app.infrastructure.tenant_scope import tenant_scope
 
 
 @pytest.fixture(autouse=True)
-def _reset_agent_repositories(monkeypatch):
-    from app.application.agent_orchestrator import task_execution_repository
+def _reset_agent_repositories():
     from app.application.agent_orchestrator.run_repository import (
         set_agent_run_repository_for_tests,
     )
     from app.application.agent_orchestrator.task_dispatcher import (
         set_agent_task_dispatcher_for_tests,
     )
+    from app.application.agent_orchestrator.task_execution_repository import (
+        set_task_execution_repository_for_tests,
+    )
 
-    # Failed-test tracebacks can retain repositories after their engines are disposed.
-    monkeypatch.setattr(task_execution_repository, "_OPEN_REPOSITORIES", weakref.WeakSet())
     yield
     set_agent_run_repository_for_tests(None)
-    task_execution_repository.set_task_execution_repository_for_tests(None)
+    set_task_execution_repository_for_tests(None)
     set_agent_task_dispatcher_for_tests(None)
 
 
@@ -74,6 +73,7 @@ def _client(
     from tests.fixtures.cross_module_business import _build_source_workbook
 
     if engine is None:
+        # Request, dispatcher and polling sessions must have independent transactions.
         engine = create_engine(
             f"sqlite:///{tmp_path / 'reliability.sqlite3'}",
             connect_args={"check_same_thread": False},
@@ -685,17 +685,12 @@ def test_approval_http_returns_while_dispatcher_owns_the_queue(tmp_path, monkeyp
         assert _product_models(env) == []
         release.set()
         assert started.wait(5)
-        # Product rows commit before the dispatcher releases the lease.
+        # The lease completes after the business rows and the public task view commit.
         deadline = time.monotonic() + 10
         finished = None
         while time.monotonic() < deadline:
             finished = env["queue"].get(created["data"]["run_id"])
-            if (
-                _product_models(env) == ["HAND-1", "HAND-2"]
-                and finished is not None
-                and finished.state == "succeeded"
-                and finished.execution_count == 1
-            ):
+            if finished is not None and finished.state == "succeeded":
                 break
             time.sleep(0.05)
         assert _product_models(env) == ["HAND-1", "HAND-2"]

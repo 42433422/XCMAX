@@ -488,7 +488,9 @@ def set_task_execution_repository_for_tests(
 ) -> None:
     global _task_execution_repository
     _task_execution_repository = repository
-    if repository is not None:
+    if repository is None:
+        _OPEN_REPOSITORIES.clear()
+    else:
         remember_open_repository(repository)
 
 
