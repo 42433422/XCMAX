@@ -232,7 +232,6 @@ const workbookReports = computed(() => {
   if (!intakePending.value && !intakeError.value && intakePlan.value) return workbookEmployeeReports(intakePlan.value)
   return []
 })
-const intakeValidRowsOnly = ref(false)
 const currentComposerNote = computed(() => [...requirementNotes.value, composerDraft.value.trim()].filter(Boolean).join('\n').trim().slice(0, 4000))
 const intakeSelectionKey = computed(() => JSON.stringify([review.value?.review_id, proposal.value?.version,
   proposal.value?.candidates[candidateIndex.value]?.id, selected.value, name.value.trim(), currentComposerNote.value]))
@@ -242,7 +241,7 @@ let intakeTimer: ReturnType<typeof setTimeout> | null = null
 function resetIntake() {
   intakeGeneration += 1
   if (intakeTimer) clearTimeout(intakeTimer)
-  intakeTimer = null; intakePlan.value = null; intakePending.value = false; intakeError.value = ''; intakeValidRowsOnly.value = false
+  intakeTimer = null; intakePlan.value = null; intakePending.value = false; intakeError.value = ''
   preparedSelectionKey = ''
 }
 const intakeWritableRows = computed(() => {
@@ -261,7 +260,6 @@ const canConfirmIntake = computed(() => {
     && preparedSelectionKey === intakeSelectionKey.value && intakePlan.value?.mod_id === readActiveExtensionModIdFromStorage()
     && run?.status === 'preview_ready' && !!run.preview_revision
     && [run.summary.new, run.summary.update, run.summary.skip, run.summary.error].every(value => Number.isFinite(value) && value >= 0)
-    && (!run.summary.error || intakeValidRowsOnly.value)
 })
 async function prepareIntake() {
   if (!canCommitSelectedTemplate()) return
@@ -1149,7 +1147,7 @@ async function save() {
     form.append('private_intake', privateIntake ? 'true' : 'false')
     form.append('intake_run_id', intakePlan.value!.run_id)
     form.append('preview_revision', intakePlan.value!.business.preview_revision!)
-    form.append('valid_rows_only', String(intakeValidRowsOnly.value))
+    form.append('valid_rows_only', String(Number(intakePlan.value?.business?.summary?.error || 0) > 0))
     form.append('review_id', review.value!.review_id)
     form.append('proposal_version', proposal.value.version)
     form.append('candidate_id', proposal.value.candidates[candidateIndex.value].id)
@@ -1549,7 +1547,7 @@ async function downloadCandidate(index: number) {
           <p v-if="intakePlan.business.target_type === 'knowledge'">业务数据：仅知识资料，无业务记录写入。</p>
           <p v-else>业务目标：{{ targetLabel(intakePlan.business.target_type) }}；预计新增 {{ intakePlan.business.summary.new }} 行、更新 {{ intakePlan.business.summary.update }} 行、跳过 {{ intakePlan.business.summary.skip }} 行、错误 {{ intakePlan.business.summary.error }} 行。</p>
           <p v-if="intakeZeroRowWarning" role="alert">预演可写入行为 0：确认入库也不会写入业务行（无报错≠已入库）。请核对原件与候选后再保存。</p>
-          <label v-if="intakePlan.business.summary.error"><input v-model="intakeValidRowsOnly" type="checkbox" :disabled="busy"> 我已核对错误行，确认仅写入正确行；错误行不会写入。</label>
+          <p v-if="intakePlan.business.summary.error">错误行不写入业务库，仍留在知识库文档中。正确行按预演写入。</p>
           <p>确认后保存 1 份模板到当前企业模板库，并按上方同一预演写入；重复数据跳过，更新范围以预演为准。撤回仅回退本批知识和业务写入，原件和模板保留。</p>
         </template>
         <button type="button" :disabled="busy || intakePending || !canCommitSelectedTemplate()" @click="prepareIntake">重新预演入库范围</button>

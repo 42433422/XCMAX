@@ -778,6 +778,16 @@ def test_knowledge_line_calls_its_own_model(intake_store, monkeypatch, tmp_path)
     assert "螺母" in plan["content"]
 
 
+def test_unwritten_rows_stay_in_the_knowledge_document():
+    from app.application.elt.auto_ingest_service import knowledge_document_keeps_unwritten_rows
+
+    kept = knowledge_document_keeps_unwritten_rows("整理摘要", "桶数 -1")
+    assert kept.startswith("整理摘要")
+    assert "桶数 -1" in kept
+    assert knowledge_document_keeps_unwritten_rows("", "归档原文") == "归档原文"
+    assert knowledge_document_keeps_unwritten_rows("归档原文已含明细", "归档原文") == "归档原文已含明细"
+
+
 def test_knowledge_plan_uses_archived_text_when_the_model_fails(intake_store, monkeypatch, tmp_path):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 

@@ -1834,15 +1834,41 @@ async def reviewed_excel_save(
                     preview_revision=preview_revision,
                     owned_upload_user_id=upload.owner_user_id,
                 )
-                if business.get("summary", {}).get("error") and not valid_rows_only:
-                    raise HTTPException(
-                        status_code=409, detail="预演存在错误行，请修正或明确确认仅写入正确行"
-                    )
+                error_rows = int((business.get("summary") or {}).get("error") or 0)
+                if error_rows:
+                    valid_rows_only = True
                 confirmed_plan = {
                     **plan,
                     "preview_revision": preview_revision,
                     "valid_rows_only": valid_rows_only,
                 }
+                if error_rows:
+                    from app.application.elt.auto_ingest_service import (
+                        knowledge_document_keeps_unwritten_rows,
+                    )
+
+                    held = confirmed_plan.get("knowledge")
+                    held = held if isinstance(held, dict) else {}
+                    kept = knowledge_document_keeps_unwritten_rows(
+                        str(held.get("content") or ""),
+                        str(held.get("source_text") or ""),
+                    )
+                    if kept:
+                        # The archived source hash stays so the preview is still the same file.
+                        # The stored document is the summary plus that source, including unwritten rows.
+                        refreshed = get_auto_ingest_service().knowledge_plan(
+                            path=prepared_path,
+                            file_name=str(confirmed_plan.get("name") or ""),
+                            note=str(confirmed_plan.get("note") or ""),
+                            owner_user_id=owner,
+                            owned_upload_user_id=upload.owner_user_id,
+                            source_text=kept,
+                            allow_model=False,
+                        )
+                        refreshed["used_llm"] = True
+                        refreshed["source_hash"] = held.get("source_hash")
+                        refreshed["source_text"] = held.get("source_text")
+                        confirmed_plan["knowledge"] = refreshed
                 # The staged upload is the candidate chosen at preview. The template
                 # file is that same cleanup of the review workbook, not the full original.
                 cleaned = clean_workbook(body, run.file_sha256, selected)

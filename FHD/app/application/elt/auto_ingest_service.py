@@ -115,6 +115,17 @@ def _workbook_lines(workbook) -> str:
     return "\n".join(lines)[:80_000]
 
 
+def knowledge_document_keeps_unwritten_rows(summary: str, source_text: str) -> str:
+    """Keep rows that cannot be shipment records inside the knowledge document."""
+    summary = (summary or "").strip()
+    source = (source_text or "").strip()
+    if not source:
+        return summary
+    if not summary or source in summary:
+        return source if not summary else summary
+    return f"{summary}\n\n{source}"
+
+
 def workbook_text(source: bytes | bytearray) -> str:
     """Archived workbook text. Database import and knowledge import each read it alone."""
     workbook = load_workbook(BytesIO(source), read_only=True, data_only=True, keep_links=False)
