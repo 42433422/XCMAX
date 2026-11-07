@@ -105,12 +105,18 @@ def _bounded_structured_completion(
     return box["result"]
 
 
-def _active_software_llm() -> tuple[bool, Any | None, Any | None]:
+def _active_software_llm(
+    timeout_seconds: float | None = None,
+) -> tuple[bool, Any | None, Any | None]:
     """Resolve the current user's software-account LLM, then app-wide providers."""
     try:
         from app.application.elt.llm_session_provider import current_owner_market_provider
 
-        market_provider = current_owner_market_provider(timeout_seconds=etl_llm_timeout_seconds())
+        market_provider = current_owner_market_provider(
+            timeout_seconds=(
+                etl_llm_timeout_seconds() if timeout_seconds is None else timeout_seconds
+            )
+        )
         if market_provider is not None:
             return True, None, market_provider
         from app.infrastructure.llm.providers.registry import get_active_provider
@@ -142,6 +148,7 @@ def _complete(
     max_tokens: int,
     lane: str = "",
     max_repairs: int = 0,
+    timeout_seconds: float | None = None,
 ) -> LlmAssistResult:
     mode = etl_llm_mode()
     if mode == "off":
@@ -166,20 +173,26 @@ def _complete(
                 degraded=True,
                 degradation_code=circuit_degradation,
             )
-        configured, conversation_service, provider = _active_software_llm()
+        configured, conversation_service, provider = _active_software_llm(timeout_seconds)
         if not configured:
             return LlmAssistResult(
                 used_llm=False,
                 degraded=mode == "on",
                 degradation_code="ELT_LLM_UNAVAILABLE" if mode == "on" else "",
             )
-        timeout_seconds = etl_llm_timeout_seconds() * (1 + max(0, max_repairs))
+        # An explicit budget is the whole call, including one schema repair.
+        # Probe calls still scale the short timeout when a repair is allowed.
+        budget = (
+            timeout_seconds
+            if timeout_seconds is not None
+            else etl_llm_timeout_seconds() * (1 + max(0, max_repairs))
+        )
         try:
             result = _bounded_structured_completion(
                 messages,
                 schema=schema,
                 max_tokens=max_tokens,
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=budget,
                 conversation_service=conversation_service,
                 provider=provider,
                 max_repairs=max_repairs,
@@ -521,7 +534,12 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
         {"role": "user", "content": source[:20_000]},
     ]
     result = _complete(
-        messages, schema=_BUSINESS_IMPORT_SCHEMA, max_tokens=1600, lane="database", max_repairs=1
+        messages,
+        schema=_BUSINESS_IMPORT_SCHEMA,
+        max_tokens=1600,
+        lane="database",
+        max_repairs=1,
+        timeout_seconds=etl_llm_timeout_seconds(full_sheet=True),
     )
     rows = []
     for item in list(result.data.get("rows") or [])[:100]:
@@ -550,7 +568,12 @@ def advise_knowledge_import(document_text: str) -> LlmAssistResult:
         {"role": "user", "content": source[:20_000]},
     ]
     result = _complete(
-        messages, schema=_KNOWLEDGE_IMPORT_SCHEMA, max_tokens=1600, lane="knowledge", max_repairs=1
+        messages,
+        schema=_KNOWLEDGE_IMPORT_SCHEMA,
+        max_tokens=1600,
+        lane="knowledge",
+        max_repairs=1,
+        timeout_seconds=etl_llm_timeout_seconds(full_sheet=True),
     )
     result.data = {
         "title": _cell(result.data.get("title")),

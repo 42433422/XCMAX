@@ -49,12 +49,27 @@ def etl_llm_mode() -> str:
     return "auto"
 
 
-def etl_llm_timeout_seconds() -> float:
-    raw = str(os.environ.get("FHD_ETL_LLM_TIMEOUT") or "6").strip()
+_ETL_LLM_TIMEOUT_CAP = 180.0
+
+
+def etl_llm_timeout_seconds(*, full_sheet: bool = False) -> float:
+    """Probe calls stay short. A full archived sheet uses the template-analysis ceiling.
+
+    ``FHD_ETL_LLM_TIMEOUT`` defaults to 6 seconds and cannot exceed 180.
+    ``FHD_ETL_IMPORT_LLM_TIMEOUT`` is the whole database or knowledge import,
+    default 180, same ceiling. The old 12-second clamp cut a real delivery
+    note off while the remote model was still writing rows.
+    """
+    if full_sheet:
+        raw = str(os.environ.get("FHD_ETL_IMPORT_LLM_TIMEOUT") or "180").strip()
+        fallback = _ETL_LLM_TIMEOUT_CAP
+    else:
+        raw = str(os.environ.get("FHD_ETL_LLM_TIMEOUT") or "6").strip()
+        fallback = 6.0
     try:
-        return min(12.0, max(1.0, float(raw)))
+        return min(_ETL_LLM_TIMEOUT_CAP, max(1.0, float(raw)))
     except ValueError:
-        return 6.0
+        return fallback
 
 
 def etl_row_advice_limit() -> int:

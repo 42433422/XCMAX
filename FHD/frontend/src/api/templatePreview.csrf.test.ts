@@ -11,7 +11,7 @@ vi.mock('./core', () => {
   return { default: { post: mock.post, get: mock.get, download: mock.download }, ApiError, primeCsrfCookie: mock.prime }
 })
 import { ApiError } from './core'
-import { MODEL_ANALYZE_TIMEOUT_MS, MODEL_BACKED_ELT_TIMEOUT_MS, templatePreviewApi } from './templatePreview'
+import { MODEL_ANALYZE_TIMEOUT_MS, MODEL_BACKED_ELT_TIMEOUT_MS, MODEL_INTAKE_TIMEOUT_MS, templatePreviewApi } from './templatePreview'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -295,7 +295,7 @@ describe('reviewed Excel CSRF handling', () => {
     const confirmed = { version: 'confirmed-v2', confirmed: true }, plan = { intake: { run_id: 'intake-7', business: { status: 'preview_ready', preview_revision: 'r1' } } }
     mock.post.mockResolvedValueOnce(confirmed).mockResolvedValueOnce(plan)
     expect(await templatePreviewApi.confirmClassification('class/7', confirmation)).toBe(confirmed); expect(await templatePreviewApi.previewReviewedIntake(intake)).toBe(plan)
-    expect(mock.post.mock.calls).toEqual([['/api/templates/reviewed-excel/classifications/class%2F7/confirm', confirmation], ['/api/templates/reviewed-excel/intake-preview', intake, { timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS }]])
+    expect(mock.post.mock.calls).toEqual([['/api/templates/reviewed-excel/classifications/class%2F7/confirm', confirmation, {}], ['/api/templates/reviewed-excel/intake-preview', intake, { timeoutMs: MODEL_INTAKE_TIMEOUT_MS }]])
     expect(mock.post.mock.calls.some(call => call[0].endsWith('/save') || call[0].endsWith('/analyze'))).toBe(false)
   })
 
@@ -309,6 +309,7 @@ describe('reviewed Excel CSRF handling', () => {
 
   it('does not report a model-backed ELT call as failed at 8s', async () => {
     expect(MODEL_BACKED_ELT_TIMEOUT_MS).toBe(30_000)
+    expect(MODEL_INTAKE_TIMEOUT_MS).toBe(360_000)
     expect(MODEL_ANALYZE_TIMEOUT_MS).toBeGreaterThan(128_000)
     expect(MODEL_ANALYZE_TIMEOUT_MS).toBeLessThan(300_000)
     mock.post.mockResolvedValue({})

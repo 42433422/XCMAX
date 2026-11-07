@@ -3,15 +3,16 @@ import type { RequestOptions } from './core'
 import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
 import { captureAuthSession } from '@/utils/authSessionCache'
 
-// 预览、优化、入库预演：单路约 12s，入库会再问数据库和知识。30s 能等完这一次。
-// 整本分析可以超过 90s（已见到服务端约 128s 后才返回）。只加长分析这一次，
-// 让已经写完的响应能被读到。其他接口超时不变。卡住的调用仍会停。
+// 预览和优化仍是短调用。入库预演要等数据库和知识两条整表导入，每条最多 180 秒。
+// 整本分析单独等到 180 秒。卡住的调用仍会停。
 export const MODEL_BACKED_ELT_TIMEOUT_MS = 30_000
+export const MODEL_INTAKE_TIMEOUT_MS = 360_000
 export const MODEL_ANALYZE_TIMEOUT_MS = 180_000
 
 function modelBackedEltOptions(path: string): RequestOptions {
   if (path.endsWith('/analyze')) return { timeoutMs: MODEL_ANALYZE_TIMEOUT_MS }
-  if (path.endsWith('/preview') || path.endsWith('/refine') || path.endsWith('/intake-preview')) {
+  if (path.endsWith('/intake-preview')) return { timeoutMs: MODEL_INTAKE_TIMEOUT_MS }
+  if (path.endsWith('/preview') || path.endsWith('/refine')) {
     return { timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS }
   }
   return {}

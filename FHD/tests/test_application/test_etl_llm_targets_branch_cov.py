@@ -150,11 +150,19 @@ def test_llm_assist_mode_and_limits(monkeypatch):
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "5")
     assert llm_assist.etl_llm_timeout_seconds() == 5.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "99")
-    assert llm_assist.etl_llm_timeout_seconds() == 12.0
+    assert llm_assist.etl_llm_timeout_seconds() == 99.0
+    monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "999")
+    assert llm_assist.etl_llm_timeout_seconds() == 180.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "-1")
     assert llm_assist.etl_llm_timeout_seconds() == 1.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "abc")
     assert llm_assist.etl_llm_timeout_seconds() == 6.0
+    monkeypatch.delenv("FHD_ETL_IMPORT_LLM_TIMEOUT", raising=False)
+    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 180.0
+    monkeypatch.setenv("FHD_ETL_IMPORT_LLM_TIMEOUT", "30")
+    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 30.0
+    monkeypatch.setenv("FHD_ETL_IMPORT_LLM_TIMEOUT", "999")
+    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 180.0
 
     monkeypatch.delenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", raising=False)
     assert llm_assist.etl_row_advice_limit() == 20
@@ -164,6 +172,27 @@ def test_llm_assist_mode_and_limits(monkeypatch):
     assert llm_assist.etl_row_advice_limit() == 100
     monkeypatch.setenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", "bad")
     assert llm_assist.etl_row_advice_limit() == 20
+
+
+def test_archived_sheet_import_uses_full_sheet_timeout(monkeypatch):
+    from app.application.elt import llm_assist
+
+    seen: dict = {}
+
+    def capture(*_args, **kwargs):
+        seen.clear()
+        seen.update(kwargs)
+        return llm_assist.LlmAssistResult(data={"rows": [], "title": "", "content": ""})
+
+    monkeypatch.setattr(llm_assist, "_complete", capture)
+    monkeypatch.delenv("FHD_ETL_IMPORT_LLM_TIMEOUT", raising=False)
+    llm_assist.advise_business_import("sheet")
+    assert seen["lane"] == "database"
+    assert seen["max_repairs"] == 1
+    assert seen["timeout_seconds"] == 180.0
+    llm_assist.advise_knowledge_import("sheet")
+    assert seen["lane"] == "knowledge"
+    assert seen["timeout_seconds"] == 180.0
 
 
 def test_llm_assist_public_metadata():
