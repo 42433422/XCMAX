@@ -156,17 +156,17 @@ def classify_review_workbook(review: dict) -> list[dict]:
         blank = bool(dimensions.get("blank")) or not cells
         nonempty_cells = sum(len(items) for items in rows_of_cells.values())
         title_only = not blank and nonempty_cells == 1
-        tables, notes = _split_table_blocks(rows_of_cells)
-        if len(tables) >= 2:
-            regions = _regions_for_blocks(
-                sheet_cells=cells,
-                rows_of_cells=rows_of_cells,
-                tables=tables,
-                notes=notes,
-                max_col=max_col,
-                merges=merges,
-                header_pattern=header_pattern,
-                possible_shared=possible_shared,
+        segmentation = None
+        if not split and not blank and not title_only:
+            from app.application.elt.table_segmentation import review_grid, segment_sheet
+
+            segmentation = segment_sheet(sheet, *review_grid(review, sheet))
+            # Two-column blocks are key/value forms; leave them to manual review.
+            if not any(len(table.headers) >= 3 for table in segmentation.tables):
+                segmentation = None
+        if segmentation is not None and segmentation.tables:
+            regions = _regions_for_segmentation(
+                segmentation, anchors=anchors, merges=merges, possible_shared=possible_shared
             )
         elif title_only and regions:
             regions = [
@@ -202,95 +202,128 @@ def classify_review_workbook(review: dict) -> list[dict]:
                 "evidence": evidence,
                 "checked_cells": len(cells),
                 "regions": [] if blank else regions,
+                **(
+                    {
+                        "table_structure": {
+                            "tables": [table.public() for table in segmentation.tables],
+                            "cell_coverage": segmentation.coverage(),
+                        }
+                    }
+                    if segmentation is not None and segmentation.tables
+                    else {}
+                ),
             }
         )
     return results
 
 
-def _split_table_blocks(
-    rows_of_cells: dict[int, list[dict]],
-) -> tuple[list[list[int]], list[list[int]]]:
-    content_rows = sorted(rows_of_cells)
-    blocks: list[list[int]] = []
-    current: list[int] = []
-    previous: int | None = None
-    for row in content_rows:
-        if previous is not None and row - previous > 1 and current:
-            blocks.append(current)
-            current = []
-        current.append(row)
-        previous = row
-    if current:
-        blocks.append(current)
-    tables: list[list[int]] = []
-    notes: list[list[int]] = []
-    for block in blocks:
-        while (
-            len(block) >= 2
-            and len(rows_of_cells[block[0]]) < 2
-            and len(rows_of_cells[block[1]]) >= 2
-        ):
-            notes.append([block[0]])
-            block = block[1:]
-        header = rows_of_cells[block[0]]
-        if len(block) >= 2 and len(header) >= 2:
-            tables.append(block)
-        else:
-            notes.append(block)
-    return tables, notes
-
-
-def _regions_for_blocks(
-    *,
-    sheet_cells: list[dict],
-    rows_of_cells: dict[int, list[dict]],
-    tables: list[list[int]],
-    notes: list[list[int]],
-    max_col: int,
-    merges: list,
-    header_pattern,
-    possible_shared: list[dict],
+def _regions_for_segmentation(
+    segmentation, *, anchors: dict[int, list[dict]], merges: list, possible_shared: list[dict]
 ) -> list[dict]:
-    from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
+    """One data region per detected table; excluded rows become labelled non-data regions."""
+    from app.application.elt.table_segmentation import EXCLUDED_ROLES, ROLE_REASONS
 
-    def span(rows: list[int]) -> tuple[int, int, int, int]:
-        cols = [
-            column_index_from_string(coordinate_from_string(cell["cell"])[0])
-            for row in rows
-            for cell in rows_of_cells[row]
+    def region(c1: int, r1: int, c2: int, r2: int) -> tuple[str, list[str]]:
+        ref = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+        inside = [
+            merged
+            for merged in merges
+            for mc1, mr1, mc2, mr2 in [bounded_range(merged)]
+            if mr1 <= r2 and mr2 >= r1 and mc1 <= c2 and mc2 >= c1
         ]
-        return min(cols), rows[0], max(cols), rows[-1]
+        return ref, inside
 
+    cells_by_table: dict[str, int] = {}
+    for role, table_id in segmentation.cells.values():
+        cells_by_table[table_id] = cells_by_table.get(table_id, 0) + (role not in EXCLUDED_ROLES)
     regions = []
-    for rows, data_region, anomaly in (
-        *[(item, False, "title_or_note") for item in notes],
-        *[(item, True, "") for item in tables],
-    ):
-        c1, r1, c2, r2 = span(rows)
-        region_cells = [
-            cell for cell in sheet_cells if r1 <= coordinate_from_string(cell["cell"])[1] <= r2
+    boxes = []
+    for table in segmentation.tables:
+        top = min(table.header_rows)
+        boxes.append((table.min_col, top, table.max_col, table.end_row))
+        ref, inside = region(table.min_col, top, table.max_col, table.end_row)
+        evidence = [
+            item for row, items in anchors.items() if top <= row <= table.end_row for item in items
         ]
         regions.append(
             {
-                "range": f"{get_column_letter(c1)}{r1}:{get_column_letter(min(c2, max_col))}{r2}",
+                "range": ref,
+                "labels": list(dict.fromkeys(item["label"] for item in evidence)) or ["unknown"],
+                "label_source": "rule",
+                "range_source": "rule",
+                "evidence": evidence,
+                "parent_heading": table.title,
+                "header_cells": [
+                    {"cell": f"{get_column_letter(c)}{table.leaf_row}", "value": header}
+                    for c, header in zip(range(table.min_col, table.max_col + 1), table.headers)
+                ],
+                "header_rows": table.header_rows,
+                "header_paths": table.header_paths,
+                "data_rows": len(table.data_rows),
+                "excluded_rows": [
+                    {"row": item["row"], "role": item["role"], "reason": item["reason"]}
+                    for item in segmentation.row_roles
+                    if item["table_id"] == table.table_id
+                    and item["role"] in EXCLUDED_ROLES
+                    and top <= item["row"] <= table.end_row
+                ],
+                "table_id": table.table_id,
+                "table_group": table.group,
+                "repeated_header": table.repeated,
+                "merged_ranges": inside,
+                "possible_shared_context": possible_shared,
+                "checked_cells": cells_by_table.get(table.table_id, 0),
+                "needs_confirmation": True,
+                "dependency_status": "跨区图例和依赖未分析，边界需确认",
+                "data_region": True,
+                "anomaly": "",
+                "anomaly_reason": "",
+            }
+        )
+    runs: list[list[dict]] = []
+    for item in segmentation.row_roles:
+        if item["role"] not in EXCLUDED_ROLES or any(
+            b1 <= item["row"] <= b2 and a1 <= item["columns"][1] and item["columns"][0] <= a2
+            for a1, b1, a2, b2 in boxes
+        ):
+            continue
+        last = runs[-1][-1] if runs else None
+        if (
+            last is not None
+            and last["role"] == item["role"]
+            and last["columns"] == item["columns"]
+            and item["row"] == last["row"] + 1
+        ):
+            runs[-1].append(item)
+        else:
+            runs.append([item])
+    for run in runs:
+        c1, c2 = run[0]["columns"]
+        ref, inside = region(c1, run[0]["row"], c2, run[-1]["row"])
+        regions.append(
+            {
+                "range": ref,
                 "labels": ["unknown"],
                 "label_source": "rule",
                 "range_source": "rule",
                 "evidence": [],
                 "parent_heading": "",
-                "header_cells": [
-                    {"cell": cell["cell"], "value": cell["value"]}
-                    for cell in region_cells
-                    if header_pattern.fullmatch(str(cell["value"]).strip())
-                ],
-                "merged_ranges": [],
+                "header_cells": [],
+                "merged_ranges": inside,
                 "possible_shared_context": possible_shared,
-                "checked_cells": len(region_cells),
+                "checked_cells": sum(
+                    1
+                    for item in run
+                    for c in range(c1, c2 + 1)
+                    if (item["row"], c) in segmentation.cells
+                ),
                 "needs_confirmation": True,
-                "dependency_status": "跨区图例和依赖未分析，边界需确认",
-                "data_region": data_region,
-                "anomaly": anomaly,
-                "anomaly_reason": "标题或说明，不是数据表" if anomaly else "",
+                "dependency_status": "非业务记录，已明确排除",
+                "data_region": False,
+                "anomaly": "title_or_note",
+                "exclusion_role": run[0]["role"],
+                "table_id": run[0]["table_id"],
+                "anomaly_reason": ROLE_REASONS[run[0]["role"]],
             }
         )
     return regions
