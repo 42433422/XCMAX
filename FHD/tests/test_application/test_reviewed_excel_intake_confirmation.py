@@ -520,6 +520,38 @@ def _delivery_note_bytes() -> bytes:
     return stream.getvalue()
 
 
+def test_spaced_delivery_headers_use_the_sheet_name_as_customer():
+    from openpyxl import Workbook
+
+    from app.application.elt.candidate_table import read_delivery_note_business
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "演示客户甲"
+    sheet["A1"] = "演示公司送货单"
+    sheet["A3"] = "产 品 型 号"
+    sheet["B3"] = "产 品 名 称"
+    sheet["C3"] = "数量/件"
+    sheet["D3"] = "数量/KG"
+    sheet["E3"] = "单价/元"
+    sheet["F3"] = "金额/元"
+    sheet["A4"] = "FG-1"
+    sheet["B4"] = "演示色漆"
+    sheet["C4"] = 4
+    sheet["D4"] = "=C4*2"
+    sheet["E4"] = 18
+    sheet["F4"] = "=C4*E4"
+    stream = BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    dataset = read_delivery_note_business(stream.getvalue())
+    assert dataset is not None
+    assert len(dataset.rows) == 1
+    assert dataset.rows[0].values["购买单位"] == "演示客户甲"
+    assert dataset.rows[0].values["产品名称"] == "演示色漆"
+    assert dataset.rows[0].values["数量"] == 4
+
+
 def test_degraded_header_label_is_not_master_data():
     from app.application.elt.targets.helpers import degraded_header_master
 

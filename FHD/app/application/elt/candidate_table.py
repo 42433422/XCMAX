@@ -127,14 +127,14 @@ def _is_quantity(value) -> bool:
 
 
 _DELIVERY_TITLES = ("送货单", "发货单", "出货单")
-_PRODUCT_HEADERS = frozenset({"产品名称", "商品名称", "货品名称", "品名"})
-_QUANTITY_HEADERS = frozenset({"数量", "桶数", "件数"})
+_GENERIC_SHEET_TITLES = ("出货", "送货", "发货", "回款", "明细", "编号", "台账", "模板", "合计")
 _CUSTOMER_LABELS = ("客户名称", "购货单位", "购买单位", "客户")
 _OUTPUT_COLUMNS = {
     "产品名称": "产品名称",
     "商品名称": "产品名称",
     "货品名称": "产品名称",
     "品名": "产品名称",
+    "产品型号": "型号",
     "数量": "数量",
     "桶数": "数量",
     "件数": "数量",
@@ -143,6 +143,27 @@ _OUTPUT_COLUMNS = {
     "规格": "型号",
     "型号": "型号",
 }
+
+
+def _output_key(value) -> str | None:
+    """Match a header after removing spaces and a unit suffix such as 数量/件."""
+    compact = "".join(_cell_text(value).split()).replace("／", "/")
+    if not compact:
+        return None
+    head = compact.split("/", 1)[0]
+    return _OUTPUT_COLUMNS.get(head) or _OUTPUT_COLUMNS.get(compact)
+
+
+def _sheet_customer(title: str) -> str:
+    """A sheet named for one customer, when the note has no customer label."""
+    text = title.strip()
+    if not text or len(text) > 20:
+        return ""
+    if any(token in text for token in _GENERIC_SHEET_TITLES):
+        return ""
+    if any(token in text for token in _DELIVERY_TITLES):
+        return ""
+    return text
 
 
 def _pair_after(raw, labels: tuple[str, ...]) -> str:
@@ -189,8 +210,7 @@ def read_delivery_note_business(source: bytes | bytearray | str | Path) -> Parse
                 (
                     index
                     for index, (_, raw) in enumerate(occupied)
-                    if (_PRODUCT_HEADERS & {_cell_text(cell) for cell in raw})
-                    and (_QUANTITY_HEADERS & {_cell_text(cell) for cell in raw})
+                    if {"产品名称", "数量"} <= {_output_key(cell) for cell in raw}
                 ),
                 None,
             )
@@ -200,10 +220,12 @@ def read_delivery_note_business(source: bytes | bytearray | str | Path) -> Parse
             for _, raw in occupied[:header_at]:
                 customer = _pair_after(raw, _CUSTOMER_LABELS) or customer
             if not customer:
+                customer = _sheet_customer(worksheet.title)
+            if not customer:
                 continue
             columns: list[tuple[int, str]] = []
             for pos, cell in enumerate(occupied[header_at][1]):
-                key = _OUTPUT_COLUMNS.get(_cell_text(cell))
+                key = _output_key(cell)
                 if key and key not in {item[1] for item in columns}:
                     columns.append((pos, key))
             if not any(key == "产品名称" for _, key in columns):
