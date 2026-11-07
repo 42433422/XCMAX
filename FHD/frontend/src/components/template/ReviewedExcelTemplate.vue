@@ -1269,8 +1269,18 @@ async function downloadCandidate(index: number) {
       <div v-if="error" class="elt-bubble elt-bubble--error" role="alert">{{ error }}</div>
 
       <template v-if="archiveOnSelect">
-        <div class="reviewed-documents" aria-label="模型识别的模板">
-          <button v-for="doc in documentWorkspace.documents.value" :key="doc.key" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
+        <div class="workbook-thread" :class="{ 'workbook-thread--live': workbookReports.length }" :aria-label="workbookReports.length ? '工作情况回报' : '模型识别的模板'">
+          <span v-if="workbookReports.length" class="workbook-thread__spine" aria-hidden="true"></span>
+          <div class="workbook-node workbook-node--template">
+            <span v-if="workbookReports.length" class="workbook-node__dot" aria-hidden="true"></span>
+            <div class="workbook-node__body">
+              <p v-if="workbookReports.length" class="workbook-node__who">模板导入员</p>
+              <div class="reviewed-documents">
+                <button v-for="doc in documentWorkspace.documents.value" :key="doc.key" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
+              </div>
+            </div>
+          </div>
+          <WorkbookEmployeeReport v-for="report in workbookReports" :key="report.employee" v-bind="report" />
         </div>
         <div v-if="templatePickerOpen && activeDocument" class="elt-template-picker__layer reviewed-document-picker" @click.self="closeCandidatePicker" @wheel.self.prevent @touchmove.self.prevent>
           <section ref="candidatePickerPanel" class="elt-template-picker__panel" role="dialog" aria-modal="true" :aria-label="activeDocument.displayName" tabindex="-1">
@@ -1292,9 +1302,6 @@ async function downloadCandidate(index: number) {
               <button type="button" :disabled="!documentWorkspace.canSave(activeDocument)" @click="saveActiveDocument">{{ documentWorkspace.saved(activeDocument) ? '已保存' : '保存模板' }}</button>
             </template>
           </section>
-        </div>
-        <div v-if="workbookReports.length" class="workbook-employee-reports" aria-label="工作情况回报">
-          <WorkbookEmployeeReport v-for="report in workbookReports" :key="report.employee" v-bind="report" />
         </div>
         <TemplateCandidatePreview v-if="activeDocument && activeDocumentProposal && expandedCandidateIndex !== null" :title="documentOriginalPreview ? `${activeDocument.displayName} · 原件（只读）` : activeDocumentProposal.candidates[expandedCandidateIndex].label" :explanation="documentOriginalPreview ? '' : activeDocumentProposal.candidates[expandedCandidateIndex].explanation" :layouts="documentOriginalPreview ? activeDocument.review?.layout || [] : activeDocumentProposal.result_previews?.[expandedCandidateIndex]?.layout || []" :initial-sheet="0" :selected="!documentOriginalPreview && activeDocument.candidateIndex === expandedCandidateIndex" :can-select="!activeDocument.phase && !activeDocument.unknown && !documentWorkspace.saved(activeDocument)" :read-only="documentOriginalPreview" :cell-style="cellStyle" @close="expandedCandidateIndex = null; documentOriginalPreview = false" @select="selectExpandedDocumentCandidate" />
       </template>
@@ -1466,7 +1473,8 @@ async function downloadCandidate(index: number) {
     <button v-if="!archiveOnSelect || !review" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (archiveOnSelect && modelFlow)" @click="preview()">预览清理候选</button>
     <button v-if="archiveOnSelect && error.includes('请明确选择所选片段作为派生打印区域')" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy" @click="retrySelectedPrintArea">按所选片段生成副本并重试（原件不变）</button>
     <button v-if="archiveOnSelect" ref="candidateCapsule" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--selected': !!chosenCandidate }" aria-haspopup="dialog" :aria-expanded="templatePickerOpen" :aria-controls="candidatePickerId" :disabled="busy || !proposal?.candidates.length" @click="openCandidatePicker">{{ chosenCandidate?.label || (busy ? '模板处理中…' : proposal?.candidates.length ? '选择模板' : '暂无可选模板') }} <span aria-hidden="true">⌄</span></button>
-    <div v-if="!archiveOnSelect && workbookReports.length" class="workbook-employee-reports" aria-label="工作情况回报">
+    <div v-if="!archiveOnSelect && workbookReports.length" class="workbook-thread workbook-thread--live" aria-label="工作情况回报">
+      <span class="workbook-thread__spine" aria-hidden="true"></span>
       <WorkbookEmployeeReport v-for="report in workbookReports" :key="report.employee" v-bind="report" />
     </div>
     <div v-if="review">
@@ -1727,7 +1735,14 @@ async function downloadCandidate(index: number) {
 .reviewed-template .reviewed-template__candidate-capsule--selected { border-color: var(--xc-color-success); background: color-mix(in srgb, var(--xc-color-success) 8%, var(--xc-color-surface)); }
 .reviewed-template .reviewed-template__candidate-capsule--saved { border-color: var(--xc-color-success); background: color-mix(in srgb, var(--xc-color-success) 8%, var(--xc-color-surface)); }
 .reviewed-documents { display: flex; flex-wrap: wrap; gap: var(--xc-space-2); }
-.workbook-employee-reports { display: flex; flex-direction: column; align-items: flex-start; gap: var(--xc-space-3); }
+.workbook-thread { display: flex; flex-direction: column; align-items: flex-start; gap: var(--xc-space-2); background: transparent; border: 0; }
+.workbook-thread--live { position: relative; gap: var(--xc-space-6); padding: var(--xc-space-2) 0; }
+.workbook-thread__spine { position: absolute; top: 1.15rem; bottom: 1.15rem; left: 7px; width: 1px; background: color-mix(in srgb, var(--xc-color-primary) 32%, transparent); pointer-events: none; }
+.workbook-thread--live .workbook-node { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: var(--xc-space-3); align-items: start; width: min(40rem, 100%); background: transparent; border: 0; box-shadow: none; }
+.workbook-node__who { margin: 0; color: var(--xc-color-text); font-size: 13px; font-weight: 600; line-height: 1.4; }
+.workbook-thread--live :deep(.workbook-node__dot),
+.workbook-thread--live .workbook-node__dot { width: 7px; height: 7px; margin-top: 0.4rem; justify-self: center; border-radius: 50%; background: var(--xc-color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--xc-color-primary) 16%, transparent); }
+.workbook-thread--live :deep(.workbook-node__dot--quiet) { background: var(--xc-color-muted); box-shadow: 0 0 0 3px color-mix(in srgb, var(--xc-color-muted) 24%, transparent); }
 .reviewed-template__candidate-capsule small { color: var(--xc-color-muted); }
 .reviewed-document-picker__options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--xc-space-3); }
 .reviewed-document-picker .elt-template-picker__bar { position: sticky; top: 0; z-index: 1; background: var(--xc-color-surface); padding-bottom: var(--xc-space-2); }
