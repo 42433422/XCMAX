@@ -174,13 +174,37 @@ def test_llm_assist_mode_and_limits(monkeypatch):
     assert llm_assist.etl_row_advice_limit() == 20
 
 
+def test_degradation_log_keeps_raw_head_and_tail(caplog):
+    import logging
+
+    from app.application.elt.llm_assist_runtime import clip_model_raw, log_etl_llm_degradation
+
+    raw = "HEAD" + ("中" * 3000) + "TAIL"
+    shown = clip_model_raw(raw)
+    assert shown.startswith("HEAD") and shown.endswith("TAIL") and len(shown) <= 2000
+    assert clip_model_raw("short") == "short"
+
+    class Failed(Exception):
+        def __init__(self) -> None:
+            super().__init__("structured output failed")
+            self.last_errors = ["输出中未找到有效 JSON object"]
+            self.last_raw = raw
+
+    caplog.set_level(logging.INFO, logger="app.application.elt.llm_assist")
+    log = logging.getLogger("app.application.elt.llm_assist")
+    log_etl_llm_degradation(log, code="ELT_LLM_UNAVAILABLE", lane="database", exc=Failed())
+    line = caplog.text
+    assert "last_raw=" in line and "HEAD" in line and "TAIL" in line and "middle omitted" in line
+
+
 def test_archived_sheet_import_uses_full_sheet_timeout(monkeypatch):
     from app.application.elt import llm_assist
 
     seen: dict = {}
 
-    def capture(*_args, **kwargs):
+    def capture(*args, **kwargs):
         seen.clear()
+        seen["messages"] = args[0] if args else kwargs.get("messages")
         seen.update(kwargs)
         return llm_assist.LlmAssistResult(data={"rows": [], "title": "", "content": ""})
 
@@ -188,8 +212,11 @@ def test_archived_sheet_import_uses_full_sheet_timeout(monkeypatch):
     monkeypatch.delenv("FHD_ETL_IMPORT_LLM_TIMEOUT", raising=False)
     llm_assist.advise_business_import("sheet")
     assert seen["lane"] == "database"
+    assert seen["max_tokens"] == 8192
     assert seen["max_repairs"] == 1
     assert seen["timeout_seconds"] == 180.0
+    prompt = seen["messages"][0]["content"]
+    assert "JSON 必须是单个对象、以 rows 开头、不要 markdown 代码块、不要解释文字。" in prompt
     llm_assist.advise_knowledge_import("sheet")
     assert seen["lane"] == "knowledge"
     assert seen["timeout_seconds"] == 180.0

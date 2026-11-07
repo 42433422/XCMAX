@@ -206,12 +206,8 @@ def _complete(
         except BOUNDARY_ERRORS as exc:  # Advisory-provider boundary: preserve deterministic ETL.
             degradation_code = _degradation_code(exc)
             _open_circuit(circuit_key, degradation_code)
-            logger.info(
-                "general etl llm assist degraded (%s lane=%s): %s %s",
-                degradation_code,
-                lane or "shared",
-                type(exc).__name__,
-                getattr(exc, "last_errors", ""),
+            _runtime.log_etl_llm_degradation(
+                logger, code=degradation_code, lane=lane, exc=exc
             )
             return LlmAssistResult(
                 used_llm=True,
@@ -529,6 +525,7 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
                 "rows 的字段只能是 customer_name、purchase_unit、product_name、quantity、"
                 "unit_price、amount、model。只放货品明细。表头、合计、空行不要放入。"
                 "购买单位用单据上的客户，不要用列名。"
+                "JSON 必须是单个对象、以 rows 开头、不要 markdown 代码块、不要解释文字。"
             ),
         },
         {"role": "user", "content": source[:20_000]},
@@ -536,7 +533,7 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
     result = _complete(
         messages,
         schema=_BUSINESS_IMPORT_SCHEMA,
-        max_tokens=1600,
+        max_tokens=8192,
         lane="database",
         max_repairs=1,
         timeout_seconds=etl_llm_timeout_seconds(full_sheet=True),

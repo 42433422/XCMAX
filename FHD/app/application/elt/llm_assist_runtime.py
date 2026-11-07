@@ -87,6 +87,29 @@ def degradation_code(exc: BaseException) -> str:
     return "ELT_LLM_UNAVAILABLE"
 
 
+def clip_model_raw(raw: object, *, limit: int = 2000) -> str:
+    """Keep the start and end of a model body so a failed import can be read."""
+    text = str(raw or "")
+    if len(text) <= limit:
+        return text
+    marker = "\n…[middle omitted]…\n"
+    room = max(0, limit - len(marker))
+    head = room // 2
+    return f"{text[:head]}{marker}{text[-(room - head):]}"
+
+
+def log_etl_llm_degradation(logger, *, code: str, lane: str, exc: BaseException) -> None:
+    """StructuredOutputError keeps last_raw; the degradation line must show it."""
+    logger.info(
+        "general etl llm assist degraded (%s lane=%s): %s %s last_raw=%s",
+        code,
+        lane or "shared",
+        type(exc).__name__,
+        getattr(exc, "last_errors", ""),
+        clip_model_raw(getattr(exc, "last_raw", "")),
+    )
+
+
 def circuit_key(lane: str = "") -> str:
     """Template, database, and knowledge calls do not share one outage."""
     try:
