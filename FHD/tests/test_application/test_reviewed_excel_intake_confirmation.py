@@ -550,6 +550,7 @@ def test_spaced_delivery_headers_use_the_sheet_name_as_customer():
     assert dataset.rows[0].values["购买单位"] == "演示客户甲"
     assert dataset.rows[0].values["产品名称"] == "演示色漆"
     assert dataset.rows[0].values["数量"] == 4
+    assert not str(dataset.rows[0].values.get("金额") or "").startswith("=")
 
 
 def test_degraded_header_label_is_not_master_data():

@@ -194,8 +194,15 @@ def read_delivery_note_business(source: bytes | bytearray | str | Path) -> Parse
     """
     if isinstance(source, (bytes, bytearray)):
         workbook = load_workbook(BytesIO(source), read_only=True, data_only=False, keep_links=False)
+        cached_book = load_workbook(BytesIO(source), read_only=True, data_only=True, keep_links=False)
     else:
         workbook = load_workbook(source, read_only=True, data_only=False, keep_links=False)
+        cached_book = load_workbook(source, read_only=True, data_only=True, keep_links=False)
+    cached_rows = {
+        (worksheet.title, number): raw
+        for worksheet in cached_book.worksheets
+        for number, raw in enumerate(worksheet.iter_rows(values_only=True), start=1)
+    }
     rows: list[ParsedRow] = []
     sheet_name = ""
     try:
@@ -238,11 +245,17 @@ def read_delivery_note_business(source: bytes | bytearray | str | Path) -> Parse
                 if is_footer_or_note_row(raw):
                     continue
                 values = {"购买单位": customer}
+                stored = cached_rows.get((worksheet.title, number)) or ()
                 for pos, key in columns:
                     if pos >= len(raw) or is_column_header_label(raw[pos]):
                         continue
-                    if _cell_text(raw[pos]):
-                        values[key] = raw[pos]
+                    cell = raw[pos]
+                    if isinstance(cell, str) and cell.startswith("="):
+                        cell = stored[pos] if pos < len(stored) else None
+                        if isinstance(cell, bool) or not isinstance(cell, (int, float)):
+                            continue
+                    if _cell_text(cell):
+                        values[key] = cell
                 product = _cell_text(values.get("产品名称"))
                 if not product or not _is_quantity(values.get("数量")):
                     continue
@@ -256,6 +269,7 @@ def read_delivery_note_business(source: bytes | bytearray | str | Path) -> Parse
                 )
     finally:
         workbook.close()
+        cached_book.close()
     if not rows:
         return None
     headers = [
