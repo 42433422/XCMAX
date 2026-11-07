@@ -100,13 +100,13 @@
     "FHD/app/application/reviewed_excel_template.py": {
       "base_file": "FHD/app/application/reviewed_excel_template.py",
       "base_blob": "6999cd18e774ea9306f6c89ccb2175815d57d225",
-      "head_blob": "e42db994d4cd20b30ffc42516c3783a734c7f38a",
+      "head_blob": "3c400640973806cb37897da3512c4e9c8168a23d",
       "before_lines": 1375,
       "after_lines": 1376,
-      "reason": "Read formula cache presence and retain supported Word/table structure without dropping rows.",
-      "boundary": "Existing source inspection limits remain bounded; derived sources remain review candidates.",
-      "validation": "From FHD, python -m pytest -q -o addopts='' over all changed tests relative to origin/main: 790 passed in 433.05s on frozen integrated tree 740eff8 (including this structural/candidate path). Ruff and full CI mypy passed. Final updated head CI and human architecture review remain pending; synthetic fixtures only.",
-      "follow_up": "@42433422: Keep source inspection separate from confirmed candidate persistence and audit.",
+      "reason": "Raise the full-workbook nonempty-cell inspection budget from 20,000 to 100,000 (5x) so large sources can be reviewed before slicing; formula-cache changes are already in main.",
+      "boundary": "Only the existing inspection budget and error text change. MAX_CELLS bounds all accumulated nonempty workbook cells; the separate structural sampling extent is per sheet and is not an equivalent global resource bound. No permission or write gate changes.",
+      "validation": "Synthetic large-workbook and auto-slice regressions cover prior >20,000-cell sources; full final CI at cb98061 passed. No production memory/concurrency load test or real customer retest is claimed; inspection costs may increase with the 5x budget.",
+      "follow_up": "@42433422: review the 100,000-cell global budget explicitly and measure memory/latency under representative concurrency before raising limits further; keep inspection admission separate from write confirmation.",
       "review_owner": "@42433422"
     },
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
@@ -172,12 +172,12 @@
     "FHD/app/application/elt/table_segmentation.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "0628a30d7ce973c0d921a9736b395e64752617bb",
+      "head_blob": "92f296c8d6c445c2a5701f3b0de12a965480119c",
       "before_lines": 0,
-      "after_lines": 935,
-      "reason": "Keep deterministic merged-cell, parallel-table and row-kind segmentation in one cohesive parser; ambiguous names must not become totals.",
+      "after_lines": 932,
+      "reason": "Keep deterministic structural segmentation cohesive; preserve legitimate business records with note-like customer names and long textual fields instead of excluding them by prefix or text length.",
       "boundary": "Pure structural analysis only; no persistence, model authorization or new API endpoint.",
-      "validation": "From FHD, python -m pytest -q -o addopts='' over all changed tests relative to origin/main: 790 passed in 433.05s on frozen integrated tree 740eff8 (including this structural/candidate path). Ruff and full CI mypy passed. Final updated head CI and human architecture review remain pending; synthetic fixtures only.",
+      "validation": "From FHD: python -m pytest -q -o addopts= tests/test_application/test_table_segmentation.py tests/test_application/test_reviewed_excel_auto_slice.py: 31 passed in 113.59s. Includes segment_sheet and parse_file customer regressions for note-like names, long addresses/names and explicit footer labels. Final head CI must rerun; cb98061 green CI did not cover this semantic defect. No real customer retest.",
       "follow_up": "@42433422: Review this new parser as a coherent unit; do not mechanically split it solely to hide the advisory size.",
       "review_owner": "@42433422"
     },
@@ -189,7 +189,7 @@
       "after_lines": 909,
       "reason": "Preserve overflow table evidence instead of silently truncating after eighty structural candidates.",
       "boundary": "Existing structural index and projection contract only; no import execution.",
-      "validation": "From FHD, python -m pytest -q -o addopts='' over all changed tests relative to origin/main: 790 passed in 433.05s on frozen integrated tree 740eff8 (including this structural/candidate path). Ruff and full CI mypy passed. Final updated head CI and human architecture review remain pending; synthetic fixtures only.",
+      "validation": "From FHD: python -m pytest -q -o addopts= tests/test_application/test_reviewed_excel_structural_index.py: 9 passed. Includes 79/80/81/1000 candidate boundaries preserving tail ranges, remainder basis, run counts and compressed projection. Synthetic fixtures only; final-head CI pending.",
       "follow_up": "@42433422: Review candidate overflow representation together with its consumer contract.",
       "review_owner": "@42433422"
     },

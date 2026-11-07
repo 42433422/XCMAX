@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from openpyxl import Workbook
 
 from app.application.elt.parser_shipment_history import ledger_row_verification
@@ -218,3 +219,70 @@ def test_parallel_slice_row_keeps_each_review_status():
         ("left", "import"),
         ("right", "pending_review"),
     ]
+
+
+@pytest.mark.parametrize(
+    "headers,values",
+    [
+        (["客户名称", "数量"], ["说明科技", 2]),
+        (["客户名称", "数量"], ["备注材料", 3]),
+        (
+            ["客户名称", "地址"],
+            ["甲公司", "某省某市某区某街道某工业园区第十二栋第三单元二楼办公室" * 2],
+        ),
+        (["客户名称", "地址"], ["一个超过十二个字符的完整合法客户名称", None]),
+    ],
+)
+def test_business_text_is_not_silently_disposed_as_note(headers, values, tmp_path):
+    wb = Workbook()
+    ws = wb.active
+    ws.append(headers)
+    ws.append(values)
+    result = _segment(ws)
+    assert result.tables[0].data_rows == [2]
+    assert _roles(result)[2] == "data"
+    assert result.coverage()["unassigned_cells"] == 0
+    path = tmp_path / "synthetic-customer.xlsx"
+    wb.save(path)
+    dataset = parse_file(path, target_type="customers")
+    try:
+        rows = list(dataset.rows)
+        assert len(rows) == 1
+        assert rows[0].values["客户名称"] == values[0]
+        if values[1] is not None:
+            assert rows[0].values[headers[1]] == values[1]
+    finally:
+        dataset.rows.close()
+
+
+def test_explicit_note_label_still_excludes_footer_without_excluding_business_name():
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["客户名称", "地址"])
+    ws.append(["说明科技", "某街道"])
+    ws.append(["备注", "本页仅供核对"])
+    result = _segment(ws)
+    assert result.tables[0].data_rows == [2]
+    assert _roles(result)[3] == "note"
+
+
+def test_long_text_record_between_other_business_records_is_preserved(tmp_path):
+    wb = Workbook()
+    ws = wb.active
+    address = "这是一个正常但超过三十个字的客户收货地址北京市朝阳区某某道路第一号楼五层"
+    ws.append(["客户名称", "联系人", "地址"])
+    ws.append(["甲公司", "张三", "上海"])
+    ws.append(["乙公司", "李四", address])
+    ws.append(["丙公司", "王五", "深圳"])
+    result = _segment(ws)
+    assert result.tables[0].data_rows == [2, 3, 4]
+    assert _roles(result)[3] == "data"
+    path = tmp_path / "long-address.xlsx"
+    wb.save(path)
+    dataset = parse_file(path, target_type="customers")
+    try:
+        rows = list(dataset.rows)
+        assert [row.values["客户名称"] for row in rows] == ["甲公司", "乙公司", "丙公司"]
+        assert rows[1].values["地址"] == address
+    finally:
+        dataset.rows.close()

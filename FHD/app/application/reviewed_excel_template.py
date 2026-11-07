@@ -28,7 +28,7 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_UNPACKED = 100 * 1024 * 1024
-# Equals the per-sheet structural-sampling extent, so any fully read sheet fits.
+# Full-workbook nonempty-cell budget; per-sheet structural sampling is separate.
 MAX_CELLS = 100_000
 
 
