@@ -190,9 +190,9 @@ Second run on the fixed candidate: 878 passed, 1 skipped, exit 0.
 
 `.github/workflows/fhd-ci-cd.yml` runs on `pull_request` to `main` (and on `push` only for `main`, `develop`, and `master`). A branch push alone does not start that pipeline. Required checks therefore have no result: not green, not red, not started.
 
-This session has no `ManagePullRequest` tool. `gh` is read-only and was not used to create the PR. GitHub’s compare link from the push is `https://github.com/42433422/XCMAX/pull/new/cursor/elt-e2e-full-001-826b`. That is not an open pull request.
+Pull request: https://github.com/42433422/XCMAX/pull/3094. Opening it is what starts `fhd-ci-cd.yml`. Those checks were not terminal when the PR was opened, so CI is not green.
 
-CI remains a release blocker until a PR exists and the checks on that head are terminal and green. This report does not call them passed.
+CI remains a release blocker until the checks on this head are terminal and green. This report does not call them passed.
 
 ## Production release
 
