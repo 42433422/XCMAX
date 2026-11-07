@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 from collections.abc import Callable
@@ -9,6 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI
 
+from app.runtime_integrity import record_runtime_component
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -17,6 +19,26 @@ logger = logging.getLogger(__name__)
 def is_ci_strict() -> bool:
     """When CI=1, optional route import failures should fail the build."""
     return os.environ.get("CI", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def import_and_mount(app: FastAPI, module_path: str, router_attr: str, prefix: str) -> None:
+    """Record the mount result without changing the caller's exception strategy."""
+    ok = False
+    try:
+        module = importlib.import_module(module_path)
+        router = getattr(module, router_attr)
+        if prefix:
+            app.include_router(router, prefix=prefix)
+        else:
+            app.include_router(router)
+        ok = True
+    finally:
+        record_runtime_component(
+            app,
+            f"route:{module_path}:{router_attr}:{prefix}",
+            ok=ok,
+            detail="" if ok else "Route registration failed",
+        )
 
 
 def try_include_router(

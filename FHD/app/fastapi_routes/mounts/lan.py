@@ -6,7 +6,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app.legacy.routes.legacy_compat import _import_and_mount
+from app.fastapi_routes._route_helpers import import_and_mount as _import_and_mount
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

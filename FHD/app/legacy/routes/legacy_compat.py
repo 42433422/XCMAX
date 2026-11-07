@@ -37,23 +37,10 @@ def is_ci_strict() -> bool:
 
 
 def _import_and_mount(app: FastAPI, module_path: str, router_attr: str, prefix: str) -> None:
-    """Record the mount result without changing the caller's exception strategy."""
-    ok = False
-    try:
-        module = importlib.import_module(module_path)
-        router = getattr(module, router_attr)
-        if prefix:
-            app.include_router(router, prefix=prefix)
-        else:
-            app.include_router(router)
-        ok = True
-    finally:
-        record_runtime_component(
-            app,
-            f"route:{module_path}:{router_attr}:{prefix}",
-            ok=ok,
-            detail="" if ok else "Route registration failed",
-        )
+    """Lazy compatibility export that avoids the route package's bootstrap cycle."""
+    from app.fastapi_routes._route_helpers import import_and_mount
+
+    import_and_mount(app, module_path, router_attr, prefix)
 
 
 def _mount_router(
