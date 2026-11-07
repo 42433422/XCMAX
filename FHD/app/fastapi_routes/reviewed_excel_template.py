@@ -716,9 +716,13 @@ async def _reviewed_excel_classification_analyze_body(
             if checkpoint and checkpoint.get("auto_group", False) != auto_group:
                 raise HTTPException(status_code=409, detail="分组模式已改变，请核对已有批次")
             if checkpoint and checkpoint.get("phase") == "inflight":
-                raise HTTPException(
-                    status_code=409, detail="上次请求结果未知，请核对后处理；不会自动重发"
-                )
+                from app.application.reviewed_excel_audit import release_unanswered_inflight
+
+                if not release_unanswered_inflight(state, getattr(run, "updated_at", None)):
+                    raise HTTPException(
+                        status_code=409, detail="上次请求结果未知，请核对后处理；不会自动重发"
+                    )
+                logger.info("analyze released an unanswered inflight claim with no stored response")
             if checkpoint and checkpoint.get("phase") == "failed":
                 if checkpoint.get("calls_in_round", 0) >= checkpoint["max_calls"]:
                     checkpoint["calls_in_round"] = 0

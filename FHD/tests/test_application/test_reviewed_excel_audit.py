@@ -3,7 +3,13 @@ import json
 import pytest
 
 from app.application.elt.errors import ReviewedExcelError
-from app.application.reviewed_excel_audit import claim_request, verify_request
+from datetime import datetime, timedelta, timezone
+
+from app.application.reviewed_excel_audit import (
+    claim_request,
+    release_unanswered_inflight,
+    verify_request,
+)
 
 
 def test_claim_binds_source_version_and_exact_request_without_headers():
@@ -371,3 +377,23 @@ def test_audited_stream_keeps_provider_body_and_parsed_result(monkeypatch):
         )
     assert result.data == {}
     assert archived == [(sse, 200, "upstream-synthetic")]
+
+
+def test_unanswered_inflight_releases_only_after_the_claim_expires():
+    state = {
+        "analysis_checkpoint": {"phase": "inflight", "results": [], "calls_in_round": 0},
+        "model_audit": [{"state": "inflight", "request_sha256": "abc"}],
+    }
+    recent = datetime.now(timezone.utc) - timedelta(minutes=5)
+    assert release_unanswered_inflight(state, recent) is False
+    assert state["analysis_checkpoint"]["phase"] == "inflight"
+    stale = datetime.now(timezone.utc) - timedelta(minutes=16)
+    assert release_unanswered_inflight(state, stale) is True
+    assert state["analysis_checkpoint"]["phase"] == "ready"
+    assert state["model_audit"][0]["state"] == "unanswered"
+    stored = {
+        "analysis_checkpoint": {"phase": "inflight", "results": []},
+        "model_audit": [{"state": "inflight", "response_base64": "e30="}],
+    }
+    assert release_unanswered_inflight(stored, stale) is False
+    assert stored["analysis_checkpoint"]["phase"] == "inflight"

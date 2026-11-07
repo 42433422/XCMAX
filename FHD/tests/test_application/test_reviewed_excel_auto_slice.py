@@ -460,3 +460,39 @@ def test_refused_extraction_keeps_values_and_rejects_rows_with_reason(monkeypatc
     assert load_workbook(BytesIO(slices[0]["workbook"])).worksheets[0]["A2"].value == "面漆"
     assert {r["status"] for r in rows} == {"rejected"}
     assert all("打印区域" in r["reason"] for r in rows)
+
+
+def test_hidden_model_document_stays_for_review_and_visible_document_exports():
+    book = Workbook()
+    visible = book.active
+    visible.title = "送货"
+    visible["A1"] = "送货单"
+    visible["B1"] = "甲"
+    ledger = book.create_sheet("台账")
+    ledger["A1"] = "客户"
+    ledger["B1"] = "金额"
+    ledger["A2"] = "甲"
+    ledger.sheet_state = "hidden"
+    body = _save(book)
+    source = inspect_workbook(body)
+    note = {"sheet": "送货", "range": "A1:B1"}
+    hidden = {"sheet": "台账", "range": "A1:B2"}
+    slices = derive_classified_documents(
+        body,
+        {
+            "source_sha256": source["sha256"],
+            "model_status": "returned",
+            "regions": [{**note, "dependencies": []}, {**hidden, "dependencies": []}],
+            "suggested_documents": [
+                {"fragments": [note], "reason": "送货单"},
+                {"fragments": [hidden], "reason": "隐藏台账"},
+            ],
+        },
+    )
+    exported = next(item for item in slices if item["fragments"][0]["sheet"] == "送货")
+    held = next(item for item in slices if item["fragments"][0]["sheet"] == "台账")
+    assert "status" not in exported
+    assert load_workbook(BytesIO(exported["workbook"]))["送货"]["A1"].value == "送货单"
+    assert held["status"] == "pending_review" and "隐藏" in held["review_reason"]
+    copied = load_workbook(BytesIO(held["workbook"]))
+    assert copied["台账"]["A2"].value == "甲" and "隐藏" in str(copied["切片复核说明"]["B4"].value)

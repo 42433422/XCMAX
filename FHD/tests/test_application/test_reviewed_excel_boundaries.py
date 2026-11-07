@@ -128,6 +128,38 @@ def test_duplicate_coverage_rejected(monkeypatch):
         execute(monkeypatch, source(["A1", "C1"]), answer(region(), region()))
 
 
+def test_identify_prompt_states_the_three_rejection_rules():
+    from app.application.reviewed_excel_reference_prompts import IDENTIFY_PROMPT
+
+    assert "每个划定范围至少包含一个非空主单元格（合并格无值不算）" in IDENTIFY_PROMPT
+    assert "不要覆盖全空尾部行" in IDENTIFY_PROMPT
+    assert "范围之间不能重叠，否则整批拒绝" in IDENTIFY_PROMPT
+
+
+def test_disjoint_nonempty_ranges_pass(monkeypatch):
+    result = execute(
+        monkeypatch,
+        source(["A1", "C1"], ["C10:E10"]),
+        answer(region(1, 1, 1, 1), region(1, 1, 3, 3)),
+    )
+    assert [item["range"] for item in result["regions"]] == ["A1:A1", "C1:C1"]
+
+
+def test_empty_trailing_merge_is_rejected(monkeypatch):
+    review = source(["A1"], ["C10:E10"])
+    with pytest.raises(ReviewedExcelError, match="主体为空或重复覆盖"):
+        execute(monkeypatch, review, answer(region(1, 1, 1, 1), region(10, 10, 3, 5)))
+
+
+def test_overlapping_primary_ranges_are_rejected(monkeypatch):
+    with pytest.raises(ReviewedExcelError, match="主体为空或重复覆盖"):
+        execute(
+            monkeypatch,
+            source(["A1", "B1"]),
+            answer(region(1, 1, 1, 2), region(1, 1, 2, 2)),
+        )
+
+
 def test_partial_boundary_keeps_covered_cells_for_a_person(monkeypatch):
     """Synthetic fixture: the model rectangle covers A1 and leaves C1 uncovered."""
     from app.application.reviewed_excel_partition import boundary_left_for_confirmation

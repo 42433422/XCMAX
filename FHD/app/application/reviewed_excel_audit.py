@@ -13,6 +13,40 @@ class ModelRequestNotSent(ReviewedExcelError):
     """Only failures known to precede model dispatch may raise this."""
 
 
+# A live template call is at most 180s. Past this, an inflight claim with no
+# stored provider body is a dead request, not a call still in flight.
+UNANSWERED_INFLIGHT_SECONDS = 900
+
+
+def release_unanswered_inflight(state: dict, updated_at) -> bool:
+    """Let analyze continue when a claimed call stored no response and has gone stale.
+
+    A response body keeps the lock. A recent claim keeps the lock so a live call
+    is not sent twice.
+    """
+    from datetime import datetime, timezone
+
+    checkpoint = state.get("analysis_checkpoint")
+    records = state.get("model_audit")
+    if not isinstance(checkpoint, dict) or checkpoint.get("phase") != "inflight":
+        return False
+    if not isinstance(records, list) or not records or not isinstance(records[-1], dict):
+        return False
+    latest = records[-1]
+    if latest.get("state") != "inflight" or latest.get("response_base64"):
+        return False
+    if not isinstance(updated_at, datetime):
+        return False
+    moment = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - moment).total_seconds()
+    if age < UNANSWERED_INFLIGHT_SECONDS:
+        return False
+    latest["state"] = "unanswered"
+    latest["reason"] = "no provider response stored before the analyze claim expired"
+    checkpoint["phase"] = "ready"
+    return True
+
+
 def record_not_sent(state: dict, expected: str, reason: str) -> None:
     records = state.get("model_audit")
     if (

@@ -87,44 +87,49 @@ _HIDDEN_REASON = "隐藏工作表（附表/台账），未经确认不排除；�
 
 
 def _review_copy(sources: dict, body: bytes, fragment: dict, reason: str) -> bytes:
-    """Value copy of one region at source coordinates for manual review.
+    """Value copy of one region at source coordinates for manual review."""
+    return _review_document(sources, body, [fragment], reason)
 
-    Used when the faithful extractor refuses a region, so the rows stay covered and
-    visible instead of being replaced by an empty placeholder.
-    """
+
+def _review_document(sources: dict, body: bytes, fragments: list[dict], reason: str) -> bytes:
+    """Value copy of one document's regions. A hidden sheet stays for a person to confirm."""
     from io import BytesIO
 
     from openpyxl import Workbook, load_workbook
 
+    sheet_name = str(fragments[0]["sheet"])
+    if any(str(item.get("sheet")) != sheet_name for item in fragments):
+        raise ReviewedExcelError("跨工作表文档暂不能保证保真")
     if not sources:
         sources["values"] = load_workbook(BytesIO(body), data_only=True)
         sources["formulas"] = load_workbook(BytesIO(body), data_only=False)
-    c1, r1, c2, r2 = bounded_range(fragment["range"])
-    values = sources["values"][fragment["sheet"]]
-    formulas = sources["formulas"][fragment["sheet"]]
+    values = sources["values"][sheet_name]
+    formulas = sources["formulas"][sheet_name]
     book = Workbook()
     sheet = book.active
     assert sheet is not None
-    sheet.title = fragment["sheet"][:31]
-    for row in range(r1, r2 + 1):
-        for column in range(c1, c2 + 1):
-            value = values.cell(row, column).value
-            if value is None:
-                value = formulas.cell(row, column).value
-            if value is None or value == "":
-                continue
-            cell = sheet.cell(row, column, value)
-            if isinstance(value, str):
-                cell.data_type = "s"
-    for merged in formulas.merged_cells.ranges:
-        if (
-            c1 <= merged.min_col <= merged.max_col <= c2
-            and r1 <= merged.min_row <= merged.max_row <= r2
-        ):
-            sheet.merge_cells(str(merged))
+    sheet.title = sheet_name[:31]
+    for fragment in fragments:
+        c1, r1, c2, r2 = bounded_range(fragment["range"])
+        for row in range(r1, r2 + 1):
+            for column in range(c1, c2 + 1):
+                value = values.cell(row, column).value
+                if value is None:
+                    value = formulas.cell(row, column).value
+                if value is None or value == "":
+                    continue
+                cell = sheet.cell(row, column, value)
+                if isinstance(value, str):
+                    cell.data_type = "s"
+        for merged in formulas.merged_cells.ranges:
+            if (
+                c1 <= merged.min_col <= merged.max_col <= c2
+                and r1 <= merged.min_row <= merged.max_row <= r2
+            ):
+                sheet.merge_cells(str(merged))
     note = book.create_sheet("切片复核说明")
-    note.append(["来源工作表", fragment["sheet"]])
-    note.append(["来源范围", fragment["range"]])
+    note.append(["来源工作表", sheet_name])
+    note.append(["来源范围", "；".join(str(item["range"]) for item in fragments)])
     note.append(["状态", "待人工确认"])
     note.append(["原因", reason[:500]])
     buffer = BytesIO()
@@ -408,28 +413,43 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
         if source.get("drawing_evidence") and source.get("read_only_print_areas"):
             raise ReviewedExcelError("原打印区域无法安全映射，暂不能自动裁切")
         object_receipt: dict = {}
+        hidden_hold: str | None = None
         try:
             output = derive_document_workbook(
                 body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
             )
         except ReviewedExcelError as exc:
-            if "所选片段作为派生打印区域" not in str(exc):
+            message = str(exc)
+            if "所选片段作为派生打印区域" in message:
+                print_area_mode = "selected"
+                object_receipt = {}
+                output = derive_document_workbook(
+                    body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+                )
+            elif "隐藏工作表暂不能作为独立模板提取" in message:
+                hidden_hold = message
+                output = b""
+            else:
                 raise
-            print_area_mode = "selected"
-            object_receipt = {}
-            output = derive_document_workbook(
-                body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
-            )
-        results.append(
-            {
-                "print_area_mode": print_area_mode,
-                "range_objects_receipt": object_receipt,
-                "fragments": fragments,
-                "basis": basis,
-                "confirmed": False,
-                "source_sha256": source["sha256"],
-                "filename": _slice_filename(fragments, source["cells"], used_names, reason=reason),
-                "workbook": output,
-            }
-        )
+        record = {
+            "print_area_mode": print_area_mode,
+            "range_objects_receipt": object_receipt,
+            "fragments": fragments,
+            "basis": basis,
+            "confirmed": False,
+            "source_sha256": source["sha256"],
+            "filename": _slice_filename(fragments, source["cells"], used_names, reason=reason),
+            "workbook": output,
+        }
+        if hidden_hold is not None:
+            copy_sources: dict = {}
+            try:
+                record["workbook"] = _review_document(copy_sources, body, fragments, _HIDDEN_REASON)
+            finally:
+                for book in copy_sources.values():
+                    book.close()
+            record["status"] = "pending_review"
+            record["error"] = hidden_hold
+            record["review_reason"] = _HIDDEN_REASON
+        results.append(record)
     return results
