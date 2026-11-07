@@ -147,6 +147,7 @@ def parse_shipment_history_rows(
     *,
     canonical_by_alias: dict[str, str],
     max_rows: int,
+    default_customer: str = "",
 ) -> list[ParsedRow]:
     """Parse a high-confidence historical shipment sheet for product-master preview only."""
     if _FINANCE_SHEET_RE.search(worksheet.title):
@@ -156,7 +157,10 @@ def parse_shipment_history_rows(
     last_customer_raw = ""
     for row_number, raw_values in enumerate(worksheet.iter_rows(values_only=True), start=1):
         values = tuple(raw_values)
-        explicit_customer = clean_cell_text(values[0] if values else "")
+        first = values[0] if values else ""
+        # A per-customer workbook keys its ledger by date, never by customer name.
+        dated = bool(_source_date(first))
+        explicit_customer = "" if dated else clean_cell_text(first)
         if explicit_customer and _FINANCE_SHEET_RE.search(explicit_customer):
             continue
         candidate = _line_candidate(values)
@@ -164,11 +168,13 @@ def parse_shipment_history_rows(
             continue
         if explicit_customer:
             last_customer_raw = explicit_customer
-        customer_raw = explicit_customer or last_customer_raw
-        if not customer_raw:
+        customer_raw = explicit_customer or last_customer_raw or default_customer
+        if not customer_raw and not dated:
             continue
         source_date, source_date_column = _source_date_from_values(values)
-        customer_name = _canonical_customer(customer_raw, canonical_by_alias)
+        customer_name = (
+            _canonical_customer(customer_raw, canonical_by_alias) if customer_raw else ""
+        )
         values_out = {
             "customer_name": customer_name,
             "name": candidate["product_name"],
@@ -202,6 +208,7 @@ def parse_shipment_history_rows(
                         "last_column": candidate["last_column"],
                     },
                     "customer_alias_source": customer_raw,
+                    "customer_unresolved": not customer_raw,
                     "source_date": source_date,
                     "source_date_column": source_date_column or None,
                 },
@@ -216,6 +223,54 @@ def parse_shipment_history_rows(
     if not _SHIPMENT_SHEET_RE.search(worksheet.title) and len(rows) < 3:
         return []
     return rows
+
+
+def ledger_row_verification(
+    rows: list[ParsedRow], state: dict[int, str], *, written_rows: int, target_type: str
+) -> dict[str, Any]:
+    """Row-by-row destination of companion ledger lines; a shortfall needs confirmation."""
+    records = []
+    for row in rows:
+        fragment = row.provenance.get("original_fragment") or {}
+        kg, price, amount = (
+            _number(fragment.get("quantity_kg")),
+            _number(fragment.get("price")),
+            _number(fragment.get("amount")),
+        )
+        records.append(
+            {
+                "sheet": row.sheet,
+                "row": row.row_number,
+                "customer_name": row.values.get("customer_name") or "",
+                "product": row.values.get("name") or "",
+                "quantity_kg": kg,
+                "price": price,
+                "amount": amount,
+                "amount_consistent": (
+                    None
+                    if None in (kg, price, amount)
+                    else abs(kg * price - amount) <= max(0.05, abs(amount) * 0.01)
+                ),
+                "source_date": row.provenance.get("source_date") or "",
+                "customer_unresolved": bool(row.provenance.get("customer_unresolved")),
+                "status": state.get(id(row), "superseded_by_newer_record"),
+            }
+        )
+    counts: dict[str, int] = {}
+    for record in records:
+        counts[record["status"]] = counts.get(record["status"], 0) + 1
+    by_sheet: dict[str, int] = {}
+    for record in records:
+        by_sheet[record["sheet"]] = by_sheet.get(record["sheet"], 0) + 1
+    return {
+        "total_rows": len(records),
+        "sheets": by_sheet,
+        "status_counts": dict(sorted(counts.items())),
+        "written_rows": written_rows,
+        "customer_unresolved_rows": sum(record["customer_unresolved"] for record in records),
+        "confirmation_required": target_type == "shipment_records" and len(records) > written_rows,
+        "rows": records,
+    }
 
 
 def product_match_key(values: dict[str, Any]) -> tuple[str, str, str]:
@@ -350,6 +405,7 @@ def parse_structured_shipment_history_rows(
                     "source_kind": "structured_shipment_history",
                     "header_rows": {"start": header_row, "end": header_row},
                     "customer_alias_source": customer_raw,
+                    "customer_unresolved": not customer_raw,
                     "source_date": source_date,
                     "source_date_column": date_column,
                 },
@@ -449,6 +505,7 @@ def parse_quote_rows(
 
 __all__ = [
     "customer_alias_key",
+    "ledger_row_verification",
     "parse_quote_rows",
     "parse_shipment_history_rows",
     "parse_structured_shipment_history_rows",
