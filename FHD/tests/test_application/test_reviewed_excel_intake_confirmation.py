@@ -1,5 +1,6 @@
 """Real prepared XLSX runs bind reviewed intake consent to scope and content."""
 
+import json
 from io import BytesIO
 from pathlib import Path
 from threading import Event
@@ -59,6 +60,11 @@ def intake_store(review_store, rag_service, monkeypatch, account_session_client)
         ),
     )
     monkeypatch.setenv("FHD_ETL_LLM", "off")
+
+    def old_parser_must_not_run(*_args, **_kwargs):
+        raise AssertionError("旧解析器不能参与所选候选的入库")
+
+    monkeypatch.setattr("app.application.elt.service_preview.parse_file", old_parser_must_not_run)
     monkeypatch.setattr(ais, "get_app_data_dir", lambda: str(store.root))
     monkeypatch.setattr(path_utils, "get_app_data_dir", lambda **_: str(store.root))
     monkeypatch.setattr(ais, "get_auto_ingest_service", lambda: store.intake)
@@ -120,7 +126,7 @@ def review(store):
         "review_id": data["review_id"],
         "proposal_version": data["proposal"]["version"],
         "candidate_id": data["proposal"]["candidates"][0]["id"],
-        "selections": "[]",
+        "selections": json.dumps(data["proposal"]["candidates"][0]["clear"]),
         "name": "已确认客户",
         "composer_note": "核对客户数据",
     }
@@ -175,9 +181,7 @@ def test_auto_ingest_start_failure_keeps_safe_diagnostics_and_saved_receipt(
     assert replay["replayed"] and replay["auto_ingest"] == failure
 
 
-def test_exact_prepared_run_reuses_original_for_ingest_and_cleans_for_template(
-    intake_store, monkeypatch
-):
+def test_exact_prepared_run_ingests_the_selected_candidate(intake_store, monkeypatch):
     store = intake_store
     data, plan, business = prepare(store)
     assert plan["target_type"] == "customers"
@@ -187,9 +191,10 @@ def test_exact_prepared_run_reuses_original_for_ingest_and_cleans_for_template(
     with store.factory() as db:
         before = (db.query(EltRun).count(), db.query(EltUpload).count())
         prepared = Path(db.get(EltUpload, plan["upload_id"]).storage_path).read_bytes()
-        # Staged intake upload is the original workbook (sha equals review source).
-        assert plan["candidate_sha256"] == db.get(EltUpload, plan["upload_id"]).sha256
-        assert plan["source_sha256"] == plan["candidate_sha256"]
+        staged = db.get(EltUpload, plan["upload_id"])
+        assert plan["candidate_sha256"] == staged.sha256
+        assert plan["source_sha256"] != "" and staged.sha256
+        assert Path(staged.storage_path).read_bytes() == prepared
 
     clean_calls = {"n": 0}
     real_clean = routes.clean_workbook
@@ -220,7 +225,7 @@ def test_exact_prepared_run_reuses_original_for_ingest_and_cleans_for_template(
     assert len(store.starts) == 1
     assert store.starts[0]["prepared_plan"]["run_id"] == plan["run_id"]
     assert store.starts[0]["prepared_plan"]["preview_revision"] == data["preview_revision"]
-    # Ingest path must reuse the staged ORIGINAL bytes.
+    # Ingest reuses the staged candidate workbook from preview.
     assert Path(store.starts[0]["source_path"]).read_bytes() == prepared
     replay = store.client.post(f"{BASE}/save", data=data)
     assert replay.status_code == 200 and replay.json()["replayed"] is True
@@ -231,6 +236,40 @@ def test_exact_prepared_run_reuses_original_for_ingest_and_cleans_for_template(
         assert db.get(EltRun, plan["run_id"]).status == "completed"
         assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
     assert len(store.rag.status(dataset_id="office-docking", tenant_id="1")["documents"]) == 1
+
+
+def test_selected_candidate_clears_are_not_recovered_from_original(intake_store, monkeypatch):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    store = intake_store
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete",
+        lambda *_args, **_kwargs: LlmAssistResult(
+            used_llm=True,
+            provider="platform",
+            model="synthetic",
+            data={
+                "candidates": [
+                    {
+                        "clear": [{"sheet": "客户", "cell": cell} for cell in ("B2", "A3", "B3")],
+                        "reason": "Remove one record and one private field",
+                    }
+                    for _ in range(3)
+                ]
+            },
+        ),
+    )
+    data, plan, business = prepare(store)
+    assert business["summary"]["new"] == 1
+    assert plan["candidate_sha256"] != plan["source_sha256"]
+    saved = store.client.post(f"{BASE}/save", data=data)
+    assert saved.status_code == 200, saved.text
+    store.executor.futures[-1].result(timeout=10)
+    with tenant_scope(1), store.factory() as db:
+        customer = db.query(PurchaseUnit).one()
+        assert customer.unit_name == "确认客户甲"
+        assert not customer.contact_phone
+        assert db.get(EltRun, plan["run_id"]).status == "completed"
 
 
 def test_knowledge_changed_since_preview_requires_new_consent(intake_store):
@@ -392,7 +431,8 @@ def test_private_intake_requires_preview_and_unscoped_attendance_is_refused(inta
     response = store.client.post(f"{BASE}/save", data={**data, "private_intake": "true"})
     assert response.status_code == 409
     response = store.client.post(f"{BASE}/intake-preview", data={**data, "composer_note": "考勤"})
-    assert response.status_code == 409 and "业务空间" in response.text
+    assert response.status_code == 200, response.text
+    assert response.json()["intake"]["target_type"] == "customers"
     assert_no_writes(store)
 
 

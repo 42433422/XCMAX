@@ -137,6 +137,17 @@ class MarketSSEDecoder:
         if line_text == "[DONE]":
             self.done = True
             return None
+        if self.current_event == "status":
+            try:
+                raw = json.loads(line_text)
+            except json.JSONDecodeError:
+                raw = {}
+            state = raw.get("state") if isinstance(raw, dict) else None
+            status_payload = {"status": state or "processing"}
+            request_id = raw.get("request_id") if isinstance(raw, dict) else None
+            if isinstance(request_id, str) and request_id:
+                status_payload["request_id"] = request_id
+            return json.dumps(status_payload, ensure_ascii=False)
         if self.current_event == "error":
             # The gateway puts the event kind in the SSE header, not body.type.
             try:

@@ -68,7 +68,7 @@ def test_customer_chain_fails_closed_on_data_loss_and_passes_only_when_complete(
             checks=checks,
             hard_fail=False,
         )
-        == "PARTIAL PASS"
+        == "FAIL"
     )
 
 
@@ -219,3 +219,144 @@ def test_unconfirmed_customer_file_does_not_count_as_pass(tmp_path):
     assert report["checks"]["B31-35"] == "not_tested"
     assert any("未经确认" in note for note in report["notes"])
     assert not list(tmp_path.glob("**/*.sqlite"))
+
+
+def _matrix_book(path, *, marks=("√", "✘"), extra_rows=()):
+    import calendar
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "考勤"
+    for year, month in ((2026, 2), (2026, 3)):
+        days = calendar.monthrange(year, month)[1]
+        sheet.append([f"{year}年{month}月考勤表"])
+        sheet.append(
+            [
+                "",
+                *(
+                    "一二三四五六日"[calendar.weekday(year, month, day)]
+                    for day in range(1, days + 1)
+                ),
+            ]
+        )
+        sheet.append(["姓名", *range(1, days + 1)])
+        sheet.append(["张三", marks[0], marks[1]])
+        sheet.append(["李四"])
+        sheet.append(["备注：月底结算"])
+    for row in extra_rows:
+        sheet.append(row)
+    book.save(path)
+    book.close()
+
+
+def test_monthly_matrix_reaches_every_row_and_reconciles_monthly_records(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
+    path = tmp_path / "客户考勤原件.xlsx"
+    _matrix_book(path)
+    report = evaluate_workbook(
+        path,
+        {
+            "version": "v",
+            "task_id": "matrix",
+            "confirmed": True,
+            "business_records": 4,
+            "absent_days": 2,
+            "present_marked_days": 2,
+            "exception_rows": 0,
+        },
+        data_dir=tmp_path / "gate",
+    )
+    assert report["checks"]["B31-16"] == "pass"
+    assert report["checks"]["B31-35"] == "pass"
+    assert report["checks"]["B31-36"] == "pass"
+    assert report["checks"]["B31-42"] == "pass"
+    assert not any("没有去向" in note for note in report["notes"])
+    with sqlite3.connect(tmp_path / "gate" / "b31.sqlite") as conn:
+        stored = conn.execute(
+            "SELECT employee_name, work_month, absent_dates FROM attendance_monthly_marks "
+            "ORDER BY work_month, employee_name"
+        ).fetchall()
+    assert stored == [
+        ("张三", "2026-02", "2026-02-02"),
+        ("李四", "2026-02", ""),
+        ("张三", "2026-03", "2026-03-02"),
+        ("李四", "2026-03", ""),
+    ]
+
+
+def test_monthly_matrix_wrong_manual_total_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
+    path = tmp_path / "客户考勤原件.xlsx"
+    _matrix_book(path)
+    report = evaluate_workbook(
+        path,
+        {
+            "version": "v",
+            "task_id": "m",
+            "confirmed": True,
+            "business_records": 4,
+            "absent_days": 3,
+        },
+        data_dir=tmp_path / "gate",
+    )
+    assert report["status"] == "FAIL"
+    assert report["checks"]["B31-42"] == "fail"
+
+
+def test_unknown_mark_is_an_exception_not_a_silent_value(tmp_path):
+    from app.application.elt.attendance_pipeline import parse_attendance_dataset
+
+    path = tmp_path / "考勤.xlsx"
+    _matrix_book(path, marks=("√", "Ⅹ"))
+    dataset = parse_attendance_dataset(path, max_rows=100)
+    issues = [row.provenance["clean"]["validation_result"] for row in dataset.rows]
+    assert len(dataset.rows) == 4
+    assert sum(1 for item in issues if item) == 2
+    assert all(issue["code"] == "ELT_ATTENDANCE_MARK_UNKNOWN" for item in issues for issue in item)
+    assert all(not row.values["business_id"] for row, item in zip(dataset.rows, issues) if item)
+
+
+def test_content_without_recognised_region_blocks_confirmation(tmp_path):
+    from app.application.elt.attendance_pipeline import parse_attendance_dataset
+    from app.application.elt.errors import EltError
+
+    path = tmp_path / "考勤.xlsx"
+    book = Workbook()
+    book.active.append(["随便写的", "不是考勤"])
+    book.save(path)
+    book.close()
+    try:
+        parse_attendance_dataset(path, max_rows=100)
+    except EltError as exc:
+        assert exc.code == "ELT_ATTENDANCE_REGION_UNPARSED"
+    else:
+        raise AssertionError("unparsed content must not produce an empty confirmable preview")
+    report = evaluate_workbook(
+        path, {"version": "v", "task_id": "z", "confirmed": True}, data_dir=tmp_path / "gate"
+    )
+    assert report["status"] == "FAIL"
+    assert report["checks"]["B31-04"] == "fail"
+
+
+def test_rows_without_destination_fail_the_gate(tmp_path, monkeypatch):
+    from app.application.elt import customer_excel_gate as gate
+
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
+    path = tmp_path / "客户考勤原件.xlsx"
+    _matrix_book(path)
+    real = gate._row_destinations
+
+    def drop_notes(sheets, rows):
+        roles = real(sheets, rows)
+        for target in roles.values():
+            for line in [key for key, role in target.items() if role == "note"]:
+                del target[line]
+        return roles
+
+    monkeypatch.setattr(gate, "_row_destinations", drop_notes)
+    report = evaluate_workbook(
+        path, {"version": "v", "task_id": "o", "confirmed": True}, data_dir=tmp_path / "gate"
+    )
+    assert report["status"] == "FAIL"
+    assert report["checks"]["B31-16"] == "fail"
+    assert any("没有去向" in note for note in report["notes"])

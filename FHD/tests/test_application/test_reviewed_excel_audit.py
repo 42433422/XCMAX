@@ -272,13 +272,14 @@ def test_template_call_passes_configured_timeout_to_http(monkeypatch, setting, e
                 200,
                 json={"ok": True, "provider": "deepseek", "model": "synthetic-model"},
             )
-        assert request.url.path == "/api/llm/chat"
+        assert request.url.path == "/api/llm/chat/stream"
         body = json.loads(request.content)
         assert body["provider"] == "deepseek" and body["model"] == "synthetic-model"
         assert "_reviewed_excel_transport_timeout" not in body
         return httpx.Response(
             200,
-            json={"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]},
+            headers={"content-type": "text/event-stream"},
+            text='data: {"delta":"{}"}\n\ndata: [DONE]\n\n',
         )
 
     real_client = httpx.AsyncClient
@@ -296,4 +297,4 @@ def test_template_call_passes_configured_timeout_to_http(monkeypatch, setting, e
 
     monkeypatch.setattr(llm_session_provider, "current_owner_market_provider", session_provider)
     assert _template_platform_complete([], {"type": "object"}, 100, owner_id=7).data == {}
-    assert seen == [("GET", "/api/llm/resolve-chat-default"), ("POST", "/api/llm/chat")]
+    assert seen == [("GET", "/api/llm/resolve-chat-default"), ("POST", "/api/llm/chat/stream")]

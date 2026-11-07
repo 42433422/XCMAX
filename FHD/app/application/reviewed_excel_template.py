@@ -169,19 +169,40 @@ def _template_platform_complete(
         except INFRA_TRANSIENT:
             raise ModelRequestNotSent("平台模型初始化失败；未调用模型") from None
         audit_callback = response_capture()
+        seen = {"on": False}
+
+        def _still_processing() -> None:
+            seen["on"] = True
 
         async def call():
-            return await asyncio.wait_for(
+            task = asyncio.create_task(
                 provider.chat_completion(
                     messages,
                     temperature=0.0,
                     max_tokens=max_tokens,
+                    _processing_status=_still_processing,
                     **(
                         {"_reviewed_excel_audit_response": audit_callback} if audit_callback else {}
                     ),
-                ),
-                timeout=timeout_seconds,
+                )
             )
+            try:
+                while True:
+                    done, _pending = await asyncio.wait({task}, timeout=timeout_seconds)
+                    if task in done:
+                        return task.result()
+                    if not seen["on"]:
+                        break
+                    seen["on"] = False
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                raise TimeoutError
+            finally:
+                if not task.done():
+                    task.cancel()
 
         try:
             response = asyncio.run(call())

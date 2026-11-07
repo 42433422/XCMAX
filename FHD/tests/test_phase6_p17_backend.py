@@ -500,80 +500,38 @@ class TestModstorePlatformAdapterChatCompletion:
             await a.chat_completion([{"role": "user", "content": "hi"}])
 
     @pytest.mark.asyncio
-    async def test_chat_completion_success(self, chat_discovery_http):
+    @pytest.mark.parametrize("status,user_id", [(200, None), (500, None), (200, 99)])
+    async def test_chat_completion_stream_contract(self, chat_discovery_http, status, user_id):
+        import httpx
+
         from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
-        a = ModstorePlatformAdapter(platform_url="http://test", auth_token="tok")
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "content": "hello",
-            "usage": {},
-            "success": True,
-        }
+        calls = []
 
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client.is_closed = False
-        a._client = mock_client
+        def respond(request):
+            calls.append(request)
+            return httpx.Response(
+                status,
+                headers={"content-type": "text/event-stream"},
+                text='data: {"content":"hello"}\n\ndata: [DONE]\n\n',
+            )
 
-        with (
-            patch(
-                "app.domain.shared_services.conversation.modstore_adapter.neuro_notify_ai_model_roundtrip",
-                create=True,
-            ),
-            patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip",
-                create=True,
-            ),
-        ):
-            result = await a.chat_completion([{"role": "user", "content": "hi"}])
-        assert result["choices"][0]["message"]["content"] == "hello"
-
-    @pytest.mark.asyncio
-    async def test_chat_completion_http_error_raises_value_error(self, chat_discovery_http):
-        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
-
-        a = ModstorePlatformAdapter(platform_url="http://test", auth_token="tok")
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-        mock_response.text = "Internal Server Error"
-
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client.is_closed = False
-        a._client = mock_client
-
-        with pytest.raises(ValueError, match="平台错误"):
-            await a.chat_completion([{"role": "user", "content": "hi"}])
-
-    @pytest.mark.asyncio
-    async def test_chat_completion_with_user_id_in_payload(self, chat_discovery_http):
-        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
-
-        a = ModstorePlatformAdapter(platform_url="http://test", user_id=99)
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"content": "ok", "usage": {}, "success": True}
-
-        mock_client = AsyncMock()
-        mock_client.is_closed = False
-        mock_client.post = AsyncMock(return_value=mock_response)
-        a._client = mock_client
-
-        with (
-            patch(
-                "app.domain.shared_services.conversation.modstore_adapter.neuro_notify_ai_model_roundtrip",
-                create=True,
-            ),
-            patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip",
-                create=True,
-            ),
-        ):
-            await a.chat_completion([{"role": "user", "content": "hi"}])
-        call_kwargs = mock_client.post.call_args
-        assert call_kwargs[1]["json"]["user_id"] == 99
+        adapter = ModstorePlatformAdapter(
+            platform_url="http://test", auth_token="tok", user_id=user_id
+        )
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            adapter._client = client
+            if status == 500:
+                with pytest.raises(ValueError, match="平台错误\\(500\\)"):
+                    await adapter.chat_completion([{"role": "user", "content": "hi"}])
+            else:
+                result = await adapter.chat_completion([{"role": "user", "content": "hi"}])
+                assert result["choices"][0]["message"]["content"] == "hello"
+        assert len(calls) == 1
+        assert calls[0].method == "POST" and calls[0].url.path == "/api/llm/chat/stream"
+        payload = json.loads(calls[0].content)
+        assert payload.get("user_id") == user_id
+        assert ("user_id" in payload) == (user_id is not None)
 
 
 class TestModstorePlatformAdapterFromSession:

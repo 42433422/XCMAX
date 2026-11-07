@@ -39,7 +39,32 @@ def allow_tmp_ingest_paths(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
 
 
+def _candidate_plan(fake, monkeypatch, run_id, source: Path, revision="rev-1"):
+    ready = {
+        "id": run_id,
+        "status": "preview_ready",
+        "preview_revision": revision,
+        "target_type": "shipment_records",
+    }
+    fake.get_run.return_value = ready
+    monkeypatch.setattr(
+        "app.utils.path_io.path_utils.get_app_data_dir",
+        lambda **_kwargs: str(source.parents[4]),
+    )
+    monkeypatch.setattr(AutoIngestService, "validate_prepared", lambda self, _db, **_kwargs: ready)
+    return {
+        "run_id": run_id,
+        "upload_id": "up-1",
+        "preview_revision": revision,
+        "target_type": "shipment_records",
+        "detection": {"target_type": "shipment_records", "reason": "candidate_headers"},
+        "name": "候选",
+        "note": "",
+    }
+
+
 def _shipment_xlsx(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
     ws = wb.active
     ws.title = "出货"
@@ -54,7 +79,7 @@ def _shipment_xlsx(path: Path) -> Path:
 def test_auto_ingest_writes_knowledge_and_records_business(
     rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
-    xlsx = _shipment_xlsx(tmp_path / "26鑫顺.xlsx")
+    xlsx = _shipment_xlsx(tmp_path / "data" / "etl" / "uploads" / "42" / "7" / "26鑫顺.xlsx")
     fake_etl = MagicMock()
     fake_etl.save_upload.return_value = {"upload_id": "up-1"}
     fake_etl.create_preview.return_value = {
@@ -70,6 +95,7 @@ def test_auto_ingest_writes_knowledge_and_records_business(
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake_etl)
 
     service = AutoIngestService()
+    plan = _candidate_plan(fake_etl, monkeypatch, "run-1", xlsx)
     with tenant_scope(42):
         batch = service.run(
             MagicMock(),
@@ -81,6 +107,7 @@ def test_auto_ingest_writes_knowledge_and_records_business(
             review_id="rev-excel-1",
             labels=["出货", "送货单"],
             composer_note="整理要求：保留客户与单号",
+            prepared_plan=plan,
         )
 
     assert batch["status"] == "applied"
@@ -89,7 +116,7 @@ def test_auto_ingest_writes_knowledge_and_records_business(
     assert batch["knowledge"]["action"] in {"new", "update"}
     assert batch["business"]["target_type"] == "shipment_records"
     assert batch["business"]["run_id"] == "run-1"
-    fake_etl.create_preview.assert_called_once()
+    fake_etl.create_preview.assert_not_called()
     fake_etl.execute.assert_called_once()
 
     docs = rag_service.status(dataset_id="office-docking", tenant_id="42")["documents"]
@@ -102,7 +129,7 @@ def test_auto_ingest_writes_knowledge_and_records_business(
 def test_auto_ingest_withdraw_rolls_back_kb_and_business(
     rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
-    xlsx = _shipment_xlsx(tmp_path / "ship.xlsx")
+    xlsx = _shipment_xlsx(tmp_path / "data" / "etl" / "uploads" / "9" / "3" / "ship.xlsx")
     fake_etl = MagicMock()
     fake_etl.save_upload.return_value = {"upload_id": "up-2"}
     fake_etl.create_preview.return_value = {
@@ -115,6 +142,7 @@ def test_auto_ingest_withdraw_rolls_back_kb_and_business(
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake_etl)
 
     service = AutoIngestService()
+    plan = _candidate_plan(fake_etl, monkeypatch, "run-2", xlsx, "rev-2")
     with tenant_scope(9):
         batch = service.run(
             MagicMock(),
@@ -123,6 +151,7 @@ def test_auto_ingest_withdraw_rolls_back_kb_and_business(
             source_path=xlsx,
             file_name="ship.xlsx",
             labels=["出货"],
+            prepared_plan=plan,
         )
         doc_id = batch["knowledge"]["match_ref"]
         assert rag_service.status(dataset_id="office-docking", tenant_id="9")["documents"]
@@ -140,7 +169,7 @@ def test_auto_ingest_withdraw_rolls_back_kb_and_business(
 def test_auto_ingest_progress_tracks_real_stages(
     rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
-    xlsx = _shipment_xlsx(tmp_path / "progress.xlsx")
+    xlsx = _shipment_xlsx(tmp_path / "data" / "etl" / "uploads" / "7" / "3" / "progress.xlsx")
     fake_etl = MagicMock()
     fake_etl.save_upload.return_value = {"upload_id": "up-p"}
     fake_etl.create_preview.return_value = {
@@ -156,6 +185,7 @@ def test_auto_ingest_progress_tracks_real_stages(
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake_etl)
 
     service = AutoIngestService()
+    plan = _candidate_plan(fake_etl, monkeypatch, "run-p", xlsx, "rev-p")
     with tenant_scope(7):
         batch = service.run(
             MagicMock(),
@@ -164,6 +194,7 @@ def test_auto_ingest_progress_tracks_real_stages(
             source_path=xlsx,
             file_name="progress.xlsx",
             labels=["出货"],
+            prepared_plan=plan,
         )
         progress = service.get_progress(tenant_id=7, owner_user_id=3, batch_id=batch["batch_id"])
 
@@ -197,17 +228,30 @@ def test_async_business_receipts_follow_actual_run_without_reexecution(
         "status": "executing",
         "progress": 30,
         "summary": {"executed": 0},
+        "target_type": "shipment_records",
+        "preview_revision": "rev",
     }
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake)
     monkeypatch.setattr("app.db.session.get_db", lambda: nullcontext(MagicMock()))
     service = AutoIngestService()
     with tenant_scope(42):
+        source = _shipment_xlsx(tmp_path / "data" / "etl" / "uploads" / "42" / "7" / "async.xlsx")
+        plan = _candidate_plan(fake, monkeypatch, "run-async", source, "rev")
+        fake.get_run.return_value = {
+            "id": "run-async",
+            "status": "executing",
+            "progress": 30,
+            "summary": {"executed": 0},
+            "target_type": "shipment_records",
+            "preview_revision": "rev",
+        }
         batch = service.run(
             MagicMock(),
             owner_user_id=7,
             tenant_id=42,
-            source_path=_shipment_xlsx(tmp_path / "async.xlsx"),
+            source_path=source,
             file_name="async.xlsx",
+            prepared_plan=plan,
         )
         assert batch["status"] == "running"
         assert batch["business_progress"]["pct"] < 100
@@ -222,6 +266,8 @@ def test_async_business_receipts_follow_actual_run_without_reexecution(
             "status": terminal,
             "progress": 100,
             "summary": {"executed": 1},
+            "target_type": "shipment_records",
+            "preview_revision": "rev",
         }
         final = service.get_progress(tenant_id=42, owner_user_id=7, batch_id=batch["batch_id"])
         assert final["status"] == ("applied" if terminal == "completed" else "failed")
@@ -251,13 +297,16 @@ def test_business_failure_preserves_completed_knowledge_receipt(
     }
     fake.execute.side_effect = EltError("ELT_PREVIEW_STALE", "业务预演已变化")
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake)
+    source = _shipment_xlsx(tmp_path / "data" / "etl" / "uploads" / "42" / "7" / "error.xlsx")
+    plan = _candidate_plan(fake, monkeypatch, "run-error", source, "rev")
     with tenant_scope(42), pytest.raises(EltError):
         AutoIngestService().run(
             MagicMock(),
             owner_user_id=7,
             tenant_id=42,
-            source_path=_shipment_xlsx(tmp_path / "error.xlsx"),
+            source_path=source,
             file_name="error.xlsx",
+            prepared_plan=plan,
         )
     saved = next(iter(ais._load_ledger(42)["batches"].values()))
     assert saved["status"] == "failed"

@@ -340,17 +340,25 @@ def test_source_request_key_is_required_and_bounded(source_client, request_key):
     assert response.status_code == 422
 
 
-def test_legacy_upload_keeps_seven_day_retention_and_response_contract(source_client):
+def test_upload_keeps_seven_day_retention_for_reviewed_intake(source_client):
     store = source_client
     before = datetime.now(UTC)
     batch_id = "7af2693b-cf7c-4a15-af76-e725ee15470a"
-    response = store.client.post(
-        "/api/elt/uploads",
-        files={"file": ("legacy.csv", ORIGINAL, "text/csv")},
-        data={"batch_id": batch_id, "relative_path": "folder/legacy.csv"},
-    )
-    assert response.status_code == 201, response.text
-    data = response.json()["data"]
+    from io import BytesIO
+
+    from app.application.elt.service import get_elt_service
+
+    with tenant_scope(1), store.factory() as db:
+        data = get_elt_service().save_upload(
+            db,
+            owner_user_id=7,
+            file_name="legacy.csv",
+            content_type="text/csv",
+            stream=BytesIO(ORIGINAL),
+            batch_id=batch_id,
+            relative_path="folder/legacy.csv",
+        )
+        db.commit()
     assert data["file_name"] == "legacy.csv" and data["batch_id"] == batch_id
     assert data["relative_path"] == "folder/legacy.csv"
     assert data["sha256"] == hashlib.sha256(ORIGINAL).hexdigest()

@@ -1572,43 +1572,36 @@ def reviewed_excel_intake_preview(
             key = _intake_selection_key(
                 review, proposal_version, candidate_id, selected, name, composer_note
             )
-            # Template cleanup and ingest must diverge: cleaned bytes are for the
-            # saved template file only. Intake preview / knowledge / business runs
-            # must parse the original workbook or empty cleared cells starve ingest.
+            # The person already chose this candidate. Preview and later writes use
+            # that workbook, not a second parse of the untouched original.
             original = _source(db, review, tenant, owner)
-            clean_workbook(original, review.file_sha256, selected)  # validate selections
+            chosen = clean_workbook(original, review.file_sha256, selected)
             service = get_elt_service()
             upload = service.save_upload(
                 db,
                 owner_user_id=owner,
                 file_name=f"{name.strip()}.xlsx",
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                stream=BytesIO(original),
+                stream=BytesIO(chosen),
             )
             source = service._owned_upload(db, upload["upload_id"], owner)
             if source.tenant_id != tenant:
                 raise HTTPException(status_code=403, detail="无权使用该入库预演")
             path = staged_path = Path(source.storage_path)
-            summary = load_json(review.summary_json, {})
-            region = summary.get("selected_region") or {}
-            labels = [
-                str(region.get(field) or summary.get(field) or "")
-                for field in ("document_type", "semantic_label", "label", "sheet")
-            ]
-            labels.append(composer_note.strip())
-            intake = get_auto_ingest_service()
-            detection = intake.detect_target(
-                path, labels, owned_upload_user_id=source.owner_user_id
+            from app.application.elt.candidate_table import (
+                match_business_target,
+                read_candidate_table,
             )
-            target_type = str(detection.get("target_type") or "")
-            if not target_type or str(detection.get("reason") or "").startswith(
-                "safe_structured_fallback"
-            ):
-                raise HTTPException(
-                    status_code=409,
-                    detail="尚未识别业务目标，未开始写入；请核对文件表头或补充整理要求后重新预演",
-                )
+
+            chosen_table = read_candidate_table(path)
+            target_type = match_business_target(chosen_table.headers)
+            detection = {
+                "target_type": target_type,
+                "reason": "candidate_headers",
+                "confirmed": True,
+            }
             _authorize_intake(request, (tenant, owner), target_type)
+            intake = get_auto_ingest_service()
             knowledge = intake.knowledge_plan(
                 path=path,
                 file_name=name.strip(),
@@ -1618,7 +1611,11 @@ def reviewed_excel_intake_preview(
             )
             preview_started = True
             business = service.create_preview(
-                db, owner_user_id=owner, upload_id=upload["upload_id"], target_type=target_type
+                db,
+                owner_user_id=owner,
+                upload_id=upload["upload_id"],
+                target_type=target_type,
+                source_dataset=chosen_table,
             )
             plan = {
                 "run_id": business["id"],
@@ -1781,8 +1778,8 @@ async def reviewed_excel_save(
                     "preview_revision": preview_revision,
                     "valid_rows_only": valid_rows_only,
                 }
-                # Staged upload is the original workbook for ingest/knowledge.
-                # Template library still receives the cleaned copy derived here.
+                # The staged upload is the candidate chosen at preview. The template
+                # file is the same cleanup, written again from the archived original.
                 cleaned = clean_workbook(body, run.file_sha256, selected)
             else:
                 # Old template-library clients authorize one template only, never implicit business writes.
@@ -1945,7 +1942,7 @@ async def reviewed_excel_save(
                 auto_ingest = get_auto_ingest_service().start_background(
                     owner_user_id=owner,
                     tenant_id=tenant,
-                    # Staged original workbook — never the cleaned template file.
+                    # Staged candidate workbook chosen at preview.
                     source_path=str(prepared_path),
                     file_name=name.strip(),
                     template_id=str(template_id),

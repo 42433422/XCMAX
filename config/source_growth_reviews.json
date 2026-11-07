@@ -99,13 +99,13 @@
     },
     "FHD/app/application/reviewed_excel_template.py": {
       "base_file": "FHD/app/application/reviewed_excel_template.py",
-      "base_blob": "543ec26705272798f29734ed8c5e5f6f88c4bda6",
-      "head_blob": "cde2e0e83017ce38f0822d040a37f9966e6a23dc",
-      "before_lines": 1265,
-      "after_lines": 1304,
-      "reason": "Real workbook classification needs bounded structural sampling and explicit skipped-part evidence; integration repairs preserve strict drawing validation and reject lossy cleaning or derivation.",
+      "base_blob": "cde2e0e83017ce38f0822d040a37f9966e6a23dc",
+      "head_blob": "5a0d5f2f5830bbb81a9369c068540b60b2bea61a",
+      "before_lines": 1304,
+      "after_lines": 1325,
+      "reason": "The same model request may report processing while its SSE completion remains active; classification keeps grid and drawing evidence separate.",
       "boundary": "Workbook inspection and derivation admission only. Existing drawing, formula, range-object, and classification modules retain their responsibilities.",
-      "validation": "Drawing/range-object regressions and workbook/auto-slice/ETL acceptance tests pass; one private customer workbook test remains explicitly skipped because originals are unavailable.",
+      "validation": "Reviewed workbook drawing and structural tests plus stream waiting regressions validate synthetic model evidence and completion handling.",
       "follow_up": "Separate inspection policy from workbook derivation when the next feature changes both; retain fail-closed fidelity checks and keep private-source acceptance distinct from synthetic tests.",
       "review_owner": "@42433422"
     },
@@ -156,6 +156,18 @@
       "validation": "Six isolated cloud HTTP tests cover both provider configurations, status/code consistency and no session or user mutation; desktop and mobile bridge contract regressions also pass.",
       "follow_up": "Keep SMS unavailable until a real provider and rate-limit/verification flow are independently reviewed; extract authentication capabilities only with a concrete broader boundary change.",
       "review_owner": "@42433422"
+    },
+    "FHD/app/application/elt/attendance_pipeline.py": {
+      "base_file": "FHD/app/application/elt/attendance_pipeline.py",
+      "base_blob": "85b2440a6941d230651d018aad4af912298e59b3",
+      "head_blob": "1ad52242f7a32da9128e39406e6a02f3e4d402ba",
+      "before_lines": 593,
+      "after_lines": 1007,
+      "review_owner": "@42433422",
+      "reason": "Selected attendance candidates retain monthly marks and committed-row readback instead of re-parsing an untouched source workbook.",
+      "boundary": "Existing attendance pipeline only; static bound SQLite queries and 500-ID readback batches preserve idempotent writes and no new route.",
+      "validation": "Synthetic attendance confirmation and customer Excel gate tests cover real workbook writes, exclusions, monthly marks and committed output.",
+      "follow_up": "Review separation of monthly layout interpretation from attendance persistence after candidate-only ingestion is integrated; this record requests review, not approval."
     }
   }
 }

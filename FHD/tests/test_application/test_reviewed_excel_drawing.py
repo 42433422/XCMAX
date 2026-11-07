@@ -703,6 +703,8 @@ def test_independent_drawing_ids_and_contract_reject_forged_duplicate_or_outside
     assert request["messages"][0]["content"] == DRAWING_IDENTIFY_PROMPT
     assert not {"rule_hints", "structure_map", "relationship_context", "labels"} & payload.keys()
     assert payload["drawing_evidence"][0]["drawing_id"] == "D0001"
+    assert payload["drawing_evidence"][0]["object"] == "drawing"
+    assert payload["cells"][0]["object"] == "cell"
     properties = request["schema"]["properties"]["physical_regions"]["items"]["properties"]
     assert "labels" not in properties and properties["drawing_ids"]["items"]["enum"] == ["D0001"]
     assert all(key.startswith("S1:") for key in properties["primary_id"]["enum"])

@@ -292,9 +292,10 @@ def prepare_reference_messages(
         payload["cells"], references, provider_schema = reference_contract(
             payload["cells"], schema, payload.get("drawing_evidence"), sheets=payload["sheets"]
         )
+        payload["cells"] = [{**cell, "object": "cell"} for cell in payload["cells"]]
     if payload.get("drawing_evidence"):
         payload["drawing_evidence"] = [
-            {**drawing, "drawing_id": f"D{index:04d}"}
+            {**drawing, "drawing_id": f"D{index:04d}", "object": "drawing"}
             for index, drawing in enumerate(payload["drawing_evidence"], 1)
         ]
     if "documents" not in provider_schema["properties"]:
@@ -685,7 +686,7 @@ _EXPECTED = {
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
-        "12e49845beea1c4222ee6bafcaf5d0fddf3b5b9e8271f74dc7b4c65761953cb0",
+        "4c4e9e766bc52906b012dc4af39efc45210da225bbb0b2f28e55484cd8bc6de6",
         "15de0f5d41027cf4d1e6034fad68e704e3377763a0e91e37c3dda8509314209b",
     ),
     "group_drawing": (

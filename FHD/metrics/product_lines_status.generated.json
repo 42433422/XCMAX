@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-11-07 06:47 UTC",
+  "generated_at": "2026-11-07 06:53 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -439,6 +439,7 @@
     "[erp-reconcile] 实现路径不存在: FHD/app/services/fhd_payment_reconciliation.py",
     "[erp-contract] 实现路径不存在: FHD/app/services/contract_lifecycle.py",
     "[erp-ocr] 实现路径不存在: FHD/app/services/ocr_service.py",
+    "[erp-etl] 实现路径不存在: FHD/app/fastapi_routes/elt_targets.py",
     "[ch-notify] 实现路径不存在: FHD/app/services/mobile_push.py",
     "[ch-task-center] 实现路径不存在: FHD/app/application/approval_notifications.py",
     "[ch-mobile-pair] 实现路径不存在: FHD/app/services/mobile_relay_pairing.py",

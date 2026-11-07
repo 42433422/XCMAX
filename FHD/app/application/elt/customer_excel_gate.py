@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import sqlite3
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 from xml.etree.ElementTree import ParseError
@@ -19,15 +20,10 @@ from zipfile import BadZipFile, ZipFile
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 
-from app.application.elt.attendance_pipeline import (
-    _hours,
-    parse_attendance_dataset,
-    persist_attendance_rows,
-)
+from app.application.elt.attendance_pipeline import _hours, persist_attendance_rows
 from app.application.elt.errors import EltError, ReviewedExcelError
-from app.application.reviewed_excel_auto_slice import derive_rule_slices
-from app.application.reviewed_excel_basic_classification import classify_review_workbook
-from app.application.reviewed_excel_template import inspect_workbook
+from app.application.elt.parser_types import ParsedRow
+from app.application.elt.parsers import parse_file
 
 GATE_ID = "B31"
 CHAIN = (
@@ -137,6 +133,8 @@ def decide_status(
         return "BLOCKED"
     if hard_fail:
         return "FAIL"
+    if any(value == "fail" for value in checks.values()):
+        return "FAIL"
     if set(checks) == set(CHECK_IDS) and all(value == "pass" for value in checks.values()):
         return "PASS"
     if any(value == "pass" for value in checks.values()):
@@ -161,6 +159,31 @@ def _payload(dataset) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _row_destinations(sheets: list[dict], rows: Iterable[ParsedRow]) -> dict[str, dict[int, str]]:
+    """Every non-empty source row must land in exactly one named role."""
+    roles: dict[str, dict[int, str]] = {}
+    for item in sheets:
+        name = str(item.get("name"))
+        target = roles.setdefault(name, {})
+        if item.get("status") == "sliced_not_business_table":
+            target.update(
+                dict.fromkeys(range(1, int(item.get("max_row") or 0) + 1), "non_business_sheet")
+            )
+        header_row = int(item.get("header_row") or 0)
+        if header_row:
+            target.update(dict.fromkeys(range(1, header_row), "title"))
+            target[header_row] = "header"
+        for region in item.get("regions") or []:
+            target[int(region["title_row"])] = "title"
+            for role in ("header_rows", "note_rows", "blank_rows"):
+                target.update(dict.fromkeys(region.get(role) or [], role[:-5]))
+    for row in rows:
+        roles.setdefault(row.sheet, {})[row.row_number] = (
+            "exception" if row.provenance["clean"]["validation_result"] else "record"
+        )
+    return roles
 
 
 def _tenant_isolated(db_path: Path) -> bool | None:
@@ -206,6 +229,51 @@ def _expected_daily_rows(rows: list[dict[str, Any]]) -> dict[str, tuple]:
     }
 
 
+_MONTHLY_FIELDS = (
+    "employee_name",
+    "work_month",
+    "days_in_month",
+    "absent_dates",
+    "present_marked_dates",
+    "unmarked_days",
+)
+
+
+def _monthly_rows(db_path: Path) -> dict[str, tuple]:
+    with sqlite3.connect(db_path) as conn:
+        try:
+            return {
+                row[0]: tuple(row[1:])
+                for row in conn.execute(
+                    "SELECT business_id, source_row, "
+                    + ", ".join(_MONTHLY_FIELDS)
+                    + " FROM attendance_monthly_marks"
+                )
+            }
+        except sqlite3.OperationalError:
+            return {}
+
+
+def _expected_monthly_rows(rows: list[dict[str, Any]]) -> dict[str, tuple]:
+    return {
+        row["business_id"]: (
+            int(row.get("source_row") or 0),
+            *(
+                int(row.get(field) or 0)
+                if field in {"days_in_month", "unmarked_days"}
+                else row.get(field) or ""
+                for field in _MONTHLY_FIELDS
+            ),
+        )
+        for row in rows
+        if row.get("work_month")
+    }
+
+
+def _date_count(rows: list[dict[str, Any]], field: str) -> int:
+    return sum(len([item for item in str(row.get(field) or "").split(",") if item]) for row in rows)
+
+
 def evaluate_workbook(
     path: Path,
     baseline: dict[str, Any],
@@ -237,140 +305,121 @@ def evaluate_workbook(
         hard_fail = True
         notes.append("原件 SHA256 与人工基准不一致")
 
-    review_error = ""
+    dataset = None
     try:
-        review = inspect_workbook(before)
-        classified = classify_review_workbook(review)
+        dataset = parse_file(
+            path, target_type="attendance", max_rows=int(baseline.get("max_rows") or 20000)
+        )
+    except (EltError, *_WORKBOOK_ERRORS) as exc:
+        hard_fail = True
+        notes.append(f"生产解析失败: {exc}")
+    workbook = (dataset.source_features or {}).get("workbook", {}) if dataset else {}
+    recorded = list(workbook.get("sheets") or [])
+    rows = dataset.rows if dataset is not None else []
+    _mark(checks, "04", dataset is not None)
+    try:
         book = load_workbook(path, read_only=False, data_only=False)
         try:
             actual_sheets = [
                 {"name": sheet.title, "state": sheet.sheet_state} for sheet in book.worksheets
             ]
+            content_rows = {
+                sheet.title: {
+                    cell.row
+                    for line in sheet.iter_rows()
+                    for cell in line
+                    if cell.row is not None
+                    and str(cell.value if cell.value is not None else "").strip()
+                }
+                for sheet in book.worksheets
+            }
         finally:
             book.close()
     except _WORKBOOK_ERRORS as exc:
-        review = {}
-        classified = []
-        actual_sheets = []
-        review_error = str(exc)
+        actual_sheets, content_rows = [], {}
         hard_fail = True
-        notes.append(f"解析失败: {exc}")
-    _mark(checks, "04", bool(review) and not review_error)
-    recorded = review.get("sheet_overview") or []
-    recorded_names = [item.get("sheet") for item in recorded]
-    hidden_seen = {item["name"] for item in actual_sheets if item["state"] != "visible"}
-    recorded_hidden = {
-        item.get("sheet") for item in recorded if item.get("sheet_state") not in (None, "visible")
-    }
+        notes.append(f"工作簿无法打开: {exc}")
+    recorded_names = [item.get("name") for item in recorded]
     sheets_match = bool(actual_sheets) and recorded_names == [
         item["name"] for item in actual_sheets
     ]
     _mark(
         checks,
         "05",
-        sheets_match and hidden_seen <= recorded_hidden | {item.get("sheet") for item in recorded},
+        sheets_match
+        and all(
+            item.get("state") == actual["state"] for item, actual in zip(recorded, actual_sheets)
+        ),
     )
     silent = [item["name"] for item in actual_sheets if item["name"] not in recorded_names]
-    _mark(checks, "06", not silent and not review_error)
+    _mark(checks, "06", dataset is not None and not silent)
     if silent:
         hard_fail = True
         notes.append("静默跳过工作表: " + ",".join(silent))
+    if dataset is not None and not rows and any(content_rows.values()):
+        hard_fail = True
+        notes.append("工作簿有内容但识别出 0 条业务记录，禁止进入确认")
 
+    destinations = _row_destinations(recorded, rows)
+    orphans = {
+        sheet: sorted(found - set(destinations.get(sheet, {})))
+        for sheet, found in content_rows.items()
+        if found - set(destinations.get(sheet, {}))
+    }
+    if orphans:
+        hard_fail = True
+        notes.append(
+            "源行没有去向: "
+            + "; ".join(f"{sheet} 行 {lines[:10]}" for sheet, lines in orphans.items())
+        )
     regions = [
-        {
-            "sheet": item["sheet"],
-            "range": region.get("range"),
-            "data": region.get("data_region", True),
-        }
-        for item in classified
+        {"sheet": item["name"], "range": region.get("range")}
+        for item in recorded
         for region in item.get("regions") or []
+    ] + [
+        {"sheet": item["name"], "range": f"header:{item['header_row']}"}
+        for item in recorded
+        if item.get("status") == "identified" and item.get("header_row")
     ]
     oracle = baseline.get("regions")
     if isinstance(oracle, list) and oracle:
-        found = {(item["sheet"], item["range"]) for item in regions if item["data"] is not False}
+        found = {(item["sheet"], item["range"]) for item in regions}
         wanted = {(item.get("sheet"), item.get("range")) for item in oracle}
-        region_ok = found == wanted and all(item["range"] for item in regions)
+        region_ok = found == wanted
         _mark(checks, "07", region_ok)
-        _mark(checks, "14", region_ok)
+        _mark(checks, "14", region_ok and not orphans)
         if not region_ok:
             hard_fail = True
-            notes.append("表格区域与客户基准不一致")
-    data_regions = [item for item in regions if item["data"] is not False]
-    per_sheet: dict[str, list] = {}
-    for item in data_regions:
-        per_sheet.setdefault(item["sheet"], []).append(item["range"])
-    if isinstance(oracle, list) and oracle:
-        oracle_by_sheet: dict[str, list] = {}
+            notes.append("表格区域与人工基准不一致")
+        per_sheet: dict[str, int] = {}
+        for item in regions:
+            per_sheet[item["sheet"]] = per_sheet.get(item["sheet"], 0) + 1
+        wanted_per_sheet: dict[str, int] = {}
         for item in oracle:
-            oracle_by_sheet.setdefault(str(item.get("sheet")), []).append(item.get("range"))
-        multi = {sheet: ranges for sheet, ranges in oracle_by_sheet.items() if len(ranges) > 1}
-        if multi:
-            _mark(
-                checks,
-                "08",
-                all(
-                    len(ranges) == len(per_sheet.get(sheet, [])) for sheet, ranges in multi.items()
-                ),
-            )
-        blanks = [item.get("sheet") for item in classified if item.get("blank")]
-        if blanks:
-            _mark(
-                checks,
-                "12",
-                all(
-                    isinstance(name, str) and bool(name) and not per_sheet.get(name)
-                    for name in blanks
-                ),
-            )
-
-    slices: list[dict] = []
-    if classified:
-        try:
-            slices = derive_rule_slices(before, {"sheets": classified})
-        except ReviewedExcelError as exc:
-            notes.append(f"切片失败: {exc}")
-            hard_fail = True
-    slice_keys = [
-        (item.get("fragments", [{}])[0].get("sheet"), item.get("table_region")) for item in slices
-    ]
-    _mark(
-        checks,
-        "15",
-        bool(data_regions)
-        and bool(slices)
-        and all(item.get("basis") == "rule_region" for item in slices),
-    )
-    _mark(
-        checks,
-        "16",
-        bool(data_regions)
-        and len(slices) == len(data_regions)
-        and all(item.get("workbook") for item in slices),
-    )
-    if data_regions:
-        _mark(checks, "19", bool(slices) and len(slice_keys) == len(set(slice_keys)))
-    if slices:
+            sheet = str(item.get("sheet"))
+            wanted_per_sheet[sheet] = wanted_per_sheet.get(sheet, 0) + 1
+        if any(count > 1 for count in wanted_per_sheet.values()):
+            _mark(checks, "08", per_sheet == wanted_per_sheet)
+    blanks = [item.get("name") for item in recorded if item.get("blank")]
+    if blanks:
         _mark(
             checks,
-            "20",
-            all(item.get("source_sha256") == digest and item.get("slice_id") for item in slices),
+            "12",
+            all(not destinations.get(name) or not content_rows.get(name) for name in blanks),
         )
+
+    slices = [row.provenance.get("slice") or {} for row in rows]
+    slice_ids = [item.get("slice_id") for item in slices]
+    _mark(checks, "15", bool(rows) and all(slice_ids))
+    _mark(checks, "16", bool(rows) and not orphans)
+    if rows:
+        _mark(checks, "19", len(slice_ids) == len(set(slice_ids)))
+        _mark(checks, "20", all(item.get("source_sha256") == digest for item in slices))
     _mark(checks, "21", hashlib.sha256(path.read_bytes()).hexdigest() == digest)
     if any("business_id" in item for item in slices):
         hard_fail = True
         notes.append("切片阶段出现业务编号")
     _mark(checks, "03", hashlib.sha256(path.read_bytes()).hexdigest() == digest)
-
-    dataset = None
-    if not review_error:
-        try:
-            dataset = parse_attendance_dataset(
-                path, max_rows=int(baseline.get("max_rows") or 20000)
-            )
-        except (EltError, *_WORKBOOK_ERRORS) as exc:
-            hard_fail = True
-            notes.append(f"考勤解析失败: {exc}")
-    rows = dataset.rows if dataset is not None else []
     slice_clean = all("business_id" not in row.provenance["slice"] for row in rows)
     _mark(
         checks,
@@ -446,10 +495,7 @@ def evaluate_workbook(
             run_id=f"{task_id}-recover",
             fault="",
         )
-        with sqlite3.connect(fault_db) as conn:
-            fault_count = conn.execute("SELECT COUNT(*) FROM attendance_daily_records").fetchone()[
-                0
-            ]
+        fault_count = len({**_daily_rows(fault_db), **_monthly_rows(fault_db)})
         _mark(checks, "51", interrupted)
         notes.append("已验证同进程中断恢复；尚未验证服务进程重启")
         _mark(checks, "53", interrupted and fault_count == len(ready))
@@ -484,12 +530,22 @@ def evaluate_workbook(
             try:
                 if not reopened.worksheets:
                     raise ReviewedExcelError("结果文件缺少工作表")
-                sheet = reopened.worksheets[0]
-                header = [cell.value for cell in next(sheet.iter_rows(max_row=1), ())]
-                body_rows = list(sheet.iter_rows(min_row=2, values_only=True))
+                output_sheet = reopened.worksheets[0]
+                header = [cell.value for cell in next(output_sheet.iter_rows(max_row=1), ())]
+                body_rows = list(output_sheet.iter_rows(min_row=2, values_only=True))
+                monthly_sheet = reopened["月度考勤"] if "月度考勤" in reopened.sheetnames else None
+                monthly_body = (
+                    list(monthly_sheet.iter_rows(min_row=2, values_only=True))
+                    if monthly_sheet is not None
+                    else []
+                )
             finally:
                 reopened.close()
-            opened = bool(header) and header[0] == "员工姓名" and len(body_rows) == written
+            opened = (
+                bool(header)
+                and header[0] == "员工姓名"
+                and len(body_rows) + len(monthly_body) == written
+            )
         except _WORKBOOK_ERRORS as exc:
             notes.append(f"结果文件无法打开: {exc}")
             opened = False
@@ -505,9 +561,12 @@ def evaluate_workbook(
         _mark(checks, "46", opened and {"excel", "wps"} <= attested)
         if not opened:
             hard_fail = True
-        stored_rows = _daily_rows(db_path)
+        stored_rows = {**_daily_rows(db_path), **_monthly_rows(db_path)}
         stored = len(stored_rows)
-        fields_match = stored_rows == _expected_daily_rows(ready)
+        fields_match = stored_rows == {
+            **_expected_daily_rows(ready),
+            **_expected_monthly_rows(ready),
+        }
         _mark(checks, "36", fields_match)
         if not fields_match:
             hard_fail = True
@@ -516,28 +575,32 @@ def evaluate_workbook(
         _mark(checks, "40", fields_match)
         hours = 0.0
         for row in ready:
-            hours += _hours(row.get("work_date"), row.get("clock_in"), row.get("clock_out"))[
-                "regular_hours"
-            ]
+            if row.get("work_date"):
+                hours += _hours(row.get("work_date"), row.get("clock_in"), row.get("clock_out"))[
+                    "regular_hours"
+                ]
         _mark(checks, "41", written > 0)
-        expected_rows = baseline.get("daily_rows")
-        expected_hours = baseline.get("regular_hours")
-        rows_ok = expected_rows is not None and int(expected_rows) == written
-        hours_ok = (
-            expected_hours is not None and abs(float(expected_hours) - round(hours, 2)) < 0.01
+        expected_rows = baseline.get("business_records", baseline.get("daily_rows"))
+        metrics = {
+            "regular_hours": round(hours, 2),
+            "absent_days": _date_count(ready, "absent_dates"),
+            "present_marked_days": _date_count(ready, "present_marked_dates"),
+            "exception_rows": len(invalid),
+        }
+        wanted_metrics = {key: baseline[key] for key in metrics if key in baseline}
+        metrics_ok = bool(wanted_metrics) and all(
+            abs(float(value) - float(metrics[key])) < 0.01 for key, value in wanted_metrics.items()
         )
+        rows_ok = expected_rows is not None and int(expected_rows) == written
         _mark(
             checks,
             "42",
-            rows_ok and hours_ok
-            if expected_rows is not None and expected_hours is not None
-            else None,
+            rows_ok and metrics_ok if expected_rows is not None and wanted_metrics else None,
         )
         _mark(checks, "47", rows_ok and opened if expected_rows is not None else None)
-        _mark(
-            checks, "48", rows_ok and hours_ok and bool(baseline.get("manual_reconciled") is True)
-        )
-        _mark(checks, "54", fields_match and _daily_rows(fault_db) == stored_rows)
+        _mark(checks, "48", rows_ok and metrics_ok and baseline.get("manual_reconciled") is True)
+        fault_rows = {**_daily_rows(fault_db), **_monthly_rows(fault_db)}
+        _mark(checks, "54", fields_match and fault_rows == stored_rows)
         _mark(
             checks,
             "56",
@@ -546,9 +609,9 @@ def evaluate_workbook(
         if expected_rows is not None and int(expected_rows) != written:
             hard_fail = True
             notes.append("入库数量与人工基准不一致")
-        if not (expected_hours is None or hours_ok):
+        if wanted_metrics and not metrics_ok:
             hard_fail = True
-            notes.append("工时与人工基准不一致")
+            notes.append(f"核算指标与人工基准不一致: {metrics}")
     elif not confirmed:
         notes.append("未经确认，未写入数据库")
     _mark(checks, "34", written == 0 or confirmed)
