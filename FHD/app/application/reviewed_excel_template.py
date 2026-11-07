@@ -170,9 +170,15 @@ def _coerce_sheet_name_payload(data, raw_content: str):
         )
         name = item.get("name") or item.get("名称") or item.get("title")
         kind = item.get("type") or item.get("类型") or ""
-        if not str(sheet or "").strip() or not str(name or "").strip():
+        if not str(name or "").strip():
             continue
-        cleaned.append({"sheet": str(sheet).strip(), "name": str(name).strip(), "type": str(kind).strip()})
+        cleaned.append(
+            {
+                "sheet": str(sheet or "").strip(),
+                "name": str(name).strip(),
+                "type": str(kind or "").strip(),
+            }
+        )
     return {"sheets": cleaned}
 
 

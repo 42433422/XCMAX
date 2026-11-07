@@ -102,12 +102,14 @@ def apply_unknown_sheet_names(sheets: list[dict], cells: list[dict], *, owner_id
     rows = [item for item in payload.get("sheets") or [] if isinstance(item, dict)]
     named = {str(item.get("sheet") or "").strip(): item for item in rows}
     unmatched = [sheet for sheet in pending if str(sheet.get("sheet") or "").strip() not in named]
-    if len(unmatched) == len(pending) and len(rows) == len(pending):
+    if rows and len(unmatched) == len(pending):
+        paired = list(zip(pending, rows))
         named = {
-            str(sheet.get("sheet") or "").strip(): item
-            for sheet, item in zip(pending, rows)
+            str(sheet.get("sheet") or "").strip(): item for sheet, item in paired
         }
-        logger.info("sheet naming matched %s rows by reply order", len(rows))
+        logger.info(
+            "sheet naming matched %s of %s rows by reply order", len(paired), len(pending)
+        )
     for sheet in pending:
         item = named.get(str(sheet.get("sheet") or "").strip())
         if not item:

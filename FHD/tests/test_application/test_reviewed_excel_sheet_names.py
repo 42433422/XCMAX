@@ -91,6 +91,47 @@ def test_sheet_name_reply_accepts_a_bare_array():
         "",
     )
     assert renamed == {"sheets": [{"sheet": "白浆", "name": "白浆配方", "type": "原料"}]}
+    nameless = _coerce_sheet_name_payload(
+        None,
+        '[{"name": "国圣送货单", "type": "送货单"}, {"name": "白浆配方", "type": "配方表"}]',
+    )
+    assert nameless == {
+        "sheets": [
+            {"sheet": "", "name": "国圣送货单", "type": "送货单"},
+            {"sheet": "", "name": "白浆配方", "type": "配方表"},
+        ]
+    }
+
+
+def test_names_without_sheet_keys_follow_sheet_order(monkeypatch):
+    def fake(*_args, **_kwargs):
+        return LlmAssistResult(
+            used_llm=True,
+            data={
+                "sheets": [
+                    {"sheet": "", "name": "国圣送货单", "type": "送货单"},
+                    {"sheet": "", "name": "白浆配方", "type": "配方表"},
+                ]
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_sheet_names._template_llm_complete", fake
+    )
+    sheets = [
+        {"sheet": "国圣", "labels": ["delivery"], "processable": True, "regions": []},
+        {
+            "sheet": "白浆",
+            "labels": ["unknown"],
+            "processable": True,
+            "regions": [{"labels": ["unknown"]}],
+        },
+    ]
+    apply_unknown_sheet_names(sheets, [], owner_id=1)
+    assert sheets[0]["model_name"] == "国圣送货单"
+    assert sheets[1]["model_name"] == "白浆配方"
+    assert sheets[1]["model_type"] == "配方表"
+    assert sheets[1]["labels"] == ["template"]
 
 
 def test_unknown_sheet_naming_runs_inside_a_live_event_loop(monkeypatch):
