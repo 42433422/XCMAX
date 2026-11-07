@@ -166,7 +166,9 @@ def test_crawl_files_follow_public_200_urls_and_are_published() -> None:
         assert f'rel="canonical" href="{canonical}"' in text
         assert f'property="og:url" content="{canonical}"' in text
     workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(encoding="utf-8")
-    updater = (site / "MODstore_deploy/scripts/xcmax-site-auto-update.sh").read_text(encoding="utf-8")
+    updater = (site / "MODstore_deploy/scripts/xcmax-site-auto-update.sh").read_text(
+        encoding="utf-8"
+    )
     for name in ("robots.txt", "sitemap.xml", "baidu_urls.txt", "BingSiteAuth.xml"):
         assert f'"${{GIT_SITE}}/{name}"' in workflow
         assert f'"$git_site"/{name}' in updater
