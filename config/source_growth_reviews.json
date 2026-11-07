@@ -208,9 +208,9 @@
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
       "base_blob": "acf93ca707e3e1d434ccacaf41d61ce3fcb427bf",
-      "head_blob": "23cc0273079d051c31c87e73d3751e834c3cbf55",
+      "head_blob": "5861b33081811e0d86547220ec98e8acf296453e",
       "before_lines": 936,
-      "after_lines": 1021,
+      "after_lines": 1019,
       "reason": "Reviewed intake now prepares the knowledge-import lane from the archived workbook text, records the source hash and preserves the deterministic preview/confirmation boundary.",
       "boundary": "Auto-ingest knowledge planning and source-text handoff only; business target detection, tenant authorization, persistence and commit remain in their existing services.",
       "validation": "ELT preview, knowledge-plan, selected-candidate confirmation, source-version and tenant-isolation regression suites; full integration CI on the final head.",
