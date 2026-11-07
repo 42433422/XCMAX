@@ -112,9 +112,9 @@
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
       "base_file": "FHD/app/fastapi_routes/reviewed_excel_template.py",
       "base_blob": "d89361f68dbd53f1792435f686a38dd6c8a74e47",
-      "head_blob": "dc09008a95ec9776708b1e1896bb8fa1ff2fb946",
+      "head_blob": "4f1e744c8c291de2e21581447b1e9b15266c4512",
       "before_lines": 2030,
-      "after_lines": 2039,
+      "after_lines": 2089,
       "reason": "Return per-row slice disposition and preserve each parallel region review state.",
       "boundary": "Existing reviewed Excel endpoints only; old direct execute endpoint stays removed.",
       "validation": "Auto-slice row coverage and selected candidate confirmation route tests.",
@@ -203,6 +203,18 @@
       "boundary": "Existing data docking component only; no routing, authentication or write-authorization change.",
       "validation": "Existing reviewed Excel component tests and final required frontend CI.",
       "follow_up": "Keep UI evidence tied to server structural results; future extraction must follow a real responsibility boundary.",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/elt/auto_ingest_service.py": {
+      "base_file": "FHD/app/application/elt/auto_ingest_service.py",
+      "base_blob": "acf93ca707e3e1d434ccacaf41d61ce3fcb427bf",
+      "head_blob": "09789afc80c01aa88514979ea320baf1d573d51e",
+      "before_lines": 936,
+      "after_lines": 1021,
+      "reason": "Reviewed intake now prepares the knowledge-import lane from the archived workbook text, records the source hash and preserves the deterministic preview/confirmation boundary.",
+      "boundary": "Auto-ingest knowledge planning and source-text handoff only; business target detection, tenant authorization, persistence and commit remain in their existing services.",
+      "validation": "ELT preview, knowledge-plan, selected-candidate confirmation, source-version and tenant-isolation regression suites; full integration CI on the final head.",
+      "follow_up": "Extract workbook text projection from auto_ingest_service after the candidate-only intake contract is stable.",
       "review_owner": "@42433422"
     }
   }
