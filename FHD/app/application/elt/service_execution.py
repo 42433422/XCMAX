@@ -417,6 +417,18 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                     "rows_written": bool(rows_written),
                 }
             )
+            if run.target_type == "shipment_records" and run.status in {"completed", "partial"}:
+                try:
+                    from app.application.elt.shipment_layout_fill import (
+                        write_committed_shipment_workbook,
+                    )
+
+                    produced = write_committed_shipment_workbook(db, run)
+                except BOUNDARY_ERRORS:
+                    logger.exception("shipment result workbook skipped for %s", run.id)
+                    produced = None
+                if produced:
+                    receipt.update(produced)
             run.receipt_json = dump_json(receipt)
             from app.application.elt.audit import record_elt_audit
 

@@ -38,10 +38,20 @@ def uses_tenant_scoped_store(request: Request) -> bool:
     )
 
 
+_EXPORT_PATH = "/api/shipment/shipment-records/export"
+_DOWNLOAD_PREFIX = "/api/shipment/download"
+
+
+def _is_shipment_download(path: str) -> bool:
+    return path == _DOWNLOAD_PREFIX or path.startswith(_DOWNLOAD_PREFIX + "/")
+
+
 def require_tenant_scoped_permission(read_code: str, write_code: str | None = None):
     def guard(request: Request):
         user = resolve_session_user(request)
         if user is None:
+            if _request_path(request) == _EXPORT_PATH:
+                raise HTTPException(status_code=401, detail="请先登录")
             return None
         if getattr(user, "tenant_id", None) is None:
             raise HTTPException(status_code=403, detail="该旧业务接口尚未提供安全的租户数据隔离")
@@ -77,8 +87,27 @@ def check_legacy_business_user_permission(user, permission_code: str):
     return user
 
 
+def _guard_shipment_download(request: Request, read_code: str):
+    """Tenant files stay in that tenant's output directory; everyone else is refused."""
+    user = resolve_session_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="请先登录")
+    if getattr(user, "tenant_id", None) is None:
+        if resolve_product_sku() == "enterprise":
+            raise HTTPException(status_code=403, detail="该旧业务接口尚未提供安全的租户数据隔离")
+        return user
+    if resolve_product_sku() == "enterprise":
+        from app.application.facades.session_facade import get_auth_service
+
+        if not get_auth_service().has_permission(user, read_code):
+            raise HTTPException(status_code=403, detail="权限不足")
+    return user
+
+
 def require_scoped_business_permission(read_code: str, write_code: str | None = None):
     def guard(request: Request):
+        if _is_shipment_download(_request_path(request)):
+            return _guard_shipment_download(request, read_code)
         if uses_tenant_scoped_store(request):
             return require_tenant_scoped_permission(read_code, write_code)(request)
         user = (
