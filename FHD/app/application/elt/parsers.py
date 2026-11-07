@@ -10,6 +10,7 @@ from typing import Any
 from app.application.elt.errors import EltError
 from app.application.elt.parser_ocr_provenance import enrich_ocr_provenance
 from app.application.elt.parser_structure import (
+    business_note_text,
     detect_table_layout,
     header_match_score,
     is_auxiliary_sheet_name,
@@ -97,6 +98,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
     warnings: list[dict[str, Any]] = []
     repeated_header_count = 0
     footer_count = 0
+    business_notes: list[str] = []
     header_hints = target_header_hints(target_type)
     complete = False
     try:
@@ -143,6 +145,9 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                     continue
                 if is_footer_or_note_row(values):
                     footer_count += 1
+                    note = business_note_text(values)
+                    if note and note not in business_notes:
+                        business_notes.append(note)
                     continue
                 data = {
                     headers[index]: value
@@ -232,6 +237,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             "skipped_sheets": skipped_sheets,
             "headers": all_headers,
             "structure_detection": "deterministic_v2",
+            "business_notes": business_notes,
         },
         warnings=warnings,
     )
@@ -272,6 +278,7 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
         headers = layout.headers
         repeated_header_count = 0
         footer_count = 0
+        business_notes: list[str] = []
         remaining_probe = probe[layout.header_end + 1 :]
         for row_number, values in enumerate(
             itertools.chain(remaining_probe, reader),
@@ -282,6 +289,9 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
                 continue
             if is_footer_or_note_row(values):
                 footer_count += 1
+                note = business_note_text(values)
+                if note and note not in business_notes:
+                    business_notes.append(note)
                 continue
             data = {
                 headers[index]: value
@@ -341,6 +351,7 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
                 "header_confidence": layout.confidence,
                 "header_reasons": list(layout.reasons),
                 "structure_detection": "deterministic_v2",
+                "business_notes": business_notes,
             },
             warnings=warnings,
         )

@@ -231,6 +231,23 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 for item in draft.get("field_mappings") or []
                 if str(item.get("target") or "")
             ]
+            if run.target_type in {"export_xlsx", "export_csv"}:
+                from app.application.elt.result_export import export_context
+
+                features = load_json(run.source_features_json, {})
+                first_sheet = (
+                    db.query(EltRunRow.source_sheet)
+                    .filter(
+                        EltRunRow.run_id == run.id,
+                        EltRunRow.owner_user_id == owner_user_id,
+                    )
+                    .order_by(EltRunRow.id)
+                    .limit(1)
+                    .scalar()
+                )
+                context.update(
+                    export_context(draft, adapter, features, str(first_sheet or ""))
+                )
             if target_config:
                 context["target_config"] = {
                     "endpoint_url": target_config["endpoint_url"],
