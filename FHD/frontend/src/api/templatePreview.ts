@@ -3,6 +3,17 @@ import type { RequestOptions } from './core'
 import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
 import { captureAuthSession } from '@/utils/authSessionCache'
 
+// 单路模型上限 12s。入库会先问数据库再问知识，整次请求可以超过 8s。
+// 页面要等完这一次；真卡住则停，不能无限挂起。
+export const MODEL_BACKED_ELT_TIMEOUT_MS = 30_000
+
+function modelBackedEltOptions(path: string): RequestOptions {
+  if (path.endsWith('/analyze') || path.endsWith('/preview') || path.endsWith('/refine') || path.endsWith('/intake-preview')) {
+    return { timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS }
+  }
+  return {}
+}
+
 // A rejected CSRF request never reaches the handler. Concurrent initial GETs can
 // replace the cookie after a POST reads it, so retry only that explicit rejection.
 async function reviewedExcelPost(path: string, form: FormData) {
@@ -23,7 +34,7 @@ async function reviewedExcelPost(path: string, form: FormData) {
     for (let attempt = 0; ; attempt++) {
       requireCurrentSession()
       try {
-        const result = await api.post(path, form)
+        const result = await api.post(path, form, modelBackedEltOptions(path))
         requireCurrentSession()
         return result
       } catch (error) {

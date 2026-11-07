@@ -11,7 +11,7 @@ vi.mock('./core', () => {
   return { default: { post: mock.post, get: mock.get, download: mock.download }, ApiError, primeCsrfCookie: mock.prime }
 })
 import { ApiError } from './core'
-import { templatePreviewApi } from './templatePreview'
+import { MODEL_BACKED_ELT_TIMEOUT_MS, templatePreviewApi } from './templatePreview'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -286,7 +286,7 @@ describe('reviewed Excel CSRF handling', () => {
     expect(await templatePreviewApi.analyzeClassification('class/7', form)).toBe(paused)
     expect(form.get('version')).toBe('classification-v1')
     for (const key of ['use_login_notice', 'continue_authorized', 'retry_authorized', 'sample_authorized', 'own_file_authorized']) expect(form.has(key)).toBe(false)
-    expect(mock.post).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/classifications/class%2F7/analyze', form); expect(mock.get).not.toHaveBeenCalled()
+    expect(mock.post).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/classifications/class%2F7/analyze', form, { timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS }); expect(mock.get).not.toHaveBeenCalled()
   })
 
   it('keeps classification confirmation and intake preview separate from model dispatch and saving', async () => {
@@ -295,7 +295,7 @@ describe('reviewed Excel CSRF handling', () => {
     const confirmed = { version: 'confirmed-v2', confirmed: true }, plan = { intake: { run_id: 'intake-7', business: { status: 'preview_ready', preview_revision: 'r1' } } }
     mock.post.mockResolvedValueOnce(confirmed).mockResolvedValueOnce(plan)
     expect(await templatePreviewApi.confirmClassification('class/7', confirmation)).toBe(confirmed); expect(await templatePreviewApi.previewReviewedIntake(intake)).toBe(plan)
-    expect(mock.post.mock.calls).toEqual([['/api/templates/reviewed-excel/classifications/class%2F7/confirm', confirmation], ['/api/templates/reviewed-excel/intake-preview', intake]])
+    expect(mock.post.mock.calls).toEqual([['/api/templates/reviewed-excel/classifications/class%2F7/confirm', confirmation], ['/api/templates/reviewed-excel/intake-preview', intake, { timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS }]])
     expect(mock.post.mock.calls.some(call => call[0].endsWith('/save') || call[0].endsWith('/analyze'))).toBe(false)
   })
 
@@ -305,6 +305,19 @@ describe('reviewed Excel CSRF handling', () => {
     mock.post.mockRejectedValueOnce(new ApiError(state.message, 503, data))
     await expect(templatePreviewApi.refineReviewedExcel(new FormData())).rejects.toMatchObject({ status: 503, data, message: '模型处理未完成，请核对（阶段：模型候选） 请求编号：model-error-7' })
     expect(mock.post).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not report a model-backed ELT call as failed at 8s', async () => {
+    expect(MODEL_BACKED_ELT_TIMEOUT_MS).toBeGreaterThan(12_000)
+    mock.post.mockResolvedValue({})
+    const form = new FormData()
+    await templatePreviewApi.reviewExcel(form)
+    await templatePreviewApi.refineReviewedExcel(form)
+    await templatePreviewApi.saveReviewedExcel(form)
+    const options = (suffix: string) => mock.post.mock.calls.find(call => String(call[0]).endsWith(suffix))?.[2]
+    expect(options('/preview')).toEqual({ timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS })
+    expect(options('/refine')).toEqual({ timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS })
+    expect(options('/save')).toEqual({})
   })
 
 })
