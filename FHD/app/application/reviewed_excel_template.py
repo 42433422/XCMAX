@@ -138,6 +138,31 @@ def template_llm_model_label() -> str:
     return "platform-default"
 
 
+def _run_coroutine(factory):
+    """Run one provider call. asyncio.run cannot start inside a live event loop."""
+    import asyncio
+    import threading
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(factory())
+    box: dict[str, Any] = {}
+
+    def worker() -> None:
+        try:
+            box["value"] = asyncio.run(factory())
+        except BaseException as exc:  # noqa: BLE001 - re-raised on the caller thread
+            box["error"] = exc
+
+    thread = threading.Thread(target=worker, name="template-llm")
+    thread.start()
+    thread.join()
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
 def _template_platform_complete(
     messages: list[dict], schema: dict, max_tokens: int, *, owner_id: int | None = None
 ):
@@ -212,7 +237,7 @@ def _template_platform_complete(
                     task.cancel()
 
         try:
-            response = asyncio.run(call())
+            response = _run_coroutine(call)
             choice = (response or {}).get("choices", [])[0]
             finish = choice.get("finish_reason")
             if finish not in {None, "stop"}:
@@ -1191,6 +1216,35 @@ def make_proposals(review: dict) -> dict:
     }
 
 
+def _fill_instance_cells(review: dict, base: dict, validated: list[dict]) -> None:
+    """Add non-formula instance cells when a model plan only names a few remarks."""
+    import logging
+    protected = {(item["sheet"], item["cell"]) for item in base["protected"]}
+    instance = []
+    for cell in review["cells"]:
+        if cell.get("kind") == "formula":
+            continue
+        pair = (cell["sheet"], cell["cell"])
+        if pair in protected or not str(cell.get("value") or "").strip():
+            continue
+        instance.append(pair)
+    if len(instance) < 8:
+        return
+    instance_set = set(instance)
+    for candidate in validated:
+        have = {(item["sheet"], item["cell"]) for item in candidate["clear"]}
+        if len(have & instance_set) * 2 >= len(instance_set):
+            continue
+        missing = [pair for pair in instance if pair not in have]
+        candidate["clear"].extend({"sheet": sheet, "cell": cell} for sheet, cell in missing)
+        note = "单据实例格已补入清理，公式和表头保留。"
+        candidate["explanation"] = f"{candidate['explanation']} {note}".strip()[:300]
+        logging.getLogger(__name__).info(
+            "template candidate filled %s instance cells the model left in place",
+            len(missing),
+        )
+
+
 def refine_proposal(
     review: dict,
     parent_version: str,
@@ -1377,6 +1431,7 @@ def refine_proposal(
             }
         )
     if initial:
+        _fill_instance_cells(review, base, validated)
         base["candidates"] = validated
     else:
         base["candidates"][2] = validated[0]

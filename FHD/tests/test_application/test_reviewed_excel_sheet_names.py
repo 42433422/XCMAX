@@ -55,6 +55,59 @@ def test_unknown_sheet_takes_the_model_name_and_type(monkeypatch):
     assert slices[0]["type_label"] == "借还台账"
 
 
+def test_unknown_sheet_naming_runs_inside_a_live_event_loop(monkeypatch):
+    import asyncio
+    import json
+
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+
+    for name, value in {
+        "FHD_TEMPLATE_LLM_PROVIDER": "mimo",
+        "FHD_TEMPLATE_MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
+        "FHD_TEMPLATE_MIMO_MODEL": "mimo-v2.6-flash",
+        "MIMO_API_KEY": "synthetic-placeholder",
+        "FHD_ETL_LLM": "on",
+    }.items():
+        monkeypatch.setenv(name, value)
+
+    async def fake(self, messages, **kwargs):
+        return {
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {
+                        "content": json.dumps(
+                            {"sheets": [{"sheet": "白浆", "name": "白浆配方", "type": "原料"}]},
+                            ensure_ascii=False,
+                        )
+                    },
+                }
+            ]
+        }
+
+    monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
+    monkeypatch.setattr(
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
+        lambda **_: SessionMarketProvider(7, "synthetic-market", timeout_seconds=1),
+    )
+    sheets = [
+        {
+            "sheet": "白浆",
+            "labels": ["unknown"],
+            "processable": True,
+            "regions": [{"labels": ["unknown"]}],
+        }
+    ]
+
+    async def drive():
+        apply_unknown_sheet_names(sheets, [{"sheet": "白浆", "value": "白浆"}], owner_id=7)
+
+    asyncio.run(drive())
+    assert sheets[0]["model_name"] == "白浆配方"
+    assert sheets[0]["model_type"] == "原料"
+    assert sheets[0]["labels"] == ["material"]
+
+
 def test_naming_failure_leaves_unknown(monkeypatch):
     def boom(*_args, **_kwargs):
         raise RuntimeError("down")

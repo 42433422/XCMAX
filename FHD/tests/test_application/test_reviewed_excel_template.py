@@ -6880,3 +6880,27 @@ def test_saved_refinement_concurrent_initial_insert_elects_one_child_and_model_c
             ).scalar_one()
             == 2
         )
+
+
+def test_sparse_model_plan_keeps_the_instance_cells(monkeypatch):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_template import make_proposals, refine_proposal
+
+    cells = [
+        {"sheet": "出货", "cell": f"A{index}", "value": f"货品{index}", "kind": "review"}
+        for index in range(1, 11)
+    ]
+    cells.append({"sheet": "出货", "cell": "B1", "value": "=A1", "kind": "formula"})
+    review = {"sha256": "a" * 64, "sheets": ["出货"], "cells": cells, "sheet_overview": []}
+    version = make_proposals(review)["version"]
+
+    def fake(*_args, **_kwargs):
+        plan = {"clear": [{"sheet": "出货", "cell": "A1"}], "reason": "只清备注"}
+        return LlmAssistResult(used_llm=True, data={"candidates": [plan, plan, plan]})
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", fake)
+    output = refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
+    cleared = {item["cell"] for item in output["candidates"][0]["clear"]}
+    assert cleared == {f"A{index}" for index in range(1, 11)}
+    assert "B1" not in cleared
+    assert "单据实例格已补入清理" in output["candidates"][0]["explanation"]

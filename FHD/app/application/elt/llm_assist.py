@@ -571,7 +571,7 @@ def advise_knowledge_import(document_text: str) -> LlmAssistResult:
     result = _complete(
         messages,
         schema=_KNOWLEDGE_IMPORT_SCHEMA,
-        max_tokens=1600,
+        max_tokens=8192,
         lane="knowledge",
         max_repairs=1,
         timeout_seconds=etl_llm_timeout_seconds(full_sheet=True),

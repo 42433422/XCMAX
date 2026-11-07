@@ -776,3 +776,28 @@ def test_knowledge_line_calls_its_own_model(intake_store, monkeypatch, tmp_path)
     assert plan["used_llm"] is True
     assert plan["degraded"] is False
     assert "螺母" in plan["content"]
+
+
+def test_knowledge_plan_uses_archived_text_when_the_model_fails(intake_store, monkeypatch, tmp_path):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    def knowledge(_text):
+        return LlmAssistResult(
+            used_llm=True, degraded=True, degradation_code="ELT_LLM_UNAVAILABLE"
+        )
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setattr("app.application.elt.llm_assist.etl_llm_enabled", lambda: True)
+    monkeypatch.setattr("app.application.elt.llm_assist.advise_knowledge_import", knowledge)
+    with tenant_scope(1):
+        plan = intake_store.intake.knowledge_plan(
+            path=tmp_path / "missing.xlsx",
+            file_name="国圣化工",
+            note="",
+            owner_user_id=7,
+            source_text="送货单\n客户 国圣 白浆 2",
+        )
+    assert plan["documents"] == 1
+    assert plan["degraded"] is False
+    assert plan["action"] in {"new", "update", "skip"}
+    assert "国圣" in plan["content"]

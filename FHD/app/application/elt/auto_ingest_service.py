@@ -234,7 +234,12 @@ class AutoIngestService:
             degradation_code = assist.degradation_code
             if assist.used_llm and not assist.degraded and assist.data.get("content"):
                 document = str(assist.data["content"])
-        if degraded:
+            elif degraded or not assist.used_llm:
+                logger.info(
+                    "knowledge model unusable (%s); planning the archived workbook text",
+                    degradation_code or "empty",
+                )
+        if not str(document or "").strip():
             return {
                 "action": "error",
                 "documents": 0,
@@ -242,7 +247,7 @@ class AutoIngestService:
                 "source_hash": source_hash,
                 "used_llm": assist_used,
                 "degraded": True,
-                "degradation_code": degradation_code,
+                "degradation_code": degradation_code or "ELT_KNOWLEDGE_EMPTY",
                 "lane": "knowledge",
                 "content": "",
                 "source_text": raw_text,
