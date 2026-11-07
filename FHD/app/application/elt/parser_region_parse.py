@@ -7,6 +7,8 @@ from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from app.application.elt.parser_shipment_history import ledger_row_verification
+
 if TYPE_CHECKING:
     from app.application.elt.parser_regions import ParsedDataset, ParsedRow
 
@@ -35,6 +37,8 @@ def parse_customer_product_regions(
     companion_candidate_count = 0
     companion_stale_records_skipped = 0
     future_dated_source_rows: list[dict[str, Any]] = []
+    ledger_rows: list[ParsedRow] = []
+    ledger_state: dict[int, str] = {}
     same_date_source_conflicts = 0
     model_identity_ambiguity_count = 0
     sheet_domain_hints: dict[str, str] = {}
@@ -220,6 +224,11 @@ def parse_customer_product_regions(
             for (alias, names) in canonical_candidates.items()
             if len(names) == 1
         }
+        delivery_customers = {
+            str(row.values.get("purchase_unit") or row.values.get("customer_name") or "").strip()
+            for row in parsed_rows
+        } - {""}
+        default_customer = next(iter(delivery_customers)) if len(delivery_customers) == 1 else ""
         customer_product_latest: dict[tuple[str, str, str], ParsedRow] = {}
         same_date_conflict_rows: list[ParsedRow] = []
         if target_type == "customer_products":
@@ -257,7 +266,10 @@ def parse_customer_product_regions(
             if remaining <= 0:
                 break
             companion_rows = _facade().parse_shipment_history_rows(
-                worksheet, canonical_by_alias=canonical_by_alias, max_rows=remaining
+                worksheet,
+                canonical_by_alias=canonical_by_alias,
+                max_rows=remaining,
+                default_customer=default_customer,
             )
             if not companion_rows:
                 companion_rows = _facade().parse_structured_shipment_history_rows(
@@ -269,8 +281,10 @@ def parse_customer_product_regions(
                 )
             if companion_rows:
                 companion_sheet_counts[worksheet.title] = len(companion_rows)
+            ledger_rows.extend(companion_rows)
             for row in companion_rows:
                 if _facade()._is_future_companion(row):
+                    ledger_state[id(row)] = "future_dated_isolated"
                     future_dated_source_rows.append(
                         {
                             "sheet": row.sheet,
@@ -295,6 +309,7 @@ def parse_customer_product_regions(
                         companion_stale_records_skipped += 1
                 else:
                     if key in existing_keys:
+                        ledger_state[id(row)] = "duplicate_of_delivery_note"
                         continue
                     existing = history_latest.get(key)
                     if existing is None:
@@ -305,6 +320,15 @@ def parse_customer_product_regions(
                     else:
                         companion_stale_records_skipped += 1
         companion_candidate_count = len(history_latest)
+        retained = {id(row): "history_line_pending_confirmation" for row in history_latest.values()}
+        retained.update(
+            {id(row): "customer_product_candidate" for row in customer_product_latest.values()}
+        )
+        retained.update(
+            {id(row): "same_date_conflict_needs_review" for row in same_date_conflict_rows}
+        )
+        for row in ledger_rows:
+            ledger_state.setdefault(id(row), retained.get(id(row), "superseded_by_newer_record"))
         if target_type == "customer_products":
             selected_rows: list[ParsedRow] = []
             seen_rows: set[tuple[str, int]] = set()
@@ -428,6 +452,21 @@ def parse_customer_product_regions(
                 "count": companion_candidate_count,
             }
         )
+    ledger_verification = ledger_row_verification(
+        ledger_rows, ledger_state, written_rows=len(parsed_rows), target_type=target_type
+    )
+    if ledger_verification["confirmation_required"]:
+        warnings.append(
+            {
+                "code": "ELT_LEDGER_ROWS_REQUIRE_CONFIRMATION",
+                "message": (
+                    f"附表台账共 {ledger_verification['total_rows']} 行已逐行核验；本次预演只写入 "
+                    f"{len(parsed_rows)} 行，其余行不会未经确认被缩减或丢弃，逐行去向见台账核验。"
+                ),
+                "count": ledger_verification["total_rows"],
+                "status_counts": ledger_verification["status_counts"],
+            }
+        )
     sheet_plan = _facade()._build_sheet_plan(
         workbook_sheet_names=workbook_sheet_names,
         regions=regions,
@@ -446,6 +485,7 @@ def parse_customer_product_regions(
                 ),
                 "regions": regions,
                 "shipment_history_product_candidates": companion_candidate_count,
+                "ledger_row_verification": ledger_verification,
                 "latest_record_selection": {
                     "basis": "source_date_then_same_sheet_row",
                     "unique_candidates": companion_candidate_count,

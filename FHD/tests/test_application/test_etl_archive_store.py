@@ -53,6 +53,8 @@ def test_manual_archive_readback_quota_and_owner_isolation(store):
             create_original(db, owner=3, name="x.xlsx", body=b"123", root=root, request_key="two")
         with pytest.raises(ArchivePolicyError, match="不存在"):
             read_original(db, owner=4, version_id=item.id, root=root)
+        assert Path(item.storage_path).stat().st_mode & 0o222 == 0
+        Path(item.storage_path).chmod(0o600)
         Path(item.storage_path).write_bytes(b"tampered")
         with pytest.raises(ArchivePolicyError, match="校验"):
             read_original(db, owner=3, version_id=item.id, root=root)

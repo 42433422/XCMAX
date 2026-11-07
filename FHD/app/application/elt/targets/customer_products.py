@@ -20,7 +20,7 @@ from app.application.elt.targets.customer_product_support import (
 from app.application.elt.targets.helpers import (
     assert_created_row_unchanged,
     assert_rollback_image_matches,
-    decimal_or_zero,
+    decimal_or_none,
     model_values,
     optional_text,
 )
@@ -79,6 +79,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
             type="number",
             aliases=("价格", "单价", "售价"),
             updatable=True,
+            scale=2,
         ),
         TargetField("category", "分类", aliases=("分类",), updatable=True),
         TargetField("brand", "品牌", aliases=("品牌",), updatable=True),
@@ -303,7 +304,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
                 model_number=optional_text(product_data.get("model_number")),
                 name=str(product_data.get("name") or ""),
                 specification=optional_text(product_data.get("specification")),
-                price=decimal_or_zero(product_data.get("price")),
+                price=decimal_or_none(product_data.get("price")),
                 category=optional_text(product_data.get("category")),
                 brand=optional_text(product_data.get("brand")),
                 description=optional_text(product_data.get("description")),
@@ -320,7 +321,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
         elif action == "update":
             for key in allowed_update_fields & self._product_fields:
                 value = product_data.get(key)
-                converted = decimal_or_zero(value) if key == "price" else optional_text(value)
+                converted = decimal_or_none(value) if key == "price" else optional_text(value)
                 if value not in (None, "") and converted != getattr(product, key):
                     setattr(product, key, converted)
                     product_updated = True
@@ -380,7 +381,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
             for field in changed_fields:
                 value = product_before[field.key]
                 if field.key == "price":
-                    value = decimal_or_zero(value)
+                    value = decimal_or_none(value)
                 values[field.key] = value
             restore_fields(db, product, values, "关联产品")
 

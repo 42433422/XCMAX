@@ -17,8 +17,8 @@ type Proposal = { version: string; parent_version: string | null; candidates: Ca
 type LayoutCell = { cell: string; value: string; formula: boolean; rowspan: number; colspan: number; bold: boolean; italic: boolean; font_size: number; font_color: string; fill: string; align: string }
 type Layout = { sheet: string; widths: number[]; rows: { height: number; cells: LayoutCell[] }[]; truncated: boolean }
 type Review = { usage_restrictions?: string[]; review_id: string; sha256: string; cells: Cell[]; sheets: string[]; model: string; proposal: Proposal; versions?: Proposal[]; layout?: Layout[]; layout_truncated?: boolean; selected_region?: { selection_basis?: string; print_area_mode?: string; source_print_areas?: { sheet: string; value: string }[]; derived_print_area?: string | null } | null }
-type ClassificationRegion = { splitDraft?: string; value_extent?: string | null; suggested_labels?: string[]; context_warning?: string; reason?: string; continuation_context?: { parent_range: string; parent_header_row: number; header_row: number; matched_columns: number[] } | null; range: string; original_range?: string; labels: string[]; label_source?: string; range_source?: string; modified?: boolean; checked_cells: number; parent_heading: string; dependency_status: string; needs_confirmation: boolean; header_cells: { cell: string; value: string }[]; merged_ranges: string[]; dependencies?: { sheet: string; cell: string }[]; possible_shared_context: { cell: string; kind: string }[]; evidence: { label: string; cell: string; matched: string }[] }
-type ClassificationSheet = { sheet: string; sheet_state?: string; processable?: boolean; processing_message?: string; labels: string[]; checked_cells: number; evidence: { label: string; cell: string; matched: string }[]; regions: ClassificationRegion[] }
+type ClassificationRegion = { splitDraft?: string; value_extent?: string | null; suggested_labels?: string[]; context_warning?: string; reason?: string; anomaly_reason?: string; exclusion_role?: string; data_region?: boolean; continuation_context?: { parent_range: string; parent_header_row: number; header_row: number; matched_columns: number[] } | null; range: string; original_range?: string; labels: string[]; label_source?: string; range_source?: string; modified?: boolean; checked_cells: number; parent_heading: string; dependency_status: string; needs_confirmation: boolean; header_cells: { cell: string; value: string }[]; merged_ranges: string[]; dependencies?: { sheet: string; cell: string }[]; possible_shared_context: { cell: string; kind: string }[]; evidence: { label: string; cell: string; matched: string }[] }
+type ClassificationSheet = { sheet: string; sheet_state?: string; processable?: boolean; processing_message?: string; labels: string[]; checked_cells: number; evidence: { label: string; cell: string; matched: string }[]; regions: ClassificationRegion[]; table_structure?: { cell_coverage?: { unassigned_cells?: number; nonempty_cells?: number } } }
 type FragmentLinks = { items: { sheet: string; first: string; second: string; shared_dependencies: { sheet: string; cell: string }[]; repeated_header_observed: boolean; model_group_suggested?: boolean; status: string; selected?: boolean }[]; omitted: number }
 type LogicalDocument = { logical_document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type SuggestedDocument = { document_id: string; fragments: { sheet: string; range: string }[]; status: string }
@@ -1246,6 +1246,14 @@ async function downloadCandidate(index: number) {
         整理要求：{{ note }}
       </div>
       <div v-if="archiveProgress || documentWorkPending" class="elt-bubble elt-bubble--system elt-processing-feedback" :class="{ 'elt-processing-feedback--busy': busy || documentWorkPending }" role="status" :aria-busy="busy || documentWorkPending"><span v-if="busy || documentWorkPending" class="elt-processing-feedback__spinner" aria-hidden="true"></span><span>{{ documentWorkLabel || archiveProgress }}</span></div>
+      <div v-if="archiveOnSelect" class="classification-results" data-table-structure>
+        <template v-for="(item, i) in classifications" :key="`structure-${i}`">
+          <section v-for="sheet in item.sheets" :key="`${i}-${sheet.sheet}`">
+            <p><strong>{{ item.name }} / {{ sheet.sheet }}</strong>：{{ sheet.regions.filter(region => region.data_region !== false).length }} 个表格，{{ sheet.regions.filter(region => region.data_region === false).length }} 处排除<span v-if="sheet.table_structure?.cell_coverage">，未归类单元格 {{ sheet.table_structure.cell_coverage.unassigned_cells ?? 0 }}</span></p>
+            <p v-for="region in sheet.regions" :key="`${sheet.sheet}-${region.range}-${region.exclusion_role || 'data'}`">{{ region.range }} {{ region.parent_heading }}<small v-if="region.anomaly_reason"> 排除：{{ region.anomaly_reason }}</small></p>
+          </section>
+        </template>
+      </div>
       <div v-if="error" class="elt-bubble elt-bubble--error" role="alert">{{ error }}</div>
 
       <template v-if="archiveOnSelect">
@@ -1388,6 +1396,7 @@ async function downloadCandidate(index: number) {
             <small v-if="region.context_warning">{{ region.context_warning }}</small>
             <small v-if="region.continuation_context">参考 {{ region.continuation_context.parent_range }} 第 {{ region.continuation_context.parent_header_row }} 行与本区域第 {{ region.continuation_context.header_row }} 行的重复表头。</small>
             <small v-if="region.value_extent && !region.modified">非空格范围 {{ region.value_extent }}（仅供参考，样式、合并及说明可能在其外；未裁剪原范围）。</small>
+            <small v-if="region.anomaly_reason">排除：{{ region.anomaly_reason }}</small>
             <small v-if="region.reason">模型解释：{{ region.reason }}（仅供核对）</small>
             <small>{{ region.dependency_status }}</small>
             <details><summary>查看表头、合并与可能的共享说明</summary>
