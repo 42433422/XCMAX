@@ -148,6 +148,33 @@ def test_repository_initialization_failure_never_silently_accepts_volatile_runs(
     assert queue._task_execution_repository is None
 
 
+def test_reset_retires_disposed_queues_retained_by_failed_tests(monkeypatch):
+    import weakref
+
+    from sqlalchemy.pool import StaticPool
+
+    from app.application.agent_orchestrator import task_execution_repository as queue
+
+    monkeypatch.setattr(queue, "_task_execution_repository", None)
+    monkeypatch.setattr(queue, "_OPEN_REPOSITORIES", weakref.WeakSet())
+    engine = create_engine("sqlite://", poolclass=StaticPool)
+    retired = SQLAlchemyTaskExecutionRepository(session_factory=sessionmaker(bind=engine))
+    run = AgentRun(user_id="owner", message="retired database", status="queued")
+    retired.enqueue(run)
+    queue.set_task_execution_repository_for_tests(retired)
+    assert queue.locate_task_execution(run.run_id)[0] is retired
+    engine.dispose()
+
+    # A failed test's traceback retains its repositories after fixture teardown.
+    # Looking up a different task must not reconnect to that discarded in-memory DB.
+    queue.set_task_execution_repository_for_tests(None)
+    assert queue.locate_task_execution("next-test-task") == (None, None)
+    current = queue.InMemoryTaskExecutionRepository()
+    queue.set_task_execution_repository_for_tests(current)
+    current.enqueue(run)
+    assert queue.locate_task_execution(run.run_id)[0] is current
+
+
 def test_memory_mode_is_explicit_development_only_and_shared_by_run_and_queue(monkeypatch):
     import pytest
 

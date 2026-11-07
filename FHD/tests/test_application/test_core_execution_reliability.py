@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.db.db_base import Base
 from app.infrastructure.tenant_scope import tenant_scope
@@ -74,10 +73,10 @@ def _client(
     from tests.fixtures.cross_module_business import _build_source_workbook
 
     if engine is None:
+        # Request, dispatcher and polling sessions must have independent transactions.
         engine = create_engine(
-            "sqlite://",
+            f"sqlite:///{tmp_path / 'reliability.sqlite3'}",
             connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
         )
 
         @event.listens_for(engine, "connect")
@@ -685,19 +684,12 @@ def test_approval_http_returns_while_dispatcher_owns_the_queue(tmp_path, monkeyp
         assert _product_models(env) == []
         release.set()
         assert started.wait(5)
-        # Product rows commit before the dispatcher releases the lease. Poll the
-        # queue only; another HTTP request on this shared SQLite connection can
-        # tear the import.
+        # The lease completes after the business rows and the public task view commit.
         deadline = time.monotonic() + 10
         finished = None
         while time.monotonic() < deadline:
             finished = env["queue"].get(created["data"]["run_id"])
-            if (
-                _product_models(env) == ["HAND-1", "HAND-2"]
-                and finished is not None
-                and finished.state == "succeeded"
-                and finished.execution_count == 1
-            ):
+            if finished is not None and finished.state == "succeeded":
                 break
             time.sleep(0.05)
         assert _product_models(env) == ["HAND-1", "HAND-2"]

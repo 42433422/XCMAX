@@ -256,7 +256,7 @@ describe('api request contracts', () => {
     for (const token of ['opaque', 'a.not-json.c', `a.${encode({ sub: 'user' })}.c`]) {
       localStorage.setItem('modstore_token', token)
       await api.me()
-      const headers = vi.mocked(fetch).mock.calls.at(-1)?.[1]?.headers as Record<string, string>
+      const headers = vi.mocked(fetch).mock.calls.slice(-1)[0]?.[1]?.headers as Record<string, string>
       expect(headers.Authorization).toBe(`Bearer ${token}`)
     }
   })
