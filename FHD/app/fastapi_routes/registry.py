@@ -7,7 +7,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import APIRouter, FastAPI
-from starlette.routing import Route
+from starlette.routing import Mount, compile_path
+
+from app.legacy.routes.openapi_route_compat import iter_effective_routes
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +30,61 @@ class RouteMount:
 
 @dataclass
 class RouteConflict:
-    """Duplicate method+path detected across mounts."""
+    """An exact duplicate or a static path shadowed by an earlier parameter route."""
 
     method: str
     path: str
     mounts: list[str]
+    kind: str = "duplicate"
+    shadowed_by: str | None = None
+
+
+def _detect_conflicts(entries) -> list[RouteConflict]:
+    seen: dict[tuple[str, str], list[str]] = {}
+    dynamic = []
+    conflicts: list[RouteConflict] = []
+    for route, owner in entries:
+        if isinstance(route.original_route, Mount):
+            pattern, _, _ = compile_path(route.path.rstrip("/") + "/{path:path}")
+            dynamic.append((pattern, route.path, None, f"mount:{route.path}"))
+            continue
+        if not route.path or not route.methods:
+            continue
+        methods = {str(method).upper() for method in route.methods}
+        for method in methods:
+            seen.setdefault((method, route.path), []).append(owner)
+        pattern, _format, converters = compile_path(route.path)
+        if converters:
+            dynamic.append((pattern, route.path, methods, owner))
+        else:
+            for earlier, path, earlier_methods, earlier_owner in dynamic:
+                if earlier.fullmatch(route.path):
+                    for method in sorted(
+                        methods if earlier_methods is None else methods & earlier_methods
+                    ):
+                        conflicts.append(
+                            RouteConflict(
+                                method, route.path, [earlier_owner, owner], "shadow", path
+                            )
+                        )
+    conflicts[:0] = [
+        RouteConflict(method, path, owners)
+        for (method, path), owners in sorted(seen.items())
+        if len(owners) > 1
+    ]
+    return conflicts
+
+
+def detect_app_route_conflicts(app: FastAPI) -> list[RouteConflict]:
+    """Inspect the current app, including legacy and already mounted Mod routes."""
+    return _detect_conflicts(
+        (
+            route,
+            f"{getattr(route.endpoint, '__module__', '')}:"
+            f"{getattr(route.endpoint, '__qualname__', route.name)}",
+        )
+        for route in iter_effective_routes(app.routes, include_mounts=True)
+    )
 
 
 class RouteRegistry:
@@ -87,19 +139,16 @@ class RouteRegistry:
             )
 
     def detect_conflicts(self) -> list[RouteConflict]:
-        """Detect duplicate (method, path) pairs across registered routers."""
-        seen: dict[tuple[str, str], list[str]] = {}
-        for mount in self._mounts.values():
-            for route in mount.router.routes:
-                if isinstance(route, Route):
-                    for method in route.methods or {"GET"}:
-                        key = (method.upper(), route.path)
-                        seen.setdefault(key, []).append(mount.name)
-        conflicts: list[RouteConflict] = []
-        for (method, path), mounts in sorted(seen.items()):
-            if len(mounts) > 1:
-                conflicts.append(RouteConflict(method=method, path=path, mounts=mounts))
-        return conflicts
+        """Use the same prefixes and order as apply(), expanding nested includes."""
+        return _detect_conflicts(
+            (route, mount.name)
+            for mount in sorted(self._mounts.values(), key=lambda m: (m.priority, m.name))
+            for route in iter_effective_routes(
+                mount.router.routes,
+                prefix=mount.include_kwargs.get("prefix", mount.prefix) or "",
+                include_mounts=True,
+            )
+        )
 
     def names(self) -> list[str]:
         return sorted(self._mounts.keys())

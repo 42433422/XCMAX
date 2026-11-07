@@ -6,15 +6,15 @@
   "stats": {
     "total": 157,
     "by_status": {
-      "verified": 106,
+      "verified": 104,
       "partial": 15,
       "implemented": 3,
-      "planned": 33
+      "planned": 35
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 106,
+    "verified_total": 104,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
       "windows": 98,
@@ -60,7 +60,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 75
+    "completion": 74
   },
   "product_version": "1.0.0.7",
   "release_ready": false,
@@ -971,7 +971,7 @@
             {
               "id": "ai-eskill",
               "name": "工作流编排与 ESkill 制作",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -985,7 +985,7 @@
                   "accepted_count": 1
                 }
               ],
-              "summary": "工作流定义与 ESkill 技能编排。",
+              "summary": "工作流定义与 ESkill 技能编排，完整制作流程尚待验收；历史 Web 记录仅覆盖入口及页面探测。",
               "featured": false,
               "evidence_ref": "ai-employees-workflow",
               "evidence_ref_name": "工作流员工（数字员工编排）"
@@ -993,7 +993,7 @@
             {
               "id": "ai-employee-publish",
               "name": "员工打包与发布",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -1007,7 +1007,7 @@
                   "accepted_count": 1
                 }
               ],
-              "summary": "员工包打包与发布流程。",
+              "summary": "员工包打包与发布流程尚待验收；历史 Web 记录仅覆盖目录、配置查询及页面展示。",
               "featured": false,
               "evidence_ref": "ai-employee-pack",
               "evidence_ref_name": "办公员工包"

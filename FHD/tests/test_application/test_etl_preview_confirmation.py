@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -385,51 +384,37 @@ def test_error_row_scope_requires_explicit_choice_and_cannot_change_in_queue(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("route", ["primary", "legacy"])
 @pytest.mark.parametrize("with_revision", [False, True])
-async def test_execute_routes_forward_only_supplied_approval(
-    preview_store, monkeypatch, route, with_revision
+async def test_execute_route_forwards_only_supplied_approval(
+    preview_store, monkeypatch, with_revision
 ):
     from app.fastapi_routes import elt as etl
-    from app.legacy.routes import shipment_etl_compat
-    from app.schemas.elt_schema import EltExecuteRequest
 
     store = preview_store
     run_id = ready_preview(store, monkeypatch)
-    reviewed = snapshot(store, run_id)["preview_revision"]
-    revision = reviewed if with_revision else None
+    revision = snapshot(store, run_id)["preview_revision"]
     monkeypatch.setattr(etl, "get_elt_service", lambda: store.service)
-    monkeypatch.setattr(shipment_etl_compat, "get_elt_service", lambda: store.service)
-    with store.factory() as db:
-        if route == "legacy":
-            response = await shipment_etl_compat.shipment_etl_execute(
-                etl_run_id=run_id,
-                confirmed="1",
-                valid_rows_only="0",
-                preview_revision=revision or "",
-                db=db,
-                user=SimpleNamespace(id=7),
-            )
-            assert response.status_code == (202 if with_revision else 409)
-            if not with_revision:
-                assert (
-                    json.loads(response.body)["error_code"] == "ELT_PREVIEW_CONFIRMATION_REQUIRED"
-                )
-        elif with_revision:
-            assert etl.execute_run(
-                run_id,
-                EltExecuteRequest(confirmed=True, preview_revision=revision),
-                db,
-                SimpleNamespace(id=7),
-            )["success"]
-        else:
-            with pytest.raises(EltError) as error:
-                etl.execute_run(
-                    run_id, EltExecuteRequest(confirmed=True), db, SimpleNamespace(id=7)
-                )
-            assert error.value.code == "ELT_PREVIEW_CONFIRMATION_REQUIRED"
+    app = FastAPI()
+    app.include_router(etl.router)
+    app.dependency_overrides[etl._feature_gate] = lambda: None
+    app.dependency_overrides[etl._execute] = lambda: SimpleNamespace(id=7)
+
+    def scoped_db():
+        with store.factory() as db:
+            yield db
+
+    app.dependency_overrides[etl.get_db_dependency] = scoped_db
+    payload = {"confirmed": True}
+    if with_revision:
+        payload["preview_revision"] = revision
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(f"/api/elt/runs/{run_id}/execute", json=payload)
+    assert response.status_code == (202 if with_revision else 409), response.text
     if with_revision:
         store.executor.futures[-1].result(timeout=10)
         assert snapshot(store, run_id)["summary"]["executed"] == 2
     else:
+        assert response.json()["detail"]["code"] == "ELT_PREVIEW_CONFIRMATION_REQUIRED"
         assert_unwritten(store, run_id)

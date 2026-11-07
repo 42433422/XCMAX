@@ -394,46 +394,36 @@ def compat_print_diagnose():
         return _fail("打印机诊断失败", 500)
 
 
-@router.post("/api/print/{filename:path}", dependencies=_print_access)
-def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(default_factory=dict)):
-    from app.utils.path_io.path_utils import get_app_data_dir
-
-    printer_name = payload.get("printer_name") or payload.get("printer")
-    output_dir = Path(get_app_data_dir()).resolve() / "shipment_outputs"
-    try:
-        file_path = resolve_under_allowed_dirs(filename, [output_dir])
-    except UnsafeDownloadPathError:
-        return _fail("文件路径无效", 400)
-    if not file_path.is_file():  # lgtm[py/path-injection] -- resolved under shipment_outputs
-        return _fail("文件不存在", 404)
-
-    result = _printer_svc().print_document(str(file_path), printer_name=printer_name)
-    ok = bool(result.get("success"))
-    status = 200 if ok else 400
-    public_result = {
-        "success": ok,
-        "message": "打印任务已提交" if ok else "打印服务暂时不可用，请稍后重试",
-    }
-    traced = _trace_ai_assistant_route(
-        public_result,
-        route="/api/print/{filename}",
-        action="print_shipment_file",
-        body={"filename": filename, **dict(payload or {})},
-    )
-    return JSONResponse(traced, status_code=status)
-
-
-@router.post("/api/print-last", dependencies=_print_access)
+@router.post(
+    "/api/print-last",
+    dependencies=_print_access,
+    deprecated=True,
+    status_code=501,
+    description="兼容入口已停用；请通过 /api/print/{filename} 指定要打印的文件。",
+)
 def compat_print_last():
     return _fail(
         "XCAGI 未实现 print-last（请通过 /api/print/<filename> 打印指定文件）",
         501,
+        error_code="PRINT_LAST_RETIRED",
+        replacement="/api/print/{filename}",
     )
 
 
-@router.post("/api/print/pdf_labels", dependencies=_print_access)
+@router.post(
+    "/api/print/pdf_labels",
+    dependencies=_print_access,
+    deprecated=True,
+    status_code=501,
+    description="批量 PDF 标签兼容入口未实现；单张标签请使用 /api/print/single_label。",
+)
 def compat_print_pdf_labels():
-    return _fail("XCAGI 暂未实现 pdf_labels（请使用现有打印功能）", 501)
+    return _fail(
+        "XCAGI 暂未实现 pdf_labels（单张标签请使用 /api/print/single_label）",
+        501,
+        error_code="PDF_LABELS_UNAVAILABLE",
+        replacement="/api/print/single_label",
+    )
 
 
 @router.post("/api/print/single_label", dependencies=_print_access)
@@ -498,3 +488,33 @@ def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dic
             body=payload,
         )
         return JSONResponse(traced, status_code=500)
+
+
+# Fixed print operations must precede the filename catch-all.
+@router.post("/api/print/{filename:path}", dependencies=_print_access)
+def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(default_factory=dict)):
+    from app.utils.path_io.path_utils import get_app_data_dir
+
+    printer_name = payload.get("printer_name") or payload.get("printer")
+    output_dir = Path(get_app_data_dir()).resolve() / "shipment_outputs"
+    try:
+        file_path = resolve_under_allowed_dirs(filename, [output_dir])
+    except UnsafeDownloadPathError:
+        return _fail("文件路径无效", 400)
+    if not file_path.is_file():  # lgtm[py/path-injection] -- resolved under shipment_outputs
+        return _fail("文件不存在", 404)
+
+    result = _printer_svc().print_document(str(file_path), printer_name=printer_name)
+    ok = bool(result.get("success"))
+    status = 200 if ok else 400
+    public_result = {
+        "success": ok,
+        "message": "打印任务已提交" if ok else "打印服务暂时不可用，请稍后重试",
+    }
+    traced = _trace_ai_assistant_route(
+        public_result,
+        route="/api/print/{filename}",
+        action="print_shipment_file",
+        body={"filename": filename, **dict(payload or {})},
+    )
+    return JSONResponse(traced, status_code=status)

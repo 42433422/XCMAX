@@ -24,6 +24,7 @@ adapter tomorrow. This test pins:
 from __future__ import annotations
 
 import importlib
+import subprocess
 import sys
 from pathlib import Path
 
@@ -68,33 +69,27 @@ def test_services_package_does_not_import_heavy_modules_at_load():
     in ``sys.modules`` solely because of importing the services package.
     """
 
-    # Drop any cached imports that may already have been added by other tests.
-    for mod in list(sys.modules):
-        if mod.startswith("modstore_server.services"):
-            del sys.modules[mod]
-    for forbidden in (
-        "modstore_server.payment_api",
+    forbidden = (
+        "modstore_server.api.payment_routes",
         "modstore_server.refund_api",
         "modstore_server.employee_api",
-        "modstore_server.market_api",
+        "modstore_server.api.market_routes",
         "modstore_server.knowledge_v2_api",
         "modstore_server.openapi_connector_api",
-    ):
-        sys.modules.pop(forbidden, None)
-
-    importlib.import_module("modstore_server.services")
-
-    for forbidden in (
-        "modstore_server.payment_api",
-        "modstore_server.refund_api",
-        "modstore_server.market_api",
-        "modstore_server.knowledge_v2_api",
-        "modstore_server.openapi_connector_api",
-    ):
-        assert forbidden not in sys.modules, (
-            f"importing modstore_server.services must not eagerly load "
-            f"{forbidden}; that would re-couple every domain."
-        )
+    )
+    # A fresh interpreter checks import side effects without evicting live routers.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import modstore_server.services; "
+            f"assert not set({forbidden!r}) & set(sys.modules)",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_port_modules_avoid_direct_orm_or_http_imports_at_top_level():

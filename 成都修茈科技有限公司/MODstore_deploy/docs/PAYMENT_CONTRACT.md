@@ -9,7 +9,7 @@
 - 前端只能调 Python 暴露的 `/api/payment/**`、`/api/wallet/**`、`/api/refunds/**`。
 - 当 `PAYMENT_BACKEND=java` 时，FastAPI `add_security_headers` 中间件会对 `/api/payment`、`/api/wallet`、`/api/refunds` 三个前缀整段透传给 `JAVA_PAYMENT_SERVICE_URL`。
 - **订单 SoT**：`PAYMENT_BACKEND=java` 时 `payment_orders` 本地 JSON **禁止写入**（`create`/`merge_fields`/`update_status` 返回 `java_sot_readonly`）；FHD 宿主设 `MODEL_PAYMENT_BACKEND=modstore` 时走 `/api/market/payment/*`，不再写 `model_payment_orders.json`。
-- 当 `PAYMENT_BACKEND=python` 或未设置时，请求由 `payment_api.py`、`market_api.py`（钱包路由）、`refund_api.py` 处理。
+- 当 `PAYMENT_BACKEND=python` 或未设置时，请求由 `api/payment_routes.py`、`api/market_routes.py`（钱包路由）、`refund_api.py` 处理；旧 import shim 的删除不影响这些 URL。
 - 事件出口：Python `webhook_dispatcher.publish_event` 与 Java `WebhookDispatcher.publishPaymentPaid` 共用同一 envelope 与 HMAC 头。
 
 ## 2. 路由清单与归属
@@ -39,7 +39,8 @@
 | GET    | `/api/refunds/my`                                          | python                                     | Bearer JWT                                                          | 200                       | 当前用户退款申请                                                                              |
 | GET    | `/api/refunds/admin/pending`                               | python                                     | Bearer JWT + admin                                                  | 200 / 403                 | 待审核退款列表                                                                                |
 | POST   | `/api/refunds/admin/{refund_id}/review`                    | python                                     | Bearer JWT + admin                                                  | 200 / 400 / 403 / 404     | 审核：approve/reject；approve 调用支付宝退款并发布 `refund.approved`                          |
-| POST   | `/api/webhooks/admin/replay`                               | both                                       | Bearer JWT + admin                                                  | 200 / 400 / 404 / 502     | 当 `PAYMENT_BACKEND=java` 且 `event_type` 不以 `refund.` 开头时由 Python 转发到 Java          |
+| POST   | `/api/webhooks/admin/replay`                               | both                                       | Bearer JWT + admin                                                  | 200 / 400 / 404 / 502     | 未提供 `event_id`、`PAYMENT_BACKEND=java` 且非 `refund.*` 时由 Python 转发到 Java            |
+| POST   | `/api/webhooks/admin/replay-legacy`                        | Java                                       | Bearer JWT + admin                                                  | 200 / 401 / 403           | 旧 URL 的兼容别名，与 Java `/replay` 由同一控制器方法处理；业务拒绝返回 `ok=false`           |
 | GET    | `/api/internal/payment/summary`                            | both（BFF 聚合）                           | `X-Internal-Api-Key`                                                | 200 / 403 / 503           | FHD 客服到款核对；`market_user_id` + 可选 `min_amount_cents` / `expected_out_trade_no`        |
 | GET    | `/api/internal/payment/user-orders`                        | java                                       | `X-Internal-Api-Key`                                                | 200 / 403 / 404           | Java 直查 PostgreSQL 订单；Python `PAYMENT_BACKEND=java` 时由 `payment_cs_internal` 调用      |
 
@@ -216,7 +217,9 @@ P0 必须遵守：
 1. 生产环境 `PAYMENT_BACKEND=java`；Python 不再下单或履约。
 2. `ALIPAY_NOTIFY_URL` 必须指向最终持有订单的服务（默认为 Java 公网域名 + `/api/payment/notify/alipay`）。
 3. 在 `PAYMENT_BACKEND=java` 的环境，禁止再向 Python 的 `payment_orders/` JSON 目录写入业务订单；Python 退款审核需要订单时，先尝试 Java 查询，再回退 JSON 兼容只读。
-4. Webhook replay：Python `/api/webhooks/admin/replay` 在 `PAYMENT_BACKEND=java` 且 `event_type` 非 `refund.*` 时，必须把请求转发到 Java 的 `/api/webhooks/admin/replay`。
+4. Webhook replay：Python `/api/webhooks/admin/replay` 有 `event_id` 时重放本地已存事件；未提供 `event_id`、`PAYMENT_BACKEND=java` 且 `event_type` 非 `refund.*` 时，转发到 Java 的 `/api/webhooks/admin/replay`。
+
+Java 的两个重放 URL 共用 `WebhookAdminController.replay`。`event_id=payment.paid:<order_no>` 可推导订单，且沿用旧入口优先采用事件中订单号的规则；自定义事件 ID 需同时提供 `order_no`。提供的事件 ID 去除首尾空白后用于重投；省略时生成稳定的 `payment.paid:<order_no>`，避免重试改变消费者幂等键。仅管理员可重放已支付订单，`event_type` 仅接受 `payment.paid` 或兼容名 `payment.order_paid`；退款重放仍由 Python 处理。
 
 ## 7. 切换/回滚开关
 
@@ -233,8 +236,8 @@ P0 必须遵守：
 强制由 `tests/test_payment_contract.py` 校验的项目：
 
 - `payment_contract.PROXY_PREFIXES` 与 `PaymentGatewayService.should_proxy_to_java` 一致。
-- `payment_contract.SIGN_FIELDS` 与 `payment_api.canonical_checkout_sign_data` 输出键集合一致，且 `_amount_sign_str` 处理 `9`/`9.9`/`9.99`/`0.10` 与契约一致。
-- `payment_contract.PAYMENT_PAID_PAYLOAD_FIELDS` 与 `eventing.contracts.EVENT_CONTRACTS[PAYMENT_PAID].required_payload` 一致；`webhook_api._payment_payload` 与 `payment_api._fulfill_paid_order` 发布的 payload 包含全部必填项。
+- `payment_contract.SIGN_FIELDS` 与 `payment_common.canonical_checkout_sign_data` 输出键集合一致，且 `_amount_sign_str` 处理 `9`/`9.9`/`9.99`/`0.10` 与契约一致。
+- `payment_contract.PAYMENT_PAID_PAYLOAD_FIELDS` 与 `eventing.contracts.EVENT_CONTRACTS[PAYMENT_PAID].required_payload` 一致；`webhook_api._payment_payload` 与 `api.payment_routes._fulfill_paid_order` 发布的 payload 包含全部必填项。
 - 前端 `market/src/api.ts` 与 `market/src/application/paymentApi.ts` 中的 endpoint 路径与本文件 §2 一致。
 - Java `SecurityService.canonicalCheckoutData` 顺序与本文件 §3.4 一致（通过文件文本静态校验）。
 - Java：`mvn verify` 的 JaCoCo 使用「全 BUNDLE 底限 + 契约类 CLASS 0.80/0.70」两档门禁（`java_payment_service/pom.xml`），与 Python 对 `payment_orders` / `payment_contract` 等关键文件的 80% 门禁原则对齐。

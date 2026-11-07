@@ -305,7 +305,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.fastapi_routes.domains.product.product_routes",
         "products_export_xlsx",
     ),
-    "products_export_docx": ("app.fastapi_routes.xcagi_compat_product", "products_export_docx"),
+    "products_export_docx": ("app.legacy.routes.product.compat_routes", "products_export_docx"),
     "products_get_by_id": (
         "app.legacy.routes.product.compat_routes",
         "products_get_by_id",

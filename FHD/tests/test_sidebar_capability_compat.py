@@ -77,9 +77,10 @@ def test_knowledge_and_employee_aliases(compat_app_client: TestClient) -> None:
             return {"success": True, "data": {"catalog": []}}
 
         mock_cat.side_effect = _cat
-        r3 = compat_app_client.get("/api/workflow-employee-space/overview")
+        r3 = compat_app_client.get("/api/employees")
     assert r3.status_code == 200
     assert r3.json()["success"] is True
+    assert "deprecation" not in r3.headers
 
 
 def test_data_sources_and_print_templates_aliases(compat_app_client: TestClient) -> None:
@@ -94,6 +95,8 @@ def test_data_sources_and_print_templates_aliases(compat_app_client: TestClient)
         r2 = compat_app_client.get("/api/print/templates")
     assert r2.status_code == 200
     assert r2.json()["success"] is True
+    assert r2.headers["deprecation"].startswith("@")
+    assert r2.headers["link"] == '</api/templates>; rel="successor-version"'
 
 
 def test_customers_all_delegates_to_list() -> None:
@@ -136,3 +139,58 @@ def test_customers_all_delegates_to_list() -> None:
     assert data["success"] is True
     assert data["total"] == 1
     assert data["data"][0]["customer_name"] == "闭环组织"
+
+
+@pytest.mark.parametrize(
+    "path,replacement",
+    [
+        ("/api/knowledge/base", "/api/knowledge/v1/health"),
+        ("/api/workflow-employee-space/overview", "/api/system/workflow-employee-catalog"),
+        ("/api/workflow/employees", "/api/system/workflow-employee-catalog"),
+        ("/api/core-workflow/employees", "/api/system/workflow-employee-catalog"),
+        ("/api/datasources", "/api/private-db-assistant/sources"),
+        ("/api/erp/data-sources", "/api/private-db-assistant/sources"),
+        ("/api/print/templates", "/api/templates"),
+        ("/api/label/templates", "/api/templates"),
+    ],
+)
+def test_legacy_probes_keep_data_and_advertise_real_successors(
+    compat_app_client, path, replacement
+):
+    from unittest.mock import AsyncMock
+
+    from fastapi.responses import JSONResponse
+
+    with (
+        patch("app.fastapi_routes.knowledge_v1.health", return_value={"success": True}),
+        patch(
+            "app.fastapi_routes.system_routes.get_workflow_employee_catalog",
+            new=AsyncMock(return_value={"success": True, "data": {"catalog": []}}),
+        ),
+        patch(
+            "app.fastapi_routes.template_api.templates_list_compat",
+            return_value=JSONResponse({"success": True, "templates": [{"id": "T1"}]}),
+        ),
+    ):
+        response = compat_app_client.get(path)
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.headers["deprecation"].startswith("@")
+    assert response.headers["link"] == f'<{replacement}>; rel="successor-version"'
+    assert compat_app_client.app.openapi()["paths"][path]["get"]["deprecated"] is True
+    if path.endswith("/templates"):
+        assert response.json()["templates"] == [{"id": "T1"}]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/knowledge",
+        "/api/persy/knowledge",
+        "/api/employees",
+        "/api/data-sources",
+    ],
+)
+def test_runtime_aliases_are_not_retired(compat_app_client, path):
+    operation = compat_app_client.app.openapi()["paths"][path]["get"]
+    assert not operation.get("deprecated")

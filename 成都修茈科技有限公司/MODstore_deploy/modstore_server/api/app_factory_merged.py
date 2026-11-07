@@ -195,6 +195,16 @@ def _register_core_routes(app: _facade().FastAPI, cfg: _facade().AppConfig) -> N
         from modstore_server.api.market_routes import router as market_router
         from modstore_server.api.payment_routes import router as payment_router
 
+        # Named bundle downloads must precede /market/catalog/{item_id}/download.
+        # The item_id annotation validates after matching; it cannot select a route.
+        try:
+            from modstore_server.market_catalog_api import (
+                router as market_catalog_router,
+            )
+
+            app.include_router(market_catalog_router, prefix="/api")
+        except _facade().RECOVERABLE_ERRORS:
+            _facade().logger.exception("market_catalog_api 加载失败，跳过")
         app.include_router(market_router)
         app.include_router(payment_router)
         try:
@@ -219,14 +229,6 @@ def _register_core_routes(app: _facade().FastAPI, cfg: _facade().AppConfig) -> N
             app.include_router(digest_peer_router, prefix="/api")
         except _facade().RECOVERABLE_ERRORS:
             _facade().logger.exception("digest_identity_peer_api 加载失败，跳过")
-        try:
-            from modstore_server.market_catalog_api import (
-                router as market_catalog_router,
-            )
-
-            app.include_router(market_catalog_router, prefix="/api")
-        except _facade().RECOVERABLE_ERRORS:
-            _facade().logger.exception("market_catalog_api 加载失败，跳过")
         from modstore_server.api import admin_events, authoring, catalog
         from modstore_server.api import config as config_routes
         from modstore_server.api import debug, health, scheduler_runtime_api, sync

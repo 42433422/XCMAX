@@ -144,6 +144,18 @@
       "validation": "Real SQLite crash, changed-parameter replay, legacy unknown receipt, post-commit disconnect, tenant and approval regressions pass locally. Final isolated execution and required checks run on the integration PR head.",
       "follow_up": "Extract claim persistence and reconciliation behind the existing permission guard when their transaction contract can be reviewed independently; retain the same receipt identity and conservative unknown outcome.",
       "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_auth_api_merged.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_auth_api_merged.py",
+      "base_blob": "0570340f0947fb4d830604e349db3934b5870b97",
+      "head_blob": "89e255ed8bf3f5c4dd59e4807533ff6929e66dbc",
+      "before_lines": 850,
+      "after_lines": 866,
+      "reason": "Make the two unimplemented SMS handlers return a stable unavailable contract even when SMS_PROVIDER is set; the existing authentication module grows by 16 lines while obsolete modules are retired.",
+      "boundary": "Only a shared SMS_AUTH_UNAVAILABLE response and the existing send-code/phone-login endpoints; password, email, QR authentication and session authorization are unchanged.",
+      "validation": "Six isolated cloud HTTP tests cover both provider configurations, status/code consistency and no session or user mutation; desktop and mobile bridge contract regressions also pass.",
+      "follow_up": "Keep SMS unavailable until a real provider and rate-limit/verification flow are independently reviewed; extract authentication capabilities only with a concrete broader boundary change.",
+      "review_owner": "@42433422"
     }
   }
 }

@@ -1,73 +1,61 @@
-"""手机验证码登录路由（mock 市场）。"""
+"""Legacy SMS endpoints report unavailable without authenticating or sending messages."""
 
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
 @pytest.fixture
 def client():
-    from app.fastapi_routes.domains.auth.auth_routes import router
+    from app.fastapi_routes.domains.auth.auth_routes import router as auth_router
+    from app.fastapi_routes.market_account import router as market_router
+    from app.fastapi_routes.mobile_api import router as mobile_router
 
     app = FastAPI()
-    app.include_router(router)
+    for router in (auth_router, market_router, mobile_router):
+        app.include_router(router)
     return TestClient(app)
 
 
 def test_login_with_phone_code_invalid_input(client: TestClient) -> None:
-    resp = client.post("/api/auth/login-with-phone-code", json={"phone": "", "code": ""})
-    assert resp.status_code == 400
-    assert resp.json()["error"]["code"] == "INVALID_INPUT"
+    response = client.post("/api/auth/login-with-phone-code", json={"phone": "", "code": ""})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_INPUT"
 
 
-def test_login_with_phone_code_market_fail(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-
-    from fastapi.responses import JSONResponse
-
-    err_resp = JSONResponse(
-        {"success": False, "message": "验证码无效"},
-        status_code=401,
-    )
+@pytest.mark.parametrize("provider", ["", "configured-provider"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/auth/login-with-phone-code",
+        "/api/market/send-phone-code",
+        "/api/market/login-with-phone-code",
+        "/api/mobile/v1/auth/login-with-phone-code",
+    ],
+)
+def test_sms_is_unavailable_without_upstream_or_session_side_effects(
+    client, monkeypatch, provider, path
+):
+    monkeypatch.setenv("SMS_PROVIDER", provider)
     with (
+        patch("app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock) as upstream,
         patch(
-            "app.application.enterprise_login_flow.run_market_first_login",
-            new=AsyncMock(return_value=(None, err_resp)),
+            "app.application.enterprise_login_flow.run_market_first_login", new_callable=AsyncMock
         ) as login,
-        patch(
-            "app.fastapi_routes.market_account.login_market_with_phone_code",
-            new=AsyncMock(return_value={"success": False, "message": "验证码无效"}),
-        ) as market,
     ):
-        resp = client.post(
-            "/api/auth/login-with-phone-code",
-            json={"phone": "13800138000", "code": "123456", "account_kind": "enterprise"},
-        )
-    assert resp.status_code == 401
-    assert isinstance(login.call_args.kwargs["background_tasks"], BackgroundTasks)
-    market.assert_awaited_once_with("13800138000", "123456")
-
-
-def test_market_send_phone_code_proxy() -> None:
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    from app.fastapi_routes.market_account import router as market_router
-
-    app = FastAPI()
-    app.include_router(market_router)
-    client = TestClient(app, raise_server_exceptions=False)
-
-    with patch(
-        "app.fastapi_routes.market_account.send_market_phone_code",
-        new=AsyncMock(return_value={"success": True, "message": "验证码已发送"}),
-    ):
-        resp = client.post("/api/market/send-phone-code", json={"phone": "13800138000"})
-    assert resp.status_code == 200
-    assert resp.json()["success"] is True
+        response = client.post(path, json={"phone": "13800138000", "code": "123456"})
+    assert response.status_code == 501, response.text
+    payload = response.json()
+    assert payload["success"] is False
+    detail = payload["data"] if path.startswith("/api/mobile/") else payload
+    assert detail["error_code"] == "SMS_AUTH_UNAVAILABLE"
+    assert detail["capability"] == {"id": "sms_login", "available": False}
+    assert "当前版本不支持" in payload["message"]
+    assert "set-cookie" not in response.headers
+    upstream.assert_not_awaited()
+    login.assert_not_awaited()
+    assert client.app.openapi()["paths"][path]["post"]["deprecated"] is True

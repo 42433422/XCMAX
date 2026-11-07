@@ -25,7 +25,7 @@ export interface OrderSummary {
 }
 
 /**
- * 与 modstore_server/payment_api.py `api_payment_entitlements` 字段对齐。
+ * 与 modstore_server/api/payment_account_routes.py `api_payment_entitlements` 字段对齐。
  */
 export interface EntitlementItem {
   purchase_id: number

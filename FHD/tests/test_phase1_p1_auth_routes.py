@@ -191,7 +191,7 @@ def test_auth_login_phone_code_missing(auth_client: TestClient) -> None:
 
 @patch("app.fastapi_routes.market_account.login_market_with_phone_code", new_callable=AsyncMock)
 @patch("app.application.enterprise_login_flow.run_market_first_login", new_callable=AsyncMock)
-def test_auth_login_phone_code_success(
+def test_auth_login_phone_code_cannot_create_a_session(
     mock_run: AsyncMock, mock_market: AsyncMock, auth_client: TestClient
 ) -> None:
     mock_market.return_value = {"success": True}
@@ -201,7 +201,11 @@ def test_auth_login_phone_code_success(
             "/api/auth/login-with-phone-code",
             json={"phone": "13800138000", "code": "123456"},
         )
-    assert r.status_code == 200
+    assert r.status_code == 501
+    assert r.json()["error_code"] == "SMS_AUTH_UNAVAILABLE"
+    assert "set-cookie" not in r.headers
+    mock_run.assert_not_awaited()
+    mock_market.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

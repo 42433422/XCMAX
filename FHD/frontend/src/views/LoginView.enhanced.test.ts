@@ -1,7 +1,7 @@
 /**
  * LoginView.vue 增强测试
  * 覆盖：peelNestedLoginRedirect、redirectPath、canSubmit、submitLogin、
- * switchLoginMode、sendPhoneCode、formatLoginFailurePayload、
+ * switchLoginMode、formatLoginFailurePayload、
  * completeLoginSuccess、autoLogin、rememberPassword 联动等
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -12,18 +12,14 @@ import { createPinia, setActivePinia } from 'pinia'
 // ── 外部依赖 mock ─────────────────────────────────────────
 
 const mockAuthApiLogin = vi.fn()
-const mockAuthApiLoginWithPhoneCode = vi.fn()
 const mockAuthApiGetOidcStatus = vi.fn()
-const mockAuthApiSendPhoneCode = vi.fn()
 const mockAuthApiIssueAuthQr = vi.fn()
 const mockAuthApiPollAuthQr = vi.fn()
 
 vi.mock('@/api/auth', () => ({
   authApi: {
     login: (...args: unknown[]) => mockAuthApiLogin(...args),
-    loginWithPhoneCode: (...args: unknown[]) => mockAuthApiLoginWithPhoneCode(...args),
     getOidcStatus: (...args: unknown[]) => mockAuthApiGetOidcStatus(...args),
-    sendPhoneCode: (...args: unknown[]) => mockAuthApiSendPhoneCode(...args),
     issueAuthQr: (...args: unknown[]) => mockAuthApiIssueAuthQr(...args),
     pollAuthQr: (...args: unknown[]) => mockAuthApiPollAuthQr(...args),
   },
@@ -203,35 +199,30 @@ describe('LoginView.vue – login mode switching', () => {
     })
   })
 
-  it('switches to phone mode when phone tab is clicked', async () => {
+  it('does not advertise or render unsupported SMS login', async () => {
     const { wrapper } = await mountLoginView()
-    const tabs = wrapper.findAll('.login-mode-tabs button[role="tab"]')
-    // Click phone tab (second tab)
-    if (tabs.length >= 2) {
-      await tabs[1].trigger('click')
-      expect(wrapper.find('input[name="phone"]').exists() || wrapper.find('.otp-cells-stub').exists()).toBe(true)
-    }
+    expect(wrapper.findAll('.login-mode-tabs button[role="tab"]')).toHaveLength(2)
+    expect(wrapper.text()).not.toContain('手机号登录')
+    expect(wrapper.find('#lv-phone').exists()).toBe(false)
+    expect(wrapper.find('#lv-sms-send').exists()).toBe(false)
+    expect(wrapper.find('.otp-cells-stub').exists()).toBe(false)
   })
 
   it('switches to QR mode when QR tab is clicked', async () => {
     const { wrapper } = await mountLoginView()
     const tabs = wrapper.findAll('.login-mode-tabs button[role="tab"]')
-    // Click QR tab (third tab)
-    if (tabs.length >= 3) {
-      await tabs[2].trigger('click')
-      // QR mode should not show the form
-      expect(wrapper.find('.login-form').exists()).toBe(false)
-    }
+    expect(tabs).toHaveLength(2)
+    await tabs[1].trigger('click')
+    expect(wrapper.find('.login-form').exists()).toBe(false)
   })
 
   it('switches back to password mode', async () => {
     const { wrapper } = await mountLoginView()
     const tabs = wrapper.findAll('.login-mode-tabs button[role="tab"]')
-    if (tabs.length >= 2) {
-      await tabs[1].trigger('click') // phone
-      await tabs[0].trigger('click') // back to password
-      expect(wrapper.find('#lv-username').exists()).toBe(true)
-    }
+    expect(tabs).toHaveLength(2)
+    await tabs[1].trigger('click') // QR
+    await tabs[0].trigger('click') // back to password
+    expect(wrapper.find('#lv-username').exists()).toBe(true)
   })
 })
 
@@ -239,7 +230,6 @@ describe('LoginView.vue – submitLogin', () => {
   beforeEach(() => {
     mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
     mockAuthApiLogin.mockReset()
-    mockAuthApiLoginWithPhoneCode.mockReset()
   })
 
   it('shows error when submitting with empty username and password', async () => {
@@ -345,41 +335,6 @@ describe('LoginView.vue – rememberPassword and autoLogin', () => {
   })
 })
 
-describe('LoginView.vue – sendPhoneCode', () => {
-  beforeEach(() => {
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
-    mockAuthApiSendPhoneCode.mockReset()
-  })
-
-  it('shows error for short phone number', async () => {
-    const { wrapper } = await mountLoginView()
-    wrapper.vm.loginMode = 'phone'
-    wrapper.vm.phone = '123'
-    await wrapper.vm.sendPhoneCode()
-    expect(wrapper.vm.errorMessage).toBeTruthy()
-  })
-
-  it('calls authApi.sendPhoneCode with valid phone', async () => {
-    mockAuthApiSendPhoneCode.mockResolvedValue({ message: '验证码已发送' })
-    const { wrapper } = await mountLoginView()
-    wrapper.vm.loginMode = 'phone'
-    wrapper.vm.phone = '13800138000'
-    await wrapper.vm.sendPhoneCode()
-    expect(mockAuthApiSendPhoneCode).toHaveBeenCalledWith('13800138000')
-    expect(wrapper.vm.altLoginHint).toBeTruthy()
-  })
-
-  it('shows error when sendPhoneCode fails', async () => {
-    const { ApiError } = await import('@/api')
-    mockAuthApiSendPhoneCode.mockRejectedValue(new ApiError('发送失败'))
-    const { wrapper } = await mountLoginView()
-    wrapper.vm.loginMode = 'phone'
-    wrapper.vm.phone = '13800138000'
-    await wrapper.vm.sendPhoneCode()
-    expect(wrapper.vm.errorMessage).toBeTruthy()
-  })
-})
-
 describe('LoginView.vue – redirectPath computed', () => {
   beforeEach(() => {
     mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
@@ -435,28 +390,6 @@ describe('LoginView.vue – canSubmit computed', () => {
     const { wrapper } = await mountLoginView()
     wrapper.vm.loginMode = 'qr'
     expect(wrapper.vm.canSubmit).toBe(false)
-  })
-
-  it('returns true in phone mode with valid phone and code', async () => {
-    const { wrapper } = await mountLoginView()
-    wrapper.vm.loginMode = 'phone'
-    wrapper.vm.phone = '13800138000'
-    wrapper.vm.smsCode = '123456'
-    expect(wrapper.vm.canSubmit).toBe(true)
-  })
-
-  it('returns false in phone mode with short phone', async () => {
-    const { wrapper } = await mountLoginView()
-    wrapper.vm.loginMode = 'phone'
-    wrapper.vm.phone = '123'
-    wrapper.vm.smsCode = '123456'
-    expect(wrapper.vm.canSubmit).toBe(false)
-  })
-})
-
-describe('LoginView.vue – formatLoginFailurePayload', () => {
-  beforeEach(() => {
-    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
   })
 
   it('returns default error message for null payload', async () => {

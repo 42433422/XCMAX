@@ -24,7 +24,7 @@ describe('sidebarApiRegression', () => {
       ['/api/shipment/generate', '/api/mod/xcagi-erp-domain-bridge/shipment/generate'],
       ['/api/shipment/download/note.xlsx', '/api/mod/xcagi-erp-domain-bridge/shipment/download/note.xlsx'],
       ['/api/materials', '/api/materials'],
-      ['/api/print/templates', '/api/print/templates'],
+      ['/api/templates', '/api/templates'],
     ]
     for (const [host, expected] of cases) {
       expect(resolveErpApiPath(host, ['xcagi-erp-domain-bridge'])).toBe(expected)

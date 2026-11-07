@@ -7,6 +7,7 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.legacy.routes.legacy_compat import _import_and_mount
 from app.legacy.routes.openapi_route_compat import iter_effective_routes
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -38,42 +39,32 @@ def _ensure_auth_session_validate_route(app: FastAPI) -> None:
 def register_essential_compat_routes(app: FastAPI) -> None:
     """CI/E2E 在跳过完整 legacy 栈时仍须可用的最小 API（避免 payment_sot 等重依赖）。"""
     try:
-        from app.fastapi_routes.domains.auth.auth_routes import router as legacy_auth_router
-
-        app.include_router(legacy_auth_router)
+        _import_and_mount(app, "app.fastapi_routes.domains.auth.auth_routes", "router", "")
         logger.info("Registered legacy_auth_router (essential compat, /api/auth/*)")
     except RECOVERABLE_ERRORS as e:
         logger.warning("essential auth routes skipped: %s", e)
     _ensure_auth_session_validate_route(app)
 
     try:
-        from app.fastapi_routes.system_routes import router as system_router
-
-        app.include_router(system_router)
+        _import_and_mount(app, "app.fastapi_routes.system_routes", "router", "")
         logger.info("Registered system_router (essential compat, /api/system/*)")
     except RECOVERABLE_ERRORS as e:
         logger.warning("essential system routes skipped: %s", e)
 
     try:
-        from app.fastapi_routes.tools_execute import router as tools_execute_router
-
-        app.include_router(tools_execute_router)
+        _import_and_mount(app, "app.fastapi_routes.tools_execute", "router", "")
         logger.info("Registered tools_execute (essential, /api/tools/execute)")
     except RECOVERABLE_ERRORS as e:
         logger.warning("essential tools_execute skipped: %s", e)
 
     try:
-        from app.fastapi_routes.agent_tool_lifecycle import router as agent_tool_router
-
-        app.include_router(agent_tool_router)
+        _import_and_mount(app, "app.fastapi_routes.agent_tool_lifecycle", "router", "")
         logger.info("Registered agent tool lifecycle (/api/agent-tools)")
     except RECOVERABLE_ERRORS as e:
         logger.warning("essential agent tool lifecycle skipped: %s", e)
 
     try:
-        from app.legacy.routes.product.compat_routes import router as product_compat_router
-
-        app.include_router(product_compat_router, prefix="/api")
+        _import_and_mount(app, "app.legacy.routes.product.compat_routes", "router", "/api")
         logger.info("Registered product compat (essential, /api/products/*)")
     except RECOVERABLE_ERRORS as e:
         logger.warning("essential product compat skipped: %s", e)

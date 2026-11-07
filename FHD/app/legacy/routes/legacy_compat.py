@@ -15,6 +15,7 @@ from typing import Literal
 from fastapi import FastAPI
 
 from app.legacy.routes.legacy_gap import register_legacy_gap_routers
+from app.runtime_integrity import record_runtime_component
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -36,13 +37,23 @@ def is_ci_strict() -> bool:
 
 
 def _import_and_mount(app: FastAPI, module_path: str, router_attr: str, prefix: str) -> None:
-    """Import module and mount router (no error handling — caller decides strategy)."""
-    module = importlib.import_module(module_path)
-    router = getattr(module, router_attr)
-    if prefix:
-        app.include_router(router, prefix=prefix)
-    else:
-        app.include_router(router)
+    """Record the mount result without changing the caller's exception strategy."""
+    ok = False
+    try:
+        module = importlib.import_module(module_path)
+        router = getattr(module, router_attr)
+        if prefix:
+            app.include_router(router, prefix=prefix)
+        else:
+            app.include_router(router)
+        ok = True
+    finally:
+        record_runtime_component(
+            app,
+            f"route:{module_path}:{router_attr}:{prefix}",
+            ok=ok,
+            detail="" if ok else "Route registration failed",
+        )
 
 
 def _mount_router(
@@ -98,12 +109,21 @@ def _register_compat_func(
     attribute (private_db_read_assistant, xcmax_personnel, user_cs_wechat_passive).
     """
     name = log_name or module_path.rsplit(".", 1)[-1]
+    ok = False
     try:
         module = importlib.import_module(module_path)
         register_func = getattr(module, register_func_name)
         register_func(app)
+        ok = True
     except RECOVERABLE_ERRORS as e:
         logger.warning("%s compat routes skipped: %s", name, e)
+    finally:
+        record_runtime_component(
+            app,
+            f"route:{module_path}:{register_func_name}:",
+            ok=ok,
+            detail="" if ok else "Route registration failed",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +198,8 @@ def _register_xcagi_compat_routes(app: FastAPI) -> None:
         log_name="xcagi_compat_router (prefix=/api)",
         prefix="/api",
     )
+    # These declarations already own /api; mount once, after the named compat paths.
+    _mount_router(app, "app.fastapi_routes.domains.product.product_routes")
     _mount_router(
         app,
         "app.legacy.routes.sidebar_capability_compat",
@@ -406,9 +428,7 @@ def _register_approval_routes(app: FastAPI) -> None:
 
     # service_bridge — broad catch + CI strict check
     try:
-        from app.fastapi_routes.service_bridge import router as service_bridge_router
-
-        app.include_router(service_bridge_router)
+        _import_and_mount(app, "app.fastapi_routes.service_bridge", "router", "")
         logger.info("Registered service_bridge (/api/service-bridge/*)")
     except RECOVERABLE_ERRORS as exc:
         if is_ci_strict():

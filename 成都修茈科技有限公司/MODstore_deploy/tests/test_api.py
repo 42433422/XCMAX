@@ -34,8 +34,36 @@ def test_openapi_schema(client):
     spec = r.json()
     assert spec["info"]["title"] == "XC AGI"
     paths = spec.get("paths", {})
-    assert "/api/mods" in paths
-    assert "/api/debug/sandbox" in paths
+    # Retiring the unused registry must preserve its public HTTP contracts.
+    expected = {
+        "/api/health": {"get"},
+        "/api/mods": {"get"},
+        "/api/mods/shell-ui": {"get"},
+        "/api/mods/{mod_id}": {"get", "delete"},
+        "/api/authoring/extension-surface": {"get"},
+        "/api/mods/{mod_id}/blueprint-routes": {"get"},
+        "/api/mods/{mod_id}/authoring-summary": {"get"},
+        "/api/mods/{mod_id}/workflow-employees/scaffold": {"post"},
+        "/api/mods/{mod_id}/export-employee-pack": {"get"},
+        "/api/mods/{mod_id}/register-workflow-employee-catalog": {"post"},
+        "/api/mods/{mod_id}/patch-workflow-employee-nodes": {"post"},
+        "/api/mods/{mod_id}/manifest": {"put"},
+        "/api/mods/{mod_id}/file": {"get", "put"},
+        "/api/mods/create": {"post"},
+        "/api/mods/ai-scaffold": {"post"},
+        "/api/mods/{mod_id}/frontend/regenerate": {"post"},
+        "/api/mods/import": {"post"},
+        "/api/mods/{mod_id}/export": {"get"},
+        "/api/sync/push": {"post"},
+        "/api/sync/pull": {"post"},
+        "/api/debug/sandbox": {"post"},
+        "/api/debug/focus-primary": {"post"},
+        "/api/fhd/db-tokens/status": {"get"},
+        "/api/xcagi/loading-status": {"get"},
+        "/api/xcagi/installed-mods": {"get"},
+    }
+    for path, methods in expected.items():
+        assert methods <= paths.get(path, {}).keys(), (path, methods)
 
 
 def test_register_email_is_optional_but_verified_when_present(client):

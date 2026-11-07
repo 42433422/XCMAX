@@ -6,6 +6,7 @@ import logging
 
 from fastapi import FastAPI
 
+from app.legacy.routes.legacy_compat import _import_and_mount
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -14,25 +15,19 @@ logger = logging.getLogger(__name__)
 def register_lan_routes(app: FastAPI) -> None:
     """注册局域网授权用户端 + 管理员路由（/api/lan/*）。"""
     try:
-        from app.fastapi_routes.lan_routes import router as lan_router
-
-        app.include_router(lan_router)
+        _import_and_mount(app, "app.fastapi_routes.lan_routes", "router", "")
         logger.info("Registered LAN routes (/api/lan/*)")
     except RECOVERABLE_ERRORS as e:
         logger.warning("LAN routes skipped: %s", e)
 
     try:
-        from app.fastapi_routes.lan_admin_routes import router as lan_admin_router
-
-        app.include_router(lan_admin_router)
+        _import_and_mount(app, "app.fastapi_routes.lan_admin_routes", "router", "")
         logger.info("Registered LAN admin routes (/api/lan/admin/*)")
     except RECOVERABLE_ERRORS as e:
         logger.warning("LAN admin routes skipped: %s", e)
 
     try:
-        from app.fastapi_routes.lan_settings_routes import router as lan_settings_router
-
-        app.include_router(lan_settings_router)
+        _import_and_mount(app, "app.fastapi_routes.lan_settings_routes", "router", "")
         logger.info("Registered LAN settings routes (/api/lan/admin/settings)")
     except RECOVERABLE_ERRORS as e:
         logger.warning("LAN settings routes skipped: %s", e)

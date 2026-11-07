@@ -22,7 +22,7 @@
 | 轨道            | 范围                                                         | CI 行为                                                                 | 路线图目标        | **当前实际执行值**      |
 | --------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- | ----------------- | ----------------------- |
 | **全局 floor**  | `modman` + `modstore_server`（`MODSTORE_PY_COVERAGE_FLOOR`） | 运行的根 `modstore-ci-backend-python.yml` `--cov-fail-under` **硬失败** | 80%（43→…→80）    | **40%（保守、未实测）** |
-| **关键模块**    | `payment_api.py`、`webhook_dispatcher.py`、合同包等          | 单独 `--fail-under`（见发布源/孤儿副本中的 per-module 步骤）            | 80% / webhook 60% | 80% / webhook 60%       |
+| **关键模块**    | `api/payment_routes.py`、`webhook_dispatcher.py`、合同包等          | 单独 `--fail-under`（见发布源/孤儿副本中的 per-module 步骤）            | 80% / webhook 60% | 80% / webhook 60%       |
 | **Market 前端** | `paymentApi.ts` 等                                           | `ci-market.yml` Vitest thresholds                                       | lines 80%         | lines 80%               |
 | **Java 支付**   | 合同包 JaCoCo                                                | `ci-payment-java.yml` `mvn verify`                                      | line 80%          | line 80%                |
 

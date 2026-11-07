@@ -264,6 +264,20 @@ def customers_list(
     return out
 
 
+@router.get(
+    "/customers/export",
+    deprecated=True,
+    status_code=501,
+    description="旧导出入口未实现；请在 /customers 客户页使用当前账号已授权的 ERP Mod 导出。",
+)
+@router.get("/customers/export/", include_in_schema=False, deprecated=True)
+def customers_export_stub() -> dict:
+    raise HTTPException(
+        status_code=501,
+        detail="旧客户导出入口未实现，请在 /customers 客户页使用当前账号已授权的 ERP Mod 导出。",
+    )
+
+
 @router.get("/customers/{customer_id}", response_model=None)
 @router.get("/customers/{customer_id}/", response_model=None, include_in_schema=False)
 def customers_get_one(request: Request, customer_id: int) -> dict | JSONResponse:
@@ -430,12 +444,3 @@ async def customers_import(request: Request, file: UploadFile = File(...)) -> di
         msg = str(out.get("message") or out.get("error") or "导入失败")
         raise HTTPException(status_code=400, detail=msg)
     return {"success": True, "data": out}
-
-
-@router.get("/customers/export")
-@router.get("/customers/export/", include_in_schema=False)
-def customers_export_stub() -> dict:
-    raise HTTPException(
-        status_code=501,
-        detail="客户 Excel 导出尚未在 FastAPI 兼容层实现；请接回 XCAGI 全量后端或使用本地模板导出。",
-    )

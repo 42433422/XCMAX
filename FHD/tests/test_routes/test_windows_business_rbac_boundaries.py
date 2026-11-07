@@ -11,7 +11,6 @@ from app.fastapi_routes.domains.excel.excel_extract import router as excel_route
 from app.fastapi_routes.knowledge_v1 import router as knowledge_router
 from app.infrastructure.auth import dependencies
 from app.infrastructure.auth import shipment_etl_access_gate as shipment_gate
-from app.legacy.routes.shipment_etl_compat import router as old_etl_router
 
 
 def _client(router, prefix: str = "") -> TestClient:
@@ -119,15 +118,6 @@ def test_desktop_tenant_cannot_run_unscoped_shipment_etl(
         lambda: SimpleNamespace(has_permission=lambda *_args: True),
     )
     response = _client(excel_router).post(path, data={"file_path": "other-user.xlsx"})
-    assert response.status_code == 403
-
-
-def test_dormant_compat_etl_fails_closed_when_mounted(enterprise_desktop, monkeypatch) -> None:
-    user = SimpleNamespace(id=8, tenant_id=23, role="user", is_active=True)
-    monkeypatch.setattr(dependencies, "get_logged_in_user", lambda _request: user)
-    response = _client(old_etl_router, prefix="/api/legacy").post(
-        "/api/legacy/shipment-etl/execute", data={"notes_json": "[]"}
-    )
     assert response.status_code == 403
 
 

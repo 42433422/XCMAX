@@ -396,35 +396,31 @@ class TestAiAssistantBranches:
         assert call_kwargs["printer_name"] == "Canon-123"
 
     def test_compat_print_single_label_quantity_above_100_defaults_to_1(self) -> None:
-        """quantity > 100 → 默认为 1。
-
-        注意：``/api/print/single_label`` 路由被先注册的 ``/api/print/{filename:path}``
-        路径参数路由遮蔽，无法通过 HTTP 触发；这里直接调用函数以覆盖其函数体。
-        """
+        """quantity > 100 → 默认为 1。"""
         with patch(
             "app.application.print_app_service.get_print_application_service"
         ) as mock_svc_get:
             mock_svc = MagicMock()
             mock_svc.print_single_label.return_value = {"success": True}
             mock_svc_get.return_value = mock_svc
-            resp = ai_assistant.compat_print_single_label({"model_number": "", "quantity": 200})
+            resp = _ai_assistant_client().post(
+                "/api/print/single_label", json={"model_number": "", "quantity": 200}
+            )
         assert resp.status_code == 200
         call_kwargs = mock_svc.print_single_label.call_args.kwargs
         assert call_kwargs["quantity"] == 1
 
     def test_compat_print_single_label_quantity_negative_defaults_to_1(self) -> None:
-        """quantity < 1 → 默认为 1。
-
-        注意：``/api/print/single_label`` 路由被先注册的 ``/api/print/{filename:path}``
-        路径参数路由遮蔽，无法通过 HTTP 触发；这里直接调用函数以覆盖其函数体。
-        """
+        """quantity < 1 → 默认为 1。"""
         with patch(
             "app.application.print_app_service.get_print_application_service"
         ) as mock_svc_get:
             mock_svc = MagicMock()
             mock_svc.print_single_label.return_value = {"success": True}
             mock_svc_get.return_value = mock_svc
-            resp = ai_assistant.compat_print_single_label({"model_number": "", "quantity": -5})
+            resp = _ai_assistant_client().post(
+                "/api/print/single_label", json={"model_number": "", "quantity": -5}
+            )
         assert resp.status_code == 200
         call_kwargs = mock_svc.print_single_label.call_args.kwargs
         assert call_kwargs["quantity"] == 1

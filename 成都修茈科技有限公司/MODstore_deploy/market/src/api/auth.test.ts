@@ -42,24 +42,11 @@ describe('auth api', () => {
     expect(setTokensFromAuthResponse).toHaveBeenCalled()
   })
 
-  it('loginWithPhoneCode calls authRequest and setTokensFromAuthResponse', async () => {
-    vi.mocked(authRequest).mockResolvedValue({ access_token: 'at' })
-    await auth.loginWithPhoneCode('13800000000', '654321')
-    expect(authRequest).toHaveBeenCalledWith('/api/auth/login-with-phone-code', expect.objectContaining({ method: 'POST' }))
-    expect(setTokensFromAuthResponse).toHaveBeenCalled()
-  })
-
   it('me calls req with /api/auth/me', async () => {
     vi.mocked(req).mockResolvedValue({ id: 1, username: 'admin' })
     const res = await auth.me()
     expect(req).toHaveBeenCalledWith('/api/auth/me')
     expect(res).toEqual({ id: 1, username: 'admin' })
-  })
-
-  it('sendPhoneCode calls req with POST', async () => {
-    vi.mocked(req).mockResolvedValue({})
-    await auth.sendPhoneCode('13800000000')
-    expect(req).toHaveBeenCalledWith('/api/auth/send-phone-code', expect.objectContaining({ method: 'POST' }))
   })
 
   it('accountBootstrap calls req', async () => {

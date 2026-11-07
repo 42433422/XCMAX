@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
@@ -51,15 +50,6 @@ def _ai_assistant_client() -> TestClient:
     app = FastAPI()
     app.include_router(ai_assistant.router)
     return TestClient(app)
-
-
-def _parse_json_response(resp: JSONResponse) -> dict:
-    """Decode a FastAPI ``JSONResponse`` body into a dict (for direct function calls)."""
-    import json
-
-    if hasattr(resp, "body"):
-        return json.loads(resp.body.decode())
-    return dict(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -729,11 +719,9 @@ def test_compat_print_last_returns_501() -> None:
 
 
 def test_compat_print_pdf_labels_returns_501() -> None:
-    # 注意：``/api/print/pdf_labels`` 路由被先注册的 ``/api/print/{filename:path}``
-    # 路径参数路由遮蔽，无法通过 HTTP 触发；这里直接调用函数以覆盖其函数体。
-    resp = ai_assistant.compat_print_pdf_labels()
+    resp = _ai_assistant_client().post("/api/print/pdf_labels")
     assert resp.status_code == 501
-    body = resp.body.decode() if hasattr(resp, "body") else ""
+    body = resp.text
     assert "pdf_labels" in body
     assert "false" in body.lower()
 
@@ -805,8 +793,6 @@ def test_compat_print_shipment_file_failure_returns_400(
 
 
 def test_compat_print_single_label_no_model_number_uses_defaults() -> None:
-    # 注意：``/api/print/single_label`` 路由被先注册的 ``/api/print/{filename:path}``
-    # 路径参数路由遮蔽，无法通过 HTTP 触发；这里直接调用函数以覆盖其函数体。
     with patch("app.application.print_app_service.get_print_application_service") as mock_get_svc:
         mock_svc = MagicMock()
         mock_svc.print_single_label.return_value = {
@@ -814,9 +800,9 @@ def test_compat_print_single_label_no_model_number_uses_defaults() -> None:
             "message": "ok",
         }
         mock_get_svc.return_value = mock_svc
-        resp = ai_assistant.compat_print_single_label({})
+        resp = _ai_assistant_client().post("/api/print/single_label", json={})
     assert resp.status_code == 200
-    body = _parse_json_response(resp)
+    body = resp.json()
     assert body["success"] is True
     call_kwargs = mock_svc.print_single_label.call_args.kwargs
     assert call_kwargs["product_name"] == ""
@@ -831,11 +817,11 @@ def test_compat_print_single_label_invalid_quantity_defaults_to_1() -> None:
         mock_svc.print_single_label.return_value = {"success": True}
         mock_get_svc.return_value = mock_svc
         # quantity=0 → 1, quantity=200 → 1
-        resp = ai_assistant.compat_print_single_label({"quantity": 0})
+        resp = _ai_assistant_client().post("/api/print/single_label", json={"quantity": 0})
         assert resp.status_code == 200
         assert mock_svc.print_single_label.call_args.kwargs["quantity"] == 1
 
-        resp = ai_assistant.compat_print_single_label({"quantity": 200})
+        resp = _ai_assistant_client().post("/api/print/single_label", json={"quantity": 200})
         assert resp.status_code == 200
         assert mock_svc.print_single_label.call_args.kwargs["quantity"] == 1
 
@@ -855,7 +841,9 @@ def test_compat_print_single_label_with_model_number_lookup_success() -> None:
         mock_print_svc.print_single_label.return_value = {"success": True}
         mock_get_print.return_value = mock_print_svc
 
-        resp = ai_assistant.compat_print_single_label({"model_number": "ABC", "quantity": 5})
+        resp = _ai_assistant_client().post(
+            "/api/print/single_label", json={"model_number": "ABC", "quantity": 5}
+        )
     assert resp.status_code == 200
     call_kwargs = mock_print_svc.print_single_label.call_args.kwargs
     assert call_kwargs["product_name"] == "高级漆"
@@ -876,7 +864,7 @@ def test_compat_print_single_label_product_lookup_failure_falls_back() -> None:
         mock_print_svc.print_single_label.return_value = {"success": True}
         mock_get_print.return_value = mock_print_svc
 
-        resp = ai_assistant.compat_print_single_label({"model_number": "ABC"})
+        resp = _ai_assistant_client().post("/api/print/single_label", json={"model_number": "ABC"})
     assert resp.status_code == 200
     # 查询失败时使用 model_number 作为 product_name
     call_kwargs = mock_print_svc.print_single_label.call_args.kwargs
@@ -891,18 +879,18 @@ def test_compat_print_single_label_print_failure_returns_400() -> None:
             "message": "no printer",
         }
         mock_get_print.return_value = mock_print_svc
-        resp = ai_assistant.compat_print_single_label({})
+        resp = _ai_assistant_client().post("/api/print/single_label", json={})
     assert resp.status_code == 400
-    body = _parse_json_response(resp)
+    body = resp.json()
     assert body["success"] is False
 
 
 def test_compat_print_single_label_recoverable_error_returns_500() -> None:
     with patch("app.application.print_app_service.get_print_application_service") as mock_get_print:
         mock_get_print.side_effect = ValueError("print svc broken")
-        resp = ai_assistant.compat_print_single_label({})
+        resp = _ai_assistant_client().post("/api/print/single_label", json={})
     assert resp.status_code == 500
-    body = _parse_json_response(resp)
+    body = resp.json()
     assert body["success"] is False
     assert body["message"] == "打印服务暂时不可用，请稍后重试"
 

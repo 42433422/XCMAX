@@ -40,8 +40,8 @@ async def validate_workflow_endpoint(
 
 @router.post(
     "/{workflow_id}/sandbox-run",
-    summary="[已弃用] 节点图沙盒运行；新工作流请用 /api/script-workflows/{id}/sandbox-run",
-    deprecated=True,
+    summary="节点图沙盒运行与员工发布准入校验",
+    description="接收节点图 JSON 输入并记录当前图的沙盒状态；脚本工作流使用独立的文件沙盒接口。",
 )
 async def sandbox_run_workflow(
     workflow_id: int,

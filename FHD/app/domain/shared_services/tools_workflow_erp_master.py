@@ -23,7 +23,10 @@ def _registered_router_products(
             runtime_context.get("route_module") or "app.legacy.routes.product.compat_routes"
         )
         # Waiting Agent runs can contain the retired implementation's module name.
-        if route_module == "app.legacy.routes.product.compat_routes_part01":
+        if route_module in {
+            "app.legacy.routes.product.compat_routes_part01",
+            "app.fastapi_routes.xcagi_compat_product",
+        }:
             route_module = "app.legacy.routes.product.compat_routes"
         module = importlib.import_module(route_module)
         execute_action = module._execute_products_compat_action

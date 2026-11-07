@@ -949,27 +949,6 @@ class TestCheckoutSignBodyFromRequest:
 
 
 class TestSendMarketPhoneCode:
-    @pytest.mark.asyncio
-    async def test_json_response_returns_failure(self):
-        jr = JSONResponse({"message": "service down"}, status_code=503)
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=jr)):
-            result = await ma.send_market_phone_code("13800000000")
-        assert result["success"] is False
-        assert result["status_code"] == 503
-
-    @pytest.mark.asyncio
-    async def test_success_dict_response(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"message": "sent"})):
-            result = await ma.send_market_phone_code("13800000001")
-        assert result["success"] is True
-        assert result["message"] == "sent"
-
-    @pytest.mark.asyncio
-    async def test_non_dict_response(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value="ok")):
-            result = await ma.send_market_phone_code("13800000002")
-        assert result["success"] is True
-
     def test_route_missing_phone_returns_400(self):
         resp = _client.post("/api/market/send-phone-code", json={})
         assert resp.status_code == 400
@@ -1949,19 +1928,6 @@ class TestLoginMarketWithPassword:
 # ===========================================================================
 # login_market_with_phone_code (lines 1025-1033)
 # ===========================================================================
-
-
-class TestLoginMarketWithPhoneCode:
-    @pytest.mark.asyncio
-    async def test_normalizes_payload(self):
-        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"token": "phone_tok"})):
-            with patch.object(
-                ma,
-                "_normalize_market_auth_payload",
-                new=AsyncMock(return_value={"success": True, "token": "phone_tok"}),
-            ):
-                result = await ma.login_market_with_phone_code("13800000000", "123456")
-        assert result["success"] is True
 
 
 # ===========================================================================

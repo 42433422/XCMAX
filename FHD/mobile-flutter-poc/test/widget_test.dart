@@ -2838,7 +2838,7 @@ void main() {
     expect(find.byType(DesktopToolWebViewScreen), findsNothing);
   });
 
-  testWidgets('auth page matches Flutter password phone and scan entry shell', (
+  testWidgets('auth page exposes password and scan login without unsupported SMS', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -2857,7 +2857,7 @@ void main() {
     );
     expect(find.text('连接服务器后台、企业工作台和电脑执行端'), findsOneWidget);
     expect(find.text('密码登录'), findsOneWidget);
-    expect(find.text('手机号登录'), findsOneWidget);
+    expect(find.text('手机号登录'), findsNothing);
     expect(find.text('企业工作台'), findsOneWidget);
     expect(find.text('服务器后台'), findsOneWidget);
     expect(find.text('扫码绑定/登录'), findsOneWidget);
@@ -2884,11 +2884,10 @@ void main() {
     Navigator.of(tester.element(find.byType(RegisterScreen))).pop();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('手机号登录'));
-    await tester.pump();
-    expect(find.text('请输入手机号'), findsOneWidget);
-    expect(find.text('验证码'), findsOneWidget);
-    expect(find.text('获取验证码'), findsOneWidget);
+    expect(find.text('请输入手机号'), findsNothing);
+    expect(find.text('验证码'), findsNothing);
+    expect(find.text('获取验证码'), findsNothing);
+    expect(find.byType(TextField), findsNWidgets(2));
   });
 
   testWidgets('auth page follows Flutter dark theme tokens', (

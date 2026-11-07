@@ -1,24 +1,4 @@
-"""AI 聊天/意图路由冒烟（FastAPI 版）。
-
-历史：
-    原文件约 1160 行，基于 Flask ``test_client`` 与 ``mock AI service``
-    断言 100+ 行为。Flask → FastAPI 迁移完成后 fixture 已无法启动应用，
-    整个文件处于"死测试"状态。
-
-    重写后保留骨干思路：
-    - ``/api/ai/test`` 健康探针
-    - ``/api/ai/intent/test`` 意图识别（mock 掉 ``recognize_intents``）
-    - ``/api/ai/chat-unified`` / ``/api/ai/chat-unified/batch``
-      （mock 掉 ``unified_chat_single_payload``）
-
-    这三条在 Phase 2A/2C 之后分别落在:
-    - ``/api/ai/test`` → :mod:`app.fastapi_routes.ai_intent`
-    - ``/api/ai/intent/test`` → :mod:`app.fastapi_routes.ai_intent`
-    - ``/api/ai/chat-unified`` / ``batch`` → :mod:`app.fastapi_routes.ai_intent`
-
-    Domain 层真正的 ``/api/ai/chat`` 在 ``app.legacy.routes.xcagi_compat`` 中、
-    需要 DB 与 p2 鉴权,不适合在此做冒烟,交给整机集成测试覆盖。
-"""
+"""现行 ai_intent HTTP 路由的聊天与意图识别回归。"""
 
 from __future__ import annotations
 
@@ -28,25 +8,19 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-pytest.importorskip(
-    "app.fastapi_routes.legacy_gaps_batch1",
-    reason="legacy_gaps_batch1/2 route modules removed; AI smoke consolidated into ai_intent",
-)
-from app.fastapi_routes import ai_intent, legacy_gaps_batch1, legacy_gaps_batch2
+from app.fastapi_routes import ai_intent
 
 
 @pytest.fixture
 def app_with_routers() -> FastAPI:
     app = FastAPI()
     app.include_router(ai_intent.router)
-    app.include_router(legacy_gaps_batch1.router)
-    app.include_router(legacy_gaps_batch2.router)
     return app
 
 
 @pytest.fixture
 def client(app_with_routers: FastAPI) -> TestClient:
-    with TestClient(app_with_routers, raise_server_exceptions=False) as c:
+    with TestClient(app_with_routers) as c:
         yield c
 
 

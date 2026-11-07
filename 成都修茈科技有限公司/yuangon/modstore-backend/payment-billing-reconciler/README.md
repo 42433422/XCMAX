@@ -9,7 +9,7 @@
 | 文件                      | 说明                                                                                   |
 | ------------------------- | -------------------------------------------------------------------------------------- |
 | `reconciliation.py`       | 平台对账快照 + **只读预览** `POST /api/admin/reconciliation/preview`（RPA/skill 对齐） |
-| `payment_api.py`          | 支付宝接口蓝图                                                                         |
+| `api/payment_routes.py`          | 支付宝接口蓝图                                                                         |
 | `payment_orders.py`       | 订单管理                                                                               |
 | `payment_common.py`       | 公共工具                                                                               |
 | `llm_billing.py`          | LLM token 计费                                                                         |

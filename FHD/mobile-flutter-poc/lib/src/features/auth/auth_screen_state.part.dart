@@ -7,17 +7,12 @@ class _AuthScreenState extends State<AuthScreen> {
   late final ExternalUrlLauncher _openExternalUrl;
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _otpController = TextEditingController();
-  var _mode = AuthLoginMode.password;
   var _passwordVisible = false;
   var _agreed = true;
   var _adminMode = false;
   var _rememberPass = false;
   var _autoLogin = false;
   var _loggingIn = false;
-  var _sendingCode = false;
-  var _codeCooldown = 0;
   String? _error;
 
   @override
@@ -35,8 +30,6 @@ class _AuthScreenState extends State<AuthScreen> {
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
-    _phoneController.dispose();
-    _otpController.dispose();
     super.dispose();
   }
 
@@ -80,92 +73,52 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _LoginTab(
-                    label: '密码登录',
-                    selected: _mode == AuthLoginMode.password,
-                    onTap: () => setState(() => _mode = AuthLoginMode.password),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _LoginTab(
-                    label: '手机号登录',
-                    selected: _mode == AuthLoginMode.phone,
-                    onTap: () => setState(() => _mode = AuthLoginMode.phone),
-                  ),
-                ),
-              ],
+            Text(
+              '密码登录',
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 14),
-            if (_mode == AuthLoginMode.password) ...[
-              if (isEnterprise) ...[
-                _AccountKindSegment(
-                  adminMode: _adminMode,
-                  onChanged: (value) => setState(() => _adminMode = value),
-                ),
-                const SizedBox(height: 14),
-              ],
-              _AuthTextField(
-                controller: _usernameController,
-                hintText: _adminMode
-                    ? '管理员账号'
-                    : isEnterprise
-                        ? '账号或邮箱'
-                        : '请输入用户名',
-                onChanged: (_) => setState(() {}),
+            if (isEnterprise) ...[
+              _AccountKindSegment(
+                adminMode: _adminMode,
+                onChanged: (value) => setState(() => _adminMode = value),
               ),
               const SizedBox(height: 14),
-              _AuthTextField(
-                controller: _passwordController,
-                hintText: '密码',
-                obscureText: !_passwordVisible,
-                onChanged: (_) => setState(() {}),
-                suffix: IconButton(
-                  onPressed: () =>
-                      setState(() => _passwordVisible = !_passwordVisible),
-                  constraints: const BoxConstraints.tightFor(
-                    width: 40,
-                    height: 40,
-                  ),
-                  padding: EdgeInsets.zero,
-                  icon: Icon(
-                    _passwordVisible ? Icons.visibility_off : Icons.visibility,
-                    size: 22,
-                  ),
-                  tooltip: _passwordVisible ? '隐藏密码' : '显示密码',
-                ),
-              ),
-            ] else ...[
-              _AuthTextField(
-                controller: _phoneController,
-                hintText: '请输入手机号',
-                keyboardType: TextInputType.phone,
-                onChanged: (value) {
-                  final digits = value.replaceAll(RegExp(r'\D'), '');
-                  if (digits != value) {
-                    _phoneController.text = digits.substring(
-                      0,
-                      digits.length > 11 ? 11 : digits.length,
-                    );
-                    _phoneController.selection = TextSelection.collapsed(
-                      offset: _phoneController.text.length,
-                    );
-                  }
-                  setState(() {});
-                },
-              ),
-              const SizedBox(height: 8),
-              _OtpCodeField(
-                controller: _otpController,
-                actionLabel: _codeButtonText,
-                actionEnabled: _canSendCode,
-                onAction: _sendCode,
-                onChanged: (_) => setState(() {}),
-              ),
             ],
+            _AuthTextField(
+              controller: _usernameController,
+              hintText: _adminMode
+                  ? '管理员账号'
+                  : isEnterprise
+                      ? '账号或邮箱'
+                      : '请输入用户名',
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 14),
+            _AuthTextField(
+              controller: _passwordController,
+              hintText: '密码',
+              obscureText: !_passwordVisible,
+              onChanged: (_) => setState(() {}),
+              suffix: IconButton(
+                onPressed: () =>
+                    setState(() => _passwordVisible = !_passwordVisible),
+                constraints: const BoxConstraints.tightFor(
+                  width: 40,
+                  height: 40,
+                ),
+                padding: EdgeInsets.zero,
+                icon: Icon(
+                  _passwordVisible ? Icons.visibility_off : Icons.visibility,
+                  size: 22,
+                ),
+                tooltip: _passwordVisible ? '隐藏密码' : '显示密码',
+              ),
+            ),
             const SizedBox(height: 18),
             if (_error != null) ...[
               Text(
@@ -206,25 +159,23 @@ class _AuthScreenState extends State<AuthScreen> {
             _ScanButton(onTap: _openScan),
             const SizedBox(height: 10),
             _RegisterLink(onTap: _openRegister),
-            if (_mode == AuthLoginMode.password) ...[
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _LoginCheckbox(
-                    checked: _rememberPass,
-                    label: '记住密码',
-                    onTap: () => setState(() => _rememberPass = !_rememberPass),
-                  ),
-                  const SizedBox(width: 20),
-                  _LoginCheckbox(
-                    checked: _autoLogin,
-                    label: '免登录',
-                    onTap: () => setState(() => _autoLogin = !_autoLogin),
-                  ),
-                ],
-              ),
-            ],
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _LoginCheckbox(
+                  checked: _rememberPass,
+                  label: '记住密码',
+                  onTap: () => setState(() => _rememberPass = !_rememberPass),
+                ),
+                const SizedBox(width: 20),
+                _LoginCheckbox(
+                  checked: _autoLogin,
+                  label: '免登录',
+                  onTap: () => setState(() => _autoLogin = !_autoLogin),
+                ),
+              ],
+            ),
             const SizedBox(height: 18),
             _AgreementRow(
               agreed: _agreed,
@@ -237,56 +188,31 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  bool get _canSendCode {
-    return _phoneController.text.trim().length == 11 &&
-        _codeCooldown == 0 &&
-        !_sendingCode;
-  }
-
-  String get _codeButtonText {
-    if (_sendingCode) return '发送中…';
-    if (_codeCooldown > 0) return '${_codeCooldown}s 后重发';
-    return '获取验证码';
-  }
-
-  bool get _canLogin {
-    if (!_agreed || _loggingIn) return false;
-    if (_mode == AuthLoginMode.password) {
-      return _usernameController.text.trim().isNotEmpty &&
-          _passwordController.text.isNotEmpty;
-    }
-    return _phoneController.text.trim().length == 11 &&
-        _otpController.text.trim().length >= 4;
-  }
+  bool get _canLogin =>
+      _agreed &&
+      !_loggingIn &&
+      _usernameController.text.trim().isNotEmpty &&
+      _passwordController.text.isNotEmpty;
 
   String get _loginButtonText {
     if (_loggingIn) return '登录中…';
-    if (_mode == AuthLoginMode.password && _adminMode) return '进入服务器后台';
-    if (_mode == AuthLoginMode.password) return '进入企业工作台';
-    return '登录';
+    return _adminMode ? '进入服务器后台' : '进入企业工作台';
   }
 
   Future<void> _login() async {
-    final requestedRemember = _mode == AuthLoginMode.password && _rememberPass;
+    final requestedRemember = _rememberPass;
     setState(() {
       _loggingIn = true;
       _error = null;
     });
     try {
-      if (_mode == AuthLoginMode.password) {
-        await _repository.login(
-          username: _usernameController.text,
-          password: _passwordController.text,
-          adminMode: _adminMode,
-          rememberPass: _rememberPass,
-          autoLogin: _autoLogin,
-        );
-      } else {
-        await _repository.loginWithPhoneCode(
-          phone: _phoneController.text,
-          code: _otpController.text,
-        );
-      }
+      await _repository.login(
+        username: _usernameController.text,
+        password: _passwordController.text,
+        adminMode: _adminMode,
+        rememberPass: _rememberPass,
+        autoLogin: _autoLogin,
+      );
       if (!mounted) return;
       if (requestedRemember) {
         final session = await _repository.client.loadSession();
@@ -324,31 +250,6 @@ class _AuthScreenState extends State<AuthScreen> {
       });
     } catch (_) {
       // Keep the login form usable when local credential storage fails.
-    }
-  }
-
-  Future<void> _sendCode() async {
-    setState(() {
-      _sendingCode = true;
-      _error = null;
-    });
-    try {
-      await _repository.sendPhoneCode(_phoneController.text);
-      if (!mounted) return;
-      setState(() => _codeCooldown = 60);
-      _tickCooldown();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _sendingCode = false);
-    }
-  }
-
-  Future<void> _tickCooldown() async {
-    while (mounted && _codeCooldown > 0) {
-      await Future<void>.delayed(const Duration(seconds: 1));
-      if (mounted) setState(() => _codeCooldown -= 1);
     }
   }
 

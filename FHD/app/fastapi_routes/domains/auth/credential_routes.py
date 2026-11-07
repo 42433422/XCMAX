@@ -44,7 +44,12 @@ class CredentialRoutes:
 
         self.auth_login = auth_login
 
-        @router.post("/api/auth/login-with-phone-code", response_model=None)
+        @router.post(
+            "/api/auth/login-with-phone-code",
+            response_model=None,
+            deprecated=True,
+            responses={501: {"description": "SMS authentication is unavailable in this release"}},
+        )
         async def auth_login_with_phone_code(
             request: Request,
             body: JsonObject = Body(default_factory=dict),

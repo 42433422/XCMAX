@@ -12,7 +12,6 @@ from fastapi import APIRouter
 
 from app.fastapi_routes.domains.customer.customer_routes import router as customer_router
 from app.fastapi_routes.domains.misc.misc_routes import router as misc_router
-from app.fastapi_routes.domains.product.product_routes import router as product_legacy_router
 from app.fastapi_routes.domains.template.template_routes import router as template_router
 from app.legacy.routes.conversation.compat_extra import router as conversation_extra_router
 from app.legacy.routes.conversation.compat_routes import router as chat_router
@@ -24,10 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["xcagi-compat"])
 
-_product = APIRouter()
-_product.include_router(product_legacy_router)
-_product.include_router(product_compat_router)
-router.include_router(_product)
+router.include_router(product_compat_router)
 
 router.include_router(customer_router)
 router.include_router(chat_router)

@@ -1,4 +1,4 @@
-"""传统节点图工作流（只读迁移源）、触发器版本与脚本工作流。"""
+"""节点图工作流、触发器版本与独立的脚本工作流。"""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from modstore_server.db.db_base import Base
 
 
 class Workflow(Base):
-    """工作流模型（节点图，**已弃用**：保留为只读迁移源数据）。"""
+    """节点图模型：用于编辑、执行和员工发布；可显式迁移为脚本工作流。"""
 
     __tablename__ = "workflows"
 

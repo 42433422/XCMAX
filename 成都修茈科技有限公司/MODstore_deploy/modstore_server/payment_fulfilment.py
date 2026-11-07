@@ -1,7 +1,7 @@
 # mypy: disable-error-code="arg-type, assignment"
 """按订单类型拆分的履约策略（item / plan / wallet）。
 
-原 ``payment_api._fulfill_paid_order`` 是 280+ 行的单函数，混杂了：
+原 ``api.payment_routes._fulfill_paid_order`` 是 280+ 行的单函数，混杂了：
 
 - 选订单类型 + 决定 description / txn_type
 - 幂等检查（按类型用不同表 / 字段）
@@ -9,7 +9,7 @@
 - 共享的 XP 入账 + 事件发布 + 自动部署
 
 本模块把"按类型差异化的部分"抽成 :class:`_FulfilStrategy` 子类，
-共享的部分留在 ``payment_api._fulfill_paid_order`` 主函数里。三类策略与原
+共享的部分留在 ``api.payment_routes._fulfill_paid_order`` 主函数里。三类策略与原
 分支行为严格一一对应，便于回归（见 ``tests/test_payment_*``）。
 """
 

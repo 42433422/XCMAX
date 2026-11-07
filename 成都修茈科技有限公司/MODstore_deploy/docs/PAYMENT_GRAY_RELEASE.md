@@ -67,7 +67,7 @@ PAYMENT_BACKEND=java
 JAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080
 ```
 
-重启 FastAPI（`start-modstore.bat` 或 `python -m modstore_server`）。`PaymentGatewayService` 在每次请求都会重新读取环境变量，无需冷启动；但 `payment_api` 模块在 import 时执行 `init_db`，`/api/payment` 路由仍会被中间件拦截。
+重启 FastAPI（`start-modstore.bat` 或 `python -m modstore_server`）。`PaymentGatewayService` 在每次请求都会重新读取环境变量，无需冷启动；但 `api.payment_routes` 模块在 import 时执行 `init_db`，`/api/payment` 路由仍会被中间件拦截。
 
 ### 2.3 自动化预检
 
@@ -133,13 +133,13 @@ cd MODstore_deploy
 1. **保留 Python 支付配置**：`ALIPAY_APP_ID` / 私钥 / 公钥不要从 Python 服务下线，至少保留两个发布周期。
 2. **临时回滚（5 分钟内）**：
    - 把 `PAYMENT_BACKEND` 改回 `python`，重启 FastAPI。
-   - 中间件停止代理，Python `payment_api` 重新接管。
+   - 中间件停止代理，Python `api.payment_routes` 重新接管。
    - 把 `ALIPAY_NOTIFY_URL` 改回 Python 域名（如 `https://<host>/api/payment/notify/alipay`，但反代到 Python 后端）。
 3. **数据一致性补偿**：Java 期间产生的订单仍存在 PostgreSQL；Python JSON 存储不会有这些订单。需要手工退款或客服介入的订单要按 Java 订单号在 PostgreSQL 直接处理，不要再写 Python JSON。
 4. **回滚后立即重新预检**：再跑一次 §2.3，确认 Python 能正常签名/下单。
 
 ## 5. 已知风险
 
-- Python `payment_api` 在 module import 时调用 `init_db()` 并 reload `alipay_service`；FastAPI 重启时如果 Java 端没准备好，Python 会瞬间承担流量。务必先确认 Java `health` 再改 `PAYMENT_BACKEND`。
+- Python `api.payment_routes` 在 import 时调用 `init_db()`；`PAYMENT_BACKEND=java` 时请求仍由中间件转发，Java 不可用返回 502，不会自动执行 Python 支付实现。切换或回滚须显式修改模式并检查对应后端健康。
 - 防重放：Python 默认使用进程内 `processed_requests` 集合，**多 worker 不安全**。生产环境必须依赖 Java 的 Redis nonce 机制；如果回滚到 Python，需要把请求集中到单 worker，或临时关闭高并发支付活动。
 - Webhook 投递目录：Python `webhook_dispatcher` 的事件以 AES-GCM 加密后落盘在 `MODSTORE_WEBHOOK_EVENTS_DIR`，密钥来自 `MODSTORE_WEBHOOK_EVENT_KEY`（未设置时回退 `MODSTORE_WEBHOOK_SECRET`）；两者都为空时禁止落盘重放。切到 Java 后某事件未送达，可在 Python 端通过 `/api/webhooks/admin/replay` 重放，但前提是事件最初由 Python 发起且密钥未变化。Java 端事件需用 Java 自身的重放接口。

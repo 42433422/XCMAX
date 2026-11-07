@@ -280,11 +280,18 @@ def test_config_read_and_export_require_admin(monkeypatch, tmp_path) -> None:
     assert client.post("/api/export/fhd-shell-mods", headers=ADMIN).status_code == 200
 
 
-def test_legacy_registry_has_no_config_routes() -> None:
-    from modstore_server.routes_registry import api_router
+def test_core_factory_preserves_config_authentication(monkeypatch, tmp_path) -> None:
+    from modstore_server.api import config
+    from modstore_server.api.app_config import AppConfig
+    from modstore_server.api.app_factory import _register_core_routes
 
-    paths = {getattr(r, "path", "") for r in api_router.routes}
-    assert not paths & {"/api/config", "/api/export/fhd-shell-mods"}
+    monkeypatch.setattr(config.library_paths, "lib", lambda: tmp_path)
+    app = FastAPI()
+    _register_core_routes(app, AppConfig())
+    client = TestClient(app)
+    for method, path in (("get", "/api/config"), ("post", "/api/export/fhd-shell-mods")):
+        assert getattr(client, method)(path).status_code == 401
+        assert getattr(client, method)(path, headers=MEMBER).status_code == 403
 
 
 def _mount_generated(source: str, monkeypatch, host_auth, tmp_path) -> TestClient:

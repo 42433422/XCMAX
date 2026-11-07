@@ -9,6 +9,49 @@ from modstore_server.auth_service import decode_access_token
 from modstore_server.models import CatalogItem, Purchase, User, get_session_factory
 
 
+def test_named_host_foundation_download_precedes_item_id_route(
+    client, auth_headers, monkeypatch, tmp_path
+):
+    from modstore_server.host_foundation_pack import (
+        BUNDLE_ARCHIVE_NAME,
+        HOST_FOUNDATION_EMPLOYEE_PACK_ID,
+    )
+
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    raw = b"PK\x03\x04host-foundation-archive"
+    archive = catalog_store.files_dir() / BUNDLE_ARCHIVE_NAME
+    archive.write_bytes(raw)
+    with get_session_factory()() as db:
+        item = CatalogItem(
+            pkg_id=HOST_FOUNDATION_EMPLOYEE_PACK_ID,
+            version="1.0.0",
+            name="Host foundation",
+            artifact="employee_pack",
+            stored_filename=archive.name,
+            sha256=hashlib.sha256(raw).hexdigest(),
+            is_public=True,
+            compliance_status="approved",
+            price=0,
+        )
+        db.add(item)
+        db.commit()
+        item_id = item.id
+    named = "/api/market/catalog/host-foundation-employee-pack/download"
+    assert client.get(named).status_code == 401
+    response = client.get(named, headers=auth_headers)
+    assert response.status_code == 200, response.text
+    assert response.content == raw
+    assert BUNDLE_ARCHIVE_NAME in response.headers["content-disposition"]
+    numeric = client.get(f"/api/market/catalog/{item_id}/download", headers=auth_headers)
+    assert numeric.status_code == 200 and numeric.content == raw
+    assert (
+        client.get("/api/market/catalog/not-an-id/download", headers=auth_headers).status_code
+        == 422
+    )
+    archive.write_bytes(b"corrupted")
+    assert client.get(named, headers=auth_headers).status_code == 404
+
+
 def test_admin_market_upload_download_and_corruption(client, auth_headers, monkeypatch, tmp_path):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     token = auth_headers["Authorization"].split()[-1]

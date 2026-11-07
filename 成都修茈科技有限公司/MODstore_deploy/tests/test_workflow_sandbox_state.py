@@ -63,7 +63,20 @@ def test_sandbox_success_makes_workflow_employee_eligible_and_graph_changes_stal
         id=1, username="pytest", is_admin=True, email="t@t.local"
     )
     try:
+        operation = app.openapi()["paths"]["/api/workflow/{workflow_id}/sandbox-run"]["post"]
+        assert operation.get("deprecated", False) is False
+        assert "application/json" in operation["requestBody"]["content"]
         wid, start_id = _create_minimal_workflow(client)
+
+        validation = client.post(
+            f"/api/workflow/{wid}/sandbox-run",
+            json={"input_data": {}, "mock_employees": True, "validate_only": True},
+        )
+        assert validation.status_code == 200, validation.text
+        assert validation.json()["ok"] is True
+        assert "sandbox_run_id" not in validation.json()
+        eligible = client.get("/api/workflow/employee-eligible").json()["workflows"]
+        assert wid not in [row["id"] for row in eligible]
 
         r = client.post(
             f"/api/workflow/{wid}/sandbox-run",
