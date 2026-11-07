@@ -64,8 +64,10 @@ def _build_item_from_row(ws, row: int, mapping: dict[str, int]) -> dict[str, Any
         model = str(ws.cell(row, mapping["model_number"]).value or "").strip()
     if "product_name" in mapping:
         name = str(ws.cell(row, mapping["product_name"]).value or "").strip()
+    columns = dict(mapping)
     if not name and model and (not re.search("[A-Za-z0-9]", model)):
         name, model = (model, "")
+        columns["product_name"] = columns.pop("model_number")
     if not name and (not model):
         return None
     if _looks_like_non_product_token(name) or _looks_like_non_product_token(model):
@@ -85,17 +87,32 @@ def _build_item_from_row(ws, row: int, mapping: dict[str, int]) -> dict[str, Any
         return None
     if 1990 <= tins <= 2035 and (not model) and _looks_like_titleish(name):
         return None
+    derived: dict[str, list[str]] = {}
     if tin_spec <= 0 and tins > 0 and (qty_kg > 0):
         tin_spec = qty_kg / tins
+        derived["tin_spec"] = ["quantity_kg", "quantity_tins"]
     if qty_kg <= 0 and tins > 0 and (tin_spec > 0):
         qty_kg = tins * tin_spec
+        derived["quantity_kg"] = ["quantity_tins", "tin_spec"]
     if amount <= 0 and unit_price > 0 and (qty_kg > 0):
         amount = unit_price * qty_kg
+        derived["amount"] = ["unit_price", "quantity_kg"]
     if tins <= 0 and qty_kg > 0:
         tins = 1
+        derived["quantity_tins"] = []
         if tin_spec <= 0:
             tin_spec = qty_kg
+            derived["tin_spec"] = ["quantity_kg"]
+    for field_name in derived:
+        columns.pop(field_name, None)
+    row_unit = (
+        str(ws.cell(row, mapping["unit_name"]).value or "").strip() if "unit_name" in mapping else ""
+    )
     return {
+        **({"unit_name": row_unit} if row_unit else {}),
+        "source_row": row,
+        "source_columns": columns,
+        "derived_fields": derived,
         "product_name": name or model,
         "model_number": model,
         "quantity_tins": max(0, tins),
@@ -139,10 +156,11 @@ def note_fingerprint(note: dict[str, Any]) -> str:
                     "q": float(i.get("quantity_tins") or i.get("quantity") or 0),
                     "k": float(i.get("quantity_kg") or 0),
                     "p": float(i.get("unit_price") or 0),
+                    **({"u": str(i["unit_name"])} if i.get("unit_name") else {}),
                 }
                 for i in note.get("items") or []
             ],
-            key=lambda x: (x["m"], x["n"], x["q"], x["k"], x["p"]),
+            key=lambda x: (x["m"], x["n"], x["q"], x["k"], x["p"], x.get("u", "")),
         ),
     }
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

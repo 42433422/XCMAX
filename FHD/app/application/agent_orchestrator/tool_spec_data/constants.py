@@ -34,6 +34,15 @@ DATASET_RAG_WRITE_PERMISSION = "dataset.write"
 PERMISSION_OVERRIDES: dict[str, str] = {
     "memory_v2": "memory_v2.write",
 }
+# Low-risk idempotent reads share the page-level view permission of the same
+# business domain; writes keep their per-action ``tool.*`` grant.
+READ_PERMISSION_BY_TOOL: dict[str, str] = {
+    "customers": "customer.view",
+    "products": "product.view",
+    "materials": "material.view",
+    "sales": "sales.view",
+    "reports": "report.view",
+}
 
 # --- aiopen risk ----------------------------------------------------------
 # actions that are low-risk and idempotent; everything else is medium/non-idempotent.

@@ -26,6 +26,7 @@ from app.application.agent_orchestrator.tool_spec_data.constants import (
     DEFAULT_TIMEOUT_SECONDS,
     PERMISSION_BARE_PREFIX_TOOLS,
     PERMISSION_OVERRIDES,
+    READ_PERMISSION_BY_TOOL,
     TOOL_ACTION_COST_OVERRIDES,
 )
 from app.application.agent_orchestrator.tool_spec_data.contract_samples import _default_fixture
@@ -113,7 +114,9 @@ def _schema_from_required(required_params: list[str]) -> dict[str, Any]:
     }
 
 
-def _special_permission(tool_id: str, action: str) -> str:
+def _special_permission(tool_id: str, action: str, *, idempotent_read: bool = False) -> str:
+    if idempotent_read and tool_id in READ_PERMISSION_BY_TOOL:
+        return READ_PERMISSION_BY_TOOL[tool_id]
     if (tool_id, action) == ("products", "exists"):
         return "product.view"
     if (tool_id, action) == ("customers", "ensure_exists"):
@@ -251,7 +254,11 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                 input_schema=deepcopy(input_schema),
                 output_schema=deepcopy(output_schema),
                 risk=risk,
-                permission=_special_permission(str(tool_id), normalized_action),
+                permission=_special_permission(
+                    str(tool_id),
+                    normalized_action,
+                    idempotent_read=risk == "low" and action_meta.get("idempotent") is True,
+                ),
                 cost_units=_cost_units(str(tool_id), normalized_action, risk),
                 timeout_seconds=int(action_meta.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS),
                 retry=dict(action_meta.get("retry") or DEFAULT_RETRY),

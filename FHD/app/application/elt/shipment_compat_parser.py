@@ -46,6 +46,64 @@ def _contact_person(note: dict[str, Any]) -> str | None:
     return value
 
 
+_SHIPMENT_FIELDS = {
+    "purchase_unit": "unit_name",
+    "external_order_no": "order_number",
+    "product_name": "product_name",
+    "model_number": "model_number",
+    "quantity_kg": "quantity_kg",
+    "quantity_tins": "quantity_tins",
+    "tin_spec": "tin_spec",
+    "unit_price": "unit_price",
+    "amount": "amount",
+}
+_PRODUCT_FIELDS = {
+    "model_number": "model_number",
+    "name": "product_name",
+    "specification": "tin_spec",
+    "price": "unit_price",
+    "unit": "unit_name",
+    "customer_name": "unit_name",
+}
+_NOTE_FIELDS = {"customer_name": "unit_name", "contact_person": "contact_person"}
+
+
+def _cell_lineage(
+    note: dict[str, Any], item: dict[str, Any], fields: dict[str, str], values: dict[str, Any]
+) -> dict[str, Any]:
+    """Map each emitted field to the workbook cell it was read from or computed out of."""
+    from openpyxl.utils import get_column_letter
+
+    row = item.get("source_row")
+    columns = item.get("source_columns") if isinstance(item.get("source_columns"), dict) else {}
+    note_cells = note.get("source_cells") if isinstance(note.get("source_cells"), dict) else {}
+
+    def cell(source_field: str) -> str | None:
+        col = columns.get(source_field)
+        if isinstance(row, int) and isinstance(col, int):
+            return f"{get_column_letter(col)}{row}"
+        return note_cells.get(source_field)
+
+    cells: dict[str, str] = {}
+    derived: dict[str, list[str]] = {}
+    value_sources: dict[str, str] = {}
+    derived_fields = item.get("derived_fields") if isinstance(item.get("derived_fields"), dict) else {}
+    for target, source_field in fields.items():
+        if values.get(target) in (None, ""):
+            continue
+        if source_field in derived_fields:
+            derived[target] = [c for c in map(cell, derived_fields[source_field]) if c]
+        elif located := cell(source_field):
+            cells[target] = located
+        elif source_field == "unit_name":
+            value_sources[target] = (
+                "inherited_note"
+                if note.get("compatibility_unit_inherited")
+                else str(note.get("unit_source") or "sheet")
+            )
+    return {"cells": cells, "derived": derived, "value_sources": value_sources}
+
+
 def _shipment_item_values(
     note: dict[str, Any],
     item: dict[str, Any],
@@ -143,27 +201,42 @@ def parse_delivery_note_with_compat_profile(
             return next(iter(primary_units)), True
         return "", False
 
-    def append(sheet: str, values: dict[str, Any], source: dict[str, Any]) -> None:
+    used_rows: dict[str, set[int]] = {}
+
+    def append(
+        sheet: str,
+        values: dict[str, Any],
+        source: dict[str, Any],
+        item: dict[str, Any],
+        fields: dict[str, str],
+    ) -> None:
         if len(rows) >= max_rows:
             raise EltError(
                 "ELT_ROW_LIMIT_EXCEEDED",
                 f"文件超过 {max_rows} 行限制",
                 status_code=413,
             )
-        row_number = len(rows) + 1
+        sheet = sheet or "送货单"
+        taken = used_rows.setdefault(sheet, set())
+        source_row = item.get("source_row")
+        # (run, sheet, row) is unique downstream; synthetic rows sit past the real ones.
+        if not isinstance(source_row, int) or source_row in taken:
+            source_row = max(taken, default=0) + 1
+        taken.add(source_row)
         headers.extend(key for key in values if key not in headers)
         rows.append(
             ParsedRow(
-                sheet=sheet or "送货单",
-                row_number=row_number,
+                sheet=sheet,
+                row_number=source_row,
                 values={key: value for key, value in values.items() if value not in (None, "")},
                 provenance={
-                    "sheet": sheet or "送货单",
-                    "row": row_number,
+                    "sheet": sheet,
+                    "row": source_row,
                     "compatibility_profile": str(source.get("profile_id") or "universal"),
                     "source_kind": "shipment_delivery",
                     "source_fingerprint": source.get("fingerprint"),
                     "original_fragment": values,
+                    **_cell_lineage(source, item, fields, values),
                 },
             )
         )
@@ -173,7 +246,12 @@ def parse_delivery_note_with_compat_profile(
             continue
         sheet = str(note.get("sheet") or note.get("sheet_name") or "送货单")
         unit_name, inherited_unit = resolved_unit_name(note, sheet)
-        if not unit_name:
+        row_units = [
+            str(item.get("unit_name") or "").strip()
+            for item in note.get("items") or []
+            if isinstance(item, dict)
+        ]
+        if not unit_name and not (row_units and all(row_units)):
             skipped_sheets.append(sheet)
             continue
         source_note = note
@@ -185,6 +263,8 @@ def parse_delivery_note_with_compat_profile(
                 "inherited_unit_name": unit_name,
             }
         if target_type == "customers":
+            unit_cell = str((note.get("source_cells") or {}).get("unit_name") or "")
+            row_match = re.search(r"\d+$", unit_cell)
             append(
                 sheet,
                 {
@@ -194,11 +274,15 @@ def parse_delivery_note_with_compat_profile(
                     "contact_address": note.get("contact_address") or note.get("address"),
                 },
                 source_note,
+                {"source_row": int(row_match.group())} if row_match else {},
+                _NOTE_FIELDS,
             )
             continue
+        note_unit = unit_name
         for item_index, item in enumerate(note.get("items") or [], start=1):
             if not isinstance(item, dict) or not _is_business_item(item):
                 continue
+            unit_name = str(item.get("unit_name") or "").strip() or note_unit
             if target_type in {"customer_products", "products"}:
                 values = {
                     "model_number": item.get("model_number"),
@@ -218,6 +302,7 @@ def parse_delivery_note_with_compat_profile(
                     )
                 else:
                     values["unit"] = unit_name
+                fields = {**_PRODUCT_FIELDS, "contact_person": "contact_person"}
             else:
                 values = _shipment_item_values(
                     note,
@@ -225,7 +310,8 @@ def parse_delivery_note_with_compat_profile(
                     unit_name=unit_name,
                     item_index=item_index,
                 )
-            append(sheet, values, source_note)
+                fields = _SHIPMENT_FIELDS
+            append(sheet, values, source_note, item, fields)
 
     if not rows:
         return None

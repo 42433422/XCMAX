@@ -39,6 +39,42 @@ def test_english_to_adjacent_buyer(tmp_path, monkeypatch):
     assert "Semiconductor" in str(note.get("unit_name") or "")
 
 
+def test_header_row_buyer_column_stays_per_row_with_cell_lineage(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
+    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    clear_profile_cache()
+    from app.application.elt.shipment_compat_parser import parse_delivery_note_with_compat_profile
+    from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
+
+    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
+    path = tmp_path / "ship.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "出货单"
+    for row in (
+        ["购货单位", "品名", "桶数", "公斤", "单价", "金额"],
+        ["华东化工有限公司", "面漆", 2, 40, 12.5, 500],
+        ["西南涂料有限公司", "底漆", 1, 18, 9, None],
+    ):
+        ws.append(row)
+    wb.save(path)
+
+    parsed = parse_delivery_note_with_compat_profile(
+        path, target_type="shipment_records", max_rows=10
+    )
+    assert parsed is not None
+    rows = {row.row_number: row for row in parsed.rows}
+    assert {n: r.values["purchase_unit"] for n, r in rows.items()} == {
+        2: "华东化工有限公司",
+        3: "西南涂料有限公司",
+    }
+    assert rows[2].provenance["cells"]["purchase_unit"] == "A2"
+    assert rows[2].provenance["cells"]["amount"] == "F2"
+    assert rows[3].provenance["derived"]["amount"] == ["E3", "D3"]
+    assert "amount" not in rows[3].provenance["cells"]
+
+
 def test_pi_bill_to_not_buyer_po(tmp_path, monkeypatch):
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
