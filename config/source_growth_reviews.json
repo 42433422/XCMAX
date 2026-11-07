@@ -99,9 +99,9 @@
     },
     "FHD/app/application/reviewed_excel_template.py": {
       "base_file": "FHD/app/application/reviewed_excel_template.py",
-      "base_blob": "5a0d5f2f5830bbb81a9369c068540b60b2bea61a",
+      "base_blob": "6999cd18e774ea9306f6c89ccb2175815d57d225",
       "head_blob": "e42db994d4cd20b30ffc42516c3783a734c7f38a",
-      "before_lines": 1325,
+      "before_lines": 1375,
       "after_lines": 1376,
       "reason": "Read formula cache presence and retain supported Word/table structure without dropping rows.",
       "boundary": "Existing source inspection limits remain bounded; derived sources remain review candidates.",
