@@ -360,10 +360,14 @@ def test_staged_run_tampering_is_rejected(intake_store, change):
         elif change == "sha":
             run.file_sha256 = "0" * 64
         elif change == "bytes":
-            Path(db.get(EltUpload, plan["upload_id"]).storage_path).write_bytes(b"changed")
+            stored = Path(db.get(EltUpload, plan["upload_id"]).storage_path)
+            stored.chmod(0o600)
+            stored.write_bytes(b"changed")
         elif change == "source_bytes":
             review_run = db.get(EltRun, data["review_id"])
-            Path(db.get(EltUpload, review_run.upload_id).storage_path).write_bytes(b"changed")
+            stored = Path(db.get(EltUpload, review_run.upload_id).storage_path)
+            stored.chmod(0o600)
+            stored.write_bytes(b"changed")
         else:
             db.query(EltRunRow).filter(EltRunRow.run_id == run.id).first().normalized_json = "{}"
         db.commit()

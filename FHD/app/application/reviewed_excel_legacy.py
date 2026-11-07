@@ -22,6 +22,7 @@ from openpyxl.worksheet.properties import PageSetupProperties
 from xlrd.compdoc import CompDoc, CompDocError
 
 from app.application.elt.errors import ReviewedExcelError
+from app.application.elt.upload_content_gate import ENCRYPTED_OFFICE_MESSAGE, is_encrypted_office
 from app.application.reviewed_excel_legacy_styles import assign_style, legacy_style
 from app.application.reviewed_excel_template import MAX_BYTES, MAX_CELLS, inspect_workbook
 
@@ -123,10 +124,16 @@ def _error(message):
     raise ReviewedExcelError("旧 XLS 转换未通过：" + message)
 
 
+def _reject_encrypted(body: bytes) -> None:
+    if is_encrypted_office(body):
+        raise ReviewedExcelError(ENCRYPTED_OFFICE_MESSAGE)
+
+
 def inspect_legacy(body: bytes):
     """Reject active/unknown content and oversized grids before xlrd allocation."""
     if not body.startswith(OLE_MAGIC) or not 0 < len(body) <= MAX_BYTES:
         _error("文件不是受支持的 OLE/BIFF8 XLS 或超过 20 MB")
+    _reject_encrypted(body)
     book = None
     try:
         compound = CompDoc(body)
@@ -651,6 +658,7 @@ def ensure_slice_workbook(body: bytes):
 
 def prepare_archive_workbook(body: bytes, *, legacy_test_only=False, legacy_source_sha256=""):
     if body.startswith(OLE_MAGIC):
+        _reject_encrypted(body)
         digest = hashlib.sha256(body).hexdigest()
         if legacy_test_only is not True or legacy_source_sha256 != digest:
             _error("请明确确认仅数据/模板测试并绑定原件 SHA-256；打印未验证，不可正式发布")

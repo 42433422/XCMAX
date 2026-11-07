@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 import uuid
+import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -487,6 +488,9 @@ class TestServiceSupport:
         code2, msg2 = safe_error(RuntimeError("boom"))
         assert code2 == "ELT_INTERNAL_ERROR"
         assert "重试" in msg2
+        code3, msg3 = safe_error(zipfile.BadZipFile("File is not a zip file"))
+        assert code3 == "ELT_FILE_CORRUPTED"
+        assert "未导入任何数据" in msg3
 
     def test_sanitize_webhook_headers(self):
         assert sanitize_webhook_headers({"X-Empty": ""}) == {"X-Empty": ""}  # empty value kept
@@ -540,6 +544,24 @@ class TestServiceSupport:
 # ---------------------------------------------------------------------------
 
 
+def _zip_bytes(members: dict[str, str]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, text in members.items():
+            archive.writestr(name, text)
+    return buffer.getvalue()
+
+
+def _workbook_bytes() -> bytes:
+    from openpyxl import Workbook
+
+    buffer = io.BytesIO()
+    workbook = Workbook()
+    workbook.active.append(["客户", "电话"])
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
 class TestServiceUploads:
     @pytest.mark.parametrize(
         "file_name",
@@ -553,23 +575,62 @@ class TestServiceUploads:
         ],
     )
     def test_save_upload_success(self, etl_db, svc, app_data, fake_adapter, file_name):
-        stream = io.BytesIO(b"0123456789")
+        body = _workbook_bytes()
         info = svc.save_upload(
             etl_db,
             owner_user_id=1,
             file_name=file_name,
-            content_type="application/vnd",
-            stream=stream,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            stream=io.BytesIO(body),
         )
         assert info["file_name"] == clean_filename(file_name)
-        assert info["size_bytes"] == 10
-        assert info["sha256"]
+        assert info["size_bytes"] == len(body)
+        assert info["sha256"] == hashlib.sha256(body).hexdigest()
         assert info["suffix"] == ".xlsx"
         stored = etl_db.query(EltUpload).one()
         destination = Path(stored.storage_path)
         assert destination == app_data / "etl" / "uploads" / "1" / "1" / f"{info['upload_id']}.xlsx"
-        assert destination.read_bytes() == b"0123456789"
+        assert destination.read_bytes() == body
+        assert destination.stat().st_mode & 0o222 == 0
         assert list(app_data.rglob("*xlsx")) == [destination]
+
+    @pytest.mark.parametrize(
+        ("file_name", "content_type", "body", "code"),
+        [
+            ("photo.png", None, b"%PDF-1.4 renamed", "ELT_FILE_FORMAT_MISMATCH"),
+            ("report.pdf", None, b"\x89PNG\r\n\x1a\nimage", "ELT_FILE_FORMAT_MISMATCH"),
+            ("table.xlsx", None, "客户,电话\n甲,1\n".encode(), "ELT_FILE_FORMAT_MISMATCH"),
+            ("table.csv", None, b"PK\x03\x04zip", "ELT_FILE_FORMAT_MISMATCH"),
+            ("table.xlsx", "application/pdf", None, "ELT_FILE_MIME_MISMATCH"),
+            ("table.xlsx", None, b"PK\x03\x04" + b"\x00" * 64, "ELT_FILE_CORRUPTED"),
+            ("table.xlsx", None, "truncated", "ELT_FILE_CORRUPTED"),
+            ("table.xlsx", None, "docx", "ELT_FILE_FORMAT_MISMATCH"),
+            ("table.xlsx", None, "encrypted", "ELT_FILE_ENCRYPTED"),
+        ],
+    )
+    def test_save_upload_rejects_mismatched_or_unreadable_content(
+        self, etl_db, svc, app_data, fake_adapter, file_name, content_type, body, code
+    ):
+        workbook = _workbook_bytes()
+        body = {
+            None: workbook,
+            "truncated": workbook[: len(workbook) // 2],
+            "docx": _zip_bytes({"word/document.xml": "<w/>"}),
+            "encrypted": b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+            + "EncryptedPackage".encode("utf-16-le"),
+        }.get(body, body)
+        with pytest.raises(EltError) as ei:
+            svc.save_upload(
+                etl_db,
+                owner_user_id=1,
+                file_name=file_name,
+                content_type=content_type,
+                stream=io.BytesIO(body),
+            )
+        assert ei.value.code == code
+        assert ei.value.message
+        assert not list(app_data.rglob("*.*"))
+        assert etl_db.query(EltUpload).count() == 0
 
     @pytest.mark.parametrize(
         "file_name", ["a.exe", "a.xlsx.exe", "../../config", "../a.xlsx/../../payload.py"]

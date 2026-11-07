@@ -2023,6 +2023,8 @@ def test_save_replay_scope_expiry_and_history(review_store):
         ).first()
         path = Path(row.storage_path)
         original = path.read_bytes()
+        assert path.stat().st_mode & 0o222 == 0
+        path.chmod(0o600)
         path.write_bytes(b"tampered")
     assert client.post("/api/templates/reviewed-excel/save", data=data).status_code == 409
     path.write_bytes(original)

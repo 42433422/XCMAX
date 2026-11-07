@@ -17,6 +17,7 @@ from app.application.elt.service_support import (
     load_json,
     utcnow,
 )
+from app.application.elt.service_uploads import discard_stored_upload
 from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.utils.path_io.path_utils import get_app_data_dir
 
@@ -115,7 +116,7 @@ class HistoryServiceMixin:
         for upload in expired_uploads:
             path = Path(upload.storage_path).resolve()
             if upload_root in path.parents and path.is_file():
-                path.unlink(missing_ok=True)
+                discard_stored_upload(path)
                 removed_files += 1
             upload.storage_path = ""
 

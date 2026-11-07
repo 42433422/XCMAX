@@ -248,6 +248,7 @@ def test_download_snapshot_is_stable_after_original_changes(store, change):
     with store.factory() as db, content(store, db, source) as snapshot:
         original = Path(db.get(EltArchiveVersion, source["revision"]["id"]).storage_path)
         if change == "in_place":
+            original.chmod(0o600)
             original.write_bytes(b"changed")
         else:
             replacement = original.with_suffix(".replacement")
@@ -262,6 +263,7 @@ def test_archive_integrity_and_withdrawal_are_enforced_by_source_download(store,
     with store.factory() as db:
         original = Path(db.get(EltArchiveVersion, source["revision"]["id"]).storage_path)
         if damage == "hash":
+            original.chmod(0o600)
             original.write_bytes(b"x" * len(RAW))
         elif damage == "withdrawn":
             db.get(EltArchiveAsset, source["id"]).state = "trashed"
