@@ -26,6 +26,8 @@ from app.application.reviewed_excel_legacy_styles import assign_style, legacy_st
 from app.application.reviewed_excel_template import MAX_BYTES, MAX_CELLS, inspect_workbook
 
 OLE_MAGIC = bytes.fromhex("d0cf11e0a1b11ae1")
+# Explicit ROW formats are allocated per row before cell records bound the grid.
+_MAX_FORMATTED_ROW = 20_000
 TEST_RESTRICTION = "仅供数据/模板测试；打印版式未验证，不得发布到企业模板库"
 _PASSIVE = {
     0x809,
@@ -224,7 +226,7 @@ def inspect_legacy(body: bytes):
             if opcode == 0x7D and (len(data) < 4 or struct.unpack_from("<H", data, 2)[0] > 255):
                 _error("列范围记录无效")
             if opcode == 0x208:
-                if len(data) < 16 or struct.unpack_from("<H", data)[0] >= MAX_CELLS:
+                if len(data) < 16 or struct.unpack_from("<H", data)[0] >= _MAX_FORMATTED_ROW:
                     _error("行格式范围超过安全限制")
                 dimensions += 1
             elif opcode == 0x7D:

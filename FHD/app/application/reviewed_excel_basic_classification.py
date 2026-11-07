@@ -261,12 +261,50 @@ def _regions_for_blocks(
         ]
         return min(cols), rows[0], max(cols), rows[-1]
 
-    regions = []
-    for rows, data_region, anomaly in (
-        *[(item, False, "title_or_note") for item in notes],
-        *[(item, True, "") for item in tables],
+    merge_bounds = [bounded_range(item) for item in merges]
+    blocks = []
+    for rows, data_region in (
+        *[(item, False) for item in notes],
+        *[(item, True) for item in tables],
     ):
         c1, r1, c2, r2 = span(rows)
+        merged_title = False
+        changed = True
+        while changed:
+            changed = False
+            for m1, n1, m2, n2 in merge_bounds:
+                if m1 <= c2 and c1 <= m2 and n1 <= r2 and r1 <= n2:
+                    merged_title = merged_title or not data_region
+                    grown = (min(c1, m1), min(r1, n1), max(c2, m2), max(r2, n2))
+                    if grown != (c1, r1, c2, r2):
+                        c1, r1, c2, r2 = grown
+                        changed = True
+        blocks.append([c1, r1, c2, r2, data_region, merged_title])
+    blocks.sort(key=lambda item: (item[1], item[3]))
+    joined: list[list] = []
+    for block in blocks:
+        # Rows are the slice unit: a merge-grown block sharing rows with its neighbour
+        # becomes one region so no row is covered twice, and a merged title directly
+        # above a table stays with that table as its context.
+        last = joined[-1] if joined else None
+        if last is not None and (
+            block[1] <= last[3]
+            or (last[5] and not last[4] and block[4] and block[1] == last[3] + 1)
+        ):
+            last[0], last[2] = min(last[0], block[0]), max(last[2], block[2])
+            last[3] = max(last[3], block[3])
+            last[4] = last[4] or block[4]
+            last[5] = last[5] and not last[4]
+        else:
+            joined.append(block)
+    regions = []
+    for c1, r1, c2, r2, data_region, _merged_title in joined:
+        anomaly = "" if data_region else "title_or_note"
+        merged_in_region = [
+            item
+            for item, (m1, n1, m2, n2) in zip(merges, merge_bounds)
+            if c1 <= m1 and m2 <= c2 and r1 <= n1 and n2 <= r2
+        ]
         region_cells = [
             cell for cell in sheet_cells if r1 <= coordinate_from_string(cell["cell"])[1] <= r2
         ]
@@ -283,7 +321,7 @@ def _regions_for_blocks(
                     for cell in region_cells
                     if header_pattern.fullmatch(str(cell["value"]).strip())
                 ],
-                "merged_ranges": [],
+                "merged_ranges": merged_in_region,
                 "possible_shared_context": possible_shared,
                 "checked_cells": len(region_cells),
                 "needs_confirmation": True,
