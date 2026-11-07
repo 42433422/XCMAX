@@ -275,3 +275,40 @@ def test_http_and_openai_errors_only_preserve_safe_failed_route():
         _platform_stream_payload_to_openai_chunk(json.dumps({"type": "error", **detail}))
     assert chunk_error.value.route_metadata == error.route_metadata
     assert MarketModelError({"status": 503}).route_metadata == {}
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_stream_processing_status_arrives_before_next_body_read(asynchronous):
+    from app.application.market_llm.streaming import _acompletion_payloads, _completion_payloads
+
+    delivered = False
+
+    class Response:
+        def iter_lines(self):
+            yield "event: status"
+            yield 'data: {"state":"processing"}'
+            assert delivered, "processing heartbeat was buffered until the next network read"
+            yield ""
+            yield "event: delta"
+            yield 'data: {"delta":"reply"}'
+
+        async def aiter_lines(self):
+            for line in self.iter_lines():
+                yield line
+
+    if asynchronous:
+        source = _acompletion_payloads(
+            Response(),
+            lambda response: aiter_market_sse_data_payloads(
+                response, payload_has_content=lambda _: True
+            ),
+        )
+        first = await anext(source)
+    else:
+        source = _completion_payloads(Response(), _iter_market_sse_data_payloads)
+        first = next(source)
+    assert json.loads(first) == {"status": "processing"}
+    delivered = True
+    remaining = [chunk async for chunk in source] if asynchronous else list(source)
+    assert remaining == ['{"delta":"reply"}']

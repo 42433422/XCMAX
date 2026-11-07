@@ -14,8 +14,6 @@ part 'auth_screen_state.part.dart';
 part 'auth_screen_login_widgets.part.dart';
 part 'auth_screen_agreement_widgets.part.dart';
 
-enum AuthLoginMode { password, phone }
-
 class AuthScreen extends StatefulWidget {
   const AuthScreen({
     super.key,

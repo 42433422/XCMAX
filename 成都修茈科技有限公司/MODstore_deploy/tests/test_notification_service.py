@@ -222,12 +222,12 @@ def test_notification_service_app_module_does_not_import_other_domain_apis():
 
     text = Path(notification_service_app.__file__).read_text(encoding="utf-8")
     forbidden = (
-        "modstore_server.payment_api",
+        "modstore_server.api.payment_routes",
         "modstore_server.refund_api",
         "modstore_server.employee_api",
         "modstore_server.workflow_api",
         "modstore_server.llm_api",
-        "modstore_server.market_api",
+        "modstore_server.api.market_routes",
         "modstore_server.knowledge_v2_api",
         "modstore_server.knowledge_vector_api",
     )

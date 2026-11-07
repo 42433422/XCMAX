@@ -17,7 +17,7 @@
 
 ## 接口层示例
 
-- `modstore_server/payment_api.py` 中例如 `/my-plan`：`UserPlan.user_id == user.id`、`Quota.user_id == user.id`，仅返回当前用户的套餐与配额。
+- `modstore_server/api/payment_routes.py` 中例如 `/my-plan`：`UserPlan.user_id == user.id`、`Quota.user_id == user.id`，仅返回当前用户的套餐与配额。
 
 ## 知识库 v2
 

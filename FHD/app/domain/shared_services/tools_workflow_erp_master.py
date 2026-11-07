@@ -6,6 +6,7 @@ import logging
 import uuid
 from typing import Any, cast
 
+from app.domain.product.entities import TRIVIAL_MEASURE_UNITS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,10 @@ def _registered_router_products(
             runtime_context.get("route_module") or "app.legacy.routes.product.compat_routes"
         )
         # Waiting Agent runs can contain the retired implementation's module name.
-        if route_module == "app.legacy.routes.product.compat_routes_part01":
+        if route_module in {
+            "app.legacy.routes.product.compat_routes_part01",
+            "app.fastapi_routes.xcagi_compat_product",
+        }:
             route_module = "app.legacy.routes.product.compat_routes"
         module = importlib.import_module(route_module)
         execute_action = module._execute_products_compat_action
@@ -41,14 +45,7 @@ def _registered_router_products(
         svc = get_products_service()
     explicit_measure_unit = str(params.get("unit") or params.get("measure_unit") or "").strip()
     legacy_unit_name = str(params.get("unit_name") or "").strip()
-    try:
-        from app.infrastructure.repositories.product_query_helpers import TRIVIAL_MEASURE_UNITS
-
-        legacy_measure_unit = legacy_unit_name if legacy_unit_name in TRIVIAL_MEASURE_UNITS else ""
-    except RECOVERABLE_ERRORS:
-        legacy_measure_unit = (
-            legacy_unit_name if legacy_unit_name in {"个", "件", "桶", "箱", "kg", "公斤"} else ""
-        )
+    legacy_measure_unit = legacy_unit_name if legacy_unit_name in TRIVIAL_MEASURE_UNITS else ""
     measure_unit = explicit_measure_unit or legacy_measure_unit or "个"
     model_number = str(params.get("model_number") or "").strip().upper()
     product_name = str(params.get("product_name") or params.get("name") or "").strip()

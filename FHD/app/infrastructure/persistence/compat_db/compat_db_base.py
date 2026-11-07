@@ -12,6 +12,7 @@ import re
 
 from fastapi import HTTPException, Request
 
+from app.domain.product.entities import TRIVIAL_MEASURE_UNITS as TRIVIAL_MEASURE_UNITS
 from app.infrastructure.auth.db_token import verify_db_write_token_header
 from app.infrastructure.db.sync_engine import get_sync_engine
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -25,48 +26,6 @@ _DEFAULT_MEASURE_UNITS: list[dict] = [
     {"id": 2, "name": "千克", "symbol": "kg"},
 ]
 
-TRIVIAL_MEASURE_UNITS: frozenset[str] = frozenset(
-    {
-        "件",
-        "个",
-        "只",
-        "箱",
-        "盒",
-        "包",
-        "袋",
-        "瓶",
-        "桶",
-        "罐",
-        "千克",
-        "公斤",
-        "克",
-        "斤",
-        "两",
-        "吨",
-        "米",
-        "厘米",
-        "毫米",
-        "千米",
-        "升",
-        "毫升",
-        "套",
-        "组",
-        "台",
-        "条",
-        "张",
-        "根",
-        "卷",
-        "块",
-        "片",
-        "支",
-        "双",
-        "对",
-        "副",
-        "把",
-        "捆",
-        "扎",
-    }
-)
 
 _ALLOWED_SQL_TABLES = frozenset(
     {

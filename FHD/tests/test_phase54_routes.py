@@ -828,8 +828,7 @@ def test_ai_single_label_success(ai_client: TestClient, monkeypatch: pytest.Monk
         "app.application.print_app_service.get_print_application_service",
         lambda: print_app,
     )
-    # /api/print/{filename:path} is registered before /api/print/single_label — call handler directly.
-    r = ai_routes_mod.compat_print_single_label({"model_number": "9803", "quantity": 2})
+    r = ai_client.post("/api/print/single_label", json={"model_number": "9803", "quantity": 2})
     assert r.status_code == 200
     print_app.print_single_label.assert_called_once()
 
@@ -847,7 +846,7 @@ def test_ai_single_label_product_lookup_fail(
         "app.application.print_app_service.get_print_application_service",
         lambda: print_app,
     )
-    r = ai_routes_mod.compat_print_single_label({"model_number": "X99", "quantity": 0})
+    r = ai_client.post("/api/print/single_label", json={"model_number": "X99", "quantity": 0})
     assert r.status_code == 200
     assert print_app.print_single_label.call_args.kwargs["quantity"] == 1
 
@@ -869,8 +868,7 @@ def test_ai_print_file_failure(
 
 
 def test_ai_print_pdf_labels_501(ai_client: TestClient) -> None:
-    # Same path-param shadow as single_label — invoke compat handler directly.
-    r = ai_routes_mod.compat_print_pdf_labels()
+    r = ai_client.post("/api/print/pdf_labels")
     assert r.status_code == 501
 
 

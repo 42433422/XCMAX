@@ -13,7 +13,7 @@ cd MODstore_deploy
 
 # 语法检查核心文件
 python -m py_compile modstore_server/workbench_api.py
-python -m py_compile modstore_server/market_api.py
+python -m py_compile modstore_server/api/market_routes.py
 python -m py_compile modstore_server/llm_chat_proxy.py
 
 # 运行单元测试

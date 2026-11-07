@@ -182,7 +182,7 @@ class AttendanceAdapter(TargetAdapter):
         if not materialized:
             from app.application.elt.attendance_pipeline import _write_output
 
-            output = _write_output(source_path, str(context["run_id"]), [])
+            output = _write_output(str(context["run_id"]), [])
             digest = __import__("hashlib").sha256(output.read_bytes()).hexdigest()
             return {
                 "receipt": {

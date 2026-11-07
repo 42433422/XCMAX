@@ -156,11 +156,12 @@ def standard_login(tmp_path, monkeypatch):
                     "route_token": "synthetic-route-snapshot",
                 },
             )
-        assert request.method == "POST" and request.url.path == "/api/llm/chat"
+        assert request.method == "POST" and request.url.path == "/api/llm/chat/stream"
         payload = json.loads(request.content)
         assert payload["provider"] == "synthetic" and payload["model"] == "synthetic-account-model"
         assert payload["user_id"] == 7 and payload["allow_failover"] is False
         assert payload["route_token"] == "synthetic-route-snapshot"
+        assert payload["stream"] is True
         task = json.loads(payload["messages"][1]["content"])
         data = (
             {"candidates": [{"clear": [], "reason": "synthetic model result"} for _ in range(3)]}
@@ -169,18 +170,13 @@ def standard_login(tmp_path, monkeypatch):
         )
         return httpx.Response(
             200,
-            json={
-                "id": "synthetic-response",
-                "model": "synthetic-account-model",
-                "choices": [
-                    {
-                        "message": {"role": "assistant", "content": json.dumps(data)},
-                        "finish_reason": "stop",
-                    }
-                ],
-                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-            },
-            headers={"x-request-id": "synthetic-response"},
+            text=(
+                'event: status\ndata: {"state":"processing"}\n\n'
+                + "data: "
+                + json.dumps({"choices": [{"delta": {"content": json.dumps(data)}}]})
+                + "\n\ndata: [DONE]\n\n"
+            ),
+            headers={"content-type": "text/event-stream", "x-request-id": "synthetic-response"},
         )
 
     monkeypatch.setattr(
@@ -207,9 +203,7 @@ def standard_login(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("method", ["password", "phone"])
-def test_first_standard_login_reaches_model_with_its_persisted_session_without_notice(
-    standard_login, method
-):
+def test_standard_login_persists_sessions_only_for_implemented_methods(standard_login, method):
     flow, client = standard_login, standard_login.client
     assert client.get("/api/templates/reviewed-excel/identity").status_code == 401
     assert (
@@ -242,6 +236,16 @@ def test_first_standard_login_reaches_model_with_its_persisted_session_without_n
         assert db.scalars(select(UserSession)).all() == []
     market.return_value = flow.market_result
     login = client.post(endpoint, json=payload)
+    if method == "phone":
+        assert failed.status_code == login.status_code == 501
+        assert login.json()["error_code"] == "SMS_AUTH_UNAVAILABLE"
+        assert login.json()["capability"]["available"] is False
+        assert not login.headers.get_list("set-cookie")
+        market.assert_not_awaited()
+        with flow.database() as db:
+            assert db.scalars(select(UserSession)).all() == []
+        assert client.get("/api/templates/reviewed-excel/identity").status_code == 401
+        return
     assert login.status_code == 200 and login.json()["success"] is True, login.text
     sid = client.cookies.get("session_id")
     assert sid and sid == login.json()["session_id"]

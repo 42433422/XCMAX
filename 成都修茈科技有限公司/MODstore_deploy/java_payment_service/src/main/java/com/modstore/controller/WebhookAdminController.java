@@ -22,17 +22,24 @@ public class WebhookAdminController {
     private final OrderRepository orderRepository;
     private final WebhookDispatcher webhookDispatcher;
 
-    @PostMapping("/replay")
+    // Keep the old URL as an alias; replay validation and dispatch have one owner.
+    @PostMapping({"/replay", "/replay-legacy"})
     public Map<String, Object> replay(@RequestBody ReplayWebhookRequest body) {
         User user = currentUserService.requireCurrentUser();
         if (!user.isAdmin()) {
             return Map.of("ok", false, "message", "需要管理员权限");
         }
 
+        String eventId = body.eventId() == null ? "" : body.eventId().trim();
         String orderNo = body.orderNo() == null ? "" : body.orderNo().trim();
-        String eventType = EventContracts.canonicalName(body.eventType() == null ? "" : body.eventType()).trim();
+        String eventType = EventContracts.canonicalName(body.eventType() == null ? "" : body.eventType().trim());
+        String paidPrefix = EventContracts.PAYMENT_PAID + ":";
+        if (eventId.startsWith(paidPrefix)) {
+            // Historical callers identify the order through its stable payment event ID.
+            orderNo = eventId.substring(paidPrefix.length()).trim();
+        }
         if (orderNo.isBlank()) {
-            return Map.of("ok", false, "message", "请提供 order_no");
+            return Map.of("ok", false, "message", "请提供 event_id 或 order_no");
         }
         if (!eventType.isBlank() && !EventContracts.PAYMENT_PAID.equals(eventType)) {
             return Map.of("ok", false, "message", "Java 支付服务仅支持重放 " + EventContracts.PAYMENT_PAID);
@@ -45,7 +52,10 @@ public class WebhookAdminController {
         if (!"paid".equals(order.getStatus())) {
             return Map.of("ok", false, "message", "只有已支付订单可重放 " + EventContracts.PAYMENT_PAID);
         }
-        Map<String, Object> result = webhookDispatcher.publishPaymentPaid(order);
+        String replayEventId = eventId.isBlank()
+                ? webhookDispatcher.eventId(EventContracts.PAYMENT_PAID, orderNo)
+                : eventId;
+        Map<String, Object> result = webhookDispatcher.publishPaymentPaid(order, replayEventId);
         return Map.of("ok", Boolean.TRUE.equals(result.get("ok")), "result", result);
     }
 

@@ -509,6 +509,7 @@ class ModstorePlatformAdapter:
             SSE数据行
         """
         connection = self._connection()
+        authentication.validate_demo_destination(connection)
         route = await self._resolve_provider_model_async(provider, model, connection)
         source = streaming.stream_async(
             connection,
@@ -551,6 +552,7 @@ class ModstorePlatformAdapter:
     ) -> Iterator[str]:
         """同步版平台流式补全，逐条产出 SSE data payload。"""
         connection = self._connection()
+        authentication.validate_demo_destination(connection)
         route = self._resolve_provider_model(provider, model, connection=connection)
         with self._route_observation():
             for data in streaming.stream_sync(

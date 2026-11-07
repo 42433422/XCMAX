@@ -1,4 +1,4 @@
-"""Tests for app.fastapi_routes.xcagi_compat_product — product/price-list routes with mocked dependencies."""
+"""Tests for app.legacy.routes.product.compat_routes — product/price-list routes with mocked dependencies."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.fastapi_routes import xcagi_compat_product as xp
+from app.legacy.routes.product import compat_routes as xp
 
 
 @pytest.fixture
@@ -47,9 +47,9 @@ def _remove_lost_parse_price(_ei):
 class TestProductsUnits:
     def test_success(self, client: TestClient):
         with (
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._products_units_for_select",
+                "app.legacy.routes.product.compat_routes._products_units_for_select",
                 return_value={"success": True, "data": []},
             ),
         ):
@@ -65,7 +65,7 @@ class TestProductsUnits:
 class TestShipmentRecordsUnits:
     def test_success(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.xcagi_compat_product._products_units_for_select",
+            "app.legacy.routes.product.compat_routes._products_units_for_select",
             return_value={"success": True, "data": []},
         ):
             r = client.get("/shipment/shipment-records/units")
@@ -80,7 +80,7 @@ class TestShipmentRecordsUnits:
 class TestPurchaseUnitsList:
     def test_success(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.xcagi_compat_product._merged_purchase_unit_entries",
+            "app.legacy.routes.product.compat_routes._merged_purchase_unit_entries",
             return_value=[],
         ):
             r = client.get("/purchase_units")
@@ -129,9 +129,9 @@ class TestProductsList:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._load_products_list_impl_pg",
+                "app.legacy.routes.product.compat_routes._load_products_list_impl_pg",
                 return_value=([], 0, None),
             ),
         ):
@@ -149,9 +149,9 @@ class TestProductsList:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._load_products_list_impl_pg",
+                "app.legacy.routes.product.compat_routes._load_products_list_impl_pg",
                 return_value=([], 0, "hint"),
             ),
         ):
@@ -168,9 +168,9 @@ class TestProductsList:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._load_products_list_impl_pg",
+                "app.legacy.routes.product.compat_routes._load_products_list_impl_pg",
                 side_effect=RuntimeError("db error"),
             ),
         ):
@@ -206,7 +206,7 @@ class TestProductsGetById:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.bootstrap.get_products_service",
                 return_value=mock_svc,
@@ -223,7 +223,7 @@ class TestProductsGetById:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.bootstrap.get_products_service",
                 return_value=mock_svc,
@@ -240,20 +240,20 @@ class TestProductsGetById:
 
 class TestProductsResolveNameHints:
     def test_invalid_hints_type(self, client: TestClient):
-        with patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"):
+        with patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"):
             r = client.post("/products/resolve-name-hints", json={"hints": "not a list"})
             assert r.json()["success"] is False
 
     def test_empty_hints(self, client: TestClient):
-        with patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"):
+        with patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"):
             r = client.post("/products/resolve-name-hints", json={"hints": []})
             assert r.json()["success"] is False
 
     def test_business_mod_blocked(self, client: TestClient):
         with (
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value={"success": False, "message": "blocked"},
             ),
         ):
@@ -262,9 +262,9 @@ class TestProductsResolveNameHints:
 
     def test_not_implemented(self, client: TestClient):
         with (
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -300,9 +300,9 @@ class TestProductsUpdate:
                     "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                     return_value=False,
                 ),
-                patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+                patch("app.legacy.routes.product.compat_routes._products_write_raise"),
                 patch(
-                    "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                    "app.legacy.routes.product.compat_routes._business_mod_json_block",
                     return_value=None,
                 ),
             ):
@@ -319,16 +319,16 @@ class TestProductsUpdate:
                     "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                     return_value=False,
                 ),
-                patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+                patch("app.legacy.routes.product.compat_routes._products_write_raise"),
                 patch(
-                    "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                    "app.legacy.routes.product.compat_routes._business_mod_json_block",
                     return_value=None,
                 ),
                 patch(
-                    "app.fastapi_routes.xcagi_compat_product._product_parse_id",
+                    "app.legacy.routes.product.compat_routes._product_parse_id",
                     return_value=1,
                 ),
-                patch("app.fastapi_routes.xcagi_compat_product.products_pg_update_row"),
+                patch("app.legacy.routes.product.compat_routes.products_pg_update_row"),
             ):
                 r = client.post("/products/update", json={"id": 1})
                 assert r.json()["success"] is True
@@ -341,9 +341,9 @@ class TestProductsUpdate:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value={"success": False, "message": "blocked"},
             ),
         ):
@@ -379,13 +379,13 @@ class TestProductsAdd:
                     "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                     return_value=False,
                 ),
-                patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+                patch("app.legacy.routes.product.compat_routes._products_write_raise"),
                 patch(
-                    "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                    "app.legacy.routes.product.compat_routes._business_mod_json_block",
                     return_value=None,
                 ),
                 patch(
-                    "app.fastapi_routes.xcagi_compat_product.products_pg_insert_row",
+                    "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                     return_value=42,
                 ),
             ):
@@ -422,9 +422,9 @@ class TestProductsDelete:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -437,16 +437,16 @@ class TestProductsDelete:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._product_parse_id",
+                "app.legacy.routes.product.compat_routes._product_parse_id",
                 return_value=1,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product.products_pg_delete_row"),
+            patch("app.legacy.routes.product.compat_routes.products_pg_delete_row"),
         ):
             r = client.post("/products/delete", json={"id": 1})
             assert r.json()["success"] is True
@@ -478,9 +478,9 @@ class TestProductsBatchDelete:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -493,9 +493,9 @@ class TestProductsBatchDelete:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -508,13 +508,13 @@ class TestProductsBatchDelete:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.xcagi_compat_product.products_pg_batch_delete_rows",
+                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                 return_value=(2, 0),
             ),
         ):
@@ -531,7 +531,7 @@ class TestProductsBatchDelete:
 class TestProductsPriceListExport:
     def test_business_data_not_exposed(self, client: TestClient):
         with (
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.shell.mod_business_scope.business_data_exposed",
                 return_value=False,
@@ -546,7 +546,7 @@ class TestProductsPriceListExport:
 
     def test_template_not_found(self, client: TestClient):
         with (
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.shell.mod_business_scope.business_data_exposed",
                 return_value=True,
@@ -561,7 +561,7 @@ class TestProductsPriceListExport:
 
     def test_export_docx_alias(self, client: TestClient):
         with (
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.shell.mod_business_scope.business_data_exposed",
                 return_value=False,
@@ -583,7 +583,7 @@ class TestProductsPriceListExport:
 class TestProductsPriceListTemplatePreview:
     def test_business_data_not_exposed(self, client: TestClient):
         with (
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.shell.mod_business_scope.business_data_exposed",
                 return_value=False,
@@ -598,7 +598,7 @@ class TestProductsPriceListTemplatePreview:
 
     def test_success(self, client: TestClient):
         with (
-            patch("app.fastapi_routes.xcagi_compat_product.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.shell.mod_business_scope.business_data_exposed",
                 return_value=True,

@@ -94,14 +94,14 @@ def test_tenant_session_cannot_bypass_gate_when_sku_is_not_enterprise(client, mo
     assert "租户数据隔离" in response.text
 
 
-def test_non_tenant_generic_session_retains_legacy_route(client, monkeypatch):
+def test_non_tenant_generic_session_receives_explicit_unsupported(client, monkeypatch):
     http, _principal = client
     monkeypatch.setattr(gate, "resolve_product_sku", lambda: "generic")
     monkeypatch.setattr(gate, "resolve_session_user", lambda _request: None)
 
     response = http.get("/api/print/jobs")
-    assert response.status_code == 200
-    assert response.json()["jobs"] == []
+    assert response.status_code == 501
+    assert response.json()["error"]["code"] == "PRINT_JOBS_UNSUPPORTED"
 
 
 def test_non_tenant_platform_admin_permission_still_controls_legacy_route(client, monkeypatch):
@@ -124,8 +124,9 @@ def test_non_tenant_platform_admin_permission_still_controls_legacy_route(client
 
     allowed[0] = True
     accepted = http.get("/api/print/jobs")
-    assert accepted.status_code == 200
-    assert accepted.json()["jobs"] == []
+    assert accepted.status_code == 501
+    assert accepted.json()["success"] is False
+    assert accepted.json()["error"]["code"] == "PRINT_JOBS_UNSUPPORTED"
 
 
 @pytest.mark.parametrize("path", ["/api/print/printers", "/api/printers", "/api/print/default"])

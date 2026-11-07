@@ -1,6 +1,6 @@
 """Thin HTTP client for the MODstore admin marketplace API.
 
-Wraps three endpoints from ``modstore_server.market_api``:
+Wraps three endpoints from ``modstore_server.api.market_routes``:
 
 - ``POST /api/auth/login``           — exchange (username, password) for tokens.
 - ``POST /api/admin/catalog``        — multipart upload of a packaged ``.xcmod``.
@@ -226,7 +226,7 @@ class MODstoreClient:
     ) -> UploadResult:
         """Upload a packaged ``.xcmod`` zip to the marketplace.
 
-        Mirrors the :func:`modstore_server.market_api.api_admin_upload_catalog`
+        Mirrors the :func:`modstore_server.api.market_routes.api_admin_upload_catalog`
         contract: same form fields, same file size limit (100 MiB).
         """
         # Validate auth before touching disk so the missing-token diagnostic

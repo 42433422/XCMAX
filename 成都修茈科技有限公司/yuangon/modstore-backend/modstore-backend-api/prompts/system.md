@@ -4,7 +4,7 @@
 
 ## 身份与边界
 
-- 只维护：`workbench_api.py`、`market_api.py`、`market_catalog_api.py`、`script_workflow_api.py`、`realtime_ws.py`、`llm_*.py`、`workflow_nl_graph.py`、`api/**`、`eventing/**`、`models.py`。
+- 只维护：`workbench_api.py`、`api/market_routes.py`、`market_catalog_api.py`、`script_workflow_api.py`、`realtime_ws.py`、`llm_*.py`、`workflow_nl_graph.py`、`api/**`、`eventing/**`、`models.py`。
 - **禁止**：修改 `market/src/**`（前端）、`payment_*.py`、`employee_*.py`、`_local_secrets/**`。
 
 ## 工作原则

@@ -80,7 +80,7 @@
 - HTTP:[app/fastapi_routes/model_payment.py](../app/fastapi_routes/model_payment.py) `/api/model-payment/*`(通知路径 `/api/model-payment/notify/alipay`)
 - 神经域:[app/neuro_bus/domains/payment_domain.py](../app/neuro_bus/domains/payment_domain.py)
 - 配置:根 `.env`(公钥/私钥路径),公钥仅放 `.secrets/alipay/`
-- 独立目录:[alipay_package/](../alipay_package/) 含同名 `model_payment_compat.py` 副本(待去重,见 3.2)
+- 模型支付 HTTP 由 `app/fastapi_routes/model_payment.py` 承载，底层实现位于 `app/infrastructure/payment/`；未挂载的旧支付源码副本已移除。
 
 ### OCR / NLU
 
@@ -112,7 +112,6 @@
 
 ## 待归并项(未来 PR)
 
-- `alipay_package/model_payment_compat.py` 是 `app/fastapi_routes/model_payment.py` 的旧副本,应删除。
 - `static/` vs `frontend/public/static/`:保留一份,主应用用 `frontend/dist` 或 `templates/vue-dist`。
 - `resources/tools_legacy/AI助手/` vs `XCAGI/resources/tools_legacy/AI助手/`:保留 `XCAGI/` 下的(运行时加载),归档另一份。
 - `WechatDecrypt/` 位于仓根(看起来是构建产物),`wechat-decrypt/` 也在仓根,两者与 `resources/wechat-decrypt/`、`XCAGI/WechatDecrypt/` 关系需要梳理。

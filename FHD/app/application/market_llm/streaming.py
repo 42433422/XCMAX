@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator, Iterator
+from itertools import chain
 
 import httpx
 
@@ -13,43 +14,43 @@ from .completions import _audit_allows_failover, _capture_reviewed_response
 
 
 class _Replay:
-    def __init__(self, lines: list[str]):
+    def __init__(self, lines):
         self._lines = lines
 
     def iter_lines(self):
         return iter(self._lines)
 
-    async def aiter_lines(self):
-        for line in self._lines:
-            yield line
-
-
-def _json_document(lines: list[str]) -> str | None:
-    body = "\n".join(lines).lstrip()
-    if body.startswith("{") and not any(
-        line.lstrip().startswith(("event:", "data:")) for line in lines
-    ):
-        return body
-    return None
+    def aiter_lines(self):
+        return self._lines
 
 
 def _completion_payloads(response, sse_payloads):
-    """One JSON document stays one payload. Event streams stay line-oriented."""
-    lines = [line for line in response.iter_lines()]
-    document = _json_document(lines)
-    if document is not None:
-        yield document
-        return
-    yield from sse_payloads(_Replay(lines))
+    """Buffer JSON documents only; SSE status and content must arrive immediately."""
+    lines = iter(response.iter_lines())
+    first = next((line for line in lines if line.strip()), "")
+    if first.lstrip().startswith("{"):
+        yield "\n".join(chain([first], lines))
+    else:
+        yield from sse_payloads(_Replay(chain([first], lines)))
 
 
 async def _acompletion_payloads(response, sse_payloads):
-    lines = [line async for line in response.aiter_lines()]
-    document = _json_document(lines)
-    if document is not None:
-        yield document
+    lines = response.aiter_lines()
+    first = ""
+    async for line in lines:
+        if line.strip():
+            first = line
+            break
+    if first.lstrip().startswith("{"):
+        yield "\n".join([first, *[line async for line in lines]])
         return
-    async for data in sse_payloads(_Replay(lines)):
+
+    async def remaining():
+        yield first
+        async for line in lines:
+            yield line
+
+    async for data in sse_payloads(_Replay(remaining())):
         yield data
 
 

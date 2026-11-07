@@ -12,50 +12,7 @@ from typing import Any
 from sqlalchemy import func, or_
 
 from app.db.models import Product as ProductModel
-
-# products.unit 历史上常被误填为计量单位；客户筛选项应对齐 purchase_units，故从「产品表去重」里排除这些纯计量词（精确匹配）。
-TRIVIAL_MEASURE_UNITS = frozenset(
-    {
-        "件",
-        "个",
-        "只",
-        "箱",
-        "盒",
-        "包",
-        "袋",
-        "瓶",
-        "桶",
-        "罐",
-        "千克",
-        "公斤",
-        "克",
-        "斤",
-        "两",
-        "吨",
-        "米",
-        "厘米",
-        "毫米",
-        "千米",
-        "升",
-        "毫升",
-        "套",
-        "组",
-        "台",
-        "条",
-        "张",
-        "根",
-        "卷",
-        "块",
-        "片",
-        "支",
-        "双",
-        "对",
-        "副",
-        "把",
-        "捆",
-        "扎",
-    }
-)
+from app.domain.product.entities import TRIVIAL_MEASURE_UNITS as TRIVIAL_MEASURE_UNITS
 
 
 def apply_product_filters(query: Any, **kwargs: Any) -> Any:

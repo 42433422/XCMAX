@@ -473,7 +473,7 @@ async def send_market_phone_code(phone: str) -> dict[str, Any]:
     return await _authentication().send_phone_code(phone)
 
 
-@router.post("/send-phone-code")
+@router.post("/send-phone-code", deprecated=True)
 async def market_send_phone_code(body: dict[str, Any] = Body(default_factory=dict)):
     return await _identity_routes().phone_code(body)
 
@@ -483,7 +483,7 @@ async def market_send_register_code(body: dict[str, Any] = Body(default_factory=
     return await _identity_routes().registration_code(body)
 
 
-@router.post("/login-with-phone-code")
+@router.post("/login-with-phone-code", deprecated=True)
 async def market_login_with_phone_code_route(body: dict[str, Any] = Body(default_factory=dict)):
     return await _identity_routes().phone_login_route(body)
 

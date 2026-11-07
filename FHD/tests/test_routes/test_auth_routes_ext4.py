@@ -964,57 +964,6 @@ class TestAuthLoginWithPhoneCode:
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
-    @pytest.mark.asyncio
-    async def test_login_with_error(self):
-        from app.fastapi_routes.domains.auth.auth_routes import auth_login_with_phone_code
-
-        request = MagicMock()
-        err_resp = JSONResponse({"success": False}, status_code=401)
-        with (
-            patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric,
-            patch("app.application.auth_app_service.get_auth_app_service"),
-            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_phone_code",
-                new=AsyncMock(return_value={"success": True}),
-            ),
-            patch(
-                "app.application.enterprise_login_flow.run_market_first_login",
-                new=AsyncMock(return_value=(None, err_resp)),
-            ),
-        ):
-            mock_labels = MagicMock()
-            mock_metric.labels.return_value = mock_labels
-            result = await auth_login_with_phone_code(
-                request, {"phone": "13800000000", "code": "1234"}
-            )
-        assert result is err_resp
-
-    @pytest.mark.asyncio
-    async def test_login_success(self):
-        from app.fastapi_routes.domains.auth.auth_routes import auth_login_with_phone_code
-
-        request = MagicMock()
-        with (
-            patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric,
-            patch("app.application.auth_app_service.get_auth_app_service"),
-            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_phone_code",
-                new=AsyncMock(return_value={"success": True}),
-            ),
-            patch(
-                "app.application.enterprise_login_flow.run_market_first_login",
-                new=AsyncMock(return_value=({"success": True, "session_id": "sid"}, None)),
-            ),
-        ):
-            mock_labels = MagicMock()
-            mock_metric.labels.return_value = mock_labels
-            result = await auth_login_with_phone_code(
-                request, {"phone": "13800000000", "code": "1234"}
-            )
-        assert isinstance(result, JSONResponse)
-
 
 # ---------------------------------------------------------------------------
 # auth_oidc_status / auth_oidc_start / auth_oidc_callback

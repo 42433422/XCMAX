@@ -88,5 +88,5 @@ class ProductQueries:
             return {**gate, "data": []}
         raise HTTPException(
             status_code=501,
-            detail="products/resolve-name-hints 未启用：product_name_resolve 模块已在清理过程中被移除，请使用销售合同流程中的 name_hint 解析能力。",
+            detail="products/resolve-name-hints 已停用，请使用销售合同流程中的 name_hint 解析能力。",
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import types
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -154,15 +155,16 @@ def test_register_workflow_employee_catalog_writes_runtime_catalog(
 
     save_store({"packages": []})
 
-    async def fake_audit(*args, **kwargs):
-        return {
+    audit = AsyncMock(
+        return_value={
             "ok": True,
             "summary": {"pass": True},
             "dimensions": {},
             "functional_tests": [],
         }
+    )
 
-    monkeypatch.setattr("modstore_server.routes_registry.run_package_audit_async", fake_audit)
+    monkeypatch.setattr("modstore_server.api.authoring.run_package_audit_async", audit)
 
     create_mod("reg-ready", "Reg Ready", library)
     _write_workflow_employee(
@@ -180,6 +182,7 @@ def test_register_workflow_employee_catalog_writes_runtime_catalog(
         json={"workflow_index": 0},
     )
     assert res.status_code == 200, res.text
+    audit.assert_awaited_once()
     pkg_id = res.json()["package"]["id"]
     assert pkg_id == "reg-ready-agent"
 

@@ -144,12 +144,11 @@ const PAGE_API = {
     ['/api/mods/', 'GET'],
   ],
   '04-knowledge': [
-    ['/api/persy/knowledge', 'GET'],
-    ['/api/knowledge/base', 'GET'],
+    ['/api/knowledge/v1/datasets/persy-knowledge/status?include_documents=false', 'GET'],
+    ['/api/knowledge/v1/health', 'GET'],
   ],
   '05-employee-space': [
-    ['/api/workflow/employees', 'GET'],
-    ['/api/workflow-employee-space/overview', 'GET'],
+    ['/api/system/workflow-employee-catalog', 'GET'],
   ],
   '06-workflow-viz': [['/api/workflow/graph', 'GET']],
   '07-products': [
@@ -164,11 +163,9 @@ const PAGE_API = {
   ],
   '11-materials': [['/api/materials', 'GET']],
   '12-data-sources': [
-    ['/api/data-sources', 'GET'],
-    ['/api/datasources', 'GET'],
+    ['/api/private-db-assistant/sources', 'GET'],
   ],
   '13-print': [
-    ['/api/print/templates', 'GET'],
     ['/api/templates', 'GET'],
   ],
   '14-printer-list': [['/api/print/printers', 'GET']],

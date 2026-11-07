@@ -1,6 +1,6 @@
 """Cross-cutting NeuroBus subscribers.
 
-The publishers in :mod:`modstore_server.payment_api`, :mod:`refund_api` and
+The publishers in :mod:`modstore_server.api.payment_routes`, :mod:`refund_api` and
 the outbox dispatcher emit canonical domain events. Instead of every API
 adding bespoke calls into the notification / metrics / audit modules, the
 subscribers here own those side-effects and stay decoupled from the

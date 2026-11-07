@@ -155,17 +155,6 @@ export const authApi = {
     }, options)
   },
 
-  async loginWithPhoneCode(phone: string, code: string, accountKind: AccountKind = 'enterprise', options: AuthOperationOptions = {}): Promise<ApiResponse<LoginResponse>> {
-    return loginRequest('/api/auth/login-with-phone-code', {
-      phone, code, account_kind: accountKind,
-    }, options)
-  },
-
-  async sendPhoneCode(phone: string): Promise<ApiResponse<{ message?: string }>> {
-    await primeCsrfCookie()
-    return api.post<ApiResponse<{ message?: string }>>('/api/market/send-phone-code', { phone })
-  },
-
   async getOidcStatus(): Promise<ApiResponse<{ enabled?: boolean }>> {
     return api.get<ApiResponse<{ enabled?: boolean }>>('/api/auth/oidc/status', {}, { timeoutMs: 5_000 })
   },

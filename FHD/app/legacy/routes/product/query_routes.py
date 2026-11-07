@@ -80,8 +80,14 @@ class ProductQueryRoutes:
 
         self.products_get_by_id = products_get_by_id
 
-        @router.post("/products/resolve-name-hints")
-        @router.post("/products/resolve-name-hints/", include_in_schema=False)
+        @router.post(
+            "/products/resolve-name-hints",
+            deprecated=True,
+            responses={
+                501: {"description": "兼容解析已停用；请使用销售合同流程的 name_hint 解析。"}
+            },
+        )
+        @router.post("/products/resolve-name-hints/", include_in_schema=False, deprecated=True)
         def products_resolve_name_hints(
             request: Request, body: dict = Body(default_factory=dict)
         ) -> dict:
