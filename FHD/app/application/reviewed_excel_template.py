@@ -161,7 +161,13 @@ def _coerce_sheet_name_payload(data, raw_content: str):
     for item in data["sheets"]:
         if not isinstance(item, dict):
             continue
-        sheet = item.get("sheet") or item.get("工作表") or item.get("表")
+        sheet = (
+            item.get("sheet")
+            or item.get("sheet_name")
+            or item.get("工作表")
+            or item.get("表名")
+            or item.get("表")
+        )
         name = item.get("name") or item.get("名称") or item.get("title")
         kind = item.get("type") or item.get("类型") or ""
         if not str(sheet or "").strip() or not str(name or "").strip():
@@ -1427,6 +1433,11 @@ def refine_proposal(
     if result is None and initial:
         _fill_instance_cells(review, base, base["candidates"])
         base["parent_version"] = parent_version
+        base["model"] = {
+            "status": "returned",
+            "adopted": False,
+            "fallback": "local_plan",
+        }
         return base
     if not result.used_llm or result.degraded:
         state = (

@@ -55,6 +55,29 @@ def test_unknown_sheet_takes_the_model_name_and_type(monkeypatch):
     assert slices[0]["type_label"] == "借还台账"
 
 
+def test_naming_uses_reply_order_when_sheet_keys_differ(monkeypatch):
+    def fake(*_args, **_kwargs):
+        return LlmAssistResult(
+            used_llm=True,
+            data={"sheets": [{"sheet": "表1", "name": "白浆配方", "type": "原料"}]},
+        )
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_sheet_names._template_llm_complete", fake
+    )
+    sheets = [
+        {
+            "sheet": "白浆",
+            "labels": ["unknown"],
+            "processable": True,
+            "regions": [{"labels": ["unknown"]}],
+        }
+    ]
+    apply_unknown_sheet_names(sheets, [{"sheet": "白浆", "value": "白浆"}], owner_id=1)
+    assert sheets[0]["model_name"] == "白浆配方"
+    assert sheets[0]["labels"] == ["material"]
+
+
 def test_sheet_name_reply_accepts_a_bare_array():
     from app.application.reviewed_excel_template import _coerce_sheet_name_payload
 
@@ -63,6 +86,11 @@ def test_sheet_name_reply_accepts_a_bare_array():
         '说明\n[{"sheet":"白浆","name":"白浆配方","type":"原料","note":"多余"}]',
     )
     assert data == {"sheets": [{"sheet": "白浆", "name": "白浆配方", "type": "原料"}]}
+    renamed = _coerce_sheet_name_payload(
+        {"sheets": [{"sheet_name": "白浆", "名称": "白浆配方", "类型": "原料"}]},
+        "",
+    )
+    assert renamed == {"sheets": [{"sheet": "白浆", "name": "白浆配方", "type": "原料"}]}
 
 
 def test_unknown_sheet_naming_runs_inside_a_live_event_loop(monkeypatch):

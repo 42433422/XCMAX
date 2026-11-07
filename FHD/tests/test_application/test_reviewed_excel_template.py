@@ -482,6 +482,7 @@ def test_platform_fenced_three_plans_and_strict_nested_contract(monkeypatch):
             "table",
             "table_identity",
         ]
+        assert kept["model"]["status"] == "returned"
     responses.append(
         json.dumps(
             {

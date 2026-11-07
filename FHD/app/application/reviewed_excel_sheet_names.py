@@ -96,13 +96,18 @@ def apply_unknown_sheet_names(sheets: list[dict], cells: list[dict], *, owner_id
         logger.info("sheet naming failed: BOUNDARY")
         return
     if not getattr(result, "used_llm", False) or getattr(result, "degraded", False):
+        logger.info("sheet naming returned no usable model result")
         return
     payload = result.data if isinstance(getattr(result, "data", None), dict) else {}
-    named = {
-        str(item.get("sheet") or "").strip(): item
-        for item in payload.get("sheets") or []
-        if isinstance(item, dict)
-    }
+    rows = [item for item in payload.get("sheets") or [] if isinstance(item, dict)]
+    named = {str(item.get("sheet") or "").strip(): item for item in rows}
+    unmatched = [sheet for sheet in pending if str(sheet.get("sheet") or "").strip() not in named]
+    if len(unmatched) == len(pending) and len(rows) == len(pending):
+        named = {
+            str(sheet.get("sheet") or "").strip(): item
+            for sheet, item in zip(pending, rows)
+        }
+        logger.info("sheet naming matched %s rows by reply order", len(rows))
     for sheet in pending:
         item = named.get(str(sheet.get("sheet") or "").strip())
         if not item:
