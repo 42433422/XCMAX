@@ -184,36 +184,10 @@ describe('data docking user-only intake', () => {
     wrapper.unmount()
   })
 
-  it('preserves intake while opening history workspace', async () => {
-    const { wrapper, choose, button, openDocument } = await setup(); await choose()
-    const documentKey = wrapper.get('[data-document-key]').attributes('data-document-key')
-    await button('历史导入任务').trigger('click'); await flushPromises()
-    await vi.waitFor(() => expect(legacy.runs).toHaveBeenCalledTimes(1))
-    await button('导入').trigger('click'); await flushPromises()
-    expect(wrapper.get('[data-document-key]').attributes('data-document-key')).toBe(documentKey)
-    expect(wrapper.find('[role=dialog]').exists()).toBe(false)
-    await openDocument()
-    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(4)
-    expect(archive.archiveClassifyExcel).toHaveBeenCalledTimes(1)
-    expect(archive.analyzeClassification).toHaveBeenCalledTimes(1)
-    expect(archive.reviewExcel).toHaveBeenCalledTimes(1)
-    wrapper.unmount()
-  })
-
-  it('returns from history deep-link to intake', async () => {
-    legacy.runs.mockResolvedValue([])
-    const { wrapper, router, button } = await setup('run-42')
-    expect(wrapper.find('button.active').text()).toContain('历史导入任务')
-    await button('返回导入新文件').trigger('click'); await flushPromises()
-    expect(router.currentRoute.value.query.run_id).toBeUndefined()
-    expect(wrapper.find('button.active').text()).toContain('导入')
-    expect(wrapper.text()).toContain('上传 → 自动分类 → 选模板并入库')
-    wrapper.unmount()
-  })
-
   it('shows chatlike empty composer guidance', async () => {
     const { wrapper } = await setup()
     expect(wrapper.text()).toContain('上传文件，挑选模板')
+    expect(wrapper.text()).not.toContain('历史导入任务')
     expect(wrapper.find('.elt-composer__input').exists()).toBe(true)
     expect(wrapper.find('.elt-admin-panel').exists()).toBe(false)
     expect(wrapper.find('.elt-composer__start').attributes('disabled')).toBeDefined()

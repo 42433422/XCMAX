@@ -1572,18 +1572,17 @@ def reviewed_excel_intake_preview(
             key = _intake_selection_key(
                 review, proposal_version, candidate_id, selected, name, composer_note
             )
-            # Template cleanup and ingest must diverge: cleaned bytes are for the
-            # saved template file only. Intake preview / knowledge / business runs
-            # must parse the original workbook or empty cleared cells starve ingest.
+            # The person already chose this candidate. Preview and later writes use
+            # that workbook, not a second parse of the untouched original.
             original = _source(db, review, tenant, owner)
-            clean_workbook(original, review.file_sha256, selected)  # validate selections
+            chosen = clean_workbook(original, review.file_sha256, selected)
             service = get_elt_service()
             upload = service.save_upload(
                 db,
                 owner_user_id=owner,
                 file_name=f"{name.strip()}.xlsx",
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                stream=BytesIO(original),
+                stream=BytesIO(chosen),
             )
             source = service._owned_upload(db, upload["upload_id"], owner)
             if source.tenant_id != tenant:
@@ -1781,8 +1780,8 @@ async def reviewed_excel_save(
                     "preview_revision": preview_revision,
                     "valid_rows_only": valid_rows_only,
                 }
-                # Staged upload is the original workbook for ingest/knowledge.
-                # Template library still receives the cleaned copy derived here.
+                # The staged upload is the candidate chosen at preview. The template
+                # file is the same cleanup, written again from the archived original.
                 cleaned = clean_workbook(body, run.file_sha256, selected)
             else:
                 # Old template-library clients authorize one template only, never implicit business writes.

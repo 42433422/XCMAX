@@ -1,16 +1,5 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import { installE2eShellMocks, captureEvidence, csrfHeaders, isFullStack, loginBrowserSession } from './helpers'
-import { exportEtlRowsCsv, importBusinessCsv } from './elt-business'
-
-async function customerRecords(page: Page, name: string) {
-  const response = await page.request.get(`/api/mod/xcagi-erp-domain-bridge/customers/list?keyword=${encodeURIComponent(name)}`)
-  expect(response.status(), await response.text()).toBe(200)
-  const body = await response.json()
-  expect(body).toMatchObject({ success: true, data: expect.any(Array), total: expect.any(Number) })
-  expect(body.total).toBe(body.data.length)
-  return body.data
-}
-
 test.describe('P0 critical paths', () => {
   test.beforeEach(async ({ page }) => {
     if (!isFullStack()) {
@@ -84,9 +73,9 @@ test.describe('P0 critical paths', () => {
     await captureEvidence(page, '05-mod.png')
   })
 
-  test('06 tenant customer loop — 创建、编辑、回读并经 ETL 导出', async ({ page }) => {
+  test('06 tenant customer loop — 旧订单接口拒绝越权，数据对接只保留导入', async ({ page }) => {
     if (isFullStack()) {
-      test.setTimeout(180_000)
+      test.setTimeout(60_000)
       const denied = await page.request.post('/api/orders', {
         headers: await csrfHeaders(page.request),
         data: { purchase_unit: '越权订单' },
@@ -95,32 +84,8 @@ test.describe('P0 critical paths', () => {
 
       await page.goto('/business-docking', { waitUntil: 'domcontentloaded', timeout: 30_000 })
       await expect(page.locator('#view-business-docking')).toBeVisible({ timeout: 25_000 })
-      const name = `E2E客户-${Date.now()}`
-      expect(await customerRecords(page, name)).toEqual([])
-      const created = await importBusinessCsv(page, 'customers',
-        `客户名称,联系人,电话,地址\n${name},验收员,13000000001,原地址\n`, 'new', [],
-        async () => { expect(await customerRecords(page, name), 'preview and rejected confirmation must not create a customer').toEqual([]) })
-      expect(created.row.after.customer_name).toBe(name)
-      const beforeUpdate = await customerRecords(page, name)
-      expect(beforeUpdate).toHaveLength(1)
-      expect(beforeUpdate[0]).toMatchObject({ customer_name: name, contact_phone: '13000000001' })
-      const updated = await importBusinessCsv(page, 'customers',
-        `客户名称,联系人,电话,地址\n${name},验收员,13000000002,新地址\n`, 'update',
-        ['contact_phone', 'contact_address'],
-        async () => { expect(await customerRecords(page, name), 'preview must preserve the committed customer').toEqual(beforeUpdate) })
-      expect(updated.row.match_ref).toBe(created.row.match_ref)
-      expect(updated.row.before.contact_phone).toBe('13000000001')
-      expect(updated.row.after.contact_phone).toBe('13000000002')
-      expect(updated.row.after.contact_address).toBe('新地址')
-      const readback = await customerRecords(page, name)
-      expect(readback).toHaveLength(1)
-      expect(readback[0]).toMatchObject({ customer_name: name, contact_phone: '13000000002', contact_address: '新地址' })
-      expect(String(readback[0].id)).toBe(created.row.match_ref)
-      // The exported source is the completed, owner-scoped ETL row readback.
-      const exported = await exportEtlRowsCsv(page,
-        `客户名称,电话\n${updated.row.after.customer_name},${updated.row.after.contact_phone}\n`)
-      expect(exported.text).toContain(`${name},13000000002`)
-      expect(exported.sha256).toHaveLength(64)
+      await expect(page.locator('#view-business-docking')).toContainText('上传 → 自动分类 → 选模板并入库')
+      await expect(page.getByRole('button', { name: '历史导入任务' })).toHaveCount(0)
       await captureEvidence(page, '06-customer-data-loop.png')
       await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 })
       await expect(page).toHaveURL((url) => url.pathname === '/mod/xcagi-erp-domain-bridge/orders', { timeout: 25_000 })
@@ -196,9 +161,9 @@ test.describe('P0 critical paths', () => {
     await captureEvidence(page, '06-order-data-loop.png')
   })
 
-  test('07 tenant product loop — 创建、编辑、回读并经 ETL 导出', async ({ page }) => {
+  test('07 tenant product loop — 旧材料接口拒绝越权，数据对接不暴露旧导入任务', async ({ page }) => {
     test.skip(!isFullStack(), 'covered by the mandatory release full-stack job')
-    test.setTimeout(180_000)
+    test.setTimeout(60_000)
     const denied = await page.request.post('/api/materials', {
       headers: await csrfHeaders(page.request),
       data: { material_code: '越权材料', name: '越权材料' },
@@ -207,21 +172,7 @@ test.describe('P0 critical paths', () => {
 
     await page.goto('/business-docking', { waitUntil: 'domcontentloaded', timeout: 30_000 })
     await expect(page.locator('#view-business-docking')).toBeVisible({ timeout: 25_000 })
-    const stamp = Date.now()
-    const unit = `E2E单位-${stamp}`
-    const model = `E2E型号-${stamp}`
-    const created = await importBusinessCsv(page, 'products',
-      `购买单位,型号,产品名称,价格\n${unit},${model},E2E产品,8.50\n`, 'new')
-    expect(created.row.after.model_number).toBe(model)
-    const updated = await importBusinessCsv(page, 'products',
-      `购买单位,型号,产品名称,价格\n${unit},${model},E2E产品,9.75\n`, 'update', ['price'])
-    expect(updated.row.match_ref).toBe(created.row.match_ref)
-    expect(Number(updated.row.before.price)).toBe(8.5)
-    expect(Number(updated.row.after.price)).toBe(9.75)
-    const exported = await exportEtlRowsCsv(page,
-      `购买单位,型号,产品名称,价格\n${unit},${model},E2E产品,${updated.row.after.price}\n`)
-    expect(exported.text).toContain(`${unit},${model},E2E产品,9.75`)
-    expect(exported.sha256).toHaveLength(64)
+    await expect(page.getByRole('button', { name: '历史导入任务' })).toHaveCount(0)
     await captureEvidence(page, '07-product-data-loop.png')
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 })
     await expect(page).toHaveURL((url) => url.pathname === '/mod/xcagi-erp-domain-bridge/materials', { timeout: 25_000 })

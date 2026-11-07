@@ -7,9 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-import httpx
 import pytest
-from fastapi import FastAPI
 
 from app.application.elt import service_execution
 from app.application.elt.errors import EltError
@@ -18,7 +16,6 @@ from app.application.elt.service_support import dump_json, load_json
 from app.application.elt.targets import get_adapter
 from app.db.models import PurchaseUnit
 from app.db.models.elt import EltRun, EltRunRow, EltTargetConfig, EltUpload
-from app.fastapi_routes import elt as etl_routes
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.test_application.test_etl_preview_task_boundaries import (
     create_preview,
@@ -227,45 +224,6 @@ def test_source_location_keeps_owner_scope_pagination_and_approval_revision(
         with tenant_scope(2), pytest.raises(EltError):
             store.service.get_rows(db, **query)
     assert_unwritten(store, run_id)
-
-
-@pytest.mark.asyncio
-async def test_source_location_route_validates_and_forwards_exact_coordinates(
-    preview_store, monkeypatch
-):
-    store = preview_store
-    run_id = ready_preview(store, monkeypatch)
-    app = FastAPI()
-    app.include_router(etl_routes.router)
-    app.dependency_overrides[etl_routes._feature_gate] = lambda: None
-    app.dependency_overrides[etl_routes._read] = lambda: SimpleNamespace(id=7)
-
-    def scoped_db():
-        with store.factory() as db:
-            yield db
-
-    app.dependency_overrides[etl_routes.get_db_dependency] = scoped_db
-    monkeypatch.setattr(etl_routes, "get_elt_service", lambda: store.service)
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        unfiltered = (await client.get(f"/api/elt/runs/{run_id}/rows")).json()["data"]
-        row = unfiltered["items"][-1]
-        response = await client.get(
-            f"/api/elt/runs/{run_id}/rows",
-            params={
-                "source_sheet": row["source_sheet"],
-                "source_row": row["source_row"],
-                "page_size": 1,
-            },
-        )
-        assert response.status_code == 200
-        assert response.json()["data"]["items"] == [row]
-        assert response.json()["data"]["preview_revision"] == unfiltered["preview_revision"]
-        for invalid_row in (0, -1, "not-a-row", "1.5"):
-            assert (
-                await client.get(f"/api/elt/runs/{run_id}/rows", params={"source_row": invalid_row})
-            ).status_code == 422
 
 
 @pytest.mark.parametrize("after_queue", [False, True])

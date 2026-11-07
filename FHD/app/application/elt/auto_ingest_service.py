@@ -586,7 +586,7 @@ class AutoIngestService:
             elif status == "preview_ready":
                 batch_status, progress = (
                     "awaiting_confirmation",
-                    _progress("pending", 70, message="业务预演待确认；请到历史导入任务核对"),
+                    _progress("pending", 70, message="业务预演待确认；请在当前导入里核对所选模板后再入库"),
                 )
             else:
                 batch_status, progress = (
@@ -909,7 +909,7 @@ class AutoIngestService:
                     "run_id": run_id,
                     "status": current.get("status"),
                     "pending_preview": True,
-                    "message": "业务预演尚未完成；知识库已写入，可稍后在历史任务中执行或撤回",
+                    "message": "业务预演尚未完成；知识库已写入，请稍后在审批工作台核对",
                 }
         preview_revision = current.get("preview_revision")
         _notify("executing", 80, "执行业务写入")

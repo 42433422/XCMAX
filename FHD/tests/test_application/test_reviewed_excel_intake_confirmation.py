@@ -175,7 +175,7 @@ def test_auto_ingest_start_failure_keeps_safe_diagnostics_and_saved_receipt(
     assert replay["replayed"] and replay["auto_ingest"] == failure
 
 
-def test_exact_prepared_run_reuses_original_for_ingest_and_cleans_for_template(
+def test_exact_prepared_run_ingests_the_selected_candidate(
     intake_store, monkeypatch
 ):
     store = intake_store
@@ -187,9 +187,10 @@ def test_exact_prepared_run_reuses_original_for_ingest_and_cleans_for_template(
     with store.factory() as db:
         before = (db.query(EltRun).count(), db.query(EltUpload).count())
         prepared = Path(db.get(EltUpload, plan["upload_id"]).storage_path).read_bytes()
-        # Staged intake upload is the original workbook (sha equals review source).
-        assert plan["candidate_sha256"] == db.get(EltUpload, plan["upload_id"]).sha256
-        assert plan["source_sha256"] == plan["candidate_sha256"]
+        staged = db.get(EltUpload, plan["upload_id"])
+        assert plan["candidate_sha256"] == staged.sha256
+        assert plan["source_sha256"] != "" and staged.sha256
+        assert Path(staged.storage_path).read_bytes() == prepared
 
     clean_calls = {"n": 0}
     real_clean = routes.clean_workbook
@@ -220,7 +221,7 @@ def test_exact_prepared_run_reuses_original_for_ingest_and_cleans_for_template(
     assert len(store.starts) == 1
     assert store.starts[0]["prepared_plan"]["run_id"] == plan["run_id"]
     assert store.starts[0]["prepared_plan"]["preview_revision"] == data["preview_revision"]
-    # Ingest path must reuse the staged ORIGINAL bytes.
+    # Ingest reuses the staged candidate workbook from preview.
     assert Path(store.starts[0]["source_path"]).read_bytes() == prepared
     replay = store.client.post(f"{BASE}/save", data=data)
     assert replay.status_code == 200 and replay.json()["replayed"] is True
