@@ -43,16 +43,12 @@ def _create_runs(
     upload_id: str,
     target_types: list[str],
 ) -> list[dict[str, Any]]:
-    service = get_elt_service()
-    return [
-        service.create_preview(
-            db,
-            owner_user_id=owner_user_id,
-            upload_id=upload_id,
-            target_type=target_type,
-        )
-        for target_type in dict.fromkeys(target_types)
-    ]
+    del db, owner_user_id, upload_id, target_types
+    raise EltError(
+        "ELT_CANDIDATE_REQUIRED",
+        "请先在数据对接中心选中候选并完成预演",
+        status_code=409,
+    )
 
 
 def _store_general_upload(db: Session, file: UploadFile, *, owner_user_id: int) -> dict[str, Any]:

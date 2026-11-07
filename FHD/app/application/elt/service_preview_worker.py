@@ -8,6 +8,7 @@ import time
 from contextvars import copy_context
 from typing import TYPE_CHECKING, Any
 
+from app.application.elt.errors import EltError
 from app.application.elt.operation_owner import (
     activate_operation,
     bind_owner,
@@ -102,6 +103,12 @@ class PreviewWorkerMixin:
             draft = load_json(run.draft_json, {})
             compatibility_preset_id = str(draft.get("compatibility_preset_id") or "").strip()
             dataset = self._load_source_snapshot(db, run)
+            if dataset is None and load_json(run.summary_json, {}).get("intake_source") == "reviewed_candidate":
+                raise EltError(
+                    "ELT_CANDIDATE_SOURCE_MISSING",
+                    "所选候选没有可预演的记录",
+                    status_code=409,
+                )
             if dataset is None:
                 upload = self._owned_upload(db, run.upload_id, owner_user_id)
                 dataset = _facade().parse_file(

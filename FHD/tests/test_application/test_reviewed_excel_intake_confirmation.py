@@ -59,6 +59,13 @@ def intake_store(review_store, rag_service, monkeypatch, account_session_client)
         ),
     )
     monkeypatch.setenv("FHD_ETL_LLM", "off")
+
+    def old_parser_must_not_run(*_args, **_kwargs):
+        raise AssertionError("旧解析器不能参与所选候选的入库")
+
+    monkeypatch.setattr(
+        "app.application.elt.service_preview.parse_file", old_parser_must_not_run
+    )
     monkeypatch.setattr(ais, "get_app_data_dir", lambda: str(store.root))
     monkeypatch.setattr(path_utils, "get_app_data_dir", lambda **_: str(store.root))
     monkeypatch.setattr(ais, "get_auto_ingest_service", lambda: store.intake)
@@ -393,7 +400,8 @@ def test_private_intake_requires_preview_and_unscoped_attendance_is_refused(inta
     response = store.client.post(f"{BASE}/save", data={**data, "private_intake": "true"})
     assert response.status_code == 409
     response = store.client.post(f"{BASE}/intake-preview", data={**data, "composer_note": "考勤"})
-    assert response.status_code == 409 and "业务空间" in response.text
+    assert response.status_code == 200, response.text
+    assert response.json()["intake"]["target_type"] == "customers"
     assert_no_writes(store)
 
 
