@@ -5,7 +5,6 @@ vi.mock('@/api/system', () => ({
   systemApi: {
     getIndustries: vi.fn().mockResolvedValue({ success: true, data: { industries: [] } }),
     getCurrentIndustry: vi.fn().mockResolvedValue({ success: true, data: { id: '通用', name: '通用', code: '通用' } }),
-    setIndustry: vi.fn().mockResolvedValue({ success: true }),
   },
 }))
 

@@ -15,7 +15,6 @@ import {
   loadWorkflowEmployeeRegistryCached,
   mergeModManifestEntries,
   resolveLabel,
-  loadRegistryFromJson,
 } from './workflowEmployeeRegistry'
 import type { WorkflowEmployeeRegistryV1, WorkflowEmployeeRegistryEntry } from '@/types/workflow-employee'
 
@@ -182,11 +181,4 @@ describe('workflowEmployeeRegistry', () => {
     })
   })
 
-  describe('loadRegistryFromJson (deprecated)', () => {
-    it('returns same as loadWorkflowEmployeeRegistry', async () => {
-      const result = await loadRegistryFromJson()
-      expect(result.schemaVersion).toBe(1)
-      expect(result.employees).toEqual([])
-    })
-  })
 })

@@ -96,14 +96,6 @@ export function createResolveAlias(frontendDir, opts = {}) {
       replacement: path.join(adminSrc, 'constants/xcmaxDashboardEmbed.ts'),
     },
     {
-      find: '@/composables/useWechatEnterpriseBinding',
-      replacement: path.join(adminSrc, 'composables/useWechatEnterpriseBinding.ts'),
-    },
-    {
-      find: '@/composables/useWechatGroupBridge',
-      replacement: path.join(adminSrc, 'composables/useWechatGroupBridge.ts'),
-    },
-    {
       find: '@/api/xcmaxOps',
       replacement: path.join(adminSrc, 'api/xcmaxOps.ts'),
     },

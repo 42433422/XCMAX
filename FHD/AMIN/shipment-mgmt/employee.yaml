@@ -13,7 +13,6 @@ scope_globs:
   - FHD-个人/frontend/src/composables/useWorkflowEmployeeDesks.ts
   - FHD-个人/frontend/src/constants/workflowEmployeeDocIds.ts
   - FHD-个人/frontend/src/constants/workflowEmployeeDatabaseLinks.ts
-  - FHD-个人/frontend/src/constants/yuangongStitchPlacements.ts
   - FHD-个人/frontend/src/data/workflow-employee-docs.json
 
 forbidden_globs:

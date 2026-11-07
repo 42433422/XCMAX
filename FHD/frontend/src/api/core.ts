@@ -1,4 +1,3 @@
-import { notifyDbReadTokenRequiredAfter403, notifyDbWriteTokenRequiredAfter403 } from '@/fhd/dbTokenHeaders'
 import { getApiBase } from '@/utils/apiBase'
 import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCookie'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
@@ -307,9 +306,6 @@ async function requestOnce<T = unknown>(
       }
 
       assertSameAccount()
-      const verb = String(config.method || 'GET').toUpperCase()
-      notifyDbReadTokenRequiredAfter403(response.status, fullUrl, verb)
-      notifyDbWriteTokenRequiredAfter403(response.status, fullUrl, verb)
       maybeNotifyLanGate(response.status, errorData)
       const recovery = await authRecovery(url, response.status, errorData, options)
       assertSameAccount()

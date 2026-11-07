@@ -4,7 +4,6 @@ import { systemApi } from './system'
 vi.mock('./core', () => ({
   api: {
     get: vi.fn().mockResolvedValue({ success: true, data: {} }),
-    post: vi.fn().mockResolvedValue({ success: true, data: {} }),
   },
 }))
 
@@ -23,12 +22,6 @@ describe('systemApi', () => {
     await systemApi.getCurrentIndustry()
     const { api } = await import('./core')
     expect(api.get).toHaveBeenCalledWith('/api/system/industry', {}, { timeoutMs: 8_000 })
-  })
-
-  it('setIndustry calls POST /api/system/industry', async () => {
-    await systemApi.setIndustry(5)
-    const { api } = await import('./core')
-    expect(api.post).toHaveBeenCalledWith('/api/system/industry', { industry_id: 5 })
   })
 
   it('getIndustryDetail calls GET /api/system/industry/:id', async () => {

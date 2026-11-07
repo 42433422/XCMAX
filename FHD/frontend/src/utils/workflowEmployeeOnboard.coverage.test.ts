@@ -2,7 +2,6 @@
  * workflowEmployeeOnboard.ts 覆盖率补齐测试
  * 重点覆盖：collectDeskEmployeeIdsFromCatalogItem 各分支、
  * autoOnboardInstalledMarketItem 全流程（employee_pack / 非 employee_pack / reload 失败 / 无 ids）、
- * autoOnboardWorkflowEmployeesForMod（deprecated 代理）、
  * autoOnboardWorkflowEmployeesFromMods（空/有员工/过滤）
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -63,7 +62,6 @@ vi.mock('@/utils/modWorkflowEmployees', () => ({
 import {
   collectDeskEmployeeIdsFromCatalogItem,
   autoOnboardInstalledMarketItem,
-  autoOnboardWorkflowEmployeesForMod,
   autoOnboardWorkflowEmployeesFromMods,
   type MarketInstallCatalogItem,
 } from './workflowEmployeeOnboard'
@@ -485,39 +483,7 @@ describe('workflowEmployeeOnboard – 覆盖率补齐', () => {
   })
 
   // ═══════════════════════════════════════════════════════════
-  // 3. autoOnboardWorkflowEmployeesForMod（deprecated 代理）
-  // ═══════════════════════════════════════════════════════════
-  describe('autoOnboardWorkflowEmployeesForMod', () => {
-    it('代理调用 autoOnboardInstalledMarketItem 并返回 onboardedIds', async () => {
-      const modWithEmployees = {
-        id: 'mod-1',
-        pkg_id: 'mod-1',
-        workflow_employees: [
-          { id: 'wf-1', label: 'WF1' },
-          { id: 'wf-2', label: 'WF2' },
-        ],
-      }
-      mockModsStoreModsForUi.mockReturnValue([modWithEmployees])
-      mockWfStoreEnableEmployees.mockReturnValue(['wf-1', 'wf-2'])
-
-      const result = await autoOnboardWorkflowEmployeesForMod('mod-1')
-
-      expect(result).toEqual(['wf-1', 'wf-2'])
-      // 应以 { id: modId, pkg_id: modId } 调用 autoOnboardInstalledMarketItem
-      expect(mockModsStoreRefresh).toHaveBeenCalled()
-    })
-
-    it('modId 为空字符串时仍正常执行', async () => {
-      mockWfStoreEnableEmployees.mockReturnValue([])
-
-      const result = await autoOnboardWorkflowEmployeesForMod('')
-
-      expect(result).toEqual([])
-    })
-  })
-
-  // ═══════════════════════════════════════════════════════════
-  // 4. autoOnboardWorkflowEmployeesFromMods
+  // 3. autoOnboardWorkflowEmployeesFromMods
   // ═══════════════════════════════════════════════════════════
   describe('autoOnboardWorkflowEmployeesFromMods', () => {
     it('mods 为 undefined 时返回空数组', async () => {
