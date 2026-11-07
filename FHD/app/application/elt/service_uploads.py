@@ -96,11 +96,13 @@ class UploadServiceMixin:
         if total == 0:
             destination.unlink(missing_ok=True)
             raise EltError("ELT_FILE_EMPTY", "上传文件为空")
+        content_valid = False
         try:
             check_stored_content(destination, suffix)
-        except BaseException:
-            destination.unlink(missing_ok=True)
-            raise
+            content_valid = True
+        finally:
+            if not content_valid:
+                destination.unlink(missing_ok=True)
         with contextlib.suppress(OSError):
             destination.chmod(READ_ONLY_MODE)
 
