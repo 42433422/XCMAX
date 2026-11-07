@@ -244,6 +244,18 @@ def _column_bands(sheet: _Sheet) -> list[tuple[int, int]]:
             merged[-1][1] = band[1]
         else:
             merged.append(band)
+    # A header-less key column (e.g. names left of a calendar) joins the table it labels.
+    index = 0
+    while index + 1 < len(merged):
+        left, right = merged[index], merged[index + 1]
+        shares_rows = any(
+            sheet.row_cols(r, left[0], left[1]) and sheet.row_cols(r, right[0], right[1])
+            for r in sheet.by_row
+        )
+        if shares_rows and not _band_has_header(sheet, left) and _band_has_header(sheet, right):
+            merged[index : index + 2] = [[left[0], right[1]]]
+        else:
+            index += 1
     return [(a, b) for a, b in merged]
 
 
@@ -272,6 +284,8 @@ def _row_kind(sheet: _Sheet, r: int, c1: int, c2: int) -> str:
     colon = sum(t.endswith((":", "：")) or bool(re.search(r"[:：]\s*\S", t)) for t in labels)
     if any(_TOTAL_RE.search(t) and len(t) <= 10 for t in labels[:3]):
         return "summary"
+    if len(values) == 1 and _NOTE_RE.match(texts[0]):
+        return "single"
     if (
         labels
         and colon * 2 >= len(labels)
