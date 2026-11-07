@@ -49,7 +49,7 @@ class TestTransforms:
         assert transforms.apply_transform(123, {"op": "trim"}, {}) == 123
 
     def test_apply_transform_cast(self):
-        assert transforms.apply_transform(None, {"op": "cast", "type": "string"}, {}) == ""
+        assert transforms.apply_transform(None, {"op": "cast", "type": "string"}, {}) is None
         assert transforms.apply_transform(5, {"op": "cast", "type": "string"}, {}) == "5"
         assert transforms.apply_transform("1,234.5", {"op": "cast", "type": "float"}, {}) == 1234.5
         assert transforms.apply_transform("12", {"op": "cast", "type": "number"}, {}) == "12"
@@ -70,7 +70,8 @@ class TestTransforms:
             transforms.apply_transform("x", {"op": "cast", "type": "point"}, {})
 
     def test_apply_transform_date(self):
-        assert transforms.apply_transform(None, {"op": "date"}, {}) == ""
+        assert transforms.apply_transform(None, {"op": "date"}, {}) is None
+        assert transforms.apply_transform("", {"op": "date"}, {}) == ""
         assert (
             transforms.apply_transform(datetime(2026, 8, 1, 12, 0), {"op": "date"}, {})
             == "2026-08-01"
@@ -201,7 +202,7 @@ class TestTransforms:
             ],
         )
         assert out["name"] == "漆"
-        assert out["price"] == ""
+        assert out["price"] is None
         # empty target skipped
         assert transforms.apply_mapping({"a": 1}, [{"target": "", "source": "a"}]) == {}
         # transforms must be list

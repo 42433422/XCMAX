@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import itertools
+import re
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +82,28 @@ def _aligned_headers_by_sheet(
     return result
 
 
+_ZERO_PAD_FORMAT = re.compile(r"0{2,}")
+
+
+def _cell_value(cell: Any) -> Any:
+    """Cell value as displayed for zero-padded codes (number format ``00000``)."""
+    value = cell.value
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return value
+    number_format = str(getattr(cell, "number_format", "") or "")
+    if _ZERO_PAD_FORMAT.fullmatch(number_format) and value >= 0 and value == int(value):
+        return str(int(value)).zfill(len(number_format))
+    return value
+
+
+def _row_data(headers: list[str], values: Any) -> dict[str, Any]:
+    """Keep "" distinct from None; drop only absent cells and all-blank rows."""
+    row = values[: len(headers)]
+    if all(value in (None, "") for value in row):
+        return {}
+    return {headers[index]: value for index, value in enumerate(row) if value is not None}
+
+
 def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
     from openpyxl import load_workbook
 
@@ -134,21 +157,18 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             }
             all_headers.extend(header for header in headers if header not in all_headers)
             sheet_count = 0
-            for row_number, values in enumerate(
-                worksheet.iter_rows(min_row=layout.header_end + 2, values_only=True),
+            for row_number, cells in enumerate(
+                worksheet.iter_rows(min_row=layout.header_end + 2),
                 start=layout.header_end + 2,
             ):
+                values = tuple(_cell_value(cell) for cell in cells)
                 if is_repeated_header(values, layout.headers):
                     repeated_header_count += 1
                     continue
                 if is_footer_or_note_row(values):
                     footer_count += 1
                     continue
-                data = {
-                    headers[index]: value
-                    for index, value in enumerate(values[: len(headers)])
-                    if value not in (None, "")
-                }
+                data = _row_data(headers, values)
                 if not data:
                     continue
                 if len(result) >= max_rows:
@@ -283,11 +303,7 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
             if is_footer_or_note_row(values):
                 footer_count += 1
                 continue
-            data = {
-                headers[index]: value
-                for index, value in enumerate(values[: len(headers)])
-                if value != ""
-            }
+            data = _row_data(headers, values)
             if not data:
                 continue
             if len(rows) >= max_rows:

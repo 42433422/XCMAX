@@ -24,6 +24,25 @@ def json_safe(value: Any) -> Any:
     return value
 
 
+def strict_decimal(value: Any) -> Decimal | None:
+    """Exact numeric value; None/blank stay None, booleans are never numbers."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if isinstance(value, bool):
+        raise EltError("ELT_NUMBER_INVALID", f"布尔值不能当作数字: {value}")
+    if isinstance(value, Decimal):
+        return value
+    # Excel stores doubles but shows 15 significant digits; that is the business value.
+    text = format(value, ".15g") if isinstance(value, float) else str(value)
+    try:
+        number = Decimal(text.strip().replace(",", ""))
+    except ArithmeticError as exc:
+        raise EltError("ELT_NUMBER_INVALID", f"数字格式不正确: {value}") from exc
+    if not number.is_finite():
+        raise EltError("ELT_NUMBER_INVALID", f"数字格式不正确: {value}")
+    return number
+
+
 @dataclass(frozen=True, slots=True)
 class TargetField:
     key: str
@@ -32,6 +51,7 @@ class TargetField:
     required: bool = False
     aliases: tuple[str, ...] = ()
     updatable: bool = False
+    scale: int | None = None
 
 
 @dataclass(slots=True)
@@ -77,7 +97,30 @@ class TargetAdapter:
                         "message": f"{field.label}不能为空",
                     }
                 )
+            elif field.type in {"number", "integer"}:
+                issues.extend(self._numeric_issues(field, data.get(field.key)))
         return issues
+
+    @staticmethod
+    def _numeric_issues(field: TargetField, value: Any) -> list[dict[str, Any]]:
+        try:
+            number = strict_decimal(value)
+        except EltError as exc:
+            return [{"code": exc.code, "field": field.key, "severity": "error", "message": exc.message}]
+        if number is None:
+            return []
+        scale = 0 if field.type == "integer" else field.scale
+        exponent = number.normalize().as_tuple().exponent
+        if scale is not None and isinstance(exponent, int) and -exponent > scale:
+            return [
+                {
+                    "code": "ELT_NUMBER_PRECISION_EXCEEDED",
+                    "field": field.key,
+                    "severity": "error",
+                    "message": f"{field.label}最多保留 {scale} 位小数，拒绝擅自舍入: {value}",
+                }
+            ]
+        return []
 
     def preview(
         self,

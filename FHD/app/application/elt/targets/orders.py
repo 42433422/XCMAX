@@ -11,7 +11,9 @@ from sqlalchemy import or_
 from app.application.elt.errors import EltError
 from app.application.elt.targets.helpers import (
     assert_snapshot_unchanged,
+    decimal_or_none,
     decimal_or_zero,
+    integer_or_zero,
     issue,
     optional_text,
     parse_date,
@@ -57,9 +59,10 @@ class PurchaseOrderAdapter(TargetAdapter):
             type="number",
             required=True,
             aliases=("数量", "采购数量"),
+            scale=4,
         ),
         TargetField("unit", "单位", aliases=("单位", "计量单位")),
-        TargetField("unit_price", "单价", type="number", aliases=("单价", "价格")),
+        TargetField("unit_price", "单价", type="number", aliases=("单价", "价格"), scale=4),
     )
     default_match_keys = ("external_order_no",)
 
@@ -216,8 +219,8 @@ class ShipmentAdapter(TargetAdapter):
         TargetField("quantity_kg", "公斤数", type="number", aliases=("重量", "公斤", "kg")),
         TargetField("quantity_tins", "桶数", type="integer", aliases=("桶数", "数量")),
         TargetField("tin_spec", "桶规格", type="number", aliases=("桶规格",)),
-        TargetField("unit_price", "单价", type="number", aliases=("单价",)),
-        TargetField("amount", "金额", type="number", aliases=("金额", "合计")),
+        TargetField("unit_price", "单价", type="number", aliases=("单价",), scale=2),
+        TargetField("amount", "金额", type="number", aliases=("金额", "合计"), scale=2),
     )
     default_match_keys = ("source_fingerprint", "external_order_no")
 
@@ -377,7 +380,8 @@ class ShipmentAdapter(TargetAdapter):
             "etl_fingerprint": fingerprint,
         }
         quantity_kg = float(decimal_or_zero(data.get("quantity_kg")))
-        quantity_tins = int(decimal_or_zero(data.get("quantity_tins")))
+        quantity_tins = integer_or_zero(data.get("quantity_tins"))
+        tin_spec = decimal_or_none(data.get("tin_spec"))
         obj = ShipmentRecord(
             tenant_id=tenant_id_for_write(),
             purchase_unit=str(data["purchase_unit"]),
@@ -385,9 +389,9 @@ class ShipmentAdapter(TargetAdapter):
             model_number=optional_text(data.get("model_number")),
             quantity_kg=quantity_kg,
             quantity_tins=quantity_tins,
-            tin_spec=float(decimal_or_zero(data.get("tin_spec"))) or None,
-            unit_price=decimal_or_zero(data.get("unit_price")),
-            amount=decimal_or_zero(data.get("amount")),
+            tin_spec=None if tin_spec is None else float(tin_spec),
+            unit_price=decimal_or_none(data.get("unit_price")),
+            amount=decimal_or_none(data.get("amount")),
             status="pending",
             raw_text=json.dumps(json_safe(data), ensure_ascii=False),
             parsed_data=json.dumps(parsed, ensure_ascii=False),

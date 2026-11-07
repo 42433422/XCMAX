@@ -905,10 +905,21 @@ def test_helpers_issue_optional_decimal():
         "message": "m",
     }
     assert helpers.optional_text("  hi  ") == "hi"
-    assert helpers.optional_text("") is None
+    assert helpers.optional_text("") == ""
     assert helpers.optional_text(None) is None
+    assert helpers.optional_text(0) == "0"
+    assert helpers.optional_text(False) == "False"
     assert helpers.decimal_or_zero("1,000") == Decimal("1000")
     assert helpers.decimal_or_zero(None) == Decimal("0")
+    assert helpers.decimal_or_none(None) is None
+    assert helpers.decimal_or_none(0) == Decimal("0")
+    assert helpers.integer_or_zero("3") == 3
+    for bad in (False, "abc"):
+        with pytest.raises(EltError):
+            helpers.decimal_or_none(bad)
+    with pytest.raises(EltError) as ex:
+        helpers.integer_or_zero("2.5")
+    assert ex.value.code == "ELT_NUMBER_PRECISION_EXCEEDED"
     assert helpers.decimal_or_zero("3.5") == Decimal("3.5")
     with pytest.raises(EltError) as ex:
         helpers.decimal_or_zero("abc")

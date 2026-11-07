@@ -20,14 +20,15 @@ MODEL_AMBIGUITY_MESSAGE = (
 
 def product_name_key(data: dict[str, Any], *, unit_field: str = "unit") -> tuple[str, str]:
     """Return the same conservative customer/product key used by DB matching."""
-    return (
-        str(data.get(unit_field) or "").strip(),
-        str(data.get("name") or "").strip(),
-    )
+    return (_text(data.get(unit_field)), _text(data.get("name")))
+
+
+def _text(value: Any) -> str:
+    return "" if value is None else str(value).strip()
 
 
 def model_token(value: Any) -> str:
-    return str(value or "").strip().casefold()
+    return _text(value).casefold()
 
 
 def validation_issue() -> dict[str, Any]:
