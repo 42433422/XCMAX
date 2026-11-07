@@ -20,7 +20,6 @@ from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy import update
 from starlette.concurrency import run_in_threadpool
 
-from app.application.elt.archive_store import default_archive_root
 from app.application.elt.errors import (
     EltError,
     ReviewedExcelError,
