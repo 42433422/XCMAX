@@ -198,8 +198,12 @@ def apply_transform(value: Any, rule: dict[str, Any], row: dict[str, Any]) -> An
     return _formula(rule, row)
 
 
-def apply_mapping(source: dict[str, Any], mappings: list[dict[str, Any]]) -> dict[str, Any]:
+def map_row_with_issues(
+    source: dict[str, Any], mappings: list[dict[str, Any]]
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Map one source row and keep going after a bad cell so every field error is reported."""
     normalized: dict[str, Any] = {}
+    issues: list[dict[str, Any]] = []
     for mapping in mappings:
         target = str(mapping.get("target") or "").strip()
         source_name = str(mapping.get("source") or "").strip()
@@ -208,12 +212,51 @@ def apply_mapping(source: dict[str, Any], mappings: list[dict[str, Any]]) -> dic
         value = source.get(source_name)
         rules = mapping.get("transforms") or []
         if not isinstance(rules, list):
-            raise EltError("ELT_TRANSFORMS_INVALID", f"{target} 的 transforms 必须是数组")
+            issues.append(
+                {
+                    "code": "ELT_TRANSFORMS_INVALID",
+                    "severity": "error",
+                    "field": target,
+                    "message": f"{target} 的 transforms 必须是数组",
+                }
+            )
+            continue
         context = {**source, **normalized}
+        failed = False
         for rule in rules:
             if not isinstance(rule, dict):
-                raise EltError("ELT_TRANSFORM_INVALID", "转换规则必须是 JSON 对象")
-            value = apply_transform(value, rule, context)
+                issues.append(
+                    {
+                        "code": "ELT_TRANSFORM_INVALID",
+                        "severity": "error",
+                        "field": target,
+                        "message": "转换规则必须是 JSON 对象",
+                    }
+                )
+                failed = True
+                break
+            try:
+                value = apply_transform(value, rule, context)
+            except EltError as exc:
+                issues.append(
+                    {
+                        "code": exc.code,
+                        "severity": "error",
+                        "field": target,
+                        "message": exc.message,
+                    }
+                )
+                failed = True
+                break
             context[target] = value
-        normalized[target] = value
+        if not failed:
+            normalized[target] = value
+    return normalized, issues
+
+
+def apply_mapping(source: dict[str, Any], mappings: list[dict[str, Any]]) -> dict[str, Any]:
+    normalized, issues = map_row_with_issues(source, mappings)
+    if issues:
+        first = issues[0]
+        raise EltError(str(first["code"]), str(first["message"]))
     return normalized

@@ -48,6 +48,26 @@ from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _unconfirmed_mappings(mappings: Any) -> list[dict[str, Any]]:
+    """Mappings below a confident match stay out of the warehouse until a person confirms them."""
+    if not isinstance(mappings, list):
+        return []
+    pending: list[dict[str, Any]] = []
+    for item in mappings:
+        if not isinstance(item, dict) or not str(item.get("source") or "").strip():
+            continue
+        if item.get("confirmed") is True or "confidence" not in item:
+            continue
+        try:
+            confidence = float(item.get("confidence"))
+        except (TypeError, ValueError):
+            pending.append(item)
+            continue
+        if 0 < confidence < 0.9:
+            pending.append(item)
+    return pending
+
+
 class ExecutionServiceMixin(RollbackServiceMixin):
     if TYPE_CHECKING:
         _owned_run: Any
@@ -76,6 +96,20 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             raise EltError("ELT_CONFIRMATION_REQUIRED", "执行前必须显式确认")
         if run.status != "preview_ready":
             raise EltConflict("ELT_PREVIEW_REQUIRED", "请先完成预演再执行")
+        if int(run.total_rows or 0) == 0:
+            raise EltConflict("ELT_PREVIEW_EMPTY", "没有识别出可入库的数据，不能确认或入库")
+        pending_mappings = _unconfirmed_mappings(
+            load_json(run.draft_json, {}).get("field_mappings")
+        )
+        if pending_mappings:
+            names = "、".join(
+                str(item.get("target") or item.get("source") or "字段")
+                for item in pending_mappings[:8]
+            )
+            raise EltConflict(
+                "ELT_MAPPING_CONFIRMATION_REQUIRED",
+                f"有歧义的字段尚未确认：{names}。请确认映射后再入库",
+            )
         if run.error_rows and not valid_rows_only:
             raise EltConflict(
                 "ELT_INVALID_ROWS_BLOCKED",

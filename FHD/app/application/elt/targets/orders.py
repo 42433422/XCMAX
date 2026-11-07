@@ -78,6 +78,19 @@ class PurchaseOrderAdapter(TargetAdapter):
                 reason="existing_order_v1_no_update",
                 issues=issues,
             )
+        cache = context.setdefault("_preview_cache", {})
+        line_key = (
+            str(data.get("external_order_no") or "").strip(),
+            str(data.get("product_model") or data.get("product_name") or "").strip(),
+        )
+        seen_lines = cache.setdefault("purchase_order_lines", set())
+        if line_key[0] and line_key[1] and line_key in seen_lines and not issues:
+            return PreviewDecision(
+                "skip",
+                before={"external_order_no": line_key[0], "product": line_key[1]},
+                after=json_safe(data),
+                reason="duplicate_order_line_in_source",
+            )
         supplier = (
             db.query(Supplier).filter(Supplier.name == str(data.get("supplier_name"))).first()
         )
@@ -94,6 +107,7 @@ class PurchaseOrderAdapter(TargetAdapter):
             issues.append(issue("ELT_PRODUCT_NOT_FOUND", "product_name", "产品不存在"))
         if issues:
             return PreviewDecision("error", issues=issues, reason="reference_missing")
+        seen_lines.add(line_key)
         return PreviewDecision(
             "new",
             after={**json_safe(data), "_supplier_id": supplier.id, "_product_id": product.id},
@@ -351,6 +365,24 @@ class ShipmentAdapter(TargetAdapter):
                     match_ref=str(existing_records[0].id),
                     reason="external_order_duplicate",
                 )
+        cache = context.setdefault("_preview_cache", {})
+        line_key = (
+            str(data.get("external_order_no") or "").strip(),
+            str(data.get("purchase_unit") or "").strip(),
+            str(data.get("product_name") or "").strip(),
+            str(data.get("model_number") or "").strip(),
+            str(data.get("quantity_kg") or "").strip(),
+            str(data.get("quantity_tins") or "").strip(),
+        )
+        seen_lines = cache.setdefault("shipment_lines", set())
+        if line_key in seen_lines:
+            return PreviewDecision(
+                "skip",
+                before={"external_order_no": line_key[0], "product_name": line_key[2]},
+                after=json_safe(data),
+                reason="duplicate_shipment_line_in_source",
+            )
+        seen_lines.add(line_key)
         return PreviewDecision(
             "new",
             after={**json_safe(data), "_fingerprint": fingerprint},

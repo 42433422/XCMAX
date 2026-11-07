@@ -129,8 +129,24 @@ class AttendanceAdapter(TargetAdapter):
                 after=payload,
                 reason="duplicate_attendance_source",
             )
+        identity = (
+            name,
+            str(payload.get("employee_no") or "").strip(),
+            str(payload.get("work_date") or "").strip(),
+        )
+        seen_people = cache.setdefault("attendance_identities", set())
+        if name and identity in seen_people:
+            return PreviewDecision(
+                "skip",
+                match_ref=business_id,
+                before={"employee_name": name, "work_date": identity[2]},
+                after=payload,
+                reason="duplicate_attendance_in_source",
+            )
         if business_id:
             seen.add(business_id)
+        if name:
+            seen_people.add(identity)
         return PreviewDecision("new", after=payload, reason="new_attendance_row")
 
     def _business_written(self, business_id: str) -> bool:

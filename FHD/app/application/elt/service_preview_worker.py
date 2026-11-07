@@ -150,10 +150,17 @@ class PreviewWorkerMixin:
                 run.draft_json = dump_json(draft)
             run.total_rows = len(dataset.rows)
             run.source_features_json = dump_json(source_features)
+            if not dataset.rows:
+                summary["confirmable"] = False
+                summary["empty_preview"] = {
+                    "code": "ELT_PREVIEW_EMPTY",
+                    "message": "没有识别出可入库的数据，不能确认或入库",
+                }
             run.summary_json = dump_json(
                 {
                     **summary,
                     "warnings": dataset.warnings,
+                    "row_reconciliation": source_features.get("row_reconciliation") or {},
                 }
             )
             run.stage = "transforming"
@@ -166,7 +173,8 @@ class PreviewWorkerMixin:
             run.progress = 100
             run.processed_rows = run.total_rows
             self._update_linked_companion_summary(db, run, status="preview_ready")
-            publish_preview(db, run)
+            if int(run.total_rows or 0) > 0:
+                publish_preview(db, run)
             finish_operation(db, operation)
             db.commit()
             self._record_preview_metrics(run, started_at, status="success")

@@ -1982,6 +1982,37 @@ def test_attendance_adapter_preview(session, monkeypatch, tmp_path):
         context=ctx3,
     )
     assert d3.action == "skip" and d3.reason == "duplicate_attendance_source"
+    d4 = a.preview(
+        MagicMock(),
+        {"employee_name": "乙", "work_date": "2026-01-02"},
+        allowed_update_fields=set(),
+        context=ctx3,
+    )
+    d5 = a.preview(
+        MagicMock(),
+        {"employee_name": "乙", "work_date": "2026-01-02"},
+        allowed_update_fields=set(),
+        context=ctx3,
+    )
+    assert d4.action == "new"
+    assert d5.action == "skip" and d5.reason == "duplicate_attendance_in_source"
+    from app.application.elt.targets.orders import PurchaseOrderAdapter
+
+    issues = {
+        item["field"]: item
+        for item in PurchaseOrderAdapter().validate(
+            {
+                "external_order_no": "PO-1",
+                "supplier_name": "甲",
+                "order_date": "昨天",
+                "product_name": "漆",
+                "quantity": "-2",
+            }
+        )
+    }
+    assert issues["order_date"]["code"] == "ELT_VALUE_FORMAT_INVALID"
+    assert issues["quantity"]["code"] == "ELT_VALUE_INVALID"
+    assert "负数" in issues["quantity"]["message"]
 
 
 def test_attendance_existing_batch_db(session, tmp_path):

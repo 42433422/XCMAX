@@ -28,6 +28,57 @@ STRUCTURED_SUFFIXES = {".xlsx", ".xlsm", ".csv"}
 OCR_SUFFIXES = {".pdf", ".jpg", ".jpeg", ".png"}
 KNOWLEDGE_ONLY_SUFFIXES = {".doc", ".docx", ".ppt", ".pptx"}
 SUPPORTED_SUFFIXES = STRUCTURED_SUFFIXES | OCR_SUFFIXES | KNOWLEDGE_ONLY_SUFFIXES
+_ROW_DIFFERENCE_LIMIT = 50
+
+
+def _row_reconciliation(
+    recognized: int,
+    row_groups: list[tuple[str, list[dict[str, Any]], str]],
+    sheet_groups: list[tuple[str, list[dict[str, Any]], str]] | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Explain original, recognized and preview counts without dropping a row silently."""
+    differences: list[dict[str, Any]] = []
+    dropped = 0
+    for code, rows, message in row_groups:
+        if not rows:
+            continue
+        dropped += len(rows)
+        item: dict[str, Any] = {
+            "code": code,
+            "count": len(rows),
+            "message": message,
+            "rows": rows[:_ROW_DIFFERENCE_LIMIT],
+        }
+        if len(rows) > _ROW_DIFFERENCE_LIMIT:
+            item["rows_omitted"] = len(rows) - _ROW_DIFFERENCE_LIMIT
+        differences.append(item)
+    for code, sheets, message in sheet_groups or []:
+        if not sheets:
+            continue
+        differences.append(
+            {
+                "code": code,
+                "count": 0,
+                "sheet_count": len(sheets),
+                "message": message,
+                "sheets": sheets,
+            }
+        )
+    if recognized == 0 and dropped == 0:
+        differences.append(
+            {
+                "code": "ELT_NO_DATA_ROWS",
+                "count": 0,
+                "message": "表头下没有可识别的业务数据行。",
+            }
+        )
+    reconciliation = {
+        "original_rows": recognized + dropped,
+        "recognized_rows": recognized,
+        "preview_rows": recognized,
+        "differences": differences,
+    }
+    return reconciliation, [dict(item) for item in differences]
 
 
 def _aligned_headers_by_sheet(
@@ -94,9 +145,9 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
     all_headers: list[str] = []
     sheets: list[dict[str, Any]] = []
     skipped_sheets: list[dict[str, Any]] = []
-    warnings: list[dict[str, Any]] = []
-    repeated_header_count = 0
-    footer_count = 0
+    blank_rows: list[dict[str, Any]] = []
+    repeated_rows: list[dict[str, Any]] = []
+    footer_rows: list[dict[str, Any]] = []
     header_hints = target_header_hints(target_type)
     complete = False
     try:
@@ -138,11 +189,12 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                 worksheet.iter_rows(min_row=layout.header_end + 2, values_only=True),
                 start=layout.header_end + 2,
             ):
+                located = {"sheet": worksheet.title, "row": row_number}
                 if is_repeated_header(values, layout.headers):
-                    repeated_header_count += 1
+                    repeated_rows.append(located)
                     continue
                 if is_footer_or_note_row(values):
-                    footer_count += 1
+                    footer_rows.append(located)
                     continue
                 data = {
                     headers[index]: value
@@ -150,6 +202,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                     if value not in (None, "")
                 }
                 if not data:
+                    blank_rows.append(located)
                     continue
                 if len(result) >= max_rows:
                     raise EltError(
@@ -199,30 +252,29 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
         if not complete:
             result.close()
         workbook.close()
-    if skipped_sheets:
-        warnings.append(
-            {
-                "code": "ELT_AUXILIARY_SHEETS_SKIPPED",
-                "message": f"已跳过 {len(skipped_sheets)} 个非业务或无法识别的工作表。",
-                "sheets": skipped_sheets,
-            }
-        )
-    if repeated_header_count:
-        warnings.append(
-            {
-                "code": "ELT_REPEATED_HEADERS_SKIPPED",
-                "message": f"已跳过 {repeated_header_count} 行重复表头。",
-                "count": repeated_header_count,
-            }
-        )
-    if footer_count:
-        warnings.append(
-            {
-                "code": "ELT_FOOTER_ROWS_SKIPPED",
-                "message": f"已跳过 {footer_count} 行合计、备注或签字尾行。",
-                "count": footer_count,
-            }
-        )
+    reconciliation, warnings = _row_reconciliation(
+        len(result),
+        [
+            ("ELT_BLANK_ROWS_SKIPPED", blank_rows, f"已跳过 {len(blank_rows)} 行空白行。"),
+            (
+                "ELT_REPEATED_HEADERS_SKIPPED",
+                repeated_rows,
+                f"已跳过 {len(repeated_rows)} 行重复表头。",
+            ),
+            (
+                "ELT_FOOTER_ROWS_SKIPPED",
+                footer_rows,
+                f"已跳过 {len(footer_rows)} 行合计、备注或签字尾行。",
+            ),
+        ],
+        [
+            (
+                "ELT_AUXILIARY_SHEETS_SKIPPED",
+                skipped_sheets,
+                f"已跳过 {len(skipped_sheets)} 个非业务或无法识别的工作表，这些工作表不计入行数。",
+            )
+        ],
+    )
     return ParsedDataset(
         headers=all_headers,
         rows=result,
@@ -232,6 +284,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             "skipped_sheets": skipped_sheets,
             "headers": all_headers,
             "structure_detection": "deterministic_v2",
+            "row_reconciliation": reconciliation,
         },
         warnings=warnings,
     )
@@ -270,18 +323,20 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
             dataset = ParsedDataset(headers=[], rows=rows, source_features={"kind": "csv"})
             return dataset
         headers = layout.headers
-        repeated_header_count = 0
-        footer_count = 0
+        blank_rows: list[dict[str, Any]] = []
+        repeated_rows: list[dict[str, Any]] = []
+        footer_rows: list[dict[str, Any]] = []
         remaining_probe = probe[layout.header_end + 1 :]
         for row_number, values in enumerate(
             itertools.chain(remaining_probe, reader),
             start=layout.header_end + 2,
         ):
+            located = {"sheet": "CSV", "row": row_number}
             if is_repeated_header(values, headers):
-                repeated_header_count += 1
+                repeated_rows.append(located)
                 continue
             if is_footer_or_note_row(values):
-                footer_count += 1
+                footer_rows.append(located)
                 continue
             data = {
                 headers[index]: value
@@ -289,6 +344,7 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
                 if value != ""
             }
             if not data:
+                blank_rows.append(located)
                 continue
             if len(rows) >= max_rows:
                 raise EltError(
@@ -311,23 +367,22 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
                     },
                 )
             )
-        warnings: list[dict[str, Any]] = []
-        if repeated_header_count:
-            warnings.append(
-                {
-                    "code": "ELT_REPEATED_HEADERS_SKIPPED",
-                    "message": f"已跳过 {repeated_header_count} 行重复表头。",
-                    "count": repeated_header_count,
-                }
-            )
-        if footer_count:
-            warnings.append(
-                {
-                    "code": "ELT_FOOTER_ROWS_SKIPPED",
-                    "message": f"已跳过 {footer_count} 行合计、备注或签字尾行。",
-                    "count": footer_count,
-                }
-            )
+        reconciliation, warnings = _row_reconciliation(
+            len(rows),
+            [
+                ("ELT_BLANK_ROWS_SKIPPED", blank_rows, f"已跳过 {len(blank_rows)} 行空白行。"),
+                (
+                    "ELT_REPEATED_HEADERS_SKIPPED",
+                    repeated_rows,
+                    f"已跳过 {len(repeated_rows)} 行重复表头。",
+                ),
+                (
+                    "ELT_FOOTER_ROWS_SKIPPED",
+                    footer_rows,
+                    f"已跳过 {len(footer_rows)} 行合计、备注或签字尾行。",
+                ),
+            ],
+        )
         dataset = ParsedDataset(
             headers=headers,
             rows=rows,
@@ -341,6 +396,7 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
                 "header_confidence": layout.confidence,
                 "header_reasons": list(layout.reasons),
                 "structure_detection": "deterministic_v2",
+                "row_reconciliation": reconciliation,
             },
             warnings=warnings,
         )

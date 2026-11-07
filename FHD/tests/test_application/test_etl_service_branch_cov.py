@@ -1232,6 +1232,7 @@ class TestServiceExecution:
 
     def test_execute_blocks_invalid_rows(self, etl_db, svc, app_data, fake_adapter):
         run = _make_run(etl_db)
+        run.total_rows = 3
         run.error_rows = 3
         etl_db.commit()
         with pytest.raises(EltConflict) as ei:
@@ -1243,6 +1244,7 @@ class TestServiceExecution:
     def test_execute_success(self, etl_db, svc, app_data, fake_adapter, no_background):
         up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
         run = _make_run(etl_db, upload_id="upx", target_type="webhook")
+        run.total_rows = 1
         run.draft_json = dump_json({"target_config_id": "cfg1"})
         etl_db.commit()
         cfg = EltTargetConfig(
@@ -1274,6 +1276,7 @@ class TestServiceExecution:
     def test_execute_success_non_webhook(self, etl_db, svc, app_data, fake_adapter, no_background):
         up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
         run = _make_run(etl_db, upload_id="upx", target_type="shipment_records")
+        run.total_rows = 1
         run.draft_json = dump_json({"field_mappings": []})
         etl_db.commit()
         publish_preview(etl_db, run)

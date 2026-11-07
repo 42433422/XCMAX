@@ -22,7 +22,7 @@ from app.application.elt import (
     service_preview,
     service_uploads,
 )
-from app.application.elt.errors import EltError
+from app.application.elt.errors import EltConflict, EltError
 from app.application.elt.service import EltService
 from app.application.elt.service_support import load_json
 from app.application.elt.targets import get_adapter
@@ -452,3 +452,62 @@ async def test_upload_committed_before_success_response(preview_store, monkeypat
             "/api/elt/uploads", files={"file": ("products.csv", CSV, "text/csv")}
         )
         assert result.status_code == 201, result.text
+
+
+def test_empty_preview_is_not_confirmable(preview_store):
+    store = preview_store
+    run_id = create_preview(store, csv="客户名称,电话\n".encode())
+    store.executor.futures[-1].result(timeout=10)
+    result = snapshot(store, run_id)
+    assert result["status"] == "preview_ready"
+    assert result["total_rows"] == 0
+    assert result["preview_revision"] is None
+    assert result["details"]["empty_preview"]["code"] == "ELT_PREVIEW_EMPTY"
+    reconciliation = result["details"]["row_reconciliation"]
+    assert reconciliation["original_rows"] == reconciliation["recognized_rows"] == 0
+    assert any(item["code"] == "ELT_NO_DATA_ROWS" for item in reconciliation["differences"])
+    with store.factory() as db, pytest.raises(EltConflict) as error:
+        store.service.execute(
+            db,
+            run_id=run_id,
+            owner_user_id=7,
+            confirmed=True,
+            valid_rows_only=False,
+            preview_revision="a" * 64,
+        )
+    assert error.value.code == "ELT_PREVIEW_EMPTY"
+
+
+def test_ambiguous_mapping_blocks_import_until_confirmed(preview_store):
+    store = preview_store
+    run_id = create_preview(store)
+    store.executor.futures[-1].result(timeout=10)
+    current = snapshot(store, run_id)
+    mappings = current["draft"]["field_mappings"]
+    mappings[0]["confidence"] = 0.84
+    mappings[0]["confirmed"] = False
+    with store.factory() as db:
+        store.service.update_draft(
+            db, run_id=run_id, owner_user_id=7, patch={"field_mappings": mappings}
+        )
+    store.executor.futures[-1].result(timeout=10)
+    reviewed = snapshot(store, run_id)
+    assert reviewed["preview_revision"]
+    with store.factory() as db, pytest.raises(EltConflict) as error:
+        store.service.execute(
+            db,
+            run_id=run_id,
+            owner_user_id=7,
+            confirmed=True,
+            valid_rows_only=False,
+            preview_revision=reviewed["preview_revision"],
+        )
+    assert error.value.code == "ELT_MAPPING_CONFIRMATION_REQUIRED"
+    mappings[0]["confirmed"] = True
+    with store.factory() as db:
+        store.service.update_draft(
+            db, run_id=run_id, owner_user_id=7, patch={"field_mappings": mappings}
+        )
+    store.executor.futures[-1].result(timeout=10)
+    confirmed = snapshot(store, run_id)
+    assert confirmed["preview_revision"] not in {None, reviewed["preview_revision"]}

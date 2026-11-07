@@ -4,12 +4,58 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltError
+
+_NON_NEGATIVE_FIELDS = frozenset({"quantity", "quantity_kg", "quantity_tins", "received_quantity"})
+
+
+def _typed_value_issue(field: TargetField, value: Any) -> dict[str, Any] | None:
+    if value in (None, ""):
+        return None
+    if field.type == "date":
+        from app.application.elt.transforms import _date
+
+        try:
+            _date(value)
+        except EltError:
+            return {
+                "code": "ELT_VALUE_FORMAT_INVALID",
+                "field": field.key,
+                "severity": "error",
+                "message": f"{field.label}不是有效日期",
+            }
+        return None
+    if field.type not in {"number", "integer"}:
+        return None
+    try:
+        number = Decimal(str(value).replace(",", "").replace("，", ""))
+    except InvalidOperation:
+        return {
+            "code": "ELT_VALUE_INVALID",
+            "field": field.key,
+            "severity": "error",
+            "message": f"{field.label}不是有效数字",
+        }
+    if field.key in _NON_NEGATIVE_FIELDS and number < 0:
+        return {
+            "code": "ELT_VALUE_INVALID",
+            "field": field.key,
+            "severity": "error",
+            "message": f"{field.label}不能为负数",
+        }
+    if field.type == "integer" and number != number.to_integral_value():
+        return {
+            "code": "ELT_VALUE_FORMAT_INVALID",
+            "field": field.key,
+            "severity": "error",
+            "message": f"{field.label}必须是整数",
+        }
+    return None
 
 
 def json_safe(value: Any) -> Any:
@@ -68,7 +114,8 @@ class TargetAdapter:
     def validate(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         issues: list[dict[str, Any]] = []
         for field in self.fields:
-            if field.required and data.get(field.key) in (None, ""):
+            value = data.get(field.key)
+            if field.required and value in (None, ""):
                 issues.append(
                     {
                         "code": "ELT_REQUIRED_FIELD_MISSING",
@@ -77,6 +124,10 @@ class TargetAdapter:
                         "message": f"{field.label}不能为空",
                     }
                 )
+                continue
+            issue = _typed_value_issue(field, value)
+            if issue:
+                issues.append(issue)
         return issues
 
     def preview(
