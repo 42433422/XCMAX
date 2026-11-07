@@ -9,6 +9,48 @@ import httpx
 
 from app.infrastructure.chat_stream_lifetime import check_stream_active, owned_model_read
 
+from .completions import _audit_allows_failover, _capture_reviewed_response
+
+
+class _Replay:
+    def __init__(self, lines: list[str]):
+        self._lines = lines
+
+    def iter_lines(self):
+        return iter(self._lines)
+
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
+
+
+def _json_document(lines: list[str]) -> str | None:
+    body = "\n".join(lines).lstrip()
+    if body.startswith("{") and not any(
+        line.lstrip().startswith(("event:", "data:")) for line in lines
+    ):
+        return body
+    return None
+
+
+def _completion_payloads(response, sse_payloads):
+    """One JSON document stays one payload. Event streams stay line-oriented."""
+    lines = [line for line in response.iter_lines()]
+    document = _json_document(lines)
+    if document is not None:
+        yield document
+        return
+    yield from sse_payloads(_Replay(lines))
+
+
+async def _acompletion_payloads(response, sse_payloads):
+    lines = [line async for line in response.aiter_lines()]
+    document = _json_document(lines)
+    if document is not None:
+        yield document
+        return
+    async for data in sse_payloads(_Replay(lines)):
+        yield data
 from .protocols import ChatInput, Connection, Route, StreamPorts
 from .responses import market_response_error
 
@@ -18,7 +60,8 @@ def stream_sync(
 ) -> Iterator[str]:
     if not connection.platform_url:
         raise ValueError("修茈市场平台URL未配置")
-    candidates = ports.candidates(*route)
+    allow_failover = request.extra.get("allow_failover") is not False
+    candidates = ports.candidates(*route) if allow_failover else [route]
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
         check_stream_active()
@@ -44,16 +87,24 @@ def stream_sync(
                     if status < 400:
                         # No retry after output has begun: replaying a partial answer
                         # could duplicate visible output or an upstream billed call.
-                        for data in ports.sync_payloads(response):
+                        for data in _completion_payloads(response, ports.sync_payloads):
                             emitted = True
                             yield data
+                        _capture_reviewed_response(request, connection, response)
                         return
+                    response.read()
+                    will_failover = (
+                        index + 1 < len(candidates)
+                        and ports.failoverable(status, response.text[:500])
+                        and _audit_allows_failover(request.extra)
+                    )
+                    if not will_failover:
+                        _capture_reviewed_response(request, connection, response)
                     if request.extra.get("key_source") or request.extra.get("route_token"):
-                        response.read()
                         raise market_response_error(response, status)
-                    text = response.read().decode("utf-8", errors="ignore")[:500]
+                    text = response.text[:500]
                     error = ValueError(f"平台错误({status}): {text}")
-                    if index + 1 >= len(candidates) or not ports.failoverable(status, text):
+                    if not will_failover:
                         raise error
                     last_error = error
                     ports.logger.warning(
@@ -65,6 +116,7 @@ def stream_sync(
                     emitted
                     or index + 1 >= len(candidates)
                     or not ports.failoverable(None, str(exc))
+                    or not _audit_allows_failover(request.extra)
                 ):
                     raise
                 last_error = exc
@@ -83,7 +135,10 @@ async def stream_async(
 ) -> AsyncGenerator[str, None]:
     if not connection.platform_url:
         raise ValueError("修茈市场平台URL未配置")
-    candidates = await asyncio.to_thread(ports.candidates, *route)
+    allow_failover = request.extra.get("allow_failover") is not False
+    candidates = (
+        await asyncio.to_thread(ports.candidates, *route) if allow_failover else [route]
+    )
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
         messages = await ports.prepare_async(request.messages, *candidate)
@@ -102,24 +157,37 @@ async def stream_async(
                 status = ports.status_code(response, 200)
                 if status >= 400:
                     await response.aread()
+                    will_failover = (
+                        index + 1 < len(candidates)
+                        and ports.failoverable(status, response.text[:500])
+                        and _audit_allows_failover(request.extra)
+                    )
+                    if not will_failover:
+                        _capture_reviewed_response(request, connection, response)
                     if request.extra.get("key_source") or request.extra.get("route_token"):
                         raise market_response_error(response, status)
                     text = response.text[:500]
                     error = ValueError(f"平台错误({status}): {text}")
-                    if index + 1 >= len(candidates) or not ports.failoverable(status, text):
+                    if not will_failover:
                         raise error
                     last_error = error
                     ports.logger.warning(
                         "[Modstream] 流式换模 %s/%s -> %s", *candidate, candidates[index + 1]
                     )
                     continue
-                async for data in ports.async_payloads(response):
+                async for data in _acompletion_payloads(response, ports.async_payloads):
                     emitted = True
                     yield data
+                _capture_reviewed_response(request, connection, response)
                 return
         except httpx.HTTPError as exc:
             # 传输故障只在未输出首包时换模，避免重复内容或重复计费。
-            if emitted or index + 1 >= len(candidates) or not ports.failoverable(None, str(exc)):
+            if (
+                emitted
+                or index + 1 >= len(candidates)
+                or not ports.failoverable(None, str(exc))
+                or not _audit_allows_failover(request.extra)
+            ):
                 raise
             last_error = exc
             ports.logger.warning(

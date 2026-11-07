@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+
+import httpx
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -523,59 +525,75 @@ class TestChatCompletion:
         import httpx
 
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
-        mock_client = AsyncMock()
-        # httpx.ConnectError is a subclass of httpx.HTTPError
-        # which is caught by the `except httpx.HTTPError` block and re-raised
-        mock_client.post = AsyncMock(side_effect=httpx.ConnectError("connection failed"))
-        # _get_client is an async method that returns the client
-        adapter._get_client = AsyncMock(return_value=mock_client)
+        calls = []
+
+        class _Client:
+            is_closed = False
+
+            def stream(self, method, url, json=None, headers=None):
+                calls.append((method, url, json))
+                raise httpx.ConnectError("connection failed")
+
+        adapter._get_client = AsyncMock(return_value=_Client())
         with pytest.raises(httpx.ConnectError):
             await adapter.chat_completion([{"role": "user", "content": "hi"}])
-        mock_client.post.assert_awaited_once()
-        assert mock_client.post.call_args.args == ("http://example.com/api/llm/chat",)
-        assert mock_client.post.call_args.kwargs["json"]["messages"] == [
-            {"role": "user", "content": "hi"}
-        ]
+        assert calls[0][0] == "POST"
+        assert calls[0][1] == "http://example.com/api/llm/chat/stream"
+        assert calls[0][2]["messages"] == [{"role": "user", "content": "hi"}]
 
     @pytest.mark.asyncio
     async def test_success_response(self, monkeypatch, chat_discovery_http):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "content": "hello",
-            "usage": {},
-            "success": True,
-        }
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client.is_closed = False
-        adapter._client = mock_client
+        calls = []
+        response = httpx.Response(200, json={"content": "hello", "usage": {}, "success": True})
+
+        class _Client:
+            is_closed = False
+
+            def stream(self, method, url, json=None, headers=None):
+                calls.append((method, url, json))
+
+                class _Ctx:
+                    async def __aenter__(self_nonlocal):
+                        return response
+
+                    async def __aexit__(self_nonlocal, *args):
+                        return False
+
+                return _Ctx()
+
+        adapter._client = _Client()
         result = await adapter.chat_completion([{"role": "user", "content": "hi"}])
         assert result["choices"][0]["message"]["content"] == "hello"
-        mock_client.post.assert_awaited_once()
-        assert mock_client.post.call_args.args == ("http://example.com/api/llm/chat",)
-        assert mock_client.post.call_args.kwargs["json"]["messages"] == [
-            {"role": "user", "content": "hi"}
-        ]
+        assert calls[0][1] == "http://example.com/api/llm/chat/stream"
+        assert calls[0][2]["messages"] == [{"role": "user", "content": "hi"}]
 
     @pytest.mark.asyncio
     async def test_error_status_raises(self, monkeypatch, chat_discovery_http):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-        mock_response.text = "Internal Server Error"
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client.is_closed = False
-        adapter._client = mock_client
+        calls = []
+        response = httpx.Response(500, text="Internal Server Error")
+
+        class _Client:
+            is_closed = False
+
+            def stream(self, method, url, json=None, headers=None):
+                calls.append((method, url, json))
+
+                class _Ctx:
+                    async def __aenter__(self_nonlocal):
+                        return response
+
+                    async def __aexit__(self_nonlocal, *args):
+                        return False
+
+                return _Ctx()
+
+        adapter._client = _Client()
         with pytest.raises(ValueError, match="500"):
             await adapter.chat_completion([{"role": "user", "content": "hi"}])
-        mock_client.post.assert_awaited_once()
-        assert mock_client.post.call_args.args == ("http://example.com/api/llm/chat",)
-        assert mock_client.post.call_args.kwargs["json"]["messages"] == [
-            {"role": "user", "content": "hi"}
-        ]
+        assert calls[0][1] == "http://example.com/api/llm/chat/stream"
+        assert calls[0][2]["messages"] == [{"role": "user", "content": "hi"}]
 
 
 # ---------------------------------------------------------------------------

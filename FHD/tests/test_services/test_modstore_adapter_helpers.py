@@ -119,6 +119,24 @@ class TestModstoreAdapterHelpers:
         assert payloads[0] == '{"delta": ""}'
         assert "最终回复" in payloads[1]
 
+    def test_iter_market_sse_surfaces_processing_status(self) -> None:
+        class _Resp:
+            def iter_lines(self):
+                return iter(
+                    [
+                        "event: status",
+                        'data: {"state": "processing", "request_id": "llm_same"}',
+                        "event: delta",
+                        'data: {"delta": "一次"}',
+                        "event: done",
+                        'data: {"ok": true, "content": "一次"}',
+                    ]
+                )
+
+        payloads = list(_iter_market_sse_data_payloads(_Resp()))
+        assert json.loads(payloads[0]) == {"status": "processing", "request_id": "llm_same"}
+        assert payloads[1] == '{"delta": "一次"}'
+
     def test_market_connect_timeout_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_MARKET_CONNECT_TIMEOUT", raising=False)
         assert _market_connect_timeout() == 20.0
