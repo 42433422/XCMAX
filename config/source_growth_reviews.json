@@ -148,9 +148,9 @@
     "FHD/app/application/elt/attendance_pipeline.py": {
       "base_file": "FHD/app/application/elt/attendance_pipeline.py",
       "base_blob": "85b2440a6941d230651d018aad4af912298e59b3",
-      "head_blob": "fb04dd80923a8bb84c72d07a189e1652fa2ae2e6",
+      "head_blob": "1ad52242f7a32da9128e39406e6a02f3e4d402ba",
       "before_lines": 593,
-      "after_lines": 1023,
+      "after_lines": 1007,
       "review_owner": "@42433422",
       "reason": "Selected attendance candidates retain monthly marks and committed-row readback instead of re-parsing an untouched source workbook.",
       "boundary": "Existing attendance pipeline only; static bound SQLite queries and 500-ID readback batches preserve idempotent writes and no new route.",

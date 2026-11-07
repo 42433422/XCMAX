@@ -118,7 +118,9 @@ def parse_attendance_dataset(path: Path, *, max_rows: int) -> ParsedDataset:
             }
             seen: set[str] = set()
             emitted = 0
-            for row_number, values in _data_rows(sheet, header_row):
+            for row_number, values in enumerate(
+                sheet.iter_rows(min_row=header_row + 1, values_only=True), start=header_row + 1
+            ):
                 if emitted >= max_rows:
                     raise EltError(
                         "ELT_ROW_LIMIT_EXCEEDED", f"文件超过 {max_rows} 行限制", status_code=413
@@ -147,7 +149,7 @@ def parse_attendance_dataset(path: Path, *, max_rows: int) -> ParsedDataset:
                     "status": "identified",
                     "error": None,
                 }
-                cleaned, issues = _clean(raw, columns, values)
+                cleaned, issues = _clean(columns, values)
                 business_id = ""
                 duplicate_status = "unique"
                 if not issues:
@@ -275,7 +277,7 @@ def persist_attendance_rows(
         _ensure_schema(conn)
         _ensure_monthly_schema(conn)
         conn.execute("BEGIN")
-        for index, row in enumerate(rows):
+        for row in rows:
             issues = row.get("validation_result") or []
             if issues or not str(row.get("employee_name") or "").strip():
                 errors.append(
@@ -338,8 +340,6 @@ def persist_attendance_rows(
             ),
         )
         conn.commit()
-    except EltError:
-        raise
     except sqlite3.Error as exc:
         conn.rollback()
         raise EltError("ELT_ATTENDANCE_PERSIST_FAILED", "考勤写入失败") from exc
@@ -347,7 +347,7 @@ def persist_attendance_rows(
         conn.close()
     if fault == "skip_output":
         raise EltError("ELT_OUTPUT_MISSING", "考勤结果文件未生成")
-    output = _write_output(upload_path, run_id, _committed_rows(db_path, output_rows))
+    output = _write_output(run_id, _committed_rows(db_path, output_rows))
     if not output.is_file():
         raise EltError("ELT_OUTPUT_MISSING", "考勤结果文件未生成")
     digest = hashlib.sha256(output.read_bytes()).hexdigest()
@@ -369,7 +369,7 @@ def persist_attendance_rows(
     }
 
 
-def _write_output(upload_path: Path, run_id: str, rows: list[dict[str, Any]]) -> Path:
+def _write_output(run_id: str, rows: list[dict[str, Any]]) -> Path:
     from app.utils.path_io.path_utils import get_app_data_dir
 
     root = Path(get_app_data_dir()).resolve() / "etl" / "exports"
@@ -512,9 +512,7 @@ def _round_half_hour_with_25_minute_grace(value: float) -> float:
     return round(whole / 2, 2)
 
 
-def _clean(
-    raw: dict[str, str], columns: dict[str, int], values: tuple
-) -> tuple[dict[str, Any], list[dict]]:
+def _clean(columns: dict[str, int], values: tuple) -> tuple[dict[str, Any], list[dict]]:
     cleaned = {
         key: _text(values[index]) if index < len(values) else "" for key, index in columns.items()
     }
@@ -561,14 +559,6 @@ def _header(sheet) -> tuple[int | None, dict[str, int]]:
     return None, {}
 
 
-def _data_rows(sheet, header_row: int):
-    for row_number, row in enumerate(
-        sheet.iter_rows(min_row=header_row + 1, values_only=True),
-        start=header_row + 1,
-    ):
-        yield row_number, tuple(row)
-
-
 def _sheet_blank(sheet) -> bool:
     for row in sheet.iter_rows(max_row=5, max_col=5, values_only=True):
         if any(str(value or "").strip() for value in row):
@@ -576,15 +566,11 @@ def _sheet_blank(sheet) -> bool:
     return True
 
 
-def _column_name(sheet, header_row: int, index: int) -> str:
+def _header_text(sheet, header_row: int, index: int) -> str:
     for row in sheet.iter_rows(min_row=header_row, max_row=header_row, values_only=True):
         if index < len(row) and _text(row[index]):
             return _text(row[index])
     return ""
-
-
-def _header_text(sheet, header_row: int, index: int) -> str:
-    return _column_name(sheet, header_row, index)
 
 
 def _table_region(columns: dict[str, int], header_row: int, row_number: int) -> str:
@@ -725,10 +711,7 @@ def _committed_rows(db_path: Path, rows: list[dict[str, Any]]) -> list[dict[str,
                 "WHERE business_id IN (SELECT value FROM json_each(?))",
                 chunk,
             ):
-                found[record["business_id"]] = {
-                    **dict(record),
-                    "source_sheet": record["source_sheet"],
-                }
+                found[record["business_id"]] = dict(record)
             for record in conn.execute(
                 "SELECT business_id, employee_name, employee_no, user_id, work_date, source_row, "
                 "daily_times_json FROM attendance_daily_records "
@@ -752,6 +735,7 @@ def _committed_rows(db_path: Path, rows: list[dict[str, Any]]) -> list[dict[str,
 def _insert_daily(
     conn: sqlite3.Connection, row: dict[str, Any], source_file: str, business_id: str
 ) -> None:
+    times = json.dumps([row.get("clock_in"), row.get("clock_out")], ensure_ascii=False)
     conn.execute(
         """
         INSERT INTO attendance_daily_records (
@@ -774,9 +758,9 @@ def _insert_daily(
             row.get("user_id") or "",
             row.get("work_date") or "",
             row.get("shift_name") or "",
-            json.dumps([row.get("clock_in"), row.get("clock_out")], ensure_ascii=False),
+            times,
             "[]",
-            json.dumps([row.get("clock_in"), row.get("clock_out")], ensure_ascii=False),
+            times,
             datetime.now().isoformat(timespec="seconds"),
             business_id,
         ),
