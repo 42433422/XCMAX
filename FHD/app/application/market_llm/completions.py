@@ -56,6 +56,56 @@ def _status_error(request: ChatInput, response: httpx.Response, status: int) -> 
     return error
 
 
+class _ReplayAsyncByteStream(httpx.AsyncByteStream):
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
+
+    async def __aiter__(self):
+        if self._payload:
+            yield self._payload
+        self._payload = b""
+
+    async def aclose(self) -> None:
+        self._payload = b""
+
+
+class _ReplaySyncByteStream(httpx.SyncByteStream):
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
+
+    def __iter__(self):
+        if self._payload:
+            yield self._payload
+        self._payload = b""
+
+    def close(self) -> None:
+        self._payload = b""
+
+
+def _replay_read_body(response: httpx.Response, raw: bytes) -> None:
+    """aread/read fills .content and closes the socket. Parsing still needs the bytes."""
+    response.is_stream_consumed = False
+    response.is_closed = False
+    response.stream = (
+        _ReplayAsyncByteStream(raw)
+        if isinstance(response.stream, httpx.AsyncByteStream)
+        else _ReplaySyncByteStream(raw)
+    )
+
+
+async def _buffer_audited_async_body(request: ChatInput, response: httpx.Response) -> None:
+    """Archive the provider body before SSE parsing stops at the done event."""
+    if request.extra.get("_reviewed_excel_audit_response") is None:
+        return
+    _replay_read_body(response, await response.aread())
+
+
+def _buffer_audited_sync_body(request: ChatInput, response: httpx.Response) -> None:
+    if request.extra.get("_reviewed_excel_audit_response") is None:
+        return
+    _replay_read_body(response, response.read())
+
+
 def _capture_reviewed_response(
     request: ChatInput, connection: Connection, response: httpx.Response
 ):

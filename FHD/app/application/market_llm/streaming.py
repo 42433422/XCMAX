@@ -10,7 +10,12 @@ import httpx
 
 from app.infrastructure.chat_stream_lifetime import check_stream_active, owned_model_read
 
-from .completions import _audit_allows_failover, _capture_reviewed_response
+from .completions import (
+    _audit_allows_failover,
+    _buffer_audited_async_body,
+    _buffer_audited_sync_body,
+    _capture_reviewed_response,
+)
 
 
 class _Replay:
@@ -90,6 +95,7 @@ def stream_sync(
                     if status < 400:
                         # No retry after output has begun: replaying a partial answer
                         # could duplicate visible output or an upstream billed call.
+                        _buffer_audited_sync_body(request, response)
                         for data in _completion_payloads(response, ports.sync_payloads):
                             emitted = True
                             yield data
@@ -176,6 +182,7 @@ async def stream_async(
                         "[Modstream] 流式换模 %s/%s -> %s", *candidate, candidates[index + 1]
                     )
                     continue
+                await _buffer_audited_async_body(request, response)
                 async for data in _acompletion_payloads(response, ports.async_payloads):
                     emitted = True
                     yield data
