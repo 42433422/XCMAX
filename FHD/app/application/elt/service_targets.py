@@ -150,7 +150,12 @@ class TargetConfigServiceMixin:
 
     def download_path(self, db: Session, *, run_id: str, owner_user_id: int) -> Path:
         run = self._owned_run(db, run_id, owner_user_id)
-        if run.target_type not in {"export_xlsx", "export_csv", "attendance"} or run.status not in {
+        if run.target_type not in {
+            "export_xlsx",
+            "export_csv",
+            "attendance",
+            "shipment_records",
+        } or run.status not in {
             "completed",
             "partial",
         }:
