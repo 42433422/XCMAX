@@ -187,6 +187,95 @@ def test_unknown_sheet_naming_runs_inside_a_live_event_loop(monkeypatch):
     assert sheets[0]["labels"] == ["material"]
 
 
+def test_a_missing_sheet_name_is_asked_again(monkeypatch):
+    calls = []
+
+    def fake(messages, _schema, _max_tokens, owner_id=None):
+        calls.append(messages)
+        if len(calls) == 1:
+            return LlmAssistResult(
+                used_llm=True,
+                data={
+                    "sheets": [
+                        {"name": "国圣送货单", "type": "送货单"},
+                        {"name": "26出货记录", "type": "出货明细"},
+                        {"name": "借还材料明细", "type": "借还台账"},
+                    ]
+                },
+            )
+        return LlmAssistResult(
+            used_llm=True,
+            data={"sheets": [{"name": "白浆测算", "type": "测算表"}]},
+        )
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_sheet_names._template_llm_complete", fake
+    )
+    sheets = [
+        {"sheet": "国圣", "labels": ["delivery"], "processable": True, "regions": []},
+        {
+            "sheet": "26出货",
+            "labels": ["unknown"],
+            "processable": True,
+            "regions": [{"labels": ["unknown"]}],
+        },
+        {
+            "sheet": "借原材料明细",
+            "labels": ["unknown"],
+            "processable": True,
+            "regions": [{"labels": ["unknown"]}],
+        },
+        {
+            "sheet": "白浆",
+            "labels": ["unknown"],
+            "processable": True,
+            "regions": [{"labels": ["unknown"]}],
+        },
+    ]
+    apply_unknown_sheet_names(
+        sheets, [{"sheet": "白浆", "value": "25.12.27亮光白浆"}], owner_id=1
+    )
+    assert len(calls) == 2
+    assert "不能少、不能合并、不能跳过" in calls[0][0]["content"]
+    assert "公式多的表" in calls[0][0]["content"]
+    assert "共 4 张表" in calls[0][1]["content"]
+    assert "表名依次是：国圣、26出货、借原材料明细、白浆" in calls[0][1]["content"]
+    assert "上次没有名字" in calls[1][0]["content"]
+    assert "数组长度必须等于 1" in calls[1][0]["content"]
+    assert "共 1 张表" in calls[1][1]["content"]
+    assert "表名依次是：白浆" in calls[1][1]["content"]
+    assert "亮光白浆" in calls[1][1]["content"]
+    assert sheets[0]["model_name"] == "国圣送货单"
+    assert sheets[3]["model_name"] == "白浆测算"
+    assert sheets[3]["model_type"] == "测算表"
+    assert sheets[3]["labels"] == ["calculation"]
+
+
+def test_sheet_naming_retries_a_missing_name_only_once(monkeypatch):
+    calls = {"n": 0}
+
+    def fake(*_args, **_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return LlmAssistResult(
+                used_llm=True,
+                data={"sheets": [{"name": "国圣送货单", "type": "送货单"}]},
+            )
+        return LlmAssistResult(used_llm=True, data={"sheets": []})
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_sheet_names._template_llm_complete", fake
+    )
+    sheets = [
+        {"sheet": "国圣", "labels": ["delivery"], "processable": True, "regions": []},
+        {"sheet": "白浆", "labels": ["unknown"], "processable": True, "regions": []},
+    ]
+    apply_unknown_sheet_names(sheets, [], owner_id=1)
+    assert calls["n"] == 2
+    assert sheets[0]["model_name"] == "国圣送货单"
+    assert "model_name" not in sheets[1]
+
+
 def test_naming_failure_leaves_unknown(monkeypatch):
     def boom(*_args, **_kwargs):
         raise RuntimeError("down")

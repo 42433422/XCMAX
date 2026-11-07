@@ -47,51 +47,70 @@ def _sheet_excerpt(cells: list[dict], sheet: str, limit: int = 12) -> str:
     return " | ".join(lines)[:1500]
 
 
-def apply_unknown_sheet_names(sheets: list[dict], cells: list[dict], *, owner_id: int | None) -> None:
-    """Name every processable sheet once. Replace a label only when it is still unknown."""
-    pending = [
-        sheet
-        for sheet in sheets
-        if sheet.get("processable") is not False and str(sheet.get("sheet") or "").strip()
-    ]
-    if not pending:
-        return
+_SHEET_NAME_SCHEMA = {
+    "type": "object",
+    "required": ["sheets"],
+    "properties": {
+        "sheets": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["sheet", "name", "type"],
+                "properties": {
+                    "sheet": {"type": "string"},
+                    "name": {"type": "string"},
+                    "type": {"type": "string"},
+                },
+            },
+        }
+    },
+}
+
+
+def _naming_messages(group: list[dict], cells: list[dict], *, retry: bool) -> list[dict]:
+    """Require one name per sheet. A retry names only the sheets still missing one."""
     lines = [
         f"{sheet['sheet']}: {_sheet_excerpt(cells, sheet['sheet']) or '（空表）'}"
-        for sheet in pending[:12]
+        for sheet in group
     ]
-    messages = [
+    count = len(lines)
+    titles = "、".join(str(sheet["sheet"]) for sheet in group)
+    lead = "这些表上次没有名字。" if retry else "你给每一张工作表起名并定类型。"
+    return [
         {
             "role": "system",
             "content": (
-                "你给每张工作表起名并定类型。只返回 JSON。"
-                "name 是短名称，用这张表自己的内容，不要写 unknown。"
+                f"{lead}只返回 JSON 数组。"
+                f"数组长度必须等于 {count}，每一张表一条，不能少、不能合并、不能跳过。"
+                "内容不同的表各自起名，公式多的表、原料表和测算表也要给名。"
+                "按输入顺序返回。每条只有 name 和 type。"
+                "name 是这张表自己的短名称，不要写 unknown。"
                 "type 是短类型，例如送货单、出货明细、借还台账、测算表、报价单。"
-                "每张表都要有一条。不要解释，不要 markdown。"
+                "不要解释，不要 markdown。"
             ),
         },
-        {"role": "user", "content": "\n".join(lines)},
-    ]
-    schema = {
-        "type": "object",
-        "required": ["sheets"],
-        "properties": {
-            "sheets": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "required": ["sheet", "name", "type"],
-                    "properties": {
-                        "sheet": {"type": "string"},
-                        "name": {"type": "string"},
-                        "type": {"type": "string"},
-                    },
-                },
-            }
+        {
+            "role": "user",
+            "content": (
+                f"共 {count} 张表，必须按顺序各返回一条。表名依次是：{titles}。\n"
+                + "\n".join(lines)
+            ),
         },
-    }
+    ]
+
+
+def _apply_model_names(
+    group: list[dict], cells: list[dict], *, owner_id: int | None, retry: bool
+) -> None:
+    if not group:
+        return
     try:
-        result = _template_llm_complete(messages, schema, 800, owner_id=owner_id)
+        result = _template_llm_complete(
+            _naming_messages(group, cells, retry=retry),
+            _SHEET_NAME_SCHEMA,
+            800,
+            owner_id=owner_id,
+        )
     except Exception:
         logger.info("sheet naming failed: BOUNDARY")
         return
@@ -101,16 +120,12 @@ def apply_unknown_sheet_names(sheets: list[dict], cells: list[dict], *, owner_id
     payload = result.data if isinstance(getattr(result, "data", None), dict) else {}
     rows = [item for item in payload.get("sheets") or [] if isinstance(item, dict)]
     named = {str(item.get("sheet") or "").strip(): item for item in rows}
-    unmatched = [sheet for sheet in pending if str(sheet.get("sheet") or "").strip() not in named]
-    if rows and len(unmatched) == len(pending):
-        paired = list(zip(pending, rows))
-        named = {
-            str(sheet.get("sheet") or "").strip(): item for sheet, item in paired
-        }
-        logger.info(
-            "sheet naming matched %s of %s rows by reply order", len(paired), len(pending)
-        )
-    for sheet in pending:
+    unmatched = [sheet for sheet in group if str(sheet.get("sheet") or "").strip() not in named]
+    if rows and len(unmatched) == len(group):
+        paired = list(zip(group, rows))
+        named = {str(sheet.get("sheet") or "").strip(): item for sheet, item in paired}
+        logger.info("sheet naming matched %s of %s rows by reply order", len(paired), len(group))
+    for sheet in group:
         item = named.get(str(sheet.get("sheet") or "").strip())
         if not item:
             continue
@@ -127,6 +142,24 @@ def apply_unknown_sheet_names(sheets: list[dict], cells: list[dict], *, owner_id
                 if region.get("labels") == ["unknown"]:
                     region["labels"] = [label]
                     region["suggested_labels"] = [label]
+
+
+def apply_unknown_sheet_names(sheets: list[dict], cells: list[dict], *, owner_id: int | None) -> None:
+    """Name every processable sheet. Ask once more for any sheet the model left unnamed."""
+    pending = [
+        sheet
+        for sheet in sheets
+        if sheet.get("processable") is not False and str(sheet.get("sheet") or "").strip()
+    ]
+    if not pending:
+        return
+    asked = pending[:12]
+    _apply_model_names(asked, cells, owner_id=owner_id, retry=False)
+    missing = [sheet for sheet in asked if not str(sheet.get("model_name") or "").strip()]
+    if not missing:
+        return
+    logger.info("sheet naming retry for %s sheet(s) still missing a name", len(missing))
+    _apply_model_names(missing, cells, owner_id=owner_id, retry=True)
 
 
 def annotate_slice_titles(slices: list[dict], sheets: list[dict]) -> None:
