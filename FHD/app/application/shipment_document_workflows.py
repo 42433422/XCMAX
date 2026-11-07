@@ -55,6 +55,8 @@ class ShipmentDocumentWorkflowMixin:
         unit_name: str | None = None,
         template_id: str | None = None,
         status_filter: str | None = None,
+        layout_owner_user_id: int | None = None,
+        layout_tenant_id: int | None = None,
     ) -> dict[str, Any]:
         """
         导出出货记录为 Excel 文件。
@@ -90,6 +92,15 @@ class ShipmentDocumentWorkflowMixin:
             export_dir = os.path.join(get_data_dir(), "exports")
             os.makedirs(export_dir, exist_ok=True)
             file_path = os.path.join(export_dir, filename)
+            if str(template_id or "").startswith("etl:"):
+                return self._export_saved_delivery_note(
+                    records,
+                    template_id=str(template_id),
+                    file_path=file_path,
+                    filename=filename,
+                    layout_owner_user_id=layout_owner_user_id,
+                    layout_tenant_id=layout_tenant_id,
+                )
             template_path = None
             if template_id:
                 try:
@@ -273,6 +284,50 @@ class ShipmentDocumentWorkflowMixin:
                 "filename": None,
                 "count": 0,
             }
+
+    @staticmethod
+    def _export_saved_delivery_note(
+        records: list[dict[str, Any]],
+        *,
+        template_id: str,
+        file_path: str,
+        filename: str,
+        layout_owner_user_id: int | None,
+        layout_tenant_id: int | None,
+    ) -> dict[str, Any]:
+        """Fill the owner's saved 送货单 layout instead of the generic ledger."""
+        from app.application.elt.errors import EltError
+        from app.application.elt.shipment_layout_fill import (
+            fill_delivery_note_file,
+            resolve_owned_shipment_layout,
+        )
+
+        failure = {
+            "success": False,
+            "file_path": None,
+            "filename": None,
+            "count": 0,
+        }
+        layout = resolve_owned_shipment_layout(
+            template_id,
+            tenant_id=layout_tenant_id,
+            owner_user_id=layout_owner_user_id,
+        )
+        if layout is None:
+            return {**failure, "message": "导出失败：所选模板不存在，请重新选择模板"}
+        ordered = sorted(records, key=lambda row: int(row.get("id") or 0))
+        try:
+            fill_delivery_note_file(layout, ordered, file_path)
+        except EltError:
+            logger.exception("填充送货单版式失败")
+            return {**failure, "message": "导出失败：送货单版式无法填充"}
+        return {
+            "success": True,
+            "file_path": str(file_path),
+            "filename": filename,
+            "count": len(ordered),
+            "template_used": template_id,
+        }
 
     def generate_shipment_document(
         self,
