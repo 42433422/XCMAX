@@ -66,6 +66,7 @@ from app.application.reviewed_excel_review_store import (
     _cas,
     _fork_saved_review,
     _intake_selection_key,
+    _archived_original,
     _lock_review_classification,
     _model_processing_failure,
     _proposals,
@@ -1581,10 +1582,11 @@ def reviewed_excel_intake_preview(
             key = _intake_selection_key(
                 review, proposal_version, candidate_id, selected, name, composer_note
             )
-            # The cleaned workbook is the template. A delivery note's item rows are
-            # read from the filled source, because template clears blank those lines.
-            original = _source(db, review, tenant, owner)
-            chosen = clean_workbook(original, review.file_sha256, selected)
+            # The review upload is the template fragment. Database and knowledge
+            # read the classification's archived original, which still has item rows.
+            template_source = _source(db, review, tenant, owner)
+            archived = _archived_original(db, review, tenant, owner)
+            chosen = clean_workbook(template_source, review.file_sha256, selected)
             service = get_elt_service()
             upload = service.save_upload(
                 db,
@@ -1606,42 +1608,63 @@ def reviewed_excel_intake_preview(
             )
             from app.application.elt.llm_assist import advise_business_import, etl_llm_enabled
 
-            original_text = workbook_text(original)
-            business_llm = advise_business_import(original_text) if etl_llm_enabled() else None
-            ai_table = None
-            if business_llm is not None and business_llm.used_llm and not business_llm.degraded:
-                ai_table = dataset_from_business_rows(list(business_llm.data.get("rows") or []))
-            delivery = read_delivery_note_business(original)
-            if ai_table is not None:
-                chosen_table = ai_table
-                target_type = "shipment_records"
-                detection_reason = "database_llm"
-            elif delivery is not None:
-                chosen_table = delivery
-                target_type = "shipment_records"
-                detection_reason = "delivery_note_business_rows"
-            else:
-                chosen_table = read_candidate_table(path)
-                target_type = match_business_target(chosen_table.headers)
-                detection_reason = "candidate_headers"
-            detection = {
-                "target_type": target_type,
-                "reason": detection_reason,
-                "confirmed": True,
-                "llm_lane": "database",
-                "used_llm": bool(business_llm and business_llm.used_llm),
-                "degraded": bool(business_llm and business_llm.degraded),
-            }
-            _authorize_intake(request, (tenant, owner), target_type)
-            intake = get_auto_ingest_service()
-            knowledge = intake.knowledge_plan(
-                path=path,
-                file_name=name.strip(),
-                note=composer_note.strip(),
-                owner_user_id=owner,
-                owned_upload_user_id=source.owner_user_id,
-                source_text=original_text,
+            original_text = workbook_text(archived)
+            from app.application.elt.llm_session_provider import (
+                bind_etl_llm_owner,
+                reset_etl_llm_owner,
             )
+
+            # Identity can already see the account model. Bind that same session
+            # so these two lanes resolve it; each lane still has its own circuit.
+            model_session = require_model_session(request, tenant, owner)
+            owner_token = bind_etl_llm_owner(owner)
+            try:
+                with bind_model_session(model_session):
+                    business_llm = (
+                        advise_business_import(original_text) if etl_llm_enabled() else None
+                    )
+                    ai_table = None
+                    if (
+                        business_llm is not None
+                        and business_llm.used_llm
+                        and not business_llm.degraded
+                    ):
+                        ai_table = dataset_from_business_rows(
+                            list(business_llm.data.get("rows") or [])
+                        )
+                    delivery = read_delivery_note_business(archived)
+                    if ai_table is not None:
+                        chosen_table = ai_table
+                        target_type = "shipment_records"
+                        detection_reason = "database_llm"
+                    elif delivery is not None:
+                        chosen_table = delivery
+                        target_type = "shipment_records"
+                        detection_reason = "delivery_note_business_rows"
+                    else:
+                        chosen_table = read_candidate_table(path)
+                        target_type = match_business_target(chosen_table.headers)
+                        detection_reason = "candidate_headers"
+                    detection = {
+                        "target_type": target_type,
+                        "reason": detection_reason,
+                        "confirmed": True,
+                        "llm_lane": "database",
+                        "used_llm": bool(business_llm and business_llm.used_llm),
+                        "degraded": bool(business_llm and business_llm.degraded),
+                    }
+                    _authorize_intake(request, (tenant, owner), target_type)
+                    intake = get_auto_ingest_service()
+                    knowledge = intake.knowledge_plan(
+                        path=path,
+                        file_name=name.strip(),
+                        note=composer_note.strip(),
+                        owner_user_id=owner,
+                        owned_upload_user_id=source.owner_user_id,
+                        source_text=original_text,
+                    )
+            finally:
+                reset_etl_llm_owner(owner_token)
             preview_started = True
             business = service.create_preview(
                 db,
@@ -1812,7 +1835,7 @@ async def reviewed_excel_save(
                     "valid_rows_only": valid_rows_only,
                 }
                 # The staged upload is the candidate chosen at preview. The template
-                # file is the same cleanup, written again from the archived original.
+                # file is that same cleanup of the review workbook, not the full original.
                 cleaned = clean_workbook(body, run.file_sha256, selected)
             else:
                 # Old template-library clients authorize one template only, never implicit business writes.
@@ -1850,7 +1873,7 @@ async def reviewed_excel_save(
                         tenant_id=tenant,
                         preview_revision=preview_revision,
                         owned_upload_user_id=upload.owner_user_id,
-                        source_text=workbook_text(body),
+                        source_text=workbook_text(_archived_original(db, run, tenant, owner)),
                     )
             except (HTTPException, EltError):
                 _release_failed_review(

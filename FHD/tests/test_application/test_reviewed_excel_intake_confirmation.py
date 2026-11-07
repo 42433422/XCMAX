@@ -550,14 +550,51 @@ def test_header_label_customer_preview_does_not_insert(intake_store):
 
 
 def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch):
-    """A template clear of the item lines must still commit those lines as shipments."""
+    """A banner-only template still imports item rows from the archived original."""
+    import hashlib
+
+    from app.application.elt import candidate_table
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     store = intake_store
-    cleared = [
-        {"sheet": "送货单", "cell": cell}
-        for cell in ("A4", "B4", "C4", "D4", "E4", "F4", "A5", "B5", "C5", "D5", "E5", "F5")
-    ]
+    cleared = [{"sheet": "送货单", "cell": cell} for cell in ("A1", "B2", "C2", "D2")]
+    seen = {}
+
+    def business(text):
+        from app.application.elt.llm_session_provider import current_etl_llm_owner
+        from app.application.elt_login_authorization import current_model_session_id
+
+        seen["business"] = text
+        seen["owner"] = current_etl_llm_owner()
+        seen["session"] = current_model_session_id(7)
+        return LlmAssistResult(
+            used_llm=True,
+            data={
+                "rows": [
+                    {
+                        "customer_name": "演示客户乙",
+                        "product_name": "演示物料-螺母",
+                        "quantity": "5",
+                    },
+                    {
+                        "customer_name": "演示客户乙",
+                        "product_name": "演示物料-弹垫",
+                        "quantity": "2",
+                    },
+                ]
+            },
+        )
+
+    def knowledge(text):
+        seen["knowledge"] = text
+        return LlmAssistResult(used_llm=True, data={"title": "送货单", "content": text})
+
+    real_delivery = candidate_table.read_delivery_note_business
+
+    def delivery(source):
+        seen["source_sha"] = hashlib.sha256(source).hexdigest()
+        return real_delivery(source)
+
     monkeypatch.setattr(
         "app.application.reviewed_excel_template._template_llm_complete",
         lambda *_args, **_kwargs: LlmAssistResult(
@@ -569,13 +606,10 @@ def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch
             },
         ),
     )
-    # The desktop model kept the whole note. Structural regions split it, so the
-    # preview fixture returns that filled sheet instead of one overlapping slice.
-    monkeypatch.setattr(
-        routes,
-        "derive_document_workbook",
-        lambda body, fragments, **_kwargs: body,
-    )
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setattr("app.application.elt.llm_assist.advise_business_import", business)
+    monkeypatch.setattr("app.application.elt.llm_assist.advise_knowledge_import", knowledge)
+    monkeypatch.setattr(candidate_table, "read_delivery_note_business", delivery)
     body = _delivery_note_bytes()
     classified = store.client.post(
         "/api/templates/reviewed-excel/classify",
@@ -606,13 +640,15 @@ def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch
     )
     assert confirmed.status_code == 200, confirmed.text
     confirmed_body = confirmed.json()
+    regions = confirmed_body["sheets"][0]["regions"]
+    banner = next((region for region in regions if region["range"] == "A1:D2"), regions[0])
     form = {
         "expected_actor": "1:7",
         "use_login_notice": "true",
         "classification_id": result["classification_id"],
         "classification_version": confirmed_body["version"],
         "region_sheet": confirmed_body["sheets"][0]["sheet"],
-        "region_range": confirmed_body["sheets"][0]["regions"][0]["range"],
+        "region_range": banner["range"],
     }
     response = store.client.post(
         f"{BASE}/preview",
@@ -635,6 +671,19 @@ def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch
     assert preview.status_code == 200, preview.text
     plan = preview.json()["intake"]
     assert plan["target_type"] == "shipment_records"
+    assert seen["source_sha"] == result["sha256"]
+    assert "演示物料-螺母" in seen["business"]
+    assert "演示物料-弹垫" in seen["knowledge"]
+    assert seen["owner"] == 7
+    assert seen["session"] == "synthetic-session"
+    assert plan["detection"]["used_llm"] is True
+    assert plan["detection"]["degraded"] is False
+    assert plan["detection"]["llm_lane"] == "database"
+    assert plan["knowledge"]["used_llm"] is True
+    assert plan["knowledge"]["lane"] == "knowledge"
+    with tenant_scope(1), store.factory() as db:
+        review_run = db.get(EltRun, payload["review_id"])
+    assert review_run.file_sha256 != result["sha256"]
     store.executor.futures[-1].result(timeout=10)
     with tenant_scope(1), store.factory() as db:
         business = store.service.get_run(db, run_id=plan["run_id"], owner_user_id=7)
