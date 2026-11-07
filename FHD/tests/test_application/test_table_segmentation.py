@@ -106,13 +106,14 @@ def test_calendar_attendance_yields_one_row_per_employee_month(tmp_path: Path):
     wb = Workbook()
     ws = wb.active
     ws.title = "考勤"
-    weekdays = "日一二三四五六"
-    for month, names in ((5, ["张三", "李四"]), (6, ["张三", "李四"])):
+    # 2026-05-01 is a Friday; weekday index matches the attendance matrix parser.
+    weekdays = "一二三四五六日"
+    for month, first_weekday, days in ((5, 4, 31), (6, 0, 30)):
         ws.append([f"示例公司2026年{month}月考勤表"])
-        ws.append([None, None, *[weekdays[day % 7] for day in range(10)]])
-        ws.append([None, None, *range(1, 11)])
-        for name in names:
-            ws.append([name, None, *(["✔"] * 3), "✘"])
+        ws.append([None, None, *[weekdays[(first_weekday + day) % 7] for day in range(days)]])
+        ws.append([None, None, *range(1, days + 1)])
+        for name in ("张三", "李四"):
+            ws.append([name, None, "✔", "✘"])
         ws.append(["说明：食堂费用已于月底结清"])
     path = tmp_path / "attendance.xlsx"
     wb.save(path)
@@ -120,16 +121,17 @@ def test_calendar_attendance_yields_one_row_per_employee_month(tmp_path: Path):
     dataset = parse_file(path, target_type="attendance")
     rows = list(dataset.rows)
 
-    assert [(r.values["employee_name"], r.values["work_month"]) for r in rows] == [
+    assert [(row.values["employee_name"], row.values["work_month"]) for row in rows] == [
         ("张三", "2026-05"),
         ("李四", "2026-05"),
         ("张三", "2026-06"),
         ("李四", "2026-06"),
     ]
     assert len({row.values["business_id"] for row in rows}) == 4
-    assert rows[0].values["marked_days"] == 4
-    excluded = {item["row"]: item["role"] for item in dataset.source_features["excluded_rows"]}
-    assert excluded[1] == "title" and excluded[6] == "note"
+    assert rows[0].values["present_marked_dates"] == "2026-05-01"
+    assert rows[0].values["absent_dates"] == "2026-05-02"
+    assert "食堂费用" in rows[0].values["month_notes"]
+    assert all("说明" not in row.values["employee_name"] for row in rows)
 
 
 def test_ledger_verification_lists_every_row_and_requires_confirmation():

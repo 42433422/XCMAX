@@ -210,7 +210,6 @@ def parse_attendance_dataset(path: Path, *, max_rows: int) -> ParsedDataset:
             "employee_no",
             "user_id",
             "work_date",
-            "work_month",
             "clock_in",
             "clock_out",
             "department",
