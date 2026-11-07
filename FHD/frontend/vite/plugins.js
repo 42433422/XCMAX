@@ -34,8 +34,10 @@ export function createVitePlugins({ xcmaxPublicApiPrefix = '', i18nInclude }) {
       name: 'inject-xcmax-api-base',
       transformIndexHtml(html) {
         if (!xcmaxPublicApiPrefix) return html
-        const activeHtml = html.replace(/<!--[\s\S]*?-->/g, '')
-        if (activeHtml.includes('__XCMAX_API_BASE__')) return html
+        const tokens = html.matchAll(/<!--[\s\S]*?-->|<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)
+        for (const [, scriptBody] of tokens) {
+          if (scriptBody?.includes('__XCMAX_API_BASE__')) return html
+        }
         const serializedPrefix = JSON.stringify(xcmaxPublicApiPrefix).replaceAll('<', '\\u003c')
         return html.replace('<head>', () => `<head>\n    <script>window.__XCMAX_API_BASE__=${serializedPrefix}</script>`)
       },
