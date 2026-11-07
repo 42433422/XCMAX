@@ -530,7 +530,6 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(archive_store, "get_business_archive_dir", lambda **_: str(archive_root))
     monkeypatch.setattr(archive_store, "default_archive_root", lambda: archive_root)
     monkeypatch.setattr(archive_routes, "default_archive_root", lambda: archive_root)
-    monkeypatch.setattr(routes, "default_archive_root", lambda: archive_root)
     monkeypatch.setattr(reviewed_excel_review_store, "default_archive_root", lambda: archive_root)
     actor = {"id": 7, "tenant": 1, "manage": True, "read": True, "admin": True}
 
