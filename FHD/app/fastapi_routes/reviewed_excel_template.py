@@ -31,7 +31,7 @@ from app.application.elt.errors import (
     public_excel_error,
 )
 from app.application.elt.service_support import dump_json, load_json, new_id, utcnow
-from app.application.elt.service_uploads import UploadServiceMixin
+from app.application.elt.service_uploads import UploadServiceMixin, discard_stored_upload
 from app.application.elt_login_authorization import (
     bind_model_session,
     model_session_identity,
@@ -253,7 +253,6 @@ async def reviewed_excel_classify(
                 )
                 record = db.get(EltUpload, upload["upload_id"])
                 created_paths.append(Path(record.storage_path))
-                os.chmod(record.storage_path, 0o600)
                 version = _classification_version(
                     result["sha256"],
                     "",
@@ -308,7 +307,7 @@ async def reviewed_excel_classify(
     except BOUNDARY_ERRORS:
         if not commit_attempted:
             for path in created_paths:
-                path.unlink(missing_ok=True)
+                discard_stored_upload(path)
         raise
     return {"files": results, "scope": "仅检查工作表非空单元格和公式表达式；不表示语义完整理解"}
 
@@ -405,7 +404,7 @@ def reviewed_excel_classification_history(classification_id: str, user=Depends(_
         }
 
 
-def _auto_slices(db, classification_id, version, tenant, owner):
+def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False):
     from app.application.reviewed_excel_auto_slice import derive_classified_documents
 
     run = _classification_run(db, classification_id, tenant, owner)
@@ -415,9 +414,14 @@ def _auto_slices(db, classification_id, version, tenant, owner):
         raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
     body = _source(db, run, tenant, owner)
     if latest.get("model_status") == "not_called":
-        from app.application.reviewed_excel_auto_slice import derive_rule_slices
+        from app.application.reviewed_excel_auto_slice import (
+            derive_rule_slices,
+            rule_row_dispositions,
+        )
 
-        return derive_rule_slices(body, latest), latest.get("coverage") or []
+        slices = derive_rule_slices(body, latest)
+        dispositions = rule_row_dispositions(body, latest, slices) if with_rows else []
+        return slices, latest.get("coverage") or [], dispositions
     if latest.get("model_status") != "returned":
         raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
     coverage = latest.get("coverage")
@@ -460,16 +464,20 @@ def _auto_slices(db, classification_id, version, tenant, owner):
         for region in sheet.get("regions", [])
         if region.get("range_source") == "model"
     ]
-    return derive_classified_documents(
-        body,
-        {
-            "source_sha256": run.file_sha256,
-            "model_status": latest["model_status"],
-            "regions": regions,
-            "suggested_documents": latest.get("suggested_documents", []),
-            "coverage": latest.get("coverage", []),
-        },
-    ), latest.get("coverage", [])
+    return (
+        derive_classified_documents(
+            body,
+            {
+                "source_sha256": run.file_sha256,
+                "model_status": latest["model_status"],
+                "regions": regions,
+                "suggested_documents": latest.get("suggested_documents", []),
+                "coverage": latest.get("coverage", []),
+            },
+        ),
+        latest.get("coverage", []),
+        [],
+    )
 
 
 @router.get(
@@ -479,11 +487,14 @@ def reviewed_excel_auto_slices(classification_id: str, version: str, user=Depend
     tenant, owner = _identity(user)
     try:
         with tenant_scope(tenant), get_db() as db:
-            slices, coverage = _auto_slices(db, classification_id, version, tenant, owner)
+            slices, coverage, rows = _auto_slices(
+                db, classification_id, version, tenant, owner, with_rows=True
+            )
         return {
             "classification_id": classification_id,
             "version": version,
             "coverage": coverage,
+            "row_dispositions": rows,
             "slices": [
                 {
                     **{key: value for key, value in item.items() if key != "workbook"},
@@ -507,7 +518,7 @@ def reviewed_excel_auto_slice_download(
     tenant, owner = _identity(user)
     try:
         with tenant_scope(tenant), get_db() as db:
-            slices, _coverage = _auto_slices(db, classification_id, version, tenant, owner)
+            slices, _coverage, _rows = _auto_slices(db, classification_id, version, tenant, owner)
         if index < 0 or index >= len(slices):
             raise HTTPException(status_code=404, detail="切片不存在")
         return Response(
@@ -1085,7 +1096,7 @@ async def reviewed_excel_preview(
                 )
                 if not archive_version_id:
                     raise ReviewedExcelError("自动切片须先归档原件")
-                slices, _coverage = _auto_slices(
+                slices, _coverage, _rows = _auto_slices(
                     db, classification_id, classification_version, tenant, owner
                 )
                 if auto_slice_index >= len(slices):
@@ -1319,8 +1330,6 @@ async def reviewed_excel_preview(
                 content_type=file.content_type,
                 stream=BytesIO(body),
             )
-            upload_record = db.get(EltUpload, upload["upload_id"])
-            os.chmod(upload_record.storage_path, 0o600)
             run = EltRun(
                 id=new_id(),
                 tenant_id=tenant,
@@ -1641,7 +1650,7 @@ def reviewed_excel_intake_preview(
         ) from None
     finally:
         if staged_path is not None and not preview_started:
-            staged_path.unlink(missing_ok=True)
+            discard_stored_upload(staged_path)
 
 
 @router.post("/api/templates/reviewed-excel/save")
