@@ -125,6 +125,55 @@ def test_history_projection_preserves_canonical_records_without_rewriting_curren
     assert "fetchJson('/download-windows-hotfix.json')" in page
 
 
+def test_crawl_files_follow_public_200_urls_and_are_published() -> None:
+    import xml.etree.ElementTree as ET
+
+    site = REPO_ROOT / "成都修茈科技有限公司"
+    ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    locs = [
+        node.text.strip()
+        for node in ET.parse(site / "sitemap.xml").getroot().findall("s:url/s:loc", ns)
+    ]
+    assert locs[0] == "https://xiu-ci.com/"
+    assert {
+        "https://xiu-ci.com/index.html",
+        "https://xiu-ci.com/services.html",
+        "https://xiu-ci.com/case-coating.html",
+        "https://xiu-ci.com/case-manufacture.html",
+        "https://xiu-ci.com/honors.html",
+    }.isdisjoint(locs)
+    for required in (
+        "https://xiu-ci.com/pricing.html",
+        "https://xiu-ci.com/developer.html",
+        "https://xiu-ci.com/download",
+        "https://xiu-ci.com/download/releases",
+        "https://xiu-ci.com/capabilities/",
+    ):
+        assert required in locs
+    robots = (site / "robots.txt").read_text(encoding="utf-8")
+    assert "Disallow: /\n" not in robots
+    assert "Allow: /" in robots
+    assert "Sitemap: https://xiu-ci.com/sitemap.xml" in robots
+    submitted = (site / "baidu_urls.txt").read_text(encoding="utf-8")
+    assert "honors.html" not in submitted and "services.html" not in submitted
+    for page, canonical in (
+        ("visualization.html", "https://xiu-ci.com/visualization"),
+        ("world-will.html", "https://xiu-ci.com/world-will"),
+        ("download-breakpoints.html", "https://xiu-ci.com/download/breakpoints"),
+        ("download-goals.html", "https://xiu-ci.com/download/goals"),
+    ):
+        text = (site / page).read_text(encoding="utf-8")
+        assert f'rel="canonical" href="{canonical}"' in text
+        assert f'property="og:url" content="{canonical}"' in text
+    workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(encoding="utf-8")
+    updater = (site / "MODstore_deploy/scripts/xcmax-site-auto-update.sh").read_text(
+        encoding="utf-8"
+    )
+    for name in ("robots.txt", "sitemap.xml", "baidu_urls.txt", "BingSiteAuth.xml"):
+        assert f'"${{GIT_SITE}}/{name}"' in workflow
+        assert f'"$git_site"/{name}' in updater
+
+
 def test_macos_release_builds_are_separate_from_authorized_frozen_pair_promotion() -> None:
     workflows = REPO_ROOT / "FHD/.github/workflows"
     build = (workflows / "release-desktop-mac-ota.yml").read_text()

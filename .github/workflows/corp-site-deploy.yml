@@ -27,6 +27,10 @@ on:
     branches: [main]
     paths:
       - '成都修茈科技有限公司/*.html'
+      - '成都修茈科技有限公司/robots.txt'
+      - '成都修茈科技有限公司/sitemap.xml'
+      - '成都修茈科技有限公司/baidu_urls.txt'
+      - '成都修茈科技有限公司/BingSiteAuth.xml'
       - '成都修茈科技有限公司/partials/**'
       - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/*.js'
@@ -139,6 +143,8 @@ jobs:
                        "${GIT_SITE}/contact-channels.js" "${GIT_SITE}/visualization.js" "${GIT_SITE}/release-data.js" \
                        "${GIT_SITE}/world-will.js" "${GIT_SITE}/world-will-ticker.js" \
                        "${GIT_SITE}/world-will-ticker.css" \
+                       "${GIT_SITE}/robots.txt" "${GIT_SITE}/sitemap.xml" \
+                       "${GIT_SITE}/baidu_urls.txt" "${GIT_SITE}/BingSiteAuth.xml" \
                        "${GIT_SITE}/download-action-board.js"; do
                 [ -e "$f" ] || continue
                 base="$(basename "$f")"
