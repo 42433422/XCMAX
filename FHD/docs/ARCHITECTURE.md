@@ -308,8 +308,7 @@ frontend/
 │   │   └── order.ts
 │   │
 │   ├── utils/                # 工具函数
-│   │   ├── index.ts
-│   │   └── memory-manager.ts
+│   │   └── index.ts
 │   │
 │   ├── styles/               # 样式
 │   │   ├── base.css

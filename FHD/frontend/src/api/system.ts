@@ -19,11 +19,6 @@ export const systemApi = {
     return api.get<ApiResponse<Industry>>('/api/system/industry', {}, { timeoutMs: 8_000 })
   },
 
-  /** @deprecated The retired endpoint returns 410; industry comes from account data. */
-  setIndustry(industryId: number | string): Promise<ApiResponse<Industry>> {
-    return api.post<ApiResponse<Industry>>('/api/system/industry', { industry_id: industryId })
-  },
-
   getIndustryDetail(industryId: number | string): Promise<ApiResponse<Industry>> {
     return api.get<ApiResponse<Industry>>(`/api/system/industry/${industryId}`)
   },

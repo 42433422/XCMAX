@@ -114,12 +114,6 @@ export async function autoOnboardInstalledMarketItem(item: MarketInstallCatalogI
   }
 }
 
-/** @deprecated 使用 autoOnboardInstalledMarketItem */
-export async function autoOnboardWorkflowEmployeesForMod(modId: string): Promise<string[]> {
-  const result = await autoOnboardInstalledMarketItem({ id: modId, pkg_id: modId })
-  return result.onboardedIds
-}
-
 export async function autoOnboardWorkflowEmployeesFromMods(mods: ModWithWorkflowEmployees[] | undefined): Promise<string[]> {
   const modsStore = useModsStore()
   await modsStore.refresh()

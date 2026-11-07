@@ -7,7 +7,7 @@ import globals from 'globals'
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'src/views/temp2.vue'],
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
   },
   {
     files: ['**/*.{js,mjs,cjs}', '**/*.{ts,mts,cts}', '**/*.vue'],

@@ -81,8 +81,3 @@ export function resolveLabel(entry: WorkflowEmployeeRegistryEntry, i18nResolver?
   }
   return entry.label
 }
-
-/** @deprecated 使用 loadWorkflowEmployeeRegistryCached + mergeModManifestEntries */
-export async function loadRegistryFromJson(): Promise<WorkflowEmployeeRegistryV1> {
-  return loadWorkflowEmployeeRegistry()
-}

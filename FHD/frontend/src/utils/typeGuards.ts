@@ -26,7 +26,7 @@ export function asBoolean(value: unknown, fallback = false): boolean {
   return fallback
 }
 
-/** Disposable resource shape used by memory-manager */
+/** Disposable resource shape with optional cleanup methods */
 export interface DisposableResource {
   dispose?: () => void
   destroy?: () => void
