@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+import weakref
 from datetime import timedelta
 from pathlib import Path
 
@@ -13,27 +14,26 @@ from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.db.db_base import Base
 from app.infrastructure.tenant_scope import tenant_scope
 
 
 @pytest.fixture(autouse=True)
-def _reset_agent_repositories():
+def _reset_agent_repositories(monkeypatch):
+    from app.application.agent_orchestrator import task_execution_repository
     from app.application.agent_orchestrator.run_repository import (
         set_agent_run_repository_for_tests,
     )
     from app.application.agent_orchestrator.task_dispatcher import (
         set_agent_task_dispatcher_for_tests,
     )
-    from app.application.agent_orchestrator.task_execution_repository import (
-        set_task_execution_repository_for_tests,
-    )
 
+    # Failed-test tracebacks can retain repositories after their engines are disposed.
+    monkeypatch.setattr(task_execution_repository, "_OPEN_REPOSITORIES", weakref.WeakSet())
     yield
     set_agent_run_repository_for_tests(None)
-    set_task_execution_repository_for_tests(None)
+    task_execution_repository.set_task_execution_repository_for_tests(None)
     set_agent_task_dispatcher_for_tests(None)
 
 
@@ -75,9 +75,8 @@ def _client(
 
     if engine is None:
         engine = create_engine(
-            "sqlite://",
+            f"sqlite:///{tmp_path / 'reliability.sqlite3'}",
             connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
         )
 
         @event.listens_for(engine, "connect")
@@ -685,9 +684,7 @@ def test_approval_http_returns_while_dispatcher_owns_the_queue(tmp_path, monkeyp
         assert _product_models(env) == []
         release.set()
         assert started.wait(5)
-        # Product rows commit before the dispatcher releases the lease. Poll the
-        # queue only; another HTTP request on this shared SQLite connection can
-        # tear the import.
+        # Product rows commit before the dispatcher releases the lease.
         deadline = time.monotonic() + 10
         finished = None
         while time.monotonic() < deadline:
