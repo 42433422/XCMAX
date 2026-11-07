@@ -12,13 +12,18 @@ from zipfile import BadZipFile, ZipFile
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import column_index_from_string, get_column_letter
-from openpyxl.utils.cell import coordinate_from_string
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.print_settings import PrintArea
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
+from app.application.reviewed_excel_formula_cells import (
+    content_bounds,
+    formula_facts,
+    formula_text,
+    load_cached_workbook,
+)
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 20 * 1024 * 1024
@@ -349,112 +354,6 @@ def _sheet_cell_extent(sheet: object) -> int:
     )
 
 
-def _formula_text(value: object) -> str:
-    """Formula body, never an ArrayFormula object repr."""
-    if value is None:
-        return ""
-    text = getattr(value, "text", None)
-    raw = text.strip() if isinstance(text, str) and text.strip() else str(value).strip()
-    if raw.startswith("<") and " object at " in raw:
-        return ""
-    if raw.startswith("{=") and raw.endswith("}"):
-        raw = "=" + raw[2:-1]
-    elif raw and not raw.startswith("="):
-        raw = "=" + raw
-    return raw
-
-
-def _formula_facts(body: bytes) -> dict[tuple[str, str], dict[str, Any]]:
-    """XML formula text and cached `<v>`, including cells openpyxl drops."""
-    from defusedxml import ElementTree as SafeET
-
-    ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
-    rid_attr = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
-    facts: dict[tuple[str, str], dict[str, Any]] = {}
-    try:
-        with ZipFile(BytesIO(body)) as archive:
-            names = set(archive.namelist())
-            if "xl/workbook.xml" not in names or "xl/_rels/workbook.xml.rels" not in names:
-                return facts
-            shared: list[str] = []
-            if "xl/sharedStrings.xml" in names:
-                root = SafeET.fromstring(archive.read("xl/sharedStrings.xml"))
-                shared = [
-                    "".join(node.text or "" for node in item.iter(ns + "t"))
-                    for item in root.iter(ns + "si")
-                ]
-            targets = {}
-            for rel in SafeET.fromstring(archive.read("xl/_rels/workbook.xml.rels")):
-                target = rel.attrib.get("Target", "")
-                rel_id = rel.attrib.get("Id")
-                if not rel_id or not target or "://" in target:
-                    continue
-                path = target.split("#", 1)[0].lstrip("/")
-                if path.startswith("../"):
-                    path = path[3:]
-                if not path.startswith("xl/"):
-                    path = "xl/" + path
-                targets[rel_id] = path
-            book = SafeET.fromstring(archive.read("xl/workbook.xml"))
-            for sheet in book.iter(ns + "sheet"):
-                path = targets.get(sheet.attrib.get(rid_attr, ""))
-                title = sheet.attrib.get("name")
-                if not title or not path or path not in names:
-                    continue
-                for cell in SafeET.fromstring(archive.read(path)).iter(ns + "c"):
-                    formula = next((child for child in cell if child.tag == ns + "f"), None)
-                    if formula is None or not cell.attrib.get("r"):
-                        continue
-                    cached = next((child for child in cell if child.tag == ns + "v"), None)
-                    raw = None if cached is None else cached.text
-                    kind = cell.attrib.get("t") or ""
-                    if kind == "s" and raw and raw.isdigit() and int(raw) < len(shared):
-                        raw = shared[int(raw)]
-                    missing = raw is None or raw == ""
-                    facts[(title, cell.attrib["r"])] = {
-                        "formula": _formula_text(formula.text or ""),
-                        "cached": None if missing else raw,
-                        "cache_missing": missing,
-                    }
-    except BOUNDARY_ERRORS:
-        return {}
-    return facts
-
-
-def _content_bounds(sheet: object, facts: dict[tuple[str, str], dict[str, Any]]) -> tuple[int, int]:
-    """Bounds of valued cells. Empty styled cells must not inflate the used range."""
-    title = str(getattr(sheet, "title", ""))
-    max_row = max_col = 0
-    for cell in getattr(sheet, "_cells", {}).values():
-        coordinate = getattr(cell, "coordinate", "")
-        if getattr(cell, "value", None) is None and (title, coordinate) not in facts:
-            continue
-        row, col = getattr(cell, "row", None), getattr(cell, "column", None)
-        if isinstance(row, int):
-            max_row = max(max_row, row)
-        if isinstance(col, int):
-            max_col = max(max_col, col)
-    for sheet_name, coord in facts:
-        if sheet_name != title:
-            continue
-        try:
-            letters, row = coordinate_from_string(coord)
-        except ValueError:
-            continue
-        max_row = max(max_row, row)
-        max_col = max(max_col, column_index_from_string(letters))
-    return max_row, max_col
-
-
-def _load_cached_workbook(body: bytes):
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        try:
-            return load_workbook(BytesIO(body), data_only=True, keep_links=False)
-        except BOUNDARY_ERRORS:
-            return None
-
-
 def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
     if not body or len(body) > MAX_BYTES:
         raise ReviewedExcelError("文件为空或超过 20 MB")
@@ -508,8 +407,8 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
     cells: list[dict[str, Any]] = []
     layout: list[dict[str, Any]] = []
     structural_sheets: list[str] = []
-    formula_facts = _formula_facts(body)
-    cache_wb = _load_cached_workbook(body)
+    facts_by_cell = formula_facts(body)
+    cache_wb = load_cached_workbook(body)
     try:
         if len(wb.worksheets) > 100:
             raise ReviewedExcelError("工作表超过 100 张，暂不能安全预览")
@@ -517,7 +416,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
         for sheet in wb.worksheets:
             if len(sheet.merged_cells.ranges) > 5000:
                 raise ReviewedExcelError("合并区域超过 5000 个，暂不能安全预览")
-            content_row, content_col = _content_bounds(sheet, formula_facts)
+            content_row, content_col = content_bounds(sheet, facts_by_cell)
             # Extent follows valued cells. A styled cell in column XFD must not
             # hide the rest of a business sheet behind header-only sampling.
             extent = content_row * content_col
@@ -530,13 +429,12 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                     raise ReviewedExcelError("工作簿总单元格范围过大，暂不能安全预览")
             sampled = 0
             sample_full = False
+            row_iter: Any = ()
             if content_row and content_col:
                 row_iter = sheet.iter_rows(
                     max_row=min(content_row, 12) if structural else content_row,
                     max_col=min(content_col, 40) if structural else content_col,
                 )
-            else:
-                row_iter = ()
             cache_sheet = None
             if cache_wb is not None and sheet.title in cache_wb.sheetnames:
                 cache_sheet = cache_wb[sheet.title]
@@ -544,7 +442,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                 if sample_full:
                     break
                 for cell in row:
-                    fact = formula_facts.get((sheet.title, cell.coordinate))
+                    fact = facts_by_cell.get((sheet.title, cell.coordinate))
                     formula = cell.data_type == "f" or fact is not None
                     # A merge member is normally display-only. Keep it when the
                     # package still stores a formula there; openpyxl drops that value.
@@ -560,7 +458,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                     if structural:
                         sampled += 1
                     if formula:
-                        text = _formula_text(cell.value) or (fact or {}).get("formula") or ""
+                        text = formula_text(cell.value) or (fact or {}).get("formula") or ""
                         cached = None
                         if cache_sheet is not None:
                             cached_value = cache_sheet[cell.coordinate].value
@@ -617,7 +515,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                         if (r, c) in covered:
                             continue
                         cell = sheet.cell(r, c)
-                        fact = formula_facts.get((sheet.title, cell.coordinate))
+                        fact = facts_by_cell.get((sheet.title, cell.coordinate))
                         formula = cell.data_type == "f" or fact is not None
                         span = merged.get((r, c), (1, 1))
                         rgb = (
@@ -629,7 +527,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                             {
                                 "cell": cell.coordinate,
                                 "value": (
-                                    _formula_text(cell.value) or (fact or {}).get("formula") or ""
+                                    formula_text(cell.value) or (fact or {}).get("formula") or ""
                                     if formula
                                     else ""
                                     if cell.value is None

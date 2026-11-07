@@ -106,7 +106,9 @@ def _build_item_from_row(ws, row: int, mapping: dict[str, int]) -> dict[str, Any
     for field_name in derived:
         columns.pop(field_name, None)
     row_unit = (
-        str(ws.cell(row, mapping["unit_name"]).value or "").strip() if "unit_name" in mapping else ""
+        str(ws.cell(row, mapping["unit_name"]).value or "").strip()
+        if "unit_name" in mapping
+        else ""
     )
     return {
         **({"unit_name": row_unit} if row_unit else {}),

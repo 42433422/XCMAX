@@ -74,9 +74,14 @@ def _cell_lineage(
     """Map each emitted field to the workbook cell it was read from or computed out of."""
     from openpyxl.utils import get_column_letter
 
+    def mapping(source: dict[str, Any], key: str) -> dict[str, Any]:
+        value = source.get(key)
+        return value if isinstance(value, dict) else {}
+
     row = item.get("source_row")
-    columns = item.get("source_columns") if isinstance(item.get("source_columns"), dict) else {}
-    note_cells = note.get("source_cells") if isinstance(note.get("source_cells"), dict) else {}
+    columns = mapping(item, "source_columns")
+    note_cells = mapping(note, "source_cells")
+    derived_fields = mapping(item, "derived_fields")
 
     def cell(source_field: str) -> str | None:
         col = columns.get(source_field)
@@ -87,7 +92,6 @@ def _cell_lineage(
     cells: dict[str, str] = {}
     derived: dict[str, list[str]] = {}
     value_sources: dict[str, str] = {}
-    derived_fields = item.get("derived_fields") if isinstance(item.get("derived_fields"), dict) else {}
     for target, source_field in fields.items():
         if values.get(target) in (None, ""):
             continue

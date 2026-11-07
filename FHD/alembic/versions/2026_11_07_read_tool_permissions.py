@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "2026_11_07_read_tool_permissions"
@@ -24,7 +25,9 @@ _PERMISSIONS = (("sales.view", "查看销售订单", "sales"), ("report.view", "
 
 def upgrade() -> None:
     bind = op.get_bind()
-    if not {"permissions", "roles", "role_permissions"}.issubset(sa.inspect(bind).get_table_names()):
+    if not {"permissions", "roles", "role_permissions"}.issubset(
+        sa.inspect(bind).get_table_names()
+    ):
         return
     select_id = sa.text("SELECT id FROM permissions WHERE code = :code")
     for code, name, module in _PERMISSIONS:
@@ -57,4 +60,7 @@ def downgrade() -> None:
         ).bindparams(expanding),
         {"codes": codes},
     )
-    bind.execute(sa.text("DELETE FROM permissions WHERE code IN :codes").bindparams(expanding), {"codes": codes})
+    bind.execute(
+        sa.text("DELETE FROM permissions WHERE code IN :codes").bindparams(expanding),
+        {"codes": codes},
+    )
