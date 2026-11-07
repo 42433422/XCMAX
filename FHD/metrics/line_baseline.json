@@ -1,5 +1,5 @@
 {
-  "lines": 2441638,
+  "lines": 2443606,
   "updated": "2026-11-07",
-  "note": "placeholder pending recount after #3085-#3092 and delivery-note fill"
+  "note": "Integrate unmerged ELT fixes #3085-#3092 and delivery-note fill d4195b730 onto main after #3087. Upload gate, value-fidelity cleaning, preview validation, slice coverage, audit, snapshot export, table segmentation, and shipment layout fill are the required behavior and cannot be removed without dropping those fixes. Files over 800 lines stay bound in source_growth_reviews.json; that record is a review request, not approval."
 }
