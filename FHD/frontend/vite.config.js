@@ -4,7 +4,6 @@ import path from 'path'
 import { buildDevProxy } from './vite/devProxy.js'
 import { createBuildOptions } from './vite/build.js'
 import { createVitePlugins } from './vite/plugins.js'
-import { createStaticCopyPlugin } from './vite/staticCopy.js'
 import { resolveApiBase } from './vite/resolveApiBase.js'
 
 const API_BASE = resolveApiBase(process.env.VITE_API_BASE)
@@ -47,7 +46,6 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: createVitePlugins({
-      staticCopyPlugin: createStaticCopyPlugin(__dirname),
       xcmaxPublicApiPrefix,
       i18nInclude: path.resolve(__dirname, './src/i18n/locales/**/*.json'),
     }),
@@ -88,43 +86,6 @@ export default defineConfig(({ mode }) => {
           find: '@mod-frontend/xcagi-customer-service-bridge',
           replacement: path.resolve(__dirname, '../mods/xcagi-customer-service-bridge/frontend'),
         },
-        // 干净通用版：Mod 已迁出 mods-export-2026-06-07/，开发时按需恢复单条 alias
-        // {
-        //   find: '@mod-views/xcagi-lan-license-bridge',
-        //   replacement: modViewsDir(__dirname, 'xcagi-lan-license-bridge'),
-        // },
-        // {
-        //   find: '@mod-views/xcagi-customer-service-bridge',
-        //   replacement: modViewsDir(__dirname, 'xcagi-customer-service-bridge'),
-        // },
-        // {
-        //   find: '@mod-views/xcagi-approval-bridge',
-        //   replacement: modViewsDir(__dirname, 'xcagi-approval-bridge'),
-        // },
-        // {
-        //   find: '@mod-views/xcagi-planner-bridge',
-        //   replacement: modViewsDir(__dirname, 'xcagi-planner-bridge'),
-        // },
-        // {
-        //   find: '@mod-views/xcagi-model-payment-bridge',
-        //   replacement: modViewsDir(__dirname, 'xcagi-model-payment-bridge'),
-        // },
-        // {
-        //   find: '@mod-views/xcagi-erp-domain-bridge',
-        //   replacement: modViewsDir(__dirname, 'xcagi-erp-domain-bridge'),
-        // },
-        // {
-        //   find: '@mod-views/xcagi-office-employee-pack-bridge',
-        //   replacement: modViewsDir(__dirname, 'xcagi-office-employee-pack-bridge'),
-        // },
-        // {
-        //   find: '@mod-views/xcagi-workflow-visualization-bridge',
-        //   replacement: modViewsDir(__dirname, 'xcagi-workflow-visualization-bridge'),
-        // },
-        // {
-        //   find: '@mod-views/xcagi-core-workflow-employees',
-        //   replacement: modViewsDir(__dirname, 'xcagi-workflow-visualization-bridge'),
-        // },
         { find: 'vue-router', replacement: path.resolve(__dirname, 'node_modules/vue-router') },
         { find: 'pinia', replacement: path.resolve(__dirname, 'node_modules/pinia') },
         { find: 'element-plus', replacement: path.resolve(__dirname, 'node_modules/element-plus') },

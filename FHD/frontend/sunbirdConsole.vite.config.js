@@ -93,30 +93,6 @@ export default defineConfig(() => ({
         replacement: path.join(adminSrc, 'api/financeLedger.ts'),
       },
       {
-        find: '@/api/wechatGroupBridge',
-        replacement: path.join(adminSrc, 'api/wechatGroupBridge.ts'),
-      },
-      {
-        find: '@/api/wechatGroupBridge.ts',
-        replacement: path.join(adminSrc, 'api/wechatGroupBridge.ts'),
-      },
-      {
-        find: '@/composables/useWechatEnterpriseBinding',
-        replacement: path.join(adminSrc, 'composables/useWechatEnterpriseBinding.ts'),
-      },
-      {
-        find: '@/composables/useWechatEnterpriseBinding.ts',
-        replacement: path.join(adminSrc, 'composables/useWechatEnterpriseBinding.ts'),
-      },
-      {
-        find: '@/composables/useWechatGroupBridge',
-        replacement: path.join(adminSrc, 'composables/useWechatGroupBridge.ts'),
-      },
-      {
-        find: '@/composables/useWechatGroupBridge.ts',
-        replacement: path.join(adminSrc, 'composables/useWechatGroupBridge.ts'),
-      },
-      {
         find: '@/constants/hostViewGlob',
         replacement: path.join(hostConstants, 'hostViewGlob.full.ts'),
       },

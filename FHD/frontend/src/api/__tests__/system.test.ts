@@ -5,7 +5,6 @@ describe('system api module', () => {
   it('exports industry and config helpers', () => {
     expect(typeof systemApi.getIndustries).toBe('function')
     expect(typeof systemApi.getCurrentIndustry).toBe('function')
-    expect(typeof systemApi.setIndustry).toBe('function')
     expect(typeof systemApi.getIndustryDetail).toBe('function')
     expect(typeof systemApi.getSystemConfig).toBe('function')
     expect(typeof systemApi.getHostProfile).toBe('function')

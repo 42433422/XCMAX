@@ -82,17 +82,6 @@ export function buildVsCodeInstallUrl(serverName: string, serverConfig: McpComma
   return `vscode://mcp/install?${encodeURIComponent(payload)}`
 }
 
-/** @deprecated 使用 buildAiopenClientInstalls */
-export function buildAiopenCursorInstallLinks(baseUrl: string, apiKey = '') {
-  const config = buildMcpUrlConfig(baseUrl, apiKey)
-  return {
-    config,
-    deeplink: buildCursorDeeplink(AIOPEN_MCP_SERVER_NAME, config),
-    webUrl: buildCursorWebInstallUrl(AIOPEN_MCP_SERVER_NAME, config),
-    mcpJson: wrapMcpJson(config),
-  }
-}
-
 export function buildAiopenClientInstalls(baseUrl: string, apiKey = '', _options: { stdioScriptPath?: string } = {}): AiMcpClientInstall[] {
   const urlCfg = buildMcpUrlConfig(baseUrl, apiKey)
   const remoteCfg = buildMcpRemoteConfig(baseUrl, apiKey)

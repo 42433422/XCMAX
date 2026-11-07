@@ -14,8 +14,6 @@ import { modPhysicalViewGlob as modPhysicalViewGlobGeneric } from './modPhysical
 import { buildTimeEdition, isMinimalBuild, isGenericBuild, MINIMAL_BUILD_MOD_IDS } from './buildEdition'
 import { BRIDGE_MOD_IDS, PLATFORM_SHELL_POLICY } from './platformShell'
 import { SIX_LINE_DEPARTMENTS } from './sixLineDepartments'
-import { YUANGONG_STITCH_STATION_PLACEMENTS } from './yuangongStitchPlacements'
-import { YUANGONG_STITCH_HOTSPOTS } from './yuangongStitchHotspots'
 import { ALL_PLANNED_YUANGON_PKG_IDS } from './modstoreDutyRosterIds'
 import { xcmaxAutomationPolicyEmbedUrl, xcmaxAutomationPolicyOpenUrl, xcmaxDutyTimeArchitectureEmbedUrl } from './xcmaxDashboardEmbed'
 import {
@@ -262,40 +260,6 @@ describe('sixLineDepartments', () => {
   it('contains expected department ids', () => {
     const ids = SIX_LINE_DEPARTMENTS.map((d) => d.id)
     expect(ids).toEqual(['site', 'ops', 'product', 'market', 'workflow', 'quality'])
-  })
-})
-
-describe('yuangongStitchPlacements', () => {
-  it('exports four placeholder placements', () => {
-    expect(YUANGONG_STITCH_STATION_PLACEMENTS).toHaveLength(4)
-  })
-
-  it('each placement has empId, leftPct, topPct, and scale', () => {
-    for (const p of YUANGONG_STITCH_STATION_PLACEMENTS) {
-      expect(typeof p.empId).toBe('string')
-      expect(p.empId.length).toBeGreaterThan(0)
-      expect(typeof p.leftPct).toBe('number')
-      expect(p.leftPct).toBeGreaterThanOrEqual(0)
-      expect(p.leftPct).toBeLessThanOrEqual(100)
-      expect(typeof p.topPct).toBe('number')
-      expect(p.topPct).toBeGreaterThanOrEqual(0)
-      expect(p.topPct).toBeLessThanOrEqual(100)
-      expect(typeof p.scale).toBe('number')
-      expect(p.scale).toBeGreaterThan(0)
-    }
-  })
-
-  it('placements are along the bottom row (topPct=82)', () => {
-    for (const p of YUANGONG_STITCH_STATION_PLACEMENTS) {
-      expect(p.topPct).toBe(82)
-    }
-  })
-})
-
-describe('yuangongStitchHotspots', () => {
-  it('exports an empty array initially', () => {
-    expect(Array.isArray(YUANGONG_STITCH_HOTSPOTS)).toBe(true)
-    expect(YUANGONG_STITCH_HOTSPOTS).toHaveLength(0)
   })
 })
 

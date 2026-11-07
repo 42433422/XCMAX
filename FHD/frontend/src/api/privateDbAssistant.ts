@@ -10,8 +10,6 @@ const MOD_UNAVAILABLE: ApiResponse<never> = {
   message: 'private-db-read-assistant Mod 未安装或不可用',
 }
 
-let modRouteAvailable: boolean | null = null
-
 type PrivateDbModRouteRow = {
   id?: string
   mod_id?: string
@@ -19,24 +17,16 @@ type PrivateDbModRouteRow = {
 }
 
 async function isPrivateDbModRouteAvailable(): Promise<boolean> {
-  if (modRouteAvailable !== null) return modRouteAvailable
-  try {
-    const { api } = await import('./core')
-    const resp = await api.get<{
-      success?: boolean
-      data?: PrivateDbModRouteRow[] | PrivateDbModRouteRow
-    }>('/api/mods/')
-    const mods = Array.isArray(resp?.data) ? resp.data : resp?.data ? [resp.data] : []
-    modRouteAvailable =
-      resp?.success !== false &&
-      mods.some((m) => {
-        const id = String(m?.id || m?.mod_id || '')
-        return id === PRIVATE_DB_READ_ASSISTANT_MOD_ID && m?.enabled !== false
-      })
-  } catch {
-    modRouteAvailable = false
+  // Installed and account-visible Mods can change without reloading the page.
+  const resp = await api.get<ApiResponse<PrivateDbModRouteRow[] | PrivateDbModRouteRow>>('/api/mods/', {}, { cache: 'no-store' })
+  if (resp?.success === false) {
+    throw new Error(resp.message || '无法读取 Mod 列表')
   }
-  return modRouteAvailable
+  const mods = Array.isArray(resp?.data) ? resp.data : resp?.data ? [resp.data] : []
+  return mods.some((m) => {
+    const id = String(m?.id || m?.mod_id || '')
+    return id === PRIVATE_DB_READ_ASSISTANT_MOD_ID && m?.enabled !== false
+  })
 }
 
 export interface PrivateDbSource {
@@ -64,24 +54,14 @@ async function modGet<T>(path: string): Promise<ApiResponse<T>> {
   if (!(await isPrivateDbModRouteAvailable())) {
     return MOD_UNAVAILABLE as ApiResponse<T>
   }
-  try {
-    return await api.get<ApiResponse<T>>(path)
-  } catch {
-    modRouteAvailable = false
-    return MOD_UNAVAILABLE as ApiResponse<T>
-  }
+  return api.get<ApiResponse<T>>(path)
 }
 
 async function modPost<T>(path: string, body?: unknown): Promise<ApiResponse<T>> {
   if (!(await isPrivateDbModRouteAvailable())) {
     return MOD_UNAVAILABLE as ApiResponse<T>
   }
-  try {
-    return await api.post<ApiResponse<T>>(path, body)
-  } catch {
-    modRouteAvailable = false
-    return MOD_UNAVAILABLE as ApiResponse<T>
-  }
+  return api.post<ApiResponse<T>>(path, body)
 }
 
 export const privateDbAssistantApi = {
