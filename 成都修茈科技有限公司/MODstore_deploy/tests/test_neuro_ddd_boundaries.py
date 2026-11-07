@@ -22,7 +22,7 @@ def test_shared_auth_dependency_is_not_reimplemented_in_legacy_api_modules():
     offenders = []
     for path in _py_files(ROOT):
         text = path.read_text(encoding="utf-8")
-        if "from modstore_server.market_api import _get_current_user" in text:
+        if "from modstore_server.api.market_routes import _get_current_user" in text:
             offenders.append(str(path.relative_to(ROOT)))
         if "def _get_current_user(" in text or "def _require_admin(" in text:
             offenders.append(f"{path.relative_to(ROOT)} reimplements auth dependency")

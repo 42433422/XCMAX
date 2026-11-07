@@ -12,18 +12,14 @@ import { createPinia, setActivePinia } from 'pinia'
 // ── 外部依赖 mock ─────────────────────────────────────────
 
 const mockAuthApiLogin = vi.fn()
-const mockAuthApiLoginWithPhoneCode = vi.fn()
 const mockAuthApiGetOidcStatus = vi.fn()
-const mockAuthApiSendPhoneCode = vi.fn()
 const mockAuthApiIssueAuthQr = vi.fn()
 const mockAuthApiPollAuthQr = vi.fn()
 
 vi.mock('@/api/auth', () => ({
   authApi: {
     login: (...args: unknown[]) => mockAuthApiLogin(...args),
-    loginWithPhoneCode: (...args: unknown[]) => mockAuthApiLoginWithPhoneCode(...args),
     getOidcStatus: (...args: unknown[]) => mockAuthApiGetOidcStatus(...args),
-    sendPhoneCode: (...args: unknown[]) => mockAuthApiSendPhoneCode(...args),
     issueAuthQr: (...args: unknown[]) => mockAuthApiIssueAuthQr(...args),
     pollAuthQr: (...args: unknown[]) => mockAuthApiPollAuthQr(...args),
   },
@@ -478,24 +474,20 @@ describe('LoginView functions – tryAutoLogin', () => {
     expect(mockAuthApiLogin).not.toHaveBeenCalled()
   })
 
-  it.each(['password', 'phone'] as const)('submits and retries %s login through the sole form without feature-specific authorization', async mode => {
+  it('submits and retries password login through the sole form without feature-specific authorization', async () => {
     mockLoadLoginPreferences.mockReturnValue({ rememberPassword: false, autoLogin: false, username: '', password: '' })
     mockAuthApiLogin.mockReset().mockResolvedValue({ success: false, message: 'synthetic' })
-    mockAuthApiLoginWithPhoneCode.mockReset().mockResolvedValue({ success: false, message: 'synthetic' })
     const { wrapper } = await mountLoginView()
     const vm = wrapper.vm as any
     try {
-      vm.loginMode = mode
-      vm.username = 'synthetic'; vm.password = 'synthetic'; vm.phone = '13800138000'; vm.smsCode = '123456'
+      vm.username = 'synthetic'; vm.password = 'synthetic'
       await wrapper.vm.$nextTick()
       expect(wrapper.findAll('.login-submit')).toHaveLength(1)
       expect(wrapper.find('.login-basic').exists()).toBe(false)
-      const request = mode === 'password' ? mockAuthApiLogin : mockAuthApiLoginWithPhoneCode
-      const otherRequest = mode === 'password' ? mockAuthApiLoginWithPhoneCode : mockAuthApiLogin
-      const args = mode === 'password' ? ['synthetic', 'synthetic', 'enterprise', ''] : ['13800138000', '123456', 'enterprise']
+      const request = mockAuthApiLogin
+      const args = ['synthetic', 'synthetic', 'enterprise', '']
       await wrapper.get('.login-form').trigger('submit.prevent'); await flushPromises()
       expect(request).toHaveBeenCalledExactlyOnceWith(...args)
-      expect(otherRequest).not.toHaveBeenCalled()
       expect(vm.errorMessage).toBe('synthetic')
       expect(vm.loading).toBe(false)
       expect(wrapper.get('.login-submit').attributes('disabled')).toBeUndefined()
@@ -612,10 +604,23 @@ describe('LoginView functions – switchLoginMode to qr', () => {
     const vm = wrapper.vm as any
     vm.errorMessage = 'some error'
     vm.altLoginHint = 'some hint'
-    vm.switchLoginMode('phone')
+    vm.switchLoginMode('password')
     expect(vm.errorMessage).toBe('')
     expect(vm.altLoginHint).toBe('')
   })
+})
+
+it('rejects unsupported phone mode without issuing a login request', async () => {
+  resetLoginMocks()
+  const { wrapper } = await mountLoginView()
+  const vm = wrapper.vm as any
+  vm.switchLoginMode('phone')
+  expect(vm.loginMode).toBe('password')
+  vm.username = 'user'; vm.password = 'password'; vm.loginMode = 'phone'
+  expect(vm.canSubmit).toBe(false)
+  await vm.submitLogin()
+  expect(mockAuthApiLogin).not.toHaveBeenCalled()
+  wrapper.unmount()
 })
 
 describe('LoginView functions – peelNestedLoginRedirect edge cases', () => {
@@ -683,39 +688,6 @@ describe('LoginView functions – canSubmit computed', () => {
     const vm = wrapper.vm as any
     vm.loginMode = 'qr'
     expect(vm.canSubmit).toBe(false)
-  })
-
-  it('canSubmit returns true for valid phone and sms code in phone mode', async () => {
-    const { wrapper } = await mountLoginView()
-    const vm = wrapper.vm as any
-    vm.loginMode = 'phone'
-    vm.phone = '13800138000'
-    vm.smsCode = '123456'
-    expect(vm.canSubmit).toBe(true)
-  })
-
-  it('canSubmit returns false for short phone in phone mode', async () => {
-    const { wrapper } = await mountLoginView()
-    const vm = wrapper.vm as any
-    vm.loginMode = 'phone'
-    vm.phone = '123'
-    vm.smsCode = '123456'
-    expect(vm.canSubmit).toBe(false)
-  })
-
-  it('canSubmit returns false for short sms code in phone mode', async () => {
-    const { wrapper } = await mountLoginView()
-    const vm = wrapper.vm as any
-    vm.loginMode = 'phone'
-    vm.phone = '13800138000'
-    vm.smsCode = '123'
-    expect(vm.canSubmit).toBe(false)
-  })
-})
-
-describe('LoginView functions – watch rememberPassword/autoLogin', () => {
-  beforeEach(() => {
-    resetLoginMocks()
   })
 
   it('disabling rememberPassword also disables autoLogin', async () => {
@@ -876,45 +848,6 @@ describe('LoginView functions – formatLoginFailurePayload edge cases', () => {
     expect(wrapper.get('[data-testid="login-error"]').text()).toContain('请输入账号和密码')
     expect(wrapper.get('#lv-username').attributes('aria-invalid')).toBeUndefined()
     expect(wrapper.get('#lv-password').attributes('aria-invalid')).toBe('true')
-  })
-})
-
-describe('LoginView functions – sendPhoneCode edge cases', () => {
-  beforeEach(() => {
-    resetLoginMocks()
-  })
-
-  it('sendPhoneCode sets error for short phone number', async () => {
-    const { wrapper } = await mountLoginView()
-    const vm = wrapper.vm as any
-    vm.phone = '123'
-    await vm.sendPhoneCode()
-    expect(vm.errorMessage).toBeTruthy()
-    expect(mockAuthApiSendPhoneCode).not.toHaveBeenCalled()
-  })
-
-  it('sendPhoneCode sets altLoginHint on success', async () => {
-    mockAuthApiSendPhoneCode.mockResolvedValue({ message: 'Code sent to your phone' })
-    const { wrapper } = await mountLoginView()
-    const vm = wrapper.vm as any
-    vm.phone = '13800138000'
-    await vm.sendPhoneCode()
-    await flushPromises()
-    expect(vm.altLoginHint).toBe('Code sent to your phone')
-    expect(vm.sendingCode).toBe(false)
-  })
-
-  it('sendPhoneCode sets errorMessage on ApiError', async () => {
-    const { ApiError } = await import('@/api')
-    const apiError = new ApiError('Phone send failed', {})
-    mockAuthApiSendPhoneCode.mockRejectedValue(apiError)
-    const { wrapper } = await mountLoginView()
-    const vm = wrapper.vm as any
-    vm.phone = '13800138000'
-    await vm.sendPhoneCode()
-    await flushPromises()
-    expect(vm.errorMessage).toBeTruthy()
-    expect(vm.sendingCode).toBe(false)
   })
 })
 

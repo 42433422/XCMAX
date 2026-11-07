@@ -38,15 +38,6 @@ export const auth = {
     setTokensFromAuthResponse(res as AuthResponse)
     return res
   },
-  sendPhoneCode: (phone: string) => req('/api/auth/send-phone-code', { method: 'POST', body: JSON.stringify({ phone }) }),
-  loginWithPhoneCode: async (phone: string, code: string) => {
-    const res = await authRequest('/api/auth/login-with-phone-code', {
-      method: 'POST',
-      body: JSON.stringify({ phone, code }),
-    })
-    setTokensFromAuthResponse(res as AuthResponse)
-    return res
-  },
   me: () => req<MeResponse>('/api/auth/me'),
   accountBootstrap: () => req('/api/account/bootstrap'),
   sendVerificationCode: (email: string) => req('/api/auth/send-code', { method: 'POST', body: JSON.stringify({ email }) }),

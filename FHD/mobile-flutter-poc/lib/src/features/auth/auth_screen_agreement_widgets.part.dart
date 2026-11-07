@@ -2,41 +2,6 @@
 
 part of 'auth_screen.dart';
 
-class _OtpCell extends StatelessWidget {
-  const _OtpCell({required this.char, required this.focused});
-
-  final String char;
-  final bool focused;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    return Container(
-      height: 48,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: focused ? colors.brand : colors.divider,
-          width: focused ? 1.5 : 1,
-        ),
-      ),
-      child: Text(
-        char,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: colors.textPrimary,
-          fontSize: 18,
-          height: 1.44,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 0,
-        ),
-      ),
-    );
-  }
-}
-
 class _ScanButton extends StatelessWidget {
   const _ScanButton({required this.onTap});
 

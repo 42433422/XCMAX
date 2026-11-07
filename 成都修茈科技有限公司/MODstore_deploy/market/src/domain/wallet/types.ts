@@ -1,5 +1,5 @@
 /**
- * 与 modstore_server/market_api.py `api_wallet_balance` 字段对齐；
+ * 与 modstore_server/api/market_routes.py `api_wallet_balance` 字段对齐；
  * 经 Java 网关回传可能附加 `membership_reference_yuan`（见后端 WalletService#getMembershipReferenceLineYuan）。
  */
 export interface WalletBalance {
@@ -11,7 +11,7 @@ export interface WalletBalance {
 }
 
 /**
- * 与 modstore_server/market_api.py `api_wallet_transactions` 单行字段对齐。
+ * 与 modstore_server/api/market_routes.py `api_wallet_transactions` 单行字段对齐。
  * - `type` 即后端 `Transaction.txn_type`，前端历史代码也保留 `txn_type` 别名供兼容。
  */
 export interface WalletTransaction {

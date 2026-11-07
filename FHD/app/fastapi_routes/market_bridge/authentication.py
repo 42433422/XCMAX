@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from fastapi.responses import JSONResponse
 
+from app.application.market_auth_payloads import sms_auth_unavailable
 from app.application.market_bridge.protocols import (
     DemoPayload,
     JsonObject,
     NormalizeAuth,
     ProxyJSON,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 @dataclass
@@ -53,14 +52,8 @@ class Authentication:
         return result
 
     async def phone_login(self, phone: str, code: str) -> dict[str, Any]:
-        """Authenticate against market via phone verification code."""
-        market_base = self.base_url()
-        payload = await self.proxy(
-            "POST",
-            "/api/auth/login-with-phone-code",
-            json_body={"phone": (phone or "").strip(), "code": (code or "").strip()},
-        )
-        return await self.normalize_auth(payload, market_base=market_base)
+        """Retain the legacy contract without contacting an unimplemented provider."""
+        return sms_auth_unavailable()
 
     async def register(
         self, username: str, password: str, email: str, verification_code: str = ""
@@ -180,22 +173,5 @@ class Authentication:
         return {"success": True, "message": "密码已重置", "raw": payload}
 
     async def send_phone_code(self, phone: str) -> dict[str, Any]:
-        """Proxy send-phone-code to market."""
-        payload = await self.proxy(
-            "POST", "/api/auth/send-phone-code", json_body={"phone": (phone or "").strip()}
-        )
-        if isinstance(payload, JSONResponse):
-            try:
-                raw_body = json.loads(bytes(payload.body).decode("utf-8") if payload.body else "{}")
-            except RECOVERABLE_ERRORS:
-                raw_body = {}
-            return {
-                "success": False,
-                "message": str(
-                    raw_body.get("message") or raw_body.get("detail") or "发送验证码失败"
-                ),
-                "status_code": int(payload.status_code or 502),
-            }
-        if isinstance(payload, dict):
-            return {"success": True, "message": str(payload.get("message") or "验证码已发送")}
-        return {"success": True, "message": "验证码已发送"}
+        """Retain the legacy contract; setting SMS_PROVIDER cannot enable SMS."""
+        return sms_auth_unavailable()

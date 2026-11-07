@@ -870,57 +870,6 @@ class TestMarketRegisterMarketUser:
         assert result["success"] is False
 
 
-class TestMarketSendMarketPhoneCode:
-    """Cover ``send_market_phone_code``."""
-
-    @pytest.mark.asyncio
-    async def test_success_with_message(self) -> None:
-        with patch.object(
-            ma, "_proxy_json", new_callable=AsyncMock, return_value={"message": "sent"}
-        ):
-            result = await ma.send_market_phone_code("13800000000")
-        assert result["success"] is True
-        assert result["message"] == "sent"
-
-    @pytest.mark.asyncio
-    async def test_success_default_message(self) -> None:
-        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value={}):
-            result = await ma.send_market_phone_code("13800000000")
-        assert result["success"] is True
-        assert "已发送" in result["message"]
-
-    @pytest.mark.asyncio
-    async def test_json_response_returns_failure(self) -> None:
-        json_resp = JSONResponse({"message": "failed"}, status_code=502)
-        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=json_resp):
-            result = await ma.send_market_phone_code("13800000000")
-        assert result["success"] is False
-
-    @pytest.mark.asyncio
-    async def test_non_dict_payload(self) -> None:
-        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value="string"):
-            result = await ma.send_market_phone_code("13800000000")
-        assert result["success"] is True
-
-
-class TestMarketLoginMarketWithPhoneCode:
-    """Cover ``login_market_with_phone_code``."""
-
-    @pytest.mark.asyncio
-    async def test_success_path(self) -> None:
-        payload = {"access_token": "tok", "data": {"user": {"id": 1, "username": "u"}}}
-        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=payload):
-            result = await ma.login_market_with_phone_code("13800000000", "1234")
-        assert result["success"] is True
-        assert result["token"] == "tok"
-
-    @pytest.mark.asyncio
-    async def test_no_token_returns_failure(self) -> None:
-        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value={}):
-            result = await ma.login_market_with_phone_code("13800000000", "1234")
-        assert result["success"] is False
-
-
 class TestMarketLoginMarketWithPassword:
     """Cover ``login_market_with_password``."""
 

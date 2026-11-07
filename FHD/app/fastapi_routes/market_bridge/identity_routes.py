@@ -106,6 +106,8 @@ class IdentityRoutes:
                 {
                     "success": False,
                     "message": result.get("message"),
+                    "capability": result.get("capability"),
+                    "error_code": result.get("error_code") or "MARKET_AUTH_FAILED",
                     "error": {
                         "code": result.get("error_code") or "MARKET_AUTH_FAILED",
                         "message": result.get("message"),

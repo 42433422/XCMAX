@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import os
 import sys
+from contextlib import nullcontext
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
+from fastapi.testclient import TestClient
 
+from app.legacy.routes import legacy_compat
 from app.legacy.routes.legacy_compat import register_legacy_compat_routes
+from scripts.route_inventory_diff import _inventory_report
 
 
 def _collect_paths(app: FastAPI) -> list[str]:
@@ -214,3 +219,167 @@ class TestRegisterLegacyCompatRoutes:
             register_legacy_compat_routes(fresh_app)
         non_empty = _collect_paths(fresh_app)
         assert len(non_empty) > 10
+
+
+@pytest.mark.parametrize("strategy", ["bare", "broad", "narrow"])
+@pytest.mark.parametrize("failure_stage", ["import", "mount"])
+def test_failed_router_mount_marks_inventory_incomplete_until_retry(
+    fresh_app, strategy, failure_stage
+):
+    module = "test_route_registration"
+    error = ImportError("route dependency unavailable")
+    router = APIRouter()
+    router.add_api_route("/probe", lambda: {"ok": True}, methods=["GET"])
+    loader = (
+        {"side_effect": error}
+        if failure_stage == "import"
+        else {"return_value": SimpleNamespace(public_router=router)}
+    )
+    with (
+        patch.object(legacy_compat.importlib, "import_module", **loader),
+        patch.object(fresh_app, "include_router", side_effect=error)
+        if failure_stage == "mount"
+        else nullcontext(),
+    ):
+        call = lambda: legacy_compat._mount_router(
+            fresh_app, module, router_attr="public_router", prefix="/api", strategy=strategy
+        )
+        if strategy == "bare":
+            with pytest.raises(ImportError) as raised:
+                call()
+            assert raised.value is error
+        else:
+            call()
+    component = f"route:{module}:public_router:/api"
+    report = _inventory_report(fresh_app)
+    assert not report["complete"] and report["failed_components"] == [component]
+    assert not fresh_app.state.runtime_components[component]["required"]
+
+    with patch.object(
+        legacy_compat.importlib, "import_module", return_value=SimpleNamespace(public_router=router)
+    ):
+        call()
+    report = _inventory_report(fresh_app)
+    assert report["complete"] and not report["failed_components"]
+    assert ("GET", "/api/probe") in report["routes"]
+    assert fresh_app.state.runtime_components[component]["detail"] == ""
+
+
+@pytest.mark.parametrize(
+    "strategy,error", [("narrow", RuntimeError("unexpected")), ("broad", TypeError("bug"))]
+)
+def test_router_registration_keeps_nonrecoverable_exceptions(fresh_app, strategy, error):
+    with (
+        patch.object(legacy_compat.importlib, "import_module", side_effect=error),
+        pytest.raises(type(error)) as raised,
+    ):
+        legacy_compat._mount_router(fresh_app, "test_route_registration", strategy=strategy)
+    assert raised.value is error
+    assert not _inventory_report(fresh_app)["complete"]
+
+
+@pytest.mark.parametrize("failure_stage", ["import", "register"])
+def test_compat_registration_function_failure_and_retry(fresh_app, failure_stage):
+    error = RuntimeError("registration unavailable")
+    callback = MagicMock(side_effect=error if failure_stage == "register" else None)
+    module = SimpleNamespace(register_routes=callback)
+    with patch.object(
+        legacy_compat.importlib,
+        "import_module",
+        side_effect=error if failure_stage == "import" else None,
+        return_value=module,
+    ):
+        legacy_compat._register_compat_func(
+            fresh_app, "test_route_registration", register_func_name="register_routes"
+        )
+    assert _inventory_report(fresh_app)["failed_components"] == [
+        "route:test_route_registration:register_routes:"
+    ]
+    callback.side_effect = None
+    with patch.object(legacy_compat.importlib, "import_module", return_value=module):
+        legacy_compat._register_compat_func(
+            fresh_app, "test_route_registration", register_func_name="register_routes"
+        )
+    assert _inventory_report(fresh_app)["complete"]
+
+
+_OPTIONAL_MOUNTS = [
+    ("essential", "app.fastapi_routes.domains.auth.auth_routes", "router", ""),
+    ("essential", "app.fastapi_routes.system_routes", "router", ""),
+    ("essential", "app.fastapi_routes.tools_execute", "router", ""),
+    ("essential", "app.fastapi_routes.agent_tool_lifecycle", "router", ""),
+    ("essential", "app.legacy.routes.product.compat_routes", "router", "/api"),
+    ("lan", "app.fastapi_routes.lan_routes", "router", ""),
+    ("lan", "app.fastapi_routes.lan_admin_routes", "router", ""),
+    ("lan", "app.fastapi_routes.lan_settings_routes", "router", ""),
+    ("approval", "app.fastapi_routes.service_bridge", "router", ""),
+    (
+        "neuro",
+        "app.neuro_bus.integrations.fastapi_integration",
+        "add_neurobus_routes",
+        "",
+    ),
+]
+
+
+@pytest.fixture
+def optional_mounts(monkeypatch):
+    from app.fastapi_routes.mounts import lan, neuro
+    from app.legacy.routes.mounts import essential_compat
+
+    modules = {}
+    for _, name, attribute, _ in [
+        *_OPTIONAL_MOUNTS,
+        ("approval", "app.fastapi_routes.approval", "router", ""),
+    ]:
+        router = APIRouter()
+        router.add_api_route(f"/probe/{len(modules)}", lambda: {"ok": True}, methods=["GET"])
+        callback = lambda app, router=router: app.include_router(router)
+        modules[name] = SimpleNamespace(
+            **{attribute: router if attribute == "router" else callback}
+        )
+        monkeypatch.setitem(sys.modules, name, modules[name])
+    monkeypatch.setattr(legacy_compat, "is_ci_strict", lambda: False)
+    monkeypatch.setattr(neuro, "is_ci_strict", lambda: False)
+    return modules, {
+        "essential": essential_compat.register_essential_compat_routes,
+        "lan": lan.register_lan_routes,
+        "approval": legacy_compat._register_approval_routes,
+        "neuro": neuro.register_neuro_routes,
+    }
+
+
+@pytest.mark.parametrize("phase,module,attribute,prefix", _OPTIONAL_MOUNTS)
+def test_optional_phase_failure_is_reported_and_retry_recovers(
+    fresh_app, monkeypatch, optional_mounts, phase, module, attribute, prefix
+):
+    modules, register = optional_mounts
+    monkeypatch.setitem(sys.modules, module, None)
+    register[phase](fresh_app)
+    report = _inventory_report(fresh_app)
+    assert not report["complete"]
+    assert report["failed_components"] == [f"route:{module}:{attribute}:{prefix}"]
+    if module == "app.fastapi_routes.domains.auth.auth_routes":
+        with TestClient(fresh_app) as client:
+            response = client.get("/api/auth/session/validate")
+        assert response.status_code == 200 and response.json()["valid"] is False
+    monkeypatch.setitem(sys.modules, module, modules[module])
+    register[phase](fresh_app)
+    assert _inventory_report(fresh_app)["complete"]
+
+
+@pytest.mark.parametrize("phase,module,attribute,prefix", _OPTIONAL_MOUNTS[-2:])
+def test_required_ci_phase_records_failure_and_still_raises(
+    fresh_app, monkeypatch, optional_mounts, phase, module, attribute, prefix
+):
+    from app.fastapi_routes.mounts import neuro
+
+    _, register = optional_mounts
+    monkeypatch.setattr(legacy_compat, "is_ci_strict", lambda: True)
+    monkeypatch.setattr(neuro, "is_ci_strict", lambda: True)
+    monkeypatch.setitem(sys.modules, module, None)
+    with pytest.raises(RuntimeError, match="required in CI"):
+        register[phase](fresh_app)
+    assert _inventory_report(fresh_app)["failed_components"] == [
+        f"route:{module}:{attribute}:{prefix}"
+    ]

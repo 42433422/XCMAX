@@ -19,7 +19,7 @@ from app.fastapi_routes.mounts import (
     register_neuro_migration_routes,
     register_neuro_routes,
 )
-from app.fastapi_routes.registry import RouteRegistry
+from app.fastapi_routes.registry import RouteRegistry, detect_app_route_conflicts
 from app.legacy.routes.legacy_gap import register_legacy_gap_routers
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.runtime_integrity import record_runtime_component
@@ -75,15 +75,6 @@ def register_deferred_routes(app: FastAPI) -> None:
     register_business_routes(app, registry)
     registry.apply(app)
 
-    conflicts = registry.detect_conflicts()
-    for conflict in conflicts:
-        logger.warning(
-            "Route conflict: %s %s registered in %s",
-            conflict.method,
-            conflict.path,
-            conflict.mounts,
-        )
-
     register_neuro_routes(app)
     register_neuro_migration_routes(app)
     register_lan_routes(app)
@@ -99,6 +90,20 @@ def register_deferred_routes(app: FastAPI) -> None:
     else:
         register_legacy_compat_routes(app)
 
+    # Fast-start appended these routes after the already installed SPA fallback.
+    # Diagnose the serving order, not the transient order before the usual reorder.
+    from app.fastapi_routes.spa_fallback import ensure_spa_fallback_last
+
+    ensure_spa_fallback_last(app)
+    for conflict in detect_app_route_conflicts(app):
+        logger.warning(
+            "Route %s: %s %s registered in %s (shadowed_by=%s)",
+            conflict.kind,
+            conflict.method,
+            conflict.path,
+            conflict.mounts,
+            conflict.shadowed_by,
+        )
     logger.info("Deferred FastAPI routes registered successfully")
 
 

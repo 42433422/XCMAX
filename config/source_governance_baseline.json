@@ -113,11 +113,6 @@
       "lines": 1106,
       "soft_cap": 800
     },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/routes_registry_merged.py": {
-      "stack": "modstore_backend",
-      "lines": 1069,
-      "soft_cap": 800
-    },
     "FHD/app/application/shipment_excel_etl_security.py": {
       "stack": "fhd_backend",
       "lines": 970,
@@ -158,11 +153,6 @@
     "FHD/app/fastapi_routes/domains/system/system_routes.py": {
       "stack": "fhd_backend",
       "routes": 32,
-      "soft_cap": 20
-    },
-    "FHD/app/fastapi_routes/xcagi_compat_product.py": {
-      "stack": "fhd_backend",
-      "routes": 26,
       "soft_cap": 20
     },
     "FHD/mods/xcagi-erp-domain-bridge/backend/blueprints.py": {
@@ -276,7 +266,6 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/release_train_merged.py": 173,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/research_tools_merged.py": 302,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/retort_clarification_operations_merged.py": 157,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/routes_registry_merged.py": 338,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/script_agent/agent_loop_v2.py": 14,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/script_agent/agent_loop_vibe.py": 36,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/script_workflow_execution_routes.py": 80,

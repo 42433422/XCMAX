@@ -744,24 +744,40 @@ class LoginWithPhoneCodeDTO(_facade().BaseModel):
     code: str = _facade().Field(..., min_length=4, max_length=16)
 
 
-@_facade().router.post("/auth/send-phone-code", summary="发送手机短信验证码")
+def _sms_auth_unavailable():
+    """No SMS provider is implemented; configuration alone cannot enable login."""
+    message = "当前版本不支持短信验证码登录，请使用账号密码或邮箱验证码登录。"
+    return _facade().JSONResponse(
+        {
+            "success": False,
+            "status_code": 501,
+            "message": message,
+            "error_code": "SMS_AUTH_UNAVAILABLE",
+            "error": {"code": "SMS_AUTH_UNAVAILABLE", "message": message},
+            "capability": {"id": "sms_login", "available": False},
+        },
+        status_code=501,
+    )
+
+
+@_facade().router.post(
+    "/auth/send-phone-code",
+    summary="短信验证码兼容入口（当前不支持）",
+    deprecated=True,
+    status_code=501,
+)
 def api_send_phone_code(body: SendPhoneCodeDTO, request: _facade().Request):
-    """发送短信验证码登录。当前实现：以邮箱接口替代（若已配置 SMS_PROVIDER 则由运营对接）。
-    前端 sendPhoneCode 消费此接口。未配置 SMS 服务时返回 503。
-    """
-    sms_provider = (_facade().os.environ.get("SMS_PROVIDER") or "").strip()
-    if not sms_provider:
-        raise _facade().HTTPException(503, "短信服务未配置，请使用邮箱验证码登录")
-    raise _facade().HTTPException(501, "短信验证码功能待接入，请联系管理员")
+    return _sms_auth_unavailable()
 
 
-@_facade().router.post("/auth/login-with-phone-code", summary="手机验证码登录")
+@_facade().router.post(
+    "/auth/login-with-phone-code",
+    summary="短信登录兼容入口（当前不支持）",
+    deprecated=True,
+    status_code=501,
+)
 def api_login_with_phone_code(body: LoginWithPhoneCodeDTO):
-    """手机验证码登录（与 send-phone-code 配套）。未配置 SMS 时返回 503。"""
-    sms_provider = (_facade().os.environ.get("SMS_PROVIDER") or "").strip()
-    if not sms_provider:
-        raise _facade().HTTPException(503, "短信服务未配置，请使用邮箱验证码登录")
-    raise _facade().HTTPException(501, "短信验证码功能待接入，请联系管理员")
+    return _sms_auth_unavailable()
 
 
 class VerifyAdminDigestCodeDTO(_facade().BaseModel):

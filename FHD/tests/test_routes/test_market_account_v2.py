@@ -817,47 +817,7 @@ class TestEnterpriseModIdsForIndustry:
 # ========================= login_market_with_phone_code =======================
 
 
-class TestLoginMarketWithPhoneCode:
-    @pytest.mark.asyncio
-    async def test_success(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
-        login_resp = {"data": {"access_token": "phone_tok", "refresh_token": "phone_rt"}}
-        me_resp = {"user": {"id": 1, "username": "u"}}
-        call_count = 0
-
-        async def mock_proxy(method, path, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if path == "/api/auth/login-with-phone-code":
-                return login_resp
-            if path == "/api/auth/me":
-                return me_resp
-            return {}
-
-        with patch.object(ma, "_proxy_json", side_effect=mock_proxy):
-            result = await ma.login_market_with_phone_code("13800138000", "1234")
-            assert result["success"] is True
-            assert result["token"] == "phone_tok"
-
-
 # ========================= send_market_phone_code =============================
-
-
-class TestSendMarketPhoneCode:
-    @pytest.mark.asyncio
-    async def test_success(self):
-        with patch.object(ma, "_proxy_json", return_value={"message": "验证码已发送"}):
-            result = await ma.send_market_phone_code("13800138000")
-            assert result["success"] is True
-
-    @pytest.mark.asyncio
-    async def test_json_response_error(self):
-        error_resp = ma.JSONResponse(
-            {"success": False, "message": "市场服务不可用"}, status_code=502
-        )
-        with patch.object(ma, "_proxy_json", return_value=error_resp):
-            result = await ma.send_market_phone_code("13800138000")
-            assert result["success"] is False
 
 
 # ========================= refresh_session_market_token =======================

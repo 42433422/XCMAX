@@ -1,5 +1,5 @@
 /**
- * 与 modstore_server/market_api.py `api_market_catalog` / `api_market_catalog_detail` 字段对齐。
+ * 与 modstore_server/api/market_routes.py `api_market_catalog` / `api_market_catalog_detail` 字段对齐。
  */
 export interface CatalogItem {
   id: number

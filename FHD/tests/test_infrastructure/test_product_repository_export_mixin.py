@@ -61,7 +61,7 @@ def test_export_matches_tenant_and_model_filter(monkeypatch, tmp_path, format):
 
                 from docx import Document
 
-                from app.fastapi_routes.xcagi_compat_product import (
+                from app.legacy.routes.product.compat_routes import (
                     _products_price_list_word_response,
                 )
 

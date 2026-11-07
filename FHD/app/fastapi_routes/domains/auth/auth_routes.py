@@ -216,7 +216,6 @@ def _credentials() -> CredentialLogin:
         login_market=lambda username, password: market_account.login_market_with_password(
             username, password
         ),
-        login_phone=lambda phone, code: market_account.login_market_with_phone_code(phone, code),
         jit_create=lambda username, password, email: _jit_create_local_user_for_enterprise(
             username, password, email
         ),

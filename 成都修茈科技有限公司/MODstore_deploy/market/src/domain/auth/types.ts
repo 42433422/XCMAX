@@ -22,7 +22,7 @@ export interface AuthTokens {
 }
 
 /**
- * 与 modstore_server/market_api.py `api_me` 返回保持一致；
+ * 与 modstore_server/api/market_routes.py `api_me` 返回保持一致；
  * Java 网关可能多包一层 `{ user: {...} }`，在 `domain/accountLevel.ts#normalizeMeResponse` 处压平。
  */
 export interface CurrentUser {

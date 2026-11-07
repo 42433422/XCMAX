@@ -156,7 +156,7 @@ def test_fallback_plan_export_price_list() -> None:
 
 @pytest.fixture
 def xcagi_product_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    from app.fastapi_routes import xcagi_compat_product
+    from app.legacy.routes.product import compat_routes as xcagi_compat_product
 
     monkeypatch.setattr(
         "app.infrastructure.auth.db_token.verify_db_read_token_header",
@@ -169,7 +169,7 @@ def xcagi_product_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 def test_xcagi_products_units(xcagi_product_client: TestClient) -> None:
     with patch(
-        "app.fastapi_routes.xcagi_compat_product._products_units_for_select",
+        "app.legacy.routes.product.compat_routes._products_units_for_select",
         return_value={"units": ["甲公司"]},
     ):
         r = xcagi_product_client.get("/products/units")
@@ -178,7 +178,7 @@ def test_xcagi_products_units(xcagi_product_client: TestClient) -> None:
 
 def test_xcagi_purchase_units_list(xcagi_product_client: TestClient) -> None:
     with patch(
-        "app.fastapi_routes.xcagi_compat_product._merged_purchase_unit_entries",
+        "app.legacy.routes.product.compat_routes._merged_purchase_unit_entries",
         return_value=[{"unit_name": "甲公司"}],
     ):
         r = xcagi_product_client.get("/purchase_units")
@@ -197,7 +197,7 @@ def test_xcagi_products_list(xcagi_product_client: TestClient) -> None:
             return_value=False,
         ),
         patch(
-            "app.fastapi_routes.xcagi_compat_product._load_products_list_impl_pg",
+            "app.legacy.routes.product.compat_routes._load_products_list_impl_pg",
             return_value=([{"id": 1}], 1, None),
         ),
     ):
@@ -208,7 +208,7 @@ def test_xcagi_products_list(xcagi_product_client: TestClient) -> None:
 
 def test_xcagi_products_resolve_name_hints_501(xcagi_product_client: TestClient) -> None:
     with patch(
-        "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+        "app.legacy.routes.product.compat_routes._business_mod_json_block",
         return_value=None,
     ):
         r = xcagi_product_client.post(

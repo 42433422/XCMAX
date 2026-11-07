@@ -110,15 +110,8 @@ function bindUiEvents() {
       })
   })
   bind('exportCustomersExcelBtn', 'click', () => {
-    const apiBase = typeof API_BASE !== 'undefined' ? API_BASE : ''
-    const link = document.createElement('a')
-    // 后端客户导出接口是 `/api/customers/export`
-    link.href = `${apiBase}/api/customers/export`
-    link.download = '购买单位列表.xlsx'
-    link.style.display = 'none'
-    document.body.appendChild(link)
-    link.click()
-    setTimeout(() => link.remove(), 0)
+    // The current customer page selects the account's authorized ERP export route.
+    window.location.assign('/customers')
   })
   bind('toggleAllCustomersCheckbox', 'change', (e) => callIfExists('toggleAllCustomers', e.target))
 

@@ -12,7 +12,7 @@ import type { LoginViewState } from './useLoginViewState'
 
 let latestLoginAttempt = 0
 export function useLoginViewSession(state: LoginViewState, options: { router: Router }) {
-  const { username, phone, errorMessage, isEnterpriseEdition, redirectPath } = state
+  const { username, errorMessage, isEnterpriseEdition, redirectPath } = state
   const { router } = options
   const accountProfileStore = useAccountProfileStore()
 
@@ -51,7 +51,7 @@ export function useLoginViewSession(state: LoginViewState, options: { router: Ro
       return
     }
     const loginUser = raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? (raw.data as Record<string, unknown>) : raw
-    const accountUsername = String(loginUser?.username || username.value || phone.value || '').trim()
+    const accountUsername = String(loginUser?.username || username.value || '').trim()
     await router.replace(
       isAdminConsoleSpa() && (redirectPath.value === '/' || !redirectPath.value) ? `/${ADMIN_OPERATOR_HOME_ROUTE}` : redirectPath.value,
     )

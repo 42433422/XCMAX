@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.infrastructure.auth.dependencies import (
@@ -13,9 +13,6 @@ from app.infrastructure.auth.dependencies import (
     resolve_session_user,
     session_id_from_request,
 )
-
-# 纯工具模块；历史路由已迁出，保留空 router 供 legacy_gaps_batch1 聚合 include。
-router = APIRouter(deprecated=True)
 
 # 向后兼容别名（v9 路由应改用 infrastructure.auth.dependencies）
 _session_id_from_request = session_id_from_request

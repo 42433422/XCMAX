@@ -10,7 +10,7 @@
 
 ```bash
 # 语法检查
-python -m py_compile MODstore_deploy/modstore_server/payment_api.py
+python -m py_compile MODstore_deploy/modstore_server/api/payment_routes.py
 python -m py_compile MODstore_deploy/modstore_server/payment_orders.py
 
 # 只读对账预览（管理员 JWT；不落库）。详见 MODstore_deploy/docs/runbooks/payment-reconciliation-preview-api.md

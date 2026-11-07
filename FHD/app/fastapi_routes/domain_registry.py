@@ -1,10 +1,4 @@
-"""
-domain_registry.py — 14+ 业务域 SSOT（v10.0.5+ 纯文档表）
-
-v10.0.3 已删除全部 legacy_/xcagi_compat_* shim；运行时路由由 domains/* 与
-``register_legacy_gap_routers``（内联于 ``app/fastapi_routes/__init__.py``）承载。
-本模块仅登记业务域 → 目标模块映射，供 CI 与迁移文档使用。
-"""
+"""业务域 → 当前实现映射；运行时挂载由 mounts/* 与 legacy/routes 管理。"""
 
 from __future__ import annotations
 
@@ -34,7 +28,7 @@ DOMAIN_TO_DIR: dict[str, str] = {
     "conversation": "app/fastapi_routes/domains/conversation/",
     "customer": "app/fastapi_routes/domains/customer/",
     "excel": "app/fastapi_routes/domains/excel/",
-    "inventory": "app/fastapi_routes/domains/inventory/",
+    "inventory": "app/fastapi_routes/",
     "misc": "app/fastapi_routes/domains/misc/",
     "product": "app/fastapi_routes/domains/product/",
     "shipment": "app/fastapi_routes/domains/shipment/",
@@ -47,18 +41,17 @@ DOMAIN_TO_DIR: dict[str, str] = {
 
 # 顶层允许保留的 legacy/compat 文件白名单。
 # - xcagi_compat.py：compat 聚合入口（misc 域文档指向它）。
-# - xcagi_compat_chat_helpers.py / xcagi_compat_product.py：仍被 mod_sdk / application /
+# - xcagi_compat_chat_helpers.py：仍被 mod_sdk / application /
 #   mods-admin-runtime 桥接实时引用的 compat 辅助模块，已在 arch_fitness/layer_ratchet
 #   baseline 中登记为已知债，待后续迁入 domains/conversation、domains/product 后移除。
 ALLOWED_LEGACY_FILES: frozenset[str] = frozenset(
     {
         "xcagi_compat.py",
         "xcagi_compat_chat_helpers.py",
-        "xcagi_compat_product.py",
     }
 )
 
-# Implementation companions extracted from the three approved compatibility
+# Implementation companions extracted from the approved compatibility
 # facades above.  They are not independently supported route entrypoints and
 # therefore must not expand ALLOWED_LEGACY_FILES.
 COMPAT_IMPLEMENTATION_FILES: frozenset[str] = frozenset(
@@ -103,7 +96,7 @@ LEGACY_ROUTE_REGISTRY: tuple[LegacyRoute, ...] = (
     ),
     _doc("customer", "app.fastapi_routes.domains.customer.customer_routes", "客户/CRM"),
     _doc("excel", "app.fastapi_routes.domains.excel.excel_routes", "Excel 解析/导出"),
-    _doc("inventory", "app.fastapi_routes.domains.inventory.inventory_routes", "库存"),
+    _doc("inventory", "app.fastapi_routes.inventory", "库存现行入口"),
     _doc(
         "misc",
         "app.fastapi_routes.domains.misc.helpers",
@@ -164,8 +157,10 @@ def verify_registry_integrity() -> list[str]:
     for r in LEGACY_ROUTE_REGISTRY:
         if r.target_domain not in BUSINESS_DOMAINS:
             errors.append(f"{r.filename} → 未知业务域: {r.target_domain}")
-        if not r.target_module.startswith("app.fastapi_routes.domains."):
+        if not r.target_module.startswith("app.fastapi_routes."):
             errors.append(f"{r.target_domain} target_module 格式错误: {r.target_module}")
+        elif not (project_root / (r.target_module.replace(".", "/") + ".py")).is_file():
+            errors.append(f"{r.target_domain} target_module 不存在: {r.target_module}")
 
     return errors
 

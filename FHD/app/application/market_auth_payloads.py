@@ -5,6 +5,19 @@ from __future__ import annotations
 from typing import Any
 
 
+def sms_auth_unavailable() -> dict[str, Any]:
+    """SMS authentication has no provider implementation in this release."""
+    message = "当前版本不支持短信验证码登录，请使用账号密码或邮箱验证码登录。"
+    return {
+        "success": False,
+        "status_code": 501,
+        "message": message,
+        "error_code": "SMS_AUTH_UNAVAILABLE",
+        "error": {"code": "SMS_AUTH_UNAVAILABLE", "message": message},
+        "capability": {"id": "sms_login", "available": False},
+    }
+
+
 def user_blob_from_market_payload(payload: Any) -> dict[str, Any]:
     """Extract a user mapping from supported login and ``/me`` envelopes."""
 

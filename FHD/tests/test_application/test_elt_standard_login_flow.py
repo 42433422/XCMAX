@@ -207,9 +207,7 @@ def standard_login(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("method", ["password", "phone"])
-def test_first_standard_login_reaches_model_with_its_persisted_session_without_notice(
-    standard_login, method
-):
+def test_standard_login_persists_sessions_only_for_implemented_methods(standard_login, method):
     flow, client = standard_login, standard_login.client
     assert client.get("/api/templates/reviewed-excel/identity").status_code == 401
     assert (
@@ -242,6 +240,16 @@ def test_first_standard_login_reaches_model_with_its_persisted_session_without_n
         assert db.scalars(select(UserSession)).all() == []
     market.return_value = flow.market_result
     login = client.post(endpoint, json=payload)
+    if method == "phone":
+        assert failed.status_code == login.status_code == 501
+        assert login.json()["error_code"] == "SMS_AUTH_UNAVAILABLE"
+        assert login.json()["capability"]["available"] is False
+        assert not login.headers.get_list("set-cookie")
+        market.assert_not_awaited()
+        with flow.database() as db:
+            assert db.scalars(select(UserSession)).all() == []
+        assert client.get("/api/templates/reviewed-excel/identity").status_code == 401
+        return
     assert login.status_code == 200 and login.json()["success"] is True, login.text
     sid = client.cookies.get("session_id")
     assert sid and sid == login.json()["session_id"]

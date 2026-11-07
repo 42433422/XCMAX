@@ -183,6 +183,7 @@ async def get_current_industry_endpoint(request: Request):
 @router.post(
     "/industry",
     deprecated=True,
+    description="全局行业切换已停用，行业由账号资料确定；GET /api/system/industry 仅查询当前行业。",
     status_code=410,
     responses={
         401: {"description": "Authentication required"},

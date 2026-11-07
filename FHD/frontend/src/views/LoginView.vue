@@ -8,7 +8,6 @@ import { fetchProductSku } from '@/utils/productSku'
 import { isDesktopShell } from '@/utils/desktopShell'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { canResumeRecentDesktopSession } from '@/utils/authSessionCache'
-import OtpCells from '@/components/OtpCells.vue'
 import LoginAccountActions from '@/components/login/LoginAccountActions.vue'
 import { useLoginViewState } from './login-view/useLoginViewState'
 import { useLoginViewMeta } from './login-view/useLoginViewMeta'
@@ -37,9 +36,6 @@ const {
   altLoginHint,
   oidcEnabled,
   loginMode,
-  phone,
-  smsCode,
-  sendingCode,
   qrDataUrl,
   qrPollTimer,
   qrExpiresAt,
@@ -71,7 +67,6 @@ const { stopQrPoll, startQrLogin, pollQrStatus } = qr
 const {
   applySavedLoginPreferences,
   tryAutoLogin,
-  sendPhoneCode,
   switchLoginMode,
   formatLoginFailurePayload,
   selectEnterpriseLogin,
@@ -154,9 +149,6 @@ onUnmounted(() => {
           <button type="button" role="tab" :class="{ active: loginMode === 'password' }" @click="switchLoginMode('password')">
             {{ $t('login.tabPassword') }}
           </button>
-          <button type="button" role="tab" :class="{ active: loginMode === 'phone' }" @click="switchLoginMode('phone')">
-            {{ $t('login.tabPhone') }}
-          </button>
           <button type="button" role="tab" :class="{ active: loginMode === 'qr' }" @click="switchLoginMode('qr')">
             {{ $t('login.tabQr') }}
           </button>
@@ -230,36 +222,6 @@ onUnmounted(() => {
                 <input v-model="rememberPassword" type="checkbox" class="login-option-input" :disabled="loading" />
                 <span>{{ $t('login.rememberPassword') }}</span>
               </label>
-            </div>
-          </template>
-
-          <template v-else>
-            <div class="login-field">
-              <label class="login-label" for="lv-phone">{{ $t('login.labelPhone') }}</label>
-              <input
-                id="lv-phone"
-                v-model="phone"
-                type="tel"
-                class="login-input"
-                autocomplete="tel"
-                :placeholder="$t('login.phonePlaceholder')"
-                :disabled="loading"
-              />
-            </div>
-            <div class="login-field login-field--sms">
-              <div class="login-sms-head">
-                <label class="login-label" for="lv-sms-send">{{ $t('login.labelSmsCode') }}</label>
-                <button
-                  id="lv-sms-send"
-                  type="button"
-                  class="login-sms-btn login-sms-btn--inline"
-                  :disabled="loading || sendingCode"
-                  @click="sendPhoneCode"
-                >
-                  {{ sendingCode ? $t('login.sendingCode') : $t('login.getSmsCode') }}
-                </button>
-              </div>
-              <OtpCells v-model="smsCode" :disabled="loading" />
             </div>
           </template>
 

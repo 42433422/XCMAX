@@ -24,9 +24,6 @@ export function useLoginViewActions(
     errorMessage,
     altLoginHint,
     loginMode,
-    phone,
-    smsCode,
-    sendingCode,
     qrDataUrl,
     rememberPassword,
     autoLogin,
@@ -56,24 +53,8 @@ export function useLoginViewActions(
     await submitLogin()
   }
 
-  async function sendPhoneCode() {
-    if (phone.value.trim().length < 5) {
-      errorMessage.value = t('login.errInvalidPhone')
-      return
-    }
-    sendingCode.value = true
-    errorMessage.value = ''
-    try {
-      const res = await authApi.sendPhoneCode(phone.value.trim())
-      altLoginHint.value = String((res as { message?: string }).message || t('login.errCodeSent'))
-    } catch (error: unknown) {
-      errorMessage.value = error instanceof ApiError ? error.message : t('login.errSendCodeFailed')
-    } finally {
-      sendingCode.value = false
-    }
-  }
-
-  function switchLoginMode(mode: 'password' | 'phone' | 'qr') {
+  function switchLoginMode(mode: 'password' | 'qr') {
+    if (mode !== 'password' && mode !== 'qr') return
     loginMode.value = mode
     errorMessage.value = ''
     altLoginHint.value = ''
@@ -126,7 +107,7 @@ export function useLoginViewActions(
 
   async function submitLogin(_event?: Event) {
     if (!canSubmit.value) {
-      errorMessage.value = loginMode.value === 'phone' ? t('login.errNeedPhoneAndCode') : t('login.errNeedUsernamePassword')
+      errorMessage.value = t('login.errNeedUsernamePassword')
       return
     }
     const attempt = ++loginAttempt
@@ -135,10 +116,7 @@ export function useLoginViewActions(
     const invitation = invitationCode.value.trim()
     const invitationForRequest = invitation && invitation !== password.value ? invitation : ''
     try {
-      const result =
-        loginMode.value === 'phone'
-          ? await authApi.loginWithPhoneCode(phone.value.trim(), smsCode.value.trim(), accountKind.value)
-          : await authApi.login(username.value.trim(), password.value, accountKind.value, invitationForRequest)
+      const result = await authApi.login(username.value.trim(), password.value, accountKind.value, invitationForRequest)
       if (attempt !== loginAttempt) return
       const raw = result as unknown as Record<string, unknown>
       const ok = raw?.success === true || (raw?.data as Record<string, unknown> | undefined)?.success === true
@@ -191,7 +169,6 @@ export function useLoginViewActions(
   return {
     applySavedLoginPreferences,
     tryAutoLogin,
-    sendPhoneCode,
     switchLoginMode,
     formatLoginFailurePayload,
     selectEnterpriseLogin,

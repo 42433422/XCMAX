@@ -260,8 +260,11 @@ def test_public_executor_is_resolved_by_actual_agent_tool_chain(
     routes.products_pg_batch_delete_rows.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "retired_module", [RETIRED_MODULE, "app.fastapi_routes.xcagi_compat_product"]
+)
 def test_historical_waiting_run_resumes_without_retired_module(
-    product_client, agent_repository, monkeypatch
+    product_client, agent_repository, monkeypatch, retired_module
 ):
     with monkeypatch.context() as pause:
         pause.setattr(AgentOrchestrator, "continue_run", lambda *args, **kwargs: None)
@@ -270,13 +273,13 @@ def test_historical_waiting_run_resumes_without_retired_module(
         )
     run = agent_repository.get(response.json()["run_id"])
     assert run is not None and run.status == "waiting_user"
-    context = {**run.metadata["runtime_context"], "route_module": RETIRED_MODULE, "trace": "kept"}
+    context = {**run.metadata["runtime_context"], "route_module": retired_module, "trace": "kept"}
     run.metadata["runtime_context"] = context
     agent_repository.save(run)
     real_import = importlib.import_module
 
     def import_active(name, package=None):
-        if name == RETIRED_MODULE:
+        if name == retired_module:
             raise ModuleNotFoundError("retired product implementation", name=name)
         return real_import(name, package)
 

@@ -30,22 +30,24 @@ def _read(rel: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_payment_api_does_not_import_notification_service_directly():
+def test_payment_routes_do_not_import_notification_service_directly():
     """Payment domain must publish events, not call notification side-effects.
 
     The notification subscriber lives in ``eventing/subscribers.py`` and
     listens for ``payment.paid`` / ``refund.*``. Bypassing it from
-    ``payment_api`` defeats the decoupling and prevents a future
+    payment routes defeat the decoupling and prevent a future
     notification microservice from owning user-facing copy.
     """
 
-    text = _read("payment_api.py")
-    if not text:
-        return
-    assert "from modstore_server.notification_service" not in text, (
-        "payment_api must not import notification_service directly; publish "
-        "domain events and let eventing.subscribers handle the notification."
-    )
+    for rel in (
+        "api/payment_routes.py",
+        "api/payment_checkout_routes.py",
+        "api/payment_account_routes.py",
+    ):
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert (
+            "from modstore_server.notification_service" not in text
+        ), f"{rel} must publish domain events; subscribers own notifications."
 
 
 def test_refund_api_does_not_import_notification_service_directly():
@@ -69,14 +71,14 @@ def test_eventing_subscribers_owns_notification_imports():
 
 def test_eventing_package_does_not_import_business_apis():
     """Reverse direction is illegal: the eventing layer must stay below the
-    application layer. No ``from modstore_server.payment_api import ...``
+    application layer. No ``from modstore_server.api.payment_routes import ...``
     inside ``eventing/``.
     """
 
     forbidden_prefixes = (
-        "from modstore_server.payment_api",
+        "from modstore_server.api.payment_routes",
         "from modstore_server.refund_api",
-        "from modstore_server.market_api",
+        "from modstore_server.api.market_routes",
         "from modstore_server.workflow_api",
         "from modstore_server.employee_api",
     )
@@ -111,7 +113,7 @@ def test_new_domain_port_modules_stay_below_application_layer():
         text = _read(rel)
         if not text:
             continue
-        assert "from modstore_server.market_api" not in text
+        assert "from modstore_server.api.market_routes" not in text
         assert "from fastapi" not in text
 
 

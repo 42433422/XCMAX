@@ -59,9 +59,9 @@ def test_mod_export_routes_keep_filters_and_read_auth(monkeypatch, tmp_path, ext
     from fastapi import FastAPI, HTTPException, Response
     from fastapi.testclient import TestClient
 
-    from app.fastapi_routes import xcagi_compat_product as compat
     from app.fastapi_routes.domains.product import routes
     from app.infrastructure.mods.mod_manager import import_mod_backend_py
+    from app.legacy.routes.product import compat_routes as compat
 
     artifact = tmp_path / "products.xlsx"
     artifact.write_bytes(b"export result")

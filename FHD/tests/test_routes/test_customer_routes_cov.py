@@ -455,12 +455,8 @@ class TestCustomersImport:
 
 
 class TestCustomersExportStub:
-    def test_export_returns_501(self, client: TestClient):
-        # /customers/export conflicts with /customers/{customer_id}
-        # The route is registered but the path matches customer_id="export"
-        # The route itself raises 501 when directly invoked as a function
-        from app.fastapi_routes.domains.customer.customer_routes import customers_export_stub
-
-        with pytest.raises(HTTPException) as exc_info:
-            customers_export_stub()
-        assert exc_info.value.status_code == 501
+    @pytest.mark.parametrize("suffix", ["", "/"])
+    def test_export_returns_501(self, client: TestClient, suffix: str):
+        response = client.get(f"/customers/export{suffix}")
+        assert response.status_code == 501
+        assert "/customers 客户页" in response.json()["detail"]

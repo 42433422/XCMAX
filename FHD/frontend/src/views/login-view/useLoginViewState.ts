@@ -21,10 +21,7 @@ export function useLoginViewState(route: RouteLocationNormalizedLoaded) {
   const errorMessage = ref('')
   const altLoginHint = ref('')
   const oidcEnabled = ref(false)
-  const loginMode = ref<'password' | 'phone' | 'qr'>('password')
-  const phone = ref('')
-  const smsCode = ref('')
-  const sendingCode = ref(false)
+  const loginMode = ref<'password' | 'qr'>('password')
   const qrDataUrl = ref('')
   const qrPollTimer = ref<number | null>(null)
   const qrExpiresAt = ref(0)
@@ -72,11 +69,7 @@ export function useLoginViewState(route: RouteLocationNormalizedLoaded) {
   })
 
   const canSubmit = computed(() => {
-    if (loading.value) return false
-    if (loginMode.value === 'phone') {
-      return phone.value.trim().length >= 5 && smsCode.value.trim().length >= 6
-    }
-    if (loginMode.value === 'qr') return false
+    if (loading.value || loginMode.value !== 'password') return false
     return username.value.trim().length > 0 && password.value.length > 0
   })
 
@@ -101,9 +94,6 @@ export function useLoginViewState(route: RouteLocationNormalizedLoaded) {
     altLoginHint,
     oidcEnabled,
     loginMode,
-    phone,
-    smsCode,
-    sendingCode,
     qrDataUrl,
     qrPollTimer,
     qrExpiresAt,

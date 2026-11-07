@@ -253,7 +253,6 @@ module = [
     "modstore_server.release_train_merged",
     "modstore_server.research_tools_merged",
     "modstore_server.retort_clarification_operations_merged",
-    "modstore_server.routes_registry_merged",
     "modstore_server.self_evolution_operations_merged",
     "modstore_server.strategic_layer_api_merged",
     "modstore_server.time_rail_workflow_merged",

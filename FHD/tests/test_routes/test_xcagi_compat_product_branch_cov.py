@@ -1,4 +1,4 @@
-"""Branch coverage tests for app.fastapi_routes.xcagi_compat_product helper functions.
+"""Branch coverage tests for app.legacy.routes.product.compat_routes helper functions.
 
 Focuses on the internal helper functions that have uncovered branches:
 _agent_node_output, _products_compat_agent_user_id, _products_compat_status_code,
@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.fastapi_routes import xcagi_compat_product as xp
+from app.legacy.routes.product import compat_routes as xp
 
 # ---------------------------------------------------------------------------
 # _agent_node_output
@@ -292,7 +292,7 @@ class TestProductsCompatPreflight:
 
     def test_via_service_enabled_returns_none(self):
         with patch(
-            "app.fastapi_routes.xcagi_compat_product._products_compat_via_service_enabled",
+            "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
             return_value=True,
         ):
             assert xp._products_compat_preflight(self._req(), "create", {}) is None
@@ -300,12 +300,12 @@ class TestProductsCompatPreflight:
     def test_business_mod_blocked_returns_gate(self):
         with (
             patch(
-                "app.fastapi_routes.xcagi_compat_product._products_compat_via_service_enabled",
+                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value={"success": False, "message": "blocked"},
             ),
         ):
@@ -316,15 +316,15 @@ class TestProductsCompatPreflight:
         payload = {"id": 42}
         with (
             patch(
-                "app.fastapi_routes.xcagi_compat_product._products_compat_via_service_enabled",
+                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._product_parse_id", return_value=42),
+            patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=42),
         ):
             assert xp._products_compat_preflight(self._req(), "update", payload) is None
             assert payload["id"] == 42
@@ -332,15 +332,15 @@ class TestProductsCompatPreflight:
     def test_update_invalid_id_raises(self):
         with (
             patch(
-                "app.fastapi_routes.xcagi_compat_product._products_compat_via_service_enabled",
+                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._product_parse_id", return_value=None),
+            patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=None),
         ):
             with pytest.raises(HTTPException) as exc_info:
                 xp._products_compat_preflight(self._req(), "update", {"id": "bad"})
@@ -350,15 +350,15 @@ class TestProductsCompatPreflight:
         payload = {"id": 7}
         with (
             patch(
-                "app.fastapi_routes.xcagi_compat_product._products_compat_via_service_enabled",
+                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._product_parse_id", return_value=7),
+            patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=7),
         ):
             assert xp._products_compat_preflight(self._req(), "delete", payload) is None
 
@@ -366,12 +366,12 @@ class TestProductsCompatPreflight:
         payload = {"ids": [1, 2, 3]}
         with (
             patch(
-                "app.fastapi_routes.xcagi_compat_product._products_compat_via_service_enabled",
+                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -381,12 +381,12 @@ class TestProductsCompatPreflight:
         payload = {"product_ids": [4, 5]}
         with (
             patch(
-                "app.fastapi_routes.xcagi_compat_product._products_compat_via_service_enabled",
+                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -396,12 +396,12 @@ class TestProductsCompatPreflight:
     def test_batch_delete_not_list_raises(self):
         with (
             patch(
-                "app.fastapi_routes.xcagi_compat_product._products_compat_via_service_enabled",
+                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -412,12 +412,12 @@ class TestProductsCompatPreflight:
     def test_batch_delete_empty_raises(self):
         with (
             patch(
-                "app.fastapi_routes.xcagi_compat_product._products_compat_via_service_enabled",
+                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -428,12 +428,12 @@ class TestProductsCompatPreflight:
     def test_create_action_no_id_check(self):
         with (
             patch(
-                "app.fastapi_routes.xcagi_compat_product._products_compat_via_service_enabled",
+                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -525,7 +525,7 @@ class TestExecuteProductsCompatAction:
         ):
             # Falls through to PG path
             with patch(
-                "app.fastapi_routes.xcagi_compat_product.products_pg_insert_row", return_value=1
+                "app.legacy.routes.product.compat_routes.products_pg_insert_row", return_value=1
             ):
                 import app.domain.app_pure.excel_imports as _ei
 
@@ -547,7 +547,7 @@ class TestExecuteProductsCompatAction:
                     return_value=False,
                 ),
                 patch(
-                    "app.fastapi_routes.xcagi_compat_product.products_pg_insert_row",
+                    "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                     return_value=99,
                 ),
             ):
@@ -568,7 +568,7 @@ class TestExecuteProductsCompatAction:
                     return_value=False,
                 ),
                 patch(
-                    "app.fastapi_routes.xcagi_compat_product.products_pg_insert_row",
+                    "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                     side_effect=HTTPException(status_code=400, detail="dup"),
                 ),
             ):
@@ -589,7 +589,7 @@ class TestExecuteProductsCompatAction:
                     return_value=False,
                 ),
                 patch(
-                    "app.fastapi_routes.xcagi_compat_product.products_pg_insert_row",
+                    "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                     side_effect=RuntimeError("db down"),
                 ),
             ):
@@ -610,7 +610,7 @@ class TestExecuteProductsCompatAction:
                     return_value=False,
                 ),
                 patch(
-                    "app.fastapi_routes.xcagi_compat_product._product_parse_id", return_value=None
+                    "app.legacy.routes.product.compat_routes._product_parse_id", return_value=None
                 ),
             ):
                 result = xp._execute_products_compat_action("update", {"id": "bad"})
@@ -629,8 +629,8 @@ class TestExecuteProductsCompatAction:
                     "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                     return_value=False,
                 ),
-                patch("app.fastapi_routes.xcagi_compat_product._product_parse_id", return_value=5),
-                patch("app.fastapi_routes.xcagi_compat_product.products_pg_update_row"),
+                patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=5),
+                patch("app.legacy.routes.product.compat_routes.products_pg_update_row"),
             ):
                 result = xp._execute_products_compat_action("update", {"id": 5})
                 assert result["success"] is True
@@ -648,9 +648,9 @@ class TestExecuteProductsCompatAction:
                     "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                     return_value=False,
                 ),
-                patch("app.fastapi_routes.xcagi_compat_product._product_parse_id", return_value=5),
+                patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=5),
                 patch(
-                    "app.fastapi_routes.xcagi_compat_product.products_pg_update_row",
+                    "app.legacy.routes.product.compat_routes.products_pg_update_row",
                     side_effect=HTTPException(status_code=404, detail="not found"),
                 ),
             ):
@@ -670,9 +670,9 @@ class TestExecuteProductsCompatAction:
                     "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                     return_value=False,
                 ),
-                patch("app.fastapi_routes.xcagi_compat_product._product_parse_id", return_value=5),
+                patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=5),
                 patch(
-                    "app.fastapi_routes.xcagi_compat_product.products_pg_update_row",
+                    "app.legacy.routes.product.compat_routes.products_pg_update_row",
                     side_effect=RuntimeError("db err"),
                 ),
             ):
@@ -688,7 +688,7 @@ class TestExecuteProductsCompatAction:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._product_parse_id", return_value=None),
+            patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=None),
         ):
             result = xp._execute_products_compat_action("delete", {"id": "bad"})
             assert result["success"] is False
@@ -700,8 +700,8 @@ class TestExecuteProductsCompatAction:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._product_parse_id", return_value=3),
-            patch("app.fastapi_routes.xcagi_compat_product.products_pg_delete_row"),
+            patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=3),
+            patch("app.legacy.routes.product.compat_routes.products_pg_delete_row"),
         ):
             result = xp._execute_products_compat_action("delete", {"id": 3})
             assert result["success"] is True
@@ -712,9 +712,9 @@ class TestExecuteProductsCompatAction:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._product_parse_id", return_value=3),
+            patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=3),
             patch(
-                "app.fastapi_routes.xcagi_compat_product.products_pg_delete_row",
+                "app.legacy.routes.product.compat_routes.products_pg_delete_row",
                 side_effect=HTTPException(status_code=404, detail="nf"),
             ),
         ):
@@ -728,9 +728,9 @@ class TestExecuteProductsCompatAction:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.xcagi_compat_product._product_parse_id", return_value=3),
+            patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=3),
             patch(
-                "app.fastapi_routes.xcagi_compat_product.products_pg_delete_row",
+                "app.legacy.routes.product.compat_routes.products_pg_delete_row",
                 side_effect=RuntimeError("db"),
             ),
         ):
@@ -763,7 +763,7 @@ class TestExecuteProductsCompatAction:
                 return_value=False,
             ),
             patch(
-                "app.fastapi_routes.xcagi_compat_product.products_pg_batch_delete_rows",
+                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                 return_value=(2, [3]),
             ),
         ):
@@ -779,7 +779,7 @@ class TestExecuteProductsCompatAction:
                 return_value=False,
             ),
             patch(
-                "app.fastapi_routes.xcagi_compat_product.products_pg_batch_delete_rows",
+                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                 return_value=(2, []),
             ),
         ):
@@ -793,7 +793,7 @@ class TestExecuteProductsCompatAction:
                 return_value=False,
             ),
             patch(
-                "app.fastapi_routes.xcagi_compat_product.products_pg_batch_delete_rows",
+                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                 return_value=(1, "skipped-id"),
             ),
         ):
@@ -807,7 +807,7 @@ class TestExecuteProductsCompatAction:
                 return_value=False,
             ),
             patch(
-                "app.fastapi_routes.xcagi_compat_product.products_pg_batch_delete_rows",
+                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                 return_value=(1, 0),
             ),
         ):
@@ -821,7 +821,7 @@ class TestExecuteProductsCompatAction:
                 return_value=False,
             ),
             patch(
-                "app.fastapi_routes.xcagi_compat_product.products_pg_batch_delete_rows",
+                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                 side_effect=RuntimeError("db"),
             ),
         ):
@@ -1003,7 +1003,7 @@ class TestProductsPriceListWordResponse:
                 return_value=(tpl, "tpl.docx"),
             ),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._load_products_all_for_export",
+                "app.legacy.routes.product.compat_routes._load_products_all_for_export",
                 return_value=[],
             ),
             patch(
@@ -1027,7 +1027,7 @@ class TestProductsPriceListWordResponse:
                 return_value=(tpl, "tpl.docx"),
             ),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._load_products_all_for_export",
+                "app.legacy.routes.product.compat_routes._load_products_all_for_export",
                 return_value=[{"name": "P1"}],
             ),
             patch(
@@ -1052,7 +1052,7 @@ class TestProductsPriceListWordResponse:
                 return_value=(tpl, "tpl.docx"),
             ),
             patch(
-                "app.fastapi_routes.xcagi_compat_product._load_products_all_for_export",
+                "app.legacy.routes.product.compat_routes._load_products_all_for_export",
                 return_value=[],
             ),
             patch(

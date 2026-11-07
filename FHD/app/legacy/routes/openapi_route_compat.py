@@ -34,7 +34,7 @@ class EffectiveRoute:
 def _join_route_path(prefix: str, path: str) -> str:
     if not prefix:
         return path or ""
-    if not path or path == "/":
+    if not path:
         return prefix or "/"
     return prefix.rstrip("/") + (path if path.startswith("/") else f"/{path}")
 
@@ -55,13 +55,16 @@ def _route_view(route: Any, *, prefix: str = "") -> EffectiveRoute:
     )
 
 
-def iter_effective_routes(routes: Any, *, prefix: str = ""):
+def iter_effective_routes(routes: Any, *, prefix: str = "", include_mounts: bool = False):
     """Yield route-like views, expanding FastAPI 0.137 lazy included routers.
 
     FastAPI 0.137 keeps ``include_router()`` entries as private ``_IncludedRouter``
     objects in ``app.routes``. OpenAPI generation and request dispatch understand
     them, but tests and consistency scripts that inspect ``app.routes`` need a
     version-tolerant flattened view.
+
+    Conflict analysis can include Mount boundaries after their descendants. A
+    Mount claims its entire prefix, including paths absent from the child app.
     """
     for route in routes or []:
         contexts = getattr(route, "effective_route_contexts", None)
@@ -72,7 +75,11 @@ def iter_effective_routes(routes: Any, *, prefix: str = ""):
 
         if isinstance(route, Mount):
             mount_prefix = _join_route_path(prefix, str(getattr(route, "path", "") or ""))
-            yield from iter_effective_routes(getattr(route, "routes", []), prefix=mount_prefix)
+            yield from iter_effective_routes(
+                getattr(route, "routes", []), prefix=mount_prefix, include_mounts=include_mounts
+            )
+            if include_mounts:
+                yield _route_view(route, prefix=prefix)
             continue
 
         yield _route_view(route, prefix=prefix)

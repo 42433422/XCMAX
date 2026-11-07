@@ -1,12 +1,12 @@
 """Cross-service payment contract surface.
 
-This module is the single source of truth that ``payment_api``, ``webhook_api``,
+This module is the single source of truth that ``api.payment_routes``, ``webhook_api``,
 ``refund_api``, ``application/payment_gateway`` and the Java payment service
 must agree with. Changes here MUST be mirrored in:
 
 - ``docs/PAYMENT_CONTRACT.md``
-- ``modstore_server/payment_api.canonical_checkout_sign_data`` /
-  ``modstore_server/payment_api._amount_sign_str``
+- ``modstore_server.payment_common.canonical_checkout_sign_data`` /
+  ``modstore_server.payment_common._amount_sign_str``
 - ``com.modstore.service.SecurityService.canonicalCheckoutData``
 - ``com.modstore.event.EventContracts``
 - ``MODstore_deploy/market/src/api.ts`` and

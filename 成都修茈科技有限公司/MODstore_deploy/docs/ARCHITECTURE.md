@@ -81,11 +81,11 @@ NeuroDomain 在 MODstore 中表示“自治业务域”。每个域应有清晰�
 
 | NeuroDomain        | 现有代表文件                                                        | 领域职责                                 |
 | ------------------ | ------------------------------------------------------------------- | ---------------------------------------- |
-| CatalogDomain      | `catalog_api.py`、`catalog_store.py`、`market_api.py`               | 公网目录、本地包索引、检索、购买入口     |
+| CatalogDomain      | `api/catalog_public_routes.py`、`catalog_store.py`、`api/market_routes.py`               | 公网目录、本地包索引、检索、购买入口     |
 | AuthoringDomain    | `authoring.py`、`mod_ai_scaffold.py`、`mod_scaffold_runner.py`      | Mod 制作、AI 脚手架、manifest 读写与校验 |
 | EmployeeDomain     | `employee_api.py`、`employee_runtime.py`、`employee_pack_export.py` | AI 员工配置、员工包导出、员工运行态      |
 | WorkflowDomain     | `workflow_api/`、`workflow_engine.py`、`workflow_scheduler.py`    | 工作流图、沙盒运行、调度与变量           |
-| PaymentDomain      | `payment_api.py`、`java_payment_service/.../PaymentController.java` | 下单、支付回调、订单状态                 |
+| PaymentDomain      | `api/payment_routes.py`、`java_payment_service/.../PaymentController.java` | 下单、支付回调、订单状态                 |
 | WalletDomain       | `java_payment_service/.../WalletController.java`                    | 钱包余额、充值、交易记录                 |
 | EntitlementDomain  | `java_payment_service/.../EntitlementService.java`                  | 支付成功后的购买权益与套餐额度           |
 | LLMDomain          | `llm_api.py`、`llm_chat_proxy.py`、`llm_key_resolver.py`            | 模型目录、BYOK、对话代理、配额消耗       |
@@ -169,7 +169,7 @@ sequenceDiagram
 迁移原则：
 
 - Java 服务成为支付、钱包、权益的默认实现。
-- Python `payment_api.py` 保留为短期兼容路径，用于灰度和回滚。
+- Python `api/payment_routes.py` 保留为短期兼容路径，用于灰度和回滚。
 - FastAPI 网关只负责认证透传、路由代理、错误转换，不再承载支付业务规则。
 - 支付成功后的通知、统计、审计通过事件或 outbox 逐步解耦。
 
