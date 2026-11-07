@@ -254,6 +254,41 @@ def read_delivery_note_business(source: bytes | bytearray | str | Path) -> Parse
     )
 
 
+def dataset_from_business_rows(items: list[dict]) -> ParsedDataset | None:
+    """Shipment rows from the database-line model. A column title is not a row."""
+    rows: list[ParsedRow] = []
+    for index, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            continue
+        unit = _cell_text(item.get("purchase_unit")) or _cell_text(item.get("customer_name"))
+        product = _cell_text(item.get("product_name"))
+        quantity = item.get("quantity")
+        if (
+            not unit
+            or not product
+            or is_column_header_label(unit)
+            or is_column_header_label(product)
+            or not _is_quantity(quantity)
+        ):
+            continue
+        values = {"购买单位": unit, "产品名称": product, "数量": quantity}
+        for source_key, target in (("unit_price", "单价"), ("amount", "金额"), ("model", "型号")):
+            cell = _cell_text(item.get(source_key))
+            if cell and not is_column_header_label(cell):
+                values[target] = cell
+        rows.append(ParsedRow(
+            sheet="", row_number=index, values=values,
+            provenance={"source": "reviewed_candidate", "parser": "database_llm"},
+        ))
+    if not rows:
+        return None
+    headers = [name for name in ("购买单位", "产品名称", "数量", "单价", "金额", "型号") if any(name in row.values for row in rows)]
+    return ParsedDataset(
+        headers=headers, rows=rows,
+        source_features={"kind": "reviewed_candidate", "parser": "database_llm", "headers": headers, "sheet_name": "", "business_notes": []},
+    )
+
+
 def match_business_target(headers: list[str]) -> str:
     """Use a business target only when its required column names are all present."""
     present = {str(header).strip() for header in headers if str(header).strip()}

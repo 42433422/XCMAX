@@ -72,14 +72,17 @@ def degradation_code(exc: BaseException) -> str:
     return "ELT_LLM_UNAVAILABLE"
 
 
-def circuit_key() -> str:
+def circuit_key(lane: str = "") -> str:
+    """Template, database, and knowledge calls do not share one outage."""
     try:
         from app.application.elt.llm_session_provider import current_etl_llm_owner
 
         owner_user_id = current_etl_llm_owner()
     except RECOVERABLE_ERRORS:
         owner_user_id = None
-    return f"owner:{owner_user_id}" if owner_user_id is not None else "process"
+    base = f"owner:{owner_user_id}" if owner_user_id is not None else "process"
+    lane_name = str(lane or "").strip()
+    return f"{base}:{lane_name}" if lane_name else base
 
 
 def circuit_cooldown_seconds(code: str) -> float:

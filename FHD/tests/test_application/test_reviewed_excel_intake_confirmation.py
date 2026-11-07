@@ -659,3 +659,63 @@ def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch
         ("演示客户乙", "演示物料-螺母", 5),
         ("演示客户乙", "演示物料-弹垫", 2),
     ]
+
+
+def test_import_lanes_do_not_share_a_circuit(monkeypatch):
+    from unittest.mock import patch
+
+    from app.application.elt import llm_assist
+
+    with patch("app.application.elt.llm_session_provider.current_etl_llm_owner", return_value=7):
+        assert llm_assist._circuit_key() == "owner:7"
+        assert llm_assist._circuit_key("database") == "owner:7:database"
+        assert llm_assist._circuit_key("knowledge") == "owner:7:knowledge"
+        assert llm_assist._circuit_key("template") == "owner:7:template"
+
+
+def test_database_model_rows_drop_header_labels():
+    from app.application.elt.candidate_table import dataset_from_business_rows
+
+    dataset = dataset_from_business_rows(
+        [
+            {"purchase_unit": "产品名称", "product_name": "数量", "quantity": "1"},
+            {
+                "customer_name": "演示客户乙",
+                "product_name": "演示物料-螺母",
+                "quantity": "5",
+                "unit_price": "6.5",
+                "amount": "32.5",
+            },
+        ]
+    )
+    assert dataset is not None
+    assert len(dataset.rows) == 1
+    assert dataset.rows[0].values["购买单位"] == "演示客户乙"
+    assert dataset.rows[0].values["产品名称"] == "演示物料-螺母"
+
+
+def test_knowledge_line_calls_its_own_model(intake_store, monkeypatch, tmp_path):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    seen = {}
+
+    def knowledge(text):
+        seen["text"] = text
+        return LlmAssistResult(used_llm=True, data={"title": "送货单", "content": "演示客户乙 螺母 5"})
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setattr("app.application.elt.llm_assist.etl_llm_enabled", lambda: True)
+    monkeypatch.setattr("app.application.elt.llm_assist.advise_knowledge_import", knowledge)
+    with tenant_scope(1):
+        plan = intake_store.intake.knowledge_plan(
+            path=tmp_path / "missing.xlsx",
+            file_name="送货单",
+            note="",
+            owner_user_id=7,
+            source_text="送货单\n客户名称 演示客户乙",
+        )
+    assert seen["text"].startswith("送货单")
+    assert plan["lane"] == "knowledge"
+    assert plan["used_llm"] is True
+    assert plan["degraded"] is False
+    assert "螺母" in plan["content"]

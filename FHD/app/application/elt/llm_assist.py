@@ -56,6 +56,7 @@ def _bounded_structured_completion(
     timeout_seconds: float,
     conversation_service: Any | None,
     provider: Any | None,
+    max_repairs: int = 0,
 ):
     """Run one structured LLM call without letting a worker thread stall.
 
@@ -79,7 +80,7 @@ def _bounded_structured_completion(
                 max_tokens=max_tokens,
                 # A schema repair is another provider request.  ETL remains
                 # deterministic without it, so never retry advisory output.
-                max_repairs=0,
+                max_repairs=max_repairs,
                 timeout_seconds=timeout_seconds,
                 profile="etl",
                 conversation_service=conversation_service,
@@ -139,11 +140,13 @@ def _complete(
     *,
     schema: dict[str, Any],
     max_tokens: int,
+    lane: str = "",
+    max_repairs: int = 0,
 ) -> LlmAssistResult:
     mode = etl_llm_mode()
     if mode == "off":
         return LlmAssistResult()
-    circuit_key = _circuit_key()
+    circuit_key = _circuit_key(lane)
     circuit_degradation = _circuit_degradation(circuit_key)
     if circuit_degradation:
         return LlmAssistResult(
@@ -170,7 +173,7 @@ def _complete(
                 degraded=mode == "on",
                 degradation_code="ELT_LLM_UNAVAILABLE" if mode == "on" else "",
             )
-        timeout_seconds = etl_llm_timeout_seconds()
+        timeout_seconds = etl_llm_timeout_seconds() * (1 + max(0, max_repairs))
         try:
             result = _bounded_structured_completion(
                 messages,
@@ -179,6 +182,7 @@ def _complete(
                 timeout_seconds=timeout_seconds,
                 conversation_service=conversation_service,
                 provider=provider,
+                max_repairs=max_repairs,
             )
             return LlmAssistResult(
                 used_llm=True,
@@ -190,9 +194,11 @@ def _complete(
             degradation_code = _degradation_code(exc)
             _open_circuit(circuit_key, degradation_code)
             logger.info(
-                "general etl llm assist degraded (%s): %s",
+                "general etl llm assist degraded (%s lane=%s): %s %s",
                 degradation_code,
+                lane or "shared",
                 type(exc).__name__,
+                getattr(exc, "last_errors", ""),
             )
             return LlmAssistResult(
                 used_llm=True,
@@ -277,7 +283,7 @@ def advise_workbook_regions(probes: list[dict[str, Any]]) -> LlmAssistResult:
             ),
         },
     ]
-    result = _complete(messages, schema=_REGION_SCHEMA, max_tokens=1800)
+    result = _complete(messages, schema=_REGION_SCHEMA, max_tokens=1800, lane="template")
     allowed_ids = {item["region_id"] for item in bounded if item["region_id"]}
     normalized: list[dict[str, Any]] = []
     for item in list(result.data.get("regions") or []):
@@ -362,7 +368,7 @@ def advise_field_mappings(
             ),
         },
     ]
-    result = _complete(messages, schema=_MAPPING_SCHEMA, max_tokens=1600)
+    result = _complete(messages, schema=_MAPPING_SCHEMA, max_tokens=1600, lane="database")
     allowed_sources = set(headers)
     allowed_targets = {str(field.get("key") or "") for field in target_fields}
     normalized: list[dict[str, Any]] = []
@@ -456,7 +462,7 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
             ),
         },
     ]
-    result = _complete(messages, schema=_ROW_SCHEMA, max_tokens=1600)
+    result = _complete(messages, schema=_ROW_SCHEMA, max_tokens=1600, lane="database")
     normalized: list[dict[str, Any]] = []
     for item in list(result.data.get("items") or []):
         if not isinstance(item, dict):
@@ -479,9 +485,85 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
     return result
 
 
+
+
+_BUSINESS_IMPORT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["rows"],
+    "properties": {"rows": {"type": "array", "items": {"type": "object"}}},
+}
+_KNOWLEDGE_IMPORT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["content"],
+    "properties": {"title": {"type": "string"}, "content": {"type": "string"}},
+}
+
+
+def _cell(value: Any) -> str:
+    return str(value or "").strip()[:160]
+
+
+def advise_business_import(sheet_text: str) -> LlmAssistResult:
+    """Import archived sheet rows on the database line only."""
+    source = str(sheet_text or "").strip()
+    if not source:
+        return LlmAssistResult()
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你把归档原表导入业务数据库。只返回 JSON。"
+                "rows 的字段只能是 customer_name、purchase_unit、product_name、quantity、"
+                "unit_price、amount、model。只放货品明细。表头、合计、空行不要放入。"
+                "购买单位用单据上的客户，不要用列名。"
+            ),
+        },
+        {"role": "user", "content": source[:20_000]},
+    ]
+    result = _complete(
+        messages, schema=_BUSINESS_IMPORT_SCHEMA, max_tokens=1600, lane="database", max_repairs=1
+    )
+    rows = []
+    for item in list(result.data.get("rows") or [])[:100]:
+        if isinstance(item, dict):
+            rows.append({key: _cell(item.get(key)) for key in (
+                "customer_name", "purchase_unit", "product_name", "quantity",
+                "unit_price", "amount", "model",
+            )})
+    result.data = {"rows": rows}
+    return result
+
+
+def advise_knowledge_import(document_text: str) -> LlmAssistResult:
+    """Import one archived sheet on the knowledge line only."""
+    source = str(document_text or "").strip()
+    if not source:
+        return LlmAssistResult()
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你把归档原表导入知识库。只返回 JSON，包含 title 和 content。"
+                "content 保留客户、货品、数量、单价和金额，不要改成列名。"
+            ),
+        },
+        {"role": "user", "content": source[:20_000]},
+    ]
+    result = _complete(
+        messages, schema=_KNOWLEDGE_IMPORT_SCHEMA, max_tokens=1600, lane="knowledge", max_repairs=1
+    )
+    result.data = {
+        "title": _cell(result.data.get("title")),
+        "content": str(result.data.get("content") or "").strip()[:20_000],
+    }
+    return result
+
+
 __all__ = [
     "LlmAssistResult",
+    "advise_business_import",
     "advise_field_mappings",
+    "advise_knowledge_import",
     "advise_row_decisions",
     "advise_workbook_regions",
     "clear_etl_llm_circuit",

@@ -1597,14 +1597,26 @@ def reviewed_excel_intake_preview(
             if source.tenant_id != tenant:
                 raise HTTPException(status_code=403, detail="无权使用该入库预演")
             path = staged_path = Path(source.storage_path)
+            from app.application.elt.auto_ingest_service import workbook_text
             from app.application.elt.candidate_table import (
+                dataset_from_business_rows,
                 match_business_target,
                 read_candidate_table,
                 read_delivery_note_business,
             )
+            from app.application.elt.llm_assist import advise_business_import, etl_llm_enabled
 
+            original_text = workbook_text(original)
+            business_llm = advise_business_import(original_text) if etl_llm_enabled() else None
+            ai_table = None
+            if business_llm is not None and business_llm.used_llm and not business_llm.degraded:
+                ai_table = dataset_from_business_rows(list(business_llm.data.get("rows") or []))
             delivery = read_delivery_note_business(original)
-            if delivery is not None:
+            if ai_table is not None:
+                chosen_table = ai_table
+                target_type = "shipment_records"
+                detection_reason = "database_llm"
+            elif delivery is not None:
                 chosen_table = delivery
                 target_type = "shipment_records"
                 detection_reason = "delivery_note_business_rows"
@@ -1616,6 +1628,9 @@ def reviewed_excel_intake_preview(
                 "target_type": target_type,
                 "reason": detection_reason,
                 "confirmed": True,
+                "llm_lane": "database",
+                "used_llm": bool(business_llm and business_llm.used_llm),
+                "degraded": bool(business_llm and business_llm.degraded),
             }
             _authorize_intake(request, (tenant, owner), target_type)
             intake = get_auto_ingest_service()
@@ -1625,6 +1640,7 @@ def reviewed_excel_intake_preview(
                 note=composer_note.strip(),
                 owner_user_id=owner,
                 owned_upload_user_id=source.owner_user_id,
+                source_text=original_text,
             )
             preview_started = True
             business = service.create_preview(
@@ -1824,6 +1840,8 @@ async def reviewed_excel_save(
                         != confirmed_plan["mod_id"]
                     ):
                         raise HTTPException(status_code=409, detail="业务空间已变化，请重新预演")
+                    from app.application.elt.auto_ingest_service import workbook_text
+
                     get_auto_ingest_service().validate_prepared(
                         db,
                         plan=confirmed_plan,
@@ -1832,6 +1850,7 @@ async def reviewed_excel_save(
                         tenant_id=tenant,
                         preview_revision=preview_revision,
                         owned_upload_user_id=upload.owner_user_id,
+                        source_text=workbook_text(body),
                     )
             except (HTTPException, EltError):
                 _release_failed_review(
