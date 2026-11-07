@@ -175,6 +175,23 @@ class PreviewWorkerMixin:
             run.stage = "preview_ready"
             run.progress = 100
             run.processed_rows = run.total_rows
+            from app.application.elt.audit import record_elt_audit
+
+            snapshot = load_json(run.summary_json, {}).get("source_snapshot") or {}
+            record_elt_audit(
+                db,
+                actor=owner_user_id,
+                action="elt_clean",
+                payload={
+                    "run_id": run.id,
+                    "upload_id": run.upload_id,
+                    "file_sha256": run.file_sha256,
+                    "snapshot_sha256": snapshot.get("sha256"),
+                    "rows": run.total_rows,
+                    "target_type": run.target_type,
+                    "outcome": "preview_ready",
+                },
+            )
             self._update_linked_companion_summary(db, run, status="preview_ready")
             publish_preview(db, run)
             finish_operation(db, operation)

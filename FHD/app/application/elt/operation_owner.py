@@ -13,10 +13,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import uuid4
 
-from sqlalchemy import Table, and_, event, func, or_, update
+from sqlalchemy import Table, and_, case, event, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltConflict
+from app.application.elt.service_support import utcnow
 from app.db.models.elt import EltRun
 from app.infrastructure.tenant_scope import tenant_id_for_write
 
@@ -190,12 +191,24 @@ def fail_operation(
         values["status"] = values["stage"] = "outcome_unknown" if outcome_unknown else "failed"
     if not outcome_unknown:
         values.update(operation_kind=None, operation_token=None, operation_lease_until=None)
+    columns = EltRun.__table__.c
+    values["executed_at"] = case(
+        (and_(columns.executed_rows > 0, columns.executed_at.is_(None)), utcnow()),
+        else_=columns.executed_at,
+    )
     result = _dml(
         db,
         update(_RUN_TABLE)
-        .where(*_scope(owner), EltRun.__table__.c.operation_token == owner.token)
+        .where(*_scope(owner), columns.operation_token == owner.token)
         .values(**values),
     )
+    if result.rowcount == 1:
+        _audit_terminal_failure(
+            db,
+            owner,
+            outcome="outcome_unknown" if outcome_unknown else "failed",
+            code=values["error_code"],
+        )
     db.commit()
     return bool(result.rowcount == 1)
 
@@ -234,6 +247,10 @@ def recover_stale_owner(db: Session, run: EltRun) -> bool:
     if not unknown:
         values.update(operation_kind=None, operation_token=None, operation_lease_until=None)
     columns = EltRun.__table__.c
+    values["executed_at"] = case(
+        (and_(columns.executed_rows > 0, columns.executed_at.is_(None)), utcnow()),
+        else_=columns.executed_at,
+    )
     result = _dml(
         db,
         update(_RUN_TABLE)
@@ -245,10 +262,48 @@ def recover_stale_owner(db: Session, run: EltRun) -> bool:
         .values(**values),
     )
     if result.rowcount:
+        _audit_terminal_failure(
+            db,
+            owner,
+            outcome="outcome_unknown" if unknown else "interrupted",
+            code=values["error_code"],
+        )
         db.commit()
         db.refresh(run)
         return True
     return False
+
+
+def _audit_terminal_failure(db: Session, owner: OperationOwner, *, outcome: str, code: str) -> None:
+    from app.application.elt.audit import record_elt_audit
+
+    row = db.execute(
+        select(
+            EltRun.upload_id,
+            EltRun.target_type,
+            EltRun.file_sha256,
+            EltRun.executed_rows,
+            EltRun.executed_at,
+        ).where(EltRun.id == owner.run_id)
+    ).one()
+    record_elt_audit(
+        db,
+        actor=owner.owner_user_id,
+        action="elt_exception",
+        payload={
+            "run_id": owner.run_id,
+            "upload_id": row.upload_id,
+            "target_type": row.target_type,
+            "file_sha256": row.file_sha256,
+            "outcome": outcome,
+            "error_code": code,
+            "operation_kind": owner.kind,
+            "executed_rows": int(row.executed_rows or 0),
+            "executed_at": row.executed_at
+            if isinstance(row.executed_at, str) or row.executed_at is None
+            else row.executed_at.isoformat(),
+        },
+    )
 
 
 @event.listens_for(Session, "before_flush")
