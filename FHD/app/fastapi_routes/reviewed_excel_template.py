@@ -1588,7 +1588,10 @@ def reviewed_excel_intake_preview(
             if source.tenant_id != tenant:
                 raise HTTPException(status_code=403, detail="无权使用该入库预演")
             path = staged_path = Path(source.storage_path)
-            from app.application.elt.candidate_table import match_business_target, read_candidate_table
+            from app.application.elt.candidate_table import (
+                match_business_target,
+                read_candidate_table,
+            )
 
             chosen_table = read_candidate_table(path)
             target_type = match_business_target(chosen_table.headers)

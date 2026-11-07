@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-
-import httpx
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from app.domain.shared_services.conversation.modstore_adapter import (
@@ -625,37 +624,33 @@ class TestChatCompletionSync:
         with pytest.raises(ValueError, match="未配置"):
             adapter.chat_completion_sync([{"role": "user", "content": "hi"}])
 
-    def test_success(self, monkeypatch):
+    @pytest.mark.parametrize("status", [200, 403])
+    def test_stream_response(self, monkeypatch, status):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "content": "hello sync",
-            "usage": {},
-            "success": True,
-        }
-        with patch("httpx.Client") as MockClient:
-            mock_client_instance = MagicMock()
-            mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
-            mock_client_instance.__exit__ = MagicMock(return_value=False)
-            mock_client_instance.post.return_value = mock_response
-            MockClient.return_value = mock_client_instance
+        calls = []
+        real_client = httpx.Client
+
+        def respond(request):
+            if request.method == "GET":
+                return httpx.Response(404, json={})
+            calls.append(request.url.path)
+            return httpx.Response(
+                status,
+                headers={"content-type": "text/event-stream"},
+                text='data: {"content":"hello sync"}\n\ndata: [DONE]\n\n',
+            )
+
+        monkeypatch.setattr(
+            httpx, "Client",
+            lambda **kwargs: real_client(**kwargs, transport=httpx.MockTransport(respond)),
+        )
+        if status == 200:
             result = adapter.chat_completion_sync([{"role": "user", "content": "hi"}])
             assert result["choices"][0]["message"]["content"] == "hello sync"
-
-    def test_error_status_raises(self, monkeypatch):
-        adapter = ModstorePlatformAdapter(platform_url="http://example.com")
-        mock_response = MagicMock()
-        mock_response.status_code = 403
-        mock_response.text = "Forbidden"
-        with patch("httpx.Client") as MockClient:
-            mock_client_instance = MagicMock()
-            mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
-            mock_client_instance.__exit__ = MagicMock(return_value=False)
-            mock_client_instance.post.return_value = mock_response
-            MockClient.return_value = mock_client_instance
+        else:
             with pytest.raises(ValueError, match="403"):
                 adapter.chat_completion_sync([{"role": "user", "content": "hi"}])
+        assert calls == ["/api/llm/chat/stream"]
 
 
 # ---------------------------------------------------------------------------

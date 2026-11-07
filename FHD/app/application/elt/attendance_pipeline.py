@@ -614,11 +614,12 @@ def _clock_text(value: str) -> str:
 
 
 def _business_exists(conn: sqlite3.Connection, business_id: str) -> bool:
-    for table in ("attendance_daily_records", "attendance_monthly_marks"):
+    for query in (
+        "SELECT 1 FROM attendance_daily_records WHERE business_id = ?",
+        "SELECT 1 FROM attendance_monthly_marks WHERE business_id = ?",
+    ):
         try:
-            if conn.execute(
-                f"SELECT 1 FROM {table} WHERE business_id = ?", (business_id,)
-            ).fetchone():
+            if conn.execute(query, (business_id,)).fetchone():
                 return True
         except sqlite3.OperationalError:
             continue
@@ -689,15 +690,16 @@ def _committed_rows(db_path: Path, rows: list[dict[str, Any]]) -> list[dict[str,
     try:
         found: dict[str, dict[str, Any]] = {}
         for start in range(0, len(ids), 500):
-            chunk = ids[start : start + 500]
-            marks = ",".join("?" * len(chunk))
+            chunk = (json.dumps(ids[start : start + 500]),)
             for record in conn.execute(
-                f"SELECT * FROM attendance_monthly_marks WHERE business_id IN ({marks})", chunk
+                "SELECT * FROM attendance_monthly_marks "
+                "WHERE business_id IN (SELECT value FROM json_each(?))", chunk
             ):
                 found[record["business_id"]] = {**dict(record), "source_sheet": record["source_sheet"]}
             for record in conn.execute(
                 "SELECT business_id, employee_name, employee_no, user_id, work_date, source_row, "
-                f"daily_times_json FROM attendance_daily_records WHERE business_id IN ({marks})",
+                "daily_times_json FROM attendance_daily_records "
+                "WHERE business_id IN (SELECT value FROM json_each(?))",
                 chunk,
             ):
                 times = json.loads(record["daily_times_json"] or "[]") + [None, None]

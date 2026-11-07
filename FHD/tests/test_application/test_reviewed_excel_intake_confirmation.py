@@ -1,5 +1,6 @@
 """Real prepared XLSX runs bind reviewed intake consent to scope and content."""
 
+import json
 from io import BytesIO
 from pathlib import Path
 from threading import Event
@@ -127,7 +128,7 @@ def review(store):
         "review_id": data["review_id"],
         "proposal_version": data["proposal"]["version"],
         "candidate_id": data["proposal"]["candidates"][0]["id"],
-        "selections": "[]",
+        "selections": json.dumps(data["proposal"]["candidates"][0]["clear"]),
         "name": "已确认客户",
         "composer_note": "核对客户数据",
     }
@@ -239,6 +240,32 @@ def test_exact_prepared_run_ingests_the_selected_candidate(
         assert db.get(EltRun, plan["run_id"]).status == "completed"
         assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
     assert len(store.rag.status(dataset_id="office-docking", tenant_id="1")["documents"]) == 1
+
+
+def test_selected_candidate_clears_are_not_recovered_from_original(intake_store, monkeypatch):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    store = intake_store
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete",
+        lambda *_args, **_kwargs: LlmAssistResult(
+            used_llm=True, provider="platform", model="synthetic",
+            data={"candidates": [{"clear": [
+                {"sheet": "客户", "cell": cell} for cell in ("B2", "A3", "B3")
+            ], "reason": "Remove one record and one private field"} for _ in range(3)]},
+        ),
+    )
+    data, plan, business = prepare(store)
+    assert business["summary"]["new"] == 1
+    assert plan["candidate_sha256"] != plan["source_sha256"]
+    saved = store.client.post(f"{BASE}/save", data=data)
+    assert saved.status_code == 200, saved.text
+    store.executor.futures[-1].result(timeout=10)
+    with tenant_scope(1), store.factory() as db:
+        customer = db.query(PurchaseUnit).one()
+        assert customer.unit_name == "确认客户甲"
+        assert not customer.contact_phone
+        assert db.get(EltRun, plan["run_id"]).status == "completed"
 
 
 def test_knowledge_changed_since_preview_requires_new_consent(intake_store):
