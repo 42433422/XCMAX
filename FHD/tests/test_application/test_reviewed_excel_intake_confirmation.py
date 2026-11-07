@@ -18,7 +18,7 @@ from app.application.elt import service_draft, service_execution, service_previe
 from app.application.elt.errors import EltError
 from app.application.elt.service import EltService
 from app.db.db_base import Base
-from app.db.models import PurchaseUnit
+from app.db.models import PurchaseUnit, ShipmentRecord
 from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.infrastructure.tenant_scope import tenant_scope
@@ -482,3 +482,180 @@ def test_prepared_upload_record_must_still_be_owned_and_live(intake_store, chang
     response = store.client.post(f"{BASE}/save", data=data)
     assert response.status_code == status, response.text
     assert_no_writes(store)
+
+
+def _delivery_note_bytes() -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "送货单"
+    sheet["A1"] = "送货单"
+    sheet["A2"] = "客户名称"
+    sheet["B2"] = "演示客户乙"
+    sheet["C2"] = "单据日期"
+    sheet["D2"] = "2026-11-07"
+    sheet["A3"] = "产品名称"
+    sheet["B3"] = "数量"
+    sheet["C3"] = "单价"
+    sheet["D3"] = "金额"
+    sheet["E3"] = "规格"
+    sheet["F3"] = "备注"
+    sheet["A4"] = "演示物料-螺母"
+    sheet["B4"] = 5
+    sheet["C4"] = 6.5
+    sheet["D4"] = 32.5
+    sheet["E4"] = "M10"
+    sheet["F4"] = "实机复测"
+    sheet["A5"] = "演示物料-弹垫"
+    sheet["B5"] = 2
+    sheet["C5"] = 3
+    sheet["D5"] = 6
+    sheet["E5"] = "M10"
+    sheet["F5"] = "实机复测"
+    sheet["A6"] = "合计"
+    sheet["B6"] = 7
+    sheet["D6"] = 38.5
+    stream = BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    return stream.getvalue()
+
+
+def test_degraded_header_label_is_not_master_data():
+    from app.application.elt.targets.helpers import degraded_header_master
+
+    degraded = {
+        "degraded": True,
+        "degradation_code": "ELT_LLM_UNAVAILABLE",
+        "used_llm": False,
+    }
+    assert degraded_header_master(degraded, {"customer_name": "产品名称"})
+    assert not degraded_header_master(
+        {"degraded": False, "used_llm": True}, {"customer_name": "产品名称"}
+    )
+    assert not degraded_header_master(degraded, {"customer_name": "演示客户乙"})
+
+
+def test_header_label_customer_preview_does_not_insert(intake_store):
+    from app.application.elt.targets.customers import CustomerAdapter
+
+    with tenant_scope(1), intake_store.factory() as db:
+        decision = CustomerAdapter().preview(
+            db,
+            {"customer_name": "产品名称"},
+            allowed_update_fields=set(),
+            context={},
+        )
+    assert decision.action == "error"
+    assert decision.reason == "header_label_not_master_data"
+
+
+def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch):
+    """A template clear of the item lines must still commit those lines as shipments."""
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    store = intake_store
+    cleared = [
+        {"sheet": "送货单", "cell": cell}
+        for cell in ("A4", "B4", "C4", "D4", "E4", "F4", "A5", "B5", "C5", "D5", "E5", "F5")
+    ]
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete",
+        lambda *_args, **_kwargs: LlmAssistResult(
+            used_llm=True,
+            provider="platform",
+            model="synthetic",
+            data={
+                "candidates": [{"clear": cleared, "reason": "blank the lines"} for _ in range(3)]
+            },
+        ),
+    )
+    # The desktop model kept the whole note. Structural regions split it, so the
+    # preview fixture returns that filled sheet instead of one overlapping slice.
+    monkeypatch.setattr(
+        routes,
+        "derive_document_workbook",
+        lambda body, fragments, **_kwargs: body,
+    )
+    body = _delivery_note_bytes()
+    classified = store.client.post(
+        "/api/templates/reviewed-excel/classify",
+        files={"files": ("送货单.xlsx", body)},
+        data={"expected_actor": "1:7"},
+    )
+    assert classified.status_code == 200, classified.text
+    result = classified.json()["files"][0]
+    # The rule partition overlaps the banner and the item table on the header row.
+    # Separate them the way a person confirms one delivery note.
+    labels = []
+    for sheet in result["sheets"]:
+        for region in sheet["regions"]:
+            area = region["range"]
+            if area == "A1:D3":
+                area = "A1:D2"
+            labels.append(
+                {
+                    "sheet": sheet["sheet"],
+                    "original_range": region["range"],
+                    "range": area,
+                    "labels": ["delivery"],
+                }
+            )
+    confirmed = store.client.post(
+        f"/api/templates/reviewed-excel/classifications/{result['classification_id']}/confirm",
+        data={"version": result["version"], "labels_json": json.dumps(labels)},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    confirmed_body = confirmed.json()
+    form = {
+        "expected_actor": "1:7",
+        "use_login_notice": "true",
+        "classification_id": result["classification_id"],
+        "classification_version": confirmed_body["version"],
+        "region_sheet": confirmed_body["sheets"][0]["sheet"],
+        "region_range": confirmed_body["sheets"][0]["regions"][0]["range"],
+    }
+    response = store.client.post(
+        f"{BASE}/preview",
+        files={"file": ("送货单.xlsx", body)},
+        data=form,
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    proposal = payload["proposal"]
+    candidate = next(item for item in proposal["candidates"] if item["clear"])
+    data = {
+        "review_id": payload["review_id"],
+        "proposal_version": proposal["version"],
+        "candidate_id": candidate["id"],
+        "selections": json.dumps(candidate["clear"]),
+        "name": "送货单",
+        "composer_note": "",
+    }
+    preview = store.client.post(f"{BASE}/intake-preview", data=data)
+    assert preview.status_code == 200, preview.text
+    plan = preview.json()["intake"]
+    assert plan["target_type"] == "shipment_records"
+    store.executor.futures[-1].result(timeout=10)
+    with tenant_scope(1), store.factory() as db:
+        business = store.service.get_run(db, run_id=plan["run_id"], owner_user_id=7)
+    assert business["status"] == "preview_ready", business
+    assert business["summary"]["new"] == 2
+    saved = store.client.post(
+        f"{BASE}/save",
+        data={
+            **data,
+            "private_intake": "true",
+            "intake_run_id": plan["run_id"],
+            "preview_revision": business["preview_revision"],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    store.executor.futures[-1].result(timeout=10)
+    with tenant_scope(1), store.factory() as db:
+        units = [row.unit_name for row in db.query(PurchaseUnit).all()]
+        shipments = db.query(ShipmentRecord).order_by(ShipmentRecord.id).all()
+    assert units == ["演示客户乙"]
+    assert [(row.purchase_unit, row.product_name, row.quantity_tins) for row in shipments] == [
+        ("演示客户乙", "演示物料-螺母", 5),
+        ("演示客户乙", "演示物料-弹垫", 2),
+    ]

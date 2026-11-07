@@ -14,6 +14,7 @@ from app.application.elt.targets.helpers import (
     decimal_or_none,
     decimal_or_zero,
     integer_or_zero,
+    is_column_header_label,
     issue,
     optional_text,
     parse_date,
@@ -263,7 +264,33 @@ class ShipmentAdapter(TargetAdapter):
             return False
         return isinstance(parsed, dict) and str(parsed.get("etl_run_id") or "") == expected
 
+    @staticmethod
+    def _ensure_purchase_unit(db, name: str) -> None:
+        """业务记录 lists units from purchase_units, so the shipment's customer must exist."""
+        from app.application.elt.targets.customer_product_support import owned_query
+        from app.db.models.purchase_unit import PurchaseUnit
+
+        unit_name = str(name or "").strip()
+        if not unit_name or is_column_header_label(unit_name):
+            return
+        if owned_query(db, PurchaseUnit).filter(PurchaseUnit.unit_name == unit_name).first():
+            return
+        db.add(PurchaseUnit(tenant_id=tenant_id_for_write(), unit_name=unit_name, is_active=True))
+        db.flush()
+
     def preview(self, db, data, *, allowed_update_fields, context):
+        if is_column_header_label(data.get("purchase_unit")):
+            return PreviewDecision(
+                "error",
+                issues=[
+                    issue(
+                        "ELT_HEADER_LABEL_NOT_MASTER_DATA",
+                        "purchase_unit",
+                        "表头文字不能写入购买单位",
+                    )
+                ],
+                reason="header_label_not_master_data",
+            )
         issues = self.validate(data)
         if data.get("quantity_kg") in (None, "") and data.get("quantity_tins") in (None, ""):
             issues.append(issue("ELT_QUANTITY_REQUIRED", "quantity_kg", "公斤数或桶数至少填写一项"))
@@ -402,6 +429,7 @@ class ShipmentAdapter(TargetAdapter):
                 "发货记录在预演后已存在，请重新预演",
                 status_code=409,
             )
+        self._ensure_purchase_unit(db, str(data.get("purchase_unit") or ""))
         parsed = {
             "external_order_no": data.get("external_order_no"),
             "etl_run_id": context.get("run_id"),

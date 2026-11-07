@@ -1581,8 +1581,8 @@ def reviewed_excel_intake_preview(
             key = _intake_selection_key(
                 review, proposal_version, candidate_id, selected, name, composer_note
             )
-            # The person already chose this candidate. Preview and later writes use
-            # that workbook, not a second parse of the untouched original.
+            # The cleaned workbook is the template. A delivery note's item rows are
+            # read from the filled source, because template clears blank those lines.
             original = _source(db, review, tenant, owner)
             chosen = clean_workbook(original, review.file_sha256, selected)
             service = get_elt_service()
@@ -1600,13 +1600,21 @@ def reviewed_excel_intake_preview(
             from app.application.elt.candidate_table import (
                 match_business_target,
                 read_candidate_table,
+                read_delivery_note_business,
             )
 
-            chosen_table = read_candidate_table(path)
-            target_type = match_business_target(chosen_table.headers)
+            delivery = read_delivery_note_business(original)
+            if delivery is not None:
+                chosen_table = delivery
+                target_type = "shipment_records"
+                detection_reason = "delivery_note_business_rows"
+            else:
+                chosen_table = read_candidate_table(path)
+                target_type = match_business_target(chosen_table.headers)
+                detection_reason = "candidate_headers"
             detection = {
                 "target_type": target_type,
-                "reason": "candidate_headers",
+                "reason": detection_reason,
                 "confirmed": True,
             }
             _authorize_intake(request, (tenant, owner), target_type)

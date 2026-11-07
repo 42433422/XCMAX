@@ -32,6 +32,7 @@ from app.application.elt.service_support import (
     safe_error,
 )
 from app.application.elt.targets import TargetAdapter, get_adapter
+from app.application.elt.targets.helpers import degraded_header_master
 from app.application.elt.transforms import ALLOWED_TRANSFORMS
 from app.application.elt.transforms import map_row_with_issues as _map_row_with_issues
 from app.db.models.elt import EltRun, EltRunRow
@@ -409,6 +410,12 @@ class DraftServiceMixin:
             for (row, _payload), advisory in zip(advisory_jobs, suggestions, strict=False):
                 row.llm_suggestion_json = dump_json(advisory)
                 llm_degraded = llm_degraded or bool(advisory.get("degraded"))
+                if degraded_header_master(advisory, load_json(row.normalized_json, {})):
+                    action = row.final_action
+                    if action in {"new", "update"}:
+                        counts[action] = counts.get(action, 0) - 1
+                        row.final_action = "skip"
+                        counts["skip"] = counts.get("skip", 0) + 1
         self._set_run_counts(run, counts)
         summary = load_json(run.summary_json, {})
         summary["llm_degraded"] = llm_degraded

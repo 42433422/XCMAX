@@ -9,7 +9,7 @@ from app.application.elt.targets.customer_product_support import (
     customer_values,
     owned_query,
 )
-from app.application.elt.targets.helpers import optional_text
+from app.application.elt.targets.helpers import is_column_header_label, issue, optional_text
 from app.application.elt.targets.rollback_compare_swap import delete_created_row, restore_fields
 from app.application.elt.targets.targets_base import (
     PreviewDecision,
@@ -37,6 +37,18 @@ class CustomerAdapter(TargetAdapter):
     )
 
     def preview(self, db, data, *, allowed_update_fields, context):
+        if is_column_header_label(data.get("customer_name")):
+            return PreviewDecision(
+                "error",
+                issues=[
+                    issue(
+                        "ELT_HEADER_LABEL_NOT_MASTER_DATA",
+                        "customer_name",
+                        "表头文字不能写入客户主数据",
+                    )
+                ],
+                reason="header_label_not_master_data",
+            )
         issues = self.validate(data)
         if issues:
             return PreviewDecision("error", issues=issues, reason="validation_failed")
