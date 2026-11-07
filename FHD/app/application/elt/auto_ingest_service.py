@@ -16,11 +16,11 @@ import threading
 from contextvars import copy_context
 from datetime import UTC, datetime
 from io import BytesIO
-from openpyxl import load_workbook
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltError
@@ -127,8 +127,6 @@ def workbook_text(source: bytes | bytearray) -> str:
 def _extract_text(path: Path, *, owned_upload_user_id: int | None = None) -> str:
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xlsm"}:
-        from openpyxl import load_workbook
-
         with open_etl_input_file(path, owner_user_id=owned_upload_user_id) as stream:
             workbook = load_workbook(stream, read_only=True, data_only=True, keep_links=False)
             try:
