@@ -36,6 +36,23 @@ describe('public API base injection', () => {
     expect(transformHtml('/fhd-api', configured)).toBe(configured)
   })
 
+  it.each(['</script\t\n bar>', '</script ignored=">">'])('recognizes an active script closed by %s', (endTag) => {
+    const configured = `<html><head><script>window.__XCMAX_API_BASE__="/custom-api"${endTag}</head><body></body></html>`
+    const document = new DOMParser().parseFromString(configured, 'text/html')
+    expect(document.scripts[0].textContent).toBe('window.__XCMAX_API_BASE__="/custom-api"')
+    expect(transformHtml('/fhd-api', configured)).toBe(configured)
+  })
+
+  it('does not treat inert template scripts as active configuration', () => {
+    const template = '<template><script>window.__XCMAX_API_BASE__="/template-only"</script></template>'
+    const result = transformHtml('/fhd-api', `<html><head>${template}</head><body></body></html>`)
+    const document = new DOMParser().parseFromString(result, 'text/html')
+    expect(Array.from(document.scripts).map((script) => script.textContent)).toEqual([
+      'window.__XCMAX_API_BASE__="/fhd-api"',
+    ])
+    expect(result).toContain(template)
+  })
+
   it('leaves the index unchanged when no prefix is configured', () => {
     expect(transformHtml('')).toBe(indexHtml)
   })
