@@ -97,6 +97,7 @@ def _client(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(workspace / "app-data"))
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
     monkeypatch.delenv("XCAGI_TX_FAULT", raising=False)
     source = workspace / "source.xlsx"
