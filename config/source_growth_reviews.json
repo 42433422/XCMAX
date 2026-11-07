@@ -112,9 +112,9 @@
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
       "base_file": "FHD/app/fastapi_routes/reviewed_excel_template.py",
       "base_blob": "d89361f68dbd53f1792435f686a38dd6c8a74e47",
-      "head_blob": "4f1e744c8c291de2e21581447b1e9b15266c4512",
+      "head_blob": "6d047420ea65640669ce1b09d7229f64537b4a3d",
       "before_lines": 2030,
-      "after_lines": 2089,
+      "after_lines": 2088,
       "reason": "Return per-row slice disposition and preserve each parallel region review state.",
       "boundary": "Existing reviewed Excel endpoints only; old direct execute endpoint stays removed.",
       "validation": "Auto-slice row coverage and selected candidate confirmation route tests.",
@@ -208,7 +208,7 @@
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
       "base_blob": "acf93ca707e3e1d434ccacaf41d61ce3fcb427bf",
-      "head_blob": "09789afc80c01aa88514979ea320baf1d573d51e",
+      "head_blob": "23cc0273079d051c31c87e73d3751e834c3cbf55",
       "before_lines": 936,
       "after_lines": 1021,
       "reason": "Reviewed intake now prepares the knowledge-import lane from the archived workbook text, records the source hash and preserves the deterministic preview/confirmation boundary.",
