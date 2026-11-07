@@ -309,14 +309,14 @@ def test_audited_stream_keeps_provider_body_and_parsed_result(monkeypatch):
     from app.application.reviewed_excel_template import _template_platform_complete
 
     sse = (
-        'event: meta\ndata: {"ok":true,"provider":"xiaomi","model":"mimo-v2.6-flash"}\n\n'
-        'event: status\ndata: {"state":"processing","request_id":"upstream-synthetic"}\n\n'
-        'event: delta\ndata: {"delta":"{"}\n\n'
-        'event: delta\ndata: {"delta":"}"}\n\n'
-        'event: done\ndata: {"ok":true,"content":"{}","provider":"xiaomi",'
-        '"model":"mimo-v2.6-flash"}\n\n'
-        "event: tail\ndata: after-done\n\n"
-    ).encode()
+        b'event: meta\ndata: {"ok":true,"provider":"xiaomi","model":"mimo-v2.6-flash"}\n\n'
+        b'event: status\ndata: {"state":"processing","request_id":"upstream-synthetic"}\n\n'
+        b'event: delta\ndata: {"delta":"{"}\n\n'
+        b'event: delta\ndata: {"delta":"}"}\n\n'
+        b'event: done\ndata: {"ok":true,"content":"{}","provider":"xiaomi",'
+        b'"model":"mimo-v2.6-flash"}\n\n'
+        b"event: tail\ndata: after-done\n\n"
+    )
 
     class Chunked(httpx.AsyncByteStream):
         def __init__(self, payload: bytes):
