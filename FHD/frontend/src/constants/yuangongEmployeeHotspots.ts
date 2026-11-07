@@ -1,6 +1,5 @@
 /**
  * `员工.png`（576×1024）上的可点击功能区，坐标为相对原图的百分比 0–100。
- * 量法与 `yuangongStitchHotspots.ts` 相同。
  */
 export type YuangongEmployeeHotspot = {
   id: string

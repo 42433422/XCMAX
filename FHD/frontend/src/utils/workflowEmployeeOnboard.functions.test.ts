@@ -46,7 +46,6 @@ vi.mock('@/constants/enterpriseModStack', () => ({
 import {
   collectDeskEmployeeIdsFromCatalogItem,
   autoOnboardInstalledMarketItem,
-  autoOnboardWorkflowEmployeesForMod,
   autoOnboardWorkflowEmployeesFromMods,
 } from './workflowEmployeeOnboard'
 
@@ -141,13 +140,6 @@ describe('workflowEmployeeOnboard', () => {
       const item = { id: 'mod1', pkg_id: 'mod1', artifact: 'other' }
       await autoOnboardInstalledMarketItem(item)
       expect(reloadEmployeePacks).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('autoOnboardWorkflowEmployeesForMod (deprecated)', () => {
-    it('returns onboarded ids array', async () => {
-      const result = await autoOnboardWorkflowEmployeesForMod('mod1')
-      expect(Array.isArray(result)).toBe(true)
     })
   })
 
