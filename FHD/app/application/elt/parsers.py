@@ -16,6 +16,12 @@ from app.application.elt.parser_structure import (
     is_footer_or_note_row,
     is_repeated_header,
 )
+from app.application.elt.parser_table_structure import (
+    load_sheet_segmentations,
+    plan_rows,
+    structured_layout,
+    table_values,
+)
 from app.application.elt.parser_target_match import (
     covers_required_target_fields,
     target_header_hints,
@@ -105,10 +111,20 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             probe = list(worksheet.iter_rows(min_row=1, max_row=60, values_only=True))
             layout = detect_table_layout(probe, header_hints=header_hints)
             candidates.append((worksheet, layout))
+        segmentations = (
+            load_sheet_segmentations(path)
+            if any(layout is not None for _, layout in candidates)
+            else {}
+        )
+        candidates = [
+            (worksheet, structured_layout(segmentations.get(worksheet.title), layout, header_hints))
+            for worksheet, layout in candidates
+        ]
         any_target_match = any(
             layout is not None and layout.matched_hint_count > 0 for _, layout in candidates
         )
         aligned_headers = _aligned_headers_by_sheet(candidates, target_type)
+        excluded_rows: list[dict[str, Any]] = []
 
         for worksheet, layout in candidates:
             if layout is None:
@@ -134,51 +150,81 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             }
             all_headers.extend(header for header in headers if header not in all_headers)
             sheet_count = 0
-            for row_number, values in enumerate(
+            plan = plan_rows(segmentations.get(worksheet.title), layout.header_end + 1)
+            for row_number, row_values in enumerate(
                 worksheet.iter_rows(min_row=layout.header_end + 2, values_only=True),
                 start=layout.header_end + 2,
             ):
-                if is_repeated_header(values, layout.headers):
+                if plan is not None:
+                    tables = plan.tables_by_row.get(row_number)
+                    if not tables:
+                        if any(value not in (None, "") for value in row_values):
+                            role, reason = plan.exclude(row_number)
+                            excluded_rows.append(
+                                {
+                                    "sheet": worksheet.title,
+                                    "row": row_number,
+                                    "role": role,
+                                    "reason": reason,
+                                }
+                            )
+                        continue
+                    slices = [
+                        (table, table_values(row_values, table, plan, len(headers)))
+                        for table in tables
+                    ]
+                elif is_repeated_header(row_values, layout.headers):
                     repeated_header_count += 1
                     continue
-                if is_footer_or_note_row(values):
+                elif is_footer_or_note_row(row_values):
                     footer_count += 1
                     continue
-                data = {
-                    headers[index]: value
-                    for index, value in enumerate(values[: len(headers)])
-                    if value not in (None, "")
-                }
-                if not data:
-                    continue
-                if len(result) >= max_rows:
-                    raise EltError(
-                        "ELT_ROW_LIMIT_EXCEEDED",
-                        f"文件超过 {max_rows} 行限制",
-                        status_code=413,
-                    )
-                result.append(
-                    ParsedRow(
-                        sheet=worksheet.title,
-                        row_number=row_number,
-                        values=data,
-                        provenance={
-                            "sheet": worksheet.title,
-                            "row": row_number,
-                            "original_fragment": {
-                                layout.headers[index]: value
-                                for index, value in enumerate(values[: len(headers)])
-                            },
-                            "header_aliases": header_aliases,
-                            "columns": {headers[index]: index + 1 for index in range(len(headers))},
-                            "header_rows": {
-                                "start": layout.header_start + 1,
-                                "end": layout.header_end + 1,
-                            },
+                else:
+                    slices = [(None, row_values)]
+                for table, values in slices:
+                    data = {
+                        headers[index]: value
+                        for index, value in enumerate(values[: len(headers)])
+                        if value not in (None, "")
+                    }
+                    if not data:
+                        continue
+                    if len(result) >= max_rows:
+                        raise EltError(
+                            "ELT_ROW_LIMIT_EXCEEDED",
+                            f"文件超过 {max_rows} 行限制",
+                            status_code=413,
+                        )
+                    offset = table.min_col - 1 if table is not None else 0
+                    provenance = {
+                        "sheet": worksheet.title,
+                        "row": row_number,
+                        "original_fragment": {
+                            layout.headers[index]: value
+                            for index, value in enumerate(values[: len(headers)])
                         },
+                        "header_aliases": header_aliases,
+                        "columns": {
+                            headers[index]: offset + index + 1 for index in range(len(headers))
+                        },
+                        "header_rows": {
+                            "start": layout.header_start + 1,
+                            "end": layout.header_end + 1,
+                        },
+                    }
+                    if table is not None:
+                        provenance["table_id"] = table.table_id
+                        provenance["table_range"] = table.range_ref()
+                        provenance["table_title"] = table.title
+                    result.append(
+                        ParsedRow(
+                            sheet=worksheet.title,
+                            row_number=row_number,
+                            values=data,
+                            provenance=provenance,
+                        )
                     )
-                )
-                sheet_count += 1
+                    sheet_count += 1
             sheets.append(
                 {
                     "name": worksheet.title,
@@ -192,8 +238,14 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                     "aligned_headers": list(headers),
                     "header_aliases": header_aliases,
                     "row_count": sheet_count,
+                    **({"table_structure": plan.public()} if plan is not None else {}),
                 }
             )
+            if plan is not None:
+                repeated_header_count += plan.excluded_counts["repeated_header"]
+                footer_count += sum(
+                    plan.excluded_counts[role] for role in ("summary", "note", "form_info")
+                )
         complete = True
     finally:
         if not complete:
@@ -232,6 +284,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             "skipped_sheets": skipped_sheets,
             "headers": all_headers,
             "structure_detection": "deterministic_v2",
+            "excluded_rows": excluded_rows,
         },
         warnings=warnings,
     )
