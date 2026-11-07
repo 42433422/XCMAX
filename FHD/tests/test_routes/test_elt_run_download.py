@@ -12,12 +12,12 @@ from app.application.elt.result_export import write_xlsx_result
 from app.application.elt.service_support import dump_json
 from app.db.models.elt import EltRun, EltUpload
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.test_routes.test_elt_sources import source_client
+from tests.test_routes.test_elt_sources import source_client as source_client
 
 
 @pytest.fixture
-def download_store(source_client, monkeypatch):  # noqa: F811
-    store = source_client
+def download_store(request, monkeypatch):
+    store = request.getfixturevalue("source_client")
     monkeypatch.setattr(service_targets, "get_app_data_dir", lambda: str(store.root))
     run_id = "download-regression"
     path = store.root / "etl" / "exports" / f"etl-{run_id}.xlsx"
