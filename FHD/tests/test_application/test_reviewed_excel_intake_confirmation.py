@@ -689,6 +689,12 @@ def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch
         business = store.service.get_run(db, run_id=plan["run_id"], owner_user_id=7)
     assert business["status"] == "preview_ready", business
     assert business["summary"]["new"] == 2
+    assert business["details"]["entities"] == {
+        "customers": 0,
+        "purchase_units": 1,
+        "products": 2,
+        "records": 2,
+    }
     saved = store.client.post(
         f"{BASE}/save",
         data={
@@ -703,6 +709,8 @@ def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch
     with tenant_scope(1), store.factory() as db:
         units = [row.unit_name for row in db.query(PurchaseUnit).all()]
         shipments = db.query(ShipmentRecord).order_by(ShipmentRecord.id).all()
+        saved_run = store.service.get_run(db, run_id=plan["run_id"], owner_user_id=7)
+    assert saved_run["receipt"]["entities"]["records"] == 2
     assert units == ["演示客户乙"]
     assert [(row.purchase_unit, row.product_name, row.quantity_tins) for row in shipments] == [
         ("演示客户乙", "演示物料-螺母", 5),

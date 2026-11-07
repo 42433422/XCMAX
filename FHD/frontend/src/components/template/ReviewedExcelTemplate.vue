@@ -10,6 +10,8 @@ import { eltApi, type EltRun } from '@/api/elt'
 import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
 import { autoIngestStatusLabel, actionLabel, targetLabel } from '@/views/eltCenter/eltCenterShared'
 import TemplateCandidatePreview from './TemplateCandidatePreview.vue'
+import WorkbookEmployeeReport from './WorkbookEmployeeReport.vue'
+import { workbookEmployeeReports } from './workbookEmployeeReport'
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
@@ -220,6 +222,16 @@ type IntakePlan = { run_id: string; mod_id: string; candidate_sha256: string; kn
 const intakePlan = ref<IntakePlan | null>(null)
 const intakePending = ref(false)
 const intakeError = ref('')
+const workbookReports = computed(() => {
+  const ready = (doc?: { intake: unknown; intakePending: boolean; intakeError: string } | null) => !!doc?.intake && !doc.intakePending && !doc.intakeError
+  if (props.archiveOnSelect) {
+    if (ready(activeDocument.value)) return workbookEmployeeReports(activeDocument.value?.intake)
+    const found = documentWorkspace.documents.value.find(doc => ready(doc))
+    if (found) return workbookEmployeeReports(found.intake)
+  }
+  if (!intakePending.value && !intakeError.value && intakePlan.value) return workbookEmployeeReports(intakePlan.value)
+  return []
+})
 const intakeValidRowsOnly = ref(false)
 const currentComposerNote = computed(() => [...requirementNotes.value, composerDraft.value.trim()].filter(Boolean).join('\n').trim().slice(0, 4000))
 const intakeSelectionKey = computed(() => JSON.stringify([review.value?.review_id, proposal.value?.version,
@@ -1281,6 +1293,9 @@ async function downloadCandidate(index: number) {
             </template>
           </section>
         </div>
+        <div v-if="workbookReports.length" class="workbook-employee-reports" aria-label="工作情况回报">
+          <WorkbookEmployeeReport v-for="report in workbookReports" :key="report.employee" v-bind="report" />
+        </div>
         <TemplateCandidatePreview v-if="activeDocument && activeDocumentProposal && expandedCandidateIndex !== null" :title="documentOriginalPreview ? `${activeDocument.displayName} · 原件（只读）` : activeDocumentProposal.candidates[expandedCandidateIndex].label" :explanation="documentOriginalPreview ? '' : activeDocumentProposal.candidates[expandedCandidateIndex].explanation" :layouts="documentOriginalPreview ? activeDocument.review?.layout || [] : activeDocumentProposal.result_previews?.[expandedCandidateIndex]?.layout || []" :initial-sheet="0" :selected="!documentOriginalPreview && activeDocument.candidateIndex === expandedCandidateIndex" :can-select="!activeDocument.phase && !activeDocument.unknown && !documentWorkspace.saved(activeDocument)" :read-only="documentOriginalPreview" :cell-style="cellStyle" @close="expandedCandidateIndex = null; documentOriginalPreview = false" @select="selectExpandedDocumentCandidate" />
       </template>
       <template v-if="!archiveOnSelect">
@@ -1451,6 +1466,9 @@ async function downloadCandidate(index: number) {
     <button v-if="!archiveOnSelect || !review" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (archiveOnSelect && modelFlow)" @click="preview()">预览清理候选</button>
     <button v-if="archiveOnSelect && error.includes('请明确选择所选片段作为派生打印区域')" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy" @click="retrySelectedPrintArea">按所选片段生成副本并重试（原件不变）</button>
     <button v-if="archiveOnSelect" ref="candidateCapsule" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--selected': !!chosenCandidate }" aria-haspopup="dialog" :aria-expanded="templatePickerOpen" :aria-controls="candidatePickerId" :disabled="busy || !proposal?.candidates.length" @click="openCandidatePicker">{{ chosenCandidate?.label || (busy ? '模板处理中…' : proposal?.candidates.length ? '选择模板' : '暂无可选模板') }} <span aria-hidden="true">⌄</span></button>
+    <div v-if="!archiveOnSelect && workbookReports.length" class="workbook-employee-reports" aria-label="工作情况回报">
+      <WorkbookEmployeeReport v-for="report in workbookReports" :key="report.employee" v-bind="report" />
+    </div>
     <div v-if="review">
       <p v-if="review.selected_region?.print_area_mode === 'selected'">已按您的选择设置派生打印范围：原范围 {{ review.selected_region.source_print_areas?.map((area) => area.value).join('；') || '未设置' }} → 派生范围 {{ review.selected_region.derived_print_area || '未设置' }}；原件不变。</p>
       <div v-if="!archiveOnSelect || templatePickerOpen" class="reviewed-template__candidate-popover" :class="{ 'elt-template-picker__layer': archiveOnSelect }" @click.self="closeCandidatePicker" @wheel.self.prevent @touchmove.self.prevent>
@@ -1709,6 +1727,7 @@ async function downloadCandidate(index: number) {
 .reviewed-template .reviewed-template__candidate-capsule--selected { border-color: var(--xc-color-success); background: color-mix(in srgb, var(--xc-color-success) 8%, var(--xc-color-surface)); }
 .reviewed-template .reviewed-template__candidate-capsule--saved { border-color: var(--xc-color-success); background: color-mix(in srgb, var(--xc-color-success) 8%, var(--xc-color-surface)); }
 .reviewed-documents { display: flex; flex-wrap: wrap; gap: var(--xc-space-2); }
+.workbook-employee-reports { display: flex; flex-direction: column; align-items: flex-start; gap: var(--xc-space-3); }
 .reviewed-template__candidate-capsule small { color: var(--xc-color-muted); }
 .reviewed-document-picker__options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--xc-space-3); }
 .reviewed-document-picker .elt-template-picker__bar { position: sticky; top: 0; z-index: 1; background: var(--xc-color-surface); padding-bottom: var(--xc-space-2); }

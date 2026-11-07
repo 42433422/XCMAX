@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltConflict, EltError, EltNotFound
+from app.application.elt.intake_entities import entities_for_run
 from app.application.elt.operation_owner import (
     activate_operation,
     bind_owner,
@@ -417,9 +418,11 @@ class DraftServiceMixin:
                         row.final_action = "skip"
                         counts["skip"] = counts.get("skip", 0) + 1
         self._set_run_counts(run, counts)
+        db.flush()
         summary = load_json(run.summary_json, {})
         summary["llm_degraded"] = llm_degraded
         summary["llm_advisory_only"] = True
+        summary["entities"] = entities_for_run(db, run_id, owner_user_id)
         run.summary_json = dump_json(summary)
         if publish:
             run.status = run.stage = "preview_ready"
