@@ -83,64 +83,193 @@ def _model_region_for_fragment(known: dict[tuple[str, str], dict], fragment: dic
     raise ReviewedExcelError("切后复核产生了模型区域之外的片段，不能保证保真提取")
 
 
-def derive_rule_slices(body: bytes, latest: dict) -> list[dict]:
-    """Identify sheet regions before any model call. Slices carry no business id."""
-    from app.application.reviewed_excel_template import derive_document_workbook
+_HIDDEN_REASON = "隐藏工作表（附表/台账），未经确认不排除；已生成复核副本，需人工确认去向"
 
+
+def _review_copy(sources: dict, body: bytes, fragment: dict, reason: str) -> bytes:
+    """Value copy of one region at source coordinates for manual review.
+
+    Used when the faithful extractor refuses a region, so the rows stay covered and
+    visible instead of being replaced by an empty placeholder.
+    """
+    from io import BytesIO
+
+    from openpyxl import Workbook, load_workbook
+
+    if not sources:
+        sources["values"] = load_workbook(BytesIO(body), data_only=True)
+        sources["formulas"] = load_workbook(BytesIO(body), data_only=False)
+    c1, r1, c2, r2 = bounded_range(fragment["range"])
+    values = sources["values"][fragment["sheet"]]
+    formulas = sources["formulas"][fragment["sheet"]]
+    book = Workbook()
+    sheet = book.active
+    sheet.title = fragment["sheet"][:31]
+    for row in range(r1, r2 + 1):
+        for column in range(c1, c2 + 1):
+            value = values.cell(row, column).value
+            if value is None:
+                value = formulas.cell(row, column).value
+            if value is None or value == "":
+                continue
+            cell = sheet.cell(row, column, value)
+            if isinstance(value, str):
+                cell.data_type = "s"
+    for merged in formulas.merged_cells.ranges:
+        if (
+            c1 <= merged.min_col <= merged.max_col <= c2
+            and r1 <= merged.min_row <= merged.max_row <= r2
+        ):
+            sheet.merge_cells(str(merged))
+    note = book.create_sheet("切片复核说明")
+    note.append(["来源工作表", fragment["sheet"]])
+    note.append(["来源范围", fragment["range"]])
+    note.append(["状态", "待人工确认"])
+    note.append(["原因", reason[:500]])
+    buffer = BytesIO()
+    book.save(buffer)
+    book.close()
+    return buffer.getvalue()
+
+
+def derive_rule_slices(body: bytes, latest: dict) -> list[dict]:
+    """Identify sheet regions before any model call. Slices carry no business id.
+
+    Every data region becomes a slice record. Regions the faithful extractor cannot
+    export (hidden ledgers, print areas or drawings crossing the region, ...) keep a
+    value review copy with ``status="pending_review"`` and the reason, so no data row
+    is dropped without confirmation.
+    """
     source = inspect_workbook(body)
     results: list[dict] = []
     used_names: set[str] = set()
+    copy_sources: dict = {}
     sheets = latest.get("sheets")
     if not isinstance(sheets, list):
         return results
-    for sheet in sheets:
+    try:
+        for sheet in sheets:
+            if not isinstance(sheet, dict) or sheet.get("blank"):
+                continue
+            hidden = sheet.get("sheet_state", "visible") != "visible"
+            for region in sheet.get("regions") or []:
+                if not isinstance(region, dict) or region.get("data_region") is False:
+                    continue
+                if sheet.get("processable") is False and not hidden:
+                    continue
+                results.append(
+                    _rule_slice(body, source, sheet, region, hidden, used_names, copy_sources)
+                )
+    finally:
+        for book in copy_sources.values():
+            book.close()
+    return results
+
+
+def _rule_slice(body, source, sheet, region, hidden, used_names, copy_sources) -> dict:
+    fragment = {"sheet": sheet.get("sheet"), "range": region.get("range")}
+    record = {
+        "fragments": [fragment],
+        "basis": "rule_region",
+        "confirmed": False,
+        "source_sha256": source["sha256"],
+        "slice_id": f"{source['sha256'][:12]}:{fragment['sheet']}:{fragment['range']}",
+        "template_type": (sheet.get("labels") or ["unknown"])[0],
+        "table_region": fragment["range"],
+        "original_row_range": fragment["range"],
+        "status": "identified",
+        "error": None,
+        "review_reason": "",
+    }
+    reason = _HIDDEN_REASON if hidden else ""
+    if not hidden:
+        try:
+            record["workbook"] = derive_document_workbook(
+                body, [fragment], print_area_mode="source"
+            )
+        except ReviewedExcelError as exc:
+            record["error"] = str(exc)
+            reason = f"自动保真提取未通过：{exc}；已生成复核副本，需人工确认去向"
+    if reason:
+        record["status"] = "pending_review"
+        record["review_reason"] = reason
+        record["workbook"] = _review_copy(copy_sources, body, fragment, reason)
+    elif not region.get("header_cells") and set(region.get("labels") or ["unknown"]) == {"unknown"}:
+        record["status"] = "pending_review"
+        record["review_reason"] = "未识别的业务区域（无可识别表头或单据类型），需人工复核"
+    record["filename"] = _slice_filename(
+        [fragment], source["cells"], used_names, reason=str(fragment["range"])
+    )
+    if "business_id" in record:
+        raise ReviewedExcelError("切片阶段不能生成业务主键")
+    return record
+
+
+def rule_row_dispositions(body: bytes, latest: dict, slices: list[dict]) -> list[dict]:
+    """One outcome per non-empty source row: import, pending_review or rejected, with reason."""
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    owners: dict[str, list[tuple[int, int, dict]]] = {}
+    for item in slices:
+        part = item["fragments"][0]
+        _c1, r1, _c2, r2 = bounded_range(part["range"])
+        owners.setdefault(part["sheet"], []).append((r1, r2, item))
+    notes: dict[str, list[tuple[int, int, str]]] = {}
+    sheet_messages: dict[str, str] = {}
+    for sheet in latest.get("sheets") or []:
         if not isinstance(sheet, dict):
             continue
+        sheet_messages[sheet.get("sheet")] = sheet.get("processing_message") or ""
         for region in sheet.get("regions") or []:
-            if not isinstance(region, dict) or region.get("data_region") is False:
-                continue
-            if sheet.get("processable") is False or sheet.get("blank"):
-                continue
-            fragment = {"sheet": sheet.get("sheet"), "range": region.get("range")}
-            record = {
-                "fragments": [fragment],
-                "basis": "rule_region",
-                "confirmed": False,
-                "source_sha256": source["sha256"],
-                "slice_id": f"{source['sha256'][:12]}:{fragment['sheet']}:{fragment['range']}",
-                "template_type": (sheet.get("labels") or ["unknown"])[0],
-                "table_region": fragment["range"],
-                "original_row_range": fragment["range"],
-                "status": "identified",
-                "error": None,
-            }
-            try:
-                output = derive_document_workbook(body, [fragment], print_area_mode="source")
-                record["workbook"] = output
-                record["filename"] = _slice_filename(
-                    [fragment], source["cells"], used_names, reason=str(fragment["range"])
+            if isinstance(region, dict) and region.get("data_region") is False:
+                _c1, r1, _c2, r2 = bounded_range(region["range"])
+                notes.setdefault(sheet.get("sheet"), []).append(
+                    (r1, r2, region.get("anomaly_reason") or "标题或说明")
                 )
-            except ReviewedExcelError as exc:
-                from io import BytesIO
-
-                from openpyxl import Workbook
-
-                record["status"] = "error"
-                record["error"] = str(exc)
-                failed = Workbook()
-                failed_sheet = failed.worksheets[0]
-                failed_sheet["A1"] = "切片未提取"
-                failed_sheet["A2"] = str(exc)[:180]
-                buffer = BytesIO()
-                failed.save(buffer)
-                failed.close()
-                record["workbook"] = buffer.getvalue()
-                record["filename"] = _slice_filename(
-                    [fragment], source["cells"], used_names, reason="切片"
+    book = load_workbook(BytesIO(body), read_only=True, data_only=False)
+    results: list[dict] = []
+    try:
+        for ws in book.worksheets:
+            # Stored dimensions can understate the used range; scan the whole sheet.
+            ws.reset_dimensions()
+            for row_number, values in enumerate(ws.iter_rows(values_only=True), start=1):
+                if all(value is None or value == "" for value in values):
+                    continue
+                owner = next(
+                    (item for r1, r2, item in owners.get(ws.title, []) if r1 <= row_number <= r2),
+                    None,
                 )
-            if "business_id" in record:
-                raise ReviewedExcelError("切片阶段不能生成业务主键")
-            results.append(record)
+                note = next(
+                    (text for r1, r2, text in notes.get(ws.title, []) if r1 <= row_number <= r2),
+                    None,
+                )
+                if owner is not None and owner["status"] == "identified":
+                    status, reason = "import", "位于已识别数据切片，确认模板后导入"
+                elif owner is not None and owner.get("error"):
+                    status, reason = (
+                        "rejected",
+                        f"自动提取被拒绝：{owner['error']}；复核副本待人工确认",
+                    )
+                elif owner is not None:
+                    status, reason = "pending_review", owner["review_reason"]
+                elif note is not None:
+                    status, reason = "pending_review", f"{note}，未经确认不排除"
+                else:
+                    message = sheet_messages.get(ws.title) or "未识别为数据区域"
+                    status, reason = "pending_review", f"{message}；需人工复核去向"
+                results.append(
+                    {
+                        "sheet": ws.title,
+                        "row": row_number,
+                        "status": status,
+                        "reason": reason,
+                        "slice_id": owner["slice_id"] if owner is not None else None,
+                    }
+                )
+    finally:
+        book.close()
     return results
 
 

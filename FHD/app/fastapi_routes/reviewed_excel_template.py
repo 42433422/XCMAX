@@ -405,7 +405,7 @@ def reviewed_excel_classification_history(classification_id: str, user=Depends(_
         }
 
 
-def _auto_slices(db, classification_id, version, tenant, owner):
+def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False):
     from app.application.reviewed_excel_auto_slice import derive_classified_documents
 
     run = _classification_run(db, classification_id, tenant, owner)
@@ -415,9 +415,14 @@ def _auto_slices(db, classification_id, version, tenant, owner):
         raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
     body = _source(db, run, tenant, owner)
     if latest.get("model_status") == "not_called":
-        from app.application.reviewed_excel_auto_slice import derive_rule_slices
+        from app.application.reviewed_excel_auto_slice import (
+            derive_rule_slices,
+            rule_row_dispositions,
+        )
 
-        return derive_rule_slices(body, latest), latest.get("coverage") or []
+        slices = derive_rule_slices(body, latest)
+        dispositions = rule_row_dispositions(body, latest, slices) if with_rows else []
+        return slices, latest.get("coverage") or [], dispositions
     if latest.get("model_status") != "returned":
         raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
     coverage = latest.get("coverage")
@@ -460,16 +465,20 @@ def _auto_slices(db, classification_id, version, tenant, owner):
         for region in sheet.get("regions", [])
         if region.get("range_source") == "model"
     ]
-    return derive_classified_documents(
-        body,
-        {
-            "source_sha256": run.file_sha256,
-            "model_status": latest["model_status"],
-            "regions": regions,
-            "suggested_documents": latest.get("suggested_documents", []),
-            "coverage": latest.get("coverage", []),
-        },
-    ), latest.get("coverage", [])
+    return (
+        derive_classified_documents(
+            body,
+            {
+                "source_sha256": run.file_sha256,
+                "model_status": latest["model_status"],
+                "regions": regions,
+                "suggested_documents": latest.get("suggested_documents", []),
+                "coverage": latest.get("coverage", []),
+            },
+        ),
+        latest.get("coverage", []),
+        [],
+    )
 
 
 @router.get(
@@ -479,11 +488,14 @@ def reviewed_excel_auto_slices(classification_id: str, version: str, user=Depend
     tenant, owner = _identity(user)
     try:
         with tenant_scope(tenant), get_db() as db:
-            slices, coverage = _auto_slices(db, classification_id, version, tenant, owner)
+            slices, coverage, rows = _auto_slices(
+                db, classification_id, version, tenant, owner, with_rows=True
+            )
         return {
             "classification_id": classification_id,
             "version": version,
             "coverage": coverage,
+            "row_dispositions": rows,
             "slices": [
                 {
                     **{key: value for key, value in item.items() if key != "workbook"},
@@ -507,7 +519,7 @@ def reviewed_excel_auto_slice_download(
     tenant, owner = _identity(user)
     try:
         with tenant_scope(tenant), get_db() as db:
-            slices, _coverage = _auto_slices(db, classification_id, version, tenant, owner)
+            slices, _coverage, _rows = _auto_slices(db, classification_id, version, tenant, owner)
         if index < 0 or index >= len(slices):
             raise HTTPException(status_code=404, detail="切片不存在")
         return Response(
@@ -1085,7 +1097,7 @@ async def reviewed_excel_preview(
                 )
                 if not archive_version_id:
                     raise ReviewedExcelError("自动切片须先归档原件")
-                slices, _coverage = _auto_slices(
+                slices, _coverage, _rows = _auto_slices(
                     db, classification_id, classification_version, tenant, owner
                 )
                 if auto_slice_index >= len(slices):
