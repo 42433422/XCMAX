@@ -51,22 +51,31 @@ def _paragraph_text(paragraph: ElementTree.Element) -> str:
     return text
 
 
-def _cell_text(cell: ElementTree.Element) -> str:
+def _cell_text(cell: ElementTree.Element) -> tuple[str, int]:
     if cell.find(f".//{_W}tbl") is not None:
         raise ReviewedExcelError("Word 包含嵌套表格，无法无损派生，请先拆分表格")
-    if any(
-        cell.find(f"./{_W}tcPr/{_W}{name}") is not None for name in ("gridSpan", "vMerge", "hMerge")
-    ):
-        raise ReviewedExcelError("Word 包含合并单元格，无法保证列对应，请先拆分并确认原值")
+    if any(cell.find(f"./{_W}tcPr/{_W}{name}") is not None for name in ("vMerge", "hMerge")):
+        raise ReviewedExcelError("Word 包含纵向合并单元格，无法保证行对应，请先拆分并确认原值")
+    span = 1
+    grid_span = cell.find(f"./{_W}tcPr/{_W}gridSpan")
+    if grid_span is not None:
+        try:
+            span = int(grid_span.get(f"{_W}val") or "")
+        except ValueError:
+            span = 0
+        if not 1 <= span <= _MAX_COLUMNS:
+            raise ReviewedExcelError("Word 合并单元格跨列数无效，无法保证列对应")
     text = "\n".join(_paragraph_text(p) for p in cell.findall(f"./{_W}p"))
     if len(text) > _MAX_TEXT:
         raise ReviewedExcelError("Word 单元格超过 Excel 文本上限，未截断或导入")
-    return text
+    return text, span
 
 
 def _read_tables(
     document_xml: bytes,
-) -> tuple[list[str], list[list[list[str]]], list[tuple[int, str]]]:
+) -> tuple[
+    list[str], list[list[list[str]]], list[tuple[int, str]], list[list[tuple[int, int, int]]]
+]:
     try:
         root = fromstring(document_xml)
     except (ElementTree.ParseError, DefusedXmlException) as exc:
@@ -78,6 +87,7 @@ def _read_tables(
     lead: list[str] = []
     tables: list[list[list[str]]] = []
     paragraphs: list[tuple[int, str]] = []
+    spans: list[list[tuple[int, int, int]]] = []
     row_count = 0
     if any(
         root.find(f".//{_W}{tag}") is not None
@@ -121,17 +131,22 @@ def _read_tables(
         elif tag == f"{_W}tbl":
             supported_children(child, {"tblPr", "tblGrid", "tr", "bookmarkStart", "bookmarkEnd"})
             rows: list[list[str]] = []
+            row_spans: list[tuple[int, int, int]] = []
             for row in child.findall(f"./{_W}tr"):
-                supported_children(row, {"trPr", "tc", "bookmarkStart", "bookmarkEnd"})
+                # tblPrEx only overrides borders/shading/widths for this row.
+                supported_children(row, {"trPr", "tblPrEx", "tc", "bookmarkStart", "bookmarkEnd"})
                 if any(
                     row.find(f"./{_W}trPr/{_W}{tag}") is not None
                     for tag in ("gridBefore", "gridAfter")
                 ):
                     raise ReviewedExcelError("Word 表格存在缺省列，无法保证列对应，请先整理表格")
-                cells = []
+                cells: list[str] = []
                 for cell in row.findall(f"./{_W}tc"):
                     supported_children(cell, {"tcPr", "p", "bookmarkStart", "bookmarkEnd", "tbl"})
-                    cells.append(_cell_text(cell))
+                    text, span = _cell_text(cell)
+                    if span > 1:
+                        row_spans.append((len(rows), len(cells), span))
+                    cells.extend([text] + [""] * (span - 1))
                 if len(cells) > _MAX_COLUMNS:
                     raise ReviewedExcelError("Word 表格超过 64 列，未截断或导入")
                 rows.append(cells)
@@ -140,13 +155,17 @@ def _read_tables(
                     raise ReviewedExcelError("Word 表格总行数超过 5000 行，未截断或导入")
             if rows:
                 tables.append(rows)
+                spans.append(row_spans)
                 if len(tables) > 64:
                     raise ReviewedExcelError("Word 表格数量超过安全上限，未截断或导入")
-    return lead, tables, paragraphs
+    return lead, tables, paragraphs, spans
 
 
 def _build_workbook(
-    lead: list[str], tables: list[list[list[str]]], paragraphs: list[tuple[int, str]]
+    lead: list[str],
+    tables: list[list[list[str]]],
+    paragraphs: list[tuple[int, str]],
+    spans: list[list[tuple[int, int, int]]] | None = None,
 ) -> bytes:
     def put(sheet, row: int, column: int, value: str) -> None:
         cell = sheet.cell(row, column, value or None)
@@ -177,6 +196,14 @@ def _build_workbook(
         for r_index, row in enumerate(rows, start=1):
             for c_index, value in enumerate(row, start=1):
                 put(sheet, row_offset + r_index, c_index, value)
+        for r_index, c_index, width in spans[table_index - 1] if spans else []:
+            target_row = row_offset + r_index + 1
+            sheet.merge_cells(
+                start_row=target_row,
+                start_column=c_index + 1,
+                end_row=target_row,
+                end_column=c_index + width,
+            )
     if tables and any(table_index for table_index, _ in paragraphs):
         sheet = book.create_sheet("正文顺序")
         sheet.append(["此前表格数量", "正文"])
@@ -211,10 +238,10 @@ def convert_docx_to_xlsx_for_archive(body: bytes):
                 raise ReviewedExcelError("Word 正文解压大小超过安全上限")
     except (BadZipFile, KeyError, OSError) as exc:
         raise ReviewedExcelError("无法读取 Word 正文") from exc
-    lead, tables, paragraphs = _read_tables(document_xml)
+    lead, tables, paragraphs, spans = _read_tables(document_xml)
     if not tables and not lead:
         raise ReviewedExcelError("Word 文档没有可派生的正文或表格")
-    converted = _build_workbook(lead, tables, paragraphs)
+    converted = _build_workbook(lead, tables, paragraphs, spans)
     review = inspect_workbook(converted)
     review["conversion_receipt"] = {
         "source_sha256": digest,

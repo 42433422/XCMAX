@@ -123,10 +123,33 @@ def test_geometric_overlap_only_at_blank_still_fails(monkeypatch):
         )
 
 
-def test_missing_and_duplicate_coverage_rejected(monkeypatch):
-    for raw in (answer(region(c2=1)), answer(region(), region())):
-        with pytest.raises(ReviewedExcelError):
-            execute(monkeypatch, source(["A1", "C1"]), raw)
+def test_duplicate_coverage_rejected(monkeypatch):
+    with pytest.raises(ReviewedExcelError, match="重复覆盖"):
+        execute(monkeypatch, source(["A1", "C1"]), answer(region(), region()))
+
+
+def test_partial_boundary_keeps_covered_cells_for_a_person(monkeypatch):
+    """Synthetic fixture: the model rectangle covers A1 and leaves C1 uncovered."""
+    from app.application.reviewed_excel_partition import boundary_left_for_confirmation
+
+    review = source(["A1", "C1"])
+    raw = answer(region(c2=1))
+    original = deepcopy(raw)
+    calls = []
+
+    def complete(*_args, **_kwargs):
+        calls.append(raw)
+        return SimpleNamespace(data=raw, model="synthetic-no-network")
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete", complete
+    )
+    result = _classify_semantic_batch(review, reference_ids=True)
+    assert raw == original and calls == [raw]
+    assert [item["range"] for item in result["regions"]] == ["A1:A1"]
+    pending = result["input_summary"]["source_coverage"]["pending_confirmation"]
+    assert pending == [{"sheet": SHEET, "cell": "C1"}]
+    assert boundary_left_for_confirmation({"input_summaries": [result["input_summary"]]}) is True
 
 
 def test_flat_source_range_documents_are_coerced_before_validation(monkeypatch):

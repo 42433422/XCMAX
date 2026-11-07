@@ -137,10 +137,28 @@ def test_docx_refuses_limit_overflow_without_truncation(monkeypatch, limit):
         prepare_archive_workbook(_minimal_docx())
 
 
-def test_docx_refuses_merged_cells_instead_of_shifting_columns():
+def test_docx_horizontal_merge_keeps_grid_columns_and_row_exceptions():
+    rows = [["日期", "摘要", "欠款", "收款"], ["合计", "见备注", "100.00"]]
+    body = _replace_document(
+        _minimal_docx(rows=rows),
+        lambda xml: xml.replace(
+            "<w:tr><w:tc><w:tcPr/><w:p><w:r><w:t>合计",
+            "<w:tr><w:tblPrEx/><w:tc><w:tcPr/><w:p><w:r><w:t>合计",
+        ).replace(
+            "<w:tc><w:tcPr/><w:p><w:r><w:t>见备注",
+            '<w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>见备注',
+        ),
+    )
+    converted, _review = prepare_archive_workbook(body)
+    sheet = load_workbook(io.BytesIO(converted)).active
+    assert [cell.value for cell in sheet[5]] == ["合计", "见备注", None, "100.00"]
+    assert [str(item) for item in sheet.merged_cells.ranges] == ["B5:C5"]
+
+
+def test_docx_refuses_vertical_merge_instead_of_shifting_rows():
     body = _replace_document(
         _minimal_docx(),
-        lambda xml: xml.replace("<w:tcPr/>", '<w:tcPr><w:gridSpan w:val="2"/></w:tcPr>', 1),
+        lambda xml: xml.replace("<w:tcPr/>", "<w:tcPr><w:vMerge/></w:tcPr>", 1),
     )
     with pytest.raises(ReviewedExcelError, match="合并单元格"):
         prepare_archive_workbook(body)

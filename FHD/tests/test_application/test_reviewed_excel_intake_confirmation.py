@@ -18,7 +18,7 @@ from app.application.elt import service_draft, service_execution, service_previe
 from app.application.elt.errors import EltError
 from app.application.elt.service import EltService
 from app.db.db_base import Base
-from app.db.models import PurchaseUnit
+from app.db.models import PurchaseUnit, ShipmentRecord
 from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.infrastructure.tenant_scope import tenant_scope
@@ -399,10 +399,14 @@ def test_staged_run_tampering_is_rejected(intake_store, change):
         elif change == "sha":
             run.file_sha256 = "0" * 64
         elif change == "bytes":
-            Path(db.get(EltUpload, plan["upload_id"]).storage_path).write_bytes(b"changed")
+            stored = Path(db.get(EltUpload, plan["upload_id"]).storage_path)
+            stored.chmod(0o600)
+            stored.write_bytes(b"changed")
         elif change == "source_bytes":
             review_run = db.get(EltRun, data["review_id"])
-            Path(db.get(EltUpload, review_run.upload_id).storage_path).write_bytes(b"changed")
+            stored = Path(db.get(EltUpload, review_run.upload_id).storage_path)
+            stored.chmod(0o600)
+            stored.write_bytes(b"changed")
         else:
             db.query(EltRunRow).filter(EltRunRow.run_id == run.id).first().normalized_json = "{}"
         db.commit()
@@ -478,3 +482,297 @@ def test_prepared_upload_record_must_still_be_owned_and_live(intake_store, chang
     response = store.client.post(f"{BASE}/save", data=data)
     assert response.status_code == status, response.text
     assert_no_writes(store)
+
+
+def _delivery_note_bytes() -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "送货单"
+    sheet["A1"] = "送货单"
+    sheet["A2"] = "客户名称"
+    sheet["B2"] = "演示客户乙"
+    sheet["C2"] = "单据日期"
+    sheet["D2"] = "2026-11-07"
+    sheet["A3"] = "产品名称"
+    sheet["B3"] = "数量"
+    sheet["C3"] = "单价"
+    sheet["D3"] = "金额"
+    sheet["E3"] = "规格"
+    sheet["F3"] = "备注"
+    sheet["A4"] = "演示物料-螺母"
+    sheet["B4"] = 5
+    sheet["C4"] = 6.5
+    sheet["D4"] = 32.5
+    sheet["E4"] = "M10"
+    sheet["F4"] = "实机复测"
+    sheet["A5"] = "演示物料-弹垫"
+    sheet["B5"] = 2
+    sheet["C5"] = 3
+    sheet["D5"] = 6
+    sheet["E5"] = "M10"
+    sheet["F5"] = "实机复测"
+    sheet["A6"] = "合计"
+    sheet["B6"] = 7
+    sheet["D6"] = 38.5
+    stream = BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    return stream.getvalue()
+
+
+def test_degraded_header_label_is_not_master_data():
+    from app.application.elt.targets.helpers import degraded_header_master
+
+    degraded = {
+        "degraded": True,
+        "degradation_code": "ELT_LLM_UNAVAILABLE",
+        "used_llm": False,
+    }
+    assert degraded_header_master(degraded, {"customer_name": "产品名称"})
+    assert not degraded_header_master(
+        {"degraded": False, "used_llm": True}, {"customer_name": "产品名称"}
+    )
+    assert not degraded_header_master(degraded, {"customer_name": "演示客户乙"})
+
+
+def test_header_label_customer_preview_does_not_insert(intake_store):
+    from app.application.elt.targets.customers import CustomerAdapter
+
+    with tenant_scope(1), intake_store.factory() as db:
+        decision = CustomerAdapter().preview(
+            db,
+            {"customer_name": "产品名称"},
+            allowed_update_fields=set(),
+            context={},
+        )
+    assert decision.action == "error"
+    assert decision.reason == "header_label_not_master_data"
+
+
+def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch):
+    """A banner-only template still imports item rows from the archived original."""
+    import hashlib
+
+    from app.application.elt import candidate_table
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    store = intake_store
+    cleared = [{"sheet": "送货单", "cell": cell} for cell in ("A1", "B2", "C2", "D2")]
+    seen = {}
+
+    def business(text):
+        from app.application.elt.llm_session_provider import current_etl_llm_owner
+        from app.application.elt_login_authorization import current_model_session_id
+
+        seen["business"] = text
+        seen["owner"] = current_etl_llm_owner()
+        seen["session"] = current_model_session_id(7)
+        return LlmAssistResult(
+            used_llm=True,
+            data={
+                "rows": [
+                    {
+                        "customer_name": "演示客户乙",
+                        "product_name": "演示物料-螺母",
+                        "quantity": "5",
+                    },
+                    {
+                        "customer_name": "演示客户乙",
+                        "product_name": "演示物料-弹垫",
+                        "quantity": "2",
+                    },
+                ]
+            },
+        )
+
+    def knowledge(text):
+        seen["knowledge"] = text
+        return LlmAssistResult(used_llm=True, data={"title": "送货单", "content": text})
+
+    real_delivery = candidate_table.read_delivery_note_business
+
+    def delivery(source):
+        seen["source_sha"] = hashlib.sha256(source).hexdigest()
+        return real_delivery(source)
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete",
+        lambda *_args, **_kwargs: LlmAssistResult(
+            used_llm=True,
+            provider="platform",
+            model="synthetic",
+            data={
+                "candidates": [{"clear": cleared, "reason": "blank the lines"} for _ in range(3)]
+            },
+        ),
+    )
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setattr("app.application.elt.llm_assist.advise_business_import", business)
+    monkeypatch.setattr("app.application.elt.llm_assist.advise_knowledge_import", knowledge)
+    monkeypatch.setattr(candidate_table, "read_delivery_note_business", delivery)
+    body = _delivery_note_bytes()
+    classified = store.client.post(
+        "/api/templates/reviewed-excel/classify",
+        files={"files": ("送货单.xlsx", body)},
+        data={"expected_actor": "1:7"},
+    )
+    assert classified.status_code == 200, classified.text
+    result = classified.json()["files"][0]
+    # The rule partition overlaps the banner and the item table on the header row.
+    # Separate them the way a person confirms one delivery note.
+    labels = []
+    for sheet in result["sheets"]:
+        for region in sheet["regions"]:
+            area = region["range"]
+            if area == "A1:D3":
+                area = "A1:D2"
+            labels.append(
+                {
+                    "sheet": sheet["sheet"],
+                    "original_range": region["range"],
+                    "range": area,
+                    "labels": ["delivery"],
+                }
+            )
+    confirmed = store.client.post(
+        f"/api/templates/reviewed-excel/classifications/{result['classification_id']}/confirm",
+        data={"version": result["version"], "labels_json": json.dumps(labels)},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    confirmed_body = confirmed.json()
+    regions = confirmed_body["sheets"][0]["regions"]
+    banner = next((region for region in regions if region["range"] == "A1:D2"), regions[0])
+    form = {
+        "expected_actor": "1:7",
+        "use_login_notice": "true",
+        "classification_id": result["classification_id"],
+        "classification_version": confirmed_body["version"],
+        "region_sheet": confirmed_body["sheets"][0]["sheet"],
+        "region_range": banner["range"],
+    }
+    response = store.client.post(
+        f"{BASE}/preview",
+        files={"file": ("送货单.xlsx", body)},
+        data=form,
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    proposal = payload["proposal"]
+    candidate = next(item for item in proposal["candidates"] if item["clear"])
+    data = {
+        "review_id": payload["review_id"],
+        "proposal_version": proposal["version"],
+        "candidate_id": candidate["id"],
+        "selections": json.dumps(candidate["clear"]),
+        "name": "送货单",
+        "composer_note": "",
+    }
+    preview = store.client.post(f"{BASE}/intake-preview", data=data)
+    assert preview.status_code == 200, preview.text
+    plan = preview.json()["intake"]
+    assert plan["target_type"] == "shipment_records"
+    assert seen["source_sha"] == result["sha256"]
+    assert "演示物料-螺母" in seen["business"]
+    assert "演示物料-弹垫" in seen["knowledge"]
+    assert seen["owner"] == 7
+    assert seen["session"] == "synthetic-session"
+    assert plan["detection"]["used_llm"] is True
+    assert plan["detection"]["degraded"] is False
+    assert plan["detection"]["llm_lane"] == "database"
+    assert plan["knowledge"]["used_llm"] is True
+    assert plan["knowledge"]["lane"] == "knowledge"
+    with tenant_scope(1), store.factory() as db:
+        review_run = db.get(EltRun, payload["review_id"])
+    assert review_run.file_sha256 != result["sha256"]
+    store.executor.futures[-1].result(timeout=10)
+    with tenant_scope(1), store.factory() as db:
+        business = store.service.get_run(db, run_id=plan["run_id"], owner_user_id=7)
+    assert business["status"] == "preview_ready", business
+    assert business["summary"]["new"] == 2
+    assert business["details"]["entities"] == {
+        "customers": 0,
+        "purchase_units": 1,
+        "products": 2,
+        "records": 2,
+    }
+    saved = store.client.post(
+        f"{BASE}/save",
+        data={
+            **data,
+            "private_intake": "true",
+            "intake_run_id": plan["run_id"],
+            "preview_revision": business["preview_revision"],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    store.executor.futures[-1].result(timeout=10)
+    with tenant_scope(1), store.factory() as db:
+        units = [row.unit_name for row in db.query(PurchaseUnit).all()]
+        shipments = db.query(ShipmentRecord).order_by(ShipmentRecord.id).all()
+        saved_run = store.service.get_run(db, run_id=plan["run_id"], owner_user_id=7)
+    assert saved_run["receipt"]["entities"]["records"] == 2
+    assert units == ["演示客户乙"]
+    assert [(row.purchase_unit, row.product_name, row.quantity_tins) for row in shipments] == [
+        ("演示客户乙", "演示物料-螺母", 5),
+        ("演示客户乙", "演示物料-弹垫", 2),
+    ]
+
+
+def test_import_lanes_do_not_share_a_circuit(monkeypatch):
+    from unittest.mock import patch
+
+    from app.application.elt import llm_assist
+
+    with patch("app.application.elt.llm_session_provider.current_etl_llm_owner", return_value=7):
+        assert llm_assist._circuit_key() == "owner:7"
+        assert llm_assist._circuit_key("database") == "owner:7:database"
+        assert llm_assist._circuit_key("knowledge") == "owner:7:knowledge"
+        assert llm_assist._circuit_key("template") == "owner:7:template"
+
+
+def test_database_model_rows_drop_header_labels():
+    from app.application.elt.candidate_table import dataset_from_business_rows
+
+    dataset = dataset_from_business_rows(
+        [
+            {"purchase_unit": "产品名称", "product_name": "数量", "quantity": "1"},
+            {
+                "customer_name": "演示客户乙",
+                "product_name": "演示物料-螺母",
+                "quantity": "5",
+                "unit_price": "6.5",
+                "amount": "32.5",
+            },
+        ]
+    )
+    assert dataset is not None
+    assert len(dataset.rows) == 1
+    assert dataset.rows[0].values["购买单位"] == "演示客户乙"
+    assert dataset.rows[0].values["产品名称"] == "演示物料-螺母"
+
+
+def test_knowledge_line_calls_its_own_model(intake_store, monkeypatch, tmp_path):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    seen = {}
+
+    def knowledge(text):
+        seen["text"] = text
+        return LlmAssistResult(used_llm=True, data={"title": "送货单", "content": "演示客户乙 螺母 5"})
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setattr("app.application.elt.llm_assist.etl_llm_enabled", lambda: True)
+    monkeypatch.setattr("app.application.elt.llm_assist.advise_knowledge_import", knowledge)
+    with tenant_scope(1):
+        plan = intake_store.intake.knowledge_plan(
+            path=tmp_path / "missing.xlsx",
+            file_name="送货单",
+            note="",
+            owner_user_id=7,
+            source_text="送货单\n客户名称 演示客户乙",
+        )
+    assert seen["text"].startswith("送货单")
+    assert plan["lane"] == "knowledge"
+    assert plan["used_llm"] is True
+    assert plan["degraded"] is False
+    assert "螺母" in plan["content"]

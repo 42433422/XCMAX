@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltConflict, EltError, EltNotFound
+from app.application.elt.intake_entities import entities_for_run
 from app.application.elt.operation_owner import (
     activate_operation,
     bind_owner,
@@ -32,12 +33,19 @@ from app.application.elt.service_support import (
     safe_error,
 )
 from app.application.elt.targets import TargetAdapter, get_adapter
-from app.application.elt.transforms import ALLOWED_TRANSFORMS, apply_mapping
+from app.application.elt.targets.helpers import degraded_header_master
+from app.application.elt.transforms import ALLOWED_TRANSFORMS
+from app.application.elt.transforms import map_row_with_issues as _map_row_with_issues
 from app.db.models.elt import EltRun, EltRunRow
 from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def apply_mapping(source: dict[str, Any], mappings: list[dict[str, Any]]) -> Any:
+    """Patch point for preview tests. Returns normalized data plus field issues."""
+    return _map_row_with_issues(source, mappings)
 
 
 class DraftServiceMixin:
@@ -325,19 +333,28 @@ class DraftServiceMixin:
                 if row.execution_status == "success":
                     counts[row.final_action] = counts.get(row.final_action, 0) + 1
                     continue
-                issues: list[dict[str, Any]] = []
+                normalized: dict[str, Any]
                 try:
-                    normalized = apply_mapping(load_json(row.source_json, {}), mappings)
+                    mapped = apply_mapping(load_json(row.source_json, {}), mappings)
                 except EltError as exc:
                     normalized = {}
-                    issues.append(
+                    issues = [
                         {
                             "code": exc.code,
                             "severity": "error",
-                            "field": "",
+                            "field": str(getattr(exc, "field", "") or ""),
                             "message": exc.message,
                         }
-                    )
+                    ]
+                else:
+                    if (
+                        isinstance(mapped, tuple)
+                        and len(mapped) == 2
+                        and isinstance(mapped[1], list)
+                    ):
+                        normalized, issues = mapped
+                    else:
+                        normalized, issues = mapped, []
                 issues.extend(apply_validation_rules(normalized, validation_rules))
                 provenance = load_json(row.provenance_json, {})
                 issues.extend(provenance_validation_issues(provenance))
@@ -358,7 +375,14 @@ class DraftServiceMixin:
                     allowed_update_fields=allowed_updates,
                     context=context,
                 )
-                issues.extend(decision.issues or [])
+                failed_fields = {str(item.get("field") or "") for item in issues}
+                for item in decision.issues or []:
+                    if (
+                        item.get("code") == "ELT_REQUIRED_FIELD_MISSING"
+                        and str(item.get("field") or "") in failed_fields
+                    ):
+                        continue
+                    issues.append(item)
                 action = "error" if issues else decision.action
                 row.normalized_json = dump_json(normalized)
                 row.validation_json = dump_json(issues)
@@ -387,10 +411,18 @@ class DraftServiceMixin:
             for (row, _payload), advisory in zip(advisory_jobs, suggestions, strict=False):
                 row.llm_suggestion_json = dump_json(advisory)
                 llm_degraded = llm_degraded or bool(advisory.get("degraded"))
+                if degraded_header_master(advisory, load_json(row.normalized_json, {})):
+                    action = row.final_action
+                    if action in {"new", "update"}:
+                        counts[action] = counts.get(action, 0) - 1
+                        row.final_action = "skip"
+                        counts["skip"] = counts.get("skip", 0) + 1
         self._set_run_counts(run, counts)
+        db.flush()
         summary = load_json(run.summary_json, {})
         summary["llm_degraded"] = llm_degraded
         summary["llm_advisory_only"] = True
+        summary["entities"] = entities_for_run(db, run_id, owner_user_id)
         run.summary_json = dump_json(summary)
         if publish:
             run.status = run.stage = "preview_ready"

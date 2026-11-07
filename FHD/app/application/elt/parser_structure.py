@@ -17,6 +17,7 @@ _AUXILIARY_SHEET_RE = re.compile(
 )
 _TOTAL_RE = re.compile(r"^(合计|总计|小计|汇总)(?:\s|[:：]|$)", re.I)
 _NOTE_RE = re.compile(r"^(备注|说明|制表|审核|签字|签名)(?:\s|[:：]|$)", re.I)
+_CONTRACT_RE = re.compile(r"^(本合同|本协议|合同条款|协议条款|条款[:：])")
 _NUMBER_RE = re.compile(
     r"^[\s￥¥$€£(（+-]*\d[\d\s,，]*(?:\.\d+)?[%元）)]*$",
     re.I,
@@ -273,7 +274,17 @@ def is_footer_or_note_row(values: Iterable[Any]) -> bool:
     first_two = " ".join(cells[:2])
     if _TOTAL_RE.match(first_two):
         return True
-    return len(cells) <= 2 and bool(_NOTE_RE.match(first_two))
+    return len(cells) <= 2 and bool(_NOTE_RE.match(first_two) or _CONTRACT_RE.match(first_two))
+
+
+def business_note_text(values: Iterable[Any]) -> str:
+    """Return remark or contract text that must stay outside the data table."""
+    if not is_footer_or_note_row(values):
+        return ""
+    text = " ".join(_non_empty(values))
+    if _TOTAL_RE.match(text):
+        return ""
+    return text
 
 
 def is_auxiliary_sheet_name(name: str) -> bool:
@@ -286,6 +297,7 @@ __all__ = [
     "detect_table_layout",
     "header_match_score",
     "header_semantic_keys",
+    "business_note_text",
     "is_auxiliary_sheet_name",
     "is_footer_or_note_row",
     "is_repeated_header",

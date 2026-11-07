@@ -10,6 +10,8 @@ import { eltApi, type EltRun } from '@/api/elt'
 import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
 import { autoIngestStatusLabel, actionLabel, targetLabel } from '@/views/eltCenter/eltCenterShared'
 import TemplateCandidatePreview from './TemplateCandidatePreview.vue'
+import WorkbookEmployeeReport from './WorkbookEmployeeReport.vue'
+import { workbookEmployeeReports } from './workbookEmployeeReport'
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
@@ -17,12 +19,12 @@ type Proposal = { version: string; parent_version: string | null; candidates: Ca
 type LayoutCell = { cell: string; value: string; formula: boolean; rowspan: number; colspan: number; bold: boolean; italic: boolean; font_size: number; font_color: string; fill: string; align: string }
 type Layout = { sheet: string; widths: number[]; rows: { height: number; cells: LayoutCell[] }[]; truncated: boolean }
 type Review = { usage_restrictions?: string[]; review_id: string; sha256: string; cells: Cell[]; sheets: string[]; model: string; proposal: Proposal; versions?: Proposal[]; layout?: Layout[]; layout_truncated?: boolean; selected_region?: { selection_basis?: string; print_area_mode?: string; source_print_areas?: { sheet: string; value: string }[]; derived_print_area?: string | null } | null }
-type ClassificationRegion = { splitDraft?: string; value_extent?: string | null; suggested_labels?: string[]; context_warning?: string; reason?: string; continuation_context?: { parent_range: string; parent_header_row: number; header_row: number; matched_columns: number[] } | null; range: string; original_range?: string; labels: string[]; label_source?: string; range_source?: string; modified?: boolean; checked_cells: number; parent_heading: string; dependency_status: string; needs_confirmation: boolean; header_cells: { cell: string; value: string }[]; merged_ranges: string[]; dependencies?: { sheet: string; cell: string }[]; possible_shared_context: { cell: string; kind: string }[]; evidence: { label: string; cell: string; matched: string }[] }
-type ClassificationSheet = { sheet: string; sheet_state?: string; processable?: boolean; processing_message?: string; labels: string[]; checked_cells: number; evidence: { label: string; cell: string; matched: string }[]; regions: ClassificationRegion[] }
+type ClassificationRegion = { splitDraft?: string; value_extent?: string | null; suggested_labels?: string[]; context_warning?: string; reason?: string; anomaly_reason?: string; exclusion_role?: string; data_region?: boolean; continuation_context?: { parent_range: string; parent_header_row: number; header_row: number; matched_columns: number[] } | null; range: string; original_range?: string; labels: string[]; label_source?: string; range_source?: string; modified?: boolean; checked_cells: number; parent_heading: string; dependency_status: string; needs_confirmation: boolean; header_cells: { cell: string; value: string }[]; merged_ranges: string[]; dependencies?: { sheet: string; cell: string }[]; possible_shared_context: { cell: string; kind: string }[]; evidence: { label: string; cell: string; matched: string }[] }
+type ClassificationSheet = { sheet: string; sheet_state?: string; processable?: boolean; processing_message?: string; labels: string[]; checked_cells: number; evidence: { label: string; cell: string; matched: string }[]; regions: ClassificationRegion[]; table_structure?: { cell_coverage?: { unassigned_cells?: number; nonempty_cells?: number } } }
 type FragmentLinks = { items: { sheet: string; first: string; second: string; shared_dependencies: { sheet: string; cell: string }[]; repeated_header_observed: boolean; model_group_suggested?: boolean; status: string; selected?: boolean }[]; omitted: number }
 type LogicalDocument = { logical_document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type SuggestedDocument = { document_id: string; fragments: { sheet: string; range: string }[]; status: string }
-type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; fragments: { sheet: string; range: string }[] }
+type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; type_label?: string; fragments: { sheet: string; range: string }[] }
 type Checkpoint = { phase: 'ready' | 'paused' | 'inflight' | 'failed'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; remaining_in_round?: number; message: string }
 type ConversionReceipt = { converter: string; source_sha256: string; derived_sha256: string; purpose?: string; print_layout_verified?: boolean; warnings?: string[] }
 type Classification = { usage_restrictions?: string[]; original_sha256?: string; conversion_receipt?: ConversionReceipt | null; template_write_state?: string; independent_confirmed?: boolean; confirmed_document_count?: number | null; document_count_status?: string; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; read_only_print_areas?: { sheet: string; value: string }[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; checkpoint?: Checkpoint | null; name: string; status: string; sha256?: string; message?: string; classification_id?: string; version?: string; confirmed?: boolean; model_status?: string; budget?: { calls: number; max_calls: number; unread: number }; input_messages?: unknown[]; input_summaries?: unknown[]; coverage?: { sheet: string; total: number; sent: number; unread: string[]; unassigned: string[]; model_unassigned?: string[]; value_truncated: string[]; deferred_large_values?: string[]; deferred_oversized_rows?: string[]; merged_sent: number; merged_omitted: number }[]; sheets: ClassificationSheet[] }
@@ -99,7 +101,7 @@ const previewSelectionReady = computed(() => {
 })
 const selectedPrintArea = ref(false)
 const batchLabel = ref('unknown')
-const labelNames: Record<string, string> = { quotation: '报价', delivery: '送货', purchase: '采购', attendance: '考勤', production: '生产', process: '工艺', material: '原料', inspection: '检验', template: '模板', unknown: '未知/待理解' }
+const labelNames: Record<string, string> = { quotation: '报价', delivery: '送货', purchase: '采购', attendance: '考勤', production: '生产', process: '工艺', material: '原料', inspection: '检验', template: '模板', ledger: '借还台账', calculation: '测算表', unknown: '未知/待理解' }
 function classificationStatus(item: { confirmed?: boolean; model_status?: string; sheets: ClassificationSheet[] } | null) {
   if (!item) return '待确认'
   const unknown = item.sheets.some((sheet) => sheet.regions.some((region) => region.labels.includes('unknown')))
@@ -220,6 +222,16 @@ type IntakePlan = { run_id: string; mod_id: string; candidate_sha256: string; kn
 const intakePlan = ref<IntakePlan | null>(null)
 const intakePending = ref(false)
 const intakeError = ref('')
+const workbookReports = computed(() => {
+  const ready = (doc?: { intake: unknown; intakePending: boolean; intakeError: string } | null) => !!doc?.intake && !doc.intakePending && !doc.intakeError
+  if (props.archiveOnSelect) {
+    if (ready(activeDocument.value)) return workbookEmployeeReports(activeDocument.value?.intake)
+    const found = documentWorkspace.documents.value.find(doc => ready(doc))
+    if (found) return workbookEmployeeReports(found.intake)
+  }
+  if (!intakePending.value && !intakeError.value && intakePlan.value) return workbookEmployeeReports(intakePlan.value)
+  return []
+})
 const intakeValidRowsOnly = ref(false)
 const currentComposerNote = computed(() => [...requirementNotes.value, composerDraft.value.trim()].filter(Boolean).join('\n').trim().slice(0, 4000))
 const intakeSelectionKey = computed(() => JSON.stringify([review.value?.review_id, proposal.value?.version,
@@ -1246,11 +1258,29 @@ async function downloadCandidate(index: number) {
         整理要求：{{ note }}
       </div>
       <div v-if="archiveProgress || documentWorkPending" class="elt-bubble elt-bubble--system elt-processing-feedback" :class="{ 'elt-processing-feedback--busy': busy || documentWorkPending }" role="status" :aria-busy="busy || documentWorkPending"><span v-if="busy || documentWorkPending" class="elt-processing-feedback__spinner" aria-hidden="true"></span><span>{{ documentWorkLabel || archiveProgress }}</span></div>
+      <div v-if="archiveOnSelect" class="classification-results" data-table-structure>
+        <template v-for="(item, i) in classifications" :key="`structure-${i}`">
+          <section v-for="sheet in item.sheets" :key="`${i}-${sheet.sheet}`">
+            <p><strong>{{ item.name }} / {{ sheet.sheet }}</strong>：{{ sheet.regions.filter(region => region.data_region !== false).length }} 个表格，{{ sheet.regions.filter(region => region.data_region === false).length }} 处排除<span v-if="sheet.table_structure?.cell_coverage">，未归类单元格 {{ sheet.table_structure.cell_coverage.unassigned_cells ?? 0 }}</span></p>
+            <p v-for="region in sheet.regions" :key="`${sheet.sheet}-${region.range}-${region.exclusion_role || 'data'}`">{{ region.range }} {{ region.parent_heading }}<small v-if="region.anomaly_reason"> 排除：{{ region.anomaly_reason }}</small></p>
+          </section>
+        </template>
+      </div>
       <div v-if="error" class="elt-bubble elt-bubble--error" role="alert">{{ error }}</div>
 
       <template v-if="archiveOnSelect">
-        <div class="reviewed-documents" aria-label="模型识别的模板">
-          <button v-for="doc in documentWorkspace.documents.value" :key="doc.key" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
+        <div class="workbook-thread" :class="{ 'workbook-thread--live': workbookReports.length }" :aria-label="workbookReports.length ? '工作情况回报' : '模型识别的模板'">
+          <span v-if="workbookReports.length" class="workbook-thread__spine" aria-hidden="true"></span>
+          <div class="workbook-node workbook-node--template">
+            <span v-if="workbookReports.length" class="workbook-node__dot" aria-hidden="true"></span>
+            <div class="workbook-node__body">
+              <p v-if="workbookReports.length" class="workbook-node__who">模板导入员</p>
+              <div class="reviewed-documents">
+                <button v-for="doc in documentWorkspace.documents.value" :key="doc.key" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${doc.typeLabel ? '，' + doc.typeLabel : ''}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="doc.typeLabel">{{ doc.typeLabel }}</small><small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
+              </div>
+            </div>
+          </div>
+          <WorkbookEmployeeReport v-for="report in workbookReports" :key="report.employee" v-bind="report" />
         </div>
         <div v-if="templatePickerOpen && activeDocument" class="elt-template-picker__layer reviewed-document-picker" @click.self="closeCandidatePicker" @wheel.self.prevent @touchmove.self.prevent>
           <section ref="candidatePickerPanel" class="elt-template-picker__panel" role="dialog" aria-modal="true" :aria-label="activeDocument.displayName" tabindex="-1">
@@ -1388,6 +1418,7 @@ async function downloadCandidate(index: number) {
             <small v-if="region.context_warning">{{ region.context_warning }}</small>
             <small v-if="region.continuation_context">参考 {{ region.continuation_context.parent_range }} 第 {{ region.continuation_context.parent_header_row }} 行与本区域第 {{ region.continuation_context.header_row }} 行的重复表头。</small>
             <small v-if="region.value_extent && !region.modified">非空格范围 {{ region.value_extent }}（仅供参考，样式、合并及说明可能在其外；未裁剪原范围）。</small>
+            <small v-if="region.anomaly_reason">排除：{{ region.anomaly_reason }}</small>
             <small v-if="region.reason">模型解释：{{ region.reason }}（仅供核对）</small>
             <small>{{ region.dependency_status }}</small>
             <details><summary>查看表头、合并与可能的共享说明</summary>
@@ -1441,7 +1472,11 @@ async function downloadCandidate(index: number) {
     </details>
     <button v-if="!archiveOnSelect || !review" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (archiveOnSelect && modelFlow)" @click="preview()">预览清理候选</button>
     <button v-if="archiveOnSelect && error.includes('请明确选择所选片段作为派生打印区域')" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy" @click="retrySelectedPrintArea">按所选片段生成副本并重试（原件不变）</button>
-    <button v-if="archiveOnSelect" ref="candidateCapsule" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--selected': !!chosenCandidate }" aria-haspopup="dialog" :aria-expanded="templatePickerOpen" :aria-controls="candidatePickerId" :disabled="busy || !proposal?.candidates.length" @click="openCandidatePicker">{{ chosenCandidate?.label || (busy ? '模板处理中…' : proposal?.candidates.length ? '选择模板' : '暂无可选模板') }} <span aria-hidden="true">⌄</span></button>
+    <button v-if="archiveOnSelect && !documentWorkspace.documents.value.length" ref="candidateCapsule" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--selected': !!chosenCandidate }" aria-haspopup="dialog" :aria-expanded="templatePickerOpen" :aria-controls="candidatePickerId" :disabled="busy || !proposal?.candidates.length" @click="openCandidatePicker">{{ chosenCandidate?.label || (busy ? '模板处理中…' : proposal?.candidates.length ? '选择模板' : '暂无可选模板') }} <span aria-hidden="true">⌄</span></button>
+    <div v-if="!archiveOnSelect && workbookReports.length" class="workbook-thread workbook-thread--live" aria-label="工作情况回报">
+      <span class="workbook-thread__spine" aria-hidden="true"></span>
+      <WorkbookEmployeeReport v-for="report in workbookReports" :key="report.employee" v-bind="report" />
+    </div>
     <div v-if="review">
       <p v-if="review.selected_region?.print_area_mode === 'selected'">已按您的选择设置派生打印范围：原范围 {{ review.selected_region.source_print_areas?.map((area) => area.value).join('；') || '未设置' }} → 派生范围 {{ review.selected_region.derived_print_area || '未设置' }}；原件不变。</p>
       <div v-if="!archiveOnSelect || templatePickerOpen" class="reviewed-template__candidate-popover" :class="{ 'elt-template-picker__layer': archiveOnSelect }" @click.self="closeCandidatePicker" @wheel.self.prevent @touchmove.self.prevent>
@@ -1700,6 +1735,14 @@ async function downloadCandidate(index: number) {
 .reviewed-template .reviewed-template__candidate-capsule--selected { border-color: var(--xc-color-success); background: color-mix(in srgb, var(--xc-color-success) 8%, var(--xc-color-surface)); }
 .reviewed-template .reviewed-template__candidate-capsule--saved { border-color: var(--xc-color-success); background: color-mix(in srgb, var(--xc-color-success) 8%, var(--xc-color-surface)); }
 .reviewed-documents { display: flex; flex-wrap: wrap; gap: var(--xc-space-2); }
+.workbook-thread { display: flex; flex-direction: column; align-items: flex-start; gap: var(--xc-space-2); background: transparent; border: 0; }
+.workbook-thread--live { position: relative; gap: var(--xc-space-6); padding: var(--xc-space-2) 0; }
+.workbook-thread__spine { position: absolute; top: 1.15rem; bottom: 1.15rem; left: 7px; width: 1px; background: color-mix(in srgb, var(--xc-color-primary) 32%, transparent); pointer-events: none; }
+.workbook-thread--live .workbook-node { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: var(--xc-space-3); align-items: start; width: min(40rem, 100%); background: transparent; border: 0; box-shadow: none; }
+.workbook-node__who { margin: 0; color: var(--xc-color-text); font-size: 13px; font-weight: 600; line-height: 1.4; }
+.workbook-thread--live :deep(.workbook-node__dot),
+.workbook-thread--live .workbook-node__dot { width: 7px; height: 7px; margin-top: 0.4rem; justify-self: center; border-radius: 50%; background: var(--xc-color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--xc-color-primary) 16%, transparent); }
+.workbook-thread--live :deep(.workbook-node__dot--quiet) { background: var(--xc-color-muted); box-shadow: 0 0 0 3px color-mix(in srgb, var(--xc-color-muted) 24%, transparent); }
 .reviewed-template__candidate-capsule small { color: var(--xc-color-muted); }
 .reviewed-document-picker__options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--xc-space-3); }
 .reviewed-document-picker .elt-template-picker__bar { position: sticky; top: 0; z-index: 1; background: var(--xc-color-surface); padding-bottom: var(--xc-space-2); }

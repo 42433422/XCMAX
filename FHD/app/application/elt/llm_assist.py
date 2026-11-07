@@ -56,6 +56,7 @@ def _bounded_structured_completion(
     timeout_seconds: float,
     conversation_service: Any | None,
     provider: Any | None,
+    max_repairs: int = 0,
 ):
     """Run one structured LLM call without letting a worker thread stall.
 
@@ -79,7 +80,7 @@ def _bounded_structured_completion(
                 max_tokens=max_tokens,
                 # A schema repair is another provider request.  ETL remains
                 # deterministic without it, so never retry advisory output.
-                max_repairs=0,
+                max_repairs=max_repairs,
                 timeout_seconds=timeout_seconds,
                 profile="etl",
                 conversation_service=conversation_service,
@@ -104,12 +105,18 @@ def _bounded_structured_completion(
     return box["result"]
 
 
-def _active_software_llm() -> tuple[bool, Any | None, Any | None]:
+def _active_software_llm(
+    timeout_seconds: float | None = None,
+) -> tuple[bool, Any | None, Any | None]:
     """Resolve the current user's software-account LLM, then app-wide providers."""
     try:
         from app.application.elt.llm_session_provider import current_owner_market_provider
 
-        market_provider = current_owner_market_provider(timeout_seconds=etl_llm_timeout_seconds())
+        market_provider = current_owner_market_provider(
+            timeout_seconds=(
+                etl_llm_timeout_seconds() if timeout_seconds is None else timeout_seconds
+            )
+        )
         if market_provider is not None:
             return True, None, market_provider
         from app.infrastructure.llm.providers.registry import get_active_provider
@@ -139,11 +146,14 @@ def _complete(
     *,
     schema: dict[str, Any],
     max_tokens: int,
+    lane: str = "",
+    max_repairs: int = 0,
+    timeout_seconds: float | None = None,
 ) -> LlmAssistResult:
     mode = etl_llm_mode()
     if mode == "off":
         return LlmAssistResult()
-    circuit_key = _circuit_key()
+    circuit_key = _circuit_key(lane)
     circuit_degradation = _circuit_degradation(circuit_key)
     if circuit_degradation:
         return LlmAssistResult(
@@ -163,22 +173,29 @@ def _complete(
                 degraded=True,
                 degradation_code=circuit_degradation,
             )
-        configured, conversation_service, provider = _active_software_llm()
+        configured, conversation_service, provider = _active_software_llm(timeout_seconds)
         if not configured:
             return LlmAssistResult(
                 used_llm=False,
                 degraded=mode == "on",
                 degradation_code="ELT_LLM_UNAVAILABLE" if mode == "on" else "",
             )
-        timeout_seconds = etl_llm_timeout_seconds()
+        # An explicit budget is the whole call, including one schema repair.
+        # Probe calls still scale the short timeout when a repair is allowed.
+        budget = (
+            timeout_seconds
+            if timeout_seconds is not None
+            else etl_llm_timeout_seconds() * (1 + max(0, max_repairs))
+        )
         try:
             result = _bounded_structured_completion(
                 messages,
                 schema=schema,
                 max_tokens=max_tokens,
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=budget,
                 conversation_service=conversation_service,
                 provider=provider,
+                max_repairs=max_repairs,
             )
             return LlmAssistResult(
                 used_llm=True,
@@ -189,10 +206,8 @@ def _complete(
         except BOUNDARY_ERRORS as exc:  # Advisory-provider boundary: preserve deterministic ETL.
             degradation_code = _degradation_code(exc)
             _open_circuit(circuit_key, degradation_code)
-            logger.info(
-                "general etl llm assist degraded (%s): %s",
-                degradation_code,
-                type(exc).__name__,
+            _runtime.log_etl_llm_degradation(
+                logger, code=degradation_code, lane=lane, exc=exc
             )
             return LlmAssistResult(
                 used_llm=True,
@@ -277,7 +292,7 @@ def advise_workbook_regions(probes: list[dict[str, Any]]) -> LlmAssistResult:
             ),
         },
     ]
-    result = _complete(messages, schema=_REGION_SCHEMA, max_tokens=1800)
+    result = _complete(messages, schema=_REGION_SCHEMA, max_tokens=1800, lane="template")
     allowed_ids = {item["region_id"] for item in bounded if item["region_id"]}
     normalized: list[dict[str, Any]] = []
     for item in list(result.data.get("regions") or []):
@@ -362,7 +377,7 @@ def advise_field_mappings(
             ),
         },
     ]
-    result = _complete(messages, schema=_MAPPING_SCHEMA, max_tokens=1600)
+    result = _complete(messages, schema=_MAPPING_SCHEMA, max_tokens=1600, lane="database")
     allowed_sources = set(headers)
     allowed_targets = {str(field.get("key") or "") for field in target_fields}
     normalized: list[dict[str, Any]] = []
@@ -456,7 +471,7 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
             ),
         },
     ]
-    result = _complete(messages, schema=_ROW_SCHEMA, max_tokens=1600)
+    result = _complete(messages, schema=_ROW_SCHEMA, max_tokens=1600, lane="database")
     normalized: list[dict[str, Any]] = []
     for item in list(result.data.get("items") or []):
         if not isinstance(item, dict):
@@ -479,9 +494,100 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
     return result
 
 
+
+
+_BUSINESS_IMPORT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["rows"],
+    "properties": {"rows": {"type": "array", "items": {"type": "object"}}},
+}
+_KNOWLEDGE_IMPORT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["content"],
+    "properties": {"title": {"type": "string"}, "content": {"type": "string"}},
+}
+
+
+def _cell(value: Any) -> str:
+    return str(value or "").strip()[:160]
+
+
+def advise_business_import(sheet_text: str) -> LlmAssistResult:
+    """Import archived sheet rows on the database line only."""
+    source = str(sheet_text or "").strip()
+    if not source:
+        return LlmAssistResult()
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你把归档原表导入业务数据库。只返回 JSON。"
+                "rows 的字段只能是 customer_name、purchase_unit、product_name、quantity、"
+                "unit_price、amount、model。只放货品明细。表头、合计、空行不要放入。"
+                "购买单位用单据上的客户，不要用列名。"
+                "每一张表都要扫，这一本有几张就扫几张，每一行货品单独成一条，不要在第一张送货单结束后停止。"
+                "行内没有购买单位时，用整本表头上的客户，不要留空。"
+                "合计、表头、协议文字不要放入。"
+                "借还台账和测算表不要导入，除非明确要求。"
+                "JSON 必须是单个对象、以 rows 开头、不要 markdown 代码块、不要解释文字。"
+            ),
+        },
+        {"role": "user", "content": source[:20_000]},
+    ]
+    result = _complete(
+        messages,
+        schema=_BUSINESS_IMPORT_SCHEMA,
+        max_tokens=8192,
+        lane="database",
+        max_repairs=1,
+        timeout_seconds=etl_llm_timeout_seconds(full_sheet=True),
+    )
+    rows = []
+    for item in list(result.data.get("rows") or [])[:100]:
+        if isinstance(item, dict):
+            rows.append({key: _cell(item.get(key)) for key in (
+                "customer_name", "purchase_unit", "product_name", "quantity",
+                "unit_price", "amount", "model",
+            )})
+    result.data = {"rows": rows}
+    return result
+
+
+def advise_knowledge_import(document_text: str) -> LlmAssistResult:
+    """Import one archived sheet on the knowledge line only."""
+    source = str(document_text or "").strip()
+    if not source:
+        return LlmAssistResult()
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你把归档原表导入知识库。只返回 JSON，包含 title 和 content。"
+                "content 保留客户、货品、数量、单价和金额，不要改成列名。"
+            ),
+        },
+        {"role": "user", "content": source[:20_000]},
+    ]
+    result = _complete(
+        messages,
+        schema=_KNOWLEDGE_IMPORT_SCHEMA,
+        max_tokens=1600,
+        lane="knowledge",
+        max_repairs=1,
+        timeout_seconds=etl_llm_timeout_seconds(full_sheet=True),
+    )
+    result.data = {
+        "title": _cell(result.data.get("title")),
+        "content": str(result.data.get("content") or "").strip()[:20_000],
+    }
+    return result
+
+
 __all__ = [
     "LlmAssistResult",
+    "advise_business_import",
     "advise_field_mappings",
+    "advise_knowledge_import",
     "advise_row_decisions",
     "advise_workbook_regions",
     "clear_etl_llm_circuit",

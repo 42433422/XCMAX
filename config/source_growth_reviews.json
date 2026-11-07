@@ -99,26 +99,26 @@
     },
     "FHD/app/application/reviewed_excel_template.py": {
       "base_file": "FHD/app/application/reviewed_excel_template.py",
-      "base_blob": "5a0d5f2f5830bbb81a9369c068540b60b2bea61a",
-      "head_blob": "6999cd18e774ea9306f6c89ccb2175815d57d225",
-      "before_lines": 1325,
-      "after_lines": 1375,
-      "reason": "Workbook inspection keeps formula text and cached results side by side, marks missing caches, and bounds sheets by valued cells so styled empty columns no longer hide business rows.",
-      "boundary": "Inspection loop only. Formula XML parsing, cached-value loading and content bounds live in reviewed_excel_formula_cells; classification, drawings and derivation are unchanged.",
-      "validation": "Reviewed workbook template, structural, drawing and verify-cut tests plus synthetic B09-B16 formula-cache workbooks.",
-      "follow_up": "Separate inspection policy from workbook derivation when the next feature changes both; retain fail-closed fidelity checks and keep private-source acceptance distinct from synthetic tests.",
+      "base_blob": "6999cd18e774ea9306f6c89ccb2175815d57d225",
+      "head_blob": "e42db994d4cd20b30ffc42516c3783a734c7f38a",
+      "before_lines": 1375,
+      "after_lines": 1376,
+      "reason": "Workbook inspection keeps formula text and cached results, and raises the non-empty cell preview bound to the per-sheet extent so large tables are not truncated.",
+      "boundary": "Inspection loop only. Formula XML parsing and cached-value loading stay in reviewed_excel_formula_cells; classification and derivation are unchanged.",
+      "validation": "Formula-cache, Word conversion and large-table synthetic regression tests. Private customer workbooks are not part of this check.",
+      "follow_up": "Rebind this request to the merged blob after integration; keep inspection separate from confirmed candidate persistence.",
       "review_owner": "@42433422"
     },
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
       "base_file": "FHD/app/fastapi_routes/reviewed_excel_template.py",
-      "base_blob": "cb04307e32f833a023ff1cccb6123027ca4ae0e2",
-      "head_blob": "f65ab3ae3b8c168351457c1f5af1c2b0faef4ae6",
-      "before_lines": 2032,
-      "after_lines": 2033,
-      "reason": "Archive-classify may accept Word (.docx) statements so they can be derived into a workbook and sent through platform-model analyze.",
-      "boundary": "Only the allowed upload extensions for the existing archive-classify body parser. Model-required write gates are unchanged.",
-      "validation": "tests/test_application/test_reviewed_excel_docx.py covers Word intake, a missing model session that cannot write, and a confirmed model template that can.",
-      "follow_up": "Keep Word conversion in reviewed_excel_docx; do not grow this route with additional format adapters.",
+      "base_blob": "d89361f68dbd53f1792435f686a38dd6c8a74e47",
+      "head_blob": "6d047420ea65640669ce1b09d7229f64537b4a3d",
+      "before_lines": 2030,
+      "after_lines": 2088,
+      "reason": "Return per-row slice disposition and preserve each parallel region review state.",
+      "boundary": "Existing reviewed Excel endpoints only; old direct execute endpoint stays removed.",
+      "validation": "Auto-slice row coverage and selected candidate confirmation route tests.",
+      "follow_up": "Review response compatibility without adding a second import execution path.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/ai_chat_app_service.py": {
@@ -168,6 +168,54 @@
       "boundary": "Existing attendance pipeline only; static bound SQLite queries and 500-ID readback batches preserve idempotent writes and no new route.",
       "validation": "Synthetic attendance confirmation and customer Excel gate tests cover real workbook writes, exclusions, monthly marks and committed output.",
       "follow_up": "Review separation of monthly layout interpretation from attendance persistence after candidate-only ingestion is integrated; this record requests review, not approval."
+    },
+    "FHD/app/application/elt/table_segmentation.py": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "0628a30d7ce973c0d921a9736b395e64752617bb",
+      "before_lines": 0,
+      "after_lines": 935,
+      "reason": "Keep deterministic merged-cell, parallel-table and row-kind segmentation in one cohesive parser; ambiguous names must not become totals.",
+      "boundary": "Pure structural analysis only; no persistence, model authorization or new API endpoint.",
+      "validation": "Synthetic tables cover merged headers, parallel regions, totals versus customer names and exact provenance.",
+      "follow_up": "Review this new parser as a coherent unit; do not mechanically split it solely to hide the advisory size.",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/reviewed_excel_structural_index.py": {
+      "base_file": "FHD/app/application/reviewed_excel_structural_index.py",
+      "base_blob": "7d938f86166292b9047ef21861d1155e2ba40e0f",
+      "head_blob": "b57e107324ced90a96bd01d53d53b2be74d59cdf",
+      "before_lines": 892,
+      "after_lines": 909,
+      "reason": "Preserve overflow table evidence instead of silently truncating after eighty structural candidates.",
+      "boundary": "Existing structural index and projection contract only; no import execution.",
+      "validation": "Table segmentation and reviewed Excel structural-index regression tests.",
+      "follow_up": "Review candidate overflow representation together with its consumer contract.",
+      "review_owner": "@42433422"
+    },
+    "FHD/frontend/src/components/template/ReviewedExcelTemplate.vue": {
+      "base_file": "FHD/frontend/src/components/template/ReviewedExcelTemplate.vue",
+      "base_blob": "54ffd834aa50b394215cd454c24a3827ef2302f7",
+      "head_blob": "442958ec735536f78e98a7e40662d420e3f5fcc4",
+      "before_lines": 2060,
+      "after_lines": 2069,
+      "reason": "Expose structural regions and exclusion reasons before candidate confirmation.",
+      "boundary": "Existing data docking component only; no routing, authentication or write-authorization change.",
+      "validation": "Existing reviewed Excel component tests and final required frontend CI.",
+      "follow_up": "Keep UI evidence tied to server structural results; future extraction must follow a real responsibility boundary.",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/elt/auto_ingest_service.py": {
+      "base_file": "FHD/app/application/elt/auto_ingest_service.py",
+      "base_blob": "acf93ca707e3e1d434ccacaf41d61ce3fcb427bf",
+      "head_blob": "5861b33081811e0d86547220ec98e8acf296453e",
+      "before_lines": 936,
+      "after_lines": 1018,
+      "reason": "Reviewed intake now prepares the knowledge-import lane from the archived workbook text, records the source hash and preserves the deterministic preview/confirmation boundary.",
+      "boundary": "Auto-ingest knowledge planning and source-text handoff only; business target detection, tenant authorization, persistence and commit remain in their existing services.",
+      "validation": "ELT preview, knowledge-plan, selected-candidate confirmation, source-version and tenant-isolation regression suites; full integration CI on the final head.",
+      "follow_up": "Extract workbook text projection from auto_ingest_service after the candidate-only intake contract is stable.",
+      "review_owner": "@42433422"
     }
   }
 }

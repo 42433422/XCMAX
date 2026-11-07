@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from collections import defaultdict
 from io import BytesIO
 from pathlib import Path
@@ -23,7 +22,7 @@ from app.application.elt.archive_store import (
 )
 from app.application.elt.errors import EltError, public_excel_error
 from app.application.elt.service_support import dump_json, load_json, new_id
-from app.application.elt.service_uploads import UploadServiceMixin
+from app.application.elt.service_uploads import UploadServiceMixin, discard_stored_upload
 from app.application.reviewed_excel_classification import observe_fragment_relationships
 from app.application.reviewed_excel_classification_store import (
     _classification_run,
@@ -489,7 +488,6 @@ def _create_archive_classification(
         if review.get("conversion_receipt"):
             upload_record.expires_at = None
         created_paths.append(Path(upload_record.storage_path))
-        os.chmod(upload_record.storage_path, 0o600)
         version = _classification_version(
             review["sha256"],
             "",
@@ -539,7 +537,7 @@ def _create_archive_classification(
     except BOUNDARY_ERRORS:
         if not commit_attempted:
             for path in created_paths:
-                path.unlink(missing_ok=True)
+                discard_stored_upload(path)
         raise
     return _archive_classification_receipt(
         archived,

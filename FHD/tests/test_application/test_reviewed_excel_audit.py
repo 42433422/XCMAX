@@ -298,3 +298,76 @@ def test_template_call_passes_configured_timeout_to_http(monkeypatch, setting, e
     monkeypatch.setattr(llm_session_provider, "current_owner_market_provider", session_provider)
     assert _template_platform_complete([], {"type": "object"}, 100, owner_id=7).data == {}
     assert seen == [("GET", "/api/llm/resolve-chat-default"), ("POST", "/api/llm/chat/stream")]
+
+
+def test_audited_stream_keeps_provider_body_and_parsed_result(monkeypatch):
+    """A consumed SSE body must be archived. response.content raises ResponseNotRead."""
+    import httpx
+
+    from app.application.elt import llm_session_provider
+    from app.application.reviewed_excel_audit import capture_response
+    from app.application.reviewed_excel_template import _template_platform_complete
+
+    sse = (
+        b'event: meta\ndata: {"ok":true,"provider":"xiaomi","model":"mimo-v2.6-flash"}\n\n'
+        b'event: status\ndata: {"state":"processing","request_id":"upstream-synthetic"}\n\n'
+        b'event: delta\ndata: {"delta":"{"}\n\n'
+        b'event: delta\ndata: {"delta":"}"}\n\n'
+        b'event: done\ndata: {"ok":true,"content":"{}","provider":"xiaomi",'
+        b'"model":"mimo-v2.6-flash"}\n\n'
+        b"event: tail\ndata: after-done\n\n"
+    )
+
+    class Chunked(httpx.AsyncByteStream):
+        def __init__(self, payload: bytes):
+            self.payload = payload
+
+        async def __aiter__(self):
+            for index in range(0, len(self.payload), 17):
+                yield self.payload[index : index + 17]
+
+        async def aclose(self):
+            return None
+
+    class Transport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            if request.url.path == "/api/llm/resolve-chat-default":
+                return httpx.Response(
+                    200, json={"ok": True, "provider": "xiaomi", "model": "mimo-v2.6-flash"}
+                )
+            assert request.url.path == "/api/llm/chat/stream"
+            return httpx.Response(
+                200,
+                headers={
+                    "content-type": "text/event-stream",
+                    "x-request-id": "upstream-synthetic",
+                },
+                stream=Chunked(sse),
+            )
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=Transport(), **kwargs),
+    )
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic.invalid")
+
+    def session_provider(*, timeout_seconds):
+        return llm_session_provider.SessionMarketProvider(
+            7, "synthetic-session-token", timeout_seconds=timeout_seconds
+        )
+
+    monkeypatch.setattr(llm_session_provider, "current_owner_market_provider", session_provider)
+    archived = []
+
+    def save(raw, status, request_id):
+        archived.append((raw, status, request_id))
+
+    with capture_response(save):
+        result = _template_platform_complete(
+            [{"role": "user", "content": "synthetic"}], {"type": "object"}, 100, owner_id=7
+        )
+    assert result.data == {}
+    assert archived == [(sse, 200, "upstream-synthetic")]

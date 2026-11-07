@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import itertools
+import json
 from collections.abc import Iterable
 from pathlib import Path
 from threading import Event
@@ -135,8 +136,25 @@ class AttendanceAdapter(TargetAdapter):
                 after=payload,
                 reason="duplicate_attendance_source",
             )
+        identity = json.dumps(
+            json_safe(
+                {k: v for k, v in payload.items() if k not in {"business_id", "document_path"}}
+            ),
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        seen_people = cache.setdefault("attendance_identities", set())
+        if name and identity in seen_people:
+            return PreviewDecision(
+                "skip",
+                match_ref=business_id,
+                after=payload,
+                reason="duplicate_attendance_in_source",
+            )
         if business_id:
             seen.add(business_id)
+        if name:
+            seen_people.add(identity)
         return PreviewDecision("new", after=payload, reason="new_attendance_row")
 
     def _business_written(self, business_id: str) -> bool:
@@ -308,21 +326,23 @@ class ExportAdapter(TargetAdapter):
                         if callable(callback):
                             callback(executed, total)
         else:
-            from openpyxl import Workbook
+            from app.application.elt.result_export import columns_for_export, write_xlsx_result
 
-            workbook = Workbook(write_only=True)
-            worksheet = workbook.create_sheet("ETL导出")
-            worksheet.append(headers)
-            for executed, row in enumerate(stream, start=1):
-                worksheet.append(
-                    [neutralize_spreadsheet_formula(row.get(key, "")) for key in headers]
-                )
-                if executed % 500 == 0:
-                    callback = context.get("progress_callback")
-                    if callable(callback):
-                        callback(executed, total)
-            workbook.save(path)
-            workbook.close()
+            materialized = list(stream)
+            template = context.get("export_template") or {}
+            written = write_xlsx_result(
+                path,
+                columns=columns_for_export(context, first if isinstance(first, dict) else None),
+                rows=[row for row in materialized if isinstance(row, dict)],
+                sheet_name=str(template.get("sheet_name") or "业务结果"),
+                notes=[str(item) for item in context.get("export_notes") or [] if str(item)],
+                progress=context.get("progress_callback"),
+                total=total,
+            )
+            executed = int(written["data_rows"])
+            written["download_url"] = f"/api/elt/runs/{context['run_id']}/download"
+            callback = context.get("progress_callback")
+            return {"receipt": written, "executed": executed}
         callback = context.get("progress_callback")
         if callable(callback):
             callback(executed, total)

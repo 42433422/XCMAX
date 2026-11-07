@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 from datetime import UTC, timedelta
 from pathlib import Path
@@ -14,16 +15,25 @@ from app.application.elt.parsers import SUPPORTED_SUFFIXES
 from app.application.elt.service_support import (
     MAX_FILE_BYTES,
     MAX_FILE_MIB,
+    READ_ONLY_MODE,
     clean_batch_id,
     clean_filename,
     clean_relative_path,
     new_id,
     utcnow,
 )
+from app.application.elt.upload_content_gate import check_declared_mime, check_stored_content
 from app.db.models.elt import EltUpload
 from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
+
+
+def discard_stored_upload(path: Path) -> None:
+    # Stored originals are read-only; Windows refuses to unlink them until writable again.
+    with contextlib.suppress(OSError):
+        path.chmod(0o600)
+    path.unlink(missing_ok=True)
 
 
 class UploadServiceMixin:
@@ -49,6 +59,7 @@ class UploadServiceMixin:
         )
         if suffix is None:
             raise EltError("ELT_FILE_TYPE_UNSUPPORTED", f"不支持的文件类型: {requested_suffix}")
+        check_declared_mime(suffix, content_type)
         upload_id = new_id()
         root = (
             Path(get_app_data_dir()).resolve()
@@ -85,6 +96,15 @@ class UploadServiceMixin:
         if total == 0:
             destination.unlink(missing_ok=True)
             raise EltError("ELT_FILE_EMPTY", "上传文件为空")
+        content_valid = False
+        try:
+            check_stored_content(destination, suffix)
+            content_valid = True
+        finally:
+            if not content_valid:
+                destination.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            destination.chmod(READ_ONLY_MODE)
 
         upload = EltUpload(
             id=upload_id,
@@ -102,6 +122,21 @@ class UploadServiceMixin:
         )
         db.add(upload)
         db.flush()
+        from app.application.elt.audit import record_elt_audit
+
+        record_elt_audit(
+            db,
+            actor=owner_user_id,
+            action="elt_upload",
+            payload={
+                "upload_id": upload.id,
+                "file_name": upload.file_name,
+                "sha256": upload.sha256,
+                "size_bytes": upload.size_bytes,
+                "batch_id": upload.batch_id,
+                "outcome": "stored",
+            },
+        )
         return self.upload_dict(upload)
 
     def upload_dict(self, upload: EltUpload) -> dict[str, Any]:

@@ -133,6 +133,20 @@ def _source(db, run, tenant, owner):
     return content
 
 
+def _archived_original(db, run, tenant, owner):
+    """Classification workbook. The review upload is the template fragment."""
+    scope = load_json(run.summary_json, {}).get("selected_region") or {}
+    classification_id = scope.get("classification_id")
+    if not classification_id:
+        return _source(db, run, tenant, owner)
+    classification = _classification_run(db, classification_id, tenant, owner)
+    content = _source(db, classification, tenant, owner)
+    expected = scope.get("source_sha256") or classification.file_sha256
+    if hashlib.sha256(content).hexdigest() != expected:
+        raise HTTPException(status_code=409, detail="归档来源版本已改变")
+    return content
+
+
 def _rebuild_archived_document(db, run, tenant, owner):
     scope = load_json(run.summary_json, {}).get("selected_region") or {}
     if not scope.get("archive_version_id") or not scope.get("derived_sha256"):

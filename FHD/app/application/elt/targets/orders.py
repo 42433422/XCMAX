@@ -11,7 +11,10 @@ from sqlalchemy import or_
 from app.application.elt.errors import EltError
 from app.application.elt.targets.helpers import (
     assert_snapshot_unchanged,
+    decimal_or_none,
     decimal_or_zero,
+    integer_or_zero,
+    is_column_header_label,
     issue,
     optional_text,
     parse_date,
@@ -57,9 +60,10 @@ class PurchaseOrderAdapter(TargetAdapter):
             type="number",
             required=True,
             aliases=("数量", "采购数量"),
+            scale=4,
         ),
         TargetField("unit", "单位", aliases=("单位", "计量单位")),
-        TargetField("unit_price", "单价", type="number", aliases=("单价", "价格")),
+        TargetField("unit_price", "单价", type="number", aliases=("单价", "价格"), scale=4),
     )
     default_match_keys = ("external_order_no",)
 
@@ -78,6 +82,13 @@ class PurchaseOrderAdapter(TargetAdapter):
                 reason="existing_order_v1_no_update",
                 issues=issues,
             )
+        cache = context.setdefault("_preview_cache", {})
+        line_key = json.dumps(json_safe(data), sort_keys=True, ensure_ascii=False)
+        seen_lines = cache.setdefault("purchase_order_lines", set())
+        if line_key in seen_lines and not issues:
+            return PreviewDecision(
+                "skip", after=json_safe(data), reason="duplicate_order_line_in_source"
+            )
         supplier = (
             db.query(Supplier).filter(Supplier.name == str(data.get("supplier_name"))).first()
         )
@@ -94,6 +105,7 @@ class PurchaseOrderAdapter(TargetAdapter):
             issues.append(issue("ELT_PRODUCT_NOT_FOUND", "product_name", "产品不存在"))
         if issues:
             return PreviewDecision("error", issues=issues, reason="reference_missing")
+        seen_lines.add(line_key)
         return PreviewDecision(
             "new",
             after={**json_safe(data), "_supplier_id": supplier.id, "_product_id": product.id},
@@ -216,8 +228,8 @@ class ShipmentAdapter(TargetAdapter):
         TargetField("quantity_kg", "公斤数", type="number", aliases=("重量", "公斤", "kg")),
         TargetField("quantity_tins", "桶数", type="integer", aliases=("桶数", "数量")),
         TargetField("tin_spec", "桶规格", type="number", aliases=("桶规格",)),
-        TargetField("unit_price", "单价", type="number", aliases=("单价",)),
-        TargetField("amount", "金额", type="number", aliases=("金额", "合计")),
+        TargetField("unit_price", "单价", type="number", aliases=("单价",), scale=2),
+        TargetField("amount", "金额", type="number", aliases=("金额", "合计"), scale=2),
     )
     default_match_keys = ("source_fingerprint", "external_order_no")
 
@@ -252,7 +264,33 @@ class ShipmentAdapter(TargetAdapter):
             return False
         return isinstance(parsed, dict) and str(parsed.get("etl_run_id") or "") == expected
 
+    @staticmethod
+    def _ensure_purchase_unit(db, name: str) -> None:
+        """业务记录 lists units from purchase_units, so the shipment's customer must exist."""
+        from app.application.elt.targets.customer_product_support import owned_query
+        from app.db.models.purchase_unit import PurchaseUnit
+
+        unit_name = str(name or "").strip()
+        if not unit_name or is_column_header_label(unit_name):
+            return
+        if owned_query(db, PurchaseUnit).filter(PurchaseUnit.unit_name == unit_name).first():
+            return
+        db.add(PurchaseUnit(tenant_id=tenant_id_for_write(), unit_name=unit_name, is_active=True))
+        db.flush()
+
     def preview(self, db, data, *, allowed_update_fields, context):
+        if is_column_header_label(data.get("purchase_unit")):
+            return PreviewDecision(
+                "error",
+                issues=[
+                    issue(
+                        "ELT_HEADER_LABEL_NOT_MASTER_DATA",
+                        "purchase_unit",
+                        "表头文字不能写入购买单位",
+                    )
+                ],
+                reason="header_label_not_master_data",
+            )
         issues = self.validate(data)
         if data.get("quantity_kg") in (None, "") and data.get("quantity_tins") in (None, ""):
             issues.append(issue("ELT_QUANTITY_REQUIRED", "quantity_kg", "公斤数或桶数至少填写一项"))
@@ -351,6 +389,26 @@ class ShipmentAdapter(TargetAdapter):
                     match_ref=str(existing_records[0].id),
                     reason="external_order_duplicate",
                 )
+        cache = context.setdefault("_preview_cache", {})
+        # Source fingerprints locate rows, not business equivalence. Keep differences
+        # in price, amount and packaging; only an identical business payload is duplicate.
+        line_key = json.dumps(
+            json_safe(
+                {
+                    k: v
+                    for k, v in data.items()
+                    if k not in {"source_fingerprint", "legacy_note_fingerprint"}
+                }
+            ),
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        seen_lines = cache.setdefault("shipment_lines", set())
+        if line_key in seen_lines:
+            return PreviewDecision(
+                "skip", after=json_safe(data), reason="duplicate_shipment_line_in_source"
+            )
+        seen_lines.add(line_key)
         return PreviewDecision(
             "new",
             after={**json_safe(data), "_fingerprint": fingerprint},
@@ -371,13 +429,15 @@ class ShipmentAdapter(TargetAdapter):
                 "发货记录在预演后已存在，请重新预演",
                 status_code=409,
             )
+        self._ensure_purchase_unit(db, str(data.get("purchase_unit") or ""))
         parsed = {
             "external_order_no": data.get("external_order_no"),
             "etl_run_id": context.get("run_id"),
             "etl_fingerprint": fingerprint,
         }
         quantity_kg = float(decimal_or_zero(data.get("quantity_kg")))
-        quantity_tins = int(decimal_or_zero(data.get("quantity_tins")))
+        quantity_tins = integer_or_zero(data.get("quantity_tins"))
+        tin_spec = decimal_or_none(data.get("tin_spec"))
         obj = ShipmentRecord(
             tenant_id=tenant_id_for_write(),
             purchase_unit=str(data["purchase_unit"]),
@@ -385,9 +445,9 @@ class ShipmentAdapter(TargetAdapter):
             model_number=optional_text(data.get("model_number")),
             quantity_kg=quantity_kg,
             quantity_tins=quantity_tins,
-            tin_spec=float(decimal_or_zero(data.get("tin_spec"))) or None,
-            unit_price=decimal_or_zero(data.get("unit_price")),
-            amount=decimal_or_zero(data.get("amount")),
+            tin_spec=None if tin_spec is None else float(tin_spec),
+            unit_price=decimal_or_none(data.get("unit_price")),
+            amount=decimal_or_none(data.get("amount")),
             status="pending",
             raw_text=json.dumps(json_safe(data), ensure_ascii=False),
             parsed_data=json.dumps(parsed, ensure_ascii=False),

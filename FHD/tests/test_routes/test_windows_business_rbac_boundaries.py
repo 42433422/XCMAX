@@ -260,26 +260,69 @@ def test_mod_shipment_print_resolves_files_only_inside_the_session_tenant(
     assert len(calls) == 1
 
 
-def test_legacy_shipment_generate_still_fails_closed_for_tenant_sessions(monkeypatch):
-    """旧接口没有租户隔离：企业租户会话继续 403，不能用放开它来冒充修复。"""
+def test_legacy_shipment_generate_still_fails_closed_for_tenant_sessions(monkeypatch, tmp_path):
+    """旧的生成和打印接口没有租户隔离，企业租户会话继续 403。
+
+    下载只读取当前租户自己的输出目录：自己的文件是 200，别人的文件和缺失文件是 404。
+    """
     from app.fastapi_routes import shipment_orders
     from app.infrastructure.auth import business_scope_gate
 
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     user = SimpleNamespace(id=8, tenant_id=23, role="user", tier="user", is_active=True)
     monkeypatch.setattr(business_scope_gate, "resolve_session_user", lambda _request: user)
     monkeypatch.setattr(business_scope_gate, "get_logged_in_user", lambda _request: user)
     monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda _request: user,
+    )
+    monkeypatch.setattr(
         "app.application.facades.session_facade.get_auth_service",
         lambda: SimpleNamespace(has_permission=lambda *_args: True),
     )
+    own = tmp_path / "tenants" / "23" / "shipment_outputs"
+    other = tmp_path / "tenants" / "24" / "shipment_outputs"
+    own.mkdir(parents=True)
+    other.mkdir(parents=True)
+    (own / "mine.xlsx").write_bytes(b"PK mine")
+    (other / "theirs.xlsx").write_bytes(b"PK theirs")
     client = _client(shipment_orders.router)
     for sku in ("enterprise", "personal"):
         monkeypatch.setattr(business_scope_gate, "resolve_product_sku", lambda sku=sku: sku)
         for method, path, body in (
             ("post", "/api/shipment/generate", {"unit_name": "客户B", "products": [{"name": "A"}]}),
             ("post", "/api/shipment/print", {"file_path": "x.xlsx"}),
-            ("get", "/api/shipment/download/x.xlsx", None),
         ):
             response = getattr(client, method)(path, **({"json": body} if body else {}))
             assert response.status_code == 403, (sku, path)
             assert "尚未提供安全的租户数据隔离" in response.text
+        assert client.get("/api/shipment/download/mine.xlsx").status_code == 200
+        assert client.get("/api/shipment/download/theirs.xlsx").status_code == 404
+        assert client.get("/api/shipment/download/missing.xlsx").status_code == 404
+
+
+def test_anonymous_shipment_export_and_download_require_login(monkeypatch):
+    from app.fastapi_routes import shipment_orders
+    from app.infrastructure.auth import business_scope_gate
+
+    monkeypatch.setattr(business_scope_gate, "resolve_session_user", lambda _request: None)
+    monkeypatch.setattr(business_scope_gate, "resolve_product_sku", lambda: "enterprise")
+    client = _client(shipment_orders.router)
+    assert client.get("/api/shipment/shipment-records/export").status_code == 401
+    assert client.get("/api/shipment/download/mine.xlsx").status_code == 401
+
+
+def test_platform_admin_cannot_download_tenant_shipment_export(monkeypatch):
+    from app.fastapi_routes import shipment_orders
+    from app.infrastructure.auth import business_scope_gate
+
+    admin = SimpleNamespace(id=1, tenant_id=None, role="admin", tier="admin", is_active=True)
+    monkeypatch.setattr(business_scope_gate, "resolve_session_user", lambda _request: admin)
+    monkeypatch.setattr(business_scope_gate, "resolve_product_sku", lambda: "enterprise")
+    client = _client(shipment_orders.router)
+    export = client.get("/api/shipment/shipment-records/export")
+    download = client.get("/api/shipment/download/mine.xlsx")
+    assert export.status_code == 403
+    assert download.status_code == 403
+    assert export.content[:2] != b"PK"
+    assert download.content[:2] != b"PK"

@@ -12,7 +12,7 @@ from typing import Any, cast
 from urllib.parse import urlparse
 
 from app.application.elt.errors import EltError
-from app.application.elt.targets.targets_base import TargetField, json_safe
+from app.application.elt.targets.targets_base import TargetField, json_safe, strict_decimal
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -43,16 +43,66 @@ def issue(code: str, field: str, message: str) -> dict[str, Any]:
     return {"code": code, "field": field, "severity": "error", "message": message}
 
 
+_COLUMN_HEADER_LABELS = frozenset(
+    {
+        "产品名称",
+        "商品名称",
+        "货品名称",
+        "品名",
+        "数量",
+        "单价",
+        "金额",
+        "规格",
+        "备注",
+        "客户名称",
+        "单据日期",
+        "购买单位",
+        "购货单位",
+        "客户",
+        "型号",
+        "日期",
+        "合计",
+        "总计",
+        "小计",
+    }
+)
+_MASTER_HEADER_FIELDS = ("customer_name", "purchase_unit", "unit")
+
+
+def is_column_header_label(value: Any) -> bool:
+    """True when a cell is a column title, not a customer or product value."""
+    return str(value or "").strip() in _COLUMN_HEADER_LABELS
+
+
+def degraded_header_master(advisory: dict[str, Any], normalized: dict[str, Any]) -> bool:
+    """A degraded model result must not keep a header label as master data."""
+    if not advisory.get("degraded"):
+        return False
+    return any(is_column_header_label(normalized.get(key)) for key in _MASTER_HEADER_FIELDS)
+
+
 def optional_text(value: Any) -> str | None:
-    text = str(value or "").strip()
-    return text or None
+    """Text for optional columns: only None is absent; 0, False and "" keep their meaning."""
+    if value is None:
+        return None
+    return str(value).strip()
+
+
+def decimal_or_none(value: Any) -> Decimal | None:
+    return strict_decimal(value)
 
 
 def decimal_or_zero(value: Any) -> Decimal:
-    try:
-        return Decimal(str(value or "0").replace(",", ""))
-    except RECOVERABLE_ERRORS as exc:
-        raise EltError("ELT_NUMBER_INVALID", f"数字格式不正确: {value}") from exc
+    """For NOT NULL numeric columns whose empty business meaning is zero."""
+    number = strict_decimal(value)
+    return Decimal("0") if number is None else number
+
+
+def integer_or_zero(value: Any) -> int:
+    number = decimal_or_zero(value)
+    if number != number.to_integral_value():
+        raise EltError("ELT_NUMBER_PRECISION_EXCEEDED", f"整数字段不能截断小数: {value}")
+    return int(number)
 
 
 def parse_date(value: Any) -> date:

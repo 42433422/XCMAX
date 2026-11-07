@@ -28,7 +28,8 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_UNPACKED = 100 * 1024 * 1024
-MAX_CELLS = 20_000
+# Equals the per-sheet structural-sampling extent, so any fully read sheet fits.
+MAX_CELLS = 100_000
 
 
 from app.application.reviewed_excel_classification import (
@@ -215,7 +216,11 @@ def _template_platform_complete(
             choice = (response or {}).get("choices", [])[0]
             finish = choice.get("finish_reason")
             if finish not in {None, "stop"}:
-                raise ReviewedExcelError("incomplete")
+                err = ReviewedExcelError(
+                    "模型输出不完整" if finish == "length" else "模型输出未正常结束"
+                )
+                err.finish_reason = finish
+                raise err
             data = extract_json(str((choice.get("message") or {}).get("content") or ""))
             if data is not None:
                 from app.application.reviewed_excel_partition import coerce_payload_document_labels
@@ -230,16 +235,28 @@ def _template_platform_complete(
             )
         except ModelRequestNotSent:
             raise
+        except ReviewedExcelError as exc:
+            logging.getLogger(__name__).info(
+                "template platform call failed: %s finish_reason=%s detail=%s",
+                type(exc).__name__,
+                getattr(exc, "finish_reason", None) or "unreported",
+                str(exc.public_message).replace("\n", " ")[:160],
+            )
+            raise
         except (MarketModelError, ValueError) as exc:
             from app.application.elt.errors import provider_http_status
 
             status = provider_http_status(exc)
+            logging.getLogger(__name__).info(
+                "template platform call failed: %s finish_reason=unreported detail=%s",
+                type(exc).__name__,
+                str(exc).replace("\n", " ")[:160],
+            )
             if status in {400, 401, 403, 404} or isinstance(exc, MarketModelError):
                 raise ReviewedExcelError(
                     str(exc),
                     provider_status=status or getattr(exc, "status_code", None),
                 ) from None
-            logging.getLogger(__name__).info("template platform call failed: BOUNDARY")
             raise ReviewedExcelError(
                 "模型调用失败或结果不完整，可能已产生费用；未自动重试"
             ) from None
@@ -247,11 +264,15 @@ def _template_platform_complete(
             from app.application.elt.errors import provider_http_status
 
             status = provider_http_status(exc)
+            logging.getLogger(__name__).info(
+                "template platform call failed: %s finish_reason=unreported detail=%s",
+                type(exc).__name__,
+                str(exc).replace("\n", " ")[:160],
+            )
             if status in {400, 401, 403, 404}:
                 raise ReviewedExcelError(
                     "当前模型或模型服务入口不可用", provider_status=status
                 ) from None
-            logging.getLogger(__name__).info("template platform call failed: BOUNDARY")
             raise ReviewedExcelError(
                 "模型调用失败或结果不完整，可能已产生费用；未自动重试"
             ) from None
@@ -454,7 +475,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                         sample_full = True
                         break
                     if not structural and len(cells) >= MAX_CELLS:
-                        raise ReviewedExcelError("非空单元格超过 20000 个，暂不能完整预览")
+                        raise ReviewedExcelError(f"非空单元格超过 {MAX_CELLS} 个，暂不能完整预览")
                     if structural:
                         sampled += 1
                     if formula:
@@ -1181,6 +1202,7 @@ def refine_proposal(
 ) -> dict:
     """Use the configured platform (or mapped) template LLM for a bounded revision."""
     import json
+    import logging
 
     from app.application.elt.llm_session_provider import bind_etl_llm_owner, reset_etl_llm_owner
 
@@ -1287,8 +1309,19 @@ def refine_proposal(
         },
     ]
     token = bind_etl_llm_owner(owner_id)
+    output_tokens = 1400
     try:
-        result = _template_llm_complete(messages, schema, 1400, owner_id=owner_id)
+        try:
+            result = _template_llm_complete(messages, schema, output_tokens, owner_id=owner_id)
+        except ReviewedExcelError as exc:
+            if getattr(exc, "finish_reason", None) != "length":
+                raise
+            logging.getLogger(__name__).info(
+                "template preview truncated finish_reason=length max_tokens=%s; raising cap to 4096",
+                output_tokens,
+            )
+            output_tokens = 4096
+            result = _template_llm_complete(messages, schema, output_tokens, owner_id=owner_id)
     finally:
         reset_etl_llm_owner(token)
     if not result.used_llm or result.degraded:
@@ -1312,7 +1345,9 @@ def refine_proposal(
             or not isinstance(answer.get("reason"), str)
         ):
             raise ReviewedExcelError("模型返回格式无效，原候选未改变")
+        kept = []
         pairs = []
+        dropped = 0
         for item in answer["clear"]:
             if (
                 not isinstance(item, dict)
@@ -1320,17 +1355,24 @@ def refine_proposal(
                 or not isinstance(item["sheet"], str)
                 or not isinstance(item["cell"], str)
             ):
-                raise ReviewedExcelError("模型返回坐标无效，原候选未改变")
+                dropped += 1
+                continue
             pair = (item["sheet"], item["cell"])
             if pair not in allowed or pair in protected or pair in pairs:
-                raise ReviewedExcelError("模型建议包含未提供或受保护单元格，原候选未改变")
+                dropped += 1
+                continue
             pairs.append(pair)
+            kept.append({"sheet": item["sheet"], "cell": item["cell"]})
+        if dropped:
+            logging.getLogger(__name__).info(
+                "template candidate dropped %s cells outside the supplied range", dropped
+            )
         index = len(validated) + 1
         validated.append(
             {
                 "id": f"model_initial_{index}" if initial else "model_revision",
                 "label": f"模型候选 {index}" if initial else "模型反馈候选",
-                "clear": answer["clear"],
+                "clear": kept,
                 "explanation": answer["reason"][:300],
             }
         )
@@ -1359,7 +1401,7 @@ def refine_proposal(
         source_sha256=review["sha256"],
         provider=configured_template_llm_provider(),
         model=result.model,
-        max_output_tokens=1400,
+        max_output_tokens=output_tokens,
     )
     base["model"] = {
         "status": "returned",

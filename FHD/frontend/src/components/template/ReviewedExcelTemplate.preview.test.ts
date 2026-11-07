@@ -277,4 +277,24 @@ describe('AI document capsule workspace', () => {
     expect(state().error).toBe(warning); expect(capsules()).toHaveLength(0)
     expect((wrapper.get('.elt-composer__input').element as HTMLTextAreaElement).value).toBe('新账号草稿')
   })
+  it('shows one capsule per slice, with the slice name and type, and opens the one that was clicked', async () => {
+    const named = [
+      ['国圣送货单', '送货单'],
+      ['26出货', '出货明细'],
+      ['借原材料明细（1）', '借还台账'],
+      ['借原材料明细（2）', '借还台账'],
+      ['白浆', '测算表'],
+    ] as const
+    api.autoSlices.mockResolvedValue({ slices: named.map(([name, type], index) => ({ index, basis: 'model_group', confirmed: false, sha256: `slice-${index}`, filename: `${name}.xlsx`, display_name: name, type_label: type, fragments: [{ sheet: 'Sheet1', range: 'A1:B2' }] })) })
+    api.reviewExcel.mockImplementation(async () => reviewed('片'))
+    await stage(['first.xlsx']); await start()
+    expect(capsules()).toHaveLength(5)
+    for (const [name, type] of named) {
+      expect(capsule(name).text()).toContain(name)
+      expect(capsule(name).text()).toContain(type)
+    }
+    await capsule('白浆').trigger('click'); await flushPromises()
+    expect(wrapper.get('[role=dialog]').attributes('aria-label')).toBe('白浆')
+    expect(wrapper.find('.reviewed-template__candidate-capsule[aria-controls]').exists()).toBe(false)
+  })
 })

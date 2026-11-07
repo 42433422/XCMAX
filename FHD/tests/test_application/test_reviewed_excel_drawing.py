@@ -428,7 +428,7 @@ def test_boundary_candidates_keep_merges_and_shapes_together():
     assert 1 in boundaries and 7 in boundaries
 
 
-def test_auto_slice_preserves_source_print_area_or_rejects_without_implicit_consent(monkeypatch):
+def test_auto_slice_keeps_contained_print_area_and_uses_the_fragment_when_it_crosses(monkeypatch):
     from io import BytesIO
 
     from openpyxl import load_workbook
@@ -471,9 +471,12 @@ def test_auto_slice_preserves_source_print_area_or_rejects_without_implicit_cons
         )
 
     monkeypatch.setattr(auto_slice, "derive_document_workbook", checked_derive)
-    with pytest.raises(ReviewedExcelError, match="打印区域跨越所选文档"):
-        derive_classified_documents(source, classification)
-    assert modes == ["source", "source"]
+    split = derive_classified_documents(source, classification)
+    assert [item["print_area_mode"] for item in split] == ["source", "selected"]
+    assert modes == ["source", "source", "selected"]
+    split_sheets = [load_workbook(BytesIO(item["workbook"]))["表"] for item in split]
+    assert str(split_sheets[0].print_area) == "'表'!$A$1:$B$2"
+    assert str(split_sheets[1].print_area) == "'表'!$A$3:$B$4"
     assert inspect_workbook(source)["sha256"] == review["sha256"]
 
     # An explicitly grouped document covering the entire source print area still
@@ -484,7 +487,7 @@ def test_auto_slice_preserves_source_print_area_or_rejects_without_implicit_cons
     slices = derive_classified_documents(source, classification)
     assert len(slices) == 1
     assert slices[0]["print_area_mode"] == "source"
-    assert modes == ["source", "source", "source"]
+    assert modes == ["source", "source", "selected", "source"]
     assert load_workbook(BytesIO(slices[0]["workbook"]))["表"].print_area == "'表'!$A$1:$B$2"
     assert (
         len(inspect_workbook(slices[0]["workbook"], allow_drawings=True)["drawing_evidence"]) == 1

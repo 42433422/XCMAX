@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
-
-logger = logging.getLogger(__name__)
-
 import hashlib
 import json
+import logging
 import os
 from io import BytesIO
 from pathlib import Path
@@ -23,7 +20,6 @@ from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy import update
 from starlette.concurrency import run_in_threadpool
 
-from app.application.elt.archive_store import default_archive_root as default_archive_root
 from app.application.elt.errors import (
     EltError,
     ReviewedExcelError,
@@ -31,7 +27,7 @@ from app.application.elt.errors import (
     public_excel_error,
 )
 from app.application.elt.service_support import dump_json, load_json, new_id, utcnow
-from app.application.elt.service_uploads import UploadServiceMixin
+from app.application.elt.service_uploads import UploadServiceMixin, discard_stored_upload
 from app.application.elt_login_authorization import (
     bind_model_session,
     model_session_identity,
@@ -57,12 +53,13 @@ from app.application.reviewed_excel_evidence import (
     unresolved_fragments,
 )
 from app.application.reviewed_excel_review_projection import build_candidate_previews
-from app.application.reviewed_excel_review_store import _CLASS_SAVING as _CLASS_SAVING
 from app.application.reviewed_excel_review_store import (
+    _CLASS_SAVING,
     _MODEL_PENDING,
     _READY,
     _SAVED,
     _SAVING,
+    _archived_original,
     _cas,
     _fork_saved_review,
     _intake_selection_key,
@@ -99,6 +96,8 @@ from app.infrastructure.tenant_scope import tenant_scope
 from app.middleware.error_handler import ReviewedExcelRoute, _reviewed_excel_context
 from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
+
+logger = logging.getLogger(__name__)
 
 
 def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
@@ -253,7 +252,6 @@ async def reviewed_excel_classify(
                 )
                 record = db.get(EltUpload, upload["upload_id"])
                 created_paths.append(Path(record.storage_path))
-                os.chmod(record.storage_path, 0o600)
                 version = _classification_version(
                     result["sha256"],
                     "",
@@ -308,7 +306,7 @@ async def reviewed_excel_classify(
     except BOUNDARY_ERRORS:
         if not commit_attempted:
             for path in created_paths:
-                path.unlink(missing_ok=True)
+                discard_stored_upload(path)
         raise
     return {"files": results, "scope": "仅检查工作表非空单元格和公式表达式；不表示语义完整理解"}
 
@@ -405,7 +403,7 @@ def reviewed_excel_classification_history(classification_id: str, user=Depends(_
         }
 
 
-def _auto_slices(db, classification_id, version, tenant, owner):
+def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False):
     from app.application.reviewed_excel_auto_slice import derive_classified_documents
 
     run = _classification_run(db, classification_id, tenant, owner)
@@ -415,9 +413,14 @@ def _auto_slices(db, classification_id, version, tenant, owner):
         raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
     body = _source(db, run, tenant, owner)
     if latest.get("model_status") == "not_called":
-        from app.application.reviewed_excel_auto_slice import derive_rule_slices
+        from app.application.reviewed_excel_auto_slice import (
+            derive_rule_slices,
+            rule_row_dispositions,
+        )
 
-        return derive_rule_slices(body, latest), latest.get("coverage") or []
+        slices = derive_rule_slices(body, latest)
+        dispositions = rule_row_dispositions(body, latest, slices) if with_rows else []
+        return slices, latest.get("coverage") or [], dispositions
     if latest.get("model_status") != "returned":
         raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
     coverage = latest.get("coverage")
@@ -460,7 +463,7 @@ def _auto_slices(db, classification_id, version, tenant, owner):
         for region in sheet.get("regions", [])
         if region.get("range_source") == "model"
     ]
-    return derive_classified_documents(
+    slices = derive_classified_documents(
         body,
         {
             "source_sha256": run.file_sha256,
@@ -469,7 +472,11 @@ def _auto_slices(db, classification_id, version, tenant, owner):
             "suggested_documents": latest.get("suggested_documents", []),
             "coverage": latest.get("coverage", []),
         },
-    ), latest.get("coverage", [])
+    )
+    from app.application.reviewed_excel_sheet_names import annotate_slice_titles
+
+    annotate_slice_titles(slices, latest.get("sheets") or [])
+    return slices, latest.get("coverage", []), []
 
 
 @router.get(
@@ -479,16 +486,20 @@ def reviewed_excel_auto_slices(classification_id: str, version: str, user=Depend
     tenant, owner = _identity(user)
     try:
         with tenant_scope(tenant), get_db() as db:
-            slices, coverage = _auto_slices(db, classification_id, version, tenant, owner)
+            slices, coverage, rows = _auto_slices(
+                db, classification_id, version, tenant, owner, with_rows=True
+            )
         return {
             "classification_id": classification_id,
             "version": version,
             "coverage": coverage,
+            "row_dispositions": rows,
             "slices": [
                 {
                     **{key: value for key, value in item.items() if key != "workbook"},
                     "index": index,
-                    "display_name": Path(item["filename"]).stem,
+                    "display_name": item.get("display_name") or Path(item["filename"]).stem,
+                    "type_label": item.get("type_label") or "",
                     "sha256": hashlib.sha256(item["workbook"]).hexdigest(),
                 }
                 for index, item in enumerate(slices)
@@ -507,7 +518,7 @@ def reviewed_excel_auto_slice_download(
     tenant, owner = _identity(user)
     try:
         with tenant_scope(tenant), get_db() as db:
-            slices, _coverage = _auto_slices(db, classification_id, version, tenant, owner)
+            slices, _coverage, _rows = _auto_slices(db, classification_id, version, tenant, owner)
         if index < 0 or index >= len(slices):
             raise HTTPException(status_code=404, detail="切片不存在")
         return Response(
@@ -849,7 +860,10 @@ async def _reviewed_excel_classification_analyze_body(
                     raise HTTPException(status_code=409, detail="分析批次状态无效")
                 claimed_draft = old
                 result = combine_semantic_batches(review, batches, checkpoint["results"], max_calls)
-            if auto_group and len(batches) > 1:
+            from app.application.reviewed_excel_partition import boundary_left_for_confirmation
+
+            # Uncovered cells stay for a person. Do not send another model call to fill them.
+            if auto_group and len(batches) > 1 and not boundary_left_for_confirmation(result):
                 from app.application.reviewed_excel_grouping import group_semantic_fragments
 
                 # Persist complete fragment results before beginning a separate model request.
@@ -1014,6 +1028,9 @@ async def _reviewed_excel_classification_analyze_body(
                         unresolved_fragments(candidate, regions, dimensions["merged_regions"])
                     )
                 sheets.append({**rule_sheet, "regions": regions})
+            from app.application.reviewed_excel_sheet_names import apply_unknown_sheet_names
+
+            apply_unknown_sheet_names(sheets, review["cells"], owner_id=owner)
             actual_providers = sorted(
                 {item.get("provider", "unreported") for item in result["input_summaries"]}
             )
@@ -1085,7 +1102,7 @@ async def reviewed_excel_preview(
                 )
                 if not archive_version_id:
                     raise ReviewedExcelError("自动切片须先归档原件")
-                slices, _coverage = _auto_slices(
+                slices, _coverage, _rows = _auto_slices(
                     db, classification_id, classification_version, tenant, owner
                 )
                 if auto_slice_index >= len(slices):
@@ -1319,8 +1336,6 @@ async def reviewed_excel_preview(
                 content_type=file.content_type,
                 stream=BytesIO(body),
             )
-            upload_record = db.get(EltUpload, upload["upload_id"])
-            os.chmod(upload_record.storage_path, 0o600)
             run = EltRun(
                 id=new_id(),
                 tenant_id=tenant,
@@ -1572,10 +1587,11 @@ def reviewed_excel_intake_preview(
             key = _intake_selection_key(
                 review, proposal_version, candidate_id, selected, name, composer_note
             )
-            # The person already chose this candidate. Preview and later writes use
-            # that workbook, not a second parse of the untouched original.
-            original = _source(db, review, tenant, owner)
-            chosen = clean_workbook(original, review.file_sha256, selected)
+            # The review upload is the template fragment. Database and knowledge
+            # read the classification's archived original, which still has item rows.
+            template_source = _source(db, review, tenant, owner)
+            archived = _archived_original(db, review, tenant, owner)
+            chosen = clean_workbook(template_source, review.file_sha256, selected)
             service = get_elt_service()
             upload = service.save_upload(
                 db,
@@ -1588,27 +1604,72 @@ def reviewed_excel_intake_preview(
             if source.tenant_id != tenant:
                 raise HTTPException(status_code=403, detail="无权使用该入库预演")
             path = staged_path = Path(source.storage_path)
+            from app.application.elt.auto_ingest_service import workbook_text
             from app.application.elt.candidate_table import (
+                dataset_from_business_rows,
                 match_business_target,
                 read_candidate_table,
+                read_delivery_note_business,
+            )
+            from app.application.elt.llm_assist import advise_business_import, etl_llm_enabled
+
+            original_text = workbook_text(archived)
+            from app.application.elt.llm_session_provider import (
+                bind_etl_llm_owner,
+                reset_etl_llm_owner,
             )
 
-            chosen_table = read_candidate_table(path)
-            target_type = match_business_target(chosen_table.headers)
-            detection = {
-                "target_type": target_type,
-                "reason": "candidate_headers",
-                "confirmed": True,
-            }
-            _authorize_intake(request, (tenant, owner), target_type)
-            intake = get_auto_ingest_service()
-            knowledge = intake.knowledge_plan(
-                path=path,
-                file_name=name.strip(),
-                note=composer_note.strip(),
-                owner_user_id=owner,
-                owned_upload_user_id=source.owner_user_id,
-            )
+            # Identity can already see the account model. Bind that same session
+            # so these two lanes resolve it; each lane still has its own circuit.
+            model_session = require_model_session(request, tenant, owner)
+            owner_token = bind_etl_llm_owner(owner)
+            try:
+                with bind_model_session(model_session):
+                    business_llm = (
+                        advise_business_import(original_text) if etl_llm_enabled() else None
+                    )
+                    ai_table = None
+                    if (
+                        business_llm is not None
+                        and business_llm.used_llm
+                        and not business_llm.degraded
+                    ):
+                        ai_table = dataset_from_business_rows(
+                            list(business_llm.data.get("rows") or [])
+                        )
+                    delivery = read_delivery_note_business(archived)
+                    if ai_table is not None:
+                        chosen_table = ai_table
+                        target_type = "shipment_records"
+                        detection_reason = "database_llm"
+                    elif delivery is not None:
+                        chosen_table = delivery
+                        target_type = "shipment_records"
+                        detection_reason = "delivery_note_business_rows"
+                    else:
+                        chosen_table = read_candidate_table(path)
+                        target_type = match_business_target(chosen_table.headers)
+                        detection_reason = "candidate_headers"
+                    detection = {
+                        "target_type": target_type,
+                        "reason": detection_reason,
+                        "confirmed": True,
+                        "llm_lane": "database",
+                        "used_llm": bool(business_llm and business_llm.used_llm),
+                        "degraded": bool(business_llm and business_llm.degraded),
+                    }
+                    _authorize_intake(request, (tenant, owner), target_type)
+                    intake = get_auto_ingest_service()
+                    knowledge = intake.knowledge_plan(
+                        path=path,
+                        file_name=name.strip(),
+                        note=composer_note.strip(),
+                        owner_user_id=owner,
+                        owned_upload_user_id=source.owner_user_id,
+                        source_text=original_text,
+                    )
+            finally:
+                reset_etl_llm_owner(owner_token)
             preview_started = True
             business = service.create_preview(
                 db,
@@ -1641,7 +1702,7 @@ def reviewed_excel_intake_preview(
         ) from None
     finally:
         if staged_path is not None and not preview_started:
-            staged_path.unlink(missing_ok=True)
+            discard_stored_upload(staged_path)
 
 
 @router.post("/api/templates/reviewed-excel/save")
@@ -1779,7 +1840,7 @@ async def reviewed_excel_save(
                     "valid_rows_only": valid_rows_only,
                 }
                 # The staged upload is the candidate chosen at preview. The template
-                # file is the same cleanup, written again from the archived original.
+                # file is that same cleanup of the review workbook, not the full original.
                 cleaned = clean_workbook(body, run.file_sha256, selected)
             else:
                 # Old template-library clients authorize one template only, never implicit business writes.
@@ -1807,6 +1868,8 @@ async def reviewed_excel_save(
                         != confirmed_plan["mod_id"]
                     ):
                         raise HTTPException(status_code=409, detail="业务空间已变化，请重新预演")
+                    from app.application.elt.auto_ingest_service import workbook_text
+
                     get_auto_ingest_service().validate_prepared(
                         db,
                         plan=confirmed_plan,
@@ -1815,6 +1878,7 @@ async def reviewed_excel_save(
                         tenant_id=tenant,
                         preview_revision=preview_revision,
                         owned_upload_user_id=upload.owner_user_id,
+                        source_text=workbook_text(_archived_original(db, run, tenant, owner)),
                     )
             except (HTTPException, EltError):
                 _release_failed_review(

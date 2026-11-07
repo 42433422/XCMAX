@@ -26,7 +26,12 @@ from sqlalchemy.orm import Session
 
 from app.application.elt.archive_policy import ArchivePolicy, ArchivePolicyError
 from app.application.elt.errors import EltConflict
-from app.application.elt.service_support import MAX_FILE_BYTES, clean_filename, new_id
+from app.application.elt.service_support import (
+    MAX_FILE_BYTES,
+    READ_ONLY_MODE,
+    clean_filename,
+    new_id,
+)
 from app.db.models.elt_archive import EltArchiveAsset, EltArchiveQuota, EltArchiveVersion
 from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.path_io.path_utils import get_business_archive_dir
@@ -159,6 +164,8 @@ def _write_pending(
         handle.write(payload)
         handle.flush()
         os.fsync(handle.fileno())
+    with contextlib.suppress(OSError):
+        path.chmod(READ_ONLY_MODE)
     version.status = "ready"
     db.commit()
 
@@ -382,6 +389,8 @@ def _decrypt_or_migrate(
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
+        tmp.chmod(READ_ONLY_MODE)
+        path.chmod(0o600)
         os.replace(tmp, path)
     except OSError:
         # Migration is best-effort; plaintext still verifies and is returned.

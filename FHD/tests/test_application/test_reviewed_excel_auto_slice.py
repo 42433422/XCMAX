@@ -109,7 +109,7 @@ def test_rejects_cross_sheet_model_group_and_flattens_cut_merged_cell():
 
 
 def test_resplit_ledger_fragments_resolve_to_their_model_region():
-    """verify-after-cut may resplit one model region; export must not crash on range lookup."""
+    """Template export keeps the model's document. Resplit stays available for a direct check."""
     from app.application.reviewed_excel_evidence import bounded_range
 
     book = Workbook()
@@ -134,11 +134,30 @@ def test_resplit_ledger_fragments_resolve_to_their_model_region():
             "suggested_documents": [{"fragments": [{"sheet": "客户档案", "range": "A1:H42"}]}],
         },
     )
-    assert len(result) >= 2
+    assert len(result) == 1
     for item in result:
         for fragment in item["fragments"]:
             c1, r1, c2, r2 = bounded_range(fragment["range"])
             assert fragment["sheet"] == "客户档案"
+            assert c1 >= 1 and c2 <= 8 and r1 >= 1 and r2 <= 42
+    from app.application.reviewed_excel_verify_cut import verify_after_cut
+
+    verified = verify_after_cut(
+        inspect_workbook(body),
+        [
+            {
+                "document_id": "export-0",
+                "fragments": [{"sheet": "客户档案", "range": "A1:H42"}],
+                "evidence": [],
+                "reason": "",
+            }
+        ],
+        resplit=True,
+    )
+    assert verified["groups"]
+    for group in verified["groups"]:
+        for fragment in group["fragments"]:
+            c1, r1, c2, r2 = bounded_range(fragment["range"])
             assert c1 >= 1 and c2 <= 8 and r1 >= 1 and r2 <= 42
 
 
@@ -158,10 +177,11 @@ def test_chinese_names_are_bounded_unique_and_neutral_if_no_title():
     )
 
 
-@pytest.mark.parametrize("count,accepted", [(19999, True), (20000, True), (20001, False)])
-def test_workbook_nonempty_cell_limit_and_full_batch_coverage(count, accepted):
+@pytest.mark.parametrize("count,accepted", [(20001, True), (25000, True), (25001, False)])
+def test_workbook_nonempty_cell_limit_and_full_batch_coverage(monkeypatch, count, accepted):
     from app.application.reviewed_excel_classification import plan_semantic_batches
 
+    monkeypatch.setattr("app.application.reviewed_excel_template.MAX_CELLS", 25000)
     book = Workbook()
     sheet = book.active
     for row in range(1, count + 1):
@@ -169,7 +189,7 @@ def test_workbook_nonempty_cell_limit_and_full_batch_coverage(count, accepted):
     stream = BytesIO()
     book.save(stream)
     if not accepted:
-        with pytest.raises(ReviewedExcelError, match="超过 20000"):
+        with pytest.raises(ReviewedExcelError, match="超过 25000"):
             inspect_workbook(stream.getvalue())
         return
     review = inspect_workbook(stream.getvalue())
@@ -318,3 +338,125 @@ def test_prepare_grouping_includes_middle_structure_and_cross_fragment_formulas(
     )
     # Evidence is descriptive only: prepare_grouping must not invent merged groups.
     assert len(proposal["fragments"]) == 2
+
+
+def _save(book) -> bytes:
+    stream = BytesIO()
+    book.save(stream)
+    book.close()
+    return stream.getvalue()
+
+
+def _rule_run(body):
+    from app.application.reviewed_excel_auto_slice import derive_rule_slices, rule_row_dispositions
+    from app.application.reviewed_excel_basic_classification import classify_review_workbook
+
+    latest = {"sheets": classify_review_workbook(inspect_workbook(body))}
+    slices = derive_rule_slices(body, latest)
+    return latest, slices, rule_row_dispositions(body, latest, slices)
+
+
+def test_rule_regions_keep_merged_cells_and_their_title_context():
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "生产"
+    rows = {
+        1: ["生产任务单"],
+        3: ["产品名称", "数量", "单价", "金额"],
+        4: ["面漆", 3, 12, 36],
+        6: ["工艺流程"],
+        8: ["工序", "说明", "数量", "备注"],
+        9: ["喷涂", "两遍", 1, "见附表"],
+    }
+    for row, values in rows.items():
+        for column, value in enumerate(values, start=1):
+            sheet.cell(row, column, value)
+    for merged in ("A1:D2", "A6:D7", "D9:D10"):
+        sheet.merge_cells(merged)
+    _latest, slices, _rows = _rule_run(_save(book))
+    assert [item["table_region"] for item in slices] == ["A1:D4", "A6:D10"]
+
+
+def test_hidden_ledgers_and_unrecognized_regions_go_to_review_with_row_reasons():
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "出货"
+    sheet.append(["产品名称", "数量", "单价", "金额"])
+    sheet.append(["清面漆", 2, 10, 20])
+    sheet["A5"] = "未登记业务区"
+    sheet["A6"] = "斜向批次残余"
+    sheet["B6"] = "口径不明"
+    sheet["A7"] = "补充口径待人判读"
+    ledger = book.create_sheet("台账")
+    ledger.append(["客户", "金额"])
+    ledger.append(["甲", 5])
+    ledger.sheet_state = "hidden"
+    _latest, slices, rows = _rule_run(_save(book))
+    by_region = {(s["fragments"][0]["sheet"], s["table_region"]): s for s in slices}
+    assert by_region[("出货", "A1:D2")]["status"] == "identified"
+    assert by_region[("出货", "A6:B7")]["status"] == "pending_review"
+    hidden = by_region[("台账", "A1:B2")]
+    assert hidden["status"] == "pending_review" and "隐藏" in hidden["review_reason"]
+    copied = load_workbook(BytesIO(hidden["workbook"]))
+    assert copied["台账"]["A2"].value == "甲" and copied["切片复核说明"]["B4"].value
+    status = {(r["sheet"], r["row"]): r["status"] for r in rows}
+    assert status == {
+        ("出货", 1): "import",
+        ("出货", 2): "import",
+        ("出货", 5): "pending_review",
+        ("出货", 6): "pending_review",
+        ("出货", 7): "pending_review",
+        ("台账", 1): "pending_review",
+        ("台账", 2): "pending_review",
+    }
+    assert all(r["reason"] for r in rows)
+
+
+def test_delivery_note_print_area_crossing_fragment_uses_selected_fragment():
+    """Small synthetic delivery note: the sheet print area extends past the note body."""
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "送货"
+    sheet["A1"] = "送货单"
+    sheet["A2"] = "客户"
+    sheet["B2"] = "甲"
+    sheet["A3"] = "品名"
+    sheet["B3"] = "面漆"
+    sheet["A8"] = "页脚说明"
+    sheet.print_area = "A1:B8"
+    body = _save(book)
+    source = inspect_workbook(body)
+    fragment = {"sheet": "送货", "range": "A1:B3"}
+    slices = derive_classified_documents(
+        body,
+        {
+            "source_sha256": source["sha256"],
+            "model_status": "returned",
+            "regions": [{**fragment, "dependencies": []}],
+            "suggested_documents": [{"fragments": [fragment], "reason": "送货单主体"}],
+        },
+    )
+    assert len(slices) == 1 and slices[0]["print_area_mode"] == "selected"
+    derived = load_workbook(BytesIO(slices[0]["workbook"]))["送货"]
+    assert str(derived.print_area) == "'送货'!$A$1:$B$3"
+    assert derived["A1"].value == "送货单" and derived["B3"].value == "面漆"
+    assert derived["A8"].value is None
+    assert str(load_workbook(BytesIO(body))["送货"].print_area) == "'送货'!$A$1:$B$8"
+    assert inspect_workbook(body)["sha256"] == source["sha256"]
+
+
+def test_refused_extraction_keeps_values_and_rejects_rows_with_reason(monkeypatch):
+    from app.application import reviewed_excel_auto_slice as auto_slice
+
+    def refuse(*_args, **_kwargs):
+        raise ReviewedExcelError("打印区域跨越所选文档")
+
+    monkeypatch.setattr(auto_slice, "derive_document_workbook", refuse)
+    book = Workbook()
+    book.active.append(["产品名称", "数量"])
+    book.active.append(["面漆", 3])
+    _latest, slices, rows = _rule_run(_save(book))
+    assert slices[0]["status"] == "pending_review" and "打印区域" in slices[0]["error"]
+    assert load_workbook(BytesIO(slices[0]["workbook"])).worksheets[0]["A2"].value == "面漆"
+    assert {r["status"] for r in rows} == {"rejected"}
+    assert all("打印区域" in r["reason"] for r in rows)

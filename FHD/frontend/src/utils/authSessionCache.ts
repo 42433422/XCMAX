@@ -157,7 +157,8 @@ export async function validateEnterpriseSessionCached(force = false): Promise<bo
   const isCurrent = captureAuthSession()
   const pending = (async () => {
     let valid: boolean
-    try { valid = readValid(await authApi.validateSession()) }
+    // 桌面每 5 秒探一次。入库预演会占住后端约 12s，8s 会先报失败，后端随后仍返回成功。
+    try { valid = readValid(await authApi.validateSession({ timeoutMs: 30_000 })) }
     catch (error) {
       const status = (error as { status?: number })?.status
       if (status !== 401 && status !== 403) throw error

@@ -150,11 +150,19 @@ def test_llm_assist_mode_and_limits(monkeypatch):
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "5")
     assert llm_assist.etl_llm_timeout_seconds() == 5.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "99")
-    assert llm_assist.etl_llm_timeout_seconds() == 12.0
+    assert llm_assist.etl_llm_timeout_seconds() == 99.0
+    monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "999")
+    assert llm_assist.etl_llm_timeout_seconds() == 180.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "-1")
     assert llm_assist.etl_llm_timeout_seconds() == 1.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "abc")
     assert llm_assist.etl_llm_timeout_seconds() == 6.0
+    monkeypatch.delenv("FHD_ETL_IMPORT_LLM_TIMEOUT", raising=False)
+    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 180.0
+    monkeypatch.setenv("FHD_ETL_IMPORT_LLM_TIMEOUT", "30")
+    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 30.0
+    monkeypatch.setenv("FHD_ETL_IMPORT_LLM_TIMEOUT", "999")
+    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 180.0
 
     monkeypatch.delenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", raising=False)
     assert llm_assist.etl_row_advice_limit() == 20
@@ -164,6 +172,56 @@ def test_llm_assist_mode_and_limits(monkeypatch):
     assert llm_assist.etl_row_advice_limit() == 100
     monkeypatch.setenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", "bad")
     assert llm_assist.etl_row_advice_limit() == 20
+
+
+def test_degradation_log_keeps_raw_head_and_tail(caplog):
+    import logging
+
+    from app.application.elt.llm_assist_runtime import clip_model_raw, log_etl_llm_degradation
+
+    raw = "HEAD" + ("中" * 3000) + "TAIL"
+    shown = clip_model_raw(raw)
+    assert shown.startswith("HEAD") and shown.endswith("TAIL") and len(shown) <= 2000
+    assert clip_model_raw("short") == "short"
+
+    class Failed(Exception):
+        def __init__(self) -> None:
+            super().__init__("structured output failed")
+            self.last_errors = ["输出中未找到有效 JSON object"]
+            self.last_raw = raw
+
+    caplog.set_level(logging.INFO, logger="app.application.elt.llm_assist")
+    log = logging.getLogger("app.application.elt.llm_assist")
+    log_etl_llm_degradation(log, code="ELT_LLM_UNAVAILABLE", lane="database", exc=Failed())
+    line = caplog.text
+    assert "last_raw=" in line and "HEAD" in line and "TAIL" in line and "middle omitted" in line
+
+
+def test_archived_sheet_import_uses_full_sheet_timeout(monkeypatch):
+    from app.application.elt import llm_assist
+
+    seen: dict = {}
+
+    def capture(*args, **kwargs):
+        seen.clear()
+        seen["messages"] = args[0] if args else kwargs.get("messages")
+        seen.update(kwargs)
+        return llm_assist.LlmAssistResult(data={"rows": [], "title": "", "content": ""})
+
+    monkeypatch.setattr(llm_assist, "_complete", capture)
+    monkeypatch.delenv("FHD_ETL_IMPORT_LLM_TIMEOUT", raising=False)
+    llm_assist.advise_business_import("sheet")
+    assert seen["lane"] == "database"
+    assert seen["max_tokens"] == 8192
+    assert seen["max_repairs"] == 1
+    assert seen["timeout_seconds"] == 180.0
+    prompt = seen["messages"][0]["content"]
+    assert "每一张表都要扫" in prompt and "不要在第一张送货单结束后停止" in prompt
+    assert "借还台账和测算表不要导入" in prompt
+    assert "JSON 必须是单个对象、以 rows 开头、不要 markdown 代码块、不要解释文字。" in prompt
+    llm_assist.advise_knowledge_import("sheet")
+    assert seen["lane"] == "knowledge"
+    assert seen["timeout_seconds"] == 180.0
 
 
 def test_llm_assist_public_metadata():
@@ -905,10 +963,21 @@ def test_helpers_issue_optional_decimal():
         "message": "m",
     }
     assert helpers.optional_text("  hi  ") == "hi"
-    assert helpers.optional_text("") is None
+    assert helpers.optional_text("") == ""
     assert helpers.optional_text(None) is None
+    assert helpers.optional_text(0) == "0"
+    assert helpers.optional_text(False) == "False"
     assert helpers.decimal_or_zero("1,000") == Decimal("1000")
     assert helpers.decimal_or_zero(None) == Decimal("0")
+    assert helpers.decimal_or_none(None) is None
+    assert helpers.decimal_or_none(0) == Decimal("0")
+    assert helpers.integer_or_zero("3") == 3
+    for bad in (False, "abc"):
+        with pytest.raises(EltError):
+            helpers.decimal_or_none(bad)
+    with pytest.raises(EltError) as ex:
+        helpers.integer_or_zero("2.5")
+    assert ex.value.code == "ELT_NUMBER_PRECISION_EXCEEDED"
     assert helpers.decimal_or_zero("3.5") == Decimal("3.5")
     with pytest.raises(EltError) as ex:
         helpers.decimal_or_zero("abc")
@@ -1982,6 +2051,37 @@ def test_attendance_adapter_preview(session, monkeypatch, tmp_path):
         context=ctx3,
     )
     assert d3.action == "skip" and d3.reason == "duplicate_attendance_source"
+    d4 = a.preview(
+        MagicMock(),
+        {"employee_name": "乙", "work_date": "2026-01-02"},
+        allowed_update_fields=set(),
+        context=ctx3,
+    )
+    d5 = a.preview(
+        MagicMock(),
+        {"employee_name": "乙", "work_date": "2026-01-02"},
+        allowed_update_fields=set(),
+        context=ctx3,
+    )
+    assert d4.action == "new"
+    assert d5.action == "skip" and d5.reason == "duplicate_attendance_in_source"
+    from app.application.elt.targets.orders import PurchaseOrderAdapter
+
+    issues = {
+        item["field"]: item
+        for item in PurchaseOrderAdapter().validate(
+            {
+                "external_order_no": "PO-1",
+                "supplier_name": "甲",
+                "order_date": "昨天",
+                "product_name": "漆",
+                "quantity": "-2",
+            }
+        )
+    }
+    assert issues["order_date"]["code"] == "ELT_VALUE_FORMAT_INVALID"
+    assert issues["quantity"]["code"] == "ELT_VALUE_INVALID"
+    assert "负数" in issues["quantity"]["message"]
 
 
 def test_attendance_existing_batch_db(session, tmp_path):
@@ -2135,6 +2235,71 @@ def test_export_xlsx_adapter(tmp_path, monkeypatch):
     )
     assert r["executed"] == 501
     assert (tmp_path / "etl" / "exports" / "etl-r3.xlsx").is_file()
+    assert r["receipt"]["sha256"]
+
+
+def test_export_xlsx_uses_committed_template(tmp_path, monkeypatch):
+    from datetime import date
+    from io import BytesIO
+
+    from openpyxl import Workbook, load_workbook
+
+    from app.application.elt.candidate_table import read_candidate_table
+    from app.application.elt.targets.batch import ExportXlsxAdapter
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "送货明细"
+    sheet.append(["客户", "产品", "数量", "单价", "金额", "日期"])
+    sheet.append(["甲公司", "红茶", 2, 20, 40, date(2026, 5, 1)])
+    sheet.append(["乙公司", "=CMD|probe", 3, 20, 60, date(2026, 5, 2)])
+    sheet.append(["合计", None, 5, None, 100, None])
+    sheet.append(["备注：加急，请勿改数量"])
+    sheet.append(["本合同一式两份，双方签字盖章后生效"])
+    path = tmp_path / "source.xlsx"
+    book.save(path)
+    book.close()
+    dataset = read_candidate_table(path)
+    assert [row.values["客户"] for row in dataset.rows] == ["甲公司", "乙公司"]
+    assert dataset.rows[1].values["产品"] == "=CMD|probe"
+    assert "本合同一式两份，双方签字盖章后生效" in dataset.source_features["business_notes"]
+    assert "备注：加急，请勿改数量" in dataset.source_features["business_notes"]
+    monkeypatch.setattr("app.application.elt.targets.batch.get_app_data_dir", lambda: tmp_path)
+    from app.application.elt.result_export import export_context
+
+    context = {
+        "run_id": "result",
+        "row_count": 2,
+        **export_context(
+            {
+                "field_mappings": [
+                    {"source": header, "target": header}
+                    for header in ["客户", "产品", "数量", "单价", "金额", "日期"]
+                ]
+            },
+            type("Adapter", (), {"fields": ()})(),
+            dataset.source_features,
+            dataset.rows[0].sheet,
+        ),
+    }
+    written = ExportXlsxAdapter().execute_batch([dict(row.values) for row in dataset.rows], context)
+    saved = load_workbook(BytesIO((tmp_path / "etl" / "exports" / "etl-result.xlsx").read_bytes()))
+    result = saved.active
+    assert result.title == "送货明细"
+    assert [cell.value for cell in result[1]] == ["客户", "产品", "数量", "单价", "金额", "日期"]
+    assert result["C2"].value == 2 and result["C2"].number_format == "#,##0"
+    assert result["E2"].number_format == "#,##0.00"
+    assert result["F2"].number_format == "YYYY-MM-DD"
+    assert result["B3"].data_type == "s" and "CMD|probe" in str(result["B3"].value)
+    assert result["A4"].value == "合计"
+    assert result["C4"].value == "=SUM(C2:C3)"
+    assert result["E4"].value == "=SUM(E2:E3)"
+    data_text = " ".join(str(result.cell(row, 1).value or "") for row in (2, 3))
+    assert "本合同" not in data_text and "加急" not in data_text
+    notes = " ".join(str(result.cell(row, 1).value or "") for row in range(5, 8))
+    assert "本合同" in notes and "加急" in notes
+    assert written["receipt"]["data_rows"] == 2
+    assert written["receipt"]["sha256"]
 
 
 def test_webhook_adapter_success(monkeypatch):

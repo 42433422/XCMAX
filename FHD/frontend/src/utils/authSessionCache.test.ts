@@ -137,6 +137,13 @@ describe('authSessionCache', () => {
     }
   })
 
+  it('waits out a 12s model-backed ELT call before the desktop session probe reports failure', async () => {
+    vi.mocked(authApi.validateSession).mockResolvedValueOnce({ valid: true })
+    await expect(probeEnterpriseSession()).resolves.toBe('valid')
+    const timeoutMs = vi.mocked(authApi.validateSession).mock.calls[0]?.[0]?.timeoutMs
+    expect(timeoutMs).toBeGreaterThan(12_000)
+  })
+
   it('sends the shell to login when the server says the session is gone, and not on a network miss', async () => {
     const events: string[] = []
     const onInvalid = () => events.push('invalid')
