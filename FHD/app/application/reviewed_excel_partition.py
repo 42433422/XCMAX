@@ -427,11 +427,25 @@ def _normalize_boundaries(data: dict, references: dict, review: dict) -> dict:
             seen.update(covered)
             parts.append(part)
         documents.append({"document_id": internal_document_id(document), "fragments": parts})
-    if seen != set(primary):
-        raise ReviewedExcelError("模型边界未完整覆盖本批主体，不能自动补齐")
+    # A partial boundary is usable. Keep the covered rectangles and name the
+    # uncovered source cells for a person. Do not invent the missing geometry
+    # and do not send the model request again.
+    missing = sorted(set(primary) - seen)
     references["_source_coverage"] = {
         "basis": "verified_original_source_rectangle",
         "document_id_origin": "internal_source_range_hash",
         "regions": proof,
     }
+    if missing:
+        references["_source_coverage"]["pending_confirmation"] = [
+            {"sheet": sheet, "cell": cell} for sheet, cell in missing
+        ]
     return {"physical_regions": decoded, "logical_documents": documents, "layout_references": []}
+
+
+def boundary_left_for_confirmation(classification: dict) -> bool:
+    """True when covered regions were kept and some source cells still need a person."""
+    return any(
+        (item.get("source_coverage") or {}).get("pending_confirmation")
+        for item in classification.get("input_summaries") or []
+    )

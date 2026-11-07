@@ -393,6 +393,39 @@ def test_hidden_ledgers_and_unrecognized_regions_go_to_review_with_row_reasons()
     assert all(r["reason"] for r in rows)
 
 
+def test_delivery_note_print_area_crossing_fragment_uses_selected_fragment():
+    """Small synthetic delivery note: the sheet print area extends past the note body."""
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "送货"
+    sheet["A1"] = "送货单"
+    sheet["A2"] = "客户"
+    sheet["B2"] = "甲"
+    sheet["A3"] = "品名"
+    sheet["B3"] = "面漆"
+    sheet["A8"] = "页脚说明"
+    sheet.print_area = "A1:B8"
+    body = _save(book)
+    source = inspect_workbook(body)
+    fragment = {"sheet": "送货", "range": "A1:B3"}
+    slices = derive_classified_documents(
+        body,
+        {
+            "source_sha256": source["sha256"],
+            "model_status": "returned",
+            "regions": [{**fragment, "dependencies": []}],
+            "suggested_documents": [{"fragments": [fragment], "reason": "送货单主体"}],
+        },
+    )
+    assert len(slices) == 1 and slices[0]["print_area_mode"] == "selected"
+    derived = load_workbook(BytesIO(slices[0]["workbook"]))["送货"]
+    assert str(derived.print_area) == "'送货'!$A$1:$B$3"
+    assert derived["A1"].value == "送货单" and derived["B3"].value == "面漆"
+    assert derived["A8"].value is None
+    assert str(load_workbook(BytesIO(body))["送货"].print_area) == "'送货'!$A$1:$B$8"
+    assert inspect_workbook(body)["sha256"] == source["sha256"]
+
+
 def test_refused_extraction_keeps_values_and_rejects_rows_with_reason(monkeypatch):
     from app.application import reviewed_excel_auto_slice as auto_slice
 

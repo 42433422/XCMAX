@@ -403,14 +403,23 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
                 ):
                     raise ReviewedExcelError("所选文档依赖外部说明或标题，暂不能保证保真提取")
         print_area_mode = "source"
-        # Model grouping is not permission to change the source print layout.
-        # Listing/downloading automatic slices must never silently choose selected.
+        # A print area that crosses this fragment continues as the fragment.
+        # The source workbook is not rewritten; the slice records the choice.
         if source.get("drawing_evidence") and source.get("read_only_print_areas"):
             raise ReviewedExcelError("原打印区域无法安全映射，暂不能自动裁切")
         object_receipt: dict = {}
-        output = derive_document_workbook(
-            body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
-        )
+        try:
+            output = derive_document_workbook(
+                body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+            )
+        except ReviewedExcelError as exc:
+            if "所选片段作为派生打印区域" not in str(exc):
+                raise
+            print_area_mode = "selected"
+            object_receipt = {}
+            output = derive_document_workbook(
+                body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+            )
         results.append(
             {
                 "print_area_mode": print_area_mode,

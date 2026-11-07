@@ -11,7 +11,7 @@ vi.mock('./core', () => {
   return { default: { post: mock.post, get: mock.get, download: mock.download }, ApiError, primeCsrfCookie: mock.prime }
 })
 import { ApiError } from './core'
-import { MODEL_BACKED_ELT_TIMEOUT_MS, templatePreviewApi } from './templatePreview'
+import { MODEL_ANALYZE_TIMEOUT_MS, MODEL_BACKED_ELT_TIMEOUT_MS, templatePreviewApi } from './templatePreview'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -286,7 +286,7 @@ describe('reviewed Excel CSRF handling', () => {
     expect(await templatePreviewApi.analyzeClassification('class/7', form)).toBe(paused)
     expect(form.get('version')).toBe('classification-v1')
     for (const key of ['use_login_notice', 'continue_authorized', 'retry_authorized', 'sample_authorized', 'own_file_authorized']) expect(form.has(key)).toBe(false)
-    expect(mock.post).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/classifications/class%2F7/analyze', form, { timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS }); expect(mock.get).not.toHaveBeenCalled()
+    expect(mock.post).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/classifications/class%2F7/analyze', form, { timeoutMs: MODEL_ANALYZE_TIMEOUT_MS }); expect(mock.get).not.toHaveBeenCalled()
   })
 
   it('keeps classification confirmation and intake preview separate from model dispatch and saving', async () => {
@@ -308,13 +308,17 @@ describe('reviewed Excel CSRF handling', () => {
   })
 
   it('does not report a model-backed ELT call as failed at 8s', async () => {
-    expect(MODEL_BACKED_ELT_TIMEOUT_MS).toBeGreaterThan(12_000)
+    expect(MODEL_BACKED_ELT_TIMEOUT_MS).toBe(30_000)
+    expect(MODEL_ANALYZE_TIMEOUT_MS).toBeGreaterThan(128_000)
+    expect(MODEL_ANALYZE_TIMEOUT_MS).toBeLessThan(300_000)
     mock.post.mockResolvedValue({})
     const form = new FormData()
+    await templatePreviewApi.analyzeClassification('class/7', form)
     await templatePreviewApi.reviewExcel(form)
     await templatePreviewApi.refineReviewedExcel(form)
     await templatePreviewApi.saveReviewedExcel(form)
     const options = (suffix: string) => mock.post.mock.calls.find(call => String(call[0]).endsWith(suffix))?.[2]
+    expect(options('/analyze')).toEqual({ timeoutMs: MODEL_ANALYZE_TIMEOUT_MS })
     expect(options('/preview')).toEqual({ timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS })
     expect(options('/refine')).toEqual({ timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS })
     expect(options('/save')).toEqual({})

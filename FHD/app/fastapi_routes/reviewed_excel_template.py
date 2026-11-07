@@ -859,7 +859,10 @@ async def _reviewed_excel_classification_analyze_body(
                     raise HTTPException(status_code=409, detail="分析批次状态无效")
                 claimed_draft = old
                 result = combine_semantic_batches(review, batches, checkpoint["results"], max_calls)
-            if auto_group and len(batches) > 1:
+            from app.application.reviewed_excel_partition import boundary_left_for_confirmation
+
+            # Uncovered cells stay for a person. Do not send another model call to fill them.
+            if auto_group and len(batches) > 1 and not boundary_left_for_confirmation(result):
                 from app.application.reviewed_excel_grouping import group_semantic_fragments
 
                 # Persist complete fragment results before beginning a separate model request.
