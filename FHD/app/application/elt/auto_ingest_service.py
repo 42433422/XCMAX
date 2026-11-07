@@ -15,6 +15,8 @@ import logging
 import threading
 from contextvars import copy_context
 from datetime import UTC, datetime
+from io import BytesIO
+from openpyxl import load_workbook
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -115,9 +117,6 @@ def _workbook_lines(workbook) -> str:
 
 def workbook_text(source: bytes | bytearray) -> str:
     """Archived workbook text. Database import and knowledge import each read it alone."""
-    from io import BytesIO
-    from openpyxl import load_workbook
-
     workbook = load_workbook(BytesIO(source), read_only=True, data_only=True, keep_links=False)
     try:
         return _workbook_lines(workbook)
