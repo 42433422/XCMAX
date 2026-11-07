@@ -102,6 +102,21 @@ class UploadServiceMixin:
         )
         db.add(upload)
         db.flush()
+        from app.application.elt.audit import record_elt_audit
+
+        record_elt_audit(
+            db,
+            actor=owner_user_id,
+            action="elt_upload",
+            payload={
+                "upload_id": upload.id,
+                "file_name": upload.file_name,
+                "sha256": upload.sha256,
+                "size_bytes": upload.size_bytes,
+                "batch_id": upload.batch_id,
+                "outcome": "stored",
+            },
+        )
         return self.upload_dict(upload)
 
     def upload_dict(self, upload: EltUpload) -> dict[str, Any]:
