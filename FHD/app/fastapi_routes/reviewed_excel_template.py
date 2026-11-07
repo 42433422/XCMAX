@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
-
-logger = logging.getLogger(__name__)
-
 import hashlib
 import json
+import logging
 import os
 from io import BytesIO
 from pathlib import Path
@@ -100,6 +97,8 @@ from app.infrastructure.tenant_scope import tenant_scope
 from app.middleware.error_handler import ReviewedExcelRoute, _reviewed_excel_context
 from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
+
+logger = logging.getLogger(__name__)
 
 
 def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
