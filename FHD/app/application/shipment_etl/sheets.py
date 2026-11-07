@@ -20,7 +20,17 @@ from .layout import (
     _score_delivery_sheet,
     _score_ledger_sheet,
 )
+from .metadata import _locate_meta_cells
 from .notes import _build_item_from_row, _enrich_note, _excel_date_to_str, _parse_items
+
+
+def _note_unit(meta: dict[str, Any], items: list[dict[str, Any]], fallback: str) -> tuple[str, str]:
+    if meta.get("unit_name"):
+        return str(meta["unit_name"]), "sheet"
+    row_units = {str(i.get("unit_name") or "") for i in items}
+    if len(row_units) == 1 and "" not in row_units:
+        return row_units.pop(), "column"
+    return fallback, "file_name"
 
 
 class RememberLayout(Protocol):
@@ -72,11 +82,12 @@ class SheetParser:
         memory_header, memory_mapping, fingerprint = self._ports.resolve_memory(ws)
         find_header = _find_ledger_header_row if ledger else _find_header_row
         header = memory_header if memory_header is not None else find_header(ws, profile)
-        mapping = (
-            dict(memory_mapping)
-            if memory_mapping
-            else (_map_headers(ws, header, profile) if header is not None else {})
-        )
+        fresh = _map_headers(ws, header, profile) if header is not None else {}
+        mapping = dict(memory_mapping) if memory_mapping else fresh
+        # Layouts remembered before a field existed must still pick up its column.
+        for field_name, col in fresh.items():
+            if field_name not in mapping and col not in mapping.values():
+                mapping[field_name] = col
         return delivery_score, ledger_score, header, mapping, fingerprint
 
     def delivery(
@@ -164,13 +175,15 @@ class SheetParser:
         )
         if remembered_fp and (not assist_public.get("layout_fingerprint")):
             assist_public["layout_fingerprint"] = remembered_fp
-        unit = meta.get("unit_name") or fallback_unit
+        unit, unit_source = _note_unit(meta, items, fallback_unit)
         note = _enrich_note(
             {
                 "sheet": ws.title,
                 "source_kind": "delivery_note",
                 "score": d_score,
                 "unit_name": unit,
+                "unit_source": unit_source,
+                "source_cells": _locate_meta_cells(ws, header_row, meta),
                 "contact_person": meta.get("contact_person") or "",
                 "order_date": meta.get("order_date") or "",
                 "order_number": meta.get("order_number") or "",
@@ -258,6 +271,7 @@ class SheetParser:
                     "source_kind": "shipment_ledger",
                     "score": l_score,
                     "unit_name": unit_fallback,
+                    "unit_source": "sheet" if meta.get("unit_name") else "file_name",
                     "contact_person": meta.get("contact_person") or "",
                     "order_date": order_date,
                     "order_number": order_no,

@@ -7,6 +7,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from app.application.elt.errors import EltError
+from app.application.elt.parser_structure import business_note_text, is_footer_or_note_row
 from app.application.elt.parser_types import ParsedDataset, ParsedRow
 from app.application.elt.targets import get_adapter
 
@@ -31,6 +32,8 @@ def read_candidate_table(path: str | Path) -> ParsedDataset:
     workbook = load_workbook(path, read_only=True, data_only=False, keep_links=False)
     rows: list[ParsedRow] = []
     headers: list[str] = []
+    notes: list[str] = []
+    sheet_name = ""
     try:
         for worksheet in workbook.worksheets:
             occupied: list[tuple[int, tuple]] = []
@@ -59,7 +62,14 @@ def read_candidate_table(path: str | Path) -> ParsedDataset:
             for name in (item[1] for item in named):
                 if name not in headers:
                     headers.append(name)
+            if not sheet_name:
+                sheet_name = worksheet.title
             for number, raw in occupied[header_at + 1 :]:
+                if is_footer_or_note_row(raw):
+                    note = business_note_text(raw)
+                    if note and note not in notes:
+                        notes.append(note)
+                    continue
                 values = {
                     name: raw[pos] for pos, name in named if pos < len(raw) and _cell_text(raw[pos])
                 }
@@ -84,7 +94,13 @@ def read_candidate_table(path: str | Path) -> ParsedDataset:
     return ParsedDataset(
         headers=headers,
         rows=rows,
-        source_features={"kind": "reviewed_candidate", "parser": "none", "headers": headers},
+        source_features={
+            "kind": "reviewed_candidate",
+            "parser": "none",
+            "headers": headers,
+            "sheet_name": sheet_name,
+            "business_notes": notes,
+        },
     )
 
 

@@ -66,8 +66,7 @@ def _extract_adjacent_buyer_meta(ws, header_row: int) -> dict[str, str]:
 
     out = {"unit_name": "", "contact_person": "", "order_number": ""}
     max_col = min(int(getattr(ws, "max_column", 1) or 1), 16)
-    scan_to = max(2, min(int(header_row or 2), 30))
-    for row in range(1, scan_to):
+    for row in range(1, min(int(header_row or 1), 30)):
         for col in range(1, max_col + 1):
             raw = str(ws.cell(row, col).value or "").strip()
             if not raw:
@@ -171,6 +170,27 @@ def _parse_buyer_meta(
     ):
         meta["unit_name"] = ""
     return meta
+
+
+def _locate_meta_cells(ws, header_row: int, meta: dict[str, str]) -> dict[str, str]:
+    """Coordinates of the band cells above the table that carry each meta value."""
+    from openpyxl.utils import get_column_letter
+
+    found: dict[str, str] = {}
+    max_col = min(int(getattr(ws, "max_column", 1) or 1), 16)
+    for key in ("unit_name", "contact_person", "order_date", "order_number"):
+        value = str(meta.get(key) or "").strip()
+        if not value:
+            continue
+        for row in range(1, min(int(header_row or 1), 30)):
+            col = next(
+                (c for c in range(1, max_col + 1) if value in str(ws.cell(row, c).value or "")),
+                None,
+            )
+            if col is not None:
+                found[key] = f"{get_column_letter(col)}{row}"
+                break
+    return found
 
 
 def _merge_meta(

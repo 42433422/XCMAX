@@ -18,11 +18,18 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
+from app.application.reviewed_excel_formula_cells import (
+    content_bounds,
+    formula_facts,
+    formula_text,
+    load_cached_workbook,
+)
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_UNPACKED = 100 * 1024 * 1024
-MAX_CELLS = 20_000
+# Equals the per-sheet structural-sampling extent, so any fully read sheet fits.
+MAX_CELLS = 100_000
 
 
 from app.application.reviewed_excel_classification import (
@@ -401,6 +408,8 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
     cells: list[dict[str, Any]] = []
     layout: list[dict[str, Any]] = []
     structural_sheets: list[str] = []
+    facts_by_cell = formula_facts(body)
+    cache_wb = load_cached_workbook(body)
     try:
         if len(wb.worksheets) > 100:
             raise ReviewedExcelError("工作表超过 100 张，暂不能安全预览")
@@ -408,9 +417,10 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
         for sheet in wb.worksheets:
             if len(sheet.merged_cells.ranges) > 5000:
                 raise ReviewedExcelError("合并区域超过 5000 个，暂不能安全预览")
-            extent = _sheet_cell_extent(sheet)
-            # Large used-ranges are real customer tables, not a reason to refuse
-            # classification. Sample the header band and keep the true dimensions.
+            content_row, content_col = content_bounds(sheet, facts_by_cell)
+            # Extent follows valued cells. A styled cell in column XFD must not
+            # hide the rest of a business sheet behind header-only sampling.
+            extent = content_row * content_col
             structural = extent > 100_000
             if structural:
                 structural_sheets.append(sheet.title)
@@ -420,33 +430,64 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                     raise ReviewedExcelError("工作簿总单元格范围过大，暂不能安全预览")
             sampled = 0
             sample_full = False
-            row_iter = sheet.iter_rows(
-                max_row=12 if structural else None,
-                max_col=40 if structural else None,
-            )
+            row_iter: Any = ()
+            if content_row and content_col:
+                row_iter = sheet.iter_rows(
+                    max_row=min(content_row, 12) if structural else content_row,
+                    max_col=min(content_col, 40) if structural else content_col,
+                )
+            cache_sheet = None
+            if cache_wb is not None and sheet.title in cache_wb.sheetnames:
+                cache_sheet = cache_wb[sheet.title]
             for row in row_iter:
                 if sample_full:
                     break
                 for cell in row:
-                    if isinstance(cell, MergedCell) or cell.value is None:
+                    fact = facts_by_cell.get((sheet.title, cell.coordinate))
+                    formula = cell.data_type == "f" or fact is not None
+                    # A merge member is normally display-only. Keep it when the
+                    # package still stores a formula there; openpyxl drops that value.
+                    if isinstance(cell, MergedCell) and fact is None:
+                        continue
+                    if cell.value is None and not formula:
                         continue
                     if structural and sampled >= 800:
                         sample_full = True
                         break
                     if not structural and len(cells) >= MAX_CELLS:
-                        raise ReviewedExcelError("非空单元格超过 20000 个，暂不能完整预览")
+                        raise ReviewedExcelError(f"非空单元格超过 {MAX_CELLS} 个，暂不能完整预览")
                     if structural:
                         sampled += 1
-                    formula = cell.data_type == "f"
-                    cells.append(
-                        {
-                            "sheet": sheet.title,
-                            "cell": cell.coordinate,
-                            "value": str(cell.value),
-                            "kind": "formula" if formula else "review",
-                            "reason": "公式保留" if formula else "未确定，默认保留；请逐格确认",
-                        }
-                    )
+                    if formula:
+                        text = formula_text(cell.value) or (fact or {}).get("formula") or ""
+                        cached = None
+                        if cache_sheet is not None:
+                            cached_value = cache_sheet[cell.coordinate].value
+                            cached = None if cached_value is None else str(cached_value)
+                        if cached is None and fact and not fact["cache_missing"]:
+                            cached = fact["cached"]
+                        missing = fact["cache_missing"] if fact else cached is None
+                        cells.append(
+                            {
+                                "sheet": sheet.title,
+                                "cell": cell.coordinate,
+                                "value": text,
+                                "kind": "formula",
+                                "cached_value": None if missing else cached,
+                                "cache_missing": bool(missing),
+                                "reason": "公式保留；缺失缓存" if missing else "公式保留",
+                            }
+                        )
+                    else:
+                        cells.append(
+                            {
+                                "sheet": sheet.title,
+                                "cell": cell.coordinate,
+                                "value": str(cell.value),
+                                "kind": "review",
+                                "reason": "未确定，默认保留；请逐格确认",
+                            }
+                        )
             if len(layout) < 20:
                 max_row, max_col = (
                     min(_sheet_axis(sheet.max_row), 40),
@@ -475,6 +516,8 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                         if (r, c) in covered:
                             continue
                         cell = sheet.cell(r, c)
+                        fact = facts_by_cell.get((sheet.title, cell.coordinate))
+                        formula = cell.data_type == "f" or fact is not None
                         span = merged.get((r, c), (1, 1))
                         rgb = (
                             cell.fill.fgColor.rgb
@@ -484,8 +527,14 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                         row_cells.append(
                             {
                                 "cell": cell.coordinate,
-                                "value": "" if cell.value is None else str(cell.value),
-                                "formula": cell.data_type == "f",
+                                "value": (
+                                    formula_text(cell.value) or (fact or {}).get("formula") or ""
+                                    if formula
+                                    else ""
+                                    if cell.value is None
+                                    else str(cell.value)
+                                ),
+                                "formula": formula,
                                 "rowspan": span[0],
                                 "colspan": span[1],
                                 "bold": bool(cell.font.bold),
@@ -600,6 +649,8 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
         }
     finally:
         wb.close()
+        if cache_wb is not None:
+            cache_wb.close()
 
 
 def _restore_print_areas(body: bytes, areas: list[dict]) -> bytes:

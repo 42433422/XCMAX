@@ -113,10 +113,12 @@ def test_legacy_plaintext_migrates_on_read(archive_db):
         )
         path = Path(version.storage_path)
         # Simulate pre-encrypt disk layout.
+        path.chmod(0o600)
         path.write_bytes(body)
         assert not path.read_bytes().startswith(_ENVELOPE_MAGIC)
         assert read_original(db, owner=7, version_id=version.id, root=archive_root) == body
         assert path.read_bytes().startswith(_ENVELOPE_MAGIC)
+        assert path.stat().st_mode & 0o222 == 0
         assert read_original(db, owner=7, version_id=version.id, root=archive_root) == body
 
 

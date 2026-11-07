@@ -24,7 +24,7 @@ _NUMBER_RE = re.compile(r"^[\s￥¥$€£(（+-]*\d[\d\s,，]*(?:\.\d+)?[%元）
 _DATE_RE = re.compile(
     r"^(?:19|20)?\d{2}(?:[-/.年月]\d{1,2}){1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$"
 )
-_TOTAL_RE = re.compile(r"(合计|总计|小计|汇总|共计|累计)")
+_TOTAL_RE = re.compile(r"^(合计|总计|小计|汇总|共计|累计)(?:\s|[:：]|$)")
 _NOTE_RE = re.compile(r"^(备注|说明|注[:：]|注意|制表|审核|签字|签名|条款|附注)")
 _WEEKDAYS = {
     *"日一二三四五六天",
@@ -914,7 +914,7 @@ def review_grid(review: dict, sheet: str) -> tuple[Grid, list[Merge]]:
             continue
         column, row = coordinate_from_string(cell["cell"])
         cells[(row, column_index_from_string(column))] = cell.get("value")
-    overview = next(
+    overview: dict[str, Any] = next(
         (item for item in review.get("sheet_overview", []) if item.get("sheet") == sheet), {}
     )
     merges = []

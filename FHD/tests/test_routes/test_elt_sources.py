@@ -145,6 +145,7 @@ def test_download_streams_verified_snapshot_when_original_changes(source_client,
         snapshot, file_name = get_verified_content(db, **kwargs)
         snapshots.append(snapshot)
         version = db.get(EltArchiveVersion, source["revision"]["id"])
+        Path(version.storage_path).chmod(0o600)
         Path(version.storage_path).write_bytes(CORRECTION)
         return snapshot, file_name
 

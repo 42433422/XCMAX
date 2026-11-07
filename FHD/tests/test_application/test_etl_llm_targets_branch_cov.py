@@ -905,10 +905,21 @@ def test_helpers_issue_optional_decimal():
         "message": "m",
     }
     assert helpers.optional_text("  hi  ") == "hi"
-    assert helpers.optional_text("") is None
+    assert helpers.optional_text("") == ""
     assert helpers.optional_text(None) is None
+    assert helpers.optional_text(0) == "0"
+    assert helpers.optional_text(False) == "False"
     assert helpers.decimal_or_zero("1,000") == Decimal("1000")
     assert helpers.decimal_or_zero(None) == Decimal("0")
+    assert helpers.decimal_or_none(None) is None
+    assert helpers.decimal_or_none(0) == Decimal("0")
+    assert helpers.integer_or_zero("3") == 3
+    for bad in (False, "abc"):
+        with pytest.raises(EltError):
+            helpers.decimal_or_none(bad)
+    with pytest.raises(EltError) as ex:
+        helpers.integer_or_zero("2.5")
+    assert ex.value.code == "ELT_NUMBER_PRECISION_EXCEEDED"
     assert helpers.decimal_or_zero("3.5") == Decimal("3.5")
     with pytest.raises(EltError) as ex:
         helpers.decimal_or_zero("abc")
@@ -1982,6 +1993,37 @@ def test_attendance_adapter_preview(session, monkeypatch, tmp_path):
         context=ctx3,
     )
     assert d3.action == "skip" and d3.reason == "duplicate_attendance_source"
+    d4 = a.preview(
+        MagicMock(),
+        {"employee_name": "乙", "work_date": "2026-01-02"},
+        allowed_update_fields=set(),
+        context=ctx3,
+    )
+    d5 = a.preview(
+        MagicMock(),
+        {"employee_name": "乙", "work_date": "2026-01-02"},
+        allowed_update_fields=set(),
+        context=ctx3,
+    )
+    assert d4.action == "new"
+    assert d5.action == "skip" and d5.reason == "duplicate_attendance_in_source"
+    from app.application.elt.targets.orders import PurchaseOrderAdapter
+
+    issues = {
+        item["field"]: item
+        for item in PurchaseOrderAdapter().validate(
+            {
+                "external_order_no": "PO-1",
+                "supplier_name": "甲",
+                "order_date": "昨天",
+                "product_name": "漆",
+                "quantity": "-2",
+            }
+        )
+    }
+    assert issues["order_date"]["code"] == "ELT_VALUE_FORMAT_INVALID"
+    assert issues["quantity"]["code"] == "ELT_VALUE_INVALID"
+    assert "负数" in issues["quantity"]["message"]
 
 
 def test_attendance_existing_batch_db(session, tmp_path):
@@ -2135,6 +2177,71 @@ def test_export_xlsx_adapter(tmp_path, monkeypatch):
     )
     assert r["executed"] == 501
     assert (tmp_path / "etl" / "exports" / "etl-r3.xlsx").is_file()
+    assert r["receipt"]["sha256"]
+
+
+def test_export_xlsx_uses_committed_template(tmp_path, monkeypatch):
+    from datetime import date
+    from io import BytesIO
+
+    from openpyxl import Workbook, load_workbook
+
+    from app.application.elt.candidate_table import read_candidate_table
+    from app.application.elt.targets.batch import ExportXlsxAdapter
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "送货明细"
+    sheet.append(["客户", "产品", "数量", "单价", "金额", "日期"])
+    sheet.append(["甲公司", "红茶", 2, 20, 40, date(2026, 5, 1)])
+    sheet.append(["乙公司", "=CMD|probe", 3, 20, 60, date(2026, 5, 2)])
+    sheet.append(["合计", None, 5, None, 100, None])
+    sheet.append(["备注：加急，请勿改数量"])
+    sheet.append(["本合同一式两份，双方签字盖章后生效"])
+    path = tmp_path / "source.xlsx"
+    book.save(path)
+    book.close()
+    dataset = read_candidate_table(path)
+    assert [row.values["客户"] for row in dataset.rows] == ["甲公司", "乙公司"]
+    assert dataset.rows[1].values["产品"] == "=CMD|probe"
+    assert "本合同一式两份，双方签字盖章后生效" in dataset.source_features["business_notes"]
+    assert "备注：加急，请勿改数量" in dataset.source_features["business_notes"]
+    monkeypatch.setattr("app.application.elt.targets.batch.get_app_data_dir", lambda: tmp_path)
+    from app.application.elt.result_export import export_context
+
+    context = {
+        "run_id": "result",
+        "row_count": 2,
+        **export_context(
+            {
+                "field_mappings": [
+                    {"source": header, "target": header}
+                    for header in ["客户", "产品", "数量", "单价", "金额", "日期"]
+                ]
+            },
+            type("Adapter", (), {"fields": ()})(),
+            dataset.source_features,
+            dataset.rows[0].sheet,
+        ),
+    }
+    written = ExportXlsxAdapter().execute_batch([dict(row.values) for row in dataset.rows], context)
+    saved = load_workbook(BytesIO((tmp_path / "etl" / "exports" / "etl-result.xlsx").read_bytes()))
+    result = saved.active
+    assert result.title == "送货明细"
+    assert [cell.value for cell in result[1]] == ["客户", "产品", "数量", "单价", "金额", "日期"]
+    assert result["C2"].value == 2 and result["C2"].number_format == "#,##0"
+    assert result["E2"].number_format == "#,##0.00"
+    assert result["F2"].number_format == "YYYY-MM-DD"
+    assert result["B3"].data_type == "s" and "CMD|probe" in str(result["B3"].value)
+    assert result["A4"].value == "合计"
+    assert result["C4"].value == "=SUM(C2:C3)"
+    assert result["E4"].value == "=SUM(E2:E3)"
+    data_text = " ".join(str(result.cell(row, 1).value or "") for row in (2, 3))
+    assert "本合同" not in data_text and "加急" not in data_text
+    notes = " ".join(str(result.cell(row, 1).value or "") for row in range(5, 8))
+    assert "本合同" in notes and "加急" in notes
+    assert written["receipt"]["data_rows"] == 2
+    assert written["receipt"]["sha256"]
 
 
 def test_webhook_adapter_success(monkeypatch):

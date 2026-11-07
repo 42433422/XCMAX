@@ -71,7 +71,7 @@ def structured_layout(
     from app.application.elt.parser_structure import TableLayout, semantic_key
 
     group = _qualified_group(segmentation)
-    if layout is None or not group:
+    if layout is None or segmentation is None or not group:
         return layout
     header_row = layout.header_end + 1
     if any(header_row in table.header_rows for table in group):
@@ -100,7 +100,7 @@ def structured_layout(
 def plan_rows(segmentation: SheetSegmentation | None, header_row: int) -> RowPlan | None:
     """Use the dominant table group when its header is the one the layout detector found."""
     group = _qualified_group(segmentation)
-    if not any(header_row in table.header_rows for table in group):
+    if segmentation is None or not any(header_row in table.header_rows for table in group):
         return None
     plan = RowPlan(segmentation, group)
     for table in group:

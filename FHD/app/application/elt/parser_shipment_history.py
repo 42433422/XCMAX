@@ -229,7 +229,7 @@ def ledger_row_verification(
     rows: list[ParsedRow], state: dict[int, str], *, written_rows: int, target_type: str
 ) -> dict[str, Any]:
     """Row-by-row destination of companion ledger lines; a shortfall needs confirmation."""
-    records = []
+    records: list[dict[str, Any]] = []
     for row in rows:
         fragment = row.provenance.get("original_fragment") or {}
         kg, price, amount = (
@@ -248,7 +248,7 @@ def ledger_row_verification(
                 "amount": amount,
                 "amount_consistent": (
                     None
-                    if None in (kg, price, amount)
+                    if kg is None or price is None or amount is None
                     else abs(kg * price - amount) <= max(0.05, abs(amount) * 0.01)
                 ),
                 "source_date": row.provenance.get("source_date") or "",

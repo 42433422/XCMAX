@@ -43,6 +43,7 @@ class EltRowAdviser:
         return {
             "action": deterministic_action,
             "reason": deterministic_reason or "deterministic_rule",
+            "deterministic_reason": deterministic_reason or "deterministic_rule",
             "used_llm": False,
             "advisory_only": True,
             "degraded": False,
@@ -99,6 +100,7 @@ class EltRowAdviser:
         return {
             "action": action,
             "reason": str(result.get("reason") or "llm_advice")[:300],
+            "deterministic_reason": fallback["deterministic_reason"],
             "used_llm": True,
             "advisory_only": True,
             "degraded": False,
@@ -164,6 +166,7 @@ class EltRowAdviser:
             output[index] = {
                 "action": action,
                 "reason": str(item.get("reason") or "llm_advice")[:300],
+                "deterministic_reason": output[index]["deterministic_reason"],
                 "used_llm": True,
                 "advisory_only": True,
                 "degraded": False,

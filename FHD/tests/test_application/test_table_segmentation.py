@@ -158,3 +158,63 @@ def test_ledger_verification_lists_every_row_and_requires_confirmation():
     }
     assert [r["amount_consistent"] for r in result["rows"]] == [False, True, False, True, False]
     assert result["customer_unresolved_rows"] == 5
+
+
+def test_business_names_containing_total_words_are_not_excluded():
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["客户名称", "数量", "金额"])
+    ws.append(["合计科技", 2, 10])
+    ws.append(["汇总服务", 3, 15])
+    ws.append(["合计", 5, 25])
+    result = _segment(ws)
+    assert result.tables[0].data_rows == [2, 3]
+    assert _roles(result)[4] == "summary"
+
+
+def test_indented_parallel_tables_keep_source_columns(tmp_path):
+    wb = Workbook()
+    ws = wb.active
+    ws.append([None, None, "客户名称", "数量", "金额", None, "客户名称", "数量", "金额"])
+    ws.append([None, None, "甲", 2, 10, None, "乙", 3, 15])
+    path = tmp_path / "indented.xlsx"
+    wb.save(path)
+    dataset = parse_file(path, target_type="customers")
+    try:
+        rows = list(dataset.rows)
+        assert len(rows) == 2
+        assert [row.provenance["columns"]["客户名称"] for row in rows] == [3, 7]
+        assert [row.values["客户名称"] for row in rows] == ["甲", "乙"]
+    finally:
+        dataset.rows.close()
+
+
+def test_parallel_slice_row_keeps_each_review_status():
+    from io import BytesIO
+
+    from app.application.reviewed_excel_auto_slice import rule_row_dispositions
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["甲", 1, None, "乙", 2])
+    body = BytesIO()
+    wb.save(body)
+    slices = [
+        {
+            "fragments": [{"sheet": ws.title, "range": "A1:B1"}],
+            "status": "identified",
+            "slice_id": "left",
+        },
+        {
+            "fragments": [{"sheet": ws.title, "range": "D1:E1"}],
+            "status": "pending_review",
+            "slice_id": "right",
+            "review_reason": "需复核",
+        },
+    ]
+    rows = rule_row_dispositions(body.getvalue(), {"sheets": []}, slices)
+    assert rows[0]["status"] == "pending_review"
+    assert [(p["slice_id"], p["status"]) for p in rows[0]["parts"]] == [
+        ("left", "import"),
+        ("right", "pending_review"),
+    ]

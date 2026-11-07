@@ -6,10 +6,13 @@ import json
 import logging
 import threading
 import uuid
+import zipfile
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
 from app.application.elt.errors import EltError
 from app.application.elt.targets import json_safe
@@ -18,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 MAX_FILE_MIB = 100
 MAX_FILE_BYTES = MAX_FILE_MIB * 1024 * 1024
+READ_ONLY_MODE = 0o400
 # A delivery layout is a private printing resource, not an ETL field-mapping
 # template. It shares owner-scoped ETL persistence so document resolution can
 # enforce tenant + owner isolation, but it must not be selectable for import.
@@ -94,6 +98,13 @@ def mapping_key(value: str) -> str:
 def safe_error(exc: Exception) -> tuple[str, str]:
     if isinstance(exc, EltError):
         return exc.code, exc.message
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    if isinstance(
+        exc, (zipfile.BadZipFile, zlib.error, InvalidFileException, ElementTree.ParseError)
+    ):
+        logger.warning("ETL source file unreadable: %s", type(exc).__name__)
+        return "ELT_FILE_CORRUPTED", "文件已损坏、加密或无法解压，未导入任何数据，请重新导出后上传"
     logger.exception("ETL operation failed")
     return "ELT_INTERNAL_ERROR", "ETL 处理失败，请检查文件或稍后重试"
 

@@ -168,6 +168,38 @@ def classify_review_workbook(review: dict) -> list[dict]:
             regions = _regions_for_segmentation(
                 segmentation, anchors=anchors, merges=merges, possible_shared=possible_shared
             )
+            # Unrecognised blocks still need a review slice, not just an exclusion label.
+            tables, notes = _split_table_blocks(rows_of_cells)
+            fallback = _regions_for_blocks(
+                sheet_cells=cells,
+                rows_of_cells=rows_of_cells,
+                tables=tables,
+                notes=notes,
+                max_col=max_col,
+                merges=merges,
+                header_pattern=header_pattern,
+                possible_shared=possible_shared,
+            )
+            known = [bounded_range(item["range"]) for item in regions if item.get("data_region")]
+            for item in fallback:
+                c1, r1, c2, r2 = bounded_range(item["range"])
+                if item.get("data_region") and not any(
+                    x1 <= c2 and x2 >= c1 and y1 <= r2 and y2 >= r1 for x1, y1, x2, y2 in known
+                ):
+                    regions.append(item)
+        elif not blank and not title_only:
+            tables, notes = _split_table_blocks(rows_of_cells)
+            if len(tables) >= 2:
+                regions = _regions_for_blocks(
+                    sheet_cells=cells,
+                    rows_of_cells=rows_of_cells,
+                    tables=tables,
+                    notes=notes,
+                    max_col=max_col,
+                    merges=merges,
+                    header_pattern=header_pattern,
+                    possible_shared=possible_shared,
+                )
         elif title_only and regions:
             regions = [
                 {
@@ -224,6 +256,16 @@ def _regions_for_segmentation(
     from app.application.elt.table_segmentation import EXCLUDED_ROLES, ROLE_REASONS
 
     def region(c1: int, r1: int, c2: int, r2: int) -> tuple[str, list[str]]:
+        changed = True
+        while changed:
+            changed = False
+            for merged in merges:
+                mc1, mr1, mc2, mr2 = bounded_range(merged)
+                if mr1 <= r2 and mr2 >= r1 and mc1 <= c2 and mc2 >= c1:
+                    grown = min(c1, mc1), min(r1, mr1), max(c2, mc2), max(r2, mr2)
+                    if grown != (c1, r1, c2, r2):
+                        c1, r1, c2, r2 = grown
+                        changed = True
         ref = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
         inside = [
             merged
@@ -239,7 +281,9 @@ def _regions_for_segmentation(
     regions = []
     boxes = []
     for table in segmentation.tables:
-        top = min(table.header_rows)
+        if len(table.headers) < 3:
+            continue
+        top = min([*table.header_rows, *table.title_rows])
         boxes.append((table.min_col, top, table.max_col, table.end_row))
         ref, inside = region(table.min_col, top, table.max_col, table.end_row)
         evidence = [
@@ -324,6 +368,133 @@ def _regions_for_segmentation(
                 "exclusion_role": run[0]["role"],
                 "table_id": run[0]["table_id"],
                 "anomaly_reason": ROLE_REASONS[run[0]["role"]],
+            }
+        )
+    return regions
+
+
+def _split_table_blocks(
+    rows_of_cells: dict[int, list[dict]],
+) -> tuple[list[list[int]], list[list[int]]]:
+    content_rows = sorted(rows_of_cells)
+    blocks: list[list[int]] = []
+    current: list[int] = []
+    previous: int | None = None
+    for row in content_rows:
+        if previous is not None and row - previous > 1 and current:
+            blocks.append(current)
+            current = []
+        current.append(row)
+        previous = row
+    if current:
+        blocks.append(current)
+    tables: list[list[int]] = []
+    notes: list[list[int]] = []
+    for block in blocks:
+        while (
+            len(block) >= 2
+            and len(rows_of_cells[block[0]]) < 2
+            and len(rows_of_cells[block[1]]) >= 2
+        ):
+            notes.append([block[0]])
+            block = block[1:]
+        header = rows_of_cells[block[0]]
+        if len(block) >= 2 and len(header) >= 2:
+            tables.append(block)
+        else:
+            notes.append(block)
+    return tables, notes
+
+
+def _regions_for_blocks(
+    *,
+    sheet_cells: list[dict],
+    rows_of_cells: dict[int, list[dict]],
+    tables: list[list[int]],
+    notes: list[list[int]],
+    max_col: int,
+    merges: list,
+    header_pattern,
+    possible_shared: list[dict],
+) -> list[dict]:
+    from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
+
+    def span(rows: list[int]) -> tuple[int, int, int, int]:
+        cols = [
+            column_index_from_string(coordinate_from_string(cell["cell"])[0])
+            for row in rows
+            for cell in rows_of_cells[row]
+        ]
+        return min(cols), rows[0], max(cols), rows[-1]
+
+    merge_bounds = [bounded_range(item) for item in merges]
+    blocks = []
+    for rows, data_region in (
+        *[(item, False) for item in notes],
+        *[(item, True) for item in tables],
+    ):
+        c1, r1, c2, r2 = span(rows)
+        merged_title = False
+        changed = True
+        while changed:
+            changed = False
+            for m1, n1, m2, n2 in merge_bounds:
+                if m1 <= c2 and c1 <= m2 and n1 <= r2 and r1 <= n2:
+                    merged_title = merged_title or not data_region
+                    grown = (min(c1, m1), min(r1, n1), max(c2, m2), max(r2, n2))
+                    if grown != (c1, r1, c2, r2):
+                        c1, r1, c2, r2 = grown
+                        changed = True
+        blocks.append([c1, r1, c2, r2, data_region, merged_title])
+    blocks.sort(key=lambda item: (item[1], item[3]))
+    joined: list[list] = []
+    for block in blocks:
+        # Rows are the slice unit: a merge-grown block sharing rows with its neighbour
+        # becomes one region so no row is covered twice, and a merged title directly
+        # above a table stays with that table as its context.
+        last = joined[-1] if joined else None
+        if last is not None and (
+            block[1] <= last[3]
+            or (last[5] and not last[4] and block[4] and block[1] == last[3] + 1)
+        ):
+            last[0], last[2] = min(last[0], block[0]), max(last[2], block[2])
+            last[3] = max(last[3], block[3])
+            last[4] = last[4] or block[4]
+            last[5] = last[5] and not last[4]
+        else:
+            joined.append(block)
+    regions = []
+    for c1, r1, c2, r2, data_region, _merged_title in joined:
+        anomaly = "" if data_region else "title_or_note"
+        merged_in_region = [
+            item
+            for item, (m1, n1, m2, n2) in zip(merges, merge_bounds)
+            if c1 <= m1 and m2 <= c2 and r1 <= n1 and n2 <= r2
+        ]
+        region_cells = [
+            cell for cell in sheet_cells if r1 <= coordinate_from_string(cell["cell"])[1] <= r2
+        ]
+        regions.append(
+            {
+                "range": f"{get_column_letter(c1)}{r1}:{get_column_letter(min(c2, max_col))}{r2}",
+                "labels": ["unknown"],
+                "label_source": "rule",
+                "range_source": "rule",
+                "evidence": [],
+                "parent_heading": "",
+                "header_cells": [
+                    {"cell": cell["cell"], "value": cell["value"]}
+                    for cell in region_cells
+                    if header_pattern.fullmatch(str(cell["value"]).strip())
+                ],
+                "merged_ranges": merged_in_region,
+                "possible_shared_context": possible_shared,
+                "checked_cells": len(region_cells),
+                "needs_confirmation": True,
+                "dependency_status": "跨区图例和依赖未分析，边界需确认",
+                "data_region": data_region,
+                "anomaly": anomaly,
+                "anomaly_reason": "标题或说明，不是数据表" if anomaly else "",
             }
         )
     return regions

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from contextvars import copy_context
 from pathlib import Path
@@ -46,6 +47,26 @@ from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _unconfirmed_mappings(mappings: Any) -> list[dict[str, Any]]:
+    """Mappings below a confident match stay out of the warehouse until a person confirms them."""
+    if not isinstance(mappings, list):
+        return []
+    pending: list[dict[str, Any]] = []
+    for item in mappings:
+        if not isinstance(item, dict) or not str(item.get("source") or "").strip():
+            continue
+        if item.get("confirmed") is True or "confidence" not in item:
+            continue
+        try:
+            confidence = float(item["confidence"])
+        except (TypeError, ValueError):
+            pending.append(item)
+            continue
+        if not math.isfinite(confidence) or not 0.9 <= confidence <= 1:
+            pending.append(item)
+    return pending
 
 
 class ExecutionServiceMixin(RollbackServiceMixin):
@@ -94,6 +115,20 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             # The ownership update locks this run. Read again under that lock,
             # rather than approving a stale ORM snapshot before a concurrent edit.
             db.refresh(run)
+            if int(run.total_rows or 0) == 0:
+                raise EltConflict("ELT_PREVIEW_EMPTY", "没有识别出可入库的数据，不能确认或入库")
+            pending_mappings = _unconfirmed_mappings(
+                load_json(run.draft_json, {}).get("field_mappings")
+            )
+            if pending_mappings:
+                names = "、".join(
+                    str(item.get("target") or item.get("source") or "字段")
+                    for item in pending_mappings[:8]
+                )
+                raise EltConflict(
+                    "ELT_MAPPING_CONFIRMATION_REQUIRED",
+                    f"有歧义的字段尚未确认：{names}。请确认映射后再入库",
+                )
             if run.error_rows and not valid_rows_only:
                 raise EltConflict(
                     "ELT_INVALID_ROWS_BLOCKED", "预演存在错误行，请核对后明确选择执行范围"
@@ -120,6 +155,22 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             run.confirmed_at = utcnow()
             run.error_code = None
             run.error_message = None
+            from app.application.elt.audit import record_elt_audit
+
+            record_elt_audit(
+                db,
+                actor=owner_user_id,
+                action="elt_confirm",
+                payload={
+                    "run_id": run.id,
+                    "upload_id": run.upload_id,
+                    "file_sha256": run.file_sha256,
+                    "target_type": run.target_type,
+                    "preview_revision": preview_revision,
+                    "valid_rows_only": valid_rows_only,
+                    "outcome": "confirmed",
+                },
+            )
             tenant_id = tenant_id_for_write()
             db.commit()
             committed = True
@@ -231,6 +282,21 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 for item in draft.get("field_mappings") or []
                 if str(item.get("target") or "")
             ]
+            if run.target_type in {"export_xlsx", "export_csv"}:
+                from app.application.elt.result_export import export_context
+
+                features = load_json(run.source_features_json, {})
+                first_sheet = (
+                    db.query(EltRunRow.source_sheet)
+                    .filter(
+                        EltRunRow.run_id == run.id,
+                        EltRunRow.owner_user_id == owner_user_id,
+                    )
+                    .order_by(EltRunRow.id)
+                    .limit(1)
+                    .scalar()
+                )
+                context.update(export_context(draft, adapter, features, str(first_sheet or "")))
             if target_config:
                 context["target_config"] = {
                     "endpoint_url": target_config["endpoint_url"],
@@ -352,6 +418,42 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 }
             )
             run.receipt_json = dump_json(receipt)
+            from app.application.elt.audit import record_elt_audit
+
+            wrote = int(run.executed_rows or 0)
+            if wrote:
+                record_elt_audit(
+                    db,
+                    actor=owner_user_id,
+                    action="elt_submit",
+                    payload={
+                        "run_id": run.id,
+                        "upload_id": run.upload_id,
+                        "file_sha256": run.file_sha256,
+                        "target_type": run.target_type,
+                        "outcome": "partial" if run.status != "completed" else "success",
+                        "executed_rows": wrote,
+                        "executed_at": run.executed_at.isoformat() if run.executed_at else None,
+                        "new_rows": run.new_rows,
+                        "update_rows": run.update_rows,
+                        "skip_rows": run.skip_rows,
+                        "error_rows": run.error_rows,
+                    },
+                )
+            if run.status == "failed":
+                record_elt_audit(
+                    db,
+                    actor=owner_user_id,
+                    action="elt_exception",
+                    payload={
+                        "run_id": run.id,
+                        "upload_id": run.upload_id,
+                        "target_type": run.target_type,
+                        "outcome": "failed",
+                        "error_code": run.error_code,
+                        "executed_rows": wrote,
+                    },
+                )
             finish_operation(db, operation)
             db.commit()
             self._record_execution_metrics(run, started_at, "success")
@@ -469,6 +571,27 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                     failed_row.execution_error_message = message[:500]
                 run = self._owned_run(db, run.id, run.owner_user_id)
                 run.executed_rows = executed
+                if executed:
+                    if run.executed_at is None:
+                        run.executed_at = utcnow()
+                    from app.application.elt.audit import record_elt_audit
+
+                    record_elt_audit(
+                        db,
+                        actor=run.owner_user_id,
+                        action="elt_submit",
+                        payload={
+                            "run_id": run.id,
+                            "upload_id": run.upload_id,
+                            "file_sha256": run.file_sha256,
+                            "target_type": run.target_type,
+                            "outcome": "partial",
+                            "executed_rows": executed,
+                            "executed_at": run.executed_at.isoformat(),
+                            "error_code": code,
+                            "failed_source_row": failed_row.source_row if failed_row else None,
+                        },
+                    )
                 db.commit()
                 raise
 
