@@ -450,7 +450,8 @@ def test_compat_customer_export_not_implemented() -> None:
     with pytest.raises(HTTPException) as exc:
         customers_export_stub()
     assert exc.value.status_code == 501
-    assert "尚未" in str(exc.value.detail)
+    assert "/customers" in str(exc.value.detail)
+    assert "已授权的 ERP Mod" in str(exc.value.detail)
 
 
 # ---------------------------------------------------------------------------

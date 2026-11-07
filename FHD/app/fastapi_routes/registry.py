@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -41,7 +42,7 @@ class RouteConflict:
 
 def _detect_conflicts(entries) -> list[RouteConflict]:
     seen: dict[tuple[str, str], list[str]] = {}
-    dynamic = []
+    dynamic: list[tuple[re.Pattern[str], str, set[str] | None, str]] = []
     conflicts: list[RouteConflict] = []
     for route, owner in entries:
         if isinstance(route.original_route, Mount):

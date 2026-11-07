@@ -189,17 +189,23 @@ def test_auth_login_phone_code_missing(auth_client: TestClient) -> None:
     assert r.status_code == 400
 
 
+@pytest.mark.parametrize("sku", ["personal", "generic", "enterprise"])
+@pytest.mark.parametrize("username", [None, "alice"])
 @patch("app.fastapi_routes.market_account.login_market_with_phone_code", new_callable=AsyncMock)
 @patch("app.application.enterprise_login_flow.run_market_first_login", new_callable=AsyncMock)
 def test_auth_login_phone_code_cannot_create_a_session(
-    mock_run: AsyncMock, mock_market: AsyncMock, auth_client: TestClient
+    mock_run: AsyncMock,
+    mock_market: AsyncMock,
+    auth_client: TestClient,
+    sku: str,
+    username: str | None,
 ) -> None:
     mock_market.return_value = {"success": True}
     mock_run.return_value = ({"success": True, "session_id": "s2"}, None)
-    with patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="personal"):
+    with patch("app.mod_sdk.product_skus.resolve_product_sku", return_value=sku):
         r = auth_client.post(
             "/api/auth/login-with-phone-code",
-            json={"phone": "13800138000", "code": "123456"},
+            json={"phone": "13800138000", "code": "123456", "username": username},
         )
     assert r.status_code == 501
     assert r.json()["error_code"] == "SMS_AUTH_UNAVAILABLE"
