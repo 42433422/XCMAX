@@ -51,6 +51,9 @@ def build_universal_profile_from_kb() -> ShipmentEtlProfile:
     columns["order_number"] = _contains("order_number", exclude=["型号", "model"])
     columns["order_date"] = _contains("order_date")
     columns["remark"] = _contains("remark")
+    # Exact labels only: "客户型号" / "客户订单号" headers must stay on their own fields.
+    unit_labels = kb.meta_labels().get("unit_name") or ["客户"]
+    columns["unit_name"] = [{"exact": ["".join(str(t).split()).lower() for t in unit_labels]}]
 
     header_tokens: list[str] = []
     for key in ("model_number", "product_name", "quantity_tins", "unit_price", "amount"):
