@@ -11,7 +11,7 @@ This file is an evidence snapshot for the review candidate. It is not a product 
 | Tested `origin/main` | `566cf2a446d92cf12635a41c6622ce8ac8864ab8` (`fix(excel, erp): formula caches, shipment cell lineage, AI employee read permissions (#3087)`, 2026-11-07) |
 | Integration branch | `cursor/elt-e2e-full-001-826b` |
 | Candidate before this report | `ac7531d32f921d69d01b6e9a34e0c3d90202bc3d` |
-| Candidate SHA | the commit that adds this report; the PR head is authoritative |
+| Candidate SHA | `e1ce4e470dca994d90a14b028a7a7702c23843c6` plus the follow-up commit that records the empty CI list. The pushed head is authoritative. |
 | Product version | `1.0.0.7` (`FHD/VERSION.md`; live `GET /api/health` on the restarted desktop backend) |
 | Toolchain mapping | `1.0.0` |
 | Client | XCAGI enterprise, edition full, `XCAGI_DESKTOP_MODE=1`, Electron from `FHD/desktop` with `--no-sandbox` |
@@ -186,7 +186,13 @@ Second run on the fixed candidate: 878 passed, 1 skipped, exit 0.
 
 ## CI
 
-Not terminal at the time this report was written. The branch had not been pushed yet. CI status after push belongs in the PR; a non-terminal or failing check stays a release blocker. This report must not be updated to say CI passed unless the checks on this exact candidate SHA are terminal and green.
+`e1ce4e470dca994d90a14b028a7a7702c23843c6` was pushed to `origin/cursor/elt-e2e-full-001-826b`. `gh run list --branch cursor/elt-e2e-full-001-826b` returned no workflow runs.
+
+`.github/workflows/fhd-ci-cd.yml` runs on `pull_request` to `main` (and on `push` only for `main`, `develop`, and `master`). A branch push alone does not start that pipeline. Required checks therefore have no result: not green, not red, not started.
+
+This session has no `ManagePullRequest` tool. `gh` is read-only and was not used to create the PR. GitHub’s compare link from the push is `https://github.com/42433422/XCMAX/pull/new/cursor/elt-e2e-full-001-826b`. That is not an open pull request.
+
+CI remains a release blocker until a PR exists and the checks on that head are terminal and green. This report does not call them passed.
 
 ## Production release
 
