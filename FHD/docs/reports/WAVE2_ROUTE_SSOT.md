@@ -1,4 +1,4 @@
-# 路由注册与兼容契约
+# 路由注册与兼容契约 SSOT
 
 宿主入口由 `app/fastapi_routes/mounts/*`、`RouteRegistry` 与 `app/legacy/routes/legacy_compat.py` 装配；Mod 入口按当前账号授权动态挂载。云端唯一工厂为 `modstore_server.api.app_factory`。
 
