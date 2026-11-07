@@ -55,6 +55,16 @@ def test_unknown_sheet_takes_the_model_name_and_type(monkeypatch):
     assert slices[0]["type_label"] == "借还台账"
 
 
+def test_sheet_name_reply_accepts_a_bare_array():
+    from app.application.reviewed_excel_template import _coerce_sheet_name_payload
+
+    data = _coerce_sheet_name_payload(
+        None,
+        '说明\n[{"sheet":"白浆","name":"白浆配方","type":"原料","note":"多余"}]',
+    )
+    assert data == {"sheets": [{"sheet": "白浆", "name": "白浆配方", "type": "原料"}]}
+
+
 def test_unknown_sheet_naming_runs_inside_a_live_event_loop(monkeypatch):
     import asyncio
     import json

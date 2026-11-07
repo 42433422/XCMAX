@@ -476,8 +476,12 @@ def test_platform_fenced_three_plans_and_strict_nested_contract(monkeypatch):
     ]
     for item in invalid:
         responses.append(json.dumps(item, ensure_ascii=False))
-        with pytest.raises(ValueError):
-            refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
+        kept = refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
+        assert [candidate["id"] for candidate in kept["candidates"]] == [
+            "preserve",
+            "table",
+            "table_identity",
+        ]
     responses.append(
         json.dumps(
             {

@@ -138,6 +138,38 @@ def template_llm_model_label() -> str:
     return "platform-default"
 
 
+def _coerce_sheet_name_payload(data, raw_content: str):
+    """Accept a sheet-name reply that is a bare array or uses extra fields."""
+    import json
+
+    if data is None:
+        text = raw_content.strip()
+        start = text.find("[")
+        end = text.rfind("]")
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, list):
+                data = {"sheets": parsed}
+    if isinstance(data, list):
+        data = {"sheets": data}
+    if not isinstance(data, dict) or not isinstance(data.get("sheets"), list):
+        return data if isinstance(data, dict) else None
+    cleaned = []
+    for item in data["sheets"]:
+        if not isinstance(item, dict):
+            continue
+        sheet = item.get("sheet") or item.get("工作表") or item.get("表")
+        name = item.get("name") or item.get("名称") or item.get("title")
+        kind = item.get("type") or item.get("类型") or ""
+        if not str(sheet or "").strip() or not str(name or "").strip():
+            continue
+        cleaned.append({"sheet": str(sheet).strip(), "name": str(name).strip(), "type": str(kind).strip()})
+    return {"sheets": cleaned}
+
+
 def _run_coroutine(factory):
     """Run one provider call. asyncio.run cannot start inside a live event loop."""
     import asyncio
@@ -246,12 +278,20 @@ def _template_platform_complete(
                 )
                 err.finish_reason = finish
                 raise err
-            data = extract_json(str((choice.get("message") or {}).get("content") or ""))
-            if data is not None:
+            raw_content = str((choice.get("message") or {}).get("content") or "")
+            data = extract_json(raw_content)
+            if schema.get("required") == ["sheets"]:
+                data = _coerce_sheet_name_payload(data, raw_content)
+            elif data is not None:
                 from app.application.reviewed_excel_partition import coerce_payload_document_labels
 
                 data = coerce_payload_document_labels(data)
             if data is None or not _validate_template_schema(schema, data):
+                logging.getLogger(__name__).info(
+                    "template model payload rejected finish_reason=%s chars=%s",
+                    finish,
+                    len(raw_content),
+                )
                 raise ReviewedExcelError("invalid")
             model = str((response or {}).get("model") or template_llm_model_label())
             provider_name = str((response or {}).get("provider") or "platform")
@@ -1364,20 +1404,30 @@ def refine_proposal(
     ]
     token = bind_etl_llm_owner(owner_id)
     output_tokens = 1400
+    result = None
     try:
         try:
             result = _template_llm_complete(messages, schema, output_tokens, owner_id=owner_id)
         except ReviewedExcelError as exc:
-            if getattr(exc, "finish_reason", None) != "length":
+            if getattr(exc, "finish_reason", None) == "length":
+                logging.getLogger(__name__).info(
+                    "template preview truncated finish_reason=length max_tokens=%s; raising cap to 4096",
+                    output_tokens,
+                )
+                output_tokens = 4096
+                result = _template_llm_complete(messages, schema, output_tokens, owner_id=owner_id)
+            elif initial and exc.public_message == "invalid":
+                logging.getLogger(__name__).info(
+                    "template preview kept the local plan after an unusable model payload"
+                )
+            else:
                 raise
-            logging.getLogger(__name__).info(
-                "template preview truncated finish_reason=length max_tokens=%s; raising cap to 4096",
-                output_tokens,
-            )
-            output_tokens = 4096
-            result = _template_llm_complete(messages, schema, output_tokens, owner_id=owner_id)
     finally:
         reset_etl_llm_owner(token)
+    if result is None and initial:
+        _fill_instance_cells(review, base, base["candidates"])
+        base["parent_version"] = parent_version
+        return base
     if not result.used_llm or result.degraded:
         state = (
             "模型调用失败" if result.used_llm or result.degraded else "模型未调用（未配置或已关闭）"

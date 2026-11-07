@@ -74,14 +74,12 @@ def apply_unknown_sheet_names(sheets: list[dict], cells: list[dict], *, owner_id
     ]
     schema = {
         "type": "object",
-        "additionalProperties": False,
         "required": ["sheets"],
         "properties": {
             "sheets": {
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "additionalProperties": False,
                     "required": ["sheet", "name", "type"],
                     "properties": {
                         "sheet": {"type": "string"},
