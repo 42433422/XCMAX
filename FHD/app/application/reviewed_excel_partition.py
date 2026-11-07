@@ -53,6 +53,13 @@ def coerce_payload_document_labels(payload: dict) -> dict:
     """Repair freestyle region labels and flattened source ranges before validation."""
     if not isinstance(payload, dict):
         return payload
+    wrapped = payload.get("output_schema")
+    if (
+        isinstance(wrapped, dict)
+        and "documents" not in payload
+        and isinstance(wrapped.get("documents"), list)
+    ):
+        payload = wrapped
     documents = payload.get("documents")
     if isinstance(documents, list) and documents:
         area_keys = ("sheet_name", "row_start", "row_end", "column_start", "column_end")

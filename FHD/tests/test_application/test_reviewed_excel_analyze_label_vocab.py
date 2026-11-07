@@ -157,3 +157,29 @@ def test_record_response_stores_actual_model_and_failover_from():
     assert entry["failover_from"] == "doubao/deepseek-r1-250120"
     assert entry["http_status"] == 200
     assert base64.b64decode(entry["response_base64"]) == body
+
+
+def test_output_schema_wrapper_is_unwrapped_before_validation():
+    wrapped = {
+        "output_schema": {
+            "documents": [
+                {
+                    "ranges": [
+                        {
+                            "sheet_name": "出货",
+                            "row_start": 1,
+                            "row_end": 2,
+                            "column_start": 1,
+                            "column_end": 2,
+                        }
+                    ],
+                    "reason": "一张送货单",
+                }
+            ],
+            "reason": "按表拆开",
+        }
+    }
+    coerced = coerce_payload_document_labels(wrapped)
+    assert "output_schema" not in coerced
+    assert len(coerced["documents"]) == 1
+    assert coerced["documents"][0]["ranges"][0]["sheet_name"] == "出货"
