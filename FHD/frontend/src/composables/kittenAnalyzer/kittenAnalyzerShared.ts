@@ -6,7 +6,7 @@ import type { Ref } from 'vue'
 
 export const MAX_CHAT_MESSAGES = 120
 export const KITTEN_SNAPSHOT_CACHE_MS = 90_000
-/** Planner + 工具（如 generate_office_document）可能远超过 120s；过短会 Abort 后走 JSON 再次挂死且无超时 */
+/** Planner 与文档工具可能运行数分钟；超时后仅查询原任务，不重新执行。 */
 export const KITTEN_CHAT_TIMEOUT_MS = (() => {
   const raw = String(import.meta.env.VITE_KITTEN_CHAT_TIMEOUT_MS || '').trim()
   const n = raw ? Number.parseInt(raw, 10) : NaN
@@ -63,6 +63,15 @@ export interface KittenAnalysisResult {
   chart: boolean
   type: string
   kind: string
+  execution?: {
+    turn_id: string
+    task_id: string
+    run_id: string
+    approval_id: string
+    token_name: string
+    status: string
+    reason: string
+  }
 }
 
 export type KittenChartType = 'bar' | 'line' | 'pie' | 'scatter' | 'area'

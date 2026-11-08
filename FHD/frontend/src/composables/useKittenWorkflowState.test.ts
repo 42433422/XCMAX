@@ -98,6 +98,11 @@ describe('useKittenWorkflowState', () => {
     })
   })
 
+  it.each(['waiting_authorization', 'waiting_approval', 'waiting_user', 'unknown'] as const)('keeps %s in the analysis stage', (phase) => {
+    expect(mapKittenPhaseToStepIndex(phase, true)).toBe(2)
+    expect(mapKittenPhaseToLayer(phase, true)).toBe('analyze')
+  })
+
   describe('KITTEN_PHASE constants', () => {
     it('has all expected phases', () => {
       expect(KITTEN_PHASE.idle).toBe('idle')

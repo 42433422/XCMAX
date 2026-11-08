@@ -81,6 +81,30 @@ def preserve_run_evidence(run: AgentRun, previous: AgentRun | None) -> None:
         run.metadata["stream_tool_audit"] = [audit[key] for key in sorted(audit)]
     if "receipt" in previous.final_output:
         run.final_output.setdefault("receipt", copy.deepcopy(previous.final_output["receipt"]))
+    children = copy.deepcopy(old.get("child_results") or {})
+    terminal = {"completed", "failed", "cancelled", "rejected"}
+    for child_id, receipt in (run.metadata.get("child_results") or {}).items():
+        if (
+            not isinstance(receipt, dict)
+            or receipt.get("parent_run_id") != run.run_id
+            or receipt.get("tenant_id") != tenant_id_of_run(run)
+        ):
+            raise ValueError("child result does not belong to this parent run")
+        prior = children.get(child_id)
+        if prior is not None:
+            if any(
+                prior.get(key) != receipt.get(key)
+                for key in ("parent_task_id", "parent_run_id", "tenant_id", "employee_id")
+            ):
+                raise ValueError("child result identity cannot change")
+            if prior.get("status") in terminal:
+                if receipt.get("status") not in terminal:
+                    continue
+                if prior != receipt:
+                    raise ValueError("terminal child result cannot change")
+        children[child_id] = receipt
+    if children:
+        run.metadata["child_results"] = children
     for field, identity in (("steps", "step_id"), ("tool_calls", "call_id")):
         incoming = {getattr(item, identity): item for item in getattr(run, field)}
         combined = {}

@@ -263,6 +263,16 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         request, message=body.message, provided_token=body.db_read_token
     )
     if not ok_read and read_req:
+        from app.application.planner_compat.runtime import legacy_requires_token_payload
+
+        payload = _facade().attach_chat_trace_run(
+            legacy_requires_token_payload(dict(read_req)),
+            message=body.message,
+            runtime_context=runtime_context,
+            user_id=body.user_id,
+            source=body.source,
+            channel="compat_chat_stream",
+        )
         yield sse_event_line(
             {
                 "type": "token",
@@ -271,9 +281,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         )
         yield sse_event_line(
             {
+                **payload,
                 "type": "requires_token",
-                "token_name": read_req.get("token_name"),
-                "token_description": read_req.get("token_description"),
+                "turn_id": runtime_context.get("turn_id"),
+                "execution_state": "waiting_approval",
             }
         )
         return

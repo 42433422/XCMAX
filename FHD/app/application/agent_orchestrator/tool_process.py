@@ -138,9 +138,30 @@ def _worker(
         start.wait()
 
 
+def _process_namespace_matches() -> bool:
+    procfs = getattr(psutil, "PROCFS_PATH", None)
+    if procfs is None:
+        return True
+    try:
+        for line in Path(procfs, "self/status").read_text(encoding="utf-8").splitlines():
+            if line.startswith("NSpid:"):
+                # IDs are relative to the procfs mount. An ancestor's procfs
+                # cannot safely identify the PIDs used by this process's syscalls.
+                return line.split()[1:] == [str(os.getpid())]
+    except OSError:
+        pass
+    return False
+
+
 def _reap(process) -> bool:
     children = []
+    tree_collected = False
     try:
+        if not _process_namespace_matches():
+            # Only this owned child handle is trustworthy. Its descendants are
+            # unverified, so killing it cannot establish successful cleanup.
+            process.kill()
+            return False
         root = psutil.Process(process.pid)
         root.suspend()
         # Freeze parents before collecting descendants to stop ordinary spawn races.
@@ -152,6 +173,7 @@ def _reap(process) -> bool:
                         child.suspend()
                     except psutil.NoSuchProcess:
                         pass
+        tree_collected = True
         for child in reversed(children):
             try:
                 child.kill()
@@ -159,20 +181,24 @@ def _reap(process) -> bool:
                 pass
         root.kill()
     except psutil.NoSuchProcess:
-        pass
+        if not tree_collected:
+            process.kill()
     except psutil.Error:
         process.kill()
         return False
     finally:
         process.join(timeout=1)
-    _, alive = psutil.wait_procs(children, timeout=1)
-    for child in alive:
-        try:
-            if child.is_running() and child.status() != psutil.STATUS_ZOMBIE:
-                return False
-        except psutil.NoSuchProcess:
-            pass
-    return not process.is_alive()
+    try:
+        _, alive = psutil.wait_procs(children, timeout=1)
+        for child in alive:
+            try:
+                if child.is_running() and child.status() != psutil.STATUS_ZOMBIE:
+                    return False
+            except psutil.NoSuchProcess:
+                pass
+    except psutil.Error:
+        return False
+    return tree_collected and not process.is_alive()
 
 
 def _ignore_missing_cleanup_entry(_function, _path, error):
@@ -260,6 +286,12 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
         }
     if getattr(executor, "_tool_cleanup_failed", False):
         return {"success": False, "error_code": "tool_cleanup_unresolved", "retryable": False}
+    if not _process_namespace_matches():
+        return {
+            "success": False,
+            "error_code": "tool_process_namespace_unverified",
+            "retryable": False,
+        }
     from app.application.agent_orchestrator.business_write_guard import capture_worker_claim
     from app.application.agent_orchestrator.catalog_product_worker import (
         capture_catalog_worker_profile,
@@ -300,9 +332,12 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
         logging.getLogger(__name__).warning("tool worker boundary failed: %s", type(exc).__name__)
     finally:
         if process.pid is not None:
-            clean = _reap(process)
-            if clean:
-                process.close()
+            try:
+                clean = _reap(process)
+                if clean:
+                    process.close()
+            except OSError:
+                clean = False
         if clean:
             try:
                 shutil.rmtree(folder, onerror=_ignore_missing_cleanup_entry)

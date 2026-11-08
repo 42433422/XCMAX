@@ -6,7 +6,15 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from .run_models import AgentArtifact, AgentRun, AgentStep, ToolCall, utc_now_iso
+from .run_models import (
+    AgentArtifact,
+    AgentRun,
+    AgentStep,
+    AgentStepStatus,
+    ToolCall,
+    ToolCallStatus,
+    utc_now_iso,
+)
 from .tool_spec import ToolActionSpecV2
 from .trace_artifacts import (
     _append_artifacts_to_final_output,
@@ -20,6 +28,7 @@ from .trace_memory import (
     _extract_memory_references,
 )
 from .trace_model_usage import ModelUsageRecorder, _extract_llm_calls
+from .trace_payloads import _payload_status
 from .trace_retrieval import (
     _append_retrieval_calls_to_final_output,
     _append_retrieval_calls_to_run,
@@ -93,6 +102,19 @@ class TraceRecorder:
             (tool_id, action, params, output) = _normalized_record_payload(record)
             if not tool_id:
                 continue
+            outcome = _payload_status(output)
+            step_status: AgentStepStatus = (
+                "waiting_user"
+                if outcome == "waiting_user"
+                else "completed"
+                if outcome == "completed"
+                else "failed"
+                if outcome in {"failed", "cancelled", "rejected"}
+                else "running"
+            )
+            call_status: ToolCallStatus = (
+                step_status if step_status in {"completed", "failed"} else "running"
+            )
             spec = self.tool_spec(tool_id, action)
             node_id = f"legacy_{idx}_{tool_id}_{action}".replace(".", "_")
             step = AgentStep(
@@ -103,9 +125,9 @@ class TraceRecorder:
                 risk=getattr(spec, "risk", "medium") if spec is not None else "medium",
                 idempotent=bool(getattr(spec, "idempotent", False)) if spec is not None else False,
                 description="legacy planner 已执行工具调用",
-                status="completed" if output.get("success") is not False else "failed",
+                status=step_status,
                 output=output,
-                finished_at=utc_now_iso(),
+                finished_at=utc_now_iso() if step_status in {"completed", "failed"} else "",
             )
             call = ToolCall(
                 step_id=step.step_id,
@@ -113,11 +135,11 @@ class TraceRecorder:
                 tool_id=step.tool_id,
                 action=step.action,
                 params=params,
-                status="completed" if step.status == "completed" else "failed",
+                status=call_status,
                 output=output,
-                error=""
-                if step.status == "completed"
-                else str(output.get("message") or output.get("error") or ""),
+                error=str(output.get("message") or output.get("error") or "")
+                if step.status == "failed"
+                else "",
                 cost_units=int(getattr(spec, "cost_units", 0) or 0),
                 permission=str(getattr(spec, "permission", "") or ""),
                 finished_at=step.finished_at,
@@ -126,6 +148,8 @@ class TraceRecorder:
                     "legacy_tool_call_id": str(record.get("tool_call_id") or ""),
                     "risk": step.risk,
                     "idempotent": step.idempotent,
+                    "execution_status": outcome,
+                    "requires_reconciliation": outcome == "blocked",
                 },
             )
             run.steps.append(step)
@@ -152,9 +176,8 @@ class TraceRecorder:
                     "observed": True,
                 },
             )
-            event_type = "tool.completed" if step.status == "completed" else "tool.failed"
             run.add_event(
-                event_type,
+                f"tool.{outcome}",
                 f"记录 legacy 工具 {step.tool_id}.{step.action}",
                 {
                     "step_id": step.step_id,

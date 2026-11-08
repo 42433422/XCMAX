@@ -292,9 +292,9 @@ describe('useKittenAnalyzer', () => {
     })
     analyzer.inputText.value = 'hello'
     await analyzer.sendMessage()
-    const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('请求失败'))
+    const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('服务器错误'))
     expect(aiMsg).toBeDefined()
-    expect(analyzer.kittenPhase.value).toBe('error')
+    expect(analyzer.kittenPhase.value).toBe('unknown')
   })
 
   it('sendMessage handles network error', async () => {
@@ -302,9 +302,9 @@ describe('useKittenAnalyzer', () => {
     vi.mocked(safeJsonRequest).mockRejectedValueOnce(new Error('Network error'))
     analyzer.inputText.value = 'hello'
     await analyzer.sendMessage()
-    const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('网络异常'))
+    const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('Network error'))
     expect(aiMsg).toBeDefined()
-    expect(analyzer.kittenPhase.value).toBe('error')
+    expect(analyzer.kittenPhase.value).toBe('unknown')
   })
 
   it('sendMessage handles AbortError as timeout', async () => {
@@ -314,8 +314,9 @@ describe('useKittenAnalyzer', () => {
     vi.mocked(safeJsonRequest).mockRejectedValueOnce(abortErr)
     analyzer.inputText.value = 'hello'
     await analyzer.sendMessage()
-    // AbortError should result in timeout message
-    expect(analyzer.kittenPhase.value).toBe('error')
+    // A timeout does not establish the business outcome.
+    expect(analyzer.kittenPhase.value).toBe('unknown')
+    expect(analyzer.messages.value.at(-1)?.content).toContain('请求超时')
   })
 
   it('sendMessage handles empty AI response', async () => {

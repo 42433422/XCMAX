@@ -326,7 +326,8 @@ async def test_execute_compat_chat_db_read_authorized():
 
 async def test_execute_compat_chat_requires_token_with_prerun():
     req = _req()
-    body = _body(message="ask llm")
+    turn_id = "requires-token-turn"
+    body = _body(message="ask llm", context={"turn_id": turn_id})
 
     pre_run_mock = MagicMock(run_id="run-tok")
     finalize_mock = MagicMock(return_value={"success": True, "finalized": True})
@@ -350,7 +351,7 @@ async def test_execute_compat_chat_requires_token_with_prerun():
             result = await execute_compat_chat(req, body)
 
     assert finalize_mock.called
-    assert result == {"success": True, "finalized": True}
+    assert result == {"success": True, "finalized": True, "turn_id": turn_id}
 
 
 async def test_execute_compat_chat_timeout_with_prerun():
@@ -432,7 +433,8 @@ async def test_execute_compat_chat_recoverable_error_with_prerun():
 
 async def test_execute_compat_chat_final_with_prerun():
     req = _req()
-    body = _body(message="normal path")
+    turn_id = "final-reply-turn"
+    body = _body(message="normal path", context={"turn_id": turn_id})
 
     pre_run_mock = MagicMock(run_id="run-final")
     finalize_mock = MagicMock(return_value={"success": True, "done": True})
@@ -453,7 +455,7 @@ async def test_execute_compat_chat_final_with_prerun():
             result = await execute_compat_chat(req, body)
 
     assert finalize_mock.called
-    assert result == {"success": True, "done": True}
+    assert result == {"success": True, "done": True, "turn_id": turn_id}
 
 
 async def test_execute_compat_chat_mode_online():

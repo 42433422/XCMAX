@@ -222,7 +222,10 @@ async def test_compat_turn_survives_history_reload_without_duplicates(
                     _make_request(actor.headers), body
                 )
             ]
-            assert _sse_payloads(chunks)[0]["result"] == reply
+            assert _sse_payloads(chunks)[0]["result"] == {
+                **reply,
+                "turn_id": body.context["turn_id"],
+            }
         else:
             result = await compat.execute_compat_chat(_make_request(actor.headers), body)
             assert result["response"] == reply["response"]
