@@ -99,10 +99,10 @@
     },
     "FHD/app/application/reviewed_excel_template.py": {
       "base_file": "FHD/app/application/reviewed_excel_template.py",
-      "base_blob": "6999cd18e774ea9306f6c89ccb2175815d57d225",
-      "head_blob": "6fe120470cda71b56d86ad034b6235f7241471c2",
-      "before_lines": 1375,
-      "after_lines": 1567,
+      "base_blob": "3c400640973806cb37897da3512c4e9c8168a23d",
+      "head_blob": "f0fd753e805cff647f3b3408953af7130e9e21ce",
+      "before_lines": 1376,
+      "after_lines": 1613,
       "reason": "Outcome taxonomy, bounded repair rounds, provider 402 rejection, and public model-error detail require additional template-platform call control without changing the review workbook contract.",
       "boundary": "Existing reviewed-Excel template platform call path only; no new route, persistence model, or authorization change.",
       "validation": "Reviewed Excel audit, template schema, and intake regression tests plus push preflight and backend CI.",
@@ -111,10 +111,10 @@
     },
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
       "base_file": "FHD/app/fastapi_routes/reviewed_excel_template.py",
-      "base_blob": "d89361f68dbd53f1792435f686a38dd6c8a74e47",
-      "head_blob": "c28dac4f7f1b8fc98d10f205708e96933ce985c1",
-      "before_lines": 2030,
-      "after_lines": 2211,
+      "base_blob": "dc09008a95ec9776708b1e1896bb8fa1ff2fb946",
+      "head_blob": "fb3577ec2a4c049b0263a5cf5b4cf867a8b91469",
+      "before_lines": 2039,
+      "after_lines": 2418,
       "reason": "Route handlers surface model_call_outcome classes, release known claims, and keep download/provenance paths aligned with the product loop.",
       "boundary": "Existing reviewed-Excel FastAPI routes only; no new top-level router module.",
       "validation": "Route golden snapshot, reviewed Excel route regressions, and backend CI shards.",
@@ -195,9 +195,9 @@
     },
     "FHD/frontend/src/components/template/ReviewedExcelTemplate.vue": {
       "base_file": "FHD/frontend/src/components/template/ReviewedExcelTemplate.vue",
-      "base_blob": "54ffd834aa50b394215cd454c24a3827ef2302f7",
-      "head_blob": "e8b823b0f9dcc9c81e16b46ae6a1abfb3c2c83e9",
-      "before_lines": 2060,
+      "base_blob": "442958ec735536f78e98a7e40662d420e3f5fcc4",
+      "head_blob": "df756be89327a4bb7a09120911f2097fc09b63f0",
+      "before_lines": 2069,
       "after_lines": 2106,
       "reason": "Desktop loop reports database/knowledge work beside the template capsule and polls inflight claims without inventing local ranges.",
       "boundary": "Existing data docking component only; no routing, authentication or write-authorization change.",
@@ -208,14 +208,26 @@
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
       "base_blob": "acf93ca707e3e1d434ccacaf41d61ce3fcb427bf",
-      "head_blob": "1aa2c25412f8c9e1d803196fb39a832d934273bb",
+      "head_blob": "afdd51a6ea799e8f40e7289b968e10f481dcf901",
       "before_lines": 936,
-      "after_lines": 1055,
+      "after_lines": 1121,
       "reason": "Reviewed intake prepares knowledge from archived workbook text, keeps empty model rows, and preserves the deterministic preview/confirmation boundary through the outcome taxonomy.",
       "boundary": "Auto-ingest knowledge planning and source-text handoff only; business target detection, tenant authorization, persistence and commit remain in their existing services.",
       "validation": "ELT preview, knowledge-plan, selected-candidate confirmation, source-version and tenant-isolation regression suites; full integration CI on the final head.",
       "follow_up": "Extract workbook text projection from auto_ingest_service after the candidate-only intake contract is stable.",
       "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
+      "base_blob": "fb293fc99136a7c4e59d5c58904c8ffff6492a6e",
+      "head_blob": "ff52f49c7e6bb9c6fca92f84a53a5d096f6d7e6a",
+      "before_lines": 1343,
+      "after_lines": 1365,
+      "review_owner": "@42433422",
+      "reason": "模型流式响应需要把已收到的分块持续回报给空闲等待逻辑，避免长回答被误判为卡死。",
+      "boundary": "仅限该合并路由模块中的流式分块回报与空闲计时；模型选择、配额和鉴权未改动。",
+      "validation": "流式空闲与会话回执回归覆盖分块到达、停止和超时；既有模型路由测试通过。",
+      "follow_up": "后续把流式保活抽成独立模块；本条为评审请求，不代表批准。"
     }
   }
 }

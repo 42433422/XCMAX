@@ -10,6 +10,7 @@ fails closed.
 
 import re
 from io import BytesIO
+from typing import NoReturn
 from xml.etree import ElementTree as XML
 from zipfile import ZipFile
 
@@ -30,7 +31,7 @@ _DECLARATION = re.compile(rb"\sxmlns(?::([A-Za-z_][\w.-]*))?\s*=\s*(\"[^\"]*\"|'
 _PREFIX = re.compile(rb"[<\s/]([A-Za-z_][\w.-]*):[A-Za-z_]")
 
 
-def _fail(message):
+def _fail(message) -> NoReturn:
     raise ReviewedExcelError("筛选器原始 XML 无法保真保留：" + message + "；未改写文件")
 
 
@@ -62,6 +63,8 @@ def _root_declarations(data: bytes) -> dict[bytes, bytes]:
 def _portable(raw: bytes, inherited: dict, target: dict) -> bytes:
     """The element bytes plus the source bindings the target root does not already give."""
     span = _ELEMENT.match(raw)
+    if span is None:
+        _fail("无法定位筛选器元素")
     start = raw[: raw.index(b">") + 1]
     local = {p or b"" for p, _v in _DECLARATION.findall(start)}
     used = {p for p in _PREFIX.findall(raw) if p != b"xmlns"}
@@ -75,11 +78,13 @@ def _portable(raw: bytes, inherited: dict, target: dict) -> bytes:
 
 def preserved_filters(body: bytes) -> dict[str, tuple[bytes, dict, tuple]]:
     """Sheet name to (element bytes, root bindings, fingerprint) for unmodeled metadata."""
-    kept = {}
+    kept: dict[str, tuple[bytes, dict, tuple]] = {}
     with _package(body) as archive:
         workbook = SAFE.fromstring(archive.read("xl/workbook.xml"), forbid_dtd=True)
         for entry in workbook.findall(f"{{{S}}}sheets/{{{S}}}sheet"):
             name = entry.get("name")
+            if not name:
+                continue
             part, sheet = _sheet(archive, name)
             nodes = sheet.findall(f"{{{S}}}autoFilter")
             if not nodes or not _unmodeled(nodes[0]):

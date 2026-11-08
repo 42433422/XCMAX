@@ -23,6 +23,7 @@ class ReviewedExcelError(ValueError):
     """A validation message authored by the reviewed Excel boundary, safe for users."""
 
     provider_status: int | None = None
+    finish_reason: str | None = None
 
     def __init__(self, public_message: str, *, provider_status: int | None = None):
         super().__init__(public_message)
@@ -83,10 +84,11 @@ def never_connected(exc: BaseException) -> bool:
     import httpx
 
     seen = 0
-    while exc is not None and seen < 5:
-        if isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout):
+    current: BaseException | None = exc
+    while current is not None and seen < 5:
+        if isinstance(current, httpx.ConnectError | httpx.ConnectTimeout):
             return True
-        exc, seen = exc.__cause__ or exc.__context__, seen + 1
+        current, seen = current.__cause__ or current.__context__, seen + 1
     return False
 
 

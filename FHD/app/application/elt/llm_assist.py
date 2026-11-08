@@ -686,7 +686,7 @@ def _advise_business_unit(source: str) -> LlmAssistResult:
         },
         {"role": "user", "content": source},
     ]
-    call = {
+    call: dict[str, Any] = {
         "schema": _BUSINESS_IMPORT_SCHEMA,
         "max_tokens": 8192,
         "lane": "database",

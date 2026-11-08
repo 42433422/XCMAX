@@ -16,7 +16,7 @@ from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import get_column_letter
@@ -146,11 +146,11 @@ def _copy_row_style(worksheet: Worksheet, source_row: int, target_row: int, last
         if isinstance(source, MergedCell) or isinstance(target, MergedCell):
             continue
         if source.has_style:
-            target.font = copy(source.font)
-            target.fill = copy(source.fill)
-            target.border = copy(source.border)
-            target.alignment = copy(source.alignment)
-            target.protection = copy(source.protection)
+            target.font = cast(Any, copy(source.font))
+            target.fill = cast(Any, copy(source.fill))
+            target.border = cast(Any, copy(source.border))
+            target.alignment = cast(Any, copy(source.alignment))
+            target.protection = cast(Any, copy(source.protection))
         target.number_format = source.number_format
 
 
@@ -291,10 +291,11 @@ def fill_delivery_note_file(
         if "送货单" in workbook.sheetnames:
             worksheet = workbook["送货单"]
         else:
-            worksheet = workbook.active
-            if worksheet is None:
+            active = workbook.active
+            if active is None:
                 raise EltError("ELT_SHIPMENT_TEMPLATE_SHEET_MISSING", "送货单版式所在工作表不存在")
-            worksheet.title = "送货单"
+            active.title = "送货单"
+            worksheet = active
         fill_delivery_note_layout(worksheet, records)
         return save_stable_workbook(workbook, Path(destination))
     finally:
@@ -483,12 +484,13 @@ def _source_date(source: dict[str, Any]) -> str:
 def _trace_rows(db: Any, run_id: str) -> list[Any]:
     from app.db.models.elt import EltRunRow
 
-    return (
+    rows: list[Any] = (
         db.query(EltRunRow)
         .filter(EltRunRow.run_id == run_id)
         .order_by(EltRunRow.source_sheet.asc(), EltRunRow.source_row.asc(), EltRunRow.id.asc())
         .all()
     )
+    return rows
 
 
 def write_submission_trace(db: Any, run: Any, destination: Path) -> str:
@@ -498,6 +500,8 @@ def write_submission_trace(db: Any, run: Any, destination: Path) -> str:
     run_id = str(getattr(run, "id", "") or "")
     book = Workbook()
     sheet = book.active
+    if sheet is None:
+        raise EltError("ELT_SHIPMENT_TEMPLATE_SHEET_MISSING", "追踪工作簿缺少工作表")
     sheet.title = "本次提交"
     sheet.append(list(_TRACE_HEADERS))
     for row in _trace_rows(db, run_id):

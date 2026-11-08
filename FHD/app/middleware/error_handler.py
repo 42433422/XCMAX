@@ -132,7 +132,7 @@ def _elt_model_error(detail: object) -> dict:
         and isinstance(reason, str | None)
     )
     unknown = code == "model_processing_failed" or detail.get("outcome_unknown") is True
-    message = _ELT_OUTCOME_MESSAGES.get(outcome) or _ELT_MODEL_MESSAGES[code]
+    message = (_ELT_OUTCOME_MESSAGES.get(outcome) if outcome else None) or _ELT_MODEL_MESSAGES[code]
     reason = " ".join((reason or "").split()) if valid else ""
     if reason:
         message = f"{message}原因：{reason[:180]}"

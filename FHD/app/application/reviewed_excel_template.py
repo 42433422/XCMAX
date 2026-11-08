@@ -1596,8 +1596,8 @@ def refine_proposal(
         bounded,
         source_sha256=review["sha256"],
         provider=configured_template_llm_provider(),
-        model=budget["model"],
-        max_output_tokens=output_tokens,
+        model=str(budget["model"]),
+        max_output_tokens=cast(int, output_tokens),
     )
     base["model"] = {
         "status": "returned",

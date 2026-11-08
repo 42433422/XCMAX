@@ -414,7 +414,10 @@ class AutoIngestService:
                 status_code=409,
             )
         verify_preview(db, run, preview_revision)
-        stored_knowledge = plan.get("knowledge") if isinstance(plan.get("knowledge"), dict) else {}
+        knowledge_plan = plan.get("knowledge")
+        stored_knowledge: dict[str, Any] = (
+            knowledge_plan if isinstance(knowledge_plan, dict) else {}
+        )
         if stored_knowledge.get("used_llm") or stored_knowledge.get("degraded"):
             basis = (
                 source_text
