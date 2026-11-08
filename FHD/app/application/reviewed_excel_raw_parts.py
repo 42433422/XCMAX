@@ -2,9 +2,10 @@
 
 openpyxl drops vendor attributes and extLst children it does not know (for example
 WPS AutoFilter metadata). When a saved copy keeps such an element unchanged, the
-source element bytes are spliced back; the only addition is a copy of the root
-namespace declarations the element itself uses, so it parses identically in the new
-document. Whenever the element would have to change, the copy fails closed.
+source element bytes are spliced back; the only addition is a copy of the source
+root's namespace bindings that the element uses and the new root does not give, so
+it parses identically there. Whenever the element would have to change, the copy
+fails closed.
 """
 
 import re

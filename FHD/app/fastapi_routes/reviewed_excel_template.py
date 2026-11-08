@@ -1931,6 +1931,8 @@ def reviewed_excel_intake_preview(
                         else:
                             chosen_table, target_type = confirmed
                             detection_reason = "candidate_headers"
+                    from app.application.elt.auto_ingest_service import row_coverage
+
                     detection = {
                         "target_type": target_type,
                         "reason": detection_reason,
@@ -1938,6 +1940,21 @@ def reviewed_excel_intake_preview(
                         "llm_lane": "database",
                         "used_llm": bool(business_llm and business_llm.used_llm),
                         "degraded": bool(business_llm and business_llm.degraded),
+                        "llm_reason": (business_llm.degradation_code if business_llm else "")
+                        or (
+                            "no_business_rows"
+                            if business_llm and business_llm.used_llm and ai_table is None
+                            else ""
+                        ),
+                        "llm_units": int((business_llm.data or {}).get("units") or 0)
+                        if business_llm
+                        else 0,
+                        "coverage": row_coverage(
+                            original_text,
+                            list(business_llm.data.get("rows") or [])
+                            if ai_table is not None and business_llm
+                            else [],
+                        ),
                     }
                     _authorize_intake(request, (tenant, owner), target_type)
                     intake = get_auto_ingest_service()
