@@ -100,6 +100,137 @@ def _model_region_for_fragment(known: dict[tuple[str, str], dict], fragment: dic
     raise ReviewedExcelError("切后复核产生了模型区域之外的片段，不能保证保真提取")
 
 
+def _uf_parent(n: int):
+    parent = list(range(n))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    return find, union
+
+
+def _dep_cell(ref) -> tuple[str, int, int] | None:
+    if not isinstance(ref, dict):
+        return None
+    sheet, cell = ref.get("sheet"), ref.get("cell")
+    if not isinstance(sheet, str) or not isinstance(cell, str):
+        return None
+    try:
+        column, row = coordinate_from_string(cell)
+        return sheet, column_index_from_string(column), row
+    except (TypeError, ValueError):
+        return None
+
+
+def documents_for_ungrouped_regions(regions: list[dict]) -> list[dict]:
+    """Dependency-connected candidate docs from exact model ranges (no invented boxes)."""
+    if not regions:
+        return []
+    find, union = _uf_parent(len(regions))
+    boxes: list[tuple[str, int, int, int, int] | None] = []
+    for region in regions:
+        sheet, area = region.get("sheet"), region.get("range")
+        if not isinstance(sheet, str) or not isinstance(area, str):
+            boxes.append(None)
+            continue
+        try:
+            c1, r1, c2, r2 = bounded_range(area)
+        except (TypeError, ValueError):
+            boxes.append(None)
+            continue
+        boxes.append((sheet, c1, r1, c2, r2))
+    for i, region in enumerate(regions):
+        if boxes[i] is None:
+            continue
+        for ref in region.get("dependencies") or []:
+            parsed = _dep_cell(ref)
+            if not parsed:
+                continue
+            sheet, col, row = parsed
+            for j, box in enumerate(boxes):
+                if box and box[0] == sheet and box[1] <= col <= box[3] and box[2] <= row <= box[4]:
+                    union(i, j)
+    comps: dict[int, list[dict]] = {}
+    for i, region in enumerate(regions):
+        comps.setdefault(find(i), []).append(region)
+    docs = []
+    for order, members in enumerate(comps.values(), start=1):
+        frags = [
+            {"sheet": r["sheet"], "range": r["range"]}
+            for r in members
+            if isinstance(r.get("sheet"), str) and isinstance(r.get("range"), str)
+        ]
+        if frags:
+            docs.append(
+                {
+                    "document_id": f"ungrouped-{order}",
+                    "fragments": frags,
+                    "status": "candidate",
+                    "reason": "grouping_skipped_dense_stamp_pack",
+                }
+            )
+    return docs
+
+
+def _union_groups_covering_dependencies(
+    known: dict[tuple[str, str], dict], groups: list[tuple[list[dict], str, str]]
+) -> list[tuple[list[dict], str, str]]:
+    """Union documents when deps land in another group's existing model fragments."""
+    if len(groups) <= 1:
+        return groups
+    find, union = _uf_parent(len(groups))
+    member = {
+        (f["sheet"], f["range"]): i for i, (frags, _, _) in enumerate(groups) for f in frags
+    }
+    for i, (frags, _, _) in enumerate(groups):
+        for frag in frags:
+            region = known.get((frag["sheet"], frag["range"])) or _model_region_for_fragment(
+                known, frag
+            )
+            for ref in region.get("dependencies") or []:
+                parsed = _dep_cell(ref)
+                if not parsed:
+                    continue
+                sheet, col, row = parsed
+                if any(
+                    sheet == p["sheet"] and c1 <= col <= c2 and r1 <= row <= r2
+                    for p in frags
+                    for c1, r1, c2, r2 in [bounded_range(p["range"])]
+                ):
+                    continue
+                host = next(
+                    (
+                        peer
+                        for (ps, pr), peer in member.items()
+                        if ps == sheet
+                        for c1, r1, c2, r2 in [bounded_range(pr)]
+                        if c1 <= col <= c2 and r1 <= row <= r2
+                    ),
+                    None,
+                )
+                if host is not None:
+                    union(i, host)
+    merged: dict[int, tuple[list[dict], str, str]] = {}
+    for i, (frags, basis, reason) in enumerate(groups):
+        root = find(i)
+        if root not in merged:
+            merged[root] = (list(frags), basis, reason)
+            continue
+        hold, b, r = merged[root]
+        seen = {(p["sheet"], p["range"]) for p in hold}
+        hold.extend(p for p in frags if (p["sheet"], p["range"]) not in seen)
+        merged[root] = (hold, b, r or reason)
+    return list(merged.values())
+
+
 _HIDDEN_REASON = "隐藏工作表（附表/台账），未经确认不排除；已生成复核副本，需人工确认去向"
 
 
@@ -490,6 +621,7 @@ def derive_classified_documents(
         groups.append((group, "model_group", reason))
     if len(assigned) != len(known):
         raise ReviewedExcelError("模型尚未确定所有区域的独立单据关系，不能自动切片")
+    groups = _union_groups_covering_dependencies(known, groups)
     from app.application.reviewed_excel_verify_cut import verify_after_cut
 
     verified = verify_after_cut(

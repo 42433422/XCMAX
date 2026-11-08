@@ -161,20 +161,46 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
                 raise ReviewedExcelError("bounds")
         except (ValueError, TypeError, KeyError):
             raise ReviewedExcelError("分类区域越界") from None
-        for oc1, or1, oc2, or2 in rectangles.setdefault(item["sheet"], []):
-            if c1 <= oc2 and oc1 <= c2 and r1 <= or2 and or1 <= r2:
-                raise ReviewedExcelError("分类区域重叠")
-        rectangles[item["sheet"]].append((c1, r1, c2, r2))
+        # Identity confirm of a stored model range: expand to contain cut merges when
+        # safe (like drawing expand), else flatten on export. User splits/edits that
+        # cut merges still fail closed — those need an explicit new partition.
+        base = (c1, r1, c2, r2)
+        original_range = expected[key]["range"]
+        identity_confirm = item["range"] == original_range
+        cut_merge = False
         for merged in size.get("merged_regions", []):
             mc1, mr1, mc2, mr2 = bounded_range(merged)
-            if (
-                c1 <= mc2
-                and mc1 <= c2
-                and r1 <= mr2
-                and mr1 <= r2
-                and not (c1 <= mc1 <= mc2 <= c2 and r1 <= mr1 <= mr2 <= r2)
-            ):
-                raise ReviewedExcelError("分类区域切断合并单元格")
+            intersects = c1 <= mc2 and mc1 <= c2 and r1 <= mr2 and mr1 <= r2
+            contains = c1 <= mc1 and mc2 <= c2 and r1 <= mr1 and mr2 <= r2
+            if intersects and not contains:
+                cut_merge = True
+                c1, r1 = min(c1, mc1), min(r1, mr1)
+                c2, r2 = max(c2, mc2), max(r2, mr2)
+        if cut_merge and not identity_confirm:
+            raise ReviewedExcelError("分类区域切断合并单元格")
+        if cut_merge and identity_confirm:
+            peer_boxes = list(rectangles.get(item["sheet"], []))
+            for peer_key, peer_original in expected.items():
+                if peer_key == key or peer_key[0] != item["sheet"]:
+                    continue
+                peer_boxes.append(bounded_range(peer_original["range"]))
+            overlaps_peer = any(
+                c1 <= pc2 and pc1 <= c2 and r1 <= pr2 and pr1 <= r2
+                for pc1, pr1, pc2, pr2 in peer_boxes
+            )
+            if overlaps_peer:
+                c1, r1, c2, r2 = base
+                item = {**item, "merge_cut_flattened_on_export": True}
+            else:
+                item = {
+                    **item,
+                    "range": f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}",
+                    "merge_bounds_expanded": True,
+                }
+        for pc1, pr1, pc2, pr2 in rectangles.setdefault(item["sheet"], []):
+            if c1 <= pc2 and pc1 <= c2 and r1 <= pr2 and pr1 <= r2:
+                raise ReviewedExcelError("分类区域重叠")
+        rectangles[item["sheet"]].append((c1, r1, c2, r2))
         supplied.setdefault(key, []).append(item)
     if set(supplied) != set(expected):
         raise ReviewedExcelError("分类区域不完整")
@@ -203,33 +229,47 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
             region["range"] = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
             for field in ("original_range", "modified"):
                 region.pop(field, None)
+            if item.get("merge_cut_flattened_on_export"):
+                region["merge_cut_flattened_on_export"] = True
             if original["range"] != region["range"]:
-                region["range_source"] = "user"
+                if item.get("merge_bounds_expanded"):
+                    # Source-merge containment only — keep model provenance and docs.
+                    region["merge_bounds_expanded"] = True
+                    region["merged_ranges"] = [
+                        merged
+                        for merged in dimensions[key[0]].get("merged_regions", [])
+                        for mc1, mr1, mc2, mr2 in [bounded_range(merged)]
+                        if c1 <= mc1 <= mc2 <= c2 and r1 <= mr1 <= mr2 <= r2
+                    ]
+                else:
+                    region["range_source"] = "user"
 
-                def in_region(ref):
-                    col, row = coordinate_from_string(ref["cell"])
-                    return (
-                        ref.get("sheet", key[0]) == key[0]
-                        and c1 <= column_index_from_string(col) <= c2
-                        and r1 <= row <= r2
+                    def in_region(ref):
+                        col, row = coordinate_from_string(ref["cell"])
+                        return (
+                            ref.get("sheet", key[0]) == key[0]
+                            and c1 <= column_index_from_string(col) <= c2
+                            and r1 <= row <= r2
+                        )
+
+                    region["evidence"] = [ref for ref in original["evidence"] if in_region(ref)]
+                    region["header_cells"] = [
+                        ref for ref in original["header_cells"] if in_region(ref)
+                    ]
+                    region["checked_cells"] = sum(
+                        in_region(cell) for cell in review["cells"] if cell["sheet"] == key[0]
                     )
-
-                region["evidence"] = [ref for ref in original["evidence"] if in_region(ref)]
-                region["header_cells"] = [ref for ref in original["header_cells"] if in_region(ref)]
-                region["checked_cells"] = sum(
-                    in_region(cell) for cell in review["cells"] if cell["sheet"] == key[0]
-                )
-                region["merged_ranges"] = [
-                    merged
-                    for merged in dimensions[key[0]].get("merged_regions", [])
-                    for mc1, mr1, mc2, mr2 in [bounded_range(merged)]
-                    if c1 <= mc1 <= mc2 <= c2 and r1 <= mr1 <= mr2 <= r2
-                ]
-                region.pop("continuation_context", None)
-                region.pop("value_extent", None)
-                region["parent_heading"] = ""
-                region["dependency_status"] = "用户修改边界；共享说明和依赖需重新确认"
-                region["needs_confirmation"] = True
+                    region["merged_ranges"] = [
+                        merged
+                        for merged in dimensions[key[0]].get("merged_regions", [])
+                        for mc1, mr1, mc2, mr2 in [bounded_range(merged)]
+                        if c1 <= mc1 <= mc2 <= c2 and r1 <= mr1 <= mr2 <= r2
+                    ]
+                    region.pop("continuation_context", None)
+                    region.pop("value_extent", None)
+                    region["parent_heading"] = ""
+                    region["dependency_status"] = "用户修改边界；共享说明和依赖需重新确认"
+                    region["needs_confirmation"] = True
             corrected[key[0]].append(region)
     for sheet in latest["sheets"]:
         sheet["regions"] = corrected[sheet["sheet"]]

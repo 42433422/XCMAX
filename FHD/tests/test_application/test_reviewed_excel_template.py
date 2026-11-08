@@ -1246,6 +1246,56 @@ def test_manual_split_rejects_missing_cells_overlaps_bounds_and_merges(
     assert len(client.get(url).json()["versions"]) == 1
 
 
+def test_identity_confirm_flattens_merge_cuts_when_expand_would_overlap():
+    from copy import deepcopy
+
+    from app.application.reviewed_excel_partition import apply_classification_corrections
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "考勤"
+    ws["A1"] = "块"
+    ws.merge_cells("A1:C1")
+    ws["A2"] = "明细"
+    ws["C2"] = "尾"
+    output = BytesIO()
+    wb.save(output)
+    review = inspect_workbook(output.getvalue())
+    latest = {
+        "sheets": [
+            {
+                "sheet": "考勤",
+                "regions": [
+                    {
+                        "range": "A1:B2",
+                        "labels": ["attendance"],
+                        "evidence": [{"sheet": "考勤", "cell": "A1"}],
+                        "header_cells": [],
+                        "checked_cells": 2,
+                        "merged_ranges": [],
+                    },
+                    {
+                        "range": "C2:C2",
+                        "labels": ["unknown"],
+                        "evidence": [{"sheet": "考勤", "cell": "C2"}],
+                        "header_cells": [],
+                        "checked_cells": 1,
+                        "merged_ranges": [],
+                    },
+                ],
+            }
+        ]
+    }
+    labels = [
+        {"sheet": "考勤", "range": "A1:B2", "labels": ["attendance"]},
+        {"sheet": "考勤", "range": "C2:C2", "labels": ["unknown"]},
+    ]
+    corrected = apply_classification_corrections(review, deepcopy(latest), labels)
+    first = corrected["sheets"][0]["regions"][0]
+    assert first["range"] == "A1:B2"
+    assert first.get("merge_cut_flattened_on_export") is True
+
+
 def test_manual_split_checks_overlap_with_other_original_regions():
     from copy import deepcopy
 

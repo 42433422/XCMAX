@@ -75,8 +75,15 @@ def test_model_group_is_not_claimed_user_confirmed():
 
 def test_rejects_external_dependency_duplicate_group_and_source_mismatch():
     body = workbook()
+    # Dependency into another model fragment unions the documents (no invented ranges).
     result = classification(body)
     result["regions"][0]["dependencies"] = [{"sheet": "One", "cell": "A5"}]
+    slices = derive_classified_documents(body, result)
+    assert len(slices) == 2
+    assert {part["range"] for part in slices[0]["fragments"]} == {"A1:B2", "A5:B5"}
+    # Dependency outside every model region still fails closed.
+    result = classification(body)
+    result["regions"][0]["dependencies"] = [{"sheet": "One", "cell": "A3"}]
     with pytest.raises(ReviewedExcelError, match="外部"):
         derive_classified_documents(body, result)
     result = classification(body)
@@ -87,6 +94,37 @@ def test_rejects_external_dependency_duplicate_group_and_source_mismatch():
     result["source_sha256"] = "wrong"
     with pytest.raises(ReviewedExcelError, match="原件"):
         derive_classified_documents(body, result)
+
+
+def test_ungrouped_regions_union_mutual_title_dependencies():
+    from app.application.reviewed_excel_auto_slice import documents_for_ungrouped_regions
+
+    regions = [
+        {
+            "sheet": "考勤",
+            "range": "A73:B73",
+            "dependencies": [{"sheet": "考勤", "cell": "A74"}, {"sheet": "考勤", "cell": "A75"}],
+        },
+        {
+            "sheet": "考勤",
+            "range": "A74:B74",
+            "dependencies": [{"sheet": "考勤", "cell": "A73"}, {"sheet": "考勤", "cell": "A75"}],
+        },
+        {
+            "sheet": "考勤",
+            "range": "A75:AI75",
+            "dependencies": [{"sheet": "考勤", "cell": "A73"}, {"sheet": "考勤", "cell": "A74"}],
+        },
+        {"sheet": "考勤", "range": "A1:B2", "dependencies": []},
+    ]
+    docs = documents_for_ungrouped_regions(regions)
+    assert len(docs) == 2
+    clustered = next(doc for doc in docs if len(doc["fragments"]) == 3)
+    assert {part["range"] for part in clustered["fragments"]} == {
+        "A73:B73",
+        "A74:B74",
+        "A75:AI75",
+    }
 
 
 def test_rejects_cross_sheet_model_group_and_flattens_cut_merged_cell():

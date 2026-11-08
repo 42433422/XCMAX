@@ -1,5 +1,5 @@
 {
-  "lines": 2454080,
+  "lines": 2454376,
   "updated": "2026-11-08",
-  "note": "更新考勤表 ELT 闭环证据 JSON（analyze returned / slice blocked）"
+  "note": "ELT 考勤表 closure: dependency-union for dense ungrouped packs + identity-confirm merge flatten/expand; required for auto-slice/confirm without inventing ranges or loosening drawing-cut"
 }

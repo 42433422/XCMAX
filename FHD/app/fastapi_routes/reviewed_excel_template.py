@@ -638,9 +638,48 @@ def reviewed_excel_classification_confirm(
             )
             latest["partition_pending"] = partition_pending
             if before != after:
-                latest["fragment_links"] = {"items": [], "omitted": 0}
-                latest["suggested_documents"] = []
-                latest["suggested_document_count"] = None
+                range_remap = {
+                    (sheet["sheet"], old_range): new_range
+                    for sheet, before_sheet, after_sheet in zip(
+                        versions[-1]["sheets"], before, after, strict=True
+                    )
+                    for (old_range, _old_labels), (new_range, _new_labels) in zip(
+                        before_sheet, after_sheet, strict=True
+                    )
+                    if old_range != new_range
+                }
+                expanded_keys = {
+                    (sheet.get("sheet"), region.get("range"))
+                    for sheet in latest.get("sheets") or []
+                    for region in sheet.get("regions") or []
+                    if region.get("merge_bounds_expanded")
+                    and region.get("range_source") != "user"
+                }
+                only_merge_expand = bool(range_remap) and all(
+                    (sheet, new_range) in expanded_keys
+                    for (sheet, _old), new_range in range_remap.items()
+                )
+                if only_merge_expand and latest.get("suggested_documents"):
+                    latest["suggested_documents"] = [
+                        {
+                            **document,
+                            "fragments": [
+                                {
+                                    "sheet": part["sheet"],
+                                    "range": range_remap.get(
+                                        (part.get("sheet"), part.get("range")),
+                                        part["range"],
+                                    ),
+                                }
+                                for part in document.get("fragments") or []
+                            ],
+                        }
+                        for document in latest["suggested_documents"]
+                    ]
+                else:
+                    latest["fragment_links"] = {"items": [], "omitted": 0}
+                    latest["suggested_documents"] = []
+                    latest["suggested_document_count"] = None
             if partition_pending:
                 # New slices never inherit an approval or relationships from their old geometry.
                 latest["fragment_links"] = observe_fragment_relationships(review, latest["sheets"])
@@ -1209,18 +1248,15 @@ async def _reviewed_excel_classification_analyze_body(
                 # grouping call used to fail the whole analyze after packs succeeded.
                 # Leave fragments ungrouped when the answer would need the output cap.
                 if region_count >= 40 or grouping_output_budget([{}] * max(region_count, 1)) >= 16_000:
-                    # One document per accepted physical region — exact model ranges only.
-                    result["suggested_documents"] = [
-                        {
-                            "document_id": f"ungrouped-{index + 1}",
-                            "fragments": [
-                                {"sheet": region["sheet"], "range": region["range"]}
-                            ],
-                            "status": "candidate",
-                            "reason": "grouping_skipped_dense_stamp_pack",
-                        }
-                        for index, region in enumerate(result.get("regions") or [])
-                    ]
+                    # Exact model ranges only; union regions that cite each other so
+                    # title/note clusters stay in one document without inventing boxes.
+                    from app.application.reviewed_excel_auto_slice import (
+                        documents_for_ungrouped_regions,
+                    )
+
+                    result["suggested_documents"] = documents_for_ungrouped_regions(
+                        result.get("regions") or []
+                    )
                     result.setdefault("budget", {})["grouping_calls"] = 0
                     result["budget"]["grouping_skipped_ungrouped"] = True
                 else:

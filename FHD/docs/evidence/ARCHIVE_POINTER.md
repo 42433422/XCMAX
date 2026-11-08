@@ -55,3 +55,14 @@ for every historical acceptance video.
 
 
 Committed MANIFEST copies (no blobs): `FHD/docs/evidence/archives/evidence-bulk-*/MANIFEST.json` — CI uses these when `~/XCMAX-archives` is absent.
+
+
+## Round — 2026-11-09 (ELT closure supersession)
+
+Intermediate 2026-11-08 ELT JSON snapshots superseded by `elt/2026-11-08-blocked-workbooks-closure.json` were archived out of the workspace.
+
+| item | value |
+|------|-------|
+| archive | `~/XCMAX-archives/elt-evidence-20261109/` |
+| removed | `2026-11-08-authorized-resend.json`, `2026-11-08-redesign-live-retest.json`, `2026-11-08-owner3-continuation.json`, `2026-11-08-four-way.json` |
+| kept | later closure JSON under `FHD/docs/evidence/elt/` |
