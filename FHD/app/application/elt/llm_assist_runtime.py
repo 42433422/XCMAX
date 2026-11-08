@@ -95,7 +95,7 @@ def clip_model_raw(raw: object, *, limit: int = 2000) -> str:
     marker = "\n…[middle omitted]…\n"
     room = max(0, limit - len(marker))
     head = room // 2
-    return f"{text[:head]}{marker}{text[-(room - head):]}"
+    return f"{text[:head]}{marker}{text[-(room - head) :]}"
 
 
 def log_etl_llm_degradation(logger, *, code: str, lane: str, exc: BaseException) -> None:
