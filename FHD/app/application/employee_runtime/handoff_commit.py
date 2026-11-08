@@ -188,6 +188,17 @@ def _persistent_handoff(
 
 
 def _parent_run(repository, identity, context, task, bindings):
+    existing = repository.get_task(
+        user_id=identity["user_id"],
+        tenant_id=identity["tenant_id"],
+        task_id=identity["task_id"],
+    )
+    if existing is not None:
+        root = repository.get(existing.root_run_id) if existing.root_run_id else None
+        if root is None:
+            return None, _unknown_handoff(identity["task_id"], existing.root_run_id)
+        if not _same_task_scope(root, identity, bindings):
+            return None, _rejected("handoff_unauthorized", "父任务的账号、Mod或工作区范围不能改变")
     supplied = {str(context.get(key) or "").strip() for key in ("run_id", "agent_run_id")} - {""}
     if len(supplied) > 1:
         return None, _rejected("handoff_unauthorized", "可信上下文中的父运行不一致")
@@ -212,11 +223,6 @@ def _parent_run(repository, identity, context, task, bindings):
         if run is None or not _same_parent(run, identity, bindings):
             return None, _unknown_handoff(identity["task_id"], child_id)
         return run, None
-    existing = repository.get_task(
-        user_id=identity["user_id"],
-        tenant_id=identity["tenant_id"],
-        task_id=identity["task_id"],
-    )
     if existing is not None:
         for run_id in (existing.root_run_id, existing.active_run_id):
             run = repository.get(run_id) if run_id else None
@@ -250,6 +256,14 @@ def _parent_run(repository, identity, context, task, bindings):
 
 
 def _same_parent(run: AgentRun, identity: dict[str, str], bindings: dict[str, Any]) -> bool:
+    return (
+        _same_task_scope(run, identity, bindings)
+        and str((run.metadata.get("runtime_context") or {}).get("employee_id") or "")
+        == identity["employee_id"]
+    )
+
+
+def _same_task_scope(run: AgentRun, identity: dict[str, str], bindings: dict[str, Any]) -> bool:
     context = run.metadata.get("runtime_context") or {}
     return (
         run.user_id == identity["user_id"]
@@ -259,10 +273,7 @@ def _same_parent(run: AgentRun, identity: dict[str, str], bindings: dict[str, An
             context.get(key) == bindings.get(key)
             for key in ("_actor_authorization", "_mod_authorization", "workspace_id")
         )
-        and all(
-            str(context.get(key) or "") == identity[key]
-            for key in ("tenant_id", "user_id", "employee_id")
-        )
+        and all(str(context.get(key) or "") == identity[key] for key in ("tenant_id", "user_id"))
     )
 
 

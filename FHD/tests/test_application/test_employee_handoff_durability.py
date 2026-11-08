@@ -317,7 +317,13 @@ def test_sealed_actor_mod_scope_is_preserved_and_revocation_rechecked(
     cross_mod = _commit(handoff_env, context={**context("mod-b"), "run_id": first["parent_run_id"]})
     assert cross_mod["error_code"] == "handoff_unauthorized"
     cross_key = _commit(handoff_env, context=context("mod-b"))
-    assert cross_key["error_code"] == "idempotency_conflict"
+    assert cross_key["error_code"] == "handoff_unauthorized"
+    new_key = _commit(
+        handoff_env,
+        body={**handoff_env.body, "idempotency_key": "different-mod-operation"},
+        context=context("mod-b"),
+    )
+    assert new_key["error_code"] == "handoff_unauthorized"
     with handoff_env.factory.begin() as db:
         db.query(UserSession).filter_by(
             session_id="test-private-session"
@@ -406,3 +412,50 @@ def test_process_exit_recovers_only_persisted_receipts_without_reexecution(
         run.run_id
         for run in fresh.list_task_runs(user_id="11", task_id=handoff_env.context["task_id"])
     } == {run.run_id for run in before}
+
+
+def test_new_operation_cannot_move_the_same_task_to_another_workspace(handoff_env):
+    import shutil
+
+    first = _commit(handoff_env)
+    assert first["success"], first
+    another = handoff_env.workspace.parent / "another-workspace"
+    shutil.copytree(handoff_env.workspace, another)
+    denied = commit_registered_handoff(
+        {**handoff_env.body, "idempotency_key": "new-workspace-operation"},
+        str(another),
+        handoff_env.context,
+    )
+    assert denied["error_code"] == "handoff_unauthorized"
+    assert (
+        len(
+            handoff_env.repository().list_task_runs(
+                user_id="11", task_id=handoff_env.context["task_id"]
+            )
+        )
+        == 2
+    )
+
+
+def test_missing_task_root_requires_reconciliation_without_a_replacement(handoff_env, monkeypatch):
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+    from app.db.models.agent import AgentRunRecord
+
+    first = _commit(handoff_env)
+    assert first["success"], first
+    with handoff_env.factory.begin() as db:
+        db.query(AgentRunRecord).filter_by(run_id=first["parent_run_id"]).delete()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("recreated missing task root")
+
+    monkeypatch.setattr(AgentOrchestrator, "start_employee_handoff", forbidden)
+    result = _commit(
+        handoff_env, body={**handoff_env.body, "idempotency_key": "new-after-root-loss"}
+    )
+    assert result["reconciliation_required"] is True
+    assert result["parent_run_id"] == first["parent_run_id"]
+    runs = handoff_env.repository().list_task_runs(
+        user_id="11", task_id=handoff_env.context["task_id"]
+    )
+    assert [run.run_id for run in runs] == [first["child_run_id"]]
