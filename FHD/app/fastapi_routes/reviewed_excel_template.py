@@ -1209,7 +1209,18 @@ async def _reviewed_excel_classification_analyze_body(
                 # grouping call used to fail the whole analyze after packs succeeded.
                 # Leave fragments ungrouped when the answer would need the output cap.
                 if region_count >= 40 or grouping_output_budget([{}] * max(region_count, 1)) >= 16_000:
-                    result["suggested_documents"] = []
+                    # One document per accepted physical region — exact model ranges only.
+                    result["suggested_documents"] = [
+                        {
+                            "document_id": f"ungrouped-{index + 1}",
+                            "fragments": [
+                                {"sheet": region["sheet"], "range": region["range"]}
+                            ],
+                            "status": "candidate",
+                            "reason": "grouping_skipped_dense_stamp_pack",
+                        }
+                        for index, region in enumerate(result.get("regions") or [])
+                    ]
                     result.setdefault("budget", {})["grouping_calls"] = 0
                     result["budget"]["grouping_skipped_ungrouped"] = True
                 else:
