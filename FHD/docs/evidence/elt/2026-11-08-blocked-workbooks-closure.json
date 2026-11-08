@@ -1,27 +1,47 @@
 {
-  "measured_at": "2026-11-09T06:53:20+08:00",
+  "measured_at": "2026-11-09T07:41:31+08:00",
   "timezone": "Asia/Shanghai",
   "pr": 3099,
-  "backend_git_sha": "5e1ebbd9e3a615cefb8bf54267c5ec9f2451d18c",
+  "backend_git_sha": "97c18c5f1ebfde48b7957a3c6cfd8dd4a87016fe",
   "fix_commits_this_pass": [
-    "827e9cb7b",
-    "1fdebc0b9",
-    "4725c574e",
-    "3e4f4ee89",
-    "5e1ebbd9e"
+    "0d798fe78",
+    "ed55c09d7",
+    "96c3feb5b",
+    "8b4b07343",
+    "1889e578d",
+    "97c18c5f1"
   ],
   "account_actor": "2:3",
   "wallet": {
-    "start_this_pass": 351.12,
-    "end": 347.48,
-    "spend": 3.64
+    "start_this_pass": 347.48,
+    "end": 337.81,
+    "spend": 9.67
   },
   "chat_check": {
     "endpoint": "POST /api/ai/chat",
     "message": "出货记录",
     "http": 200,
     "success": true,
-    "records": 100
+    "records": 20
+  },
+  "root_cause_考勤表": {
+    "invented_evidence_ids": "model put context_only footprint cells (e.g. S1:A11) into evidence_ids; schema enum is primary-only",
+    "evidence_outside_region": "model cited in-pack primary cells (AH2/AI12) outside its declared range",
+    "overlap_after_expand": "stamp expand of earlier region swallowed sibling original boxes; model also double-boxed stamp cluster + date headers",
+    "grouping_truncate": "63 model regions: grouping max_tokens ~4520 truncated after packs succeeded"
+  },
+  "product_fixes": [
+    "pack_primary_outer_a1 on stamp packs",
+    "safe evidence-bounds expand for in-pack primary citations",
+    "repair_turn forces pack primary evidence_id whitelist",
+    "skip stamp expand that would hit sibling original ranges",
+    "invalid logical_documents/layout refs → ungrouped / drop (keep physical regions)",
+    "union overlapping model ranges when either cites drawings",
+    "raise grouping_output_budget; skip dense grouping with one document per model region"
+  ],
+  "hard_constraints": {
+    "drawing_cut_validator_loosened": false,
+    "invented_ranges": false
   },
   "files": {
     "侯雪梅.xlsx": {
@@ -38,7 +58,7 @@
       "status": "done",
       "batch_id": "aib-426611620c7a49ed",
       "ingest": "partial",
-      "note": "15 invalid rows held out; not forced to applied",
+      "note": "honest partial; 15 invalid rows held out; not forced to applied",
       "four_way": {
         "preview": 77,
         "written": 60,
@@ -52,7 +72,7 @@
       "batch_id": "aib-ef9533254f304e7c",
       "classification_id": "9e871d06-8232-476e-ba67-3f6771aae991",
       "ingest": "partial",
-      "note": "sparse derive + only_index preview/download unblocked auto-slice; four-way matched; ingest partial (one slice of multi-doc book)",
+      "note": "honest partial; one slice of multi-doc book; not forced to applied",
       "four_way": {
         "preview": 7,
         "written": 7,
@@ -63,14 +83,30 @@
       "kb_documents": 1
     },
     "考勤表.xlsx": {
-      "status": "blocked_analyze",
-      "classification_id": "227639bc-45bb-40a6-b009-4ddfd01bbed1",
-      "note": "stamp expand + cluster_outer_a1: pack0 past mid-stamp cuts; still answered_invalid on later packs (evidence outside / invented evidence_ids). Drawing-cut validator not loosened."
+      "status": "analyze_returned_slice_blocked",
+      "classification_id": "a088a2bf-444c-4398-b6e2-7372cf8b2aeb",
+      "classification_version": "290f08f7a222bf9c964f7c061a2dc5ea000208ac8e7c139de72ca7f3702f097b",
+      "analyze": {
+        "packs_completed": 19,
+        "model_status": "returned",
+        "model_regions": 63
+      },
+      "auto_slice": {
+        "blocked": true,
+        "http": 400,
+        "reason": "所选文档依赖外部说明或标题，暂不能保证保真提取"
+      },
+      "confirm": {
+        "blocked": true,
+        "http": 400,
+        "reason": "分类区域切断合并单元格"
+      },
+      "note": "Analyze closed after pack evidence/repair/union fixes. Auto-slice/confirm blocked without inventing ranges or loosening drawing-cut. Drawing-cut validator not loosened."
     }
   },
   "remaining": [
     "邻居杨总 honest partial (15 invalid held out)",
     "邻居贾总 ingest partial (multi-doc book; one slice applied)",
-    "考勤表 analyze still blocked after stamp-cut expand (model evidence quality on dense packs)"
+    "考勤表 analyze returned; auto-slice/confirm blocked on external title dependency / merge cuts (no invented ranges)"
   ]
 }
