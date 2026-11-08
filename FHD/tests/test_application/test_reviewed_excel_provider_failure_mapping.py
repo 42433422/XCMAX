@@ -41,6 +41,8 @@ def test_generic_model_failure_message_keeps_public_reason():
         {
             "code": "model_processing_failed",
             "message": "模型处理未完成。模型边界未完整覆盖本批主体，不能自动补齐",
+            "reason": "模型边界未完整覆盖本批主体，不能自动补齐",
+            "outcome": "unknown",
             "retryable": False,
             "outcome_unknown": True,
         }
@@ -167,3 +169,36 @@ def test_a_claim_reads_in_progress_only_while_its_request_runs():
         mark_live("claimed")
         assert is_live("claimed")
     assert not is_live("claimed") and not is_live(None)
+
+
+def test_the_public_error_says_what_happened_to_the_model_call():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.application.elt.errors import ModelAnswerRejected
+    from app.middleware.error_handler import register_exception_handlers
+    from app.middleware.request_id import RequestIdMiddleware
+
+    cases = {
+        "not_sent": (ModelRequestNotSent("未调用模型"), None, 503, True),
+        "rejected": (ReviewedExcelError("余额不足", provider_status=402), None, 503, True),
+        "answered_invalid": (ModelAnswerRejected("缺少 sheets"), 200, 422, True),
+        "unknown": (ReviewedExcelError("连接中断"), None, 503, False),
+    }
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.add_middleware(RequestIdMiddleware)
+
+    @app.post("/api/templates/reviewed-excel/preview")
+    def failed(outcome: str):
+        exc, stored, _status, _retryable = cases[outcome]
+        raise _model_processing_failure(exc, stored_status=stored)
+
+    with TestClient(app) as client:
+        for outcome, (exc, _stored, status, retryable) in cases.items():
+            data = client.post(f"/api/templates/reviewed-excel/preview?outcome={outcome}").json()
+            assert data["outcome"] == outcome and data["retryable"] is retryable, data
+            assert data["outcome_unknown"] is (outcome == "unknown")
+            assert data["message"].endswith("原因：" + str(exc)), data
+            assert ("未调用模型" in data["message"]) is (outcome == "not_sent")
+            assert client.post(f"/api/templates/reviewed-excel/preview?outcome={outcome}").status_code == status

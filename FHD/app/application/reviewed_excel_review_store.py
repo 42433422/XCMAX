@@ -52,12 +52,14 @@ def _model_processing_failure(
 
     outcome = model_call_outcome(exc, stored_status=stored_status)
     status, code, lead = _OUTCOME_HTTP[outcome]
+    reason = public_excel_error(exc)
     return HTTPException(
         status_code=status,
         detail={
             "code": code,
             "outcome": outcome,
-            "message": lead + public_excel_error(exc),
+            "reason": reason,
+            "message": lead + reason,
             "retryable": outcome != "unknown" if retryable is None else retryable,
             "outcome_unknown": outcome == "unknown",
         },
