@@ -30,7 +30,9 @@ def _layout(path: Path, *, slots: int = 2) -> None:
     worksheet.title = "送货单"
     worksheet["A1"] = "成都国圣工业有限公司（五星花）送货单"
     worksheet.merge_cells("A1:J1")
-    worksheet["A2"] = "购货单位（乙方）：七彩乐园家私    日期：2026年10月24日   订单编号：26-01000054A"
+    worksheet["A2"] = (
+        "购货单位（乙方）：七彩乐园家私    日期：2026年10月24日   订单编号：26-01000054A"
+    )
     worksheet.merge_cells("A2:J2")
     worksheet["A3"] = " 产 品 型 号"
     worksheet.merge_cells("A3:C3")
@@ -179,9 +181,7 @@ def test_fill_inserts_lines_without_dropping_the_contract(tmp_path):
 
 def test_layout_resolution_rejects_another_tenant_or_owner(tmp_path, monkeypatch):
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    layout = (
-        tmp_path / "tenants" / "7" / "document_templates" / "11" / "七彩乐园-发货单版式.xlsx"
-    )
+    layout = tmp_path / "tenants" / "7" / "document_templates" / "11" / "七彩乐园-发货单版式.xlsx"
     _layout(layout)
     outside = tmp_path / "outside.xlsx"
     _layout(outside)
@@ -296,9 +296,12 @@ def test_completed_run_writes_a_downloadable_snapshot(tmp_path, monkeypatch):
         assert workbook["送货单"]["G4"].value == "=E4*F4"
         assert "2026年10月24日" in workbook["送货单"]["A2"].value
         workbook.close()
-        assert write_committed_shipment_workbook(
-            session, SimpleNamespace(id="run-1", target_type="orders", status="completed")
-        ) is None
+        assert (
+            write_committed_shipment_workbook(
+                session, SimpleNamespace(id="run-1", target_type="orders", status="completed")
+            )
+            is None
+        )
     finally:
         reset_current_tenant_id(token)
         session.close()

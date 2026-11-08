@@ -56,7 +56,10 @@ def _resolve_shipment_output_path(file_arg: object, tenant_id: int | None = None
         output_dir = Path(get_shipment_output_dir()).resolve()
     else:
         output_dir = (
-            Path(get_app_data_dir()).resolve() / "tenants" / str(int(tenant_id)) / "shipment_outputs"
+            Path(get_app_data_dir()).resolve()
+            / "tenants"
+            / str(int(tenant_id))
+            / "shipment_outputs"
         ).resolve()
     try:
         candidate = resolve_under_allowed_dirs(str(file_arg or ""), [output_dir])

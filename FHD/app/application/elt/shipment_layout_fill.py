@@ -184,7 +184,14 @@ def _write_line(
     columns: dict[str, int],
     record: dict[str, Any],
 ) -> None:
-    for field in ("model_number", "product_name", "quantity_tins", "tin_spec", "unit_price", "remark"):
+    for field in (
+        "model_number",
+        "product_name",
+        "quantity_tins",
+        "tin_spec",
+        "unit_price",
+        "remark",
+    ):
         column = columns.get(field)
         if column is None:
             continue
@@ -252,9 +259,10 @@ def save_stable_workbook(workbook: Workbook, destination: Path) -> str:
     buffer = BytesIO()
     workbook.save(buffer)
     fixed = BytesIO()
-    with zipfile.ZipFile(BytesIO(buffer.getvalue()), "r") as source, zipfile.ZipFile(
-        fixed, "w", compression=zipfile.ZIP_DEFLATED
-    ) as target:
+    with (
+        zipfile.ZipFile(BytesIO(buffer.getvalue()), "r") as source,
+        zipfile.ZipFile(fixed, "w", compression=zipfile.ZIP_DEFLATED) as target,
+    ):
         for info in source.infolist():
             payload = source.read(info.filename)
             if info.filename == "docProps/core.xml":
