@@ -736,6 +736,103 @@ def test_two_dimensional_selection_rejects_horizontal_cut_and_holes():
             select_drawing_objects(info, "表", boxes)
 
 
+def test_expand_range_covers_cut_drawings_without_loosening_validator():
+    from app.application.reviewed_excel_drawing import (
+        expand_range_for_intersecting_drawings,
+        select_drawing_objects,
+    )
+
+    # Attendance-like: empty twoCell A1:B3 plus stamp on A3:A4; model ends at row 2.
+    review = {
+        "drawing_evidence": [
+            {
+                "sheet": "考勤",
+                "object_id": "2",
+                "from": {"row": 0, "col": 0},
+                "last_row": 3,
+                "last_col": 2,
+            },
+            {
+                "sheet": "考勤",
+                "object_id": "18",
+                "from": {"row": 2, "col": 0},
+                "last_row": 4,
+                "last_col": 1,
+            },
+        ]
+    }
+    with pytest.raises(ReviewedExcelError, match="切断绘图对象"):
+        select_drawing_objects(review, "考勤", [(1, 1, 4, 2)])
+    grown, did = expand_range_for_intersecting_drawings(
+        review, "考勤", (1, 1, 4, 2), max_rows=40, max_columns=10, row_span=(1, 5)
+    )
+    assert did is True
+    assert grown == (1, 1, 4, 4)
+    assert select_drawing_objects(review, "考勤", [grown]) == review["drawing_evidence"]
+    # Still refuse when pack row_span cannot hold the stamp.
+    with pytest.raises(ReviewedExcelError, match="切断绘图对象"):
+        expand_range_for_intersecting_drawings(
+            review, "考勤", (1, 1, 4, 2), max_rows=40, max_columns=10, row_span=(1, 3)
+        )
+
+
+def test_drawing_packs_expose_cluster_outer_a1():
+    from app.application.reviewed_excel_drawing import plan_drawing_batches
+
+    cells = [
+        {"sheet": "考勤", "cell": f"A{i}", "value": "v", "kind": "review"} for i in range(1, 12)
+    ]
+    drawings = [
+        {
+            "sheet": "考勤",
+            "part": "xl/drawings/drawing1.xml",
+            "object_id": "2",
+            "from": {"row": 0, "col": 0},
+            "text": "",
+            "last_row": 3,
+            "last_col": 2,
+        },
+        {
+            "sheet": "考勤",
+            "part": "xl/drawings/drawing1.xml",
+            "object_id": "4",
+            "from": {"row": 0, "col": 1},
+            "text": "星期",
+            "last_row": 1,
+            "last_col": 4,
+        },
+        # Anchor on row 3 so last_drawing_row advances past pack start (cluster split).
+        {
+            "sheet": "考勤",
+            "part": "xl/drawings/drawing1.xml",
+            "object_id": "18",
+            "from": {"row": 2, "col": 0},
+            "text": "姓名",
+            "last_row": 4,
+            "last_col": 1,
+        },
+        {
+            "sheet": "考勤",
+            "part": "xl/drawings/drawing1.xml",
+            "object_id": "32",
+            "from": {"row": 9, "col": 0},
+            "text": "星期",
+            "last_row": 10,
+            "last_col": 2,
+        },
+    ]
+    review = {
+        "sheets": ["考勤"],
+        "cells": cells,
+        "drawing_evidence": drawings,
+        "sheet_overview": [{"sheet": "考勤", "drawing_row_boundaries": list(range(1, 13))}],
+    }
+    batches = plan_drawing_batches(review)
+    assert len(batches) >= 2
+    assert batches[0][0]["drawing_cluster_outer_a1"] == "A1:D4"
+    assert batches[1][0]["drawing_cluster_outer_a1"] == "A10:B10"
+
+
 def test_nonzero_transform_is_readable_but_not_derivable():
     from app.application.reviewed_excel_template import derive_document_workbook, inspect_workbook
 

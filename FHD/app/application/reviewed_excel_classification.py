@@ -105,6 +105,18 @@ def _classify_semantic_batch(
         ),
         None,
     )
+    batch_cluster_outer = next(
+        (
+            cell.get("drawing_cluster_outer_a1")
+            for cell in chosen
+            if cell.get("drawing_cluster_outer_a1")
+        ),
+        None,
+    )
+    batch_row_span = next(
+        (cell.get("drawing_batch_bounds") for cell in chosen if cell.get("drawing_batch_bounds")),
+        None,
+    )
     for sheet in review["sheet_overview"]:
         merges = sheet.get("merged_regions", [])
         # Complete structural facts are budgeted with the full prepared request.
@@ -119,23 +131,24 @@ def _classify_semantic_batch(
             legal = source_bounds
         else:
             legal = []
-        overview.append(
-            {
-                "sheet": sheet["sheet"],
-                "rows": sheet["rows"],
-                "columns": sheet["columns"],
-                "merged": included,
-                "merged_omitted": len(merges) - len(included),
-                "drawing_row_boundaries": legal,
-                "sheet_state": sheet.get("sheet_state", "visible"),
-                "hidden_rows_count": len(sheet.get("hidden_rows", [])),
-                "hidden_columns_count": len(sheet.get("hidden_columns", [])),
-                "hidden_rows": sheet.get("hidden_rows", [])[:100],
-                "hidden_rows_omitted": max(0, len(sheet.get("hidden_rows", [])) - 100),
-                "hidden_column_ranges": sheet.get("hidden_column_ranges", [])[:100],
-                "hidden_columns_omitted": max(0, len(sheet.get("hidden_column_ranges", [])) - 100),
-            }
-        )
+        entry = {
+            "sheet": sheet["sheet"],
+            "rows": sheet["rows"],
+            "columns": sheet["columns"],
+            "merged": included,
+            "merged_omitted": len(merges) - len(included),
+            "drawing_row_boundaries": legal,
+            "sheet_state": sheet.get("sheet_state", "visible"),
+            "hidden_rows_count": len(sheet.get("hidden_rows", [])),
+            "hidden_columns_count": len(sheet.get("hidden_columns", [])),
+            "hidden_rows": sheet.get("hidden_rows", [])[:100],
+            "hidden_rows_omitted": max(0, len(sheet.get("hidden_rows", [])) - 100),
+            "hidden_column_ranges": sheet.get("hidden_column_ranges", [])[:100],
+            "hidden_columns_omitted": max(0, len(sheet.get("hidden_column_ranges", [])) - 100),
+        }
+        if batch_cluster_outer and sheet["sheet"] in {c["sheet"] for c in chosen}:
+            entry["drawing_cluster_outer_a1"] = batch_cluster_outer
+        overview.append(entry)
     rule_hints = build_rule_hints(rules, sent)
     cell_schema = {
         "type": "object",
@@ -417,6 +430,45 @@ def _classify_semantic_batch(
                 fragment_metadata = {"model_original_range": area, "open_fragment": True}
                 r1, r2 = first, last
                 area = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+                region = {**region, "range": area}
+        if drawings:
+            from app.application.reviewed_excel_drawing import expand_range_for_intersecting_drawings
+
+            grown, did_expand = expand_range_for_intersecting_drawings(
+                review,
+                sheet,
+                (c1, r1, c2, r2),
+                max_rows=int(dimensions["rows"]),
+                max_columns=int(dimensions["columns"]),
+                row_span=tuple(batch_row_span) if batch_row_span else None,
+            )
+            if did_expand:
+                c1, r1, c2, r2 = grown
+                # Expanding into unread nonempty rows between observed primaries is unsafe.
+                unread_after = []
+                for cell in review.get("full_cells", review["cells"]):
+                    if cell["sheet"] != sheet or (sheet, cell["cell"]) in primary_keys:
+                        continue
+                    col, row = coordinate_from_string(cell["cell"])
+                    if c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2:
+                        unread_after.append(row)
+                observed_rows = [
+                    row
+                    for col, row in primary.get(sheet, [])
+                    if c1 <= col <= c2 and r1 <= row <= r2
+                ]
+                if observed_rows and unread_after:
+                    first, last = min(observed_rows), max(observed_rows)
+                    if any(first <= row <= last for row in unread_after):
+                        raise ReviewedExcelError(
+                            "所选范围切断绘图对象，暂不能提取"
+                        )
+                area = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+                fragment_metadata = {
+                    **fragment_metadata,
+                    "model_original_range": fragment_metadata.get("model_original_range", original_area),
+                    "drawing_bounds_expanded": True,
+                }
                 region = {**region, "range": area}
         for old_c1, old_r1, old_c2, old_r2 in rects.setdefault(sheet, []):
             if c1 <= old_c2 and old_c1 <= c2 and r1 <= old_r2 and old_r1 <= r2:

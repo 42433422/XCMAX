@@ -400,6 +400,24 @@ def drawing_row_boundaries(sheet, drawings: list[dict]) -> list[int]:
     return [row for row in range(1, max_row + 2) if row not in unsafe]
 
 
+def _stamp_pack_meta(batch: list[dict], first: int, end: int, boundaries: list[int]) -> None:
+    """Record pack row span, legal cuts, and the axis-aligned union of pack drawings."""
+    from openpyxl.utils.cell import get_column_letter
+
+    batch[0]["drawing_batch_bounds"] = [first, end]
+    batch[0]["drawing_legal_boundaries"] = [x for x in boundaries if first <= x <= end]
+    pack_drawings = [d for cell in batch for d in cell.get("drawing_evidence", [])]
+    if not pack_drawings:
+        return
+    c1 = min(int(d["from"].get("col", 0)) + 1 for d in pack_drawings)
+    r1 = min(int(d["from"]["row"]) + 1 for d in pack_drawings)
+    c2 = max(int(d["last_col"]) for d in pack_drawings)
+    r2 = max(int(d["last_row"]) for d in pack_drawings)
+    batch[0]["drawing_cluster_outer_a1"] = (
+        f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+    )
+
+
 def plan_drawing_batches(review: dict) -> list[list[dict]]:
     """Partition at explicit legal boundaries, never splitting merges or shapes."""
     import json
@@ -529,10 +547,7 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
                 or past_drawing_cluster
                 or cluster_budget
             ):
-                current[0]["drawing_batch_bounds"] = [first, start]
-                current[0]["drawing_legal_boundaries"] = [
-                    x for x in boundaries if first <= x <= start
-                ]
+                _stamp_pack_meta(current, first, start, boundaries)
                 result.append(current)
                 current, amount, used, first = [], 0, 0, start
                 last_drawing_row = first
@@ -546,12 +561,18 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
                 if clusters_in_pack == 0 or new_drawing_cluster:
                     clusters_in_pack += 1
                 drawings_in_pack += group_drawings
-                last_drawing_row = end - 1
+                # Use outer last_row so a multi-row stamp anchored on the pack's
+                # first row still advances the cluster cursor past its footprint.
+                last_drawing_row = max(
+                    end - 1,
+                    max(
+                        int(d["last_row"])
+                        for cell in group
+                        for d in cell.get("drawing_evidence", [])
+                    ),
+                )
         if current:
-            current[0]["drawing_batch_bounds"] = [first, boundaries[-1]]
-            current[0]["drawing_legal_boundaries"] = [
-                x for x in boundaries if first <= x <= boundaries[-1]
-            ]
+            _stamp_pack_meta(current, first, boundaries[-1], boundaries)
             result.append(current)
     if sum(len(c.get("drawing_evidence", [])) for batch in result for c in batch) != len(
         review["drawing_evidence"]
@@ -678,6 +699,53 @@ def set_drawing_columns(sheet, drawings: list[dict]) -> int:
     return max([int(sheet.max_column), *(int(obj.get("last_col", 0)) for obj in drawings)])
 
 
+def _drawing_cut_error(obj: dict, bounds: tuple[int, int, int, int]) -> ReviewedExcelError:
+    x1, y1, x2, y2 = bounds
+    oid = obj.get("object_id") or "?"
+    return ReviewedExcelError(
+        "所选范围切断绘图对象，暂不能提取"
+        f"（对象{oid}需整枚落在列{x1}-{x2}行{y1}-{y2}内，或完全不碰）"
+    )
+
+
+def expand_range_for_intersecting_drawings(
+    review: dict,
+    sheet: str,
+    bounds: tuple[int, int, int, int],
+    *,
+    max_rows: int,
+    max_columns: int,
+    row_span: tuple[int, int] | None = None,
+) -> tuple[tuple[int, int, int, int], bool]:
+    """Grow a region so every intersecting drawing is wholly covered.
+
+    Does not loosen the cut validator: callers still run select_drawing_objects.
+    Expansion stays inside sheet dimensions and optional pack row_span [start, end).
+    """
+    c1, r1, c2, r2 = bounds
+    expanded = False
+    objects = [obj for obj in review.get("drawing_evidence", []) if obj["sheet"] == sheet]
+    for _ in range(len(objects) + 2):
+        progress = False
+        for obj in objects:
+            box = drawing_bounds(obj)
+            x1, y1, x2, y2 = box
+            intersects = x1 <= c2 and c1 <= x2 and y1 <= r2 and r1 <= y2
+            if not intersects or rectangles_cover(box, [(c1, r1, c2, r2)]):
+                continue
+            nc1, nr1, nc2, nr2 = min(c1, x1), min(r1, y1), max(c2, x2), max(r2, y2)
+            if nc1 < 1 or nr1 < 1 or nc2 > max_columns or nr2 > max_rows:
+                raise _drawing_cut_error(obj, box)
+            if row_span is not None and (nr1 < row_span[0] or nr2 >= row_span[1]):
+                raise _drawing_cut_error(obj, box)
+            c1, r1, c2, r2 = nc1, nr1, nc2, nr2
+            expanded = True
+            progress = True
+        if not progress:
+            return (c1, r1, c2, r2), expanded
+    raise ReviewedExcelError("所选范围切断绘图对象，暂不能提取")
+
+
 def select_drawing_objects(info: dict, sheet: str, rectangles: list[tuple]) -> list[dict]:
     """Accept arbitrary rectangles only when each touched object is wholly contained."""
     selected = []
@@ -687,11 +755,7 @@ def select_drawing_objects(info: dict, sheet: str, rectangles: list[tuple]) -> l
         x1, y1, x2, y2 = bounds = drawing_bounds(obj)
         intersects = any(x1 <= c and a <= x2 and y1 <= d and b <= y2 for a, b, c, d in rectangles)
         if intersects and not rectangles_cover(bounds, rectangles):
-            oid = obj.get("object_id") or "?"
-            raise ReviewedExcelError(
-                "所选范围切断绘图对象，暂不能提取"
-                f"（对象{oid}需整枚落在列{x1}-{x2}行{y1}-{y2}内，或完全不碰）"
-            )
+            raise _drawing_cut_error(obj, bounds)
         if intersects:
             selected.append(obj)
     return selected
