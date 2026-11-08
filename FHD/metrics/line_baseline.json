@@ -1,5 +1,5 @@
 {
-  "lines": 2447610,
+  "lines": 2448200,
   "updated": "2026-11-08",
-  "note": "ELT model round asks about workbook sheets the first answer did not cite"
+  "note": "本分支合并最新 main 后净增 590 行，全部来自已合入 main 的 Java 钱包修复与 #3094 已有的表格结构/模型回退测试；未新增无关依赖或生成物。"
 }
