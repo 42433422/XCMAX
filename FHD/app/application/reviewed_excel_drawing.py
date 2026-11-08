@@ -418,9 +418,13 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
     # Keep units under this cap while still only cutting on verified legal boundaries.
     # Also cap row span: a sparse tail after the last stamp must not stay in the same
     # pack as the drawings (model then cites edge stamps into too-narrow ranges).
+    # Split between stamp clusters so a multi-row stamp stays wholly inside one pack
+    # (never straddling pack bounds); at most two clusters / ~24 drawings per pack.
     max_units = min(MAX_MODEL_CELLS, 400)
     max_bytes = min(MAX_MODEL_TEXT_BYTES, 160_000)
     max_row_span = 80
+    max_drawing_clusters = 2
+    max_drawings = 24
 
     rows = defaultdict(list)
     for cell in review["cells"]:
@@ -446,11 +450,14 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
     result = []
     overview = {entry["sheet"]: entry for entry in review["sheet_overview"]}
     drawing_tail_margin = 8
+    drawing_cluster_gap = 4
     for sheet in review["sheets"]:
         boundaries = overview[sheet]["drawing_row_boundaries"]
         current: list[dict] = []
         amount, used, first = 0, 0, boundaries[0]
         last_drawing_row = first
+        clusters_in_pack = 0
+        drawings_in_pack = 0
         for start, end in zip(boundaries, boundaries[1:]):
             group = [cell for row in range(start, end) for cell in rows.get((sheet, row), [])]
             n, size = sum(map(count, group)), sum(map(cost, group))
@@ -472,11 +479,22 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
                 and group_drawings == 0
                 and start - last_drawing_row > drawing_tail_margin
             )
+            new_drawing_cluster = (
+                current
+                and group_drawings > 0
+                and last_drawing_row > first
+                and start - last_drawing_row > drawing_cluster_gap
+            )
+            cluster_budget = new_drawing_cluster and (
+                clusters_in_pack >= max_drawing_clusters
+                or drawings_in_pack + group_drawings > max_drawings
+            )
             if current and (
                 amount + n > max_units
                 or used + size > max_bytes
                 or start - first >= max_row_span
                 or past_drawing_cluster
+                or cluster_budget
             ):
                 current[0]["drawing_batch_bounds"] = [first, start]
                 current[0]["drawing_legal_boundaries"] = [
@@ -485,10 +503,16 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
                 result.append(current)
                 current, amount, used, first = [], 0, 0, start
                 last_drawing_row = first
+                clusters_in_pack = 0
+                drawings_in_pack = 0
+                new_drawing_cluster = False
             current.extend(group)
             amount += n
             used += size
             if group_drawings:
+                if clusters_in_pack == 0 or new_drawing_cluster:
+                    clusters_in_pack += 1
+                drawings_in_pack += group_drawings
                 last_drawing_row = end - 1
         if current:
             current[0]["drawing_batch_bounds"] = [first, boundaries[-1]]

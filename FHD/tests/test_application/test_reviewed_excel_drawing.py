@@ -151,6 +151,62 @@ def test_drawing_packs_split_sparse_tail_on_row_span():
     assert all(not c.get("drawing_evidence") for b in batches[1:] for c in b)
 
 
+def test_drawing_packs_split_between_stamp_clusters_not_through_spans():
+    """Attendance-like stamp clusters stay whole; packs split on gaps, not mid-stamp."""
+    from app.application.reviewed_excel_drawing import plan_drawing_batches
+
+    # Four forms: stamps on rows (1-3), (10-12), (19-21), (28-30); multi-row on first of each.
+    cells = [
+        {"sheet": "考勤", "cell": f"A{i}", "value": "v", "kind": "review"} for i in range(1, 40)
+    ]
+    drawings = []
+    for form, base in enumerate((1, 10, 19, 28)):
+        drawings.append(
+            {
+                "sheet": "考勤",
+                "part": "xl/drawings/drawing1.xml",
+                "object_id": f"{form}-span",
+                "from": {"row": base - 1},
+                "text": "章",
+                "last_row": base + 2,
+                "last_col": 2,
+            }
+        )
+        for offset in (1, 2):
+            drawings.append(
+                {
+                    "sheet": "考勤",
+                    "part": "xl/drawings/drawing1.xml",
+                    "object_id": f"{form}-{offset}",
+                    "from": {"row": base - 1 + offset},
+                    "text": "章",
+                    "last_row": base + offset,
+                    "last_col": 1,
+                }
+            )
+    # Legal cuts omit interior rows of the 3-row stamps (base+1, base+2).
+    unsafe = {base + 1 for base in (1, 10, 19, 28)} | {base + 2 for base in (1, 10, 19, 28)}
+    boundaries = [row for row in range(1, 41) if row not in unsafe]
+    review = {
+        "sheets": ["考勤"],
+        "cells": cells,
+        "drawing_evidence": drawings,
+        "sheet_overview": [{"sheet": "考勤", "drawing_row_boundaries": boundaries}],
+    }
+    batches = plan_drawing_batches(review)
+    assert len(batches) >= 2
+    assert sum(len(c.get("drawing_evidence", [])) for b in batches for c in b) == len(drawings)
+    for batch in batches:
+        bounds = batch[0]["drawing_batch_bounds"]
+        assert bounds[1] - bounds[0] <= 80
+        pack_drawings = [d for c in batch for d in c.get("drawing_evidence", [])]
+        assert len(pack_drawings) <= 24
+        for obj in pack_drawings:
+            first = obj["from"]["row"] + 1
+            last = obj["last_row"]
+            assert bounds[0] <= first and last < bounds[1]
+
+
 def test_classifier_sends_distinct_drawing_evidence_and_rejects_forged_reference(monkeypatch):
     import json
 
