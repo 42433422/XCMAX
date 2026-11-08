@@ -208,10 +208,10 @@
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
       "base_blob": "acf93ca707e3e1d434ccacaf41d61ce3fcb427bf",
-      "head_blob": "afdd51a6ea799e8f40e7289b968e10f481dcf901",
+      "head_blob": "77370fd9e866d362080208fc57b32fb6f713b77c",
       "before_lines": 936,
-      "after_lines": 1121,
-      "reason": "Reviewed intake prepares knowledge from archived workbook text, keeps empty model rows, and preserves the deterministic preview/confirmation boundary through the outcome taxonomy.",
+      "after_lines": 1128,
+      "reason": "Reviewed intake prepares knowledge from archived workbook text without silent sheet/row/character caps, keeps empty model rows, reports per-row coverage and a partial batch status, and preserves the deterministic preview/confirmation boundary through the outcome taxonomy.",
       "boundary": "Auto-ingest knowledge planning and source-text handoff only; business target detection, tenant authorization, persistence and commit remain in their existing services.",
       "validation": "ELT preview, knowledge-plan, selected-candidate confirmation, source-version and tenant-isolation regression suites; full integration CI on the final head.",
       "follow_up": "Extract workbook text projection from auto_ingest_service after the candidate-only intake contract is stable.",
