@@ -656,6 +656,7 @@ def _classify_semantic_batch(
             raise ReviewedExcelError("模型逻辑文档或布局引用格式无效，原分类未改变")
         known = {(region["sheet"], region["range"]) for region in accepted}
         assigned, document_ids = set(), set()
+        documents_ok = True
         for document in documents:
             if (
                 not isinstance(document, dict)
@@ -667,7 +668,8 @@ def _classify_semantic_batch(
                 or not isinstance(document["fragments"], list)
                 or not 1 <= len(document["fragments"]) <= 100
             ):
-                raise ReviewedExcelError("模型逻辑文档格式或编号无效，原分类未改变")
+                documents_ok = False
+                break
             document_ids.add(document["document_id"])
             refs = []
             for ref in document["fragments"]:
@@ -677,15 +679,22 @@ def _classify_semantic_batch(
                     or not isinstance(ref["sheet"], str)
                     or not isinstance(ref["range"], str)
                 ):
-                    raise ReviewedExcelError("模型文档片段格式无效，原分类未改变")
+                    documents_ok = False
+                    break
                 key = range_map.get((ref["sheet"], ref["range"]), (ref["sheet"], ref["range"]))
                 if key not in known or key in assigned:
-                    raise ReviewedExcelError("模型文档片段来源无效或重复，原分类未改变")
+                    documents_ok = False
+                    break
                 assigned.add(key)
                 refs.append({"sheet": key[0], "range": key[1]})
+            if not documents_ok:
+                break
             suggested_documents.append(
                 {"document_id": document["document_id"], "fragments": refs, "status": "candidate"}
             )
+        if not documents_ok:
+            # Physical regions already passed; invalid grouping stays ungrouped ([]).
+            suggested_documents = []
         allowed_merges = {
             (sheet["sheet"], merge) for sheet in overview for merge in sheet["merged"]
         }
@@ -697,7 +706,8 @@ def _classify_semantic_batch(
                 or not isinstance(ref["range"], str)
                 or (ref["sheet"], ref["range"]) not in allowed_merges
             ):
-                raise ReviewedExcelError("模型布局引用不在已发送的合并区域，原分类未改变")
+                # Drop invalid layout refs; do not reject validated physical regions.
+                continue
             layout_references.append(ref)
     from app.application.reviewed_excel_evidence import summarize_model_input
 

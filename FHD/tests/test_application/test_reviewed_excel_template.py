@@ -5222,12 +5222,12 @@ def test_semantic_contract_distinguishes_fragments_documents_and_layout(monkeypa
     result["logical_documents"].append(
         {"document_id": "d2", "fragments": [{"sheet": "流水", "range": areas[0]}]}
     )
-    with pytest.raises(ValueError, match="重复"):
-        _classify_semantic_batch(review)
+    dup = _classify_semantic_batch(review)
+    assert len(dup["regions"]) == 4 and dup["logical_documents"] == []
     result["logical_documents"].pop()
     result["layout_references"] = [{"sheet": "流水", "range": "A13"}]
-    with pytest.raises(ValueError, match="布局引用"):
-        _classify_semantic_batch(review)
+    bad_layout = _classify_semantic_batch(review)
+    assert len(bad_layout["regions"]) == 4 and bad_layout["layout_references"] == []
     result["layout_references"] = []
     result["sheetcount"] = 1
     with pytest.raises(ValueError, match="结构无效"):

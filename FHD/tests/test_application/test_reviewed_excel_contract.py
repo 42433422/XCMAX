@@ -226,8 +226,9 @@ def test_layout_source_enums_do_not_replace_sheet_range_pair_guard(monkeypatch):
         "app.application.reviewed_excel_template._template_platform_complete",
         lambda *args, **kwargs: LlmAssistResult(used_llm=True, data=data),
     )
-    with pytest.raises(ReviewedExcelError, match="布局引用"):
-        _classify_semantic_batch(review, reference_ids=False)
+    # Invalid layout refs are dropped; physical regions still accept.
+    bad_layout = _classify_semantic_batch(review, reference_ids=False)
+    assert len(bad_layout["regions"]) == 2 and bad_layout["layout_references"] == []
     data["layout_references"][0]["range"] = "A1:A2"
     assert len(_classify_semantic_batch(review, reference_ids=False)["regions"]) == 2
     data["layout_references"] = []
@@ -236,12 +237,13 @@ def test_layout_source_enums_do_not_replace_sheet_range_pair_guard(monkeypatch):
         {"document_id": "d", "fragments": [{"sheet": "O'Brien ! 表", "range": "A1:A2"}]},
         {"document_id": "e", "fragments": [{"sheet": "O'Brien ! 表", "range": "A1:A2"}]},
     ]
-    with pytest.raises(ReviewedExcelError, match="重复"):
-        _classify_semantic_batch(review, reference_ids=False)
+    # Duplicate / invented fragments leave documents ungrouped instead of rejecting regions.
+    dup = _classify_semantic_batch(review, reference_ids=False)
+    assert len(dup["regions"]) == 2 and dup["logical_documents"] == []
     data["logical_documents"].pop()
     data["logical_documents"][0]["fragments"][0]["range"] = "A1:C2"
-    with pytest.raises(ReviewedExcelError, match="片段来源"):
-        _classify_semantic_batch(review, reference_ids=False)
+    bad_frag = _classify_semantic_batch(review, reference_ids=False)
+    assert len(bad_frag["regions"]) == 2 and bad_frag["logical_documents"] == []
 
 
 def test_empty_merge_source_allows_only_empty_layout_and_preserves_contract():
