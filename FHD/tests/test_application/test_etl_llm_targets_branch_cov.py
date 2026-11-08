@@ -213,7 +213,7 @@ def test_archived_sheet_import_uses_full_sheet_timeout(monkeypatch):
     llm_assist.advise_business_import("sheet")
     assert seen["lane"] == "database"
     assert seen["max_tokens"] == 8192
-    assert seen["max_repairs"] == 1
+    assert seen["max_repairs"] == 0
     assert seen["timeout_seconds"] == 180.0
     prompt = seen["messages"][0]["content"]
     assert "每一张表都要扫" in prompt and "不要在第一张送货单结束后停止" in prompt

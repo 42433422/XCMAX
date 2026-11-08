@@ -1227,16 +1227,19 @@ async def llm_chat(
     return payload
 
 
-@_facade().router.post("/chat/stream")
+_chat_endpoint_facade = _facade()
+
+
+@_chat_endpoint_facade.router.post("/chat/stream")
 async def llm_chat_stream(
-    request: _facade().Request,
+    request: _chat_endpoint_facade.Request,
     body: LlmChatDTO,
-    db: _facade().Session = _facade().Depends(_facade().get_db),
-    user: _facade().User = _facade().Depends(_facade()._get_current_user),
+    db: _chat_endpoint_facade.Session = _chat_endpoint_facade.Depends(_chat_endpoint_facade.get_db),
+    user: _chat_endpoint_facade.User = _chat_endpoint_facade.Depends(_chat_endpoint_facade._get_current_user),
 ):
     msgs = [m.model_dump(exclude_none=True) for m in body.messages]
     snapshot = _requested_chat_snapshot(db, user, body)
-    return await _facade().stream_billed_llm_chat(
+    return await _chat_endpoint_facade.stream_billed_llm_chat(
         request,
         db,
         user,
@@ -1253,18 +1256,18 @@ async def llm_chat_stream(
     )
 
 
-@_facade().router.get("/chat/requests/{client_request_id}")
+@_chat_endpoint_facade.router.get("/chat/requests/{client_request_id}")
 def llm_chat_request_state(
     client_request_id: str,
-    db: _facade().Session = _facade().Depends(_facade().get_db),
-    user: _facade().User = _facade().Depends(_facade()._get_current_user),
+    db: _chat_endpoint_facade.Session = _chat_endpoint_facade.Depends(_chat_endpoint_facade.get_db),
+    user: _chat_endpoint_facade.User = _chat_endpoint_facade.Depends(_chat_endpoint_facade._get_current_user),
 ):
     """What this user's idempotency key reached; never the answer itself."""
     from modstore_server import llm_client_requests as ledger
     from modstore_server.llm_billed_chat import _chat_total_deadline_s
 
     if not ledger.KEY_PATTERN.fullmatch(client_request_id):
-        raise _facade().HTTPException(400, "请求键无效")
+        raise _chat_endpoint_facade.HTTPException(400, "请求键无效")
     state = ledger.lookup(db, int(user.id), client_request_id, _chat_total_deadline_s())
     return {"client_request_id": client_request_id, "state": state}
 
