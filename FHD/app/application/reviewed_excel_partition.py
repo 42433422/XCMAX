@@ -23,6 +23,8 @@ DOCUMENT_LABELS = frozenset(
         "material",
         "inspection",
         "template",
+        "ledger",
+        "calculation",
         "unknown",
     }
 )
@@ -51,6 +53,13 @@ def coerce_payload_document_labels(payload: dict) -> dict:
     """Repair freestyle region labels and flattened source ranges before validation."""
     if not isinstance(payload, dict):
         return payload
+    wrapped = payload.get("output_schema")
+    if (
+        isinstance(wrapped, dict)
+        and "documents" not in payload
+        and isinstance(wrapped.get("documents"), list)
+    ):
+        payload = wrapped
     documents = payload.get("documents")
     if isinstance(documents, list) and documents:
         area_keys = ("sheet_name", "row_start", "row_end", "column_start", "column_end")
@@ -73,6 +82,20 @@ def coerce_payload_document_labels(payload: dict) -> dict:
                     }
                 )
             else:
+                if (
+                    isinstance(document, dict)
+                    and isinstance(document.get("ranges"), list)
+                    and "sheet_name" in document
+                ):
+                    names = {
+                        item.get("sheet_name")
+                        for item in document["ranges"]
+                        if isinstance(item, dict)
+                    }
+                    if names == {document.get("sheet_name")}:
+                        document = {
+                            key: value for key, value in document.items() if key != "sheet_name"
+                        }
                 coerced.append(document)
         if set(payload) == {"documents", "reason"}:
             payload = {"documents": coerced}
@@ -314,7 +337,7 @@ def _normalize_atom_ids(data: dict, references: dict, review: dict) -> dict:
     }
 
 
-def source_ranges_schema(sheets: list[dict]) -> dict:
+def source_ranges_schema(sheets: list[dict], *, decide_slice: bool = False) -> dict:
     properties: dict[str, dict] = {
         "sheet_name": {"type": "string", "enum": [sheet["sheet"] for sheet in sheets]}
     }
@@ -340,17 +363,22 @@ def source_ranges_schema(sheets: list[dict]) -> dict:
             "reason": {"type": "string", "minLength": 1},
         },
     }
+    properties = {
+        "documents": {"type": "array", "minItems": 1, "maxItems": 100, "items": document},
+        # Some providers wrap the document list with one informational summary.
+        # It is never used for geometry; accepting it avoids turning a complete,
+        # otherwise valid answer into an opaque model-processing failure.
+        "reason": {"type": "string", "maxLength": 4000},
+    }
+    required = ["documents"]
+    if decide_slice:
+        properties["can_slice"] = {"type": "boolean"}
+        required.append("can_slice")
     return {
         "type": "object",
-        "required": ["documents"],
+        "required": required,
         "additionalProperties": False,
-        "properties": {
-            "documents": {"type": "array", "minItems": 1, "maxItems": 100, "items": document},
-            # Some providers wrap the document list with one informational summary.
-            # It is never used for geometry; accepting it avoids turning a complete,
-            # otherwise valid answer into an opaque model-processing failure.
-            "reason": {"type": "string", "maxLength": 4000},
-        },
+        "properties": properties,
     }
 
 
@@ -410,7 +438,11 @@ def _normalize_boundaries(data: dict, references: dict, review: dict) -> dict:
                     if key not in primary:
                         raise ReviewedExcelError("模型边界含上下文或未发送主体，不能裁剪或补齐")
                     covered.append(key)
-            if not covered or seen.intersection(covered):
+            if not covered:
+                # A blank rectangle is not a document. Leave the ranges that
+                # contain primary cells unchanged, and do not invent a replacement.
+                continue
+            if seen.intersection(covered):
                 raise ReviewedExcelError("模型边界主体为空或重复覆盖")
             decoded.append(
                 {
@@ -426,12 +458,32 @@ def _normalize_boundaries(data: dict, references: dict, review: dict) -> dict:
             )
             seen.update(covered)
             parts.append(part)
+        if not parts:
+            continue
         documents.append({"document_id": internal_document_id(document), "fragments": parts})
-    if seen != set(primary):
-        raise ReviewedExcelError("模型边界未完整覆盖本批主体，不能自动补齐")
+    if not documents:
+        raise ReviewedExcelError("模型边界主体为空或重复覆盖")
+    # A partial boundary is usable. Keep the covered rectangles and name the
+    # uncovered source cells for a person. Do not invent the missing geometry
+    # and do not send the model request again.
+    missing = sorted(set(primary) - seen)
     references["_source_coverage"] = {
         "basis": "verified_original_source_rectangle",
         "document_id_origin": "internal_source_range_hash",
         "regions": proof,
     }
+    if isinstance(data.get("can_slice"), bool):
+        references["_source_coverage"]["can_slice"] = data["can_slice"]
+    if missing:
+        references["_source_coverage"]["pending_confirmation"] = [
+            {"sheet": sheet, "cell": cell} for sheet, cell in missing
+        ]
     return {"physical_regions": decoded, "logical_documents": documents, "layout_references": []}
+
+
+def boundary_left_for_confirmation(classification: dict) -> bool:
+    """True when covered regions were kept and some source cells still need a person."""
+    return any(
+        (item.get("source_coverage") or {}).get("pending_confirmation")
+        for item in classification.get("input_summaries") or []
+    )

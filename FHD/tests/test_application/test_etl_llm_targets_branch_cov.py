@@ -150,11 +150,19 @@ def test_llm_assist_mode_and_limits(monkeypatch):
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "5")
     assert llm_assist.etl_llm_timeout_seconds() == 5.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "99")
-    assert llm_assist.etl_llm_timeout_seconds() == 12.0
+    assert llm_assist.etl_llm_timeout_seconds() == 99.0
+    monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "999")
+    assert llm_assist.etl_llm_timeout_seconds() == 180.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "-1")
     assert llm_assist.etl_llm_timeout_seconds() == 1.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "abc")
     assert llm_assist.etl_llm_timeout_seconds() == 6.0
+    monkeypatch.delenv("FHD_ETL_IMPORT_LLM_TIMEOUT", raising=False)
+    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 180.0
+    monkeypatch.setenv("FHD_ETL_IMPORT_LLM_TIMEOUT", "30")
+    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 30.0
+    monkeypatch.setenv("FHD_ETL_IMPORT_LLM_TIMEOUT", "999")
+    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 180.0
 
     monkeypatch.delenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", raising=False)
     assert llm_assist.etl_row_advice_limit() == 20
@@ -164,6 +172,225 @@ def test_llm_assist_mode_and_limits(monkeypatch):
     assert llm_assist.etl_row_advice_limit() == 100
     monkeypatch.setenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", "bad")
     assert llm_assist.etl_row_advice_limit() == 20
+
+
+def test_degradation_log_keeps_raw_head_and_tail(caplog):
+    import logging
+
+    from app.application.elt.llm_assist_runtime import clip_model_raw, log_etl_llm_degradation
+
+    raw = "HEAD" + ("中" * 3000) + "TAIL"
+    shown = clip_model_raw(raw)
+    assert shown.startswith("HEAD") and shown.endswith("TAIL") and len(shown) <= 2000
+    assert clip_model_raw("short") == "short"
+
+    class Failed(Exception):
+        def __init__(self) -> None:
+            super().__init__("structured output failed")
+            self.last_errors = ["输出中未找到有效 JSON object"]
+            self.last_raw = raw
+
+    caplog.set_level(logging.INFO, logger="app.application.elt.llm_assist")
+    log = logging.getLogger("app.application.elt.llm_assist")
+    log_etl_llm_degradation(log, code="ELT_LLM_UNAVAILABLE", lane="database", exc=Failed())
+    line = caplog.text
+    assert "last_raw=" in line and "HEAD" in line and "TAIL" in line and "middle omitted" in line
+
+
+def test_archived_sheet_import_uses_full_sheet_timeout(monkeypatch):
+    from app.application.elt import llm_assist
+
+    seen: dict = {}
+
+    def capture(*args, **kwargs):
+        seen.clear()
+        seen["messages"] = args[0] if args else kwargs.get("messages")
+        seen.update(kwargs)
+        return llm_assist.LlmAssistResult(data={"rows": [], "title": "", "content": ""})
+
+    monkeypatch.setattr(llm_assist, "_complete", capture)
+    monkeypatch.delenv("FHD_ETL_IMPORT_LLM_TIMEOUT", raising=False)
+    llm_assist.advise_business_import("sheet")
+    assert seen["lane"] == "database"
+    assert seen["max_tokens"] == 8192
+    assert seen["max_repairs"] == 0
+    assert seen["timeout_seconds"] == 180.0
+    prompt = seen["messages"][0]["content"]
+    assert "每一张表都要扫" in prompt and "不要在第一张送货单结束后停止" in prompt
+    assert "借还台账和测算表不要导入" in prompt
+    assert "JSON 必须是单个对象、以 rows 开头、不要 markdown 代码块、不要解释文字。" in prompt
+    llm_assist.advise_knowledge_import("sheet")
+    assert seen["lane"] == "knowledge"
+    assert seen["timeout_seconds"] == 180.0
+
+
+def test_business_import_asks_again_only_for_a_stored_row_without_coordinates(monkeypatch):
+    from app.application.elt import llm_assist
+
+    calls = []
+
+    def complete(messages, **kwargs):
+        calls.append(messages[-1]["content"])
+        if len(calls) == 1:
+            return llm_assist.LlmAssistResult(
+                used_llm=True,
+                data={
+                    "rows": [
+                        {
+                            "product_name": "螺母",
+                            "quantity": "5",
+                            "source_sheet": "隐藏",
+                            "source_row": "9",
+                        }
+                    ]
+                },
+            )
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={
+                "rows": [
+                    {
+                        "product_name": "螺母",
+                        "quantity": "5",
+                        "source_sheet": "送货",
+                        "source_row": "2",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(llm_assist, "_complete", complete)
+    result = llm_assist.advise_business_import("# sheet:送货\nR2 | 螺母 | 5")
+    assert len(calls) == 2
+    assert result.data["rows"][0]["source_sheet"] == "送货"
+    assert result.data["rows"][0]["source_row"] == "2"
+
+
+def test_business_import_asks_again_when_purchase_unit_is_off_sheet(monkeypatch):
+    from app.application.elt import llm_assist
+
+    calls = []
+
+    def complete(messages, **kwargs):
+        calls.append(messages[-1]["content"])
+        if len(calls) == 1:
+            return llm_assist.LlmAssistResult(
+                used_llm=True,
+                data={
+                    "rows": [
+                        {
+                            "purchase_unit": "外客",
+                            "product_name": "螺母",
+                            "quantity": "5",
+                            "source_sheet": "送货",
+                            "source_row": "2",
+                        }
+                    ]
+                },
+            )
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={
+                "rows": [
+                    {
+                        "purchase_unit": "本客",
+                        "product_name": "螺母",
+                        "quantity": "5",
+                        "source_sheet": "送货",
+                        "source_row": "2",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(llm_assist, "_complete", complete)
+    result = llm_assist.advise_business_import("# sheet:送货\nR2 | 本客 | 螺母 | 5")
+    assert len(calls) == 2
+    assert "其他工作表" in calls[1]
+    assert result.data["rows"][0]["purchase_unit"] == "本客"
+    assert "unit_in_source" not in result.data["rows"][0]
+
+
+def test_business_import_asks_again_for_a_sheet_it_did_not_cite(monkeypatch):
+    from app.application.elt import llm_assist
+
+    calls = []
+
+    def complete(messages, **kwargs):
+        calls.append(messages[-1]["content"])
+        if len(calls) == 1:
+            return llm_assist.LlmAssistResult(
+                used_llm=True,
+                data={
+                    "rows": [
+                        {
+                            "purchase_unit": "本客",
+                            "product_name": "螺母",
+                            "quantity": "5",
+                            "source_sheet": "送货",
+                            "source_row": "2",
+                        }
+                    ]
+                },
+            )
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={
+                "rows": [
+                    {
+                        "purchase_unit": "本客",
+                        "product_name": "螺母",
+                        "quantity": "5",
+                        "source_sheet": "送货",
+                        "source_row": "2",
+                    },
+                    {
+                        "purchase_unit": "本客",
+                        "product_name": "弹垫",
+                        "quantity": "2",
+                        "source_sheet": "出货",
+                        "source_row": "3",
+                    },
+                ]
+            },
+        )
+
+    monkeypatch.setattr(llm_assist, "_complete", complete)
+    text = "# sheet:送货\nR2 | 本客 | 螺母 | 5\n# sheet:出货\nR3 | 本客 | 弹垫 | 2"
+    result = llm_assist.advise_business_import(text)
+    assert len(calls) == 2
+    assert "出货" in calls[1]
+    sheets = {row["source_sheet"] for row in result.data["rows"]}
+    assert sheets == {"送货", "出货"}
+
+
+def test_business_import_marks_a_unit_the_model_will_not_place(monkeypatch):
+    from app.application.elt import llm_assist
+    from app.application.elt.candidate_table import dataset_from_business_rows
+
+    def complete(messages, **kwargs):
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={
+                "rows": [
+                    {
+                        "purchase_unit": "外客",
+                        "product_name": "螺母",
+                        "quantity": "5",
+                        "source_sheet": "送货",
+                        "source_row": "2",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(llm_assist, "_complete", complete)
+    result = llm_assist.advise_business_import("# sheet:送货\nR2 | 螺母 | 5")
+    assert result.data["rows"][0]["unit_in_source"] == "0"
+    dataset = dataset_from_business_rows(result.data["rows"])
+    assert dataset is not None
+    codes = [item["code"] for item in dataset.rows[0].provenance["validation_issues"]]
+    assert "ELT_PURCHASE_UNIT_NOT_IN_SOURCE" in codes
 
 
 def test_llm_assist_public_metadata():
@@ -2202,6 +2429,21 @@ def test_export_xlsx_uses_committed_template(tmp_path, monkeypatch):
     book.save(path)
     book.close()
     dataset = read_candidate_table(path)
+    from app.application.elt.candidate_table import (
+        confirmed_business_table,
+        dataset_from_document_text,
+    )
+
+    form = tmp_path / "form.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["产品编号", "日期："])
+    sheet.append(["P-1", 1])
+    book.save(form)
+    book.close()
+    assert confirmed_business_table(form) is None
+    document = dataset_from_document_text("生产单正文", "生产单")
+    assert document.headers == ["内容", "来源键"] and len(document.rows) == 1
     assert [row.values["客户"] for row in dataset.rows] == ["甲公司", "乙公司"]
     assert dataset.rows[1].values["产品"] == "=CMD|probe"
     assert "本合同一式两份，双方签字盖章后生效" in dataset.source_features["business_notes"]

@@ -157,3 +157,56 @@ def test_record_response_stores_actual_model_and_failover_from():
     assert entry["failover_from"] == "doubao/deepseek-r1-250120"
     assert entry["http_status"] == 200
     assert base64.b64decode(entry["response_base64"]) == body
+
+
+def test_output_schema_wrapper_is_unwrapped_before_validation():
+    wrapped = {
+        "output_schema": {
+            "documents": [
+                {
+                    "ranges": [
+                        {
+                            "sheet_name": "出货",
+                            "row_start": 1,
+                            "row_end": 2,
+                            "column_start": 1,
+                            "column_end": 2,
+                        }
+                    ],
+                    "reason": "一张送货单",
+                }
+            ],
+            "reason": "按表拆开",
+        }
+    }
+    coerced = coerce_payload_document_labels(wrapped)
+    assert "output_schema" not in coerced
+    assert len(coerced["documents"]) == 1
+    assert coerced["documents"][0]["ranges"][0]["sheet_name"] == "出货"
+
+
+def test_document_sheet_name_is_dropped_when_it_repeats_the_ranges():
+    payload = {
+        "documents": [
+            {
+                "sheet_name": "出货",
+                "ranges": [
+                    {
+                        "sheet_name": "出货",
+                        "row_start": 1,
+                        "row_end": 2,
+                        "column_start": 1,
+                        "column_end": 2,
+                    }
+                ],
+                "reason": "一张送货单",
+            }
+        ],
+        "can_slice": True,
+    }
+    coerced = coerce_payload_document_labels(payload)
+    assert "sheet_name" not in coerced["documents"][0]
+    assert coerced["can_slice"] is True
+    payload["documents"][0]["sheet_name"] = "另一张"
+    kept = coerce_payload_document_labels(payload)
+    assert kept["documents"][0]["sheet_name"] == "另一张"

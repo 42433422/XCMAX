@@ -161,10 +161,23 @@ class TargetConfigServiceMixin:
         }:
             raise EltNotFound("导出文件")
         receipt = load_json(run.receipt_json, {})
-        file_name = Path(str(receipt.get("file_name") or "")).name
         root = (Path(get_app_data_dir()).resolve() / "etl" / "exports").resolve()
-        path = (root / file_name).resolve()
-        if root not in path.parents or not path.is_file():
+        file_name = Path(str(receipt.get("file_name") or "")).name
+        path = (root / file_name).resolve() if file_name else root / "_"
+        if run.target_type == "shipment_records" and (
+            not file_name or root not in path.parents or not path.is_file()
+        ):
+            from app.application.elt.shipment_layout_fill import write_committed_shipment_workbook
+
+            produced = write_committed_shipment_workbook(db, run)
+            if not produced:
+                raise EltNotFound("导出文件")
+            receipt.update(produced)
+            run.receipt_json = dump_json(receipt)
+            db.commit()
+            file_name = Path(str(produced.get("file_name") or "")).name
+            path = (root / file_name).resolve()
+        if not file_name or root not in path.parents or not path.is_file():
             raise EltNotFound("导出文件")
         return path
 

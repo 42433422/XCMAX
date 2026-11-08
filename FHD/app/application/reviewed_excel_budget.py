@@ -5,8 +5,8 @@ from collections import deque
 
 from app.application.elt.errors import ReviewedExcelError
 
-BUDGET_VERSION = "full-request-plan-v12-20000-cells"
-MAX_REQUEST_BYTES = 3_840_000  # aligned with MAX_MODEL_TEXT_BYTES for ~20000-cell packs
+BUDGET_VERSION = "full-request-plan-v13-2500-cells"
+MAX_REQUEST_BYTES = 640_000  # MAX_MODEL_TEXT_BYTES plus prompt and evidence-id schema
 MAX_OUTPUT_TOKENS = 16_000
 MAX_CLASSIFICATION_BATCHES = 99  # Reserve one of the 100 audit slots for grouping.
 
@@ -241,4 +241,27 @@ def template_timeout_seconds() -> float:
         raise ModelRequestNotSent("模板模型超时配置无效，未调用模型") from None
     if not math.isfinite(value) or not 1 <= value <= 180:
         raise ModelRequestNotSent("模板模型超时必须为1至180秒，未调用模型")
+    return value
+
+
+def template_first_byte_seconds() -> float:
+    """Deadline for the first market event; distinct from the idle wait between events.
+
+    A market without the accepted status event sends nothing until the model answers,
+    so the default is the template timeout; only an explicit setting shortens it.
+    """
+    import math
+    import os
+
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+
+    raw = os.environ.get("FHD_TEMPLATE_LLM_FIRST_BYTE_SECONDS", "").strip()
+    if not raw:
+        return template_timeout_seconds()
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ModelRequestNotSent("模板模型首包超时配置无效，未调用模型") from None
+    if not math.isfinite(value) or not 5 <= value <= 180:
+        raise ModelRequestNotSent("模板模型首包超时必须为5至180秒，未调用模型")
     return value

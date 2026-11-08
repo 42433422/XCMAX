@@ -3,42 +3,9 @@
 from __future__ import annotations
 
 import re
-from datetime import date, timedelta
 from decimal import Decimal
 
 from app.application.elt.errors import EltError
-
-
-def business_period(raw: str) -> tuple[date, date]:
-    """Retain year/month precision; never infer a business period from clock time."""
-    text = raw.strip()
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}T00:00:00(?:\.0+)?", text):
-        text = text.split("T", 1)[0]
-    chinese_period = text.endswith(("年", "月"))
-    text = text.replace("年", "-").replace("月", "-").replace("日", "")
-    if chinese_period:
-        text = text.removesuffix("-")
-    match = re.fullmatch(
-        r"([0-9]{4})(?:([-/])([0-9]{1,2})(?:\2([0-9]{1,2}))?)?",
-        text,
-    )
-    if match is None:
-        raise EltError(
-            "ELT_PRICE_PERIOD_INVALID", "业务期间须来自明确的年、年月或年月日；不能用上传时间代替"
-        )
-    try:
-        year = int(match[1])
-        month, day = match[3], match[4]
-        start = date(year, int(month or 1), int(day or 1))
-        if day:
-            end = start + timedelta(days=1)
-        elif month:
-            end = date(year + (int(month) == 12), int(month) % 12 + 1, 1)
-        else:
-            end = date(year + 1, 1, 1)
-    except (ValueError, OverflowError):
-        raise EltError("ELT_PRICE_PERIOD_INVALID", "业务期间不是有效的日历日期") from None
-    return start, end
 
 
 def price_value(raw: str) -> str:

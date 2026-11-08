@@ -16,7 +16,11 @@ from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.print_settings import PrintArea
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.application.elt.errors import ReviewedExcelError
+from app.application.elt.errors import (
+    ModelAnswerRejected,
+    ModelAnswerTruncated,
+    ReviewedExcelError,
+)
 from app.application.reviewed_excel_evidence import bounded_range
 from app.application.reviewed_excel_formula_cells import (
     content_bounds,
@@ -28,7 +32,7 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_UNPACKED = 100 * 1024 * 1024
-# Full-workbook nonempty-cell budget; per-sheet structural sampling is separate.
+# Equals the per-sheet structural-sampling extent, so any fully read sheet fits.
 MAX_CELLS = 100_000
 
 
@@ -40,8 +44,8 @@ from app.application.reviewed_excel_classification import (
 )
 
 
-def _validate_template_schema(schema: dict, payload: object) -> bool:
-    """Validate the complete schema subset used by template requests; fail closed otherwise."""
+def _template_schema_problem(schema: dict, payload: object) -> str:
+    """First violation of the schema subset used by template requests; fail closed otherwise."""
     permitted = {
         "type",
         "required",
@@ -60,7 +64,7 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
     def supported(rule, depth=0):
         if not isinstance(rule, dict) or depth > 16 or set(rule) - permitted:
             return False
-        if rule.get("type") not in {"object", "array", "string", "integer"}:
+        if rule.get("type") not in {"object", "array", "string", "integer", "boolean"}:
             return False
         props = rule.get("properties", {})
         if not isinstance(props, dict) or any(
@@ -84,48 +88,67 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
             for key in ("minItems", "maxItems", "minLength", "maxLength", "minimum", "maximum")
         )
 
-    def matches(rule, value):
+    def problem(rule, value, path):
+        """The first violated rule as a path, or "" when the value matches."""
         kind = rule["type"]
         if kind == "object":
             if not isinstance(value, dict):
-                return False
+                return f"{path} 应为对象"
             properties = rule.get("properties", {})
-            if any(key not in value for key in rule.get("required", [])):
-                return False
-            if rule.get("additionalProperties") is False and any(
-                key not in properties for key in value
-            ):
-                return False
-            if any(
-                key in properties and not matches(properties[key], item)
-                for key, item in value.items()
-            ):
-                return False
-        elif kind == "array":
-            if (
-                not isinstance(value, list)
-                or len(value) < rule.get("minItems", 0)
-                or len(value) > rule.get("maxItems", len(value))
-            ):
-                return False
-            if "items" in rule and any(not matches(rule["items"], item) for item in value):
-                return False
-        elif kind == "integer":
+            missing = [key for key in rule.get("required", []) if key not in value]
+            if missing:
+                return f"{path} 缺少 {missing[0]}"
+            if rule.get("additionalProperties") is False and set(value) - set(properties):
+                return f"{path} 含未定义的字段"
+            for key, item in value.items():
+                found = key in properties and problem(properties[key], item, f"{path}/{key}")
+                if found:
+                    return found
+            return ""
+        if kind == "array":
+            if not isinstance(value, list):
+                return f"{path} 应为数组"
+            if len(value) < rule.get("minItems", 0):
+                return f"{path} 少于 {rule['minItems']} 项"
+            if len(value) > rule.get("maxItems", len(value)):
+                return f"{path} 有 {len(value)} 项，超过上限 {rule['maxItems']}"
+            for index, item in enumerate(value):
+                found = "items" in rule and problem(rule["items"], item, f"{path}[{index}]")
+                if found:
+                    return found
+            return ""
+        if kind == "boolean":
+            return "" if type(value) is bool else f"{path} 应为布尔值"
+        if kind == "integer":
             if (
                 type(value) is not int
                 or value < rule.get("minimum", value)
                 or value > rule.get("maximum", value)
             ):
-                return False
-        elif (
-            not isinstance(value, str)
-            or len(value) < rule.get("minLength", 0)
-            or len(value) > rule.get("maxLength", len(value))
+                return f"{path} 应为范围内整数"
+        elif not isinstance(value, str) or not (
+            rule.get("minLength", 0) <= len(value) <= rule.get("maxLength", len(value))
         ):
-            return False
-        return "enum" not in rule or value in rule["enum"]
+            return f"{path} 应为长度合规的字符串"
+        if "enum" in rule and value not in rule["enum"]:
+            return f"{path} 不是提供的取值之一"
+        return ""
 
-    return bool(supported(schema) and matches(schema, payload))
+    if not supported(schema):
+        return "输出格式定义不受支持"
+    first = problem(schema, payload, "$")
+    if not first or not isinstance(payload, dict) or schema.get("type") != "object":
+        return str(first)
+    # One violation per top-level field, so a repair round sees every failing part.
+    properties = schema.get("properties", {})
+    parts = [
+        problem(properties[key], payload[key], f"$/{key}") for key in properties if key in payload
+    ]
+    return "；".join(item for item in parts if item) or first
+
+
+def _validate_template_schema(schema: dict, payload: object) -> bool:
+    return not _template_schema_problem(schema, payload)
 
 
 def configured_template_llm_provider() -> str:
@@ -138,6 +161,120 @@ def template_llm_model_label() -> str:
     return "platform-default"
 
 
+def _coerce_compatibility_payload(data, raw_content: str):
+    """Accept a compatibility answer wrapped or padded by the model."""
+    import json
+
+    if not isinstance(data, dict):
+        text = str(raw_content or "").strip()
+        start, end = text.find("{"), text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                parsed = None
+            data = parsed if isinstance(parsed, dict) else data
+    if not isinstance(data, dict):
+        return data
+    wrapped = data.get("output_schema")
+    if isinstance(wrapped, dict) and ("can_slice" in wrapped or "ranges" in wrapped):
+        data = wrapped
+    ranges = data.get("ranges")
+    if isinstance(ranges, str):
+        ranges = [ranges]
+    cleaned = []
+    if isinstance(ranges, list):
+        for item in ranges:
+            if isinstance(item, str):
+                cleaned.append(item)
+            elif isinstance(item, dict) and isinstance(item.get("range"), str):
+                cleaned.append(item["range"])
+            else:
+                return data
+    else:
+        return data
+    flag = data.get("can_slice")
+    if isinstance(flag, str) and flag.strip().lower() in {"true", "false"}:
+        flag = flag.strip().lower() == "true"
+    if isinstance(flag, bool):
+        return {"can_slice": flag, "ranges": cleaned}
+    return data
+
+
+def _coerce_sheet_name_payload(data, raw_content: str):
+    """Accept a sheet-name reply that is a bare array or uses extra fields."""
+    import json
+
+    if data is None:
+        text = raw_content.strip()
+        start = text.find("[")
+        end = text.rfind("]")
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, list):
+                data = {"sheets": parsed}
+    if isinstance(data, list):
+        data = {"sheets": data}
+    if not isinstance(data, dict) or not isinstance(data.get("sheets"), list):
+        return data if isinstance(data, dict) else None
+    cleaned = []
+    for item in data["sheets"]:
+        if not isinstance(item, dict):
+            continue
+        sheet = (
+            item.get("sheet")
+            or item.get("sheet_name")
+            or item.get("工作表")
+            or item.get("表名")
+            or item.get("表")
+        )
+        name = item.get("name") or item.get("名称") or item.get("title")
+        kind = item.get("type") or item.get("类型") or ""
+        if not str(name or "").strip():
+            continue
+        cleaned.append(
+            {
+                "sheet": str(sheet or "").strip(),
+                "name": str(name).strip(),
+                "type": str(kind or "").strip(),
+            }
+        )
+    return {"sheets": cleaned}
+
+
+# Catch-all for the helper thread so SystemExit/KeyboardInterrupt still reach
+# the caller; a direct ``except BaseException`` is forbidden by the owned gate.
+_THREAD_WORKER_ERRORS: tuple[type[BaseException], ...] = (BaseException,)
+
+
+def _run_coroutine(factory):
+    """Run one provider call. asyncio.run cannot start inside a live event loop."""
+    import asyncio
+    import threading
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(factory())
+    box: dict[str, Any] = {}
+
+    def worker() -> None:
+        try:
+            box["value"] = asyncio.run(factory())
+        except _THREAD_WORKER_ERRORS as exc:
+            box["error"] = exc
+
+    thread = threading.Thread(target=worker, name="template-llm")
+    thread.start()
+    thread.join()
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
 def _template_platform_complete(
     messages: list[dict], schema: dict, max_tokens: int, *, owner_id: int | None = None
 ):
@@ -145,7 +282,13 @@ def _template_platform_complete(
     import asyncio
     import logging
 
-    from app.application.reviewed_excel_audit import ModelRequestNotSent, response_capture
+    import httpx
+
+    from app.application.reviewed_excel_audit import (
+        ModelRequestNotSent,
+        note_answer,
+        response_capture,
+    )
     from app.infrastructure.modstore_transport import MarketModelError
     from app.utils.operational_errors import BOUNDARY_ERRORS, INFRA_TRANSIENT
 
@@ -175,32 +318,42 @@ def _template_platform_complete(
                 raise ModelRequestNotSent("平台模型未登录或不可用；未调用模型")
         except INFRA_TRANSIENT:
             raise ModelRequestNotSent("平台模型初始化失败；未调用模型") from None
+        from app.application.reviewed_excel_audit import current_call_id
+        from app.application.reviewed_excel_budget import template_first_byte_seconds
+
         audit_callback = response_capture()
+        call_id = current_call_id()
+        first_byte_seconds = min(template_first_byte_seconds(), timeout_seconds)
         seen = {"on": False}
 
         def _still_processing() -> None:
             seen["on"] = True
 
-        async def call():
+        async def attempt():
+            seen["on"] = False
             task = asyncio.create_task(
                 provider.chat_completion(
                     messages,
                     temperature=0.0,
                     max_tokens=max_tokens,
                     _processing_status=_still_processing,
+                    **({"client_request_id": call_id} if call_id else {}),
                     **(
                         {"_reviewed_excel_audit_response": audit_callback} if audit_callback else {}
                     ),
                 )
             )
             try:
+                # The first event has its own deadline; later events reset an idle wait.
+                wait = first_byte_seconds
                 while True:
-                    done, _pending = await asyncio.wait({task}, timeout=timeout_seconds)
+                    done, _pending = await asyncio.wait({task}, timeout=wait)
                     if task in done:
                         return task.result()
                     if not seen["on"]:
                         break
                     seen["on"] = False
+                    wait = timeout_seconds
                 task.cancel()
                 try:
                     await task
@@ -211,48 +364,111 @@ def _template_platform_complete(
                 if not task.done():
                     task.cancel()
 
+        async def call():
+            try:
+                return await attempt()
+            except (TimeoutError, httpx.TransportError) as exc:
+                from app.application.elt.errors import never_connected
+
+                if not call_id or never_connected(exc) or not hasattr(provider, "lookup_call"):
+                    raise
+                lost = exc
+            from app.application.reviewed_excel_audit import recovery_action
+
+            # Same-key recovery: only a market that confirms idempotency may see it again.
+            for _poll in range(max(1, int(timeout_seconds // 10))):
+                action = recovery_action({"call_id": call_id}, await provider.lookup_call(call_id))
+                if action == "resend":
+                    return await attempt()
+                if action != "wait":
+                    break
+                await asyncio.sleep(10)
+            raise lost
+
         try:
-            response = asyncio.run(call())
+            response = _run_coroutine(call)
             choice = (response or {}).get("choices", [])[0]
             finish = choice.get("finish_reason")
+            raw_content = str((choice.get("message") or {}).get("content") or "")
+            note_answer(raw_content)
+            if finish == "length":
+                raise ModelAnswerTruncated("模型输出达到长度上限，已截断", answer=raw_content)
             if finish not in {None, "stop"}:
-                raise ReviewedExcelError("incomplete")
-            data = extract_json(str((choice.get("message") or {}).get("content") or ""))
-            if data is not None:
+                err = ModelAnswerRejected("模型输出未正常结束", answer=raw_content)
+                err.finish_reason = finish
+                raise err
+            data = extract_json(raw_content)
+            if schema.get("required") == ["sheets"]:
+                data = _coerce_sheet_name_payload(data, raw_content)
+            elif schema.get("required") == ["can_slice", "ranges"]:
+                data = _coerce_compatibility_payload(data, raw_content)
+            elif data is not None:
                 from app.application.reviewed_excel_partition import coerce_payload_document_labels
 
                 data = coerce_payload_document_labels(data)
-            if data is None or not _validate_template_schema(schema, data):
-                raise ReviewedExcelError("invalid")
+            violation = "不是 JSON" if data is None else _template_schema_problem(schema, data)
+            if violation:
+                logging.getLogger(__name__).info(
+                    "template model payload rejected finish_reason=%s chars=%s violation=%s",
+                    finish,
+                    len(raw_content),
+                    violation[:80],
+                )
+                # The path names schema keys and positions only, never answer text.
+                raise ModelAnswerRejected(
+                    f"模型答案不符合输出格式：{violation[:200]}", answer=raw_content
+                )
             model = str((response or {}).get("model") or template_llm_model_label())
             provider_name = str((response or {}).get("provider") or "platform")
             return llm_assist.LlmAssistResult(
-                used_llm=True, model=model, data=data, provider=provider_name
+                used_llm=True,
+                model=model,
+                data=cast(dict[str, Any], data),
+                provider=provider_name,
+                answer=raw_content,
             )
         except ModelRequestNotSent:
+            raise
+        except ReviewedExcelError as exc:
+            logging.getLogger(__name__).info(
+                "template platform call failed: %s finish_reason=%s detail=%s",
+                type(exc).__name__,
+                getattr(exc, "finish_reason", None) or "unreported",
+                str(exc.public_message).replace("\n", " ")[:160],
+            )
             raise
         except (MarketModelError, ValueError) as exc:
             from app.application.elt.errors import provider_http_status
 
             status = provider_http_status(exc)
-            if status in {400, 401, 403, 404} or isinstance(exc, MarketModelError):
+            logging.getLogger(__name__).info(
+                "template platform call failed: %s finish_reason=unreported detail=%s",
+                type(exc).__name__,
+                str(exc).replace("\n", " ")[:160],
+            )
+            if status in {400, 401, 402, 403, 404} or isinstance(exc, MarketModelError):
                 raise ReviewedExcelError(
                     str(exc),
                     provider_status=status or getattr(exc, "status_code", None),
                 ) from None
-            logging.getLogger(__name__).info("template platform call failed: BOUNDARY")
             raise ReviewedExcelError(
                 "模型调用失败或结果不完整，可能已产生费用；未自动重试"
             ) from None
         except BOUNDARY_ERRORS as exc:
-            from app.application.elt.errors import provider_http_status
+            from app.application.elt.errors import never_connected, provider_http_status
 
             status = provider_http_status(exc)
-            if status in {400, 401, 403, 404}:
+            logging.getLogger(__name__).info(
+                "template platform call failed: %s finish_reason=unreported detail=%s",
+                type(exc).__name__,
+                str(exc).replace("\n", " ")[:160],
+            )
+            if never_connected(exc):
+                raise ModelRequestNotSent("模型服务连接未建立；未调用模型") from None
+            if status in {400, 401, 402, 403, 404}:
                 raise ReviewedExcelError(
                     "当前模型或模型服务入口不可用", provider_status=status
                 ) from None
-            logging.getLogger(__name__).info("template platform call failed: BOUNDARY")
             raise ReviewedExcelError(
                 "模型调用失败或结果不完整，可能已产生费用；未自动重试"
             ) from None
@@ -347,12 +563,6 @@ def _sheet_axis(value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         return 0
     return value if value > 0 else 0
-
-
-def _sheet_cell_extent(sheet: object) -> int:
-    return _sheet_axis(getattr(sheet, "max_row", None)) * _sheet_axis(
-        getattr(sheet, "max_column", None)
-    )
 
 
 def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
@@ -900,12 +1110,15 @@ def derive_document_workbook(
             saved_sheet = checked[sheet_name]
             if not isinstance(saved_sheet, Worksheet):
                 raise ReviewedExcelError("派生对象不是工作表")
+            from app.application.reviewed_excel_formula_cells import same_cell_value
+
             if any(
-                saved_sheet[address].value != value for address, value in formula_values.items()
+                not same_cell_value(saved_sheet[address].value, value)
+                for address, value in formula_values.items()
             ):
                 raise ReviewedExcelError("派生公式写出后核验失败")
             if support_sheet and any(
-                checked[support_sheet][address].value != value
+                not same_cell_value(checked[support_sheet][address].value, value)
                 for address, value in support_values.items()
             ):
                 raise ReviewedExcelError("支撑数据写出后核验失败")
@@ -988,11 +1201,11 @@ def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) ->
     inspection = inspect_workbook(body)
     if inspection.get("fidelity_skipped"):
         raise ReviewedExcelError("工作簿含尚未核验的保真部件，仅可分类，不能清理文件")
-    from app.application.reviewed_excel_range_objects import require_cleanable_range_metadata
+    from app.application.reviewed_excel_raw_parts import preserved_filters, restore_filters
 
     if inspection["sha256"] != expected_sha256:
         raise ReviewedExcelError("文件与预览不一致，请重新预览")
-    require_cleanable_range_metadata(body)
+    kept_filters = preserved_filters(body)
     allowed = {
         (item["sheet"], item["cell"]) for item in inspection["cells"] if item["kind"] == "review"
     }
@@ -1037,7 +1250,7 @@ def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) ->
             result = restore_drawing_parts(body, result, inspection["drawing_evidence"])
         if inspection["read_only_print_areas"]:
             result = _restore_print_areas(result, inspection["read_only_print_areas"])
-        return result
+        return restore_filters(result, kept_filters)
     finally:
         wb.close()
 
@@ -1182,6 +1395,7 @@ def refine_proposal(
 ) -> dict:
     """Use the configured platform (or mapped) template LLM for a bounded revision."""
     import json
+    import logging
 
     from app.application.elt.llm_session_provider import bind_etl_llm_owner, reset_etl_llm_owner
 
@@ -1287,54 +1501,102 @@ def refine_proposal(
             ),
         },
     ]
-    token = bind_etl_llm_owner(owner_id)
-    try:
-        result = _template_llm_complete(messages, schema, 1400, owner_id=owner_id)
-    finally:
-        reset_etl_llm_owner(token)
-    if not result.used_llm or result.degraded:
-        state = (
-            "模型调用失败" if result.used_llm or result.degraded else "模型未调用（未配置或已关闭）"
-        )
-        raise ReviewedExcelError(f"{state}，自然语言修改不可用；原候选未改变")
+    from app.application.reviewed_excel_audit import REPAIR_ROUNDS, ask_until_valid
+
     allowed = {(c["sheet"], c["cell"]) for c in bounded if c["kind"] != "formula"}
     protected = {(c["sheet"], c["cell"]) for c in base["protected"]}
-    if initial and (not isinstance(result.data, dict) or set(result.data) != {"candidates"}):
-        raise ReviewedExcelError("模型返回格式无效，原候选未改变")
-    answers = result.data.get("candidates") if initial else [result.data]
-    if not isinstance(answers, list) or len(answers) != (3 if initial else 1):
-        raise ReviewedExcelError("模型未返回所需候选，原候选未改变")
-    validated: list[dict[str, Any]] = []
-    for answer in answers:
-        if (
-            not isinstance(answer, dict)
-            or set(answer) != {"clear", "reason"}
-            or not isinstance(answer.get("clear"), list)
-            or not isinstance(answer.get("reason"), str)
-        ):
+    instance = {pair for pair in allowed - protected if pair in bounded_coordinates}
+    from app.application.reviewed_excel_budget import MAX_OUTPUT_TOKENS
+
+    # Worst case: every clearable cell listed in every plan, so a length stop is a defect.
+    worst = (3 if initial else 1) * (len(allowed - protected) * 30 + 200) + 600
+    budget = {
+        "tokens": min(MAX_OUTPUT_TOKENS, max(1400, worst)),
+        "instance_asked": False,
+        "model": "",
+        "asks": 0,
+    }
+
+    from app.application.reviewed_excel_audit import call_key, current_call_id
+
+    base_key = current_call_id()
+
+    def ask(turn):
+        budget["asks"] += 1
+        # Each turn its own key: a recovery rerun replays earlier turns instead of rebilling.
+        with call_key(f"{base_key}-a{budget['asks']}" if base_key else None):
+            result = _template_llm_complete(turn, schema, budget["tokens"], owner_id=owner_id)
+        if not result.used_llm or result.degraded:
+            state = (
+                "模型调用失败"
+                if result.used_llm or result.degraded
+                else "模型未调用（未配置或已关闭）"
+            )
+            raise ReviewedExcelError(f"{state}，自然语言修改不可用；原候选未改变")
+        budget["model"] = result.model
+        return result
+
+    def judge(result):
+        if initial and (not isinstance(result.data, dict) or set(result.data) != {"candidates"}):
             raise ReviewedExcelError("模型返回格式无效，原候选未改变")
-        pairs = []
-        for item in answer["clear"]:
+        answers = result.data.get("candidates") if initial else [result.data]
+        if not isinstance(answers, list) or len(answers) != (3 if initial else 1):
+            raise ReviewedExcelError("模型未返回所需候选，原候选未改变")
+        validated: list[dict[str, Any]] = []
+        for answer in answers:
             if (
-                not isinstance(item, dict)
-                or set(item) != {"sheet", "cell"}
-                or not isinstance(item["sheet"], str)
-                or not isinstance(item["cell"], str)
+                not isinstance(answer, dict)
+                or set(answer) != {"clear", "reason"}
+                or not isinstance(answer.get("clear"), list)
+                or not isinstance(answer.get("reason"), str)
             ):
-                raise ReviewedExcelError("模型返回坐标无效，原候选未改变")
-            pair = (item["sheet"], item["cell"])
-            if pair not in allowed or pair in protected or pair in pairs:
-                raise ReviewedExcelError("模型建议包含未提供或受保护单元格，原候选未改变")
-            pairs.append(pair)
-        index = len(validated) + 1
-        validated.append(
-            {
-                "id": f"model_initial_{index}" if initial else "model_revision",
-                "label": f"模型候选 {index}" if initial else "模型反馈候选",
-                "clear": answer["clear"],
-                "explanation": answer["reason"][:300],
-            }
+                raise ReviewedExcelError("模型返回格式无效，原候选未改变")
+            kept, pairs, dropped = [], [], 0
+            for item in answer["clear"]:
+                pair = (item.get("sheet"), item.get("cell")) if isinstance(item, dict) else None
+                if (
+                    pair is None
+                    or set(item) != {"sheet", "cell"}
+                    or pair not in allowed
+                    or pair in protected
+                    or pair in pairs
+                ):
+                    dropped += 1
+                    continue
+                pairs.append(pair)
+                kept.append({"sheet": item["sheet"], "cell": item["cell"]})
+            if dropped:
+                logging.getLogger(__name__).info(
+                    "template candidate dropped %s cells outside the supplied range", dropped
+                )
+            index = len(validated) + 1
+            validated.append(
+                {
+                    "id": f"model_initial_{index}" if initial else "model_revision",
+                    "label": f"模型候选 {index}" if initial else "模型反馈候选",
+                    "clear": kept,
+                    "explanation": answer["reason"][:300],
+                }
+            )
+        cleared = max(
+            len({(c["sheet"], c["cell"]) for c in v["clear"]} & instance) for v in validated
         )
+        ask_instance = initial and not budget["instance_asked"] and budget["asks"] <= REPAIR_ROUNDS
+        if ask_instance and len(instance) >= 8 and cleared * 2 < len(instance):
+            # Asked once, never fatal: the model decides what is instance data or fixed text.
+            budget["instance_asked"] = True
+            raise ReviewedExcelError(
+                f"候选最多清理 {cleared} 个，仍保留 {len(instance) - cleared} 个已发送的非公式、非表头单元格。"
+                "本单实例值（客户、日期、单号、货品、数量、金额）放入 clear；固定说明保留并在 reason 写明"
+            )
+        return validated
+
+    token = bind_etl_llm_owner(owner_id)
+    try:
+        validated = ask_until_valid(ask, messages, judge)
+    finally:
+        reset_etl_llm_owner(token)
+    output_tokens = budget["tokens"]
     if initial:
         base["candidates"] = validated
     else:
@@ -1359,8 +1621,8 @@ def refine_proposal(
         bounded,
         source_sha256=review["sha256"],
         provider=configured_template_llm_provider(),
-        model=result.model,
-        max_output_tokens=1400,
+        model=str(budget["model"]),
+        max_output_tokens=cast(int, output_tokens),
     )
     base["model"] = {
         "status": "returned",

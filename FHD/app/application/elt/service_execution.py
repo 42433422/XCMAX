@@ -403,6 +403,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             run.progress = 100
             run.executed_at = utcnow()
             receipt = load_json(run.receipt_json, {})
+            stored_entities = load_json(run.summary_json, {}).get("entities")
             receipt.update(
                 {
                     "run_id": run.id,
@@ -415,6 +416,21 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                     "reversible": run.reversible,
                     "partial": bool(valid_rows_only and run.error_rows),
                     "rows_written": bool(rows_written),
+                    **(
+                        {
+                            "entities": {
+                                key: int(stored_entities.get(key) or 0)
+                                for key in (
+                                    "customers",
+                                    "purchase_units",
+                                    "products",
+                                    "records",
+                                )
+                            }
+                        }
+                        if isinstance(stored_entities, dict)
+                        else {}
+                    ),
                 }
             )
             if run.target_type == "shipment_records" and run.status in {"completed", "partial"}:

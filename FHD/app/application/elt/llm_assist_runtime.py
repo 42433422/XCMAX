@@ -24,6 +24,8 @@ class LlmAssistResult:
     billing: dict[str, Any] = field(default_factory=dict)
     data: dict[str, Any] = field(default_factory=dict)
     provider: str = ""
+    # Raw model text, kept in memory only so a repair round can show it back.
+    answer: str = field(default="", repr=False)
 
     def public_metadata(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -49,12 +51,27 @@ def etl_llm_mode() -> str:
     return "auto"
 
 
-def etl_llm_timeout_seconds() -> float:
-    raw = str(os.environ.get("FHD_ETL_LLM_TIMEOUT") or "6").strip()
+_ETL_LLM_TIMEOUT_CAP = 180.0
+
+
+def etl_llm_timeout_seconds(*, full_sheet: bool = False) -> float:
+    """Probe calls stay short. A full archived sheet uses the template-analysis ceiling.
+
+    ``FHD_ETL_LLM_TIMEOUT`` defaults to 6 seconds and cannot exceed 180.
+    ``FHD_ETL_IMPORT_LLM_TIMEOUT`` is the whole database or knowledge import,
+    default 180, same ceiling. The old 12-second clamp cut a real delivery
+    note off while the remote model was still writing rows.
+    """
+    if full_sheet:
+        raw = str(os.environ.get("FHD_ETL_IMPORT_LLM_TIMEOUT") or "180").strip()
+        fallback = _ETL_LLM_TIMEOUT_CAP
+    else:
+        raw = str(os.environ.get("FHD_ETL_LLM_TIMEOUT") or "6").strip()
+        fallback = 6.0
     try:
-        return min(12.0, max(1.0, float(raw)))
+        return min(_ETL_LLM_TIMEOUT_CAP, max(1.0, float(raw)))
     except ValueError:
-        return 6.0
+        return fallback
 
 
 def etl_row_advice_limit() -> int:
@@ -72,14 +89,40 @@ def degradation_code(exc: BaseException) -> str:
     return "ELT_LLM_UNAVAILABLE"
 
 
-def circuit_key() -> str:
+def clip_model_raw(raw: object, *, limit: int = 2000) -> str:
+    """Keep the start and end of a model body so a failed import can be read."""
+    text = str(raw or "")
+    if len(text) <= limit:
+        return text
+    marker = "\n…[middle omitted]…\n"
+    room = max(0, limit - len(marker))
+    head = room // 2
+    return f"{text[:head]}{marker}{text[-(room - head) :]}"
+
+
+def log_etl_llm_degradation(logger, *, code: str, lane: str, exc: BaseException) -> None:
+    """StructuredOutputError keeps last_raw; the degradation line must show it."""
+    logger.info(
+        "general etl llm assist degraded (%s lane=%s): %s %s last_raw=%s",
+        code,
+        lane or "shared",
+        type(exc).__name__,
+        getattr(exc, "last_errors", ""),
+        clip_model_raw(getattr(exc, "last_raw", "")),
+    )
+
+
+def circuit_key(lane: str = "") -> str:
+    """Template, database, and knowledge calls do not share one outage."""
     try:
         from app.application.elt.llm_session_provider import current_etl_llm_owner
 
         owner_user_id = current_etl_llm_owner()
     except RECOVERABLE_ERRORS:
         owner_user_id = None
-    return f"owner:{owner_user_id}" if owner_user_id is not None else "process"
+    base = f"owner:{owner_user_id}" if owner_user_id is not None else "process"
+    lane_name = str(lane or "").strip()
+    return f"{base}:{lane_name}" if lane_name else base
 
 
 def circuit_cooldown_seconds(code: str) -> float:

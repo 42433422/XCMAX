@@ -29,7 +29,6 @@ def _legacy_transport_budget(monkeypatch):
         reviewed_excel_budget,
         reviewed_excel_evidence,
         reviewed_excel_grouping,
-        reviewed_excel_multipack_stitch,
         reviewed_excel_plan,
     )
 
@@ -38,14 +37,12 @@ def _legacy_transport_budget(monkeypatch):
         reviewed_excel_budget,
         reviewed_excel_plan,
         reviewed_excel_grouping,
-        reviewed_excel_multipack_stitch,
     ):
         monkeypatch.setattr(module, "MAX_MODEL_CELLS", 2000, raising=False)
     monkeypatch.setattr(reviewed_excel_budget, "MAX_REQUEST_BYTES", 384_000, raising=False)
     for module in (
         reviewed_excel_evidence,
         reviewed_excel_grouping,
-        reviewed_excel_multipack_stitch,
     ):
         monkeypatch.setattr(module, "MAX_MODEL_TEXT_BYTES", 384_000, raising=False)
 
@@ -335,6 +332,53 @@ def test_template_platform_uses_account_provider_once_and_never_retries(monkeypa
     assert calls.count("timeout") == 1
 
 
+def test_streamed_tokens_keep_the_template_call_alive():
+    from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
+
+    seen, pieces = [], []
+    for data in (
+        '{"choices": [{"delta": {"reasoning_content": "synthetic"}}]}',
+        '{"choices": [{"delta": {"content": "{}"}}]}',
+        '{"status": "processing"}',
+        "",
+    ):
+        ModstorePlatformAdapter._absorb_stream_payload(None, data, lambda: seen.append(1), pieces)
+    assert len(seen) == 3 and pieces == ["{}"]
+
+
+def test_audited_body_reports_each_chunk_while_it_is_archived():
+    import asyncio
+
+    import httpx
+
+    from app.application.market_llm.completions import _buffer_audited_async_body
+    from app.application.market_llm.protocols import ChatInput
+
+    class Chunks(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for part in (b'data: {"status": "processing"}\n\n', b'data: {"content": "{}"}\n\n'):
+                yield part
+
+    seen = []
+    request = ChatInput(
+        messages=[],
+        extra={
+            "_reviewed_excel_audit_response": object(),
+            "_processing_status": lambda: seen.append(1),
+        },
+    )
+    response = httpx.Response(200, stream=Chunks())
+
+    async def run():
+        await _buffer_audited_async_body(request, response)
+        return [line async for line in response.aiter_lines()]
+
+    lines = asyncio.run(run())
+    assert len(seen) == 2
+    assert response.content.endswith(b'{"content": "{}"}\n\n')
+    assert 'data: {"content": "{}"}' in lines
+
+
 def test_template_platform_keeps_the_same_call_while_status_arrives(monkeypatch):
     import asyncio
     import json
@@ -466,12 +510,6 @@ def test_platform_fenced_three_plans_and_strict_nested_contract(monkeypatch):
         {"candidates": plans, "extra": True},
         {
             "candidates": [
-                {"clear": [{"sheet": "报价", "cell": "C3"}], "reason": "公式"},
-                *plans[1:],
-            ]
-        },
-        {
-            "candidates": [
                 {
                     "clear": [{"sheet": "报价", "cell": "B2", "action": "clear"}],
                     "reason": "多余属性",
@@ -480,10 +518,36 @@ def test_platform_fenced_three_plans_and_strict_nested_contract(monkeypatch):
             ]
         },
     ]
+    from app.application.elt.errors import ModelAnswerRejected
+    from app.application.reviewed_excel_audit import REPAIR_ROUNDS
+
     for item in invalid:
+        # A rejected answer is shown back with its reason; it never becomes a local plan.
         responses.append(json.dumps(item, ensure_ascii=False))
-        with pytest.raises(ValueError):
-            refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
+        responses.append(json.dumps({"candidates": plans}, ensure_ascii=False))
+        seen.clear()
+        repaired = refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
+        assert [p["clear"] for p in repaired["candidates"]] == [p["clear"] for p in plans]
+        assert len(seen) == 2 and seen[1][-2]["role"] == "assistant"
+        assert "未通过校验" in seen[1][-1]["content"] and not responses
+    responses.extend(json.dumps(invalid[0], ensure_ascii=False) for _ in range(REPAIR_ROUNDS + 1))
+    with pytest.raises(ModelAnswerRejected):
+        refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
+    assert not responses
+    responses.append(
+        json.dumps(
+            {
+                "candidates": [
+                    {"clear": [{"sheet": "报价", "cell": "C3"}], "reason": "公式"},
+                    *plans[1:],
+                ]
+            },
+            ensure_ascii=False,
+        )
+    )
+    dropped = refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
+    assert dropped["candidates"][0]["clear"] == []
+    assert dropped["candidates"][1]["clear"] == plans[1]["clear"]
 
 
 @pytest.fixture
@@ -530,7 +594,6 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(archive_store, "get_business_archive_dir", lambda **_: str(archive_root))
     monkeypatch.setattr(archive_store, "default_archive_root", lambda: archive_root)
     monkeypatch.setattr(archive_routes, "default_archive_root", lambda: archive_root)
-    monkeypatch.setattr(routes, "default_archive_root", lambda: archive_root)
     monkeypatch.setattr(reviewed_excel_review_store, "default_archive_root", lambda: archive_root)
     actor = {"id": 7, "tenant": 1, "manage": True, "read": True, "admin": True}
 
@@ -2231,12 +2294,14 @@ def test_model_feedback_is_versioned_and_rejects_unknown_or_protected_cells(monk
     assert revised["parent_version"] == base["version"] and revised["version"] != base["version"]
     assert revised["candidates"][2]["clear"] == [{"sheet": "报价", "cell": "B2"}]
     assert revised["model"]["status"] == "returned"
-    fake.data["clear"] = [{"sheet": "报价", "cell": "C3"}]
-    with pytest.raises(ValueError):
-        service.refine_proposal(review, base["version"], "清除公式", owner_id=7)
-    fake.data["clear"] = [{"sheet": "报价", "cell": "A1"}]
-    with pytest.raises(ValueError):
-        service.refine_proposal(review, base["version"], "清除固定说明", owner_id=7)
+    fake.data["clear"] = [
+        {"sheet": "报价", "cell": "B2"},
+        {"sheet": "报价", "cell": "C3"},
+        {"sheet": "报价", "cell": "A1"},
+    ]
+    kept = service.refine_proposal(review, base["version"], "清除公式和说明", owner_id=7)
+    assert kept["model"]["status"] == "returned"
+    assert kept["candidates"][2]["clear"] == [{"sheet": "报价", "cell": "B2"}]
     monkeypatch.setattr(
         "app.application.reviewed_excel_template._template_llm_complete",
         lambda *args, **kwargs: LlmAssistResult(),
@@ -3396,6 +3461,9 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
     calls = []
 
     def fake(messages, schema, tokens, **_model_kwargs):
+        if schema.get("required") == ["sheets"]:
+            # Sheet naming after the last batch is not a classification batch.
+            return LlmAssistResult(used_llm=True, data={"sheets": []})
         calls.append(1)
         return LlmAssistResult(
             used_llm=True,
@@ -3512,7 +3580,8 @@ def test_concurrent_checkpoint_resume_never_sends_twice(review_store, monkeypatc
         first = pool.submit(client.post, url + "/analyze", data=data)
         assert entered.wait(5)
         second = pool.submit(client.post, url + "/analyze", data=data)
-        assert second.result(timeout=5).status_code == 409
+        polled = second.result(timeout=5)
+        assert polled.status_code == 202 and polled.json()["phase"] == "inflight"
         release.set()
         assert first.result(timeout=5).status_code == 200
     assert len(calls) == 2
@@ -3622,9 +3691,34 @@ def test_semantic_finish_length_rejected_without_retry(monkeypatch):
         "app.application.elt.llm_session_provider.current_owner_market_provider",
         lambda **_: SessionMarketProvider(7, "synthetic-market", timeout_seconds=1),
     )
-    with pytest.raises(ValueError, match="不完整"):
+    with pytest.raises(ValueError, match="截断"):
         classify_semantic_workbook(inspect_workbook(sample()))
     assert len(seen) == 1 and 3000 <= seen[0] <= 4000
+
+
+def test_preview_budget_covers_the_worst_case_and_length_is_not_resent(monkeypatch):
+    from app.application.elt.errors import ModelAnswerTruncated
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.application.reviewed_excel_template import make_proposals, refine_proposal
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    seen = []
+
+    async def fake(self, messages, **kwargs):
+        seen.append(kwargs["max_tokens"])
+        return {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
+
+    monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
+    monkeypatch.setattr(
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
+        lambda **_: SessionMarketProvider(7, "synthetic-market", timeout_seconds=1),
+    )
+    review = inspect_workbook(sample())
+    with pytest.raises(ModelAnswerTruncated):
+        refine_proposal(
+            review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
+        )
+    assert len(seen) == 1 and seen[0] >= 1400
 
 
 def test_real_failure_outside_region_evidence_is_rejected(monkeypatch):
@@ -3989,6 +4083,9 @@ def test_budget_pause_continues_on_next_request_without_extra_consent_or_resend(
     calls = []
 
     def fake(messages, schema, tokens, **_model_kwargs):
+        if schema.get("required") == ["sheets"]:
+            # Sheet naming after the last batch is not a classification batch.
+            return LlmAssistResult(used_llm=True, data={"sheets": []})
         calls.append(1)
         return LlmAssistResult(
             used_llm=True,
@@ -4848,7 +4945,8 @@ def test_nine_batch_concurrent_resume_does_not_resend(review_store, monkeypatch)
         second = pool.submit(
             client.post, url + "/analyze", data={**data, "continue_authorized": "true"}
         )
-        assert second.result(timeout=10).status_code == 409
+        polled = second.result(timeout=10)
+        assert polled.status_code == 202 and polled.json()["phase"] == "inflight"
         release.set()
         assert first.result(timeout=10).status_code == 200
     assert len(calls) == 5
@@ -5946,7 +6044,7 @@ def test_audit_response_is_committed_before_parsing_and_is_owner_scoped(review_s
             text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
         ).scalar_one()
     record = json.loads(persisted)["model_audit"][0]
-    assert record["state"] == "response_received" and record["request_id"] == "synthetic-req"
+    assert record["state"] == "answered_valid" and record["request_id"] == "synthetic-req"
     assert base64.b64decode(record["response_base64"]) == raw
     assert record["usage"] == {"total_tokens": 12}
     assert record["classification_version"] == item["version"]
@@ -5970,10 +6068,7 @@ def test_audit_write_failure_blocks_replay(review_store, monkeypatch):
     real_cas = routes._classification_cas
 
     def fail_response(db, run, old, state):
-        if (
-            state.get("model_audit", [])
-            and state["model_audit"][-1]["state"] == "response_received"
-        ):
+        if state.get("model_audit", []) and state["model_audit"][-1]["state"] == "streaming":
             raise HTTPException(status_code=409, detail="synthetic write failure")
         return real_cas(db, run, old, state)
 
@@ -5995,7 +6090,7 @@ def test_audit_write_failure_blocks_replay(review_store, monkeypatch):
         persisted = conn.execute(
             text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
         ).scalar_one()
-    assert json.loads(persisted)["model_audit"][-1]["state"] == "inflight"
+    assert json.loads(persisted)["model_audit"][-1]["state"] == "sent"
 
 
 def test_completed_invalid_response_is_counted_and_next_request_retries_without_extra_consent(
@@ -6037,19 +6132,48 @@ def test_completed_invalid_response_is_counted_and_next_request_retries_without_
         )
 
     monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
+    sent = []
+    complete = routes._classify_semantic_batch
+
+    def spy(*args, **kwargs):
+        if not kwargs.get("prepare_only"):
+            sent.append(kwargs.get("repair"))
+        return complete(*args, **kwargs)
+
+    monkeypatch.setattr(routes, "_classify_semantic_batch", spy)
     base = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     form = {"version": item["version"], "sample_authorized": "true"}
     assert client.post(base + "/analyze", data=form).status_code == 200
-    assert client.post(base + "/analyze", data=form).status_code == 503
+    # An answered but invalid batch is a known outcome: it queues a repair round, not a lock.
+    rejected = client.post(base + "/analyze", data=form)
+    assert rejected.status_code == 200 and rejected.json()["phase"] == "paused"
+    assert rejected.json()["repair"] == {
+        "round": 1,
+        "max_rounds": 2,
+        "reason": "synthetic incomplete",
+    }
     checkpoint = client.get(base).json()["checkpoint"]
-    assert checkpoint["phase"] == "failed" and checkpoint["completed"] == 1
-    assert checkpoint["calls_in_round"] == 2
-    assert len(calls) == 2
-    retry = client.post(base + "/analyze", data=form)
-    assert retry.status_code == 503 and len(calls) == 3
-    resumed = client.get(base).json()["checkpoint"]
-    assert resumed["phase"] == "failed" and resumed["completed"] == 1
-    assert resumed["calls_in_round"] == 1
+    assert checkpoint["phase"] == "paused" and checkpoint["completed"] == 1
+    assert checkpoint["calls_in_round"] == 2 and len(calls) == 2
+    second = client.post(base + "/analyze", data=form)
+    assert second.status_code == 200 and second.json()["repair"]["round"] == 2
+    assert sent[-1][0]["role"] == "assistant" and "synthetic incomplete" in sent[-1][1]["content"]
+    exhausted = client.post(base + "/analyze", data=form)
+    assert exhausted.status_code == 422 and len(calls) == 4
+    assert exhausted.json()["detail"]["outcome"] == "answered_invalid"
+    assert exhausted.json()["detail"]["retryable"] is False
+    assert client.get(base).json()["checkpoint"]["phase"] == "failed"
+    # After the bound it fails closed with the reason and sends nothing more.
+    closed = client.post(base + "/analyze", data=form)
+    assert closed.status_code == 422 and "synthetic incomplete" in closed.text and len(calls) == 4
+    audit = json.loads(
+        review_store.engine.connect()
+        .execute(
+            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+        )
+        .scalar_one()
+    )["model_audit"]
+    assert [r.get("outcome") for r in audit[1:]] == ["answered_invalid"] * 3
 
 
 def test_archived_model_slice_can_be_selected_for_template_without_coordinate_confirmation(
@@ -6135,8 +6259,8 @@ def test_archived_model_slice_can_be_selected_for_template_without_coordinate_co
     )
 
 
-def test_auto_slice_blocks_unassigned_cells(review_store, monkeypatch):
-    """An apparently valid model group must not silently omit source cells."""
+def test_auto_slice_blocks_unassigned_cells_until_the_model_allows_them(review_store, monkeypatch):
+    """Unassigned cells stop slicing unless the model itself says the documents can be sliced."""
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -6830,3 +6954,184 @@ def test_saved_refinement_concurrent_initial_insert_elects_one_child_and_model_c
             ).scalar_one()
             == 2
         )
+
+
+def test_sparse_model_plan_asks_the_model_once_about_instance_cells(monkeypatch):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_template import make_proposals, refine_proposal
+
+    cells = [
+        {"sheet": "出货", "cell": f"A{index}", "value": f"货品{index}", "kind": "review"}
+        for index in range(1, 11)
+    ]
+    cells.append({"sheet": "出货", "cell": "B1", "value": "=A1", "kind": "formula"})
+    review = {"sha256": "a" * 64, "sheets": ["出货"], "cells": cells, "sheet_overview": []}
+    version = make_proposals(review)["version"]
+    sent = []
+    sparse = {"clear": [{"sheet": "出货", "cell": "A1"}], "reason": "只清备注"}
+    full = {"clear": [{"sheet": "出货", "cell": f"A{i}"} for i in range(1, 11)], "reason": "实例"}
+
+    def fake(messages, *_args, **_kwargs):
+        sent.append(messages)
+        plan = sparse if len(sent) == 1 else full
+        return LlmAssistResult(used_llm=True, data={"candidates": [plan, plan, plan]})
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", fake)
+    output = refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
+    assert {item["cell"] for item in output["candidates"][0]["clear"]} == {
+        f"A{index}" for index in range(1, 11)
+    }
+    assert len(sent) == 2 and "仍保留 9 个" in sent[1][-1]["content"]
+
+    # The model keeps its sparse plan: nothing is filled in locally and nothing fails.
+    sent.clear()
+    full = sparse
+    kept = refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
+    assert kept["candidates"][0]["clear"] == sparse["clear"] and len(sent) == 2
+
+
+def _unknown_outcome_run(review_store, monkeypatch):
+    from app.application.reviewed_excel_audit import current_call_id
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("合成.xlsx", sample())},
+    ).json()["files"][0]
+    keys = []
+
+    def fake(messages, schema, tokens, **_model_kwargs):
+        keys.append(current_call_id())
+        raise ValueError("合成连接中断")
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    data = {"version": item["version"], "sample_authorized": "true"}
+    assert client.post(url + "/analyze", data=data).status_code == 503
+
+    def audit():
+        with review_store.engine.connect() as conn:
+            persisted = conn.execute(
+                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                {"id": item["classification_id"]},
+            ).scalar_one()
+        return json.loads(persisted)["model_audit"]
+
+    return client, url, data, keys, audit
+
+
+def test_unknown_outcome_stays_locked_without_market_recovery(review_store, monkeypatch):
+    client, url, data, keys, audit = _unknown_outcome_run(review_store, monkeypatch)
+
+    async def unsupported(*_args):
+        return {"supported": False}
+
+    monkeypatch.setattr(routes, "_lookup_market_call", unsupported)
+    locked = client.post(url + "/analyze", data=data)
+    assert locked.status_code == 409 and "明确授权" in locked.text
+    assert len(keys) == 1 and audit()[-1]["state"] == "unknown"
+
+
+def test_market_confirmed_recovery_resends_with_the_same_key(review_store, monkeypatch):
+    client, url, data, keys, audit = _unknown_outcome_run(review_store, monkeypatch)
+
+    async def not_found(*_args):
+        return {"supported": True, "state": "not_found"}
+
+    monkeypatch.setattr(routes, "_lookup_market_call", not_found)
+    assert client.post(url + "/analyze", data=data).status_code == 503
+    records = audit()
+    assert len(keys) == 2 and keys[0] == keys[1] == records[-1]["call_id"]
+    assert len(records) == 1 and records[-1]["attempts"] == 2
+
+
+def test_user_authorized_abandon_unlocks_one_new_call(review_store, monkeypatch):
+    client, url, data, keys, audit = _unknown_outcome_run(review_store, monkeypatch)
+    digest = audit()[-1]["request_sha256"]
+    form = {"version": data["version"], "request_sha256": digest}
+    refused = client.post(url + "/analyze/abandon", data={**form, "confirm": "yes"})
+    assert refused.status_code == 400
+    done = client.post(url + "/analyze/abandon", data={**form, "confirm": "abandon_unknown_call"})
+    assert done.status_code == 200, done.text
+    assert done.json()["possible_duplicate_charge"] is True
+    assert client.post(url + "/analyze", data=data).status_code == 503
+    records = audit()
+    assert [r["state"] for r in records] == ["abandoned", "unknown"]
+    assert records[0]["abandoned_by"] == "user:7" and keys[0] != keys[1]
+
+
+def test_unknown_preview_claim_locks_until_the_user_abandons_it(review_store, monkeypatch):
+    from app.application.reviewed_excel_audit import current_call_id
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "生产单"
+    for row in [["生产单"], ["工序", "说明"], ["切割", "合成说明"], ["焊接", "合成说明"]]:
+        ws.append(row)
+    output = BytesIO()
+    wb.save(output)
+    body = output.getvalue()
+    with review_store.engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+            )
+        )
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/archive-classify",
+        data={"expected_actor": "1:7", "request_key": "synthetic-claim"},
+        files={"file": ("生产单.xlsx", body)},
+    ).json()
+    labels = [
+        {"sheet": "生产单", "range": r["range"], "labels": r["labels"]}
+        for r in item["sheets"][0]["regions"]
+    ]
+    confirmed = client.post(
+        f"/api/templates/reviewed-excel/classifications/{item['classification_id']}/confirm",
+        data={"version": item["version"], "labels_json": json.dumps(labels)},
+    ).json()
+    keys = []
+
+    def lost(*_args, **_kwargs):
+        keys.append(current_call_id())
+        raise ValueError("合成连接中断")
+
+    monkeypatch.setattr(routes, "refine_proposal", lost)
+
+    async def unsupported(*_args):
+        return {"supported": False}
+
+    monkeypatch.setattr(routes, "_lookup_market_call", unsupported)
+    preview = {
+        "expected_actor": "1:7",
+        "classification_id": item["classification_id"],
+        "classification_version": confirmed["version"],
+        "region_sheet": "生产单",
+        "region_range": labels[0]["range"],
+    }
+
+    def send():
+        return client.post(
+            "/api/templates/reviewed-excel/preview",
+            data=preview,
+            files={"file": ("生产单.xlsx", body)},
+        )
+
+    assert send().status_code == 503
+    assert send().status_code == 409 and len(keys) == 1 and keys[0]
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    unsettled = client.get(url).json()["unsettled_candidate_requests"]
+    assert [claim["state"] for claim in unsettled] == ["unknown"]
+    abandoned = client.post(
+        url + "/analyze/abandon",
+        data={
+            "version": confirmed["version"],
+            "candidate_key": unsettled[0]["candidate_key"],
+            "confirm": "abandon_unknown_call",
+        },
+    )
+    assert abandoned.status_code == 200, abandoned.text
+    assert send().status_code == 503 and len(keys) == 2 and keys[0] != keys[1]

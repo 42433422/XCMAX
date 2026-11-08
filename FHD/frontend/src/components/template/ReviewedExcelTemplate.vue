@@ -10,6 +10,8 @@ import { eltApi, type EltRun } from '@/api/elt'
 import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
 import { autoIngestStatusLabel, actionLabel, targetLabel } from '@/views/eltCenter/eltCenterShared'
 import TemplateCandidatePreview from './TemplateCandidatePreview.vue'
+import WorkbookEmployeeReport from './WorkbookEmployeeReport.vue'
+import { workbookEmployeeReports } from './workbookEmployeeReport'
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
@@ -22,7 +24,7 @@ type ClassificationSheet = { sheet: string; sheet_state?: string; processable?: 
 type FragmentLinks = { items: { sheet: string; first: string; second: string; shared_dependencies: { sheet: string; cell: string }[]; repeated_header_observed: boolean; model_group_suggested?: boolean; status: string; selected?: boolean }[]; omitted: number }
 type LogicalDocument = { logical_document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type SuggestedDocument = { document_id: string; fragments: { sheet: string; range: string }[]; status: string }
-type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; fragments: { sheet: string; range: string }[] }
+type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; type_label?: string; fragments: { sheet: string; range: string }[] }
 type Checkpoint = { phase: 'ready' | 'paused' | 'inflight' | 'failed'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; remaining_in_round?: number; message: string }
 type ConversionReceipt = { converter: string; source_sha256: string; derived_sha256: string; purpose?: string; print_layout_verified?: boolean; warnings?: string[] }
 type Classification = { usage_restrictions?: string[]; original_sha256?: string; conversion_receipt?: ConversionReceipt | null; template_write_state?: string; independent_confirmed?: boolean; confirmed_document_count?: number | null; document_count_status?: string; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; read_only_print_areas?: { sheet: string; value: string }[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; checkpoint?: Checkpoint | null; name: string; status: string; sha256?: string; message?: string; classification_id?: string; version?: string; confirmed?: boolean; model_status?: string; budget?: { calls: number; max_calls: number; unread: number }; input_messages?: unknown[]; input_summaries?: unknown[]; coverage?: { sheet: string; total: number; sent: number; unread: string[]; unassigned: string[]; model_unassigned?: string[]; value_truncated: string[]; deferred_large_values?: string[]; deferred_oversized_rows?: string[]; merged_sent: number; merged_omitted: number }[]; sheets: ClassificationSheet[] }
@@ -99,7 +101,7 @@ const previewSelectionReady = computed(() => {
 })
 const selectedPrintArea = ref(false)
 const batchLabel = ref('unknown')
-const labelNames: Record<string, string> = { quotation: '报价', delivery: '送货', purchase: '采购', attendance: '考勤', production: '生产', process: '工艺', material: '原料', inspection: '检验', template: '模板', unknown: '未知/待理解' }
+const labelNames: Record<string, string> = { quotation: '报价', delivery: '送货', purchase: '采购', attendance: '考勤', production: '生产', process: '工艺', material: '原料', inspection: '检验', template: '模板', ledger: '借还台账', calculation: '测算表', unknown: '未知/待理解' }
 function classificationStatus(item: { confirmed?: boolean; model_status?: string; sheets: ClassificationSheet[] } | null) {
   if (!item) return '待确认'
   const unknown = item.sheets.some((sheet) => sheet.regions.some((region) => region.labels.includes('unknown')))
@@ -220,7 +222,16 @@ type IntakePlan = { run_id: string; mod_id: string; candidate_sha256: string; kn
 const intakePlan = ref<IntakePlan | null>(null)
 const intakePending = ref(false)
 const intakeError = ref('')
-const intakeValidRowsOnly = ref(false)
+const workbookReports = computed(() => {
+  const ready = (doc?: { intake: unknown; intakePending: boolean; intakeError: string } | null) => !!doc?.intake && !doc.intakePending && !doc.intakeError
+  if (props.archiveOnSelect) {
+    if (ready(activeDocument.value)) return workbookEmployeeReports(activeDocument.value?.intake)
+    const found = documentWorkspace.documents.value.find(doc => ready(doc))
+    if (found) return workbookEmployeeReports(found.intake)
+  }
+  if (!intakePending.value && !intakeError.value && intakePlan.value) return workbookEmployeeReports(intakePlan.value)
+  return []
+})
 const currentComposerNote = computed(() => [...requirementNotes.value, composerDraft.value.trim()].filter(Boolean).join('\n').trim().slice(0, 4000))
 const intakeSelectionKey = computed(() => JSON.stringify([review.value?.review_id, proposal.value?.version,
   proposal.value?.candidates[candidateIndex.value]?.id, selected.value, name.value.trim(), currentComposerNote.value]))
@@ -230,7 +241,7 @@ let intakeTimer: ReturnType<typeof setTimeout> | null = null
 function resetIntake() {
   intakeGeneration += 1
   if (intakeTimer) clearTimeout(intakeTimer)
-  intakeTimer = null; intakePlan.value = null; intakePending.value = false; intakeError.value = ''; intakeValidRowsOnly.value = false
+  intakeTimer = null; intakePlan.value = null; intakePending.value = false; intakeError.value = ''
   preparedSelectionKey = ''
 }
 const intakeWritableRows = computed(() => {
@@ -249,7 +260,6 @@ const canConfirmIntake = computed(() => {
     && preparedSelectionKey === intakeSelectionKey.value && intakePlan.value?.mod_id === readActiveExtensionModIdFromStorage()
     && run?.status === 'preview_ready' && !!run.preview_revision
     && [run.summary.new, run.summary.update, run.summary.skip, run.summary.error].every(value => Number.isFinite(value) && value >= 0)
-    && (!run.summary.error || intakeValidRowsOnly.value)
 })
 async function prepareIntake() {
   if (!canCommitSelectedTemplate()) return
@@ -320,7 +330,7 @@ async function pollIngestProgress() {
     if (!current()) return
     kbProgress.value = data.kb_progress || null
     businessProgress.value = data.business_progress || null
-    const terminal = ['applied', 'failed', 'withdrawn', 'awaiting_confirmation'].includes(String(data.status || ''))
+    const terminal = ['applied', 'partial', 'completed_empty', 'failed', 'withdrawn', 'awaiting_confirmation'].includes(String(data.status || ''))
     if (terminal) {
       stopIngestPoll()
       savedModelStatus.value = `自动入库批次 ${id}（状态 ${autoIngestStatusLabel(data.status)}）。请到审批工作台核对结果与可用的撤回操作。`
@@ -856,6 +866,11 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
           form.append('auto_group', 'true')
           const result = await templatePreviewApi.analyzeClassification(item.classification_id, form) as { phase?: string; checkpoint?: Checkpoint; version: string; sheets: ClassificationSheet[]; model_status: string; budget?: Classification['budget']; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; fragment_links?: FragmentLinks; coverage: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] }
           if (!current()) return
+          if (result.phase === 'inflight') {
+            analysisProgress.value = `${item.name}：上一请求仍在处理，稍后自动查询`
+            await new Promise((resolve) => setTimeout(resolve, 15_000))
+            continue
+          }
           if (result.phase === 'pending' || result.phase === 'paused') {
             item.checkpoint = result.checkpoint
             analysisProgress.value = `${item.name}：已完成 ${result.checkpoint?.completed}/${result.checkpoint?.total} 批`
@@ -1137,7 +1152,7 @@ async function save() {
     form.append('private_intake', privateIntake ? 'true' : 'false')
     form.append('intake_run_id', intakePlan.value!.run_id)
     form.append('preview_revision', intakePlan.value!.business.preview_revision!)
-    form.append('valid_rows_only', String(intakeValidRowsOnly.value))
+    form.append('valid_rows_only', String(Number(intakePlan.value?.business?.summary?.error || 0) > 0))
     form.append('review_id', review.value!.review_id)
     form.append('proposal_version', proposal.value.version)
     form.append('candidate_id', proposal.value.candidates[candidateIndex.value].id)
@@ -1257,8 +1272,18 @@ async function downloadCandidate(index: number) {
       <div v-if="error" class="elt-bubble elt-bubble--error" role="alert">{{ error }}</div>
 
       <template v-if="archiveOnSelect">
-        <div class="reviewed-documents" aria-label="模型识别的模板">
-          <button v-for="doc in documentWorkspace.documents.value" :key="doc.key" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
+        <div class="workbook-thread" :class="{ 'workbook-thread--live': workbookReports.length }" :aria-label="workbookReports.length ? '工作情况回报' : '模型识别的模板'">
+          <span v-if="workbookReports.length" class="workbook-thread__spine" aria-hidden="true"></span>
+          <div class="workbook-node workbook-node--template">
+            <span v-if="workbookReports.length" class="workbook-node__dot" aria-hidden="true"></span>
+            <div class="workbook-node__body">
+              <p v-if="workbookReports.length" class="workbook-node__who">模板导入员</p>
+              <div class="reviewed-documents">
+                <button v-for="doc in documentWorkspace.documents.value" :key="doc.key" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${doc.typeLabel ? '，' + doc.typeLabel : ''}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="doc.typeLabel">{{ doc.typeLabel }}</small><small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
+              </div>
+            </div>
+          </div>
+          <WorkbookEmployeeReport v-for="report in workbookReports" :key="report.employee" v-bind="report" />
         </div>
         <div v-if="templatePickerOpen && activeDocument" class="elt-template-picker__layer reviewed-document-picker" @click.self="closeCandidatePicker" @wheel.self.prevent @touchmove.self.prevent>
           <section ref="candidatePickerPanel" class="elt-template-picker__panel" role="dialog" aria-modal="true" :aria-label="activeDocument.displayName" tabindex="-1">
@@ -1450,7 +1475,11 @@ async function downloadCandidate(index: number) {
     </details>
     <button v-if="!archiveOnSelect || !review" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (archiveOnSelect && modelFlow)" @click="preview()">预览清理候选</button>
     <button v-if="archiveOnSelect && error.includes('请明确选择所选片段作为派生打印区域')" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy" @click="retrySelectedPrintArea">按所选片段生成副本并重试（原件不变）</button>
-    <button v-if="archiveOnSelect" ref="candidateCapsule" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--selected': !!chosenCandidate }" aria-haspopup="dialog" :aria-expanded="templatePickerOpen" :aria-controls="candidatePickerId" :disabled="busy || !proposal?.candidates.length" @click="openCandidatePicker">{{ chosenCandidate?.label || (busy ? '模板处理中…' : proposal?.candidates.length ? '选择模板' : '暂无可选模板') }} <span aria-hidden="true">⌄</span></button>
+    <button v-if="archiveOnSelect && !documentWorkspace.documents.value.length" ref="candidateCapsule" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--selected': !!chosenCandidate }" aria-haspopup="dialog" :aria-expanded="templatePickerOpen" :aria-controls="candidatePickerId" :disabled="busy || !proposal?.candidates.length" @click="openCandidatePicker">{{ chosenCandidate?.label || (busy ? '模板处理中…' : proposal?.candidates.length ? '选择模板' : '暂无可选模板') }} <span aria-hidden="true">⌄</span></button>
+    <div v-if="!archiveOnSelect && workbookReports.length" class="workbook-thread workbook-thread--live" aria-label="工作情况回报">
+      <span class="workbook-thread__spine" aria-hidden="true"></span>
+      <WorkbookEmployeeReport v-for="report in workbookReports" :key="report.employee" v-bind="report" />
+    </div>
     <div v-if="review">
       <p v-if="review.selected_region?.print_area_mode === 'selected'">已按您的选择设置派生打印范围：原范围 {{ review.selected_region.source_print_areas?.map((area) => area.value).join('；') || '未设置' }} → 派生范围 {{ review.selected_region.derived_print_area || '未设置' }}；原件不变。</p>
       <div v-if="!archiveOnSelect || templatePickerOpen" class="reviewed-template__candidate-popover" :class="{ 'elt-template-picker__layer': archiveOnSelect }" @click.self="closeCandidatePicker" @wheel.self.prevent @touchmove.self.prevent>
@@ -1523,7 +1552,7 @@ async function downloadCandidate(index: number) {
           <p v-if="intakePlan.business.target_type === 'knowledge'">业务数据：仅知识资料，无业务记录写入。</p>
           <p v-else>业务目标：{{ targetLabel(intakePlan.business.target_type) }}；预计新增 {{ intakePlan.business.summary.new }} 行、更新 {{ intakePlan.business.summary.update }} 行、跳过 {{ intakePlan.business.summary.skip }} 行、错误 {{ intakePlan.business.summary.error }} 行。</p>
           <p v-if="intakeZeroRowWarning" role="alert">预演可写入行为 0：确认入库也不会写入业务行（无报错≠已入库）。请核对原件与候选后再保存。</p>
-          <label v-if="intakePlan.business.summary.error"><input v-model="intakeValidRowsOnly" type="checkbox" :disabled="busy"> 我已核对错误行，确认仅写入正确行；错误行不会写入。</label>
+          <p v-if="intakePlan.business.summary.error">错误行不写入业务库，仍留在知识库文档中。正确行按预演写入。</p>
           <p>确认后保存 1 份模板到当前企业模板库，并按上方同一预演写入；重复数据跳过，更新范围以预演为准。撤回仅回退本批知识和业务写入，原件和模板保留。</p>
         </template>
         <button type="button" :disabled="busy || intakePending || !canCommitSelectedTemplate()" @click="prepareIntake">重新预演入库范围</button>
@@ -1709,6 +1738,14 @@ async function downloadCandidate(index: number) {
 .reviewed-template .reviewed-template__candidate-capsule--selected { border-color: var(--xc-color-success); background: color-mix(in srgb, var(--xc-color-success) 8%, var(--xc-color-surface)); }
 .reviewed-template .reviewed-template__candidate-capsule--saved { border-color: var(--xc-color-success); background: color-mix(in srgb, var(--xc-color-success) 8%, var(--xc-color-surface)); }
 .reviewed-documents { display: flex; flex-wrap: wrap; gap: var(--xc-space-2); }
+.workbook-thread { display: flex; flex-direction: column; align-items: flex-start; gap: var(--xc-space-2); background: transparent; border: 0; }
+.workbook-thread--live { position: relative; gap: var(--xc-space-6); padding: var(--xc-space-2) 0; }
+.workbook-thread__spine { position: absolute; top: 1.15rem; bottom: 1.15rem; left: 7px; width: 1px; background: color-mix(in srgb, var(--xc-color-primary) 32%, transparent); pointer-events: none; }
+.workbook-thread--live .workbook-node { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: var(--xc-space-3); align-items: start; width: min(40rem, 100%); background: transparent; border: 0; box-shadow: none; }
+.workbook-node__who { margin: 0; color: var(--xc-color-text); font-size: 13px; font-weight: 600; line-height: 1.4; }
+.workbook-thread--live :deep(.workbook-node__dot),
+.workbook-thread--live .workbook-node__dot { width: 7px; height: 7px; margin-top: 0.4rem; justify-self: center; border-radius: 50%; background: var(--xc-color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--xc-color-primary) 16%, transparent); }
+.workbook-thread--live :deep(.workbook-node__dot--quiet) { background: var(--xc-color-muted); box-shadow: 0 0 0 3px color-mix(in srgb, var(--xc-color-muted) 24%, transparent); }
 .reviewed-template__candidate-capsule small { color: var(--xc-color-muted); }
 .reviewed-document-picker__options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--xc-space-3); }
 .reviewed-document-picker .elt-template-picker__bar { position: sticky; top: 0; z-index: 1; background: var(--xc-color-surface); padding-bottom: var(--xc-space-2); }

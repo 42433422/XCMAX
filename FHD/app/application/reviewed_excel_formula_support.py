@@ -11,6 +11,7 @@ from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
 
 from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
+from app.application.reviewed_excel_formula_cells import formula_text
 
 _SAFE_FUNCTIONS = {"SUM", "AVERAGE", "MIN", "MAX", "ROUND", "IF", "IFERROR", "COUNT", "COUNTA"}
 _SUBTOTAL = re.compile(
@@ -92,7 +93,7 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
             if address in visited:
                 continue
             visited.add(address)
-            value = sheet[address].value
+            value = formula_text(sheet[address].value)
             try:
                 tokens = Tokenizer(value).items
             except (TypeError, TokenizerError):
@@ -229,9 +230,7 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
 
         # Pass 1: rewrite obvious self-inclusive aggregates and drop self-edges.
         for address in list(edges):
-            value = sheet[address].value
-            if not isinstance(value, str):
-                continue
+            value = formula_text(sheet[address].value)
             rewritten = _self_inclusive_rewrite(address, value)
             if rewritten is None:
                 # Also drop trivial self-loops even without rewrite.
@@ -444,7 +443,7 @@ def install_formula_support(book, plan: dict) -> str | None:
         source = sheet[address]
         if not selected(source.column, source.row):
             continue
-        tokens = Tokenizer(source.value).items
+        tokens = Tokenizer(formula_text(source.value)).items
         changed = False
         for token in tokens:
             if token.type != "OPERAND" or token.subtype != "RANGE":

@@ -545,8 +545,10 @@ def candidate_fragment_links(
     return {"items": links, "omitted": total - len(links)}
 
 
-MAX_MODEL_CELLS = 20000
-MAX_MODEL_TEXT_BYTES = 3_840_000  # raised with 20000-cell packs; ~192KB per 1000 cells
+# Live audits: classification requests over ~600KB mostly never answered before the
+# deadline (unknown outcome), so packs stay small and plans use more batches.
+MAX_MODEL_CELLS = 2500
+MAX_MODEL_TEXT_BYTES = 480_000  # ~192KB per 1000 cells
 MAX_VALUE_CHARS = 4000
 
 

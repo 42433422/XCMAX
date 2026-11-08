@@ -15,10 +15,12 @@ import logging
 import threading
 from contextvars import copy_context
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltError
@@ -100,31 +102,88 @@ def _patch_batch(tenant_id: int | str, batch_id: str, **fields: Any) -> dict[str
         return dict(batch)
 
 
+def _workbook_lines(workbook) -> str:
+    """Every visible sheet and nonempty row, each labeled with its original row number.
+
+    Hidden and veryHidden sheets are not sent to a model. The R label is the
+    worksheet row the model must cite; this function does not choose or drop a row.
+    Model lanes bound their own inputs without truncating this archive text.
+    """
+    lines: list[str] = []
+    for worksheet in workbook.worksheets:
+        if getattr(worksheet, "sheet_state", "visible") in {"hidden", "veryHidden"}:
+            continue
+        lines.append(f"# sheet:{worksheet.title}")
+        for index, row in enumerate(worksheet.iter_rows(values_only=True)):
+            cells = [str(cell).strip() for cell in row if cell not in (None, "")]
+            if cells:
+                lines.append(f"R{index + 1} | " + " | ".join(cells))
+    return "\n".join(lines)
+
+
+def source_rows(text: str) -> list[tuple[str, int]]:
+    """(sheet, row) of every archived nonempty row: the in-scope set for coverage."""
+    rows: list[tuple[str, int]] = []
+    sheet = ""
+    for line in (text or "").splitlines():
+        if line.startswith("# sheet:"):
+            sheet = line.removeprefix("# sheet:")
+        elif sheet and line.startswith("R") and line.split(" ", 1)[0][1:].isdigit():
+            rows.append((sheet, int(line.split(" ", 1)[0][1:])))
+    return rows
+
+
+def row_coverage(text: str, business_rows: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """Each in-scope row has exactly one disposition: business or knowledge archive."""
+    scope = source_rows(text)
+    cited = {
+        (str(row.get("source_sheet") or ""), int(row["source_row"]))
+        for row in business_rows or []
+        if str(row.get("source_row") or "").isdigit()
+    }
+    business = sum(1 for key in scope if key in cited)
+    return {
+        "in_scope_rows": len(scope),
+        "business_rows": business,
+        "knowledge_rows": len(scope) - business,
+        "uncited_business_coordinates": len(cited - set(scope)),
+    }
+
+
+def knowledge_document_keeps_unwritten_rows(summary: str, source_text: str) -> str:
+    """Keep rows that cannot be shipment records inside the knowledge document."""
+    summary = (summary or "").strip()
+    source = (source_text or "").strip()
+    if not source:
+        return summary
+    if not summary or source in summary:
+        return summary or source
+    return f"{summary}\n\n{source}"
+
+
+def workbook_text(source: bytes | bytearray) -> str:
+    """Archived workbook text. Database import and knowledge import each read it alone."""
+    workbook = load_workbook(BytesIO(source), read_only=True, data_only=True, keep_links=False)
+    try:
+        return _workbook_lines(workbook)
+    finally:
+        workbook.close()
+
+
 def _extract_text(path: Path, *, owned_upload_user_id: int | None = None) -> str:
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xlsm"}:
-        from openpyxl import load_workbook
-
-        lines: list[str] = []
         with open_etl_input_file(path, owner_user_id=owned_upload_user_id) as stream:
-            wb = load_workbook(stream, read_only=True, data_only=True, keep_links=False)
+            workbook = load_workbook(stream, read_only=True, data_only=True, keep_links=False)
             try:
-                for ws in wb.worksheets[:20]:
-                    lines.append(f"# sheet:{ws.title}")
-                    for index, row in enumerate(ws.iter_rows(values_only=True)):
-                        cells = [str(c).strip() for c in row if c not in (None, "")]
-                        if cells:
-                            lines.append(" | ".join(cells))
-                        if index >= 120:
-                            break
+                return _workbook_lines(workbook)
             finally:
-                wb.close()
-        return "\n".join(lines)[:80_000]
+                workbook.close()
     with (
         open_etl_input_file(path, owner_user_id=owned_upload_user_id) as stream,
         io.TextIOWrapper(stream, encoding="utf-8", errors="replace") as text,
     ):
-        return text.read(80_000)
+        return text.read()
 
 
 def _resolve_auto_ingest_source(
@@ -153,6 +212,27 @@ def _resolve_auto_ingest_source(
             "ETL_AUTO_INGEST_PATH_INVALID",
             f"自动入库路径无效：{exc}",
         ) from exc
+
+
+def _batch_coverage(
+    kb_receipt: dict[str, Any], business: dict[str, Any], detection: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """``complete`` only when the archive is recorded, no business row was left out and
+    the routing was decided by an answering model rather than a degraded one."""
+    summary = business.get("summary") if isinstance(business.get("summary"), dict) else {}
+    counts = {
+        key: int(summary.get(key) or 0) for key in ("new", "update", "skip", "error") if summary
+    }
+    knowledge_recorded = kb_receipt.get("action") in {"new", "update"} or (
+        kb_receipt.get("action") == "skip" and not kb_receipt.get("degraded")
+    )
+    routed = not (detection or {}).get("degraded")
+    return {
+        "complete": bool(knowledge_recorded) and not counts.get("error") and routed,
+        "knowledge_action": kb_receipt.get("action"),
+        "business_rows": counts,
+        "routing_degraded": not routed,
+    }
 
 
 class AutoIngestService:
@@ -197,14 +277,56 @@ class AutoIngestService:
         note: str,
         owner_user_id: int,
         owned_upload_user_id: int | None = None,
+        source_text: str | None = None,
+        allow_model: bool = True,
     ) -> dict[str, Any]:
+        from app.application.elt.llm_assist import advise_knowledge_import, etl_llm_enabled
         from app.application.elt.service_support import dump_json
         from app.application.elt.targets.knowledge import KnowledgeAdapter
 
         if owned_upload_user_id is not None and owned_upload_user_id != owner_user_id:
             raise EltError("ELT_INTAKE_FORBIDDEN", "上传文件不属于当前用户", status_code=403)
-        text = _extract_text(path, owned_upload_user_id=owned_upload_user_id)
-        body = text if not note.strip() else f"{note.strip()}\n\n{text}"
+        raw_text = (
+            source_text
+            if source_text is not None
+            else _extract_text(path, owned_upload_user_id=owned_upload_user_id)
+        )
+        document = raw_text
+        source_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+        assist_used = False
+        degraded = False
+        degradation_code = ""
+        model_applied = False
+        if allow_model and etl_llm_enabled():
+            assist = advise_knowledge_import(raw_text)
+            assist_used = bool(assist.used_llm)
+            degraded = bool(assist.degraded)
+            degradation_code = assist.degradation_code
+            if assist.used_llm and not assist.degraded and assist.data.get("content"):
+                # The summary leads; the archived rows stay so no row loses its record.
+                document = knowledge_document_keeps_unwritten_rows(
+                    str(assist.data["content"]), raw_text
+                )
+                model_applied = True
+            elif degraded or not assist.used_llm:
+                logger.info(
+                    "knowledge model unusable (%s); planning the archived workbook text",
+                    degradation_code or "empty",
+                )
+        if not str(document or "").strip():
+            return {
+                "action": "error",
+                "documents": 0,
+                "fingerprint": "",
+                "source_hash": source_hash,
+                "used_llm": assist_used,
+                "degraded": True,
+                "degradation_code": degradation_code or "ELT_KNOWLEDGE_EMPTY",
+                "lane": "knowledge",
+                "content": "",
+                "source_text": raw_text,
+            }
+        body = document if not note.strip() else f"{note.strip()}\n\n{document}"
         content_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
         decision = KnowledgeAdapter().preview(
             None,
@@ -230,7 +352,19 @@ class AutoIngestService:
                 }
             ).encode()
         ).hexdigest()
-        return {"action": decision.action, "documents": 1, "fingerprint": fingerprint}
+        return {
+            "action": decision.action,
+            "documents": 1,
+            "fingerprint": fingerprint,
+            "source_hash": source_hash,
+            "used_llm": assist_used,
+            "model_applied": model_applied,
+            "degraded": degraded,
+            "degradation_code": degradation_code,
+            "lane": "knowledge",
+            "content": document,
+            "source_text": raw_text,
+        }
 
     def validate_prepared(
         self,
@@ -242,6 +376,7 @@ class AutoIngestService:
         tenant_id: int,
         preview_revision: str,
         owned_upload_user_id: int | None = None,
+        source_text: str | None = None,
     ) -> dict[str, Any]:
         from app.application.elt.preview_confirmation import verify_preview
         from app.application.elt.service import get_elt_service
@@ -279,15 +414,41 @@ class AutoIngestService:
                 status_code=409,
             )
         verify_preview(db, run, preview_revision)
-        knowledge = self.knowledge_plan(
-            path=path,
-            file_name=plan["name"],
-            note=plan["note"],
-            owner_user_id=owner_user_id,
-            owned_upload_user_id=owned_upload_user_id,
+        knowledge_plan = plan.get("knowledge")
+        stored_knowledge: dict[str, Any] = (
+            knowledge_plan if isinstance(knowledge_plan, dict) else {}
         )
-        if knowledge != plan.get("knowledge"):
-            raise EltError("ELT_PREVIEW_STALE", "知识库已变化，请重新预演并确认", status_code=409)
+        if stored_knowledge.get("used_llm") or stored_knowledge.get("degraded"):
+            basis = (
+                source_text
+                if source_text is not None
+                else str(stored_knowledge.get("source_text") or "")
+            )
+            if hashlib.sha256(basis.encode("utf-8")).hexdigest() != stored_knowledge.get(
+                "source_hash"
+            ):
+                raise EltError(
+                    "ELT_PREVIEW_STALE", "知识库已变化，请重新预演并确认", status_code=409
+                )
+        else:
+            replay_text = (
+                source_text if source_text is not None else stored_knowledge.get("source_text")
+            )
+            knowledge = self.knowledge_plan(
+                path=path,
+                file_name=plan["name"],
+                note=plan["note"],
+                owner_user_id=owner_user_id,
+                owned_upload_user_id=owned_upload_user_id,
+                source_text=replay_text,
+                allow_model=False,
+            )
+            if "model_applied" not in stored_knowledge:
+                knowledge.pop("model_applied", None)  # plans stored before the flag existed
+            if knowledge != stored_knowledge:
+                raise EltError(
+                    "ELT_PREVIEW_STALE", "知识库已变化，请重新预演并确认", status_code=409
+                )
         return dict(get_elt_service().get_run(db, run_id=run.id, owner_user_id=owner_user_id))
 
     def run(
@@ -359,7 +520,16 @@ class AutoIngestService:
                 kb_progress=_progress("extracting", 10, message="提取文档正文"),
                 business_progress=_progress("waiting_kb", 0, message="等待知识库完成"),
             )
-            text = _extract_text(path, owned_upload_user_id=resolve_owner)
+            planned_knowledge = (prepared_plan or {}).get("knowledge") or {}
+            # A degraded model still plans the archive text; only an unusable plan skips.
+            if planned_knowledge.get("action") == "error":
+                text = ""
+            else:
+                text = (
+                    str(planned_knowledge["content"])
+                    if planned_knowledge.get("content")
+                    else _extract_text(path, owned_upload_user_id=resolve_owner)
+                )
             detection = (
                 prepared_plan["detection"]
                 if prepared_plan
@@ -371,17 +541,27 @@ class AutoIngestService:
                 detection=detection,
                 kb_progress=_progress("writing", 55, message="写入知识库"),
             )
-            content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
-            kb_receipt = self._ingest_knowledge(
-                text=text,
-                source_key=safe_name,
-                run_id=run_token,
-                owner_user_id=owner_user_id,
-                content_hash=content_hash,
-                note=composer_note,
-                tenant_id=tenant_id,
-                expected_plan=prepared_plan.get("knowledge") if prepared_plan else None,
-            )
+            if planned_knowledge.get("action") == "error":
+                kb_receipt = {
+                    "action": "skip",
+                    "reason": planned_knowledge.get("degradation_code") or "knowledge_llm_degraded",
+                    "used_llm": bool(planned_knowledge.get("used_llm")),
+                    "degraded": True,
+                    "lane": "knowledge",
+                    "run_id": run_token,
+                }
+            else:
+                content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                kb_receipt = self._ingest_knowledge(
+                    text=text,
+                    source_key=safe_name,
+                    run_id=run_token,
+                    owner_user_id=owner_user_id,
+                    content_hash=content_hash,
+                    note=composer_note,
+                    tenant_id=tenant_id,
+                    expected_plan=prepared_plan.get("knowledge") if prepared_plan else None,
+                )
             kb_receipt, kb_done, _rag_meta = enrich_knowledge_progress(
                 kb_receipt, tenant_id, _progress
             )
@@ -423,6 +603,7 @@ class AutoIngestService:
                 biz_prog = _progress("executing", 80, message="业务写入处理中，请等待实际回执")
             else:
                 biz_prog = _progress("done", 100, message="业务域已写入")
+            coverage = _batch_coverage(kb_receipt, business, detection)
             final = _patch_batch(
                 tenant_id,
                 batch_id,
@@ -434,7 +615,10 @@ class AutoIngestService:
                     else "failed"
                     if business.get("failed")
                     else "applied"
+                    if coverage["complete"]
+                    else "partial"
                 ),
+                coverage=coverage,
                 detection=detection,
                 knowledge=kb_receipt,
                 business=business,
@@ -609,8 +793,16 @@ class AutoIngestService:
                     or latest.get("business") != batch.get("business")
                 ):
                     return dict(latest) if isinstance(latest, dict) else batch
+                coverage = _batch_coverage(
+                    latest.get("knowledge") or {},
+                    {"summary": run.get("summary")},
+                    latest.get("detection"),
+                )
+                if batch_status == "applied" and not coverage["complete"]:
+                    batch_status = "partial"
                 latest.update(
                     status=batch_status,
+                    coverage=coverage,
                     business={
                         **business,
                         "status": status,
@@ -707,7 +899,7 @@ class AutoIngestService:
                 )
             if batch.get("status") == "withdrawn":
                 return batch
-            if batch.get("status") != "applied":
+            if batch.get("status") not in {"applied", "partial"}:
                 raise EltError(
                     "ETL_AUTO_INGEST_BAD_STATE",
                     f"当前状态不可撤回：{batch.get('status')}",

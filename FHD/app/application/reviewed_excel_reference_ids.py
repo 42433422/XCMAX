@@ -215,7 +215,11 @@ def _atom_contract(payload: dict, schema: dict, review: dict) -> tuple[dict, dic
 
 def _boundary_contract(payload: dict, schema: dict, review: dict) -> tuple[dict, dict]:
     _, references, _ = reference_contract(payload["cells"], schema, sheets=payload["sheets"])
-    return references, source_ranges_schema(payload["sheets"])
+    # Other sheets stay visible as relationship context, but a range there would cover
+    # cells this pack never sent as primary and could only be rejected.
+    primary = {cell["sheet"] for cell in payload["cells"] if not cell.get("context_only")}
+    sheets = [sheet for sheet in payload["sheets"] if sheet["sheet"] in primary]
+    return references, source_ranges_schema(sheets, decide_slice=True)
 
 
 def normalize_reference_ids(
@@ -248,20 +252,22 @@ def normalize_reference_ids(
             raise ReviewedExcelError("原分类schema校验失败")
         return normalized
     normalized = deepcopy(data)
-    for region in normalized["physical_regions"]:
+    for index, region in enumerate(normalized["physical_regions"]):
         # Internal compatibility label, not model output.
         region["labels"] = ["unknown"]
         primary_id = region.pop("primary_id")
         entry = references[primary_id]
+        # Index, range and evidence ids are coordinates the repair turn can act on.
+        location = f"physical_regions[{index}] {str(region['range'])[:20]} 的 {primary_id}"
         if not entry["primary"]:
-            raise ReviewedExcelError("主体证据不能只来自上下文")
+            raise ReviewedExcelError(f"主体证据不能只来自上下文：{location}")
         ref = entry["ref"]
         col, row = coordinate_from_string(ref["cell"])
         c1, r1, c2, r2 = bounded_range(region["range"])
         if ref["sheet"] != region["sheet"] or not (
             c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2
         ):
-            raise ReviewedExcelError("模型区域没有区域内主体证据")
+            raise ReviewedExcelError(f"模型区域没有区域内主体证据：{location} 不在该区域内")
         if "drawing_ids" in region:
             identifiers = region.pop("drawing_ids")
             if len(set(identifiers)) != len(identifiers):
@@ -670,8 +676,8 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "b6975fbed527549c18da809214e071543d5221937a34bfc741dd8270e2ab9ec1",
-        "2218f5c2d25cc91006ee83db14ec4bf9431c019641cb493034882fa2309eb137",
+        "b703539150a32f5ed8bbc2761655cd8c545feb06d872a446b7e61aeae92d5108",
+        "b1455573350323b3d7d3317c5202954d06e01f6675597532586facc2bdbc2b85",
     ),
     "group_ranges": (
         "0819219ae5c36ab236daf334630a45e0f7ca92862d7f745e7c8a357b718c34b6",

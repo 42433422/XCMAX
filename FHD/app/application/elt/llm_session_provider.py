@@ -22,6 +22,41 @@ class SessionMarketProvider:
     def is_configured(self) -> bool:
         return bool(self._token)
 
+    async def lookup_call(self, call_id: str) -> dict[str, Any] | None:
+        """What the market knows about one idempotency key; None when that is unknown.
+
+        A market without the lookup route answers 404/405: recovery is unsupported
+        and the caller stays fail-closed.
+        """
+        import re
+
+        import httpx
+
+        from app.application.elt_login_authorization import _platform_url
+
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{8,128}", call_id or ""):
+            return None
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(15.0, connect=10.0),
+                headers={"Authorization": f"Bearer {self._token}"},
+            ) as client:
+                response = await client.get(f"{_platform_url()}/api/llm/chat/requests/{call_id}")
+        except httpx.HTTPError:
+            return None
+        if response.status_code in {404, 405}:
+            return {"supported": False}
+        if response.status_code != 200:
+            return None
+        try:
+            body = response.json()
+        except ValueError:
+            return None
+        state = body.get("state") if isinstance(body, dict) else None
+        if state not in {"not_found", "processing", "completed", "failed"}:
+            return None
+        return {"supported": True, "state": state}
+
     async def chat_completion(
         self,
         messages: list[dict[str, str]],
@@ -122,6 +157,9 @@ class SessionMarketProvider:
                     }
                 }
                 retry.update(allow_failover=True)
+                if retry.get("client_request_id"):
+                    # The refused first shot owns its key on an idempotent market.
+                    retry["client_request_id"] = f"{retry['client_request_id']}-r"
                 return cast(
                     "dict[str, Any] | None",
                     await adapter.chat_completion(

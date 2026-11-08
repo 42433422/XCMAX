@@ -45,9 +45,9 @@ def workbook_review(rows=120, *, formulas=True):
 
 def test_complete_request_includes_dense_formulas_schema_and_preserves_all_cells(monkeypatch):
     monkeypatch.delenv("FHD_TEMPLATE_LLM_PROVIDER", raising=False)
-    # 3000 dense formula rows still exceed the raised ~3.84MB request envelope as one call,
-    # while staying under MAX_MODEL_TEXT_BYTES so transport packing (not cell-count) splits.
-    review = workbook_review(3000)
+    # 2000 dense formula rows exceed the request envelope as one call while staying
+    # under MAX_MODEL_TEXT_BYTES, so transport packing (not cell-count) splits.
+    review = workbook_review(2000)
     assert sum(map(_model_cell_cost, review["cells"])) < MAX_MODEL_TEXT_BYTES
     with pytest.raises(RequestBudgetExceeded):
         _classify_semantic_batch(review, prepare_only=True, reference_ids=True)
@@ -283,10 +283,11 @@ def test_old_cell_chunk_boundaries_do_not_change_neutral_packing():
 def test_full_width_primary_row_is_not_rejected_for_optional_context(monkeypatch):
     from openpyxl.utils.cell import get_column_letter
 
-    # Excel caps a row at 16384 columns, so the algorithm is exercised exactly at that
-    # physical width instead of the product's larger 20000-cell pack budget.
+    # Excel caps a row at 16384 columns; the pack caps are raised to that physical width
+    # so one full-width primary row is exercised as a single pack.
     width = 16384
     monkeypatch.setattr("app.application.reviewed_excel_evidence.MAX_MODEL_CELLS", width)
+    monkeypatch.setattr("app.application.reviewed_excel_evidence.MAX_MODEL_TEXT_BYTES", 3_840_000)
     review = {
         "sheets": ["S"],
         "cells": [
@@ -302,7 +303,7 @@ def test_full_width_primary_row_is_not_rejected_for_optional_context(monkeypatch
     assert len(fitted) == 2
     assert sum(not c.get("context_only") for c in fitted[0]) == width
     assert sum(not c.get("context_only") for b in fitted for c in b) == width + 1
-    assert all(len(b) <= MAX_MODEL_CELLS for b in fitted)
+    assert all(len(b) <= width for b in fitted)
 
 
 def saved_plan(review, batches):
@@ -360,6 +361,56 @@ def test_coordinate_checkpoint_tampering_is_rejected(tamper):
         checkpoint["plan_digest"] = _digest(checkpoint)
     with pytest.raises(ReviewedExcelError, match="坐标计划"):
         restore_coordinate_plan(review, checkpoint)
+
+
+def _split_review(merges=(), drawings=()):
+    cells = [
+        {"sheet": "S", "cell": f"A{row}", "value": "x", "kind": "review"} for row in range(1, 9)
+    ]
+    return {
+        "sha256": "synthetic-source",
+        "sheets": ["S"],
+        "cells": cells,
+        "sheet_overview": [{"sheet": "S", "merged_regions": list(merges)}],
+        "drawing_evidence": list(drawings),
+    }
+
+
+def test_a_truncated_unit_splits_into_restorable_halves_that_keep_merges_whole():
+    from app.application.reviewed_excel_plan import restore_coordinate_plan, split_plan_step
+
+    review = _split_review(merges=["A3:B5"])
+    checkpoint = saved_plan(review, [review["cells"]])
+    assert split_plan_step(checkpoint, 0, review) is True
+    halves = restore_coordinate_plan(review, checkpoint)
+    assert checkpoint["total"] == 2
+    rows = [{int(c["cell"][1:]) for c in half if not c["context_only"]} for half in halves]
+    assert rows[0] | rows[1] == set(range(1, 9)) and not rows[0] & rows[1]
+    assert {3, 4, 5} <= rows[0] or {3, 4, 5} <= rows[1]
+
+
+def test_a_unit_that_cannot_be_cut_legally_is_not_split():
+    from app.application.reviewed_excel_plan import split_plan_step
+
+    whole = _split_review(merges=["A1:A8"])
+    checkpoint = saved_plan(whole, [whole["cells"]])
+    before = json.dumps(checkpoint, sort_keys=True)
+    assert split_plan_step(checkpoint, 0, whole) is False
+    assert json.dumps(checkpoint, sort_keys=True) == before
+    unbounded = _split_review(drawings=[{"sheet": "S", "from": {"row": 0}, "geometry_error": "x"}])
+    checkpoint = saved_plan(unbounded, [unbounded["cells"]])
+    assert split_plan_step(checkpoint, 0, unbounded) is False
+
+
+def test_a_drawing_anchor_span_is_never_cut_by_a_split():
+    from app.application.reviewed_excel_plan import split_plan_step
+
+    review = _split_review(drawings=[{"sheet": "S", "from": {"row": 2}, "to": {"row": 5}}])
+    checkpoint = saved_plan(review, [review["cells"]])
+    assert split_plan_step(checkpoint, 0, review) is True
+    plan = checkpoint["coordinate_plan"]
+    rows = [{int(item[1][1:]) for item in half if not item[2]} for half in plan]
+    assert len(plan) == 2 and any({3, 4, 5, 6} <= half for half in rows)
 
 
 def test_optional_large_context_never_excludes_valid_primary_rows():
@@ -528,3 +579,58 @@ def test_required_extent_is_source_derived_not_a_business_region(reference_ids, 
         with pytest.raises(ReviewedExcelError, match="白名单"):
             _classify_semantic_batch(review, reference_ids=True)
         assert raw == untouched  # The source extent never repairs the model's returned range.
+
+
+@pytest.mark.parametrize("connected", [False, True])
+def test_a_connection_that_never_opened_is_not_sent(monkeypatch, connected):
+    from types import SimpleNamespace
+
+    import httpx
+
+    from app.application.elt import llm_session_provider as sessions
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+    from app.application.reviewed_excel_template import _template_platform_complete
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    failure = httpx.ReadTimeout("synthetic") if connected else httpx.ConnectTimeout("synthetic")
+
+    async def fail(*_args, **_kwargs):
+        raise failure
+
+    monkeypatch.setattr(
+        sessions,
+        "current_owner_market_provider",
+        lambda **_: SimpleNamespace(is_configured=True, chat_completion=fail),
+    )
+    with pytest.raises(ReviewedExcelError) as error:
+        _template_platform_complete([], {}, 20, owner_id=7)
+    assert isinstance(error.value, ModelRequestNotSent) is not connected
+
+
+def test_first_byte_deadline_defaults_to_the_template_timeout(monkeypatch):
+    from app.application.reviewed_excel_budget import template_first_byte_seconds
+
+    monkeypatch.delenv("FHD_TEMPLATE_LLM_FIRST_BYTE_SECONDS", raising=False)
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_TIMEOUT_SECONDS", "150")
+    assert template_first_byte_seconds() == 150
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_FIRST_BYTE_SECONDS", "30")
+    assert template_first_byte_seconds() == 30
+
+
+def test_schema_rejection_names_each_failing_field():
+    from app.application.reviewed_excel_template import _template_schema_problem
+
+    schema = {
+        "type": "object",
+        "required": ["regions", "refs"],
+        "additionalProperties": False,
+        "properties": {
+            "regions": {"type": "array", "items": {"type": "string", "enum": ["S1:A1"]}},
+            "refs": {"type": "array", "maxItems": 1, "items": {"type": "string"}},
+        },
+    }
+    assert _template_schema_problem(schema, {"regions": ["S1:A1"], "refs": []}) == ""
+    problem = _template_schema_problem(schema, {"regions": ["S1:A1", "S9:Z9"], "refs": ["a", "b"]})
+    assert "$/regions[1] 不是提供的取值之一" in problem
+    assert "$/refs 有 2 项，超过上限 1" in problem
+    assert "S9" not in problem

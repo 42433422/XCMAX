@@ -11,7 +11,7 @@ vi.mock('./core', () => {
   return { default: { post: mock.post, get: mock.get, download: mock.download }, ApiError, primeCsrfCookie: mock.prime }
 })
 import { ApiError } from './core'
-import { templatePreviewApi } from './templatePreview'
+import { MODEL_ANALYZE_TIMEOUT_MS, MODEL_BACKED_ELT_TIMEOUT_MS, MODEL_INTAKE_TIMEOUT_MS, templatePreviewApi } from './templatePreview'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -138,7 +138,7 @@ describe('reviewed Excel CSRF handling', () => {
     identity.resolve({ actor: '1:7' })
     await expect(pending).resolves.toEqual({ classification_id: 'c1' })
     expect(form.get('expected_actor')).toBe('1:7')
-    expect(mock.post).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/archive-classify', form)
+    expect(mock.post).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/archive-classify', form, {})
   })
 
   it.each(['initial request', 'CSRF retry'])('stops when the session changes during CSRF priming for %s', async phase => {
@@ -230,7 +230,7 @@ describe('reviewed Excel CSRF handling', () => {
     expect(await templatePreviewApi.appendArchiveVersion('asset/7?draft', version)).toBe(response)
     expect(quota.get('expected_actor')).toBe('1:7'); expect(quota.get('limit_bytes')).toBe('2048')
     expect(version.get('expected_actor')).toBe('1:7'); expect(version.get('file')).toBe(source); expect(version.get('request_key')).toBe('synthetic-upload-1')
-    expect(mock.post.mock.calls).toEqual([['/api/templates/reviewed-excel/archive-quota', quota], ['/api/templates/reviewed-excel/archive-assets/asset%2F7%3Fdraft/versions', version]])
+    expect(mock.post.mock.calls).toEqual([['/api/templates/reviewed-excel/archive-quota', quota, {}], ['/api/templates/reviewed-excel/archive-assets/asset%2F7%3Fdraft/versions', version, {}]])
   })
 
   it.each([
@@ -242,7 +242,7 @@ describe('reviewed Excel CSRF handling', () => {
     const failure = new ApiError('没有当前归档操作权限', 403, { error_code: 'permission_denied' })
     mock.post.mockRejectedValueOnce(failure)
     await expect(templatePreviewApi[method]('scope/7?draft', form)).rejects.toBe(failure)
-    expect(form.get('expected_actor')).toBe('1:7'); expect(mock.post).toHaveBeenCalledExactlyOnceWith(path, form)
+    expect(form.get('expected_actor')).toBe('1:7'); expect(mock.post).toHaveBeenCalledExactlyOnceWith(path, form, {})
     expect(mock.get).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/identity')
   })
 
@@ -286,7 +286,7 @@ describe('reviewed Excel CSRF handling', () => {
     expect(await templatePreviewApi.analyzeClassification('class/7', form)).toBe(paused)
     expect(form.get('version')).toBe('classification-v1')
     for (const key of ['use_login_notice', 'continue_authorized', 'retry_authorized', 'sample_authorized', 'own_file_authorized']) expect(form.has(key)).toBe(false)
-    expect(mock.post).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/classifications/class%2F7/analyze', form); expect(mock.get).not.toHaveBeenCalled()
+    expect(mock.post).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/classifications/class%2F7/analyze', form, { timeoutMs: MODEL_ANALYZE_TIMEOUT_MS }); expect(mock.get).not.toHaveBeenCalled()
   })
 
   it('keeps classification confirmation and intake preview separate from model dispatch and saving', async () => {
@@ -295,7 +295,7 @@ describe('reviewed Excel CSRF handling', () => {
     const confirmed = { version: 'confirmed-v2', confirmed: true }, plan = { intake: { run_id: 'intake-7', business: { status: 'preview_ready', preview_revision: 'r1' } } }
     mock.post.mockResolvedValueOnce(confirmed).mockResolvedValueOnce(plan)
     expect(await templatePreviewApi.confirmClassification('class/7', confirmation)).toBe(confirmed); expect(await templatePreviewApi.previewReviewedIntake(intake)).toBe(plan)
-    expect(mock.post.mock.calls).toEqual([['/api/templates/reviewed-excel/classifications/class%2F7/confirm', confirmation], ['/api/templates/reviewed-excel/intake-preview', intake]])
+    expect(mock.post.mock.calls).toEqual([['/api/templates/reviewed-excel/classifications/class%2F7/confirm', confirmation, {}], ['/api/templates/reviewed-excel/intake-preview', intake, { timeoutMs: MODEL_INTAKE_TIMEOUT_MS }]])
     expect(mock.post.mock.calls.some(call => call[0].endsWith('/save') || call[0].endsWith('/analyze'))).toBe(false)
   })
 
@@ -305,6 +305,24 @@ describe('reviewed Excel CSRF handling', () => {
     mock.post.mockRejectedValueOnce(new ApiError(state.message, 503, data))
     await expect(templatePreviewApi.refineReviewedExcel(new FormData())).rejects.toMatchObject({ status: 503, data, message: '模型处理未完成，请核对（阶段：模型候选） 请求编号：model-error-7' })
     expect(mock.post).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not report a model-backed ELT call as failed at 8s', async () => {
+    expect(MODEL_BACKED_ELT_TIMEOUT_MS).toBe(30_000)
+    expect(MODEL_INTAKE_TIMEOUT_MS).toBe(360_000)
+    expect(MODEL_ANALYZE_TIMEOUT_MS).toBeGreaterThan(128_000)
+    expect(MODEL_ANALYZE_TIMEOUT_MS).toBeLessThan(300_000)
+    mock.post.mockResolvedValue({})
+    const form = new FormData()
+    await templatePreviewApi.analyzeClassification('class/7', form)
+    await templatePreviewApi.reviewExcel(form)
+    await templatePreviewApi.refineReviewedExcel(form)
+    await templatePreviewApi.saveReviewedExcel(form)
+    const options = (suffix: string) => mock.post.mock.calls.find(call => String(call[0]).endsWith(suffix))?.[2]
+    expect(options('/analyze')).toEqual({ timeoutMs: MODEL_ANALYZE_TIMEOUT_MS })
+    expect(options('/preview')).toEqual({ timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS })
+    expect(options('/refine')).toEqual({ timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS })
+    expect(options('/save')).toEqual({})
   })
 
 })

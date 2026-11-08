@@ -407,10 +407,16 @@ def _validate_schema_payload(
     if subject == "工具输出" and payload.get("success") is False:
         required = [key for key in (required or []) if str(key) == "success"]
     for key in required or []:
-        if _is_empty(payload.get(str(key))) and not (
-            subject == "工具输出" and isinstance(payload.get(str(key)), (list, dict))
+        name = str(key)
+        present = isinstance(payload, dict) and name in payload
+        value = payload.get(name) if present else None
+        # A present array or object is the field, including an empty list.
+        if (
+            not present
+            or value is None
+            or (_is_empty(value) and not isinstance(value, (list, dict)))
         ):
-            return False, f"{subject} 缺少字段：{key}"
+            return False, f"{subject} 缺少字段：{name}"
 
     raw_properties = schema.get("properties")
     properties = raw_properties if isinstance(raw_properties, dict) else {}

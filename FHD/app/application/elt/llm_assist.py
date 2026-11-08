@@ -56,6 +56,7 @@ def _bounded_structured_completion(
     timeout_seconds: float,
     conversation_service: Any | None,
     provider: Any | None,
+    max_repairs: int = 0,
 ):
     """Run one structured LLM call without letting a worker thread stall.
 
@@ -79,7 +80,7 @@ def _bounded_structured_completion(
                 max_tokens=max_tokens,
                 # A schema repair is another provider request.  ETL remains
                 # deterministic without it, so never retry advisory output.
-                max_repairs=0,
+                max_repairs=max_repairs,
                 timeout_seconds=timeout_seconds,
                 profile="etl",
                 conversation_service=conversation_service,
@@ -104,12 +105,18 @@ def _bounded_structured_completion(
     return box["result"]
 
 
-def _active_software_llm() -> tuple[bool, Any | None, Any | None]:
+def _active_software_llm(
+    timeout_seconds: float | None = None,
+) -> tuple[bool, Any | None, Any | None]:
     """Resolve the current user's software-account LLM, then app-wide providers."""
     try:
         from app.application.elt.llm_session_provider import current_owner_market_provider
 
-        market_provider = current_owner_market_provider(timeout_seconds=etl_llm_timeout_seconds())
+        market_provider = current_owner_market_provider(
+            timeout_seconds=(
+                etl_llm_timeout_seconds() if timeout_seconds is None else timeout_seconds
+            )
+        )
         if market_provider is not None:
             return True, None, market_provider
         from app.infrastructure.llm.providers.registry import get_active_provider
@@ -139,11 +146,14 @@ def _complete(
     *,
     schema: dict[str, Any],
     max_tokens: int,
+    lane: str = "",
+    max_repairs: int = 0,
+    timeout_seconds: float | None = None,
 ) -> LlmAssistResult:
     mode = etl_llm_mode()
     if mode == "off":
         return LlmAssistResult()
-    circuit_key = _circuit_key()
+    circuit_key = _circuit_key(lane)
     circuit_degradation = _circuit_degradation(circuit_key)
     if circuit_degradation:
         return LlmAssistResult(
@@ -163,22 +173,29 @@ def _complete(
                 degraded=True,
                 degradation_code=circuit_degradation,
             )
-        configured, conversation_service, provider = _active_software_llm()
+        configured, conversation_service, provider = _active_software_llm(timeout_seconds)
         if not configured:
             return LlmAssistResult(
                 used_llm=False,
                 degraded=mode == "on",
                 degradation_code="ELT_LLM_UNAVAILABLE" if mode == "on" else "",
             )
-        timeout_seconds = etl_llm_timeout_seconds()
+        # An explicit budget is the whole call, including one schema repair.
+        # Probe calls still scale the short timeout when a repair is allowed.
+        budget = (
+            timeout_seconds
+            if timeout_seconds is not None
+            else etl_llm_timeout_seconds() * (1 + max(0, max_repairs))
+        )
         try:
             result = _bounded_structured_completion(
                 messages,
                 schema=schema,
                 max_tokens=max_tokens,
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=budget,
                 conversation_service=conversation_service,
                 provider=provider,
+                max_repairs=max_repairs,
             )
             return LlmAssistResult(
                 used_llm=True,
@@ -189,11 +206,7 @@ def _complete(
         except BOUNDARY_ERRORS as exc:  # Advisory-provider boundary: preserve deterministic ETL.
             degradation_code = _degradation_code(exc)
             _open_circuit(circuit_key, degradation_code)
-            logger.info(
-                "general etl llm assist degraded (%s): %s",
-                degradation_code,
-                type(exc).__name__,
-            )
+            _runtime.log_etl_llm_degradation(logger, code=degradation_code, lane=lane, exc=exc)
             return LlmAssistResult(
                 used_llm=True,
                 degraded=True,
@@ -277,7 +290,7 @@ def advise_workbook_regions(probes: list[dict[str, Any]]) -> LlmAssistResult:
             ),
         },
     ]
-    result = _complete(messages, schema=_REGION_SCHEMA, max_tokens=1800)
+    result = _complete(messages, schema=_REGION_SCHEMA, max_tokens=1800, lane="template")
     allowed_ids = {item["region_id"] for item in bounded if item["region_id"]}
     normalized: list[dict[str, Any]] = []
     for item in list(result.data.get("regions") or []):
@@ -362,7 +375,7 @@ def advise_field_mappings(
             ),
         },
     ]
-    result = _complete(messages, schema=_MAPPING_SCHEMA, max_tokens=1600)
+    result = _complete(messages, schema=_MAPPING_SCHEMA, max_tokens=1600, lane="database")
     allowed_sources = set(headers)
     allowed_targets = {str(field.get("key") or "") for field in target_fields}
     normalized: list[dict[str, Any]] = []
@@ -456,7 +469,7 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
             ),
         },
     ]
-    result = _complete(messages, schema=_ROW_SCHEMA, max_tokens=1600)
+    result = _complete(messages, schema=_ROW_SCHEMA, max_tokens=1600, lane="database")
     normalized: list[dict[str, Any]] = []
     for item in list(result.data.get("items") or []):
         if not isinstance(item, dict):
@@ -479,9 +492,303 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
     return result
 
 
+_BUSINESS_IMPORT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["rows"],
+    "properties": {"rows": {"type": "array", "items": {"type": "object"}}},
+}
+_KNOWLEDGE_IMPORT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["content"],
+    "properties": {"title": {"type": "string"}, "content": {"type": "string"}},
+}
+
+
+def _cell(value: Any) -> str:
+    return str(value or "").strip()[:160]
+
+
+_BUSINESS_ROW_KEYS = (
+    "customer_name",
+    "purchase_unit",
+    "product_name",
+    "quantity",
+    "unit_price",
+    "amount",
+    "model",
+    "source_sheet",
+    "source_row",
+    "source_range",
+)
+
+
+def _sheet_line_index(text: str) -> dict[tuple[str, str], set[str]]:
+    """Cells under each ``# sheet:`` and ``R`` label. Hidden sheets are already omitted."""
+    sheet = ""
+    found: dict[tuple[str, str], set[str]] = {}
+    for line in text.splitlines():
+        if line.startswith("# sheet:"):
+            sheet = line.removeprefix("# sheet:")
+            continue
+        if not sheet or not line.startswith("R"):
+            continue
+        token = line.split(" ", 1)[0][1:]
+        if not token.isdigit():
+            continue
+        cells = {
+            part.strip()
+            for part in (line.split("|", 1)[1] if "|" in line else "").split("|")
+            if part.strip()
+        }
+        found[(sheet, token)] = cells
+    return found
+
+
+def _business_rows(data: dict, cited: set[tuple[str, str]]) -> list[dict]:
+    rows = []
+    for item in list(data.get("rows") or [])[:100]:
+        if not isinstance(item, dict):
+            continue
+        row = {key: _cell(item.get(key)) for key in _BUSINESS_ROW_KEYS}
+        if (row["source_sheet"], row["source_row"]) not in cited:
+            row["source_sheet"] = ""
+            row["source_row"] = ""
+            row["source_range"] = ""
+        rows.append(row)
+    return rows
+
+
+def _coordinate_missing(row: dict) -> bool:
+    return bool(row.get("product_name") or row.get("quantity")) and not (
+        row.get("source_sheet") and str(row.get("source_row") or "").isdigit()
+    )
+
+
+def _uncited_sheets(lines: dict[tuple[str, str], set[str]], rows: list[dict]) -> list[str]:
+    """Sheet labels present in the text and absent from the model's rows."""
+    cited = {row.get("source_sheet") for row in rows if row.get("source_sheet")}
+    sheets: list[str] = []
+    for sheet, _row in lines:
+        if sheet not in sheets:
+            sheets.append(sheet)
+    return [sheet for sheet in sheets if sheet not in cited]
+
+
+def _unit_untraceable(row: dict, lines: dict[tuple[str, str], set[str]]) -> bool:
+    """A purchase unit the model did not copy from the cited sheet.
+
+    The dataset falls back to customer_name when purchase_unit is empty, so the
+    value checked is the one that would be written.
+    """
+    from app.application.elt.candidate_table import _sheet_customer
+
+    unit = row.get("purchase_unit") or row.get("customer_name") or ""
+    sheet = row.get("source_sheet") or ""
+    if not unit or not sheet:
+        return False
+    if unit == _sheet_customer(sheet):
+        return False
+    pool: set[str] = set()
+    for (label, _row), cells in lines.items():
+        if label == sheet:
+            pool.update(cells)
+    return not any(unit == item or unit in item for item in pool)
+
+
+MODEL_WINDOW_CHARS = 20_000
+# Each unit's answer must fit the 8192-token output in one call, and every unit runs
+# inside one intake request: 8 units of 60 rows stay within both.
+MAX_BUSINESS_UNITS = 8
+_UNIT_ROWS = 60
+_UNIT_CONTEXT_ROWS = 8
+
+
+def business_units(source: str) -> list[str]:
+    """Bounded model inputs cut at row boundaries; nothing is dropped.
+
+    A unit that starts inside a sheet repeats that sheet's heading and first rows
+    as context, so the header customer stays visible. Rows are never split.
+    """
+    units: list[str] = []
+    current: list[str] = []
+    size = 0
+    fresh = 0
+    sheet_head: list[str] = []
+    for line in source.splitlines():
+        if line.startswith("# sheet:"):
+            sheet_head = [line]
+        elif len(sheet_head) <= _UNIT_CONTEXT_ROWS:
+            sheet_head.append(line)
+        if current and (size + len(line) + 1 > MODEL_WINDOW_CHARS - 2_000 or fresh >= _UNIT_ROWS):
+            units.append("\n".join(current))
+            current = list(sheet_head) if not line.startswith("# sheet:") else []
+            if current and current[-1] == line:
+                current.pop()
+            size = sum(len(item) + 1 for item in current)
+            fresh = 0
+        current.append(line)
+        size += len(line) + 1
+        fresh += not line.startswith("# sheet:")
+    if current:
+        units.append("\n".join(current))
+    return units
+
+
+def advise_business_import(sheet_text: str) -> LlmAssistResult:
+    """Import archived sheet rows on the database line, one bounded unit at a time.
+
+    Rows from every unit are merged by source coordinate. If any unit is degraded
+    the whole answer is degraded: a partial table is never offered as complete.
+    """
+    source = str(sheet_text or "").strip()
+    if not source:
+        return LlmAssistResult()
+    units = business_units(source)
+    if len(units) > MAX_BUSINESS_UNITS:
+        return LlmAssistResult(degraded=True, degradation_code="ELT_DATABASE_INPUT_EXCEEDS_UNITS")
+    merged: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    result = LlmAssistResult()
+    for unit in units:
+        result = _advise_business_unit(unit)
+        if not result.used_llm or result.degraded:
+            return result
+        for row in result.data.get("rows") or []:
+            key = (
+                str(row.get("source_sheet") or ""),
+                str(row.get("source_row") or ""),
+                str(row.get("product_name") or ""),
+            )
+            if key[0] and key[1] and key in seen:
+                continue
+            seen.add(key)
+            merged.append(row)
+    result.data = {"rows": merged, "units": len(units)}
+    return result
+
+
+def _advise_business_unit(source: str) -> LlmAssistResult:
+    lines = _sheet_line_index(source)
+    cited = set(lines)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你把归档原表导入业务数据库。只返回 JSON。"
+                "rows 的字段只能是 customer_name、purchase_unit、product_name、quantity、"
+                "unit_price、amount、model、source_sheet、source_row、source_range。"
+                "只放货品明细。表头、合计、空行不要放入。"
+                "购买单位用这一张表正文里的客户，不要用列名，也不要借用其他工作表的客户。"
+                "每一张表都要扫，这一本有几张就扫几张，每一行货品单独成一条，不要在第一张送货单结束后停止。"
+                "行内没有购买单位时，用这一张表表头上的客户；表头也没有就留空。"
+                "合计、表头、协议文字不要放入。"
+                "借还台账和测算表不要导入，除非明确要求。"
+                "source_sheet 必须等于某一行 # sheet: 后面的名称，source_row 必须等于该行 R 标签的整数。"
+                "source_range 只在你能指出该行矩形时填写，不能就留空。对不上标签就让坐标为空，不要猜。"
+                "JSON 必须是单个对象、以 rows 开头、不要 markdown 代码块、不要解释文字。"
+            ),
+        },
+        {"role": "user", "content": source},
+    ]
+    call: dict[str, Any] = {
+        "schema": _BUSINESS_IMPORT_SCHEMA,
+        "max_tokens": 8192,
+        "lane": "database",
+        # A schema repair would share this call's budget and could be cut off after
+        # sending; an invalid answer is a definite failure instead.
+        "max_repairs": 0,
+        "timeout_seconds": etl_llm_timeout_seconds(full_sheet=True),
+    }
+    result = _complete(messages, **call)
+    rows = _business_rows(result.data, cited) if result.used_llm and not result.degraded else []
+    # Up to four stored rounds. A degraded or unknown call stops; it is not sent again.
+    for _round in range(3):
+        if not result.used_llm or result.degraded:
+            break
+        missing = any(_coordinate_missing(row) for row in rows)
+        borrowed = any(_unit_untraceable(row, lines) for row in rows)
+        skipped = _uncited_sheets(lines, rows)
+        if not missing and not borrowed and not skipped:
+            break
+        notes = []
+        if missing:
+            notes.append(
+                "有货品行缺少原表坐标。只根据上文 # sheet: 和 R 标签补 source_sheet 与 source_row。"
+                "对不上就留空，不要猜行号。"
+            )
+        if borrowed:
+            notes.append(
+                "有购买单位不在该行所在工作表的正文里，也不等于该表名称。"
+                "改成这一张表正文里的客户，或留空。不要借用其他工作表的客户。"
+            )
+        if skipped:
+            names = "、".join(skipped[:12])
+            notes.append(
+                f"这些工作表在正文里，但 rows 没有引用：{names}。"
+                "是货品明细就按该表的 R 标签补上，是借还台账或测算就不要补，不要编造正文里没有的行。"
+            )
+        follow = [
+            *messages,
+            {
+                "role": "assistant",
+                "content": json.dumps({"rows": rows}, ensure_ascii=False)[:12_000],
+            },
+            {"role": "user", "content": "".join(notes) + "仍然只返回 rows。"},
+        ]
+        nxt = _complete(follow, **call)
+        if not nxt.used_llm or nxt.degraded:
+            break
+        fresh = _business_rows(nxt.data, cited)
+        if not fresh:
+            break
+        result = nxt
+        rows = fresh
+    for row in rows:
+        if _unit_untraceable(row, lines):
+            row["unit_in_source"] = "0"
+    if result.used_llm and not result.degraded:
+        result.data = {"rows": rows}
+    return result
+
+
+def advise_knowledge_import(document_text: str) -> LlmAssistResult:
+    """Import one archived sheet on the knowledge line only."""
+    source = str(document_text or "").strip()
+    if not source:
+        return LlmAssistResult()
+    if len(source) > MODEL_WINDOW_CHARS:
+        # A summary of a prefix would read as the whole workbook; keep the archive text.
+        return LlmAssistResult(degraded=True, degradation_code="ELT_KNOWLEDGE_INPUT_EXCEEDS_WINDOW")
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你把归档原表导入知识库。只返回 JSON，包含 title 和 content。"
+                "content 保留客户、货品、数量、单价和金额，不要改成列名。"
+            ),
+        },
+        {"role": "user", "content": source},
+    ]
+    result = _complete(
+        messages,
+        schema=_KNOWLEDGE_IMPORT_SCHEMA,
+        max_tokens=8192,
+        lane="knowledge",
+        max_repairs=0,
+        timeout_seconds=etl_llm_timeout_seconds(full_sheet=True),
+    )
+    result.data = {
+        "title": _cell(result.data.get("title")),
+        "content": str(result.data.get("content") or "").strip(),
+    }
+    return result
+
+
 __all__ = [
     "LlmAssistResult",
+    "advise_business_import",
     "advise_field_mappings",
+    "advise_knowledge_import",
     "advise_row_decisions",
     "advise_workbook_regions",
     "clear_etl_llm_circuit",

@@ -241,3 +241,22 @@ def test_derive_surfaces_error_operand_warnings_on_receipt():
     assert result
     assert receipt["formula_error_operand_warnings"][0]["cell"] == "A1"
     assert receipt["formula_error_operand_warnings"][0]["formula"] == "=SUM(#REF!)"
+
+
+def test_array_formula_uses_its_text_when_planning_dependencies():
+    from openpyxl.worksheet.formula import ArrayFormula
+
+    from app.application.reviewed_excel_template import derive_document_workbook
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "表"
+    sheet["D52"] = 1
+    sheet["D53"] = 2
+    sheet["C54"] = ArrayFormula("C54", "=SUM(D52:D53*3%)")
+    output = BytesIO()
+    book.save(output)
+    body = output.getvalue()
+    result = plan_formula_support(body, [{"sheet": "表", "range": "C52:D54"}])
+    assert result["formula_references"]["C54"] == ["D52:D53"]
+    assert derive_document_workbook(body, [{"sheet": "表", "range": "C52:D54"}])

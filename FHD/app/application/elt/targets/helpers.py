@@ -43,6 +43,44 @@ def issue(code: str, field: str, message: str) -> dict[str, Any]:
     return {"code": code, "field": field, "severity": "error", "message": message}
 
 
+_COLUMN_HEADER_LABELS = frozenset(
+    {
+        "产品名称",
+        "商品名称",
+        "货品名称",
+        "品名",
+        "数量",
+        "单价",
+        "金额",
+        "规格",
+        "备注",
+        "客户名称",
+        "单据日期",
+        "购买单位",
+        "购货单位",
+        "客户",
+        "型号",
+        "日期",
+        "合计",
+        "总计",
+        "小计",
+    }
+)
+_MASTER_HEADER_FIELDS = ("customer_name", "purchase_unit", "unit")
+
+
+def is_column_header_label(value: Any) -> bool:
+    """True when a cell is a column title, not a customer or product value."""
+    return str(value or "").strip() in _COLUMN_HEADER_LABELS
+
+
+def degraded_header_master(advisory: dict[str, Any], normalized: dict[str, Any]) -> bool:
+    """A degraded model result must not keep a header label as master data."""
+    if not advisory.get("degraded"):
+        return False
+    return any(is_column_header_label(normalized.get(key)) for key in _MASTER_HEADER_FIELDS)
+
+
 def optional_text(value: Any) -> str | None:
     """Text for optional columns: only None is absent; 0, False and "" keep their meaning."""
     if value is None:

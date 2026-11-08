@@ -10,7 +10,12 @@ import httpx
 
 from app.infrastructure.chat_stream_lifetime import check_stream_active, owned_model_read
 
-from .completions import _audit_allows_failover, _capture_reviewed_response
+from .completions import (
+    _audit_allows_failover,
+    _buffer_audited_async_body,
+    _buffer_audited_sync_body,
+    _capture_reviewed_response,
+)
 
 
 class _Replay:
@@ -58,6 +63,12 @@ from .protocols import ChatInput, Connection, Route, StreamPorts
 from .responses import market_response_error
 
 
+def _own_attempt_key(payload: dict, index: int) -> None:
+    """A failover candidate is a different call; it must not reuse the first key."""
+    if index and isinstance(payload.get("client_request_id"), str):
+        payload["client_request_id"] = f"{payload['client_request_id']}-f{index}"
+
+
 def stream_sync(
     connection: Connection, route: Route, request: ChatInput, ports: StreamPorts
 ) -> Iterator[str]:
@@ -72,6 +83,7 @@ def stream_sync(
         payload = request.payload(
             connection, candidate, messages, stream=True, allow_failover=index == 0
         )
+        _own_attempt_key(payload, index)
         with ports.sync_client(
             timeout=httpx.Timeout(connection.timeout, connect=ports.connect_timeout()),
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
@@ -90,6 +102,7 @@ def stream_sync(
                     if status < 400:
                         # No retry after output has begun: replaying a partial answer
                         # could duplicate visible output or an upstream billed call.
+                        _buffer_audited_sync_body(request, response)
                         for data in _completion_payloads(response, ports.sync_payloads):
                             emitted = True
                             yield data
@@ -146,6 +159,7 @@ async def stream_async(
         payload = request.payload(
             connection, candidate, messages, stream=True, allow_failover=index == 0
         )
+        _own_attempt_key(payload, index)
         client = await ports.async_client()
         emitted = False
         try:
@@ -176,6 +190,7 @@ async def stream_async(
                         "[Modstream] 流式换模 %s/%s -> %s", *candidate, candidates[index + 1]
                     )
                     continue
+                await _buffer_audited_async_body(request, response)
                 async for data in _acompletion_payloads(response, ports.async_payloads):
                     emitted = True
                     yield data

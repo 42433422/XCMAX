@@ -291,7 +291,7 @@ jobs:
       - name: Install runtime Mod compiler dependencies
         if: needs.classify.outputs.backend_skip != 'true'
         working-directory: frontend
-        run: npm ci --no-audit --no-fund
+        run: bash ../scripts/ci/npm_ci_with_network_retry.sh --no-audit --no-fund
 
       - name: Verify requirements lock is in sync
         if: needs.classify.outputs.backend_skip != 'true'
@@ -416,7 +416,7 @@ jobs:
 
       - name: Install runtime Mod compiler dependencies
         working-directory: frontend
-        run: npm ci --no-audit --no-fund
+        run: bash ../scripts/ci/npm_ci_with_network_retry.sh --no-audit --no-fund
 
       - name: Run complete suite in isolated module shard
         run: |
@@ -556,7 +556,7 @@ jobs:
       - name: Install dependencies
         if: needs.classify.outputs.frontend == 'true'
         working-directory: frontend
-        run: npm ci --no-audit --no-fund
+        run: bash ../scripts/ci/npm_ci_with_network_retry.sh --no-audit --no-fund
       - name: Run ESLint including test assertion guards
         if: needs.classify.outputs.frontend == 'true'
         working-directory: frontend
@@ -606,7 +606,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci --no-audit --no-fund
+        run: bash ../scripts/ci/npm_ci_with_network_retry.sh --no-audit --no-fund
       - name: Run frontend shard with raw coverage evidence
         working-directory: frontend
         run: node ../scripts/ci/frontend_shards.mjs run shard-evidence
@@ -670,7 +670,7 @@ jobs:
       - name: Install dependencies for native Vitest report merging
         if: needs.classify.outputs.frontend == 'true'
         working-directory: frontend
-        run: npm ci --no-audit --no-fund
+        run: bash ../scripts/ci/npm_ci_with_network_retry.sh --no-audit --no-fund
       - uses: actions/download-artifact@v8
         if: needs.classify.outputs.frontend == 'true'
         with:
@@ -760,7 +760,7 @@ jobs:
       - name: Install Playwright Chromium binary (CDN)
         working-directory: frontend
         run: |
-          npm ci
+          bash ../scripts/ci/npm_ci_with_network_retry.sh
           npx playwright install chromium
 
       # 2026-09-10 #1851 复审：apt 外部源（Google Chrome 等）曾出现 Hash Sum
@@ -997,7 +997,7 @@ jobs:
 
       - name: Install admin console build dependencies
         working-directory: frontend
-        run: npm ci
+        run: bash ../scripts/ci/npm_ci_with_network_retry.sh
 
       - name: Verify version anchors and offline startup measurements
         run: |
@@ -1376,11 +1376,11 @@ jobs:
 
       - name: Install frontend deps
         working-directory: frontend
-        run: npm ci
+        run: bash ../scripts/ci/npm_ci_with_network_retry.sh
 
       - name: Install desktop deps
         working-directory: desktop
-        run: npm ci
+        run: bash ../scripts/ci/npm_ci_with_network_retry.sh
 
       - name: Run release_verify.sh
         run: bash scripts/dev/release_verify.sh
@@ -1403,7 +1403,7 @@ jobs:
       - name: Desktop tsc build
         working-directory: desktop
         run: |
-          npm ci
+          bash ../scripts/ci/npm_ci_with_network_retry.sh
           npm run build
 
   desktop-test:
@@ -1423,7 +1423,7 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
       - name: Install desktop deps
         working-directory: desktop
-        run: npm ci
+        run: bash ../scripts/ci/npm_ci_with_network_retry.sh
       - name: Run full desktop unit-test suite
         working-directory: desktop
         run: npm test

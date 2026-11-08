@@ -739,10 +739,3 @@ def verify_after_cut(
         "flagged_reidentify": sum(1 for r in receipts if r.get("action") == "flag_reidentify"),
     }
     return {"groups": out_groups, "receipts": receipts, "stats": stats}
-
-
-def verify_groups_or_raise(review: dict, groups: list[dict], *, resplit: bool = True) -> list[dict]:
-    """Product-path helper: run verify_after_cut and return groups (resplit when possible)."""
-    result = verify_after_cut(review, groups, resplit=resplit)
-    groups_out = result["groups"]
-    return groups_out if isinstance(groups_out, list) else []

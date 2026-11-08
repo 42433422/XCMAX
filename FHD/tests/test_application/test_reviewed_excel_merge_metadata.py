@@ -48,7 +48,8 @@ def classify_part(monkeypatch, review, cells):
                 ],
                 "reason": "synthetic evidence",
             }
-        ]
+        ],
+        "can_slice": True,
     }
     monkeypatch.setattr(
         template,

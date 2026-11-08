@@ -1,13 +1,30 @@
 """Extract model-grouped documents from a previously validated classification result."""
 
+import logging
 import re
 
 from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
+
+logger = logging.getLogger(__name__)
+
+# One extra model turn for export obstacles. Anything else still stops the file.
+_COMPATIBILITY_MARKERS = (
+    "过滤条件",
+    "过滤器跨界",
+    "区域规则无法保真提取",
+    "公式无法静态解析",
+    "公式函数依赖",
+    "派生公式写出后核验失败",
+    "支撑数据写出后核验失败",
+    "SUBTOTAL",
+    "模型区域之外",
+)
 
 from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 from app.application.reviewed_excel_legacy import ensure_slice_workbook
 from app.application.reviewed_excel_template import derive_document_workbook, inspect_workbook
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 def _slice_filename(
@@ -87,44 +104,49 @@ _HIDDEN_REASON = "隐藏工作表（附表/台账），未经确认不排除；�
 
 
 def _review_copy(sources: dict, body: bytes, fragment: dict, reason: str) -> bytes:
-    """Value copy of one region at source coordinates for manual review.
+    """Value copy of one region at source coordinates for manual review."""
+    return _review_document(sources, body, [fragment], reason)
 
-    Used when the faithful extractor refuses a region, so the rows stay covered and
-    visible instead of being replaced by an empty placeholder.
-    """
+
+def _review_document(sources: dict, body: bytes, fragments: list[dict], reason: str) -> bytes:
+    """Value copy of one document's regions. A hidden sheet stays for a person to confirm."""
     from io import BytesIO
 
     from openpyxl import Workbook, load_workbook
 
+    sheet_name = str(fragments[0]["sheet"])
+    if any(str(item.get("sheet")) != sheet_name for item in fragments):
+        raise ReviewedExcelError("跨工作表文档暂不能保证保真")
     if not sources:
         sources["values"] = load_workbook(BytesIO(body), data_only=True)
         sources["formulas"] = load_workbook(BytesIO(body), data_only=False)
-    c1, r1, c2, r2 = bounded_range(fragment["range"])
-    values = sources["values"][fragment["sheet"]]
-    formulas = sources["formulas"][fragment["sheet"]]
+    values = sources["values"][sheet_name]
+    formulas = sources["formulas"][sheet_name]
     book = Workbook()
     sheet = book.active
     assert sheet is not None
-    sheet.title = fragment["sheet"][:31]
-    for row in range(r1, r2 + 1):
-        for column in range(c1, c2 + 1):
-            value = values.cell(row, column).value
-            if value is None:
-                value = formulas.cell(row, column).value
-            if value is None or value == "":
-                continue
-            cell = sheet.cell(row, column, value)
-            if isinstance(value, str):
-                cell.data_type = "s"
-    for merged in formulas.merged_cells.ranges:
-        if (
-            c1 <= merged.min_col <= merged.max_col <= c2
-            and r1 <= merged.min_row <= merged.max_row <= r2
-        ):
-            sheet.merge_cells(str(merged))
+    sheet.title = sheet_name[:31]
+    for fragment in fragments:
+        c1, r1, c2, r2 = bounded_range(fragment["range"])
+        for row in range(r1, r2 + 1):
+            for column in range(c1, c2 + 1):
+                value = values.cell(row, column).value
+                if value is None:
+                    value = formulas.cell(row, column).value
+                if value is None or value == "":
+                    continue
+                cell = sheet.cell(row, column, value)
+                if isinstance(value, str):
+                    cell.data_type = "s"
+        for merged in formulas.merged_cells.ranges:
+            if (
+                c1 <= merged.min_col <= merged.max_col <= c2
+                and r1 <= merged.min_row <= merged.max_row <= r2
+            ):
+                sheet.merge_cells(str(merged))
     note = book.create_sheet("切片复核说明")
-    note.append(["来源工作表", fragment["sheet"]])
-    note.append(["来源范围", fragment["range"]])
+    note.append(["来源工作表", sheet_name])
+    note.append(["来源范围", "；".join(str(item["range"]) for item in fragments)])
     note.append(["状态", "待人工确认"])
     note.append(["原因", reason[:500]])
     buffer = BytesIO()
@@ -136,10 +158,8 @@ def _review_copy(sources: dict, body: bytes, fragment: dict, reason: str) -> byt
 def derive_rule_slices(body: bytes, latest: dict) -> list[dict]:
     """Identify sheet regions before any model call. Slices carry no business id.
 
-    Every data region becomes a slice record. Regions the faithful extractor cannot
-    export (hidden ledgers, print areas or drawings crossing the region, ...) keep a
-    value review copy with ``status="pending_review"`` and the reason, so no data row
-    is dropped without confirmation.
+    Hidden and veryHidden sheets are omitted. Visible regions the faithful
+    extractor cannot export keep a value review copy with ``status="pending_review"``.
     """
     source = inspect_workbook(body)
     results: list[dict] = []
@@ -156,10 +176,10 @@ def derive_rule_slices(body: bytes, latest: dict) -> list[dict]:
             for region in sheet.get("regions") or []:
                 if not isinstance(region, dict) or region.get("data_region") is False:
                     continue
-                if sheet.get("processable") is False and not hidden:
+                if hidden or sheet.get("processable") is False:
                     continue
                 results.append(
-                    _rule_slice(body, source, sheet, region, hidden, used_names, copy_sources)
+                    _rule_slice(body, source, sheet, region, False, used_names, copy_sources)
                 )
     finally:
         for book in copy_sources.values():
@@ -236,6 +256,8 @@ def rule_row_dispositions(body: bytes, latest: dict, slices: list[dict]) -> list
     results: list[dict] = []
     try:
         for ws in book.worksheets:
+            if (ws.sheet_state or "visible") != "visible":
+                continue
             # Stored dimensions can understate the used range; scan the whole sheet.
             ws.reset_dimensions()
             for row_number, values in enumerate(ws.iter_rows(values_only=True), start=1):
@@ -312,7 +334,96 @@ def rule_row_dispositions(body: bytes, latest: dict, slices: list[dict]) -> list
     return results
 
 
-def derive_classified_documents(body: bytes, classification: dict) -> list[dict]:
+# Same ceiling as one classification's model calls. Each round sees the last failure.
+_COMPATIBILITY_ROUNDS = 4
+
+
+def _range_inside(c1: int, r1: int, c2: int, r2: int, allowed: list[str]) -> bool:
+    for area in allowed:
+        try:
+            a1, b1, a2, b2 = bounded_range(area)
+        except (TypeError, ValueError):
+            continue
+        if a1 <= c1 and c2 <= a2 and b1 <= r1 and r2 <= b2:
+            return True
+    return False
+
+
+def _compatibility_revision(fragments, message, overview, owner_id, earlier, allowed=None):
+    """One model turn for this sheet. None means stop this document."""
+    from app.application.reviewed_excel_template import _template_llm_complete
+
+    sheet_name = str(fragments[0]["sheet"])
+    sheet = next((item for item in overview if item.get("sheet") == sheet_name), {})
+    ranges = ", ".join(str(part["range"]) for part in fragments)
+    filt = str(sheet.get("auto_filter_ref") or "无")
+    history = "\n".join(earlier) or "无"
+    limit = ""
+    if allowed:
+        limit = "新矩形必须完整落在这些模型区域之内，不要伸出：" + "、".join(allowed) + "。"
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                "这一张表还不能保真导出。只判断这一张表，不要重复已经失败的范围。\n"
+                f"工作表：{sheet_name}。状态：{sheet.get('sheet_state') or 'visible'}。\n"
+                f"当前范围：{ranges}。筛选区域：{filt}。\n"
+                f"本轮障碍：{message}\n"
+                f"此前各轮：\n{history}\n"
+                "能切就返回新的矩形，把导出依赖放进这些矩形，不要并进无关内容。"
+                + limit
+                + "不该切则 can_slice 为 false 且 ranges 为空。"
+                "顶层只能有 can_slice 和 ranges，ranges 是矩形字符串，不要再包一层。"
+            ),
+        }
+    ]
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["can_slice", "ranges"],
+        "properties": {
+            "can_slice": {"type": "boolean"},
+            "ranges": {"type": "array", "maxItems": 8, "items": {"type": "string"}},
+        },
+    }
+    try:
+        result = _template_llm_complete(messages, schema, 800, owner_id=owner_id)
+    except BOUNDARY_ERRORS as exc:
+        from app.application.elt.errors import model_call_outcome
+
+        outcome = model_call_outcome(exc)
+        logger.info("compatibility round failed outcome=%s", outcome)
+        return "again" if outcome == "answered_invalid" else "stop"
+    if not getattr(result, "used_llm", False) or getattr(result, "degraded", False):
+        return "stop"
+    payload = result.data if isinstance(getattr(result, "data", None), dict) else {}
+    if payload.get("can_slice") is not True:
+        return "stop"
+    revised = []
+    rows, columns = sheet.get("rows"), sheet.get("columns")
+    for raw in payload.get("ranges") or []:
+        if not isinstance(raw, str):
+            return "again"
+        try:
+            c1, r1, c2, r2 = bounded_range(raw)
+        except (TypeError, ValueError):
+            return "again"
+        if not (
+            isinstance(rows, int)
+            and isinstance(columns, int)
+            and 1 <= c1 <= c2 <= columns
+            and 1 <= r1 <= r2 <= rows
+        ):
+            return "again"
+        if allowed and not _range_inside(c1, r1, c2, r2, allowed):
+            return "again"
+        revised.append({"sheet": sheet_name, "range": raw})
+    return revised or "again"
+
+
+def derive_classified_documents(
+    body: bytes, classification: dict, *, owner_id: int | None = None
+) -> list[dict]:
     """Export only documents with explicit model grouping, without inferring missing groups.
 
     This internal function expects the output of classify_semantic_workbook, not
@@ -383,44 +494,138 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
             }
             for i, (frags, _basis, reason) in enumerate(groups)
         ],
-        resplit=True,
+        resplit=False,
     )
     groups = [
         (item["fragments"], "model_group", item.get("reason") or "") for item in verified["groups"]
     ]
     results = []
     used_names: set[str] = set()
+    hidden_sheets = {
+        item.get("sheet")
+        for item in source.get("sheet_overview") or []
+        if isinstance(item, dict) and item.get("sheet_state") in {"hidden", "veryHidden"}
+    }
     for fragments, basis, reason in groups:
-        for fragment in fragments:
-            region = _model_region_for_fragment(known, fragment)
-            for ref in region.get("dependencies", []):
-                column, row = coordinate_from_string(ref["cell"])
-                col = column_index_from_string(column)
-                if not any(
-                    ref["sheet"] == part["sheet"] and c1 <= col <= c2 and r1 <= row <= r2
-                    for part in fragments
-                    for c1, r1, c2, r2 in [bounded_range(part["range"])]
-                ):
-                    raise ReviewedExcelError("所选文档依赖外部说明或标题，暂不能保证保真提取")
+        if fragments and all(part.get("sheet") in hidden_sheets for part in fragments):
+            logger.info("skip hidden sheet %s", fragments[0]["sheet"])
+            continue
         print_area_mode = "source"
-        # Model grouping is not permission to change the source print layout.
-        # Listing/downloading automatic slices must never silently choose selected.
+        # A print area that crosses this fragment continues as the fragment.
+        # The source workbook is not rewritten; the slice records the choice.
         if source.get("drawing_evidence") and source.get("read_only_print_areas"):
             raise ReviewedExcelError("原打印区域无法安全映射，暂不能自动裁切")
         object_receipt: dict = {}
-        output = derive_document_workbook(
-            body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
-        )
-        results.append(
-            {
-                "print_area_mode": print_area_mode,
-                "range_objects_receipt": object_receipt,
-                "fragments": fragments,
-                "basis": basis,
-                "confirmed": False,
-                "source_sha256": source["sha256"],
-                "filename": _slice_filename(fragments, source["cells"], used_names, reason=reason),
-                "workbook": output,
-            }
-        )
+        hidden_hold: str | None = None
+        hold_reason = _HIDDEN_REASON
+        try:
+            for fragment in fragments:
+                region = _model_region_for_fragment(known, fragment)
+                for ref in region.get("dependencies", []):
+                    column, row = coordinate_from_string(ref["cell"])
+                    col = column_index_from_string(column)
+                    if not any(
+                        ref["sheet"] == part["sheet"] and c1 <= col <= c2 and r1 <= row <= r2
+                        for part in fragments
+                        for c1, r1, c2, r2 in [bounded_range(part["range"])]
+                    ):
+                        raise ReviewedExcelError("所选文档依赖外部说明或标题，暂不能保证保真提取")
+            output = derive_document_workbook(
+                body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+            )
+        except ReviewedExcelError as exc:
+            message = str(exc)
+            if "所选片段作为派生打印区域" in message:
+                print_area_mode = "selected"
+                object_receipt = {}
+                output = derive_document_workbook(
+                    body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+                )
+            elif "隐藏工作表暂不能作为独立模板提取" in message:
+                hidden_hold = message
+                output = b""
+            elif any(marker in message for marker in _COMPATIBILITY_MARKERS):
+                overview = source.get("sheet_overview") or []
+                earlier: list[str] = []
+                seen = {tuple(part["range"] for part in fragments)}
+                obstacle = message
+                hidden_hold = message
+                hold_reason = "兼容性各轮后仍不能保真导出，已保留复核副本"
+                output = b""
+                for round_index in range(1, _COMPATIBILITY_ROUNDS + 1):
+                    sheet_name = str(fragments[0]["sheet"])
+                    allowed = (
+                        [area for region_sheet, area in known if region_sheet == sheet_name]
+                        if "模型区域之外" in obstacle
+                        else None
+                    )
+                    revised = _compatibility_revision(
+                        fragments, obstacle, overview, owner_id, earlier, allowed
+                    )
+                    logger.info(
+                        "compatibility round %s sheet=%s", round_index, fragments[0]["sheet"]
+                    )
+                    if revised == "stop":
+                        break
+                    if revised == "again":
+                        earlier.append(f"第{round_index}轮回答不能用，没有给出这张表内的新矩形")
+                        continue
+                    key = tuple(part["range"] for part in revised)
+                    if key in seen:
+                        earlier.append(f"第{round_index}轮重复了已失败范围：{', '.join(key)}")
+                        break
+                    seen.add(key)
+                    try:
+                        output = derive_document_workbook(
+                            body,
+                            revised,
+                            print_area_mode=print_area_mode,
+                            object_receipt=object_receipt,
+                        )
+                        fragments = revised
+                        hidden_hold = None
+                        break
+                    except ReviewedExcelError as again:
+                        retry_message = str(again)
+                        if "所选片段作为派生打印区域" in retry_message:
+                            print_area_mode = "selected"
+                            object_receipt = {}
+                            output = derive_document_workbook(
+                                body,
+                                revised,
+                                print_area_mode=print_area_mode,
+                                object_receipt=object_receipt,
+                            )
+                            fragments = revised
+                            hidden_hold = None
+                            break
+                        obstacle = retry_message
+                        fragments = revised
+                        hidden_hold = retry_message
+                        earlier.append(
+                            f"第{round_index}轮范围 {', '.join(key)} 仍失败：{retry_message}"
+                        )
+            else:
+                raise
+        record = {
+            "print_area_mode": print_area_mode,
+            "range_objects_receipt": object_receipt,
+            "fragments": fragments,
+            "basis": basis,
+            "confirmed": False,
+            "source_sha256": source["sha256"],
+            "filename": _slice_filename(fragments, source["cells"], used_names, reason=reason),
+            "workbook": output,
+        }
+        if hidden_hold is not None:
+            copy_sources: dict = {}
+            try:
+                record["workbook"] = _review_document(copy_sources, body, fragments, _HIDDEN_REASON)
+            finally:
+                for book in copy_sources.values():
+                    book.close()
+            record["status"] = "pending_review"
+            record["error"] = hidden_hold
+            record["review_reason"] = hold_reason
+        results.append(record)
     return results
