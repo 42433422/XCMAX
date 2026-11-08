@@ -1,0 +1,35 @@
+{
+ "authorization": {
+  "by": "user",
+  "at": "2026-11-08T22:41:00+08:00",
+  "scope": "abandon parked unknowns then continue; 贾总/澜宇 one resend each; stop if unknown again"
+ },
+ "files": {
+  "张总.xlsx": {
+   "file": "张总.xlsx",
+   "authorization": {
+    "by": "user",
+    "at": "2026-11-08T22:41:00+08:00",
+    "scope": "abandon parked unknowns then continue; 贾总/澜宇 one resend each; stop if unknown again"
+   },
+   "backend_git_sha": "a4eb4e2221be783b63dc6bb59c475da19b0f7a96",
+   "started_at": "2026-11-08T22:54:39+08:00",
+   "finished_at": "2026-11-08T22:59:34+08:00",
+   "abandon": {
+    "status": 200,
+    "abandoned_call_id": null,
+    "possible_duplicate_charge": true,
+    "message": null
+   },
+   "old_classification_id": "aabae36e-21d5-4847-8947-3a3c2d9d1601",
+   "new_classification_id": "8e78b06e-e7aa-4185-b526-3e59e6ed9c67",
+   "status": "done",
+   "error": "",
+   "outcome_unknown_again": false,
+   "wallet_balance_before": 425.69,
+   "wallet_balance_after": 424.45,
+   "stop_rule": "full loop after abandon"
+  }
+ },
+ "measured_at": "2026-11-08T22:59:34+08:00"
+}

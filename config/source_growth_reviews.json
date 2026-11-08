@@ -229,6 +229,18 @@
       "follow_up": "Extract workbook text projection from auto_ingest_service after the candidate-only intake contract is stable.",
       "review_owner": "@42433422"
     },
+    "FHD/app/application/reviewed_excel_drawing.py": {
+      "base_file": "FHD/app/application/reviewed_excel_drawing.py",
+      "base_blob": "9e5ccf7a69731d2bdf33c69ca0f19b6c1ae7346f",
+      "head_blob": "27a13487948cfa0e1dc74529d494403eafddb5f2",
+      "before_lines": 832,
+      "after_lines": 837,
+      "reason": "Dense drawing sheets need a tighter pack unit/byte cap while still cutting only on verified legal drawing and merge boundaries, so attendance-style packs stop failing answered_invalid from cut objects.",
+      "boundary": "Existing plan_drawing_batches packing only; validators that refuse cut drawings and the classify prompt contract stay in their modules.",
+      "validation": "Reviewed Excel drawing planner and classifier regressions plus push preflight and backend CI.",
+      "follow_up": "Keep drawing geometry and packing together until the legal-boundary contract is stable on main.",
+      "review_owner": "@42433422"
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
       "base_blob": "fb293fc99136a7c4e59d5c58904c8ffff6492a6e",
