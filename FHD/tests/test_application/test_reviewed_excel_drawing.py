@@ -75,7 +75,7 @@ def test_planner_accounts_for_multiple_drawings_at_same_cell_and_fails_on_uncove
 
     # Drawing packs use a tighter unit cap than plain cell packs; exceed it so
     # packing needs more than one batch while still cutting only on legal rows.
-    drawing_pack_units = min(MAX_MODEL_CELLS, 800)
+    drawing_pack_units = min(MAX_MODEL_CELLS, 400)
     n_cells = drawing_pack_units
     cells = [
         {"sheet": "表", "cell": f"A{i}", "value": "v", "kind": "review"}

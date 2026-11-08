@@ -416,8 +416,8 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
 
     # Dense drawing sheets (attendance stamps, seals) answer poorly in one huge pack.
     # Keep units under this cap while still only cutting on verified legal boundaries.
-    max_units = min(MAX_MODEL_CELLS, 800)
-    max_bytes = min(MAX_MODEL_TEXT_BYTES, 240_000)
+    max_units = min(MAX_MODEL_CELLS, 400)
+    max_bytes = min(MAX_MODEL_TEXT_BYTES, 160_000)
 
     rows = defaultdict(list)
     for cell in review["cells"]:

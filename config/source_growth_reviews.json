@@ -232,10 +232,10 @@
     "FHD/app/application/reviewed_excel_drawing.py": {
       "base_file": "FHD/app/application/reviewed_excel_drawing.py",
       "base_blob": "9e5ccf7a69731d2bdf33c69ca0f19b6c1ae7346f",
-      "head_blob": "27a13487948cfa0e1dc74529d494403eafddb5f2",
+      "head_blob": "af1ef95823237ddc398ed78d0b863eb780da97cb",
       "before_lines": 832,
       "after_lines": 837,
-      "reason": "Dense drawing sheets need a tighter pack unit/byte cap while still cutting only on verified legal drawing and merge boundaries, so attendance-style packs stop failing answered_invalid from cut objects.",
+      "reason": "Dense drawing sheets need a tighter pack unit/byte cap (400 units / 160KB) while still cutting only on verified legal drawing and merge boundaries, so attendance-style packs stop failing answered_invalid from cut objects.",
       "boundary": "Existing plan_drawing_batches packing only; validators that refuse cut drawings and the classify prompt contract stay in their modules.",
       "validation": "Reviewed Excel drawing planner and classifier regressions plus push preflight and backend CI.",
       "follow_up": "Keep drawing geometry and packing together until the legal-boundary contract is stable on main.",
