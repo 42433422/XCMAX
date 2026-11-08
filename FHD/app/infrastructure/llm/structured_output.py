@@ -92,7 +92,13 @@ def extract_json(content: str) -> dict[str, Any] | None:
                     return parsed if isinstance(parsed, dict) else None
                 except json.JSONDecodeError:
                     return None
-    return None
+    if in_string or escape or not 0 < depth <= 2:
+        return None
+    try:
+        parsed = json.loads(text[start:] + ("}" * depth))
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def validate_payload(schema: dict[str, Any], payload: dict[str, Any]) -> tuple[bool, str]:

@@ -42,6 +42,11 @@ class TestExtractJson:
     def test_array_root_returns_none(self):
         assert so.extract_json("[1, 2, 3]") is None
 
+    def test_extract_json_closes_a_missing_wrapper_brace(self):
+        raw = '```json\n{"output_schema":{"can_slice": true}\n```'
+        assert so.extract_json(raw) == {"output_schema": {"can_slice": True}}
+        assert so.extract_json('{"a": "未写完') is None
+
 
 @pytest.mark.asyncio
 class TestCompleteStructured:
