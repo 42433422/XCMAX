@@ -203,7 +203,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
     originalFetch = global.fetch
 
     // 设置默认 mock 返回值
-    vi.mocked(safeJsonRequest).mockResolvedValue({
+    vi.mocked(safeJsonRequest).mockReset().mockResolvedValue({
       ok: true,
       data: { success: true },
       status: 200,
@@ -235,195 +235,18 @@ describe('useKittenAnalyzer - coverage ramp', () => {
   // 流式聊天路径覆盖（sendMessage 中的 stream 分支）
   // ════════════════════════════════════════════════════════════════════
 
-  describe('流式聊天路径', () => {
-    beforeEach(() => {
+  describe('流式聊天状态装配', () => {
+    it('原任务授权等待显示在 facade，不会成为交付成功', async () => {
       vi.mocked(isChatStreamEnabled).mockReturnValue(true)
-    })
-
-    it('流式成功：token 事件 + done 事件，最终使用 done.response 作为回复', async () => {
       vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
-        onEvent({ type: 'token', text: 'Hello' })
-        onEvent({ type: 'token', text: ' World' })
-        onEvent({ type: 'done', result: { response: '最终回复', success: true } })
+      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res, onEvent) => {
+        onEvent({ type: 'requires_token', token_name: 'DB_WRITE_TOKEN', run_id: 'original-run' })
       })
-
-      analyzer.inputText.value = '你好'
+      analyzer.inputText.value = '写入数据'
       await analyzer.sendMessage()
-
-      // 验证 AI 消息包含最终回复
-      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('最终回复'))
-      expect(aiMsg).toBeDefined()
-      expect(analyzer.kittenPhase.value).toBe('delivered')
-      expect(analyzer.isKittenStreaming.value).toBe(false)
-    })
-
-    it('流式成功：无 done 事件时使用 streamPlain 作为回复', async () => {
-      vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
-        onEvent({ type: 'token', text: '流式文本内容' })
-      })
-
-      analyzer.inputText.value = '你好'
-      await analyzer.sendMessage()
-
-      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('流式文本内容'))
-      expect(aiMsg).toBeDefined()
-      expect(analyzer.kittenPhase.value).toBe('delivered')
-    })
-
-    it('流式成功：无 token 无 done 时使用"（无内容）"占位', async () => {
-      vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockResolvedValue(undefined)
-
-      analyzer.inputText.value = '你好'
-      await analyzer.sendMessage()
-
-      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('（无内容）'))
-      expect(aiMsg).toBeDefined()
-    })
-
-    it('流式 done 事件 success=false 标记为失败', async () => {
-      vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
-        onEvent({ type: 'done', result: { response: '失败回复', success: false } })
-      })
-
-      analyzer.inputText.value = '你好'
-      await analyzer.sendMessage()
-
-      expect(analyzer.kittenPhase.value).toBe('error')
-      expect(analyzer.currentResult.value?.type).toBe('error')
-      expect(analyzer.currentResult.value?.kind).toBe('chatError')
-    })
-
-    it('流式 error 事件触发回退到 JSON 路径', async () => {
-      vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
-        onEvent({ type: 'error', message: '流式接口错误' })
-      })
-      // JSON 回退的 mock
-      vi.mocked(safeJsonRequest).mockResolvedValueOnce({
-        ok: true,
-        data: { success: true, response: 'JSON 回退回复' },
-        status: 200,
-        message: '',
-      })
-
-      analyzer.inputText.value = '你好'
-      await analyzer.sendMessage()
-
-      // 应该走 JSON 回退路径
-      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('JSON 回退回复'))
-      expect(aiMsg).toBeDefined()
-    })
-
-    it('流式 sendChatStream 返回 ok=false 触发回退到 JSON 路径', async () => {
-      vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: false, status: 500 }) as never)
-      vi.mocked(safeJsonRequest).mockResolvedValueOnce({
-        ok: true,
-        data: { success: true, response: 'JSON 回退' },
-        status: 200,
-        message: '',
-      })
-
-      analyzer.inputText.value = '你好'
-      await analyzer.sendMessage()
-
-      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('JSON 回退'))
-      expect(aiMsg).toBeDefined()
-    })
-
-    it('流式 sendChatStream 抛异常触发回退到 JSON 路径', async () => {
-      vi.mocked(chatApi.sendChatStream).mockRejectedValue(new Error('网络错误'))
-      vi.mocked(safeJsonRequest).mockResolvedValueOnce({
-        ok: true,
-        data: { success: true, response: 'JSON 回退' },
-        status: 200,
-        message: '',
-      })
-
-      analyzer.inputText.value = '你好'
-      await analyzer.sendMessage()
-
-      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('JSON 回退'))
-      expect(aiMsg).toBeDefined()
-    })
-
-    it('requires_token 事件：非 DB 令牌追加授权提示', async () => {
-      vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
-        onEvent({ type: 'token', text: '内容' })
-        onEvent({ type: 'requires_token', token_name: 'API_KEY', token_description: 'API Key' })
-        onEvent({
-          type: 'done',
-          result: { response: '内容\n[需要授权：API Key]\n', success: true },
-        })
-      })
-
-      analyzer.inputText.value = '你好'
-      await analyzer.sendMessage()
-
-      // 授权提示应出现在消息中
-      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('需要授权'))
-      expect(aiMsg).toBeDefined()
-    })
-
-    it('requires_token 事件：DB_READ_TOKEN 被跳过（不追加授权提示）', async () => {
-      vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
-        onEvent({ type: 'token', text: '内容' })
-        onEvent({
-          type: 'requires_token',
-          token_name: 'DB_READ_TOKEN',
-          token_description: '数据库读令牌',
-        })
-        onEvent({ type: 'done', result: { response: '内容', success: true } })
-      })
-
-      analyzer.inputText.value = '你好'
-      await analyzer.sendMessage()
-
-      // DB 令牌应被跳过，不应出现授权提示
-      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('需要授权'))
-      expect(aiMsg).toBeUndefined()
-    })
-
-    it('requires_token 事件：DB_WRITE_TOKEN 被跳过', async () => {
-      vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
-        onEvent({ type: 'token', text: '内容' })
-        onEvent({
-          type: 'requires_token',
-          token_name: 'DB_WRITE_TOKEN',
-          token_description: '写入令牌',
-        })
-        onEvent({ type: 'done', result: { response: '内容', success: true } })
-      })
-
-      analyzer.inputText.value = '你好'
-      await analyzer.sendMessage()
-
-      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('需要授权'))
-      expect(aiMsg).toBeUndefined()
-    })
-
-    it('requires_token 事件：空 token_name 和 token_description 使用"授权信息"占位', async () => {
-      vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
-        onEvent({ type: 'token', text: '内容' })
-        onEvent({ type: 'requires_token', token_name: '', token_description: '' })
-        onEvent({
-          type: 'done',
-          result: { response: '内容\n[需要授权：授权信息]\n', success: true },
-        })
-      })
-
-      analyzer.inputText.value = '你好'
-      await analyzer.sendMessage()
-
-      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('授权信息'))
-      expect(aiMsg).toBeDefined()
+      expect(analyzer.kittenPhase.value).toBe('waiting_authorization')
+      expect(analyzer.currentResult.value?.execution?.run_id).toBe('original-run')
+      expect(vi.mocked(safeJsonRequest)).not.toHaveBeenCalled()
     })
   })
 

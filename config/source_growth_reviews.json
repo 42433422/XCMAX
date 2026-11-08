@@ -205,6 +205,18 @@
       "follow_up": "Keep UI evidence tied to server structural results; future extraction must follow a real responsibility boundary.",
       "review_owner": "@42433422"
     },
+    "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
+      "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
+      "base_blob": "dc96991256dcede7a90397a8d3ad56cddfc6e395",
+      "head_blob": "2db257c2d2165d94aa6be977eec32a8497a92122",
+      "before_lines": 800,
+      "after_lines": 824,
+      "reason": "Persistent employee handoff needs parent saves to retain child receipts from concurrent or delayed writers, including immutable terminal child evidence.",
+      "boundary": "Only child_results merging inside the existing preserve_run_evidence transaction; no new table, repository, route or executor.",
+      "validation": "SQL repository concurrent-writer regression and handoff durability tests cover retained sibling receipts, mismatched identities, stable terminal results and process-crash readback.",
+      "follow_up": "Keep handoff lifecycle policy outside the repository; separate evidence merging only when the existing stream, step and child receipt contracts can be moved together.",
+      "review_owner": "@42433422"
+    },
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
       "base_blob": "acf93ca707e3e1d434ccacaf41d61ce3fcb427bf",

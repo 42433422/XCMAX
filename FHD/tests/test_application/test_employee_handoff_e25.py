@@ -13,6 +13,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.employee_runtime.executor import execute_employee_task_local
 from app.application.employee_runtime.task_continuity import (
     TaskContinuityRuntime,
@@ -68,6 +69,10 @@ def customers_db(tmp_path, monkeypatch):
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     monkeypatch.setattr(
         "app.application.customer_app_service.get_customers_session", lambda: factory()
+    )
+    monkeypatch.setattr(
+        "app.application.employee_runtime.handoff_commit.get_agent_run_repository",
+        lambda: SQLAlchemyAgentRunRepository(session_factory=factory),
     )
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
     monkeypatch.setenv("SECRET_KEY", "employee-handoff-test-secret-32bytes")
@@ -154,6 +159,10 @@ def test_employee_a_hands_off_to_employee_b(customers_db, tmp_path: Path) -> Non
     parent_id = str(started["task_id"])
     handed = _handoff(workspace, parent_id)
     handoff = handed["handoff"]
+    assert handoff["status"] == "succeeded", (
+        handoff.get("error_code"),
+        handoff.get("error_message"),
+    )
     payload = handoff["result_payload"]
     child_id = str(payload["child_task_id"])
     assert handoff["status"] == "succeeded"

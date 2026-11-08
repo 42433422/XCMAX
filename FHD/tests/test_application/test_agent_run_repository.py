@@ -404,3 +404,59 @@ def test_sql_plain_save_locks_before_reading_concurrently_returned_evidence(tmp_
     finally:
         for engine in engines:
             engine.dispose()
+
+
+def test_concurrent_parent_saves_keep_child_receipts_and_reject_rebinding(tmp_path):
+    import copy
+
+    import pytest
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'handoff-parent.db'}")
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    repo = SQLAlchemyAgentRunRepository(session_factory=factory)
+    parent = AgentRun(user_id="user-a", message="parent", status="running")
+    parent.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
+    repo.save(parent)
+    snapshots = [repo.get(parent.run_id), repo.get(parent.run_id)]
+    barrier = threading.Barrier(2)
+    receipts = {}
+    for index, snapshot in enumerate(snapshots):
+        child_id = f"child-{index}"
+        receipt = {
+            "status": "completed",
+            "final_output": {"answer": index},
+            "parent_task_id": parent.run_id,
+            "parent_run_id": parent.run_id,
+            "tenant_id": "tenant-a",
+            "employee_id": f"employee-{index}",
+        }
+        snapshot.metadata["child_results"] = {child_id: receipt}
+        receipts[child_id] = receipt
+
+    def save(snapshot):
+        independent = SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
+        barrier.wait(timeout=10)
+        independent.save(snapshot)
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            list(pool.map(save, snapshots))
+        assert repo.get(parent.run_id).metadata["child_results"] == receipts
+        # A stale writer cannot erase the other child's result or rewind completion.
+        stale = copy.deepcopy(snapshots[0])
+        stale.metadata["child_results"]["child-0"].update(status="running", final_output={})
+        repo.save(stale)
+        assert repo.get(parent.run_id).metadata["child_results"] == receipts
+        for field, value in (
+            ("tenant_id", "other"),
+            ("parent_run_id", "other"),
+            ("employee_id", "other"),
+            ("final_output", {"answer": "changed"}),
+        ):
+            invalid = repo.get(parent.run_id)
+            invalid.metadata["child_results"]["child-0"][field] = value
+            with pytest.raises(ValueError, match="child result"):
+                repo.save(invalid)
+            assert repo.get(parent.run_id).metadata["child_results"] == receipts
+    finally:
+        engine.dispose()
