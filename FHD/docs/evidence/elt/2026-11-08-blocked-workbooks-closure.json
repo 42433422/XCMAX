@@ -1,96 +1,76 @@
 {
-  "measured_at": "2026-11-09T03:24:47+08:00",
+  "measured_at": "2026-11-09T06:53:20+08:00",
   "timezone": "Asia/Shanghai",
   "pr": 3099,
-  "backend_git_sha": "eeee648f33d40303f20c6de8105c491bc0599d19",
+  "backend_git_sha": "5e1ebbd9e3a615cefb8bf54267c5ec9f2451d18c",
   "fix_commits_this_pass": [
-    "8490cd08e",
-    "00a9973af",
-    "aba45fda7",
-    "7938106ca",
-    "9f04cb22c",
-    "589b334e3",
-    "1db4af1a7",
-    "c27d2c175",
-    "eeee648f3"
+    "827e9cb7b",
+    "1fdebc0b9",
+    "4725c574e",
+    "3e4f4ee89",
+    "5e1ebbd9e"
   ],
   "account_actor": "2:3",
   "wallet": {
-    "start_this_pass": 388.14,
-    "end": 351.12,
-    "spend": 37.02
+    "start_this_pass": 351.12,
+    "end": 347.48,
+    "spend": 3.64
   },
   "chat_check": {
     "endpoint": "POST /api/ai/chat",
     "message": "出货记录",
     "http": 200,
     "success": true,
-    "records": 20
+    "records": 100
   },
   "files": {
     "侯雪梅.xlsx": {
       "status": "done",
-      "batch_id": "aib-36bb48faa83a4e39",
       "ingest": "applied",
-      "error": "",
-      "db_rows": "new=91 update=0 skip=27 error=0 executed=91 records=91",
-      "kb_documents": 1,
-      "four_way": {
-        "preview": 118,
-        "written": 91,
-        "db": 91,
-        "file": 118
-      }
+      "four_way": {"preview": 118, "written": 91, "db": 91, "file": 118}
     },
     "澜宇电视柜.xlsx": {
       "status": "done",
-      "batch_id": "aib-dbc0e7e96086415b",
       "ingest": "applied",
-      "error": "",
-      "db_rows": "new=70 update=0 skip=67 error=0 executed=70 records=70",
-      "kb_documents": 1,
-      "four_way": {
-        "preview": 137,
-        "written": 70,
-        "db": 70,
-        "file": 137
-      }
+      "four_way": {"preview": 137, "written": 70, "db": 70, "file": 137}
     },
     "邻居杨总.xlsx": {
       "status": "done",
       "batch_id": "aib-426611620c7a49ed",
       "ingest": "partial",
-      "error": "ingest status=partial",
-      "db_rows": "new=60 update=0 skip=2 error=15 executed=0 records=60",
-      "kb_documents": 1,
+      "note": "15 invalid rows held out; not forced to applied",
       "four_way": {
         "preview": 77,
         "written": 60,
         "db": 60,
         "file": 77,
-        "mismatched": true,
-        "orig_miss": 4,
-        "note": "partial ingest: 15 invalid rows kept out of business tables"
+        "mismatched": true
       }
     },
     "邻居贾总.xlsx": {
-      "status": "blocked_slice",
-      "batch_id": null,
-      "ingest": "",
+      "status": "done_partial_ingest",
+      "batch_id": "aib-ef9533254f304e7c",
       "classification_id": "9e871d06-8232-476e-ba67-3f6771aae991",
-      "analyze": "returned",
-      "coverage": "unassigned=0; model_excluded large on 26出货/26回款",
-      "note": "can_slice=false leftovers cleared after re-analyze+resume; auto-slices hangs because derive_document_workbook exceeds 60s on large 26材料 multi-fragment documents"
+      "ingest": "partial",
+      "note": "sparse derive + only_index preview/download unblocked auto-slice; four-way matched; ingest partial (one slice of multi-doc book)",
+      "four_way": {
+        "preview": 7,
+        "written": 7,
+        "db": 7,
+        "file": 7,
+        "mismatched": false
+      },
+      "kb_documents": 1
     },
     "考勤表.xlsx": {
       "status": "blocked_analyze",
-      "batch_id": null,
-      "ingest": "",
-      "note": "stamp-cluster packs + footprint context cells + plan-restore fix shipped; pack0 still answered_invalid after repairs (evidence outside / mid-stamp cut / fragment). Drawing-cut validator not loosened."
+      "classification_id": "227639bc-45bb-40a6-b009-4ddfd01bbed1",
+      "note": "stamp expand + cluster_outer_a1: pack0 past mid-stamp cuts; still answered_invalid on later packs (evidence outside / invented evidence_ids). Drawing-cut validator not loosened."
     }
   },
   "remaining": [
-    "邻居贾总 auto-slice derive timeout on large 26材料 docs",
-    "考勤表 model still cuts/mis-cites stamps on pack0 after footprint+cluster fixes"
+    "邻居杨总 honest partial (15 invalid held out)",
+    "邻居贾总 ingest partial (multi-doc book; one slice applied)",
+    "考勤表 analyze still blocked after stamp-cut expand (model evidence quality on dense packs)"
   ]
 }
