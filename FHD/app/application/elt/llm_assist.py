@@ -206,9 +206,7 @@ def _complete(
         except BOUNDARY_ERRORS as exc:  # Advisory-provider boundary: preserve deterministic ETL.
             degradation_code = _degradation_code(exc)
             _open_circuit(circuit_key, degradation_code)
-            _runtime.log_etl_llm_degradation(
-                logger, code=degradation_code, lane=lane, exc=exc
-            )
+            _runtime.log_etl_llm_degradation(logger, code=degradation_code, lane=lane, exc=exc)
             return LlmAssistResult(
                 used_llm=True,
                 degraded=True,
@@ -492,8 +490,6 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
         )
     result.data = {"items": normalized}
     return result
-
-
 
 
 _BUSINESS_IMPORT_SCHEMA: dict[str, Any] = {

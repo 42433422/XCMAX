@@ -237,8 +237,10 @@ class AutoIngestService:
 
         if owned_upload_user_id is not None and owned_upload_user_id != owner_user_id:
             raise EltError("ELT_INTAKE_FORBIDDEN", "上传文件不属于当前用户", status_code=403)
-        raw_text = source_text if source_text is not None else _extract_text(
-            path, owned_upload_user_id=owned_upload_user_id
+        raw_text = (
+            source_text
+            if source_text is not None
+            else _extract_text(path, owned_upload_user_id=owned_upload_user_id)
         )
         document = raw_text
         source_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
@@ -359,11 +361,21 @@ class AutoIngestService:
         verify_preview(db, run, preview_revision)
         stored_knowledge = plan.get("knowledge") if isinstance(plan.get("knowledge"), dict) else {}
         if stored_knowledge.get("used_llm") or stored_knowledge.get("degraded"):
-            basis = source_text if source_text is not None else str(stored_knowledge.get("source_text") or "")
-            if hashlib.sha256(basis.encode("utf-8")).hexdigest() != stored_knowledge.get("source_hash"):
-                raise EltError("ELT_PREVIEW_STALE", "知识库已变化，请重新预演并确认", status_code=409)
+            basis = (
+                source_text
+                if source_text is not None
+                else str(stored_knowledge.get("source_text") or "")
+            )
+            if hashlib.sha256(basis.encode("utf-8")).hexdigest() != stored_knowledge.get(
+                "source_hash"
+            ):
+                raise EltError(
+                    "ELT_PREVIEW_STALE", "知识库已变化，请重新预演并确认", status_code=409
+                )
         else:
-            replay_text = source_text if source_text is not None else stored_knowledge.get("source_text")
+            replay_text = (
+                source_text if source_text is not None else stored_knowledge.get("source_text")
+            )
             knowledge = self.knowledge_plan(
                 path=path,
                 file_name=plan["name"],
@@ -374,7 +386,9 @@ class AutoIngestService:
                 allow_model=False,
             )
             if knowledge != stored_knowledge:
-                raise EltError("ELT_PREVIEW_STALE", "知识库已变化，请重新预演并确认", status_code=409)
+                raise EltError(
+                    "ELT_PREVIEW_STALE", "知识库已变化，请重新预演并确认", status_code=409
+                )
         return dict(get_elt_service().get_run(db, run_id=run.id, owner_user_id=owner_user_id))
 
     def run(

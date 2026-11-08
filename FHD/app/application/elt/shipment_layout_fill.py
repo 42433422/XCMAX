@@ -184,7 +184,14 @@ def _write_line(
     columns: dict[str, int],
     record: dict[str, Any],
 ) -> None:
-    for field in ("model_number", "product_name", "quantity_tins", "tin_spec", "unit_price", "remark"):
+    for field in (
+        "model_number",
+        "product_name",
+        "quantity_tins",
+        "tin_spec",
+        "unit_price",
+        "remark",
+    ):
         column = columns.get(field)
         if column is None:
             continue
@@ -252,9 +259,10 @@ def save_stable_workbook(workbook: Workbook, destination: Path) -> str:
     buffer = BytesIO()
     workbook.save(buffer)
     fixed = BytesIO()
-    with zipfile.ZipFile(BytesIO(buffer.getvalue()), "r") as source, zipfile.ZipFile(
-        fixed, "w", compression=zipfile.ZIP_DEFLATED
-    ) as target:
+    with (
+        zipfile.ZipFile(BytesIO(buffer.getvalue()), "r") as source,
+        zipfile.ZipFile(fixed, "w", compression=zipfile.ZIP_DEFLATED) as target,
+    ):
         for info in source.infolist():
             payload = source.read(info.filename)
             if info.filename == "docProps/core.xml":
@@ -517,7 +525,9 @@ def write_submission_trace(db: Any, run: Any, destination: Path) -> str:
                 _first(source, "数量"),
                 _first(after, "quantity_kg") or _first(normal, "quantity_kg"),
                 _first(after, "quantity_tins") or _first(normal, "quantity_tins"),
-                _first(after, "unit_price") or _first(normal, "unit_price") or _first(source, "单价"),
+                _first(after, "unit_price")
+                or _first(normal, "unit_price")
+                or _first(source, "单价"),
                 _first(after, "amount") or _first(normal, "amount") or _first(source, "金额"),
                 _source_date(source),
                 after.get("id") if written else "",

@@ -145,7 +145,9 @@ def _apply_model_names(
                     region["suggested_labels"] = [label]
 
 
-def apply_unknown_sheet_names(sheets: list[dict], cells: list[dict], *, owner_id: int | None) -> None:
+def apply_unknown_sheet_names(
+    sheets: list[dict], cells: list[dict], *, owner_id: int | None
+) -> None:
     """Name every processable sheet. Ask once more for any sheet the model left unnamed."""
     pending = [
         sheet
@@ -172,7 +174,10 @@ def annotate_slice_titles(slices: list[dict], sheets: list[dict]) -> None:
         fragments = item.get("fragments") or []
         sheet_name = str(fragments[0].get("sheet") or "") if fragments else ""
         meta = by_sheet.get(sheet_name, {})
-        base = str(meta.get("model_name") or "").strip() or str(item.get("filename") or "").rsplit(".", 1)[0]
+        base = (
+            str(meta.get("model_name") or "").strip()
+            or str(item.get("filename") or "").rsplit(".", 1)[0]
+        )
         kind = str(meta.get("model_type") or "").strip()
         bases.append(base or sheet_name or "切片")
         kinds.append(kind)

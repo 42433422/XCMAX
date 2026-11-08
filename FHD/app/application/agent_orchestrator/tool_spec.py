@@ -418,8 +418,10 @@ def _validate_schema_payload(
         present = isinstance(payload, dict) and name in payload
         value = payload.get(name) if present else None
         # A present array or object is the field, including an empty list.
-        if not present or value is None or (
-            _is_empty(value) and not isinstance(value, (list, dict))
+        if (
+            not present
+            or value is None
+            or (_is_empty(value) and not isinstance(value, (list, dict)))
         ):
             return False, f"{subject} 缺少字段：{name}"
 

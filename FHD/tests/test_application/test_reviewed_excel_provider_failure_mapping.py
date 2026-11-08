@@ -66,7 +66,9 @@ def test_market_model_error_404_maps_configuration():
 
 
 def test_insufficient_balance_is_a_definite_rejection():
-    wrapped = ReviewedExcelError("余额不足", provider_status=MarketModelError({"status": 402}).status_code)
+    wrapped = ReviewedExcelError(
+        "余额不足", provider_status=MarketModelError({"status": 402}).status_code
+    )
     assert is_definite_provider_failure(wrapped)
     error = _model_processing_failure(wrapped)
     assert error.detail["outcome_unknown"] is False
@@ -201,4 +203,7 @@ def test_the_public_error_says_what_happened_to_the_model_call():
             assert data["outcome_unknown"] is (outcome == "unknown")
             assert data["message"].endswith("原因：" + str(exc)), data
             assert ("未调用模型" in data["message"]) is (outcome == "not_sent")
-            assert client.post(f"/api/templates/reviewed-excel/preview?outcome={outcome}").status_code == status
+            assert (
+                client.post(f"/api/templates/reviewed-excel/preview?outcome={outcome}").status_code
+                == status
+            )

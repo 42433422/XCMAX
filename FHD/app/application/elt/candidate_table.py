@@ -195,7 +195,9 @@ def read_delivery_note_business(source: bytes | bytearray | str | Path) -> Parse
     """
     if isinstance(source, (bytes, bytearray)):
         workbook = load_workbook(BytesIO(source), read_only=True, data_only=False, keep_links=False)
-        cached_book = load_workbook(BytesIO(source), read_only=True, data_only=True, keep_links=False)
+        cached_book = load_workbook(
+            BytesIO(source), read_only=True, data_only=True, keep_links=False
+        )
     else:
         workbook = load_workbook(source, read_only=True, data_only=False, keep_links=False)
         cached_book = load_workbook(source, read_only=True, data_only=True, keep_links=False)
@@ -354,15 +356,31 @@ def dataset_from_business_rows(items: list[dict]) -> ParsedDataset | None:
             issues.append(dict(_UNIT_ISSUE))
         if issues:
             provenance["validation_issues"] = issues
-        rows.append(ParsedRow(
-            sheet=sheet, row_number=number, values=values, provenance=provenance,
-        ))
+        rows.append(
+            ParsedRow(
+                sheet=sheet,
+                row_number=number,
+                values=values,
+                provenance=provenance,
+            )
+        )
     if not rows:
         return None
-    headers = [name for name in ("购买单位", "产品名称", "数量", "单价", "金额", "型号") if any(name in row.values for row in rows)]
+    headers = [
+        name
+        for name in ("购买单位", "产品名称", "数量", "单价", "金额", "型号")
+        if any(name in row.values for row in rows)
+    ]
     return ParsedDataset(
-        headers=headers, rows=rows,
-        source_features={"kind": "reviewed_candidate", "parser": "database_llm", "headers": headers, "sheet_name": "", "business_notes": []},
+        headers=headers,
+        rows=rows,
+        source_features={
+            "kind": "reviewed_candidate",
+            "parser": "database_llm",
+            "headers": headers,
+            "sheet_name": "",
+            "business_notes": [],
+        },
     )
 
 
