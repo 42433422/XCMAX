@@ -1,12 +1,20 @@
-/**
- * useKittenAnalyzer 拆分：对话发送（SSE 流式 + JSON 兜底）与请求上下文构建。
- */
+/** Kitten 对话发送：冻结单轮请求，断流只读回原任务，不重放业务。 */
 import { type Ref } from 'vue'
 import { safeJsonRequest } from '@/utils/safeJsonRequest'
 import { chatApi, parseChatStreamErrorResponse } from '@/api/chat'
+import { agentRunsApi } from '@/api/agentRuns'
 import { resolvePlannerChatPath } from '@/utils/plannerChatPaths'
-import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
+import { readPlannerSseResponse, isChatStreamEnabled } from '@/utils/chatSseStream'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
+import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
+import { asRecord, asString } from '@/utils/typeGuards'
+import { runHasUncertainReceipt } from '@/utils/agentRunExecution'
+import {
+  inspectKittenExecution,
+  rememberKittenExecution,
+  KITTEN_UNCONFIRMED_REASON,
+  type KittenExecutionReceipt,
+} from './kittenExecutionReceipt'
 import { KITTEN_PHASE, type KittenPhase } from '@/composables/useKittenWorkflowState'
 import {
   KITTEN_CHAT_TIMEOUT_MS,
@@ -57,201 +65,189 @@ export function useKittenChatSend(deps: KittenChatSendDeps) {
     scrollChatToBottom,
   } = deps
 
-  const buildKittenRequestContext = () => {
+  const sendMessage = async () => {
+    if (!inputText.value.trim() || isChatLoading.value || isDatasetParsing.value) return
+    const query = inputText.value.trim()
+    if (!kittenSessionUserId.value) kittenSessionUserId.value = makeKittenUserId()
+    const sessionId = kittenSessionUserId.value
+    const receipt: KittenExecutionReceipt = {
+      turn_id: createBusinessHarnessId('turn'),
+      task_id: createBusinessHarnessId('task'),
+      run_id: '',
+      approval_id: '',
+      token_name: '',
+      status: 'running',
+      reason: '',
+    }
     const ds = datasetSummary.value
-    const base = {
-      kitten_analyzer: true,
-      kitten_include_business_db: kittenIncludeBusinessDb.value,
-      kitten_web_search: kittenIncludeWebSearch.value,
-      kitten_session_id: kittenSessionUserId.value,
-    }
-    if (!ds) {
-      return {
-        ...base,
-        has_dataset: false,
-        kitten_dataset: null,
-      }
-    }
-    const fields = Array.isArray(ds.fieldNames) ? ds.fieldNames.map((x) => String(x)) : []
-    return {
-      ...base,
-      has_dataset: true,
-      kitten_dataset: {
-        file_name: ds.name,
-        name: ds.name,
-        rows: ds.rows,
-        columns: ds.columns,
-        fields,
-        field_names: fields,
-        preview_text: ds.previewText || '',
-      },
-    }
-  }
-
-  const buildKittenChatPayload = (query: string) => {
-    const compactHistory = (messages.value || []).slice(-6).map((m) => ({
-      role: m.role,
-      content: plainTextFromChatHtml(m.content).slice(0, 500),
-    }))
-    return {
+    const fields = Array.isArray(ds?.fieldNames) ? ds.fieldNames.map(String) : []
+    // Construct once before the assistant placeholder, including a detached dataset/history snapshot.
+    const payload = {
       message: query,
-      user_id: kittenSessionUserId.value,
+      user_id: sessionId,
       source: 'pro',
       mode: 'pro',
       context: {
-        ...buildKittenRequestContext(),
-        recent_messages: compactHistory,
+        kitten_analyzer: true,
+        kitten_session_id: sessionId,
+        session_id: sessionId,
+        conversation_id: sessionId,
+        turn_id: receipt.turn_id,
+        task_id: receipt.task_id,
+        kitten_include_business_db: kittenIncludeBusinessDb.value,
+        kitten_web_search: kittenIncludeWebSearch.value,
+        has_dataset: Boolean(ds),
+        kitten_dataset: ds
+          ? {
+              file_name: ds.name,
+              name: ds.name,
+              rows: ds.rows,
+              columns: ds.columns,
+              fields,
+              field_names: [...fields],
+              preview_text: ds.previewText || '',
+            }
+          : null,
+        recent_messages: messages.value.slice(-6).map((m) => ({ role: m.role, content: plainTextFromChatHtml(m.content).slice(0, 500) })),
       },
     }
-  }
-
-  const sendMessage = async () => {
-    if (!inputText.value.trim()) return
-    if (isChatLoading.value || isDatasetParsing.value) return
-
-    const query = inputText.value.trim()
     addMessage('user', query)
     inputText.value = ''
     isChatLoading.value = true
     isKittenStreaming.value = false
     kittenPhase.value = KITTEN_PHASE.analyzing
-
-    if (!kittenSessionUserId.value) {
-      kittenSessionUserId.value = makeKittenUserId()
-    }
-
-    const finishWithAiText = (replyText: string, envelope: Record<string, unknown> | null, failed: boolean) => {
-      const hits = envelope ? extractWebSearchHits(envelope) : []
-      lastWebSearchHits.value = hits
-      const rid = Date.now()
-      const plain = replyText
+    const current = () => kittenSessionUserId.value === sessionId
+    let streamMessage: KittenChatMessage | null = null
+    let streamPlain = ''
+    const remember = (row: unknown) => rememberKittenExecution(receipt, row)
+    const show = (text: string, envelope: Record<string, unknown>, phase: KittenPhase, title: string) => {
+      if (!current()) return
+      remember(envelope)
+      if (streamMessage) streamMessage.content = textToHtml(text)
+      else addMessage('ai', textToHtml(text))
+      lastWebSearchHits.value = extractWebSearchHits(envelope.result || envelope)
+      const failed = phase === KITTEN_PHASE.error
       currentResult.value = {
-        id: rid,
-        title: failed ? '请求失败' : 'AI 分析',
-        summary: buildKittenResultSummary(plain),
+        id: Date.now(),
+        title,
+        summary: buildKittenResultSummary(text),
         chart: false,
-        type: failed ? 'error' : 'analysis',
-        kind: failed ? 'chatError' : 'analysis',
+        type: failed ? 'error' : phase === KITTEN_PHASE.delivered ? 'analysis' : 'pending',
+        kind: failed ? 'chatError' : phase === KITTEN_PHASE.delivered ? 'analysis' : receipt.status,
+        execution: { ...receipt },
       }
-      kittenPhase.value = failed ? KITTEN_PHASE.error : KITTEN_PHASE.delivered
+      kittenPhase.value = phase
+      scrollChatToBottom()
     }
-
+    const settle = (envelope: Record<string, unknown>, fallback = '') => {
+      const result = inspectKittenExecution(envelope)
+      remember(envelope)
+      receipt.status = result.status
+      receipt.reason = result.reason
+      let text = result.text || fallback || result.reason || '服务器未返回有效回复内容。'
+      if (result.phase !== KITTEN_PHASE.delivered && streamPlain && !text.includes(streamPlain)) {
+        text = `${streamPlain}\n${text}`
+      }
+      if (result.phase === KITTEN_PHASE.error) text = `请求失败：${text}`
+      else if (result.reason && !text.includes(result.reason)) text += `\n${result.reason}`
+      show(text, envelope, result.phase, result.title)
+    }
+    const reconcile = async (): Promise<boolean> => {
+      if (!receipt.run_id) return false
+      try {
+        const result = await agentRunsApi.getRun(receipt.run_id)
+        const run = result.data
+        if (!current() || !result.success || !run || run.run_id !== receipt.run_id) return false
+        const savedTurn = asString(asRecord(run.metadata?.task_context).turn_id)
+        if (savedTurn && savedTurn !== receipt.turn_id) return false
+        const saved = asRecord(run.final_output?.chat_payload)
+        const recovered = { run_id: run.run_id, execution_state: run.status, result: saved }
+        if (runHasUncertainReceipt(run) || inspectKittenExecution(recovered).phase === KITTEN_PHASE.unknown) return false
+        if (['completed', 'success', 'succeeded'].includes(run.status) && !Object.keys(saved).length) return false
+        settle(recovered, streamPlain || run.error || '')
+        return true
+      } catch {
+        return false
+      }
+    }
+    const controller = new AbortController()
+    const killTimer = window.setTimeout(() => controller.abort(), KITTEN_CHAT_TIMEOUT_MS)
     try {
       if (isChatStreamEnabled()) {
         isKittenStreaming.value = true
-        const streamTime = new Date().toLocaleTimeString('zh-CN', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-        pushBounded(messages, { role: 'ai', content: '', time: streamTime }, MAX_CHAT_MESSAGES)
-        const aiIdx = messages.value.length - 1
-        let streamPlain = ''
-        let doneResult: unknown = null
-        let sseError: string | null = null
-        const controller = new AbortController()
-        const killTimer = window.setTimeout(() => controller.abort(), KITTEN_CHAT_TIMEOUT_MS)
-        let streamOk = false
-        try {
-          const res = await chatApi.sendChatStream(buildKittenChatPayload(query), {
-            signal: controller.signal,
-          })
-          if (!res.ok) {
-            throw new Error(await parseChatStreamErrorResponse(res))
-          }
-          await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
-            if (ev.type === 'token') {
+        pushBounded(
+          messages,
+          { role: 'ai', content: '', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) },
+          MAX_CHAT_MESSAGES,
+        )
+        streamMessage = messages.value[messages.value.length - 1]
+        const res = await chatApi.sendChatStream(payload, { signal: controller.signal })
+        if (!res.ok) {
+          remember(
+            await res
+              .clone()
+              .json()
+              .catch(() => null),
+          )
+          throw new Error(await parseChatStreamErrorResponse(res))
+        }
+        let done: Record<string, unknown> | null = null
+        let authorization: Record<string, unknown> | null = null
+        let streamError = ''
+        await readPlannerSseResponse(
+          res,
+          (ev) => {
+            if (!current()) {
+              controller.abort()
+              return
+            }
+            remember(asRecord(ev))
+            if (ev.type === 'token' && !ev.ephemeral) {
               streamPlain += ev.text || ''
-              messages.value[aiIdx].content = textToHtml(streamPlain)
+              if (streamMessage) streamMessage.content = textToHtml(streamPlain)
               scrollChatToBottom()
             } else if (ev.type === 'done') {
-              doneResult = ev.result
-            } else if (ev.type === 'error') {
-              sseError = String(ev.message || '流式接口错误')
-            } else if (ev.type === 'requires_token') {
-              const tokenName = ev.token_name || ''
-              const tokenRaw = `${String(tokenName || '')} ${String(ev.token_description || '')}`.toUpperCase()
-              if (/DB_(READ|WRITE)_TOKEN|数据库.*令牌|一级|二级|写入令牌|查看令牌/.test(tokenRaw)) {
-                return
-              }
-              streamPlain += `\n[需要授权：${ev.token_description || tokenName || '授权信息'}]\n`
-              messages.value[aiIdx].content = textToHtml(streamPlain)
-              scrollChatToBottom()
-            }
-          })
-          if (sseError) {
-            throw new Error(sseError)
-          }
-          const dr = doneResult as Record<string, unknown> | null
-          const finalText = String((dr as { response?: string } | null)?.response ?? streamPlain).trim() || streamPlain || '（无内容）'
-          messages.value[aiIdx].content = textToHtml(finalText)
-          const failed = dr ? (dr as { success?: boolean }).success === false : false
-          finishWithAiText(finalText, dr, failed)
-          streamOk = true
-        } catch (err) {
-          const atIdx = messages.value[aiIdx]
-          if (atIdx?.role === 'ai') {
-            messages.value.splice(aiIdx, 1)
-          }
-          if (import.meta.env.DEV) {
-            console.warn('kitten stream failed, falling back to JSON chat', err)
-          }
-        } finally {
-          window.clearTimeout(killTimer)
-          isKittenStreaming.value = false
-        }
-        if (streamOk) {
-          return
-        }
-      }
-
-      const jsonAbort = new AbortController()
-      const jsonKill = window.setTimeout(() => jsonAbort.abort(), KITTEN_CHAT_TIMEOUT_MS)
-      try {
+              done = asRecord(ev.result)
+              remember(done)
+            } else if (ev.type === 'error') streamError = ev.message || '流式接口错误'
+            else if (ev.type === 'requires_token') authorization = { ...ev, requires_token: true }
+          },
+          controller.signal,
+        )
+        if (!current()) return
+        if (streamError) throw new Error(streamError)
+        if (authorization) settle(authorization, streamPlain)
+        else if (done) settle(done, streamPlain)
+        else throw new Error('连接提前结束，尚未收到完成回执。')
+      } else {
         const result = await safeJsonRequest<Record<string, unknown>>(resolvePlannerChatPath(), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(buildKittenChatPayload(query)),
-          signal: jsonAbort.signal,
+          body: JSON.stringify(payload),
+          signal: controller.signal,
         })
-
-        let replyText = ''
-        if (result.ok && (result.data as { success?: boolean })?.success) {
-          replyText = extractChatApiText(result.data as Record<string, unknown>)
-        } else {
-          const d = result.data as { message?: string } | null
-          const errMsg = d?.message || result.message || '请求失败'
-          replyText = `请求失败：${errMsg}`
-        }
-
-        if (!replyText.trim()) {
-          replyText = '服务器未返回有效回复内容。'
-        }
-
-        addMessage('ai', textToHtml(replyText))
-        const env = result.data as Record<string, unknown> | null
-        const failed = !result.ok || !(result.data as { success?: boolean })?.success
-        finishWithAiText(replyText, env, failed)
-      } finally {
-        window.clearTimeout(jsonKill)
+        const envelope = result.data || {}
+        remember(envelope)
+        if (!result.ok && (result.status >= 500 || !result.data)) throw new Error(result.message || '请求结果未确认')
+        settle(
+          { ...envelope, ...(!result.ok ? { success: false } : {}) },
+          extractChatApiText(envelope) || asString(envelope.message) || result.message || '服务器未返回有效回复内容。',
+        )
       }
     } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err)
-      const msg =
-        err instanceof Error && err.name === 'AbortError' ? `请求超时（>${Math.floor(KITTEN_CHAT_TIMEOUT_MS / 1000)}s）或已中断` : raw
-      addMessage('ai', textToHtml(`网络异常：${msg}`))
-      currentResult.value = {
-        id: Date.now(),
-        title: '网络异常',
-        summary: msg.slice(0, 220),
-        chart: false,
-        type: 'error',
-        kind: 'networkError',
-      }
-      kittenPhase.value = KITTEN_PHASE.error
+      if (!current() || (await reconcile())) return
+      const reason =
+        err instanceof Error && err.name === 'AbortError' ? '请求超时或连接已中断。' : err instanceof Error ? err.message : String(err)
+      receipt.status = 'unknown'
+      receipt.reason = reason
+      show([streamPlain, `${reason}\n${KITTEN_UNCONFIRMED_REASON}`].filter(Boolean).join('\n'), {}, KITTEN_PHASE.unknown, '结果待核对')
     } finally {
-      isChatLoading.value = false
-      isKittenStreaming.value = false
-      scrollChatToBottom()
+      window.clearTimeout(killTimer)
+      if (current()) {
+        isChatLoading.value = false
+        isKittenStreaming.value = false
+        scrollChatToBottom()
+      }
     }
   }
 
@@ -259,17 +255,11 @@ export function useKittenChatSend(deps: KittenChatSendDeps) {
     inputText.value = btn.text
     void sendMessage()
   }
-
   const handleInputKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       void sendMessage()
     }
   }
-
-  return {
-    sendMessage,
-    sendQuickAction,
-    handleInputKeydown,
-  }
+  return { sendMessage, sendQuickAction, handleInputKeydown }
 }

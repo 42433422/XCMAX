@@ -142,8 +142,10 @@ class TraceRunService:
             )
         elif run.status == "waiting_user":
             run.add_event("step.waiting_user", str(payload.get("message") or "等待用户授权"), {})
-        else:
+        elif run.status == "completed":
             run.add_event("run.completed", "Legacy planner 工具调用追踪完成", run.final_output)
+        else:
+            self._record_unfinished(run, payload)
         return self.repository.save(run)
 
     def create_tool_plan(
@@ -156,7 +158,11 @@ class TraceRunService:
         source: str | None,
         channel: str,
     ) -> AgentRun | None:
-        extracted = _extract_low_risk_tool_call(payload)
+        extracted = (
+            _extract_low_risk_tool_call(payload)
+            if _payload_status(payload) == "completed"
+            else None
+        )
         if extracted is None:
             return None
         (tool_id, action, params, raw_tool_call) = extracted
@@ -284,8 +290,10 @@ class TraceRunService:
         elif status == "failed":
             run.error = run.error or _payload_error_message(payload)
             run.add_event("run.failed", run.error, {"response_preview": text[:500]})
-        else:
+        elif status == "completed":
             run.add_event("run.completed", "Chat 响应已完成", {"response_preview": text[:500]})
+        else:
+            self._record_unfinished(run, payload)
         return self.repository.save(run)
 
     def finalize(
@@ -339,7 +347,24 @@ class TraceRunService:
         elif run.status == "failed":
             run.error = run.error or _payload_error_message(payload)
             run.add_event("run.failed", run.error, run.final_output)
-        else:
+        elif run.status == "completed":
             run.add_event("run.completed", "智能任务执行完成", run.final_output)
+        else:
+            self._record_unfinished(run, payload)
         self.repository.save(run)
         return _attach_run_id(payload, run.run_id)
+
+    @staticmethod
+    def _record_unfinished(run: AgentRun, payload: dict[str, Any]) -> None:
+        if run.status == "blocked":
+            run.metadata["non_retryable"] = True
+            run.metadata["recovery"] = {
+                **dict(run.metadata.get("recovery") or {}),
+                "state": "manual_reconciliation_required",
+                "error_code": "chat_result_unconfirmed",
+            }
+        run.add_event(
+            f"run.{run.status}",
+            str(payload.get("message") or "任务尚未完成，请查询原执行结果"),
+            {"status": run.status},
+        )

@@ -39,6 +39,7 @@ _SYSTEM = (
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCKS_GUARD = threading.Lock()
 _INFLIGHT: set[tuple[str, str]] = set()
+_FINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "rejected"})
 _HARD_ERP = re.compile(
     r"(发货单|开单|打印标签|导入产品|导入数据库|导入到库|出库|"
     r"删除[\u4e00-\u9fffA-Za-z0-9]{0,12}(客户|产品|订单|记录))"
@@ -108,29 +109,32 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
     text = str(message or "").strip()
     with _lock(key):
         data = _read(key)
+        prior = _user_turn(data, turn_id)
+        if prior is not None and str(prior.get("content") or "") != text:
+            return _payload(
+                "这一轮编号已经对应另一条消息，没有覆盖它，也没有再次执行。", "failed", replay=True
+            )
         if turn_id and (key, turn_id) in _INFLIGHT:
             return _payload("这一轮正在处理，不会重复执行。", "processing", replay=True)
         _close_abandoned(key, data)
         data = _read(key)
         if turn_id:
             prior = _user_turn(data, turn_id)
-            if prior is not None and str(prior.get("content") or "") != text:
-                return _payload(
-                    "这一轮编号已经对应另一条消息，没有覆盖它，也没有再次执行。",
-                    "failed",
-                    replay=True,
-                )
             assistant = _assistant_for(data, turn_id) if prior is not None else None
             if assistant is not None:
                 stored = assistant.get("payload")
-                if isinstance(stored, dict) and stored.get("response"):
-                    return stored
+                if isinstance(stored, dict):
+                    details = stored.get("data")
+                    return {
+                        **stored,
+                        "data": {**(details if isinstance(details, dict) else {}), "replay": True},
+                    }
                 return _payload(
                     str(assistant.get("content") or ""), str(assistant.get("status") or "failed")
                 )
         if should_answer_as_dialogue(text, context):
             _append_user(data, text, turn_id, context)
-        elif turn_id:
+        if turn_id:
             data.setdefault("receipts", {})[turn_id] = {
                 "message": text,
                 "status": "processing",
@@ -158,33 +162,50 @@ def settle_chat_turn(
         reply = str(payload.get("response") or payload.get("message") or "")
     with _lock(key):
         data = _read(key)
-        if turn_id and _assistant_for(data, turn_id):
+        prior = _user_turn(data, turn_id)
+        if prior is not None and str(prior.get("content") or "") != text:
+            raise ValueError("turn_id 已绑定另一条消息")
+        previous = _assistant_for(data, turn_id)
+        if previous and previous.get("status") in _FINAL_STATUSES:
             _INFLIGHT.discard((key, turn_id))
             return
+        previous_payload = previous.get("payload") if previous else None
+        if isinstance(previous_payload, Mapping) and isinstance(payload, Mapping):
+            previous_run = previous_payload.get("run_id") or previous_payload.get("agent_run_id")
+            current_run = payload.get("run_id") or payload.get("agent_run_id")
+            if previous_run and previous_run != current_run:
+                raise ValueError("turn_id 不能切换到另一项执行")
+        receipt = {
+            "role": "assistant",
+            "content": reply[:4000],
+            "turn_id": turn_id,
+            "status": status,
+            "at": time.time(),
+            "payload": _public_payload(payload, status),
+        }
         in_turns = any(
             item.get("role") == "user" and item.get("turn_id") == turn_id
             for item in data.get("turns") or []
         )
         if in_turns or (not turn_id and should_answer_as_dialogue(text, context)):
             data["active"] = True
-            data["turns"].append(
-                {
-                    "role": "assistant",
-                    "content": reply[:4000],
-                    "turn_id": turn_id,
-                    "status": status,
-                    "at": time.time(),
-                    "payload": _public_payload(payload, status),
-                }
+            stored = next(
+                (
+                    item
+                    for item in data["turns"]
+                    if turn_id
+                    and item.get("role") == "assistant"
+                    and item.get("turn_id") == turn_id
+                ),
+                None,
             )
+            if stored is None:
+                data["turns"].append(receipt)
+            else:
+                stored.update(receipt)
         if turn_id:
             receipts = data.setdefault("receipts", {})
-            receipts[turn_id] = {
-                "message": text,
-                "status": status,
-                "at": time.time(),
-                "payload": _public_payload(payload, status),
-            }
+            receipts[turn_id] = {**receipt, "message": text}
             _INFLIGHT.discard((key, turn_id))
         _write(key, data)
 
@@ -362,6 +383,8 @@ def _payload(
             "processing": "处理中",
             "failed": "失败",
             "interrupted": "中断",
+            "waiting_approval": "等待授权",
+            "unknown": "等待核对",
         }.get(status, status),
         "response": reply,
         "data": {
@@ -380,11 +403,12 @@ def _payload(
 
 
 def _public_payload(payload: Mapping[str, Any] | None, status: str) -> dict[str, Any]:
-    if isinstance(payload, Mapping) and payload.get("response"):
+    if isinstance(payload, Mapping):
         copied = json.loads(json.dumps(payload, ensure_ascii=False, default=str))
         data = copied.get("data")
-        if isinstance(data, dict):
-            data["status"] = status
+        copied["data"] = {**(data if isinstance(data, dict) else {}), "status": status}
+        copied["execution_state"] = status
+        copied.setdefault("response", str(copied.get("message") or ""))
         return dict(copied)
     return _payload(str((payload or {}).get("response") or ""), status)
 
@@ -446,12 +470,12 @@ def _close_abandoned(key: str, data: dict[str, Any]) -> None:
 def _user_turn(data: dict[str, Any], turn_id: str) -> dict[str, Any] | None:
     if not turn_id:
         return None
-    for item in data.get("turns") or []:
-        if item.get("role") == "user" and item.get("turn_id") == turn_id:
-            return dict(item)
     receipt = (data.get("receipts") or {}).get(turn_id)
     if isinstance(receipt, dict):
         return {"role": "user", "content": receipt.get("message"), "turn_id": turn_id}
+    for item in data.get("turns") or []:
+        if item.get("role") == "user" and item.get("turn_id") == turn_id:
+            return dict(item)
     return None
 
 
@@ -462,11 +486,7 @@ def _assistant_for(data: dict[str, Any], turn_id: str) -> dict[str, Any] | None:
         if item.get("role") == "assistant" and item.get("turn_id") == turn_id:
             return dict(item)
     receipt = (data.get("receipts") or {}).get(turn_id)
-    if isinstance(receipt, dict) and receipt.get("status") in {
-        "completed",
-        "failed",
-        "interrupted",
-    }:
+    if isinstance(receipt, dict) and isinstance(receipt.get("payload"), dict):
         return receipt
     return None
 

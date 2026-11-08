@@ -5,6 +5,13 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
+from app.domain.task_lifecycle.results import (
+    execution_result_envelopes,
+    execution_result_error,
+    execution_result_states,
+    execution_result_wait_reason,
+)
+
 from .run_models import RunStatus
 
 _MAX_TRACE_STRING_CHARS = 4000
@@ -58,17 +65,35 @@ def _payload_data(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _payload_status(payload: dict[str, Any]) -> RunStatus:
-    data = _payload_data(payload)
-    if payload.get("requires_token") or data.get("requires_token"):
-        return "waiting_user"
-    if any(
-        isinstance(record.get("output"), dict) and record["output"].get("pending_approval") is True
-        for record in _extract_legacy_tool_records(payload)
+    envelopes = list(execution_result_envelopes(payload))
+    states = set().union(*(execution_result_states(item) for item in envelopes))
+    if states & {"unknown", "interrupted", "partial", "partial_success"} or any(
+        item.get("requires_reconciliation") or item.get("reconciliation_required")
+        for item in envelopes
     ):
+        return "blocked"
+    wait_reason = execution_result_wait_reason(payload)
+    if wait_reason == "paused":
+        return "paused"
+    if wait_reason:
         return "waiting_user"
-    if payload.get("success") is False:
+    if states & {"cancelled", "canceled"}:
+        return "cancelled"
+    if states & {"rejected", "expired"}:
+        return "rejected"
+    if "blocked" in states:
+        return "blocked"
+    if states & {"failed", "timeout", "timed_out"}:
         return "failed"
-    return "completed"
+    if "queued" in states:
+        return "queued"
+    if "planning" in states:
+        return "planning"
+    if "retrying" in states:
+        return "retrying"
+    if states & {"pending", "accepted", "running", "processing"}:
+        return "running"
+    return "failed" if execution_result_error(payload) else "completed"
 
 
 def _payload_error_message(payload: dict[str, Any]) -> str:

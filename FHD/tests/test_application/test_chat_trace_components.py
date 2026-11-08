@@ -3,8 +3,13 @@
 from copy import deepcopy
 from unittest.mock import Mock
 
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.trace_approval import resolve_legacy_approval
 from app.application.agent_orchestrator.trace_model_usage import ModelUsageRecorder
 from app.application.agent_orchestrator.trace_recording import TraceRecorder
@@ -85,3 +90,70 @@ def test_approval_resolution_updates_only_the_injected_repository():
     assert isinstance(primary_run, AgentRun) and primary_run.status == "cancelled"
     assert isinstance(other_run, AgentRun) and other_run.status == "waiting_user"
     assert other_run.tool_calls[0].output["pending_approval"] is True
+
+
+@pytest.mark.parametrize(
+    ("output", "status", "step_status", "call_status"),
+    [
+        ({"success": True, "requires_token": True}, "waiting_user", "waiting_user", "running"),
+        ({"success": True, "pending_approval": True}, "waiting_user", "waiting_user", "running"),
+        (
+            {"success": False, "execution_outcome": "unknown", "requires_reconciliation": True},
+            "blocked",
+            "running",
+            "running",
+        ),
+        ({"success": True, "execution_state": "running"}, "running", "running", "running"),
+        ({"success": False, "message": "工具拒绝执行"}, "failed", "failed", "failed"),
+        ({"success": True, "data": {"record_id": 42}}, "completed", "completed", "completed"),
+    ],
+)
+def test_trace_sqlite_reopen_preserves_original_turn_and_unfinished_tool_receipts(
+    tmp_path, output, status, step_status, call_status
+):
+    from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+
+    url = f"sqlite:///{tmp_path / 'trace.db'}"
+    engine = create_engine(url)
+    repository = SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
+    ledger = Mock()
+    recording = TraceRecorder(ModelUsageRecorder(ledger, Mock()), Mock(), Mock(return_value=None))
+    execute = Mock(side_effect=AssertionError("recording must not dispatch a second execution"))
+    service = TraceRunService(repository, recording, execute)
+    context = {
+        "local_user_id": "owner",
+        "tenant_id": "tenant",
+        "session_id": "kitten",
+        "turn_id": "fixed",
+    }
+    run = service.start(message="核对原任务", runtime_context=context)
+    receipt = {"tool_id": "business", "action": "inspect", "output": output}
+    service.finalize(
+        run,
+        {"success": True, "response": "工具回执", "legacy_tool_records": [receipt]},
+        message="核对原任务",
+        runtime_context=context,
+    )
+    engine.dispose()
+
+    reopened_engine = create_engine(url)
+    try:
+        reopened = SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=reopened_engine))
+        stored = reopened.get(run.run_id)
+        assert stored.status == status
+        assert stored.metadata["task_context"]["turn_id"] == "fixed"
+        assert stored.steps[0].status == step_status
+        assert stored.tool_calls[0].status == call_status
+        assert stored.tool_calls[0].output == output
+        assert bool(stored.steps[0].finished_at) is (step_status in {"completed", "failed"})
+        assert bool(stored.tool_calls[0].finished_at) is (call_status in {"completed", "failed"})
+        events = {item.event_type for item in stored.events}
+        assert ("run.completed" in events) is (status == "completed")
+        assert ("tool.completed" in events) is (status == "completed")
+        if status == "blocked":
+            assert requires_retry_reconciliation(stored)
+            assert stored.tool_calls[0].metadata["requires_reconciliation"] is True
+        ledger.assert_not_called()
+        execute.assert_not_called()
+    finally:
+        reopened_engine.dispose()

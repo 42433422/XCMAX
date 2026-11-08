@@ -9,6 +9,7 @@ mixed results), compat_chat_stream_async.
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import ExitStack, contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -493,7 +494,8 @@ class TestExecuteCompatChatBatch:
             ),
         ):
             result = await execute_compat_chat_batch(request, body)
-            assert result["success"] is True
+            assert result["success"] is False
+            assert result["execution_state"] == "waiting_approval"
             assert result["results"][0]["requires_token"] is True
 
     @pytest.mark.asyncio
@@ -609,3 +611,97 @@ class TestCompatChatStreamAsync:
             assert chunks == [b"data"]
             (_, kwargs) = mock_planner_stream.call_args
             assert kwargs.get("ai_tier") == "p2"
+
+
+@pytest.mark.parametrize(
+    ("terminal", "status"),
+    [
+        ({"type": "requires_token", "token_name": "DB_READ_TOKEN"}, "waiting_approval"),
+        ({"type": "done", "result": {"success": True, "requires_token": True}}, "waiting_approval"),
+        (
+            {"type": "error", "execution_outcome": "unknown", "requires_reconciliation": True},
+            "unknown",
+        ),
+        (None, "unknown"),
+        ({"type": "done", "result": {"success": True, "response": "原任务结果"}}, "completed"),
+    ],
+)
+async def test_stream_persists_original_run_before_observation_and_keeps_waits(
+    monkeypatch, tmp_path, terminal, status
+):
+    from app.application import planner_compat_service as compat
+    from app.application.ai_chat.dialogue_memory import (
+        conversation_key,
+        prepare_chat_turn,
+        turn_status,
+    )
+
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
+    context = {"local_user_id": 9, "tenant_id": 3, "session_id": "sse", "turn_id": "stable"}
+    body = XcagiCompatChatBody(message="分析这段文字", context=context)
+    prepare_chat_turn(body.message, context)
+    monkeypatch.setattr(
+        compat, "_runtime_context_with_authenticated_actor", lambda req, ctx: dict(ctx)
+    )
+    monkeypatch.setattr(compat, "_persist_compat_chat_turn", lambda *args: None)
+
+    async def events(*args, **kwargs):
+        yield compat._sse_event(
+            {"type": "tool_progress", "phase": "started", "run_id": "original-run"}
+        )
+        if terminal is not None:
+            yield compat._sse_event(terminal)
+
+    monkeypatch.setattr(compat.CompatStream, "run", events)
+    stream = compat.compat_chat_stream_async(_make_request(), body)
+    first = await anext(stream)
+    assert json.loads(first.decode()[6:])["turn_id"] == "stable"
+    assert turn_status(conversation_key(context), "stable") == "running"
+    initial = prepare_chat_turn(body.message, context)
+    assert initial["run_id"] == "original-run"
+    chunks = [part async for part in stream]
+    if terminal is not None:
+        assert chunks
+    persisted = prepare_chat_turn(body.message, context)
+    assert persisted["run_id"] == "original-run"
+    assert persisted["data"]["status"] == status
+    assert persisted["execution_state"] == status
+    assert persisted["data"]["replay"] is True
+    if status == "unknown":
+        assert persisted["requires_reconciliation"] is True
+
+
+@pytest.mark.parametrize(
+    ("payload", "status"),
+    [
+        ({"success": True, "requires_token": True, "response": "等待授权"}, "waiting_approval"),
+        (
+            {"success": False, "execution_outcome": "unknown", "requires_reconciliation": True},
+            "unknown",
+        ),
+        ({"success": True, "response": "完成"}, "completed"),
+    ],
+)
+async def test_json_success_flag_does_not_complete_a_waiting_or_unknown_turn(
+    monkeypatch, tmp_path, payload, status
+):
+    from app.application import planner_compat_service as compat
+    from app.application.ai_chat.dialogue_memory import prepare_chat_turn
+
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
+    context = {"local_user_id": 10, "tenant_id": 3, "session_id": "json", "turn_id": "stable"}
+    body = XcagiCompatChatBody(message="分析文字", context=context)
+    prepare_chat_turn(body.message, context)
+    monkeypatch.setattr(
+        compat, "_runtime_context_with_authenticated_actor", lambda req, ctx: dict(ctx)
+    )
+    monkeypatch.setattr(compat, "_persist_compat_chat_turn", lambda *args: None)
+    monkeypatch.setattr(
+        compat,
+        "_execute_compat_chat_impl",
+        AsyncMock(return_value={**payload, "run_id": "same-run"}),
+    )
+    await compat.execute_compat_chat(_make_request(), body)
+    persisted = prepare_chat_turn(body.message, context)
+    assert persisted["run_id"] == "same-run"
+    assert persisted["execution_state"] == status

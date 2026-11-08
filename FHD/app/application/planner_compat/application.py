@@ -10,6 +10,13 @@ from typing import Protocol
 from fastapi import HTTPException, Request
 
 from app.application.planner_compat_execute import ChatTurnExecutor
+from app.domain.task_lifecycle.results import (
+    execution_result_envelopes,
+    execution_result_error,
+    execution_result_requires_reconciliation,
+    execution_result_states,
+    execution_result_wait_reason,
+)
 from app.fastapi_routes.xcagi_compat_chat_models import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
@@ -119,11 +126,32 @@ class CompatChatApplication:
         values = body.model_dump(exclude={"messages", "context"})
         rolling_context = dict(body.context or {})
         batch_turn = str(rolling_context.get("turn_id") or uuid.uuid4().hex)
+        turn_ids = [
+            uuid.uuid5(uuid.NAMESPACE_URL, f"{batch_turn}:{index}").hex
+            for index in range(len(messages))
+        ]
         results: list[Payload] = []
+        paused_state = ""
+        wait_reason = ""
+        processed_count = 0
         for index, message in enumerate(messages):
+            if paused_state:
+                results.append(
+                    {
+                        "success": False,
+                        "execution_state": "blocked",
+                        "message": "前序任务尚未完成，本项未执行。请先核对原任务状态。",
+                        "data": {
+                            "status": "not_started",
+                            "turn_id": turn_ids[index],
+                            "blocked_by_turn_id": turn_ids[processed_count - 1],
+                        },
+                    }
+                )
+                continue
             context = {
                 **rolling_context,
-                "turn_id": uuid.uuid5(uuid.NAMESPACE_URL, f"{batch_turn}:{index}").hex,
+                "turn_id": turn_ids[index],
             }
             single = XcagiCompatChatBody(message=message, context=context, **values)
             try:
@@ -134,19 +162,53 @@ class CompatChatApplication:
                     if isinstance(exc, HTTPException)
                     else self.execution.responses.http_error(exc)
                 )
+                details = error.detail if isinstance(error.detail, dict) else {}
+                message = str(details.get("message") or details.get("response") or error.detail)
                 result = {
+                    **details,
                     "success": False,
-                    "message": str(error.detail),
-                    "response": str(error.detail),
+                    "message": message,
+                    "response": str(details.get("response") or message),
                 }
+                if not isinstance(exc, HTTPException) or error.status_code >= 500:
+                    result.update(execution_outcome="unknown", requires_reconciliation=True)
             data = result.get("data")
             update = data.get("runtime_context") if isinstance(data, dict) else None
             if isinstance(update, dict):
                 rolling_context = update
             results.append(result)
+            processed_count += 1
+            wait_reason = execution_result_wait_reason(result)
+            unknown_effect = any(
+                execution_result_states(item)
+                & {"unknown", "interrupted", "partial", "partial_success"}
+                or item.get("reconciliation_required")
+                or item.get("requires_reconciliation")
+                for item in execution_result_envelopes(result)
+            )
+            if unknown_effect:
+                paused_state, wait_reason = "blocked", "pending_result"
+            elif wait_reason:
+                paused_state = {
+                    "authorization": "waiting_approval",
+                    "approval": "waiting_approval",
+                    "input": "waiting_user",
+                    "paused": "paused",
+                }[wait_reason]
+            elif execution_result_requires_reconciliation(result):
+                paused_state = "blocked"
+                wait_reason = "pending_result"
+        completed = all(
+            item.get("success") and not execution_result_error(item) for item in results
+        )
         return {
-            "success": all(item.get("success") for item in results),
+            "success": completed,
+            "execution_state": paused_state or ("completed" if completed else "failed"),
+            "wait_reason": wait_reason,
             "batch": True,
+            "batch_turn_id": batch_turn,
+            "turn_ids": turn_ids,
             "results": results,
             "count": len(results),
+            "processed_count": processed_count,
         }

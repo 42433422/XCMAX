@@ -495,7 +495,8 @@ class TestXcagiChatTimeoutErrorPayloadExtended:
         result = ch._xcagi_chat_timeout_error_payload(120.0)
         assert result["success"] is False
         assert "120" in result["message"]
-        assert "XCAGI_CHAT_TIMEOUT_SEC" in result["message"]
+        assert result["execution_outcome"] == "unknown"
+        assert result["requires_reconciliation"] is True
         assert result["data"]["text"] == result["message"]
 
 
