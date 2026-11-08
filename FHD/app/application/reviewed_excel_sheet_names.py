@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_partition import DOCUMENT_LABELS
 from app.application.reviewed_excel_template import _template_llm_complete
 
@@ -111,7 +112,7 @@ def _apply_model_names(
             800,
             owner_id=owner_id,
         )
-    except Exception:
+    except ReviewedExcelError:
         logger.info("sheet naming failed: BOUNDARY")
         return
     if not getattr(result, "used_llm", False) or getattr(result, "degraded", False):

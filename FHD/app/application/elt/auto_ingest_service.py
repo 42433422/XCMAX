@@ -129,7 +129,7 @@ def knowledge_document_keeps_unwritten_rows(summary: str, source_text: str) -> s
     if not source:
         return summary
     if not summary or source in summary:
-        return source if not summary else summary
+        return summary or source
     return f"{summary}\n\n{source}"
 
 

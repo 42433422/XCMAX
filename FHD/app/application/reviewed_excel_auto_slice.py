@@ -387,7 +387,7 @@ def _compatibility_revision(fragments, message, overview, owner_id, earlier, all
     }
     try:
         result = _template_llm_complete(messages, schema, 800, owner_id=owner_id)
-    except Exception as exc:
+    except ReviewedExcelError as exc:
         from app.application.elt.errors import model_call_outcome
 
         outcome = model_call_outcome(exc)

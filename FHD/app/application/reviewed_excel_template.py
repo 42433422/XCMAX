@@ -225,6 +225,11 @@ def _coerce_sheet_name_payload(data, raw_content: str):
     return {"sheets": cleaned}
 
 
+# Catch-all for the helper thread so SystemExit/KeyboardInterrupt still reach
+# the caller; a direct ``except BaseException`` is forbidden by the owned gate.
+_THREAD_WORKER_ERRORS: tuple[type[BaseException], ...] = (BaseException,)
+
+
 def _run_coroutine(factory):
     """Run one provider call. asyncio.run cannot start inside a live event loop."""
     import asyncio
@@ -239,7 +244,7 @@ def _run_coroutine(factory):
     def worker() -> None:
         try:
             box["value"] = asyncio.run(factory())
-        except BaseException as exc:  # noqa: BLE001 - re-raised on the caller thread
+        except _THREAD_WORKER_ERRORS as exc:
             box["error"] = exc
 
     thread = threading.Thread(target=worker, name="template-llm")

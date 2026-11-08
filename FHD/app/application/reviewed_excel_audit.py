@@ -4,6 +4,7 @@ import hashlib
 import json
 import threading
 from copy import deepcopy
+from datetime import UTC
 
 from app.application.elt.errors import ModelRequestNotSent as ModelRequestNotSent
 from app.application.elt.errors import ReviewedExcelError
@@ -21,7 +22,7 @@ def release_unanswered_inflight(state: dict, updated_at) -> bool:
     A response body keeps the lock. A recent claim keeps the lock so a live call
     is not sent twice.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     checkpoint = state.get("analysis_checkpoint")
     records = state.get("model_audit")
@@ -34,8 +35,8 @@ def release_unanswered_inflight(state: dict, updated_at) -> bool:
         return False
     if not isinstance(updated_at, datetime):
         return False
-    moment = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=timezone.utc)
-    age = (datetime.now(timezone.utc) - moment).total_seconds()
+    moment = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=UTC)
+    age = (datetime.now(UTC) - moment).total_seconds()
     if age < UNANSWERED_INFLIGHT_SECONDS:
         return False
     latest["state"] = "unanswered"
