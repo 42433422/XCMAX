@@ -332,6 +332,20 @@ def test_template_platform_uses_account_provider_once_and_never_retries(monkeypa
     assert calls.count("timeout") == 1
 
 
+def test_streamed_tokens_keep_the_template_call_alive():
+    from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
+
+    seen, pieces = [], []
+    for data in (
+        '{"choices": [{"delta": {"reasoning_content": "synthetic"}}]}',
+        '{"choices": [{"delta": {"content": "{}"}}]}',
+        '{"status": "processing"}',
+        "",
+    ):
+        ModstorePlatformAdapter._absorb_stream_payload(None, data, lambda: seen.append(1), pieces)
+    assert len(seen) == 3 and pieces == ["{}"]
+
+
 def test_template_platform_keeps_the_same_call_while_status_arrives(monkeypatch):
     import asyncio
     import json

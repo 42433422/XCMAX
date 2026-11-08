@@ -442,6 +442,10 @@ class ModstorePlatformAdapter:
         )
 
     def _absorb_stream_payload(self, data: str, status_cb, pieces: list[str]) -> None:
+        # Every streamed payload, reasoning deltas included, shows the same call is still
+        # producing; the caller's wait is an idle limit, not a cap on a live answer.
+        if data and status_cb is not None:
+            status_cb()
         try:
             payload = json.loads(data)
         except (ValueError, TypeError):
@@ -451,8 +455,6 @@ class ModstorePlatformAdapter:
         if not isinstance(payload, dict):
             return
         if payload.get("status") == "processing":
-            if status_cb is not None:
-                status_cb()
             return
         delta = payload.get("delta")
         content = delta if isinstance(delta, str) and delta else payload.get("content")
