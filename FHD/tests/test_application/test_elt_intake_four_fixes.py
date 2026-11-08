@@ -274,3 +274,11 @@ def test_degraded_routing_is_not_complete_coverage():
     covered = ais._batch_coverage({"action": "new"}, {}, {"degraded": True})
     assert covered["complete"] is False and covered["routing_degraded"] is True
     assert ais._batch_coverage({"action": "new"}, {}, {"degraded": False})["complete"] is True
+
+
+def test_customer_name_fallback_is_checked_against_the_cited_sheet():
+    from app.application.elt.llm_assist import _sheet_line_index, _unit_untraceable
+
+    lines = _sheet_line_index("# sheet:出货\nR1 | 客户 甲公司\nR2 | 白浆 | 2")
+    assert _unit_untraceable({"source_sheet": "出货", "customer_name": "乙公司"}, lines)
+    assert not _unit_untraceable({"source_sheet": "出货", "customer_name": "甲公司"}, lines)
