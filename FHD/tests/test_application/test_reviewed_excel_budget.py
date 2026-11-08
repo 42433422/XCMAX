@@ -45,9 +45,9 @@ def workbook_review(rows=120, *, formulas=True):
 
 def test_complete_request_includes_dense_formulas_schema_and_preserves_all_cells(monkeypatch):
     monkeypatch.delenv("FHD_TEMPLATE_LLM_PROVIDER", raising=False)
-    # 3000 dense formula rows still exceed the raised ~3.84MB request envelope as one call,
-    # while staying under MAX_MODEL_TEXT_BYTES so transport packing (not cell-count) splits.
-    review = workbook_review(3000)
+    # 2000 dense formula rows exceed the request envelope as one call while staying
+    # under MAX_MODEL_TEXT_BYTES, so transport packing (not cell-count) splits.
+    review = workbook_review(2000)
     assert sum(map(_model_cell_cost, review["cells"])) < MAX_MODEL_TEXT_BYTES
     with pytest.raises(RequestBudgetExceeded):
         _classify_semantic_batch(review, prepare_only=True, reference_ids=True)
@@ -283,10 +283,11 @@ def test_old_cell_chunk_boundaries_do_not_change_neutral_packing():
 def test_full_width_primary_row_is_not_rejected_for_optional_context(monkeypatch):
     from openpyxl.utils.cell import get_column_letter
 
-    # Excel caps a row at 16384 columns, so the algorithm is exercised exactly at that
-    # physical width instead of the product's larger 20000-cell pack budget.
+    # Excel caps a row at 16384 columns; the pack caps are raised to that physical width
+    # so one full-width primary row is exercised as a single pack.
     width = 16384
     monkeypatch.setattr("app.application.reviewed_excel_evidence.MAX_MODEL_CELLS", width)
+    monkeypatch.setattr("app.application.reviewed_excel_evidence.MAX_MODEL_TEXT_BYTES", 3_840_000)
     review = {
         "sheets": ["S"],
         "cells": [
@@ -302,7 +303,7 @@ def test_full_width_primary_row_is_not_rejected_for_optional_context(monkeypatch
     assert len(fitted) == 2
     assert sum(not c.get("context_only") for c in fitted[0]) == width
     assert sum(not c.get("context_only") for b in fitted for c in b) == width + 1
-    assert all(len(b) <= MAX_MODEL_CELLS for b in fitted)
+    assert all(len(b) <= width for b in fitted)
 
 
 def saved_plan(review, batches):
