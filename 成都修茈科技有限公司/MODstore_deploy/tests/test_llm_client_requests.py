@@ -90,17 +90,13 @@ def billed(monkeypatch, db):
         base_url="https://synthetic.invalid/v1",
     )
     wallet = SimpleNamespace(
-        preauthorize=AsyncMock(
-            return_value=WalletHold("synthetic-hold", Decimal(".01"), True)
-        ),
+        preauthorize=AsyncMock(return_value=WalletHold("synthetic-hold", Decimal(".01"), True)),
         settle=AsyncMock(),
         release=AsyncMock(),
     )
     monkeypatch.setattr(llm_billed_chat, "JavaWalletClient", lambda **kwargs: wallet)
     monkeypatch.setattr(llm_billed_chat, "enforce_risk_limits", Mock())
-    monkeypatch.setattr(
-        llm_billed_chat, "estimate_preauthorization", lambda *a: Decimal(".01")
-    )
+    monkeypatch.setattr(llm_billed_chat, "estimate_preauthorization", lambda *a: Decimal(".01"))
     monkeypatch.setattr(llm_billed_chat, "calculate_charge", lambda *a: Decimal(".01"))
     monkeypatch.setattr(llm_billed_chat, "save_success_log", lambda *a, **k: 11)
     monkeypatch.setattr(llm_billed_chat, "save_failure_log", Mock())
@@ -137,13 +133,9 @@ async def test_same_key_resend_replays_the_receipt_without_a_second_charge(bille
     assert first[3][1]["finish_reason"] == "length"
     assert first[1][1]["request_id"] == ledger.attempt_request_id(7, KEY, 1) + "-0"
     second = await billed.call()
-    assert [event for event, _ in second] == ["done"] and second[0][1][
-        "replayed"
-    ] is True
+    assert [event for event, _ in second] == ["done"] and second[0][1]["replayed"] is True
     assert second[0][1]["content"] == "synthetic answer"
-    assert (
-        billed.wallet.preauthorize.await_count == 1 == billed.wallet.settle.await_count
-    )
+    assert billed.wallet.preauthorize.await_count == 1 == billed.wallet.settle.await_count
     assert billed.sent == ["mimo-v2.6-flash"]
 
 
@@ -165,7 +157,5 @@ async def test_a_live_key_is_refused_instead_of_run_twice(billed, db):
     ledger.begin(db, 7, KEY, "other-digest", 90)
     with pytest.raises(HTTPException) as refused:
         await billed.call()
-    assert (
-        refused.value.status_code == 409 and refused.value.detail["state"] == "conflict"
-    )
+    assert refused.value.status_code == 409 and refused.value.detail["state"] == "conflict"
     billed.wallet.preauthorize.assert_not_awaited()

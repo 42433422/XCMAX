@@ -24,9 +24,7 @@ _STALE_GRACE_S = 60.0
 
 
 def request_digest(payload: dict[str, Any]) -> str:
-    encoded = json.dumps(
-        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    )
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
@@ -81,9 +79,7 @@ def begin(
         return "conflict", None
     if row.state == "completed":
         return "replay", json.loads(row.done_json or "{}")
-    if row.state == "settling" or (
-        row.state == "processing" and not _stale(row, deadline_s)
-    ):
+    if row.state == "settling" or (row.state == "processing" and not _stale(row, deadline_s)):
         return "processing", None
     row.state = "processing"
     row.attempts = int(row.attempts or 1) + 1
