@@ -81,6 +81,39 @@ def _bind(monkeypatch: pytest.MonkeyPatch, facade: ModuleType, label: str) -> Si
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status_code,processed", [(503, 1), (400, 2)])
+async def test_batch_preserves_structured_http_receipts_and_pauses_uncertain_errors(
+    monkeypatch: pytest.MonkeyPatch, status_code: int, processed: int
+) -> None:
+    facade = _facade("planner_structured_failure")
+    _bind(monkeypatch, facade, "structured-failure")
+    execute = AsyncMock(
+        side_effect=[
+            HTTPException(
+                status_code=status_code,
+                detail={
+                    "message": "执行未确认",
+                    "run_id": "original-run",
+                    "data": {"receipt_id": "receipt-1"},
+                },
+            ),
+            {"success": True, "run_id": "next-run"},
+        ]
+    )
+    monkeypatch.setattr(facade, "_execute_ai_chat_mainline", execute)
+    result = await facade.execute_compat_chat_batch(
+        _request(),
+        XcagiCompatChatBatchBody(
+            messages=["first", "second"], context={"use_ai_chat_mainline": True}
+        ),
+    )
+    assert result["results"][0]["run_id"] == "original-run"
+    assert result["results"][0]["data"]["receipt_id"] == "receipt-1"
+    assert result["processed_count"] == execute.await_count == processed
+    assert result["execution_state"] == ("blocked" if status_code >= 500 else "failed")
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("batch", [False, True])
 async def test_independent_facades_keep_request_client_trace_and_thread_context(
     monkeypatch: pytest.MonkeyPatch, batch: bool
@@ -121,8 +154,14 @@ async def test_independent_facades_keep_request_client_trace_and_thread_context(
 
     results = await asyncio.gather(execute(0), execute(1))
     for index, label in enumerate(("left", "right")):
-        assert results[index] == {"success": True, "response": label, "run_id": f"run-{label}"}
         identity, client, context = captured[label]
+        assert results[index] == {
+            "success": True,
+            "response": label,
+            "run_id": f"run-{label}",
+            "turn_id": context["turn_id"],
+        }
+        assert results[index]["turn_id"] != results[1 - index]["turn_id"]
         assert identity == label
         assert client is ports[index].client_value
         assert context["_mod_authorization"] is authorizations[index]
@@ -132,7 +171,7 @@ async def test_independent_facades_keep_request_client_trace_and_thread_context(
 
 
 @pytest.mark.asyncio
-async def test_batch_interrupt_updates_context_and_failed_turn_does_not_stop_next(
+async def test_batch_interrupt_updates_context_and_uncertain_failure_stops_next(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     facade = _facade("planner_batch")
@@ -170,13 +209,135 @@ async def test_batch_interrupt_updates_context_and_failed_turn_does_not_stop_nex
     )
     assert result["count"] == 3
     assert result["success"] is False
-    assert [item["success"] for item in result["results"]] == [True, False, True]
-    assert result["results"][-1]["response"] == "completed"
+    assert [item["success"] for item in result["results"]] == [True, False, False]
+    assert result["execution_state"] == "blocked"
+    assert result["results"][1]["requires_reconciliation"] is True
+    assert result["results"][-1]["data"]["status"] == "not_started"
     assert all(context["cleared"] and "pending" not in context for context in contexts)
     assert all(context["_mod_authorization"] is authorization for context in contexts)
-    assert ports.client.call_count == 2  # Each executed turn uses the shared single-turn API.
+    assert ports.client.call_count == 1  # The unconfirmed turn must not dispatch its successor.
     assert all(call.args[0].state.label == "test" for call in ports.client.call_args_list)
-    assert ports.start.call_count == ports.finish.call_count == 2
+    assert ports.start.call_count == ports.finish.call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("pending", "state"),
+    [
+        ({"requires_token": True, "token_name": "DB_WRITE_TOKEN"}, "waiting_approval"),
+        ({"data": {"requires_token": True}}, "waiting_approval"),
+        ({"result": {"pending_approval": True}}, "waiting_approval"),
+        ({"legacy_tool_records": [{"output": {"pending_approval": True}}]}, "waiting_approval"),
+        ({"tool_records": [{"output": {"outcome": "unknown"}}]}, "blocked"),
+        ({"data": {"status": "waiting_user"}}, "waiting_user"),
+        ({"result": {"needs_user_input": True}}, "waiting_user"),
+        ({"status": "paused"}, "paused"),
+        ({"data": {"status": "unknown"}}, "blocked"),
+        ({"requires_token": True, "data": {"status": "unknown"}}, "blocked"),
+        ({"status": "running", "result": {"pending_approval": True}}, "waiting_approval"),
+        ({"data": {"status": "running"}}, "blocked"),
+        ({"result": {"outcome": "outcome_unknown"}}, "blocked"),
+        ({"result": {"execution_state": "inflight"}}, "blocked"),
+        ({"result": {"status": "in_progress"}}, "blocked"),
+        ({"result": {"status": "approval_required"}}, "waiting_approval"),
+        ({"result": {"status": "authorization_required"}}, "waiting_approval"),
+        ({"result": {"status": "needs_user_input"}}, "waiting_user"),
+        ({"result": {"status": "partial"}}, "blocked"),
+        ({"result": {"status": "partial_success"}}, "blocked"),
+        ({"result": {"status": "blocked"}}, "blocked"),
+        ({"outputs": {"first": {"outcome": "unknown"}}}, "blocked"),
+        ({"node_outputs": {"first": {"outcome": "unknown"}}}, "blocked"),
+    ],
+)
+async def test_batch_retains_receipts_and_does_not_execute_after_a_pending_item(
+    monkeypatch: pytest.MonkeyPatch, pending: dict, state: str
+) -> None:
+    facade = _facade("planner_pending_batch")
+    _bind(monkeypatch, facade, "pending")
+    first = {"success": True, "response": "已完成", "run_id": "finished-run"}
+    waiting = {"success": True, "run_id": "pending-run", **pending}
+    execute = AsyncMock(side_effect=[first, waiting])
+    monkeypatch.setattr(facade, "_execute_ai_chat_mainline", execute)
+    legacy = Mock(side_effect=AssertionError("a pending batch must not fall back"))
+    monkeypatch.setattr(facade, "run_agent_chat", legacy)
+
+    result = await facade.execute_compat_chat_batch(
+        _request(),
+        XcagiCompatChatBatchBody(
+            messages=["first", "pending", "must not execute"],
+            context={"turn_id": "batch-with-pause", "use_ai_chat_mainline": True},
+        ),
+    )
+
+    assert result["success"] is False
+    assert result["execution_state"] == state
+    assert result["wait_reason"]
+    assert result["count"] == 3 and result["processed_count"] == 2
+    assert result["results"][:2] == [first, waiting]
+    unstarted = result["results"][2]
+    assert unstarted["data"]["status"] == "not_started"
+    assert unstarted["data"]["turn_id"] == result["turn_ids"][2]
+    assert unstarted["data"]["blocked_by_turn_id"] == result["turn_ids"][1]
+    assert execute.await_count == 2
+    legacy.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_batch_item_identity_is_stable_on_retry_and_scoped_to_the_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    facade = _facade("planner_batch_identity")
+    _bind(monkeypatch, facade, "identity")
+    turns = []
+
+    async def replay(_body, context, **_kwargs):
+        turns.append(context["turn_id"])
+        return {"success": True, "run_id": context["turn_id"]}
+
+    monkeypatch.setattr(facade, "_execute_ai_chat_mainline", replay)
+    context = {"turn_id": "stable-batch", "use_ai_chat_mainline": True}
+    body = XcagiCompatChatBatchBody(messages=["same", "same"], context=context)
+    first = await facade.execute_compat_chat_batch(_request(), body)
+    retry = await facade.execute_compat_chat_batch(_request(), body)
+    other = await facade.execute_compat_chat_batch(
+        _request(), body.model_copy(update={"context": {**context, "turn_id": "other-batch"}})
+    )
+
+    assert first["batch_turn_id"] == "stable-batch"
+    assert first["turn_ids"] == retry["turn_ids"] == turns[:2] == turns[2:4]
+    assert len(set(first["turn_ids"])) == 2
+    assert not set(first["turn_ids"]) & set(other["turn_ids"])
+    assert body.context == context
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure", [{"success": False}, {"status": "error"}, {"status": "failure"}]
+)
+async def test_batch_does_not_report_nested_business_failure_as_success(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: dict,
+) -> None:
+    facade = _facade("planner_batch_business_failure")
+    _bind(monkeypatch, facade, "business-failure")
+    execute = AsyncMock(
+        side_effect=[
+            {"success": True, "run_id": "failed-run", "result": failure},
+            {"success": True, "run_id": "completed-run"},
+        ]
+    )
+    monkeypatch.setattr(facade, "_execute_ai_chat_mainline", execute)
+    result = await facade.execute_compat_chat_batch(
+        _request(),
+        XcagiCompatChatBatchBody(
+            messages=["failed", "independent next item"],
+            context={"use_ai_chat_mainline": True},
+        ),
+    )
+    assert result["success"] is False
+    assert result["execution_state"] == "failed"
+    assert result["processed_count"] == 2
+    assert execute.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -203,9 +364,10 @@ async def test_production_failure_never_implicitly_retries_legacy(
         result = await facade.execute_compat_chat_batch(
             _request(), XcagiCompatChatBatchBody(messages=["bad", "good"])
         )
-        assert [item["success"] for item in result["results"]] == [False, True]
-        assert result["results"][1]["run_id"] == "already-traced"
-        assert mainline.await_count == 2
+        assert result["execution_state"] == "blocked"
+        assert result["results"][0]["requires_reconciliation"] is True
+        assert result["results"][1]["data"]["status"] == "not_started"
+        assert mainline.await_count == 1
     elif failure is RuntimeError:
         with pytest.raises(HTTPException, match="503"):
             await facade.execute_compat_chat(_request(), XcagiCompatChatBody(message="bad"))

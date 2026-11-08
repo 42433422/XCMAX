@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -126,6 +129,72 @@ def test_abandoned_turn_is_not_a_successful_analysis(memory_dir: Path) -> None:
         "后来新增10家客户。", {"local_user_id": 1, "conversation_id": "half", "turn_id": "next"}
     )
     assert turn_status(conversation_key(context), "open") == "interrupted"
+
+
+@pytest.mark.parametrize("message", ["请分析这段文字", "查一下客户"])
+@pytest.mark.parametrize("status", ["waiting_approval", "unknown"])
+def test_unfinished_turn_survives_restart_and_settles_only_the_original_run(
+    memory_dir: Path, message: str, status: str
+) -> None:
+    context = {"local_user_id": 7, "tenant_id": 2, "session_id": "kitten", "turn_id": "original"}
+    assert prepare_chat_turn(message, context) is None
+    waiting = {
+        "run_id": "run-original",
+        "response": "等待授权" if status == "waiting_approval" else "等待核对",
+    }
+    settle_chat_turn(message, context, waiting, status)
+
+    # A fresh interpreter has no process-local inflight flags or cached result.
+    process = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json, sys
+from app.application.ai_chat.dialogue_memory import prepare_chat_turn
+data = json.load(sys.stdin)
+print(json.dumps(prepare_chat_turn(data['message'], data['context'])))
+""",
+        ],
+        input=json.dumps({"message": message, "context": context}),
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    restored = json.loads(process.stdout)
+    assert restored["run_id"] == "run-original"
+    assert restored["execution_state"] == status
+    assert restored["data"]["replay"] is True
+
+    with pytest.raises(ValueError, match="另一项执行"):
+        settle_chat_turn(message, context, {"run_id": "run-other", "response": "完成"}, "completed")
+    with pytest.raises(ValueError, match="另一项执行"):
+        settle_chat_turn(message, context, {"response": "没有原任务回执"}, "completed")
+    assert turn_status(conversation_key(context), "original") == status
+    completed = {"success": True, "run_id": "run-original", "response": "已核对原结果"}
+    settle_chat_turn(message, context, completed, "completed")
+    settle_chat_turn(message, context, waiting, "unknown")
+    final = prepare_chat_turn(message, context)
+    assert final["response"] == "已核对原结果"
+    assert final["execution_state"] == "completed"
+    stored = json.loads((memory_dir / f"{conversation_key(context)}.json").read_text())
+    assert sum(item.get("role") == "assistant" for item in stored["turns"]) <= 1
+
+
+@pytest.mark.parametrize("message", ["第一份请求", "长请求" * 3000])
+def test_active_turn_rejects_changed_message_before_inflight_replay(
+    memory_dir: Path, message: str
+) -> None:
+    context = {"local_user_id": 8, "session_id": "active", "turn_id": "fixed"}
+    assert prepare_chat_turn(message, context) is None
+    denied = prepare_chat_turn(message + "变更", context)
+    assert denied["success"] is False and denied["data"]["status"] == "failed"
+    with pytest.raises(ValueError, match="另一条消息"):
+        settle_chat_turn(message + "变更", context, {"response": "完成"}, "completed")
+    assert turn_status(conversation_key(context), "fixed") == "processing"
+    settle_chat_turn(message, context, {"response": "原请求完成"}, "completed")
+    assert turn_status(conversation_key(context), "fixed") == "completed"
 
 
 async def test_what_if_prompt_still_uses_the_complete_callback(

@@ -332,9 +332,11 @@ def _xcagi_stream_idle_notice_seconds() -> float:
 
 
 def _xcagi_chat_timeout_error_payload(timeout: float) -> dict:
-    msg = f"对话处理超时（>{int(timeout)} 秒）。可缩短问题后重试，或由管理员调大环境变量 XCAGI_CHAT_TIMEOUT_SEC。"
+    msg = f"对话观察超时（>{int(timeout)} 秒），原任务执行结果尚未确认，请核对原任务，勿重复提交。"
     return {
         "success": False,
+        "execution_outcome": "unknown",
+        "requires_reconciliation": True,
         "message": msg,
         "response": msg,
         "data": {"text": msg, "response": msg},

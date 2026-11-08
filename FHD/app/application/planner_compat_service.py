@@ -324,14 +324,32 @@ def _settle_dialogue_turn(body: XcagiCompatChatBody, payload: dict[str, Any], st
     data = payload.get("data")
     if not isinstance(data, dict):
         data = {}
-    if data.get("replay") or data.get("status") == "processing":
+    if data.get("replay"):
         return
+    from app.application.agent_orchestrator.trace_payloads import _payload_status
     from app.application.ai_chat.dialogue_memory import settle_chat_turn
+    from app.domain.task_lifecycle.results import (
+        execution_result_requires_reconciliation,
+        execution_result_wait_reason,
+    )
+
+    execution_status = _payload_status(payload)
+    if execution_status == "waiting_user":
+        status = (
+            "waiting_approval"
+            if execution_result_wait_reason(payload) in {"authorization", "approval"}
+            else "waiting_user"
+        )
+    elif execution_status == "blocked":
+        status = "unknown" if execution_result_requires_reconciliation(payload) else "blocked"
+    elif execution_status != "completed" or status not in {"unknown", "interrupted"}:
+        status = execution_status
 
     message = str(getattr(body, "message", "") or "")
     context = getattr(body, "context", None)
     if not message or not isinstance(context, dict):
         return
+    payload["turn_id"] = context.get("turn_id")
     try:
         settle_chat_turn(message, context, payload, status)
     except RECOVERABLE_ERRORS:
@@ -417,7 +435,9 @@ async def compat_chat_stream_async(
         logger,
     )
     pending = b""
+    turn_id = str((body.context or {}).get("turn_id") or "")
     last_metadata: dict[str, Any] = {}
+    last_run_id = ""
     settled = False
     try:
         with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
@@ -439,6 +459,31 @@ async def compat_chat_stream_async(
                                 continue
                             if not isinstance(item, dict):
                                 continue
+                            item["turn_id"] = turn_id
+                            nested = item.get("result")
+                            observed_run_id = str(
+                                item.get("run_id")
+                                or item.get("agent_run_id")
+                                or (
+                                    nested.get("run_id") or nested.get("agent_run_id")
+                                    if isinstance(nested, dict)
+                                    else ""
+                                )
+                                or ""
+                            )
+                            if observed_run_id and not last_run_id:
+                                last_run_id = observed_run_id
+                                if item.get("type") not in {"done", "error", "requires_token"}:
+                                    _settle_dialogue_turn(
+                                        body,
+                                        {
+                                            "success": False,
+                                            "run_id": last_run_id,
+                                            "execution_state": "running",
+                                            "response": "任务正在处理，请查询原执行结果。",
+                                        },
+                                        "running",
+                                    )
                             metadata = request_route_metadata(request)
                             if metadata and metadata != last_metadata:
                                 yield _sse_event(
@@ -447,6 +492,8 @@ async def compat_chat_stream_async(
                                 last_metadata = metadata
                             if item.get("type") == "done" and isinstance(item.get("result"), dict):
                                 result = item["result"]
+                                if last_run_id:
+                                    result.setdefault("run_id", last_run_id)
                                 if metadata:
                                     result["route_metadata"] = metadata
                                 explicit = result.get("success") if "success" in result else None
@@ -454,34 +501,51 @@ async def compat_chat_stream_async(
                                     result.get("response") or result.get("message") or ""
                                 ).strip()
                                 if explicit is True or (explicit is None and reply):
-                                    _persist_compat_chat_turn(body, result)
-                                    _settle_dialogue_turn(body, result, "completed")
+                                    status = "completed"
                                 elif explicit is False:
-                                    _persist_compat_chat_turn(body, result)
-                                    _settle_dialogue_turn(body, result, "failed")
+                                    status = "failed"
                                 else:
-                                    _settle_dialogue_turn(
-                                        body,
-                                        {"success": False, "data": {"status": "unknown"}},
-                                        "unknown",
+                                    result.update(
+                                        execution_outcome="unknown", requires_reconciliation=True
                                     )
+                                    status = "unknown"
+                                _persist_compat_chat_turn(body, result)
+                                _settle_dialogue_turn(body, result, status)
+                                settled = True
+                            elif item.get("type") == "requires_token":
+                                if last_run_id:
+                                    item.setdefault("run_id", last_run_id)
+                                item["execution_state"] = "waiting_approval"
+                                result = {
+                                    **item,
+                                    "success": True,
+                                    "requires_token": True,
+                                    "response": str(
+                                        item.get("message") or "等待授权，原任务尚未完成。"
+                                    ),
+                                }
+                                result.pop("type", None)
+                                _persist_compat_chat_turn(body, result)
+                                _settle_dialogue_turn(body, result, "waiting_approval")
                                 settled = True
                             elif item.get("type") == "error":
+                                if last_run_id:
+                                    item.setdefault("run_id", last_run_id)
                                 if metadata:
                                     item["route_metadata"] = metadata
+                                error_data = item.get("data")
                                 failure = {
+                                    **item,
                                     "success": False,
                                     "response": str(item.get("message") or "对话执行失败"),
-                                    "data": {"status": item.get("status") or "failed"},
-                                    **({"route_metadata": metadata} if metadata else {}),
+                                    "data": {
+                                        **(error_data if isinstance(error_data, dict) else {}),
+                                        "status": item.get("status") or "failed",
+                                    },
                                 }
+                                failure.pop("type", None)
                                 _persist_compat_chat_turn(body, failure)
-                                error_status = (
-                                    "interrupted"
-                                    if item.get("status") == "interrupted"
-                                    else "failed"
-                                )
-                                _settle_dialogue_turn(body, failure, error_status)
+                                _settle_dialogue_turn(body, failure, "failed")
                                 settled = True
                             encoded = _sse_event(item)
                         yield encoded
@@ -491,6 +555,12 @@ async def compat_chat_stream_async(
         if not settled:
             _settle_dialogue_turn(
                 body,
-                {"success": False, "data": {"status": "interrupted"}},
-                "interrupted",
+                {
+                    "success": False,
+                    "run_id": last_run_id,
+                    "execution_outcome": "unknown",
+                    "requires_reconciliation": True,
+                    "response": "对话观察已中断，执行结果尚未确认，请查询原任务。",
+                },
+                "unknown",
             )

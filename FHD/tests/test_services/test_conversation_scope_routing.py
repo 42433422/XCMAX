@@ -151,10 +151,11 @@ async def test_json_chat_routes_bind_request_credentials_lazily(monkeypatch, suf
     from app.infrastructure.llm.client import get_llm_client
 
     request, client = Request({"type": "http", "headers": []}), object()
+    turn_id = "request-credentials-turn"
     body = (
-        service.XcagiCompatChatBatchBody(messages=["hello"])
+        service.XcagiCompatChatBatchBody(messages=["hello"], context={"turn_id": turn_id})
         if suffix
-        else service.XcagiCompatChatBody(message="hello")
+        else service.XcagiCompatChatBody(message="hello", context={"turn_id": turn_id})
     )
     factory = MagicMock(return_value=client)
     monkeypatch.setattr(service, "create_modstore_openai_client_from_request", factory)
@@ -162,14 +163,14 @@ async def test_json_chat_routes_bind_request_credentials_lazily(monkeypatch, suf
     async def execute(actual_request, actual_body):
         assert actual_request is request
         assert actual_body.model_dump(exclude={"context"}) == body.model_dump(exclude={"context"})
+        assert actual_body.context["turn_id"] == turn_id
         factory.assert_not_called()
         assert await asyncio.to_thread(get_llm_client) is client
         return {"success": True}
 
     monkeypatch.setattr(service, f"_execute_compat_chat{suffix}_impl", execute)
-    assert await getattr(service, f"execute_compat_chat{suffix}")(request, body) == {
-        "success": True
-    }
+    expected = {"success": True} if suffix else {"success": True, "turn_id": turn_id}
+    assert await getattr(service, f"execute_compat_chat{suffix}")(request, body) == expected
     factory.assert_called_once_with(request)
 
 
