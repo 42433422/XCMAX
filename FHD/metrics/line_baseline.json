@@ -1,5 +1,5 @@
 {
-  "lines": 2453157,
+  "lines": 2453197,
   "updated": "2026-11-08",
-  "note": "drawing footprint context cells in stamp packs (+~40 lines) so empty stamp columns are visible to the model"
+  "note": "coordinate-plan restore accepts drawing footprint context_only cells (+test)"
 }
