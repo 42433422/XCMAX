@@ -1338,7 +1338,9 @@ def _fill_instance_cells(review: dict, base: dict, validated: list[dict]) -> Non
     instance_set = set(instance)
     for candidate in validated:
         have = {(item["sheet"], item["cell"]) for item in candidate["clear"]}
-        if len(have & instance_set) * 2 >= len(instance_set):
+        # An empty plan is the model's explicit "clear nothing" answer; filling it
+        # would erase every business cell the model chose to keep.
+        if not have or len(have & instance_set) * 2 >= len(instance_set):
             continue
         missing = [pair for pair in instance if pair not in have]
         candidate["clear"].extend({"sheet": sheet, "cell": cell} for sheet, cell in missing)
