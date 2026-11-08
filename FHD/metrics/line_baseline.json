@@ -1,5 +1,5 @@
 {
-  "lines": 2453034,
+  "lines": 2453115,
   "updated": "2026-11-08",
-  "note": "coverage-slice closure live evidence JSON"
+  "note": "stamp-cluster drawing packs + can_slice note prompt + unit test (+81): pack planner now splits attendance stamp clusters so multi-row seals stay whole; IDENTIFY prompt clarifies title/note leftovers use can_slice=true; drawing pack unit test"
 }
