@@ -214,8 +214,11 @@ def _resolve_auto_ingest_source(
         ) from exc
 
 
-def _batch_coverage(kb_receipt: dict[str, Any], business: dict[str, Any]) -> dict[str, Any]:
-    """``complete`` only when the archive is recorded and no business row was left out."""
+def _batch_coverage(
+    kb_receipt: dict[str, Any], business: dict[str, Any], detection: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """``complete`` only when the archive is recorded, no business row was left out and
+    the routing was decided by an answering model rather than a degraded one."""
     summary = business.get("summary") if isinstance(business.get("summary"), dict) else {}
     counts = {
         key: int(summary.get(key) or 0) for key in ("new", "update", "skip", "error") if summary
@@ -223,10 +226,12 @@ def _batch_coverage(kb_receipt: dict[str, Any], business: dict[str, Any]) -> dic
     knowledge_recorded = kb_receipt.get("action") in {"new", "update"} or (
         kb_receipt.get("action") == "skip" and not kb_receipt.get("degraded")
     )
+    routed = not (detection or {}).get("degraded")
     return {
-        "complete": bool(knowledge_recorded) and not counts.get("error"),
+        "complete": bool(knowledge_recorded) and not counts.get("error") and routed,
         "knowledge_action": kb_receipt.get("action"),
         "business_rows": counts,
+        "routing_degraded": not routed,
     }
 
 
@@ -595,7 +600,7 @@ class AutoIngestService:
                 biz_prog = _progress("executing", 80, message="业务写入处理中，请等待实际回执")
             else:
                 biz_prog = _progress("done", 100, message="业务域已写入")
-            coverage = _batch_coverage(kb_receipt, business)
+            coverage = _batch_coverage(kb_receipt, business, detection)
             final = _patch_batch(
                 tenant_id,
                 batch_id,
@@ -786,7 +791,9 @@ class AutoIngestService:
                 ):
                     return dict(latest) if isinstance(latest, dict) else batch
                 coverage = _batch_coverage(
-                    latest.get("knowledge") or {}, {"summary": run.get("summary")}
+                    latest.get("knowledge") or {},
+                    {"summary": run.get("summary")},
+                    latest.get("detection"),
                 )
                 if batch_status == "applied" and not coverage["complete"]:
                     batch_status = "partial"

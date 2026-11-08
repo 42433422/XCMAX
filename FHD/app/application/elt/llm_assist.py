@@ -592,7 +592,10 @@ def _unit_untraceable(row: dict, lines: dict[tuple[str, str], set[str]]) -> bool
 
 
 MODEL_WINDOW_CHARS = 20_000
-MAX_BUSINESS_UNITS = 12
+# Each unit's answer must fit the 8192-token output in one call, and every unit runs
+# inside one intake request: 8 units of 60 rows stay within both.
+MAX_BUSINESS_UNITS = 8
+_UNIT_ROWS = 60
 _UNIT_CONTEXT_ROWS = 8
 
 
@@ -605,20 +608,23 @@ def business_units(source: str) -> list[str]:
     units: list[str] = []
     current: list[str] = []
     size = 0
+    fresh = 0
     sheet_head: list[str] = []
     for line in source.splitlines():
         if line.startswith("# sheet:"):
             sheet_head = [line]
         elif len(sheet_head) <= _UNIT_CONTEXT_ROWS:
             sheet_head.append(line)
-        if current and size + len(line) + 1 > MODEL_WINDOW_CHARS - 2_000:
+        if current and (size + len(line) + 1 > MODEL_WINDOW_CHARS - 2_000 or fresh >= _UNIT_ROWS):
             units.append("\n".join(current))
             current = list(sheet_head) if not line.startswith("# sheet:") else []
             if current and current[-1] == line:
                 current.pop()
             size = sum(len(item) + 1 for item in current)
+            fresh = 0
         current.append(line)
         size += len(line) + 1
+        fresh += not line.startswith("# sheet:")
     if current:
         units.append("\n".join(current))
     return units
@@ -684,7 +690,9 @@ def _advise_business_unit(source: str) -> LlmAssistResult:
         "schema": _BUSINESS_IMPORT_SCHEMA,
         "max_tokens": 8192,
         "lane": "database",
-        "max_repairs": 1,
+        # A schema repair would share this call's budget and could be cut off after
+        # sending; an invalid answer is a definite failure instead.
+        "max_repairs": 0,
         "timeout_seconds": etl_llm_timeout_seconds(full_sheet=True),
     }
     result = _complete(messages, **call)
@@ -762,7 +770,7 @@ def advise_knowledge_import(document_text: str) -> LlmAssistResult:
         schema=_KNOWLEDGE_IMPORT_SCHEMA,
         max_tokens=8192,
         lane="knowledge",
-        max_repairs=1,
+        max_repairs=0,
         timeout_seconds=etl_llm_timeout_seconds(full_sheet=True),
     )
     result.data = {

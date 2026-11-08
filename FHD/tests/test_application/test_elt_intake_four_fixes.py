@@ -196,7 +196,7 @@ def test_business_import_covers_every_unit_and_merges_by_coordinate(monkeypatch)
     from app.application.elt import llm_assist
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
-    rows = [f"R{i} | 货品{i} | {i}" for i in range(2, 2000)]
+    rows = [f"R{i} | 货品{i} | {i}" for i in range(2, 400)]
     source = "# sheet:明细\nR1 | 货品 | 数量\n" + "\n".join(rows)
     seen: list[str] = []
 
@@ -218,7 +218,12 @@ def test_business_import_covers_every_unit_and_merges_by_coordinate(monkeypatch)
     assert len(seen) == out.data["units"] > 1
     assert all(len(text) <= llm_assist.MODEL_WINDOW_CHARS for text in seen)
     assert all(text.startswith("# sheet:明细\nR1 |") for text in seen)
-    assert sorted(int(r["source_row"]) for r in out.data["rows"]) == list(range(1, 2000))
+    assert sorted(int(r["source_row"]) for r in out.data["rows"]) == list(range(1, 400))
+    assert all(
+        sum(line.startswith("R") for line in text.splitlines())
+        <= llm_assist._UNIT_ROWS + llm_assist._UNIT_CONTEXT_ROWS
+        for text in seen
+    )
 
 
 def test_business_import_refuses_more_units_than_the_limit_without_calling(monkeypatch):
@@ -227,7 +232,7 @@ def test_business_import_refuses_more_units_than_the_limit_without_calling(monke
     monkeypatch.setattr(
         llm_assist, "_advise_business_unit", lambda _t: pytest.fail("model must not be called")
     )
-    source = "# sheet:s\n" + "\n".join(f"R{i} | " + "x" * 200 for i in range(1, 2000))
+    source = "# sheet:s\n" + "\n".join(f"R{i} | x" for i in range(1, 600))
     out = llm_assist.advise_business_import(source)
     assert out.degraded and out.degradation_code == "ELT_DATABASE_INPUT_EXCEEDS_UNITS"
 
@@ -263,3 +268,9 @@ def test_workbook_text_keeps_every_visible_row_and_counts_coverage():
         "knowledge_rows": 423,
         "uncited_business_coordinates": 0,
     }
+
+
+def test_degraded_routing_is_not_complete_coverage():
+    covered = ais._batch_coverage({"action": "new"}, {}, {"degraded": True})
+    assert covered["complete"] is False and covered["routing_degraded"] is True
+    assert ais._batch_coverage({"action": "new"}, {}, {"degraded": False})["complete"] is True
