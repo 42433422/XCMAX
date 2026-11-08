@@ -5403,6 +5403,43 @@ def test_document_derivation_preserves_coordinates_layout_and_rejects_external_r
     assert supported["依赖支撑"]["B8"].value == "不应出现"
 
 
+def test_document_derivation_skips_phantom_xfd_styles_and_multi_fragment_gaps():
+    """Styled empties out to column XFD must not hang derive or leak into the slice."""
+    import time
+
+    from openpyxl.styles import Font
+
+    from app.application.reviewed_excel_template import derive_document_workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "材料"
+    ws["A1"] = "块一"
+    ws["B1"] = "=A1"
+    ws["A3"] = "块二"
+    ws["Z3"] = "间隙外"
+    # Mimic attendance/材料 sheets that paint styles across the whole grid.
+    for col in (100, 1000, 16384):
+        ws.cell(1, col).font = Font(bold=True)
+        ws.cell(3, col).font = Font(bold=True)
+    assert ws.max_column == 16384
+    out = BytesIO()
+    wb.save(out)
+    body = out.getvalue()
+    fragments = [
+        {"sheet": "材料", "range": "A1:B1"},
+        {"sheet": "材料", "range": "A3:B3"},
+    ]
+    started = time.perf_counter()
+    derived = derive_document_workbook(body, fragments)
+    assert time.perf_counter() - started < 8
+    sheet = load_workbook(BytesIO(derived), data_only=False)["材料"]
+    assert sheet.max_column <= 2
+    assert (3, 26) not in sheet._cells
+    assert sheet["A1"].value == "块一" and sheet["B1"].value == "=A1"
+    assert sheet["A3"].value == "块二"
+
+
 def test_document_derivation_blocks_uncertain_print_merge_and_dynamic_formula():
     from app.application.reviewed_excel_template import derive_document_workbook
 

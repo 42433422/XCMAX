@@ -86,8 +86,10 @@ def test_planner_accounts_for_multiple_drawings_at_same_cell_and_fails_on_uncove
             "sheet": "表",
             "part": "xl/drawings/drawing1.xml",
             "object_id": str(i),
-            "from": {"row": 0},
+            "from": {"row": 0, "col": 0},
             "text": "标题",
+            "last_row": 1,
+            "last_col": 1,
         }
         for i in range(2)
     ]
@@ -112,8 +114,15 @@ def test_planner_accounts_for_multiple_drawings_at_same_cell_and_fails_on_uncove
         for b in batches
     )
     assert cells[0].get("drawing_evidence") is None
-    review["drawing_evidence"] = [{**drawings[0], "from": {"row": n_cells + 100}}]
-    with pytest.raises(ReviewedExcelError, match="没有单元格证据"):
+    review["drawing_evidence"] = [
+        {
+            **drawings[0],
+            "from": {"row": n_cells + 100, "col": 0},
+            "last_row": n_cells + 101,
+            "last_col": 1,
+        }
+    ]
+    with pytest.raises(ReviewedExcelError, match="没有单元格证据|未能完整分批"):
         plan_drawing_batches(review)
 
 
@@ -573,10 +582,14 @@ def test_auto_slice_keeps_contained_print_area_and_uses_the_fragment_when_it_cro
     original_derive = auto_slice.derive_document_workbook
     modes = []
 
-    def checked_derive(body, fragments, *, print_area_mode, object_receipt=None):
+    def checked_derive(body, fragments, *, print_area_mode, object_receipt=None, **kwargs):
         modes.append(print_area_mode)
         return original_derive(
-            body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+            body,
+            fragments,
+            print_area_mode=print_area_mode,
+            object_receipt=object_receipt,
+            **kwargs,
         )
 
     monkeypatch.setattr(auto_slice, "derive_document_workbook", checked_derive)

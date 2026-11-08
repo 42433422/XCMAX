@@ -1,5 +1,5 @@
 {
-  "lines": 2453197,
+  "lines": 2453355,
   "updated": "2026-11-08",
-  "note": "coordinate-plan restore accepts drawing footprint context_only cells (+test)"
+  "note": "elt: sparse derive for XFD-styled sheets + stamp pack/outer_a1 prompt"
 }

@@ -948,11 +948,12 @@ def derive_document_workbook(
     *,
     print_area_mode: str = "source",
     object_receipt: dict | None = None,
+    inspection: dict | None = None,
 ) -> bytes:
     """Create one isolated sheet at source coordinates; reject unprovable dependencies."""
     import re
 
-    info = inspect_workbook(body)
+    info = inspection if inspection is not None else inspect_workbook(body)
     if info.get("fidelity_skipped"):
         raise ReviewedExcelError("工作簿含尚未核验的保真部件，仅可分类，不能派生文件")
     if print_area_mode not in {"source", "selected"}:
@@ -1064,17 +1065,23 @@ def derive_document_workbook(
             # Flatten: unmerge and propagate corner value/style so each cell in
             # the selection still carries the merged content without rejecting.
             _flatten_cut_merge(ws, merge)
-        formula_plan = plan_formula_support(body, fragments)
+        formula_plan = plan_formula_support(body, fragments, inspection=info)
+        # Sparse clear: sheets may carry styled empty cells out to column XFD.
+        # Unbounded iter_rows() then walks millions of phantom cells and hangs
+        # (seen on multi-fragment 26材料 docs). Only touch real _cells entries;
+        # drop everything outside the selection so used dimensions collapse.
         clear_cells = []
-        for row in ws.iter_rows():
-            for cell in row:
-                if isinstance(cell, MergedCell):
-                    continue
-                if not contained((cell.column, cell.row, cell.column, cell.row)):
-                    clear_cells.append(cell)
-                    continue
+        drop_keys: list[tuple[int, int]] = []
+        for (row, col), cell in ws._cells.items():
+            if isinstance(cell, MergedCell):
+                continue
+            if contained((col, row, col, row)):
                 if cell.hyperlink:
                     raise ReviewedExcelError("文档包含未核验的链接，暂不能提取")
+                continue
+            if cell.value is not None or cell.comment is not None or cell.hyperlink is not None:
+                clear_cells.append(cell)
+            drop_keys.append((row, col))
         support_sheet = install_formula_support(wb, formula_plan)
         support_values = (
             {
@@ -1093,6 +1100,8 @@ def derive_document_workbook(
             cell.value = None
             cell.comment = None
             cell.hyperlink = None
+        for key in drop_keys:
+            ws._cells.pop(key, None)
         for name in list(wb.sheetnames):
             if name not in {sheet_name, support_sheet}:
                 del wb[name]

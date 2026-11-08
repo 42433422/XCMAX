@@ -27,6 +27,26 @@ def test_dependency_closure_preserves_formula_graph_and_limits_support_to_requir
     assert "E1" not in result["support_cells"]
 
 
+def test_plan_formula_support_ignores_phantom_xfd_styles():
+    import time
+
+    from openpyxl.styles import Font
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "表"
+    sheet["A1"] = "=B1"
+    sheet["B1"] = 2
+    sheet.cell(1, 16384).font = Font(bold=True)
+    assert sheet.max_column == 16384
+    output = BytesIO()
+    book.save(output)
+    started = time.perf_counter()
+    result = plan_formula_support(output.getvalue(), [{"sheet": "表", "range": "A1:B1"}])
+    assert time.perf_counter() - started < 5
+    assert result["formula_references"] == {"A1": ["B1"]}
+
+
 def test_cycles_external_refs_unsupported_functions_and_large_ranges_fail_closed():
     part = [{"sheet": "表", "range": "A1:A1"}]
     # Mutual cycles are quarantined (isolate), not whole-segment fail-closed.

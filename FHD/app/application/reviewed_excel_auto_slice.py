@@ -206,7 +206,7 @@ def _rule_slice(body, source, sheet, region, hidden, used_names, copy_sources) -
     if not hidden:
         try:
             record["workbook"] = derive_document_workbook(
-                body, [fragment], print_area_mode="source"
+                body, [fragment], print_area_mode="source", inspection=source
             )
         except ReviewedExcelError as exc:
             record["error"] = str(exc)
@@ -531,7 +531,11 @@ def derive_classified_documents(
                     ):
                         raise ReviewedExcelError("所选文档依赖外部说明或标题，暂不能保证保真提取")
             output = derive_document_workbook(
-                body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+                body,
+                fragments,
+                print_area_mode=print_area_mode,
+                object_receipt=object_receipt,
+                inspection=source,
             )
         except ReviewedExcelError as exc:
             message = str(exc)
@@ -539,9 +543,17 @@ def derive_classified_documents(
                 print_area_mode = "selected"
                 object_receipt = {}
                 output = derive_document_workbook(
-                    body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+                    body,
+                    fragments,
+                    print_area_mode=print_area_mode,
+                    object_receipt=object_receipt,
+                    inspection=source,
                 )
             elif "隐藏工作表暂不能作为独立模板提取" in message:
+                hidden_hold = message
+                output = b""
+            elif "跨工作表或外部公式依赖尚无法保真" in message:
+                # Range revision cannot invent another sheet; park without model rounds.
                 hidden_hold = message
                 output = b""
             elif any(marker in message for marker in _COMPATIBILITY_MARKERS):
@@ -581,6 +593,7 @@ def derive_classified_documents(
                             revised,
                             print_area_mode=print_area_mode,
                             object_receipt=object_receipt,
+                            inspection=source,
                         )
                         fragments = revised
                         hidden_hold = None
@@ -595,6 +608,7 @@ def derive_classified_documents(
                                 revised,
                                 print_area_mode=print_area_mode,
                                 object_receipt=object_receipt,
+                                inspection=source,
                             )
                             fragments = revised
                             hidden_hold = None

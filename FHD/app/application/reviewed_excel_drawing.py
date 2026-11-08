@@ -419,11 +419,13 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
     # Also cap row span: a sparse tail after the last stamp must not stay in the same
     # pack as the drawings (model then cites edge stamps into too-narrow ranges).
     # Split between stamp clusters so a multi-row stamp stays wholly inside one pack
-    # (never straddling pack bounds); at most two clusters / ~24 drawings per pack.
+    # (never straddling pack bounds). One cluster per pack: dense attendance headers
+    # pack ~15 overlapping textboxes into rows 1-4; a second cluster in the same
+    # packet made the model cut mid-stamp even with footprint context cells.
     max_units = min(MAX_MODEL_CELLS, 400)
     max_bytes = min(MAX_MODEL_TEXT_BYTES, 160_000)
     max_row_span = 80
-    max_drawing_clusters = 2
+    max_drawing_clusters = 1
     max_drawings = 24
 
     from openpyxl.utils.cell import get_column_letter
@@ -480,7 +482,7 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
 
     result = []
     overview = {entry["sheet"]: entry for entry in review["sheet_overview"]}
-    drawing_tail_margin = 8
+    drawing_tail_margin = 2
     drawing_cluster_gap = 4
     for sheet in review["sheets"]:
         boundaries = overview[sheet]["drawing_row_boundaries"]

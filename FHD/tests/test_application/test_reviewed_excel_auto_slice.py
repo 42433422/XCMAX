@@ -458,6 +458,32 @@ def test_refused_extraction_keeps_values_and_rejects_rows_with_reason(monkeypatc
     assert all("打印区域" in r["reason"] for r in rows)
 
 
+def test_cross_sheet_formula_parks_without_aborting_sibling_documents(monkeypatch):
+    """One unexportable formula must not veto the rest of a classified workbook."""
+    from app.application import reviewed_excel_auto_slice as auto_slice
+
+    original = auto_slice.derive_document_workbook
+    calls = {"n": 0}
+
+    def flaky(body, fragments, **kwargs):
+        calls["n"] += 1
+        if fragments == [{"sheet": "One", "range": "A1:B2"}]:
+            raise ReviewedExcelError("跨工作表或外部公式依赖尚无法保真")
+        return original(body, fragments, **kwargs)
+
+    monkeypatch.setattr(auto_slice, "derive_document_workbook", flaky)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("no model")),
+    )
+    body = workbook()
+    slices = derive_classified_documents(body, classification(body), owner_id=7)
+    assert len(slices) == 3 and calls["n"] >= 3
+    assert slices[0]["status"] == "pending_review" and "跨工作表或外部公式" in slices[0]["error"]
+    assert all(item.get("status") != "pending_review" for item in slices[1:])
+    assert load_workbook(BytesIO(slices[1]["workbook"]))["One"]["A5"].value == "第二份"
+
+
 def test_hidden_model_document_is_skipped_and_visible_document_exports(monkeypatch):
     def fail_model(*_args, **_kwargs):
         raise AssertionError("hidden sheet must not call the model")

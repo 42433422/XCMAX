@@ -300,10 +300,25 @@ def prepare_reference_messages(
         )
         payload["cells"] = [{**cell, "object": "cell"} for cell in payload["cells"]]
     if payload.get("drawing_evidence"):
-        payload["drawing_evidence"] = [
-            {**drawing, "drawing_id": f"D{index:04d}", "object": "drawing"}
-            for index, drawing in enumerate(payload["drawing_evidence"], 1)
-        ]
+        from openpyxl.utils.cell import get_column_letter
+
+        enriched = []
+        for index, drawing in enumerate(payload["drawing_evidence"], 1):
+            item = {**drawing, "drawing_id": f"D{index:04d}", "object": "drawing"}
+            start = drawing.get("from") or {}
+            if (
+                isinstance(start.get("row"), int)
+                and isinstance(drawing.get("last_row"), int)
+                and isinstance(drawing.get("last_col"), int)
+            ):
+                c1 = int(start.get("col", 0)) + 1
+                r1 = int(start["row"]) + 1
+                item["outer_a1"] = (
+                    f"{get_column_letter(c1)}{r1}:"
+                    f"{get_column_letter(int(drawing['last_col']))}{int(drawing['last_row'])}"
+                )
+            enriched.append(item)
+        payload["drawing_evidence"] = enriched
     if "documents" not in provider_schema["properties"]:
         payload["source_sheet_prefixes"] = source_sheet_prefixes(payload["sheets"])
     payload["output_schema"] = provider_schema
@@ -692,7 +707,7 @@ _EXPECTED = {
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
-        "6897a3492554e02f2891d07523d6a733b2c12b604427149b5b1949ca7d188cc3",
+        "c3755a72f9697702faa68953f282ed6b11308f989f24b8119be1e218c571a5fa",
         "15de0f5d41027cf4d1e6034fad68e704e3377763a0e91e37c3dda8509314209b",
     ),
     "group_drawing": (

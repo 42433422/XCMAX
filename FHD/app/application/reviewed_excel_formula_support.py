@@ -28,7 +28,13 @@ def _beyond_sheet_dimensions(col: int, row: int, sheet) -> bool:
     return col < 1 or row < 1 or col > max_col or row > max_row
 
 
-def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int = 20_000) -> dict:
+def plan_formula_support(
+    body: bytes,
+    fragments: list[dict],
+    *,
+    max_cells: int = 20_000,
+    inspection: dict | None = None,
+) -> dict:
     """Find required same-sheet cells and dependencies; do not rewrite or export a workbook.
 
     References to other sheets, external files, names, dynamic or unsupported
@@ -43,7 +49,7 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
         raise ReviewedExcelError("跨工作表文档暂不能验证")
     from app.application.reviewed_excel_template import inspect_workbook
 
-    info = inspect_workbook(body)
+    info = inspection if inspection is not None else inspect_workbook(body)
     from app.application.reviewed_excel_template import _read_only_print_area_warnings
 
     with warnings.catch_warnings(record=True) as found:
@@ -57,12 +63,24 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
         if sheet_name not in book.sheetnames:
             raise ReviewedExcelError("公式依赖来源工作表不存在")
         sheet = book[sheet_name]
+        overview = next(
+            (
+                item
+                for item in (info.get("sheet_overview") or [])
+                if isinstance(item, dict) and item.get("sheet") == sheet_name
+            ),
+            None,
+        )
+        # Prefer inspected content extent over openpyxl max_* so XFD-styled
+        # phantoms cannot reject an otherwise valid fragment rectangle.
+        max_col = int((overview or {}).get("columns") or sheet.max_column or 1)
+        max_row = int((overview or {}).get("rows") or sheet.max_row or 1)
         rectangles: list[tuple[int, int, int, int]] = []
         for part in fragments:
             try:
                 bounds = bounded_range(part["range"])
                 c1, r1, c2, r2 = bounds
-                if not (1 <= c1 <= c2 <= sheet.max_column and 1 <= r1 <= r2 <= sheet.max_row):
+                if not (1 <= c1 <= c2 <= max_col and 1 <= r1 <= r2 <= max_row):
                     raise ValueError("bounds")
             except (TypeError, ValueError):
                 raise ReviewedExcelError("公式依赖片段坐标无效") from None
@@ -71,10 +89,11 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
         def selected(col: int, row: int) -> bool:
             return any(c1 <= col <= c2 and r1 <= row <= r2 for c1, r1, c2, r2 in rectangles)
 
+        # Walk the sparse cell map only. Styled empty cells can inflate
+        # max_column to XFD; unbounded iter_rows() then hangs for minutes.
         pending = [
             cell.coordinate
-            for row in sheet.iter_rows()
-            for cell in row
+            for cell in sheet._cells.values()
             if cell.data_type == "f"
             and isinstance(cell.column, int)
             and isinstance(cell.row, int)
