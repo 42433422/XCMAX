@@ -3410,7 +3410,13 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
     calls = []
 
     def fake(messages, schema, tokens, **_model_kwargs):
-        calls.append(1)
+        # Sheet naming is a separate post-analysis call; only batch calls belong to the budget.
+        if schema.get("required") == [
+            "physical_regions",
+            "logical_documents",
+            "layout_references",
+        ]:
+            calls.append(1)
         return LlmAssistResult(
             used_llm=True,
             data={
@@ -4044,7 +4050,13 @@ def test_budget_pause_continues_on_next_request_without_extra_consent_or_resend(
     calls = []
 
     def fake(messages, schema, tokens, **_model_kwargs):
-        calls.append(1)
+        # Sheet naming is a separate post-analysis call; only batch calls belong to the budget.
+        if schema.get("required") == [
+            "physical_regions",
+            "logical_documents",
+            "layout_references",
+        ]:
+            calls.append(1)
         return LlmAssistResult(
             used_llm=True,
             data={

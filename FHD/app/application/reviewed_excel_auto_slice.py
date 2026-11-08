@@ -24,6 +24,7 @@ from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 from app.application.reviewed_excel_legacy import ensure_slice_workbook
 from app.application.reviewed_excel_template import derive_document_workbook, inspect_workbook
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 def _slice_filename(
@@ -387,7 +388,7 @@ def _compatibility_revision(fragments, message, overview, owner_id, earlier, all
     }
     try:
         result = _template_llm_complete(messages, schema, 800, owner_id=owner_id)
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         logger.info("compatibility round failed")
         text = str(exc)
         if "未自动重试" in text or "结果状态未知" in text:

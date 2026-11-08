@@ -31,6 +31,10 @@ MAX_UNPACKED = 100 * 1024 * 1024
 # Equals the per-sheet structural-sampling extent, so any fully read sheet fits.
 MAX_CELLS = 100_000
 
+# Named boundary: the worker thread must hand every failure, including
+# KeyboardInterrupt/SystemExit, back to the calling thread instead of hiding it.
+_THREAD_RESULT_ERRORS: tuple[type[BaseException], ...] = (BaseException,)
+
 
 from app.application.reviewed_excel_classification import (
     classify_review_workbook as classify_review_workbook,
@@ -239,7 +243,7 @@ def _run_coroutine(factory):
     def worker() -> None:
         try:
             box["value"] = asyncio.run(factory())
-        except BaseException as exc:  # noqa: BLE001 - re-raised on the caller thread
+        except _THREAD_RESULT_ERRORS as exc:  # re-raised on the caller thread
             box["error"] = exc
 
     thread = threading.Thread(target=worker, name="template-llm")

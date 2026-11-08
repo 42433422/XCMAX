@@ -138,7 +138,7 @@ describe('reviewed Excel CSRF handling', () => {
     identity.resolve({ actor: '1:7' })
     await expect(pending).resolves.toEqual({ classification_id: 'c1' })
     expect(form.get('expected_actor')).toBe('1:7')
-    expect(mock.post).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/archive-classify', form)
+    expect(mock.post).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/archive-classify', form, {})
   })
 
   it.each(['initial request', 'CSRF retry'])('stops when the session changes during CSRF priming for %s', async phase => {
@@ -230,7 +230,7 @@ describe('reviewed Excel CSRF handling', () => {
     expect(await templatePreviewApi.appendArchiveVersion('asset/7?draft', version)).toBe(response)
     expect(quota.get('expected_actor')).toBe('1:7'); expect(quota.get('limit_bytes')).toBe('2048')
     expect(version.get('expected_actor')).toBe('1:7'); expect(version.get('file')).toBe(source); expect(version.get('request_key')).toBe('synthetic-upload-1')
-    expect(mock.post.mock.calls).toEqual([['/api/templates/reviewed-excel/archive-quota', quota], ['/api/templates/reviewed-excel/archive-assets/asset%2F7%3Fdraft/versions', version]])
+    expect(mock.post.mock.calls).toEqual([['/api/templates/reviewed-excel/archive-quota', quota, {}], ['/api/templates/reviewed-excel/archive-assets/asset%2F7%3Fdraft/versions', version, {}]])
   })
 
   it.each([
@@ -242,7 +242,7 @@ describe('reviewed Excel CSRF handling', () => {
     const failure = new ApiError('没有当前归档操作权限', 403, { error_code: 'permission_denied' })
     mock.post.mockRejectedValueOnce(failure)
     await expect(templatePreviewApi[method]('scope/7?draft', form)).rejects.toBe(failure)
-    expect(form.get('expected_actor')).toBe('1:7'); expect(mock.post).toHaveBeenCalledExactlyOnceWith(path, form)
+    expect(form.get('expected_actor')).toBe('1:7'); expect(mock.post).toHaveBeenCalledExactlyOnceWith(path, form, {})
     expect(mock.get).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/identity')
   })
 
