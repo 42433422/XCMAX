@@ -215,7 +215,7 @@ def _atom_contract(payload: dict, schema: dict, review: dict) -> tuple[dict, dic
 
 def _boundary_contract(payload: dict, schema: dict, review: dict) -> tuple[dict, dict]:
     _, references, _ = reference_contract(payload["cells"], schema, sheets=payload["sheets"])
-    return references, source_ranges_schema(payload["sheets"])
+    return references, source_ranges_schema(payload["sheets"], decide_slice=True)
 
 
 def normalize_reference_ids(
@@ -670,8 +670,8 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "8a6c9afe4a9d630c062bee45f86240cfa1de9ef0586416330842b7257ab90bbe",
-        "2218f5c2d25cc91006ee83db14ec4bf9431c019641cb493034882fa2309eb137",
+        "b703539150a32f5ed8bbc2761655cd8c545feb06d872a446b7e61aeae92d5108",
+        "b1455573350323b3d7d3317c5202954d06e01f6675597532586facc2bdbc2b85",
     ),
     "group_ranges": (
         "0819219ae5c36ab236daf334630a45e0f7ca92862d7f745e7c8a357b718c34b6",

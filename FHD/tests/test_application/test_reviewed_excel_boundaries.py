@@ -23,8 +23,11 @@ def region(r1=1, r2=1, c1=1, c2=3, *, sheet=SHEET):
     }
 
 
-def answer(*ranges):
-    return {"documents": [{"ranges": list(ranges), "reason": "synthetic source relationship"}]}
+def answer(*ranges, can_slice=True):
+    return {
+        "documents": [{"ranges": list(ranges), "reason": "synthetic source relationship"}],
+        "can_slice": can_slice,
+    }
 
 
 def execute(monkeypatch, review, raw):
@@ -55,6 +58,7 @@ def test_source_proves_all_cells_without_model_numbering(monkeypatch):
         "C1",
     ]
     assert result["logical_documents"][0]["document_id"].startswith("source-")
+    assert result["input_summary"]["source_coverage"]["can_slice"] is True
 
 
 def test_provider_envelope_reason_is_ignored(monkeypatch):
@@ -134,6 +138,18 @@ def test_identify_prompt_states_the_three_rejection_rules():
     assert "每个划定范围至少包含一个非空主单元格（合并格无值不算）" in IDENTIFY_PROMPT
     assert "不要覆盖全空尾部行" in IDENTIFY_PROMPT
     assert "范围之间不能重叠，否则整批拒绝" in IDENTIFY_PROMPT
+    assert "由你决定这些单据现在能不能切片" in IDENTIFY_PROMPT
+
+
+def test_model_slice_decision_is_kept_and_required(monkeypatch):
+    refused = execute(
+        monkeypatch, source(["A1", "B1", "C1"]), answer(region(), can_slice=False)
+    )
+    assert refused["input_summary"]["source_coverage"]["can_slice"] is False
+    raw = answer(region())
+    raw.pop("can_slice")
+    with pytest.raises(ReviewedExcelError):
+        execute(monkeypatch, source(["A1", "B1", "C1"]), raw)
 
 
 def test_disjoint_nonempty_ranges_pass(monkeypatch):
@@ -197,6 +213,7 @@ def test_flat_source_range_documents_are_coerced_before_validation(monkeypatch):
             }
         ],
         "reason": "整表分段",
+        "can_slice": True,
     }
     result = execute(monkeypatch, source(["A1", "B1", "C1"]), raw)
     assert result["regions"][0]["range"] == "A1:C1"
@@ -263,7 +280,9 @@ def synthetic_document_answer(payload):
             }
             for part in payload["ranges"]
         ]
-        return answer(*ranges)
+        return {
+            "documents": [{"ranges": ranges, "reason": "synthetic source relationship"}]
+        }
     return answer(synthetic_source_region(payload))
 
 
@@ -328,7 +347,7 @@ def test_range_schema_fingerprint_and_boolean_dimension_drift():
     assert hashes["version"] == "independent-excel-v10-document-ranges"
     assert (
         hashes["schema_template_sha256"]
-        == "2218f5c2d25cc91006ee83db14ec4bf9431c019641cb493034882fa2309eb137"
+        == "b1455573350323b3d7d3317c5202954d06e01f6675597532586facc2bdbc2b85"
     )
     schema["properties"]["documents"]["items"]["properties"]["ranges"]["items"]["properties"][
         "row_end"
@@ -344,7 +363,8 @@ def test_documents_do_not_raise_global_100_region_limit(monkeypatch):
         "documents": [
             {"ranges": ranges[start : start + 20], "reason": "synthetic"}
             for start in range(0, len(ranges), 20)
-        ]
+        ],
+        "can_slice": True,
     }
     with pytest.raises(ReviewedExcelError, match="范围总数超过100"):
         execute(monkeypatch, review, raw)

@@ -496,3 +496,15 @@ def test_hidden_model_document_stays_for_review_and_visible_document_exports():
     assert held["status"] == "pending_review" and "隐藏" in held["review_reason"]
     copied = load_workbook(BytesIO(held["workbook"]))
     assert copied["台账"]["A2"].value == "甲" and "隐藏" in str(copied["切片复核说明"]["B4"].value)
+
+
+def test_only_the_model_can_allow_a_slice_while_cells_remain_outside():
+    from app.fastapi_routes.reviewed_excel_template import _model_allows_unassigned_slice
+
+    assert _model_allows_unassigned_slice(
+        {"input_summaries": [{"source_coverage": {"can_slice": True}}]}
+    )
+    assert not _model_allows_unassigned_slice(
+        {"input_summaries": [{"source_coverage": {"can_slice": False}}]}
+    )
+    assert not _model_allows_unassigned_slice({"input_summaries": [{"source_coverage": {}}]})

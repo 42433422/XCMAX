@@ -323,7 +323,7 @@ def _normalize_atom_ids(data: dict, references: dict, review: dict) -> dict:
     }
 
 
-def source_ranges_schema(sheets: list[dict]) -> dict:
+def source_ranges_schema(sheets: list[dict], *, decide_slice: bool = False) -> dict:
     properties: dict[str, dict] = {
         "sheet_name": {"type": "string", "enum": [sheet["sheet"] for sheet in sheets]}
     }
@@ -349,17 +349,22 @@ def source_ranges_schema(sheets: list[dict]) -> dict:
             "reason": {"type": "string", "minLength": 1},
         },
     }
+    properties = {
+        "documents": {"type": "array", "minItems": 1, "maxItems": 100, "items": document},
+        # Some providers wrap the document list with one informational summary.
+        # It is never used for geometry; accepting it avoids turning a complete,
+        # otherwise valid answer into an opaque model-processing failure.
+        "reason": {"type": "string", "maxLength": 4000},
+    }
+    required = ["documents"]
+    if decide_slice:
+        properties["can_slice"] = {"type": "boolean"}
+        required.append("can_slice")
     return {
         "type": "object",
-        "required": ["documents"],
+        "required": required,
         "additionalProperties": False,
-        "properties": {
-            "documents": {"type": "array", "minItems": 1, "maxItems": 100, "items": document},
-            # Some providers wrap the document list with one informational summary.
-            # It is never used for geometry; accepting it avoids turning a complete,
-            # otherwise valid answer into an opaque model-processing failure.
-            "reason": {"type": "string", "maxLength": 4000},
-        },
+        "properties": properties,
     }
 
 
@@ -445,6 +450,8 @@ def _normalize_boundaries(data: dict, references: dict, review: dict) -> dict:
         "document_id_origin": "internal_source_range_hash",
         "regions": proof,
     }
+    if isinstance(data.get("can_slice"), bool):
+        references["_source_coverage"]["can_slice"] = data["can_slice"]
     if missing:
         references["_source_coverage"]["pending_confirmation"] = [
             {"sheet": sheet, "cell": cell} for sheet, cell in missing

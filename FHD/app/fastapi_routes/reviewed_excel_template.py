@@ -403,6 +403,24 @@ def reviewed_excel_classification_history(classification_id: str, user=Depends(_
         }
 
 
+def _model_allows_unassigned_slice(latest: dict) -> bool:
+    """Only an explicit model decision lets covered documents slice while cells remain outside."""
+    summaries = latest.get("input_summaries") or []
+    if not isinstance(summaries, list):
+        return False
+    allowed = False
+    for item in summaries:
+        if not isinstance(item, dict):
+            continue
+        decision = (item.get("source_coverage") or {}).get("can_slice")
+        if decision is None:
+            continue
+        if decision is not True:
+            return False
+        allowed = True
+    return allowed
+
+
 def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False):
     from app.application.reviewed_excel_auto_slice import derive_classified_documents
 
@@ -448,7 +466,7 @@ def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False)
             or item["total"] < 0
             or item["sent"] != item["total"]
             or item.get("unread")
-            or item.get("unassigned")
+            or (item.get("unassigned") and not _model_allows_unassigned_slice(latest))
             or item.get("merged_omitted")
             or item.get("value_truncated")
             or item.get("deferred_large_values")

@@ -60,7 +60,7 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
     def supported(rule, depth=0):
         if not isinstance(rule, dict) or depth > 16 or set(rule) - permitted:
             return False
-        if rule.get("type") not in {"object", "array", "string", "integer"}:
+        if rule.get("type") not in {"object", "array", "string", "integer", "boolean"}:
             return False
         props = rule.get("properties", {})
         if not isinstance(props, dict) or any(
@@ -109,6 +109,9 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
             ):
                 return False
             if "items" in rule and any(not matches(rule["items"], item) for item in value):
+                return False
+        elif kind == "boolean":
+            if type(value) is not bool:
                 return False
         elif kind == "integer":
             if (
