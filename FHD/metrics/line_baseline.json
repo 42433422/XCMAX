@@ -1,5 +1,5 @@
 {
-  "lines": 2452768,
+  "lines": 2453036,
   "updated": "2026-11-08",
-  "note": "source-growth review for drawing pack split + closure abandon/resend evidence"
+  "note": "pack-scoped can_slice exclusions, drawing row-span packs, skip-hidden analyze, and regression tests for coverage-slice gap"
 }
