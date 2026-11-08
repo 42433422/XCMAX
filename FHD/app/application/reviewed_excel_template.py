@@ -1176,11 +1176,11 @@ def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) ->
     inspection = inspect_workbook(body)
     if inspection.get("fidelity_skipped"):
         raise ReviewedExcelError("工作簿含尚未核验的保真部件，仅可分类，不能清理文件")
-    from app.application.reviewed_excel_range_objects import require_cleanable_range_metadata
+    from app.application.reviewed_excel_raw_parts import preserved_filters, restore_filters
 
     if inspection["sha256"] != expected_sha256:
         raise ReviewedExcelError("文件与预览不一致，请重新预览")
-    require_cleanable_range_metadata(body)
+    kept_filters = preserved_filters(body)
     allowed = {
         (item["sheet"], item["cell"]) for item in inspection["cells"] if item["kind"] == "review"
     }
@@ -1225,7 +1225,7 @@ def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) ->
             result = restore_drawing_parts(body, result, inspection["drawing_evidence"])
         if inspection["read_only_print_areas"]:
             result = _restore_print_areas(result, inspection["read_only_print_areas"])
-        return result
+        return restore_filters(result, kept_filters)
     finally:
         wb.close()
 
