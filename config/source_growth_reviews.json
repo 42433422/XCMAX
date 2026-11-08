@@ -220,13 +220,13 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
       "base_blob": "fb293fc99136a7c4e59d5c58904c8ffff6492a6e",
-      "head_blob": "ff52f49c7e6bb9c6fca92f84a53a5d096f6d7e6a",
+      "head_blob": "85632e6d7b91b8af38d42200559c60f0afdd1ae8",
       "before_lines": 1343,
-      "after_lines": 1365,
+      "after_lines": 1368,
       "review_owner": "@42433422",
       "reason": "模型流式响应需要把已收到的分块持续回报给空闲等待逻辑，避免长回答被误判为卡死。",
       "boundary": "仅限该合并路由模块中的流式分块回报与空闲计时；模型选择、配额和鉴权未改动。",
-      "validation": "流式空闲与会话回执回归覆盖分块到达、停止和超时；既有模型路由测试通过。",
+      "validation": "已有流式空闲与会话回执回归；本次进一步减少动态 facade 引用。需在最新 HEAD 重跑 CI 和真实业务闭环。",
       "follow_up": "后续把流式保活抽成独立模块；本条为评审请求，不代表批准。"
     }
   }

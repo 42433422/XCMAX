@@ -87,7 +87,7 @@ jobs:
           cache-dependency-path: FHD/frontend/package-lock.json
 
       - name: Install runtime Mod compiler dependencies
-        run: npm ci --prefix "$GITHUB_WORKSPACE/FHD/frontend" --no-audit --no-fund
+        run: bash "$GITHUB_WORKSPACE/FHD/scripts/ci/npm_ci_with_network_retry.sh" --prefix "$GITHUB_WORKSPACE/FHD/frontend" --no-audit --no-fund
 
       - name: Run Black formatter check
         run: black --check --diff modman/ modstore_server/ tests/
