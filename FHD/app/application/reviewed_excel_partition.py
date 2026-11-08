@@ -82,6 +82,20 @@ def coerce_payload_document_labels(payload: dict) -> dict:
                     }
                 )
             else:
+                if (
+                    isinstance(document, dict)
+                    and isinstance(document.get("ranges"), list)
+                    and "sheet_name" in document
+                ):
+                    names = {
+                        item.get("sheet_name")
+                        for item in document["ranges"]
+                        if isinstance(item, dict)
+                    }
+                    if names == {document.get("sheet_name")}:
+                        document = {
+                            key: value for key, value in document.items() if key != "sheet_name"
+                        }
                 coerced.append(document)
         if set(payload) == {"documents", "reason"}:
             payload = {"documents": coerced}
