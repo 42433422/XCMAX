@@ -73,7 +73,8 @@ _UNFINISHED_STATES = (
 
 def execution_result_envelopes(data: dict[str, Any]) -> Iterator[dict[str, Any]]:
     """Walk only result envelopes; business rows in items/sheets are not run states."""
-    pending, seen = [data], set()
+    pending = [data]
+    seen: set[int] = set()
     while pending:
         current = pending.pop()
         if id(current) in seen:

@@ -51,7 +51,7 @@ def commit_registered_handoff(
         return rejection
     assert identity_ids is not None
     parent = _parent_task(workspace, identity_ids["task_id"])
-    if parent is None:
+    if parent is None or not workspace:
         return _rejected("handoff_unauthorized", "父任务记录不存在")
     if str(parent.get("tenant_id") or "") != identity_ids["tenant_id"]:
         return _rejected("handoff_cross_tenant", "父任务不属于当前企业")
@@ -116,9 +116,18 @@ def commit_registered_handoff(
 
 
 def _persistent_handoff(
-    body, context, identity, task, target, scope, tool_id, action, params, bindings
-):
-    run = None
+    body: dict[str, Any],
+    context: dict[str, Any],
+    identity: dict[str, str],
+    task: dict[str, Any],
+    target: str,
+    scope: list[str],
+    tool_id: str,
+    action: str,
+    params: dict[str, Any],
+    bindings: dict[str, Any],
+) -> dict[str, Any]:
+    run: AgentRun | None = None
     try:
         repository = get_agent_run_repository()
         if not isinstance(repository, SQLAlchemyAgentRunRepository) or _idempotency_path() is None:
@@ -135,7 +144,7 @@ def _persistent_handoff(
             or context.get("idempotency_key")
             or f"{identity['task_id']}:handoff:{identity['employee_id']}:{target}"
         ).strip()
-        request = {
+        request: dict[str, Any] = {
             "idempotency_key": key,
             "identity": identity,
             "bindings": bindings,
@@ -187,7 +196,13 @@ def _persistent_handoff(
         return _unknown_handoff(identity["task_id"], run.run_id if run is not None else "")
 
 
-def _parent_run(repository, identity, context, task, bindings):
+def _parent_run(
+    repository: AgentRunRepository,
+    identity: dict[str, str],
+    context: dict[str, Any],
+    task: dict[str, Any],
+    bindings: dict[str, Any],
+) -> tuple[AgentRun | None, dict[str, Any] | None]:
     existing = repository.get_task(
         user_id=identity["user_id"],
         tenant_id=identity["tenant_id"],

@@ -136,13 +136,14 @@ describe('Kitten execution receipts', () => {
     expect(deps.currentResult.value?.execution?.status).toBe('running')
   })
 
-  it('uses the persisted original chat result after a completed run is read back', async () => {
+  it('uses the persisted original chat result after a completed run, including legitimately skipped steps', async () => {
     boundary.stream.mockResolvedValue(sse(started, token))
     boundary.getRun.mockResolvedValue({
       success: true,
       data: {
         run_id: 'original-run',
         status: 'completed',
+        steps: [{ status: 'skipped', output: {} }],
         final_output: { chat_payload: { success: true, response: '客户已创建，记录ID 17' } },
       },
     })
@@ -150,6 +151,33 @@ describe('Kitten execution receipts', () => {
     await sendMessage()
     expect(deps.kittenPhase.value).toBe('delivered')
     expect(deps.messages.value.at(-1)?.content).toContain('记录ID 17')
+    expect(boundary.json).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['nested unknown', 'node', { success: true, result: { outcome: 'unknown' } }],
+    ['partial step', 'step', { success: true, outcome: 'partial_success' }],
+    ['reconciliation flag', 'node', { success: true, requires_reconciliation: true }],
+  ])('keeps sibling %s evidence unconfirmed when the saved chat payload claims success', async (_label, location, output) => {
+    boundary.stream.mockResolvedValue(sse(started, token))
+    boundary.getRun.mockResolvedValue({
+      success: true,
+      data: {
+        run_id: 'original-run',
+        status: 'completed',
+        steps: location === 'step' ? [{ status: 'completed', output }] : [],
+        final_output: {
+          chat_payload: { success: true, response: '不应显示的完成结论' },
+          ...(location === 'node' ? { node_outputs: { write: output } } : {}),
+        },
+      },
+    })
+    const { deps, sendMessage } = setup()
+    await sendMessage()
+    expect(deps.kittenPhase.value).toBe('unknown')
+    expect(deps.currentResult.value?.execution).toMatchObject({ run_id: 'original-run', status: 'unknown' })
+    expect(deps.messages.value.at(-1)?.content).toContain('已开始创建')
+    expect(deps.messages.value.at(-1)?.content).not.toContain('不应显示的完成结论')
     expect(boundary.json).not.toHaveBeenCalled()
   })
 

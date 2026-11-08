@@ -533,16 +533,13 @@ async def compat_chat_stream_async(
                                     item.setdefault("run_id", last_run_id)
                                 if metadata:
                                     item["route_metadata"] = metadata
+                                error_data = item.get("data")
                                 failure = {
                                     **item,
                                     "success": False,
                                     "response": str(item.get("message") or "对话执行失败"),
                                     "data": {
-                                        **(
-                                            item.get("data")
-                                            if isinstance(item.get("data"), dict)
-                                            else {}
-                                        ),
+                                        **(error_data if isinstance(error_data, dict) else {}),
                                         "status": item.get("status") or "failed",
                                     },
                                 }

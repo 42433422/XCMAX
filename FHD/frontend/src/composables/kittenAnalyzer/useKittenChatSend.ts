@@ -161,7 +161,12 @@ export function useKittenChatSend(deps: KittenChatSendDeps) {
         const savedTurn = asString(asRecord(run.metadata?.task_context).turn_id)
         if (savedTurn && savedTurn !== receipt.turn_id) return false
         const saved = asRecord(run.final_output?.chat_payload)
-        const recovered = { run_id: run.run_id, execution_state: run.status, result: saved }
+        const recovered = {
+          run_id: run.run_id,
+          execution_state: run.status,
+          result: saved,
+          outputs: [run.final_output, ...(run.steps || []).map((step) => step.output)],
+        }
         if (runHasUncertainReceipt(run) || inspectKittenExecution(recovered).phase === KITTEN_PHASE.unknown) return false
         if (['completed', 'success', 'succeeded'].includes(run.status) && !Object.keys(saved).length) return false
         settle(recovered, streamPlain || run.error || '')

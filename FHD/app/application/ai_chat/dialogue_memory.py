@@ -410,7 +410,7 @@ def _public_payload(payload: Mapping[str, Any] | None, status: str) -> dict[str,
         copied["execution_state"] = status
         copied.setdefault("response", str(copied.get("message") or ""))
         return dict(copied)
-    return _payload(str((payload or {}).get("response") or ""), status)
+    return _payload("", status)
 
 
 def _append_user(

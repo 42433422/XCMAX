@@ -162,7 +162,7 @@ class CompatChatApplication:
                     if isinstance(exc, HTTPException)
                     else self.execution.responses.http_error(exc)
                 )
-                details = error.detail if isinstance(error.detail, dict) else {}
+                details: Payload = error.detail if isinstance(error.detail, dict) else {}
                 message = str(details.get("message") or details.get("response") or error.detail)
                 result = {
                     **details,
