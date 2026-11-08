@@ -556,6 +556,16 @@ def derive_classified_documents(
                 # Range revision cannot invent another sheet; park without model rounds.
                 hidden_hold = message
                 output = b""
+            elif "SUBTOTAL依赖必须完整保留于同一文档原坐标" in message:
+                # Expanding the rectangle still leaves the aggregate outside the
+                # model group; park for review instead of spending compatibility turns.
+                hidden_hold = message
+                output = b""
+            elif "条件格式涉及未选中的真实数据" in message or "空白上下文继承非字体行样式" in message:
+                # Attendance/ledger style cuts need human scope; filter holes still
+                # go through compatibility rounds below.
+                hidden_hold = message
+                output = b""
             elif any(marker in message for marker in _COMPATIBILITY_MARKERS):
                 overview = source.get("sheet_overview") or []
                 earlier: list[str] = []
