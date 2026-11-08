@@ -394,7 +394,7 @@ def _template_platform_complete(
                 "模型调用失败或结果不完整，可能已产生费用；未自动重试"
             ) from None
         except BOUNDARY_ERRORS as exc:
-            from app.application.elt.errors import provider_http_status
+            from app.application.elt.errors import never_connected, provider_http_status
 
             status = provider_http_status(exc)
             logging.getLogger(__name__).info(
@@ -402,6 +402,8 @@ def _template_platform_complete(
                 type(exc).__name__,
                 str(exc).replace("\n", " ")[:160],
             )
+            if never_connected(exc):
+                raise ModelRequestNotSent("模型服务连接未建立；未调用模型") from None
             if status in {400, 401, 402, 403, 404}:
                 raise ReviewedExcelError(
                     "当前模型或模型服务入口不可用", provider_status=status

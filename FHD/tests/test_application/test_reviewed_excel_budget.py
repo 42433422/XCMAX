@@ -528,3 +528,29 @@ def test_required_extent_is_source_derived_not_a_business_region(reference_ids, 
         with pytest.raises(ReviewedExcelError, match="白名单"):
             _classify_semantic_batch(review, reference_ids=True)
         assert raw == untouched  # The source extent never repairs the model's returned range.
+
+
+@pytest.mark.parametrize("connected", [False, True])
+def test_a_connection_that_never_opened_is_not_sent(monkeypatch, connected):
+    from types import SimpleNamespace
+
+    import httpx
+
+    from app.application.elt import llm_session_provider as sessions
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+    from app.application.reviewed_excel_template import _template_platform_complete
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    failure = httpx.ReadTimeout("synthetic") if connected else httpx.ConnectTimeout("synthetic")
+
+    async def fail(*_args, **_kwargs):
+        raise failure
+
+    monkeypatch.setattr(
+        sessions,
+        "current_owner_market_provider",
+        lambda **_: SimpleNamespace(is_configured=True, chat_completion=fail),
+    )
+    with pytest.raises(ReviewedExcelError) as error:
+        _template_platform_complete([], {}, 20, owner_id=7)
+    assert isinstance(error.value, ModelRequestNotSent) is not connected

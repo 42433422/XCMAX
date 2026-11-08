@@ -72,6 +72,18 @@ class ModelAnswerRejected(ReviewedExcelError):
 DEFINITE_PROVIDER_STATUSES = frozenset({400, 401, 402, 403, 404, 429})
 
 
+def never_connected(exc: BaseException) -> bool:
+    """An httpx connect failure ends before any request byte is written."""
+    import httpx
+
+    seen = 0
+    while exc is not None and seen < 5:
+        if isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout):
+            return True
+        exc, seen = exc.__cause__ or exc.__context__, seen + 1
+    return False
+
+
 def is_definite_provider_failure(exc: Exception) -> bool:
     """True when the provider answered with a terminal client/config error."""
     return provider_http_status(exc) in DEFINITE_PROVIDER_STATUSES
