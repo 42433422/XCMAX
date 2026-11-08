@@ -433,7 +433,6 @@
     "tests/test_application/test_reviewed_excel_legacy.py": 3.218833,
     "tests/test_application/test_reviewed_excel_merge_flatten.py": 0.318786,
     "tests/test_application/test_reviewed_excel_merge_metadata.py": 0.311396,
-    "tests/test_application/test_reviewed_excel_multipack_stitch.py": 0.09219,
     "tests/test_application/test_reviewed_excel_range_objects.py": 3.241906,
     "tests/test_application/test_reviewed_excel_reclassification.py": 3.012325,
     "tests/test_application/test_reviewed_excel_reference_ids.py": 0.2003,

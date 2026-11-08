@@ -497,12 +497,6 @@ def _sheet_axis(value: object) -> int:
     return value if value > 0 else 0
 
 
-def _sheet_cell_extent(sheet: object) -> int:
-    return _sheet_axis(getattr(sheet, "max_row", None)) * _sheet_axis(
-        getattr(sheet, "max_column", None)
-    )
-
-
 def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
     if not body or len(body) > MAX_BYTES:
         raise ReviewedExcelError("文件为空或超过 20 MB")
