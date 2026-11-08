@@ -1,13 +1,19 @@
 package com.modstore.controller;
 
 import com.modstore.model.Order;
+import com.modstore.model.Transaction;
 import com.modstore.model.User;
+import com.modstore.repository.TransactionRepository;
 import com.modstore.repository.UserRepository;
+import com.modstore.repository.WalletRepository;
 import com.modstore.service.AlipayService;
 import com.modstore.service.OrderService;
+import com.modstore.service.WalletService;
 import com.modstore.service.WechatPayService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -32,6 +38,8 @@ class InternalPaymentControllerTest {
     private UserRepository userRepository;
     private AlipayService alipayService;
     private WechatPayService wechatPayService;
+    private WalletService walletService;
+    private TransactionRepository transactionRepository;
 
     @BeforeEach
     void setUp() {
@@ -39,17 +47,45 @@ class InternalPaymentControllerTest {
         userRepository = mock(UserRepository.class);
         alipayService = mock(AlipayService.class);
         wechatPayService = mock(WechatPayService.class);
+        walletService = mock(WalletService.class);
+        transactionRepository = mock(TransactionRepository.class);
         controller = new InternalPaymentController(
                 userRepository,
                 orderService,
                 alipayService,
-                wechatPayService
+                wechatPayService,
+                walletService,
+                mock(WalletRepository.class),
+                transactionRepository
         );
         ReflectionTestUtils.setField(controller, "internalApiKey", "test-internal-key");
         ReflectionTestUtils.setField(controller, "deployTier", "production");
         ReflectionTestUtils.setField(controller, "alipayDebug", false);
         ReflectionTestUtils.setField(controller, "publicOrigin", "https://www.xiu-ci.com");
         ReflectionTestUtils.setField(controller, "marketPrefix", "/market");
+    }
+
+    @Test
+    void walletPaginationPreservesNonAlignedOffsets() {
+        when(userRepository.findAll(any(Pageable.class))).thenAnswer(invocation -> {
+            Pageable page = invocation.getArgument(0);
+            assertEquals(3, page.getOffset());
+            assertEquals(2, page.getPageSize());
+            return new PageImpl<>(List.of(), page, 5);
+        });
+        assertEquals(5L, controller.wallets("test-internal-key", 2, 3).get("total"));
+    }
+
+    @Test
+    void transactionPaginationPreservesOffsetAndBreaksTimestampTies() {
+        when(transactionRepository.findAll(any(Pageable.class))).thenAnswer(invocation -> {
+            Pageable page = invocation.getArgument(0);
+            assertEquals(3, page.getOffset());
+            assertEquals(2, page.getPageSize());
+            assertEquals("createdAt: DESC,id: DESC", page.getSort().toString());
+            return new PageImpl<>(List.of(), page, 5);
+        });
+        assertEquals(5L, controller.transactions("test-internal-key", 2, 3).get("total"));
     }
 
     @Test
@@ -248,5 +284,54 @@ class InternalPaymentControllerTest {
         assertEquals(0L, row.get("user_id"));
         assertEquals("", row.get("enterprise_subject_id"));
         assertTrue(row.keySet().stream().noneMatch(key -> key.contains("buyer")));
+    }
+
+    @Test
+    void creditWalletWritesTheJavaLedgerForThatUser() {
+        User user = new User();
+        user.setId(33L);
+        when(userRepository.findById(33L)).thenReturn(java.util.Optional.of(user));
+        Transaction txn = new Transaction();
+        txn.setBalanceAfter(new BigDecimal("100.83"));
+        when(walletService.credit(
+                eq(user), eq(new BigDecimal("100.00")), eq("admin_credit"), eq("端到端测试加款"),
+                eq(null), eq(null), eq(null), eq("admin_credit:33:abc")
+        )).thenReturn(txn);
+
+        Map<String, Object> result = controller.creditWallet(
+                "test-internal-key",
+                Map.of(
+                        "user_id", 33,
+                        "amount", "100.00",
+                        "description", "端到端测试加款",
+                        "idempotency_key", "admin_credit:33:abc"
+                )
+        );
+
+        assertEquals(true, result.get("ok"));
+        assertEquals("java_postgresql", result.get("source"));
+        assertEquals(33L, result.get("user_id"));
+        assertEquals("100.00", result.get("amount"));
+        assertEquals("100.83", result.get("balance"));
+        verify(walletService).credit(
+                eq(user), eq(new BigDecimal("100.00")), eq("admin_credit"), eq("端到端测试加款"),
+                eq(null), eq(null), eq(null), eq("admin_credit:33:abc")
+        );
+    }
+
+    @Test
+    void creditWalletRejectsAMissingUserAndABadKey() {
+        when(userRepository.findById(33L)).thenReturn(java.util.Optional.empty());
+        ResponseStatusException missing = assertThrows(
+                ResponseStatusException.class,
+                () -> controller.creditWallet("test-internal-key", Map.of("user_id", 33, "amount", "1.00"))
+        );
+        assertEquals(404, missing.getStatusCode().value());
+
+        ResponseStatusException forbidden = assertThrows(
+                ResponseStatusException.class,
+                () -> controller.creditWallet("wrong", Map.of("user_id", 33, "amount", "1.00"))
+        );
+        assertEquals(403, forbidden.getStatusCode().value());
     }
 }
