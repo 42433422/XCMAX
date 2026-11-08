@@ -1,5 +1,5 @@
 {
-  "lines": 2452721,
+  "lines": 2452723,
   "updated": "2026-11-08",
-  "note": "ELT 历史批次读取时按覆盖规则判定 applied/partial（实测 6 个旧批次误显 applied），实现 +10 行、回归测试 +18 行；用户授权的大规模重构"
+  "note": "市场端幂等台账测试夹具补建 users 行，使外键在全量顺序下成立（CI modstore-backend-test 失败修复），+3 行"
 }
