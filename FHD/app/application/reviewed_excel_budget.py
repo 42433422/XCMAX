@@ -242,3 +242,19 @@ def template_timeout_seconds() -> float:
     if not math.isfinite(value) or not 1 <= value <= 180:
         raise ModelRequestNotSent("模板模型超时必须为1至180秒，未调用模型")
     return value
+
+
+def template_first_byte_seconds() -> float:
+    """Deadline for the first market event; distinct from the idle wait between events."""
+    import math
+    import os
+
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+
+    try:
+        value = float(os.environ.get("FHD_TEMPLATE_LLM_FIRST_BYTE_SECONDS", "60"))
+    except ValueError:
+        raise ModelRequestNotSent("模板模型首包超时配置无效，未调用模型") from None
+    if not math.isfinite(value) or not 5 <= value <= 180:
+        raise ModelRequestNotSent("模板模型首包超时必须为5至180秒，未调用模型")
+    return value

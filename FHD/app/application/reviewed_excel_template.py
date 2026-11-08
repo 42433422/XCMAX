@@ -16,7 +16,11 @@ from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.print_settings import PrintArea
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.application.elt.errors import ModelAnswerRejected, ReviewedExcelError
+from app.application.elt.errors import (
+    ModelAnswerRejected,
+    ModelAnswerTruncated,
+    ReviewedExcelError,
+)
 from app.application.reviewed_excel_evidence import bounded_range
 from app.application.reviewed_excel_formula_cells import (
     content_bounds,
@@ -262,6 +266,8 @@ def _template_platform_complete(
     import asyncio
     import logging
 
+    import httpx
+
     from app.application.reviewed_excel_audit import (
         ModelRequestNotSent,
         note_answer,
@@ -296,32 +302,42 @@ def _template_platform_complete(
                 raise ModelRequestNotSent("平台模型未登录或不可用；未调用模型")
         except INFRA_TRANSIENT:
             raise ModelRequestNotSent("平台模型初始化失败；未调用模型") from None
+        from app.application.reviewed_excel_audit import current_call_id
+        from app.application.reviewed_excel_budget import template_first_byte_seconds
+
         audit_callback = response_capture()
+        call_id = current_call_id()
+        first_byte_seconds = min(template_first_byte_seconds(), timeout_seconds)
         seen = {"on": False}
 
         def _still_processing() -> None:
             seen["on"] = True
 
-        async def call():
+        async def attempt():
+            seen["on"] = False
             task = asyncio.create_task(
                 provider.chat_completion(
                     messages,
                     temperature=0.0,
                     max_tokens=max_tokens,
                     _processing_status=_still_processing,
+                    **({"client_request_id": call_id} if call_id else {}),
                     **(
                         {"_reviewed_excel_audit_response": audit_callback} if audit_callback else {}
                     ),
                 )
             )
             try:
+                # The first event has its own deadline; later events reset an idle wait.
+                wait = first_byte_seconds
                 while True:
-                    done, _pending = await asyncio.wait({task}, timeout=timeout_seconds)
+                    done, _pending = await asyncio.wait({task}, timeout=wait)
                     if task in done:
                         return task.result()
                     if not seen["on"]:
                         break
                     seen["on"] = False
+                    wait = timeout_seconds
                 task.cancel()
                 try:
                     await task
@@ -332,17 +348,37 @@ def _template_platform_complete(
                 if not task.done():
                     task.cancel()
 
+        async def call():
+            try:
+                return await attempt()
+            except (TimeoutError, httpx.TransportError) as exc:
+                from app.application.elt.errors import never_connected
+
+                if not call_id or never_connected(exc) or not hasattr(provider, "lookup_call"):
+                    raise
+                lost = exc
+            from app.application.reviewed_excel_audit import recovery_action
+
+            # Same-key recovery: only a market that confirms idempotency may see it again.
+            for _poll in range(max(1, int(timeout_seconds // 10))):
+                action = recovery_action({"call_id": call_id}, await provider.lookup_call(call_id))
+                if action == "resend":
+                    return await attempt()
+                if action != "wait":
+                    break
+                await asyncio.sleep(10)
+            raise lost
+
         try:
             response = _run_coroutine(call)
             choice = (response or {}).get("choices", [])[0]
             finish = choice.get("finish_reason")
             raw_content = str((choice.get("message") or {}).get("content") or "")
             note_answer(raw_content)
+            if finish == "length":
+                raise ModelAnswerTruncated("模型输出达到长度上限，已截断", answer=raw_content)
             if finish not in {None, "stop"}:
-                err = ModelAnswerRejected(
-                    "模型输出不完整" if finish == "length" else "模型输出未正常结束",
-                    answer=raw_content,
-                )
+                err = ModelAnswerRejected("模型输出未正常结束", answer=raw_content)
                 err.finish_reason = finish
                 raise err
             data = extract_json(raw_content)
@@ -1445,16 +1481,26 @@ def refine_proposal(
     allowed = {(c["sheet"], c["cell"]) for c in bounded if c["kind"] != "formula"}
     protected = {(c["sheet"], c["cell"]) for c in base["protected"]}
     instance = {pair for pair in allowed - protected if pair in bounded_coordinates}
-    budget = {"tokens": 1400, "instance_asked": False, "model": "", "asks": 0}
+    from app.application.reviewed_excel_budget import MAX_OUTPUT_TOKENS
+
+    # Worst case: every clearable cell listed in every plan, so a length stop is a defect.
+    worst = (3 if initial else 1) * (len(allowed - protected) * 30 + 200) + 600
+    budget = {
+        "tokens": min(MAX_OUTPUT_TOKENS, max(1400, worst)),
+        "instance_asked": False,
+        "model": "",
+        "asks": 0,
+    }
+
+    from app.application.reviewed_excel_audit import call_key, current_call_id
+
+    base_key = current_call_id()
 
     def ask(turn):
         budget["asks"] += 1
-        try:
+        # Each turn its own key: a recovery rerun replays earlier turns instead of rebilling.
+        with call_key(f"{base_key}-a{budget['asks']}" if base_key else None):
             result = _template_llm_complete(turn, schema, budget["tokens"], owner_id=owner_id)
-        except ModelAnswerRejected as exc:
-            if getattr(exc, "finish_reason", None) == "length":
-                budget["tokens"] = 4096
-            raise
         if not result.used_llm or result.degraded:
             state = (
                 "模型调用失败"

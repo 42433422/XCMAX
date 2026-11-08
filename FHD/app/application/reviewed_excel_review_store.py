@@ -40,6 +40,7 @@ _OUTCOME_HTTP = {
     "not_sent": (503, "model_configuration_error", "模型连接异常，未调用模型。"),
     "rejected": (503, "model_configuration_error", "模型配置或入口不可用。"),
     "answered_invalid": (422, "model_answer_rejected", "模型已回答，但答案未通过校验。"),
+    "truncated": (422, "model_answer_truncated", "模型输出达到长度上限被截断。"),
     "unknown": (503, "model_processing_failed", "模型处理未完成。"),
 }
 
@@ -305,15 +306,20 @@ def _cas(db, run, old_draft, *, expected_status=_READY, **values):
     db.commit()
 
 
-def _update_candidate_claim(db, classification_id, key, tenant, owner, review_id=""):
+def _update_candidate_claim(
+    db, classification_id, key, tenant, owner, review_id="", *, unknown=False
+):
+    """Complete, release (definite failure) or keep locked as ``unknown``."""
     run = _classification_run(db, classification_id, tenant, owner)
     old = run.draft_json
     state = load_json(old, {})
     claims = state.get("template_candidate_requests", {})
-    if claims.get(key, {}).get("state") != "inflight":
+    if claims.get(key, {}).get("state") not in {"inflight", "sent"}:
         raise HTTPException(status_code=409, detail="模型候选请求状态已改变，请核对")
     if review_id:
         claims[key] = {"state": "completed", "review_id": review_id}
+    elif unknown:
+        claims[key]["state"] = "unknown"
     else:
         claims.pop(key)
     _classification_cas(db, run, old, state)

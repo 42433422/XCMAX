@@ -316,7 +316,7 @@ def _checkpoint_view(checkpoint):
         return None
     phase = checkpoint["phase"]
     message = {
-        "inflight": "结果未知，不可重发；需人工核对，当前无解锁入口",
+        "inflight": "请求处理中或结果未知；市场确认前不会重发",
         "failed": "模型答案多轮未通过校验，已停止；保留已完成批次，需人工核对",
         "paused": "本轮预算已用完；确认后可继续剩余批次",
         "ready": "上一轮答案未通过校验，下一次请求请模型按原因修正"
@@ -402,6 +402,15 @@ def reviewed_excel_classification_history(classification_id: str, user=Depends(_
             "template_write_state": "locked" if run.status == _CLASS_SAVING else "available",
             "versions": state.get("versions", []),
             "checkpoint": _checkpoint_view(state.get("analysis_checkpoint")),
+            "unsettled_candidate_requests": [
+                {
+                    "candidate_key": key,
+                    "state": claim.get("state"),
+                    "attempts": claim.get("attempts", 1),
+                }
+                for key, claim in (state.get("template_candidate_requests") or {}).items()
+                if claim.get("state") != "completed"
+            ],
         }
 
 
@@ -663,10 +672,10 @@ def reviewed_excel_classification_confirm(
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
-def _call_with_response_audit(function, callback, *args, **kwargs):
+def _call_with_response_audit(function, callback, *args, call_id=None, **kwargs):
     from app.application.reviewed_excel_audit import capture_response
 
-    with capture_response(callback) as answer:
+    with capture_response(callback, call_id=call_id) as answer:
         try:
             return function(*args, **kwargs)
         except ReviewedExcelError as exc:
@@ -691,8 +700,40 @@ def _response_audit_writer(state, claimed_draft, classification_id, tenant, owne
     return holder, save
 
 
+async def _lookup_market_call(call_id, owner, model_session):
+    """The market's record of one idempotency key, or None when it cannot be read."""
+    if not call_id:
+        return None
+    from app.application.elt.llm_session_provider import (
+        bind_etl_llm_owner,
+        current_owner_market_provider,
+        reset_etl_llm_owner,
+    )
+
+    token = bind_etl_llm_owner(int(owner))
+    try:
+        with bind_model_session(model_session):
+            provider = current_owner_market_provider(timeout_seconds=15.0)
+        if provider is None or not hasattr(provider, "lookup_call"):
+            return None
+        return await provider.lookup_call(str(call_id))
+    finally:
+        reset_etl_llm_owner(token)
+
+
 def _settle_failed_step(
-    db, run, state, draft, request_sha, exc, *, stored, step, previous_calls, classification_id
+    db,
+    run,
+    state,
+    draft,
+    request_sha,
+    exc,
+    *,
+    stored,
+    step,
+    previous_calls,
+    classification_id,
+    split_unit=None,
 ):
     """Record a failed call's real outcome. A rejected answer continues as a bounded repair."""
     from app.application.elt.errors import model_call_outcome
@@ -705,6 +746,29 @@ def _settle_failed_step(
     settle_call(state, request_sha, outcome, reason)
     checkpoint["results"] = checkpoint["results"][:step]
     rounds, exhausted = 0, False
+    if outcome == "truncated":
+        # A smaller unit is a different request; the same prompt is never resent.
+        checkpoint["calls_in_round"] = previous_calls + 1
+        split = split_unit is not None and split_unit(step)
+        checkpoint["phase"] = "ready" if split else "failed"
+        if not split:
+            checkpoint["repair"] = {
+                "step": step,
+                "rounds": 0,
+                "reason": "模型输出达到长度上限且本单元无法再按源结构拆分",
+                "exhausted": True,
+            }
+        _classification_cas(db, run, draft, state)
+        if split:
+            logger.info("analyze unit %s truncated; split into two source-closed units", step)
+            return {
+                "classification_id": classification_id,
+                "version": checkpoint["version"],
+                "phase": "pending",
+                "split": {"step": step, "total": checkpoint["total"]},
+                "checkpoint": _checkpoint_view(checkpoint),
+            }
+        raise _model_processing_failure(exc, stored_status=stored_status, retryable=False)
     if outcome == "answered_invalid":
         checkpoint["calls_in_round"] = previous_calls + 1
         earlier = checkpoint.get("repair") or {}
@@ -739,11 +803,7 @@ def _settle_failed_step(
 
 
 def _analysis_in_flight(classification_id, version, state):
-    """A claim whose request is still running is polled; one that ended unsettled is unknown."""
-    from app.application.reviewed_excel_audit import is_live
-
-    if not is_live((state.get("model_audit") or [{}])[-1].get("request_sha256")):
-        raise HTTPException(status_code=409, detail="上次请求结果未知，请核对后处理；不会自动重发")
+    """202 for a call that is still running here or at the market."""
     return JSONResponse(
         status_code=202,
         content={
@@ -775,6 +835,80 @@ async def reviewed_excel_classification_analyze(
         )
 
 
+@router.post("/api/templates/reviewed-excel/classifications/{classification_id}/analyze/abandon")
+def reviewed_excel_classification_abandon_call(
+    classification_id: str,
+    request: Request,
+    version: str = Form(..., max_length=64),
+    request_sha256: str = Form("", max_length=64),
+    candidate_key: str = Form("", max_length=64),
+    confirm: str = Form(..., max_length=40),
+    note: str = Form("", max_length=300),
+    user=Depends(_manage),
+):
+    """The user accepts a possible duplicate charge to unlock one unknown-outcome call."""
+    from app.application.reviewed_excel_audit import abandon_call, normalize_audit
+
+    if confirm != "abandon_unknown_call":
+        raise HTTPException(status_code=400, detail="须明确确认放弃未知结果请求")
+    tenant, owner = _identity(user)
+    try:
+        with tenant_scope(tenant), get_db() as db:
+            run = _classification_run(db, classification_id, tenant, owner)
+            old = run.draft_json
+            state = load_json(old, {})
+            versions = state.get("versions", [])
+            checkpoint = state.get("analysis_checkpoint") or {}
+            if not versions or versions[-1].get("version") != version:
+                raise HTTPException(status_code=409, detail="分类版本已改变，请刷新")
+            if candidate_key:
+                record = _abandon_candidate_claim(state, candidate_key, owner, note)
+            else:
+                if checkpoint.get("phase") != "inflight":
+                    raise HTTPException(status_code=409, detail="没有待处理的未知结果请求")
+                normalize_audit(state)
+                record = abandon_call(
+                    state, request_sha256, authorized_by=f"user:{owner}", note=note or "user"
+                )
+            _recheck(request, (tenant, owner))
+            _classification_cas(db, run, old, state)
+        return {
+            "classification_id": classification_id,
+            "version": version,
+            "abandoned_call_id": record.get("call_id"),
+            "possible_duplicate_charge": True,
+            "checkpoint": _checkpoint_view(state.get("analysis_checkpoint")),
+        }
+    except ReviewedExcelError as exc:
+        raise HTTPException(status_code=409, detail=public_excel_error(exc)) from None
+
+
+def _abandon_candidate_claim(state, candidate_key, owner, note):
+    from datetime import UTC, datetime
+
+    from app.application.reviewed_excel_audit import is_live, owned_here
+
+    claims = state.get("template_candidate_requests") or {}
+    claim = claims.get(candidate_key)
+    if not claim or claim.get("state") not in {"inflight", "sent", "unknown"}:
+        raise HTTPException(status_code=409, detail="没有可放弃的候选请求")
+    if is_live(candidate_key) or (owned_here(claim) and claim.get("state") == "sent"):
+        raise HTTPException(status_code=409, detail="该候选请求仍在本进程处理中，不能放弃")
+    record = {
+        **claims.pop(candidate_key),
+        "candidate_key": candidate_key,
+        "state": "abandoned",
+        "abandoned_by": f"user:{owner}",
+        "abandoned_note": str(note or "user")[:300],
+        "abandoned_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "possible_duplicate_charge": True,
+    }
+    history = state.setdefault("abandoned_candidate_requests", [])
+    history.append(record)
+    del history[:-50]
+    return record
+
+
 async def _reviewed_excel_classification_analyze_body(
     classification_id, request, version, auto_group, tenant, owner, model_session
 ):
@@ -786,6 +920,9 @@ async def _reviewed_excel_classification_analyze_body(
             versions = state.get("versions", [])
             if not versions or versions[-1].get("version") != version:
                 raise HTTPException(status_code=409, detail="分类版本已改变，请刷新")
+            from app.application.reviewed_excel_audit import normalize_audit
+
+            normalize_audit(state)
             body = _source(db, run, tenant, owner)
             review = inspect_workbook(body)
             checkpoint = state.get("analysis_checkpoint")
@@ -809,11 +946,27 @@ async def _reviewed_excel_classification_analyze_body(
             if checkpoint and checkpoint.get("auto_group", False) != auto_group:
                 raise HTTPException(status_code=409, detail="分组模式已改变，请核对已有批次")
             if checkpoint and checkpoint.get("phase") == "inflight":
-                from app.application.reviewed_excel_audit import release_unanswered_inflight
+                from app.application.reviewed_excel_audit import is_live, recovery_action
 
-                if not release_unanswered_inflight(state, getattr(run, "updated_at", None)):
+                latest = (state.get("model_audit") or [{}])[-1]
+                if is_live(latest.get("request_sha256")):
                     return _analysis_in_flight(classification_id, version, state)
-                logger.info("analyze released an unanswered inflight claim with no stored response")
+                lookup = await _lookup_market_call(latest.get("call_id"), owner, model_session)
+                action = recovery_action(latest, lookup)
+                if action == "wait":
+                    return _analysis_in_flight(classification_id, version, state)
+                if action == "locked":
+                    raise HTTPException(
+                        status_code=409,
+                        detail="上次请求结果未知且市场无法确认；不会自动重发。"
+                        "如需放弃并重发，须由用户明确授权（可能重复计费）",
+                    )
+                checkpoint["recovery"] = {
+                    "call_id": latest["call_id"],
+                    "request_sha256": latest["request_sha256"],
+                }
+                checkpoint["phase"] = "ready"
+                logger.info("analyze resumes an unsettled call by same-key market recovery")
             repair = (checkpoint or {}).get("repair") or {}
             if checkpoint and checkpoint.get("phase") == "failed":
                 if repair.get("exhausted"):
@@ -833,6 +986,7 @@ async def _reviewed_excel_classification_analyze_body(
                 checkpoint["calls_in_round"] = 0
             from app.application.reviewed_excel_plan import (
                 restore_coordinate_plan,
+                split_plan_step,
                 store_coordinate_plan,
             )
 
@@ -918,6 +1072,7 @@ async def _reviewed_excel_classification_analyze_body(
                             function,
                             save,
                             *args,
+                            call_id=state["model_audit"][-1].get("call_id"),
                             expected_request_sha256=request_sha,
                             owner_id=owner,
                             **kwargs,
@@ -934,9 +1089,17 @@ async def _reviewed_excel_classification_analyze_body(
                         step=step,
                         previous_calls=previous_calls,
                         classification_id=classification_id,
+                        split_unit=(
+                            (lambda unit: split_plan_step(checkpoint, unit, review))
+                            if phase == "classification"
+                            else None
+                        ),
                     )
                 _recheck(request, (tenant, owner))
                 _source(db, run, tenant, owner)
+                from app.application.reviewed_excel_audit import mark_answered
+
+                mark_answered(state, request_sha)
                 checkpoint["calls_in_round"] = previous_calls + 1
                 checkpoint["phase"] = "ready"
                 checkpoint.pop("repair", None)
@@ -1164,7 +1327,14 @@ async def reviewed_excel_preview(
     model_session = require_model_session(request, tenant, owner)
     if not classification_id or not classification_version:
         raise HTTPException(status_code=409, detail="请先建立文件分类记录，再生成候选")
-    from app.application.reviewed_excel_audit import is_live, live_claims, mark_live
+    from app.application.reviewed_excel_audit import (
+        call_key,
+        is_live,
+        live_claims,
+        mark_live,
+        owner_stamp,
+        recovery_action,
+    )
 
     _dock_cm = _docking_channel()
     _dock_cm.__enter__()
@@ -1332,6 +1502,7 @@ async def reviewed_excel_preview(
                     raise HTTPException(status_code=409, detail="分类版本已变化，请重新处理")
                 claims = state.setdefault("template_candidate_requests", {})
                 existing = claims.get(candidate_key)
+                claim = None
                 if existing:
                     if existing.get("state") == "completed" and existing.get("review_id"):
                         return _stored_candidate_response(db, existing["review_id"], tenant, owner)
@@ -1339,20 +1510,36 @@ async def reviewed_excel_preview(
                         return JSONResponse(
                             status_code=202, content={"phase": "inflight", "retry_after": 30}
                         )
-                    # Unknown-outcome inflight must stay locked (no double-send). Definite
-                    # config/404 failures release the claim in the except path below.
-                    error = _model_processing_failure(
-                        ReviewedExcelError(
-                            "上次候选处理仍在进行或结果未知，请先核对状态；不会重复发送"
-                        )
+                    lookup = await _lookup_market_call(
+                        existing.get("call_id"), owner, model_session
                     )
-                    error.status_code = 409
-                    raise error
+                    action = recovery_action(existing, lookup)
+                    if action == "wait":
+                        return JSONResponse(
+                            status_code=202, content={"phase": "inflight", "retry_after": 30}
+                        )
+                    if action == "locked":
+                        error = _model_processing_failure(
+                            ReviewedExcelError(
+                                "上次候选请求结果未知且市场无法确认；不会重复发送。"
+                                "如需放弃并重发，须由用户明确授权（可能重复计费）"
+                            )
+                        )
+                        error.status_code = 409
+                        raise error
+                    claim = {**existing, "state": "sent", "owner": owner_stamp()}
+                    claim["attempts"] = int(existing.get("attempts") or 1) + 1
                 if len(claims) >= 200:
                     raise HTTPException(
                         status_code=409, detail="本文件候选请求已达上限，请先核对已有结果"
                     )
-                claims[candidate_key] = {"state": "inflight"}
+                claims[candidate_key] = claim or {
+                    "state": "sent",
+                    "call_id": uuid4().hex,
+                    "owner": owner_stamp(),
+                    "attempts": 1,
+                }
+                candidate_call_id = claims[candidate_key]["call_id"]
                 _recheck(request, (tenant, owner))
                 _classification_cas(db, classification, old, state)
                 mark_live(candidate_key)
@@ -1361,6 +1548,7 @@ async def reviewed_excel_preview(
             with (
                 tenant_scope(tenant),
                 bind_model_session(model_session),
+                call_key(candidate_call_id),
             ):
                 proposal = await run_in_threadpool(
                     refine_proposal,
@@ -1373,13 +1561,15 @@ async def reviewed_excel_preview(
             versions.append(proposal)
         except ValueError as exc:
             # Only a call that may have been answered without our seeing it keeps the claim.
-            if classification_id and model_call_outcome(exc) != "unknown":
-                with tenant_scope(tenant), get_db() as db:
-                    try:
-                        _update_candidate_claim(db, classification_id, candidate_key, tenant, owner)
-                    except HTTPException:
-                        # Claim already moved; still surface the model failure.
-                        pass
+            unknown = model_call_outcome(exc) == "unknown"
+            with tenant_scope(tenant), get_db() as db:
+                try:
+                    _update_candidate_claim(
+                        db, classification_id, candidate_key, tenant, owner, unknown=unknown
+                    )
+                except HTTPException:
+                    # Claim already moved; still surface the model failure.
+                    pass
             raise _model_processing_failure(exc) from None
         proposal["model"]["authorization"] = template_model_authorization(
             model_session,

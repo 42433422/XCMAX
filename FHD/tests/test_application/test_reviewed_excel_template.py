@@ -362,7 +362,10 @@ def test_audited_body_reports_each_chunk_while_it_is_archived():
     seen = []
     request = ChatInput(
         messages=[],
-        extra={"_reviewed_excel_audit_response": object(), "_processing_status": lambda: seen.append(1)},
+        extra={
+            "_reviewed_excel_audit_response": object(),
+            "_processing_status": lambda: seen.append(1),
+        },
     )
     response = httpx.Response(200, stream=Chunks())
 
@@ -3688,37 +3691,22 @@ def test_semantic_finish_length_rejected_without_retry(monkeypatch):
         "app.application.elt.llm_session_provider.current_owner_market_provider",
         lambda **_: SessionMarketProvider(7, "synthetic-market", timeout_seconds=1),
     )
-    with pytest.raises(ValueError, match="不完整"):
+    with pytest.raises(ValueError, match="截断"):
         classify_semantic_workbook(inspect_workbook(sample()))
     assert len(seen) == 1 and 3000 <= seen[0] <= 4000
 
 
-def test_preview_length_raises_the_token_cap_once(monkeypatch):
-    import json
-
+def test_preview_budget_covers_the_worst_case_and_length_is_not_resent(monkeypatch):
+    from app.application.elt.errors import ModelAnswerTruncated
     from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.application.reviewed_excel_template import make_proposals, refine_proposal
 
     monkeypatch.setenv("FHD_ETL_LLM", "on")
     seen = []
-    plans = [
-        {"clear": [], "reason": "保留"},
-        {"clear": [{"sheet": "报价", "cell": "B2"}], "reason": "清除客户"},
-        {"clear": [{"sheet": "报价", "cell": "B2"}], "reason": "同样清除客户"},
-    ]
 
     async def fake(self, messages, **kwargs):
         seen.append(kwargs["max_tokens"])
-        if kwargs["max_tokens"] == 1400:
-            return {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
-        return {
-            "choices": [
-                {
-                    "finish_reason": "stop",
-                    "message": {"content": json.dumps({"candidates": plans})},
-                }
-            ]
-        }
+        return {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
 
     monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
     monkeypatch.setattr(
@@ -3726,12 +3714,11 @@ def test_preview_length_raises_the_token_cap_once(monkeypatch):
         lambda **_: SessionMarketProvider(7, "synthetic-market", timeout_seconds=1),
     )
     review = inspect_workbook(sample())
-    output = refine_proposal(
-        review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
-    )
-    assert seen == [1400, 4096]
-    assert output["candidates"][1]["clear"] == [{"sheet": "报价", "cell": "B2"}]
-    assert output["model"]["input_summary"]["max_output_tokens"] == 4096
+    with pytest.raises(ModelAnswerTruncated):
+        refine_proposal(
+            review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
+        )
+    assert len(seen) == 1 and seen[0] >= 1400
 
 
 def test_real_failure_outside_region_evidence_is_rejected(monkeypatch):
@@ -6057,7 +6044,7 @@ def test_audit_response_is_committed_before_parsing_and_is_owner_scoped(review_s
             text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
         ).scalar_one()
     record = json.loads(persisted)["model_audit"][0]
-    assert record["state"] == "response_received" and record["request_id"] == "synthetic-req"
+    assert record["state"] == "answered_valid" and record["request_id"] == "synthetic-req"
     assert base64.b64decode(record["response_base64"]) == raw
     assert record["usage"] == {"total_tokens": 12}
     assert record["classification_version"] == item["version"]
@@ -6081,10 +6068,7 @@ def test_audit_write_failure_blocks_replay(review_store, monkeypatch):
     real_cas = routes._classification_cas
 
     def fail_response(db, run, old, state):
-        if (
-            state.get("model_audit", [])
-            and state["model_audit"][-1]["state"] == "response_received"
-        ):
+        if state.get("model_audit", []) and state["model_audit"][-1]["state"] == "streaming":
             raise HTTPException(status_code=409, detail="synthetic write failure")
         return real_cas(db, run, old, state)
 
@@ -6106,7 +6090,7 @@ def test_audit_write_failure_blocks_replay(review_store, monkeypatch):
         persisted = conn.execute(
             text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
         ).scalar_one()
-    assert json.loads(persisted)["model_audit"][-1]["state"] == "inflight"
+    assert json.loads(persisted)["model_audit"][-1]["state"] == "sent"
 
 
 def test_completed_invalid_response_is_counted_and_next_request_retries_without_extra_consent(
@@ -7004,3 +6988,150 @@ def test_sparse_model_plan_asks_the_model_once_about_instance_cells(monkeypatch)
     full = sparse
     kept = refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
     assert kept["candidates"][0]["clear"] == sparse["clear"] and len(sent) == 2
+
+
+def _unknown_outcome_run(review_store, monkeypatch):
+    from app.application.reviewed_excel_audit import current_call_id
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("合成.xlsx", sample())},
+    ).json()["files"][0]
+    keys = []
+
+    def fake(messages, schema, tokens, **_model_kwargs):
+        keys.append(current_call_id())
+        raise ValueError("合成连接中断")
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    data = {"version": item["version"], "sample_authorized": "true"}
+    assert client.post(url + "/analyze", data=data).status_code == 503
+
+    def audit():
+        with review_store.engine.connect() as conn:
+            persisted = conn.execute(
+                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                {"id": item["classification_id"]},
+            ).scalar_one()
+        return json.loads(persisted)["model_audit"]
+
+    return client, url, data, keys, audit
+
+
+def test_unknown_outcome_stays_locked_without_market_recovery(review_store, monkeypatch):
+    client, url, data, keys, audit = _unknown_outcome_run(review_store, monkeypatch)
+
+    async def unsupported(*_args):
+        return {"supported": False}
+
+    monkeypatch.setattr(routes, "_lookup_market_call", unsupported)
+    locked = client.post(url + "/analyze", data=data)
+    assert locked.status_code == 409 and "明确授权" in locked.text
+    assert len(keys) == 1 and audit()[-1]["state"] == "unknown"
+
+
+def test_market_confirmed_recovery_resends_with_the_same_key(review_store, monkeypatch):
+    client, url, data, keys, audit = _unknown_outcome_run(review_store, monkeypatch)
+
+    async def not_found(*_args):
+        return {"supported": True, "state": "not_found"}
+
+    monkeypatch.setattr(routes, "_lookup_market_call", not_found)
+    assert client.post(url + "/analyze", data=data).status_code == 503
+    records = audit()
+    assert len(keys) == 2 and keys[0] == keys[1] == records[-1]["call_id"]
+    assert len(records) == 1 and records[-1]["attempts"] == 2
+
+
+def test_user_authorized_abandon_unlocks_one_new_call(review_store, monkeypatch):
+    client, url, data, keys, audit = _unknown_outcome_run(review_store, monkeypatch)
+    digest = audit()[-1]["request_sha256"]
+    form = {"version": data["version"], "request_sha256": digest}
+    refused = client.post(url + "/analyze/abandon", data={**form, "confirm": "yes"})
+    assert refused.status_code == 400
+    done = client.post(url + "/analyze/abandon", data={**form, "confirm": "abandon_unknown_call"})
+    assert done.status_code == 200, done.text
+    assert done.json()["possible_duplicate_charge"] is True
+    assert client.post(url + "/analyze", data=data).status_code == 503
+    records = audit()
+    assert [r["state"] for r in records] == ["abandoned", "unknown"]
+    assert records[0]["abandoned_by"] == "user:7" and keys[0] != keys[1]
+
+
+def test_unknown_preview_claim_locks_until_the_user_abandons_it(review_store, monkeypatch):
+    from app.application.reviewed_excel_audit import current_call_id
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "生产单"
+    for row in [["生产单"], ["工序", "说明"], ["切割", "合成说明"], ["焊接", "合成说明"]]:
+        ws.append(row)
+    output = BytesIO()
+    wb.save(output)
+    body = output.getvalue()
+    with review_store.engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+            )
+        )
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/archive-classify",
+        data={"expected_actor": "1:7", "request_key": "synthetic-claim"},
+        files={"file": ("生产单.xlsx", body)},
+    ).json()
+    labels = [
+        {"sheet": "生产单", "range": r["range"], "labels": r["labels"]}
+        for r in item["sheets"][0]["regions"]
+    ]
+    confirmed = client.post(
+        f"/api/templates/reviewed-excel/classifications/{item['classification_id']}/confirm",
+        data={"version": item["version"], "labels_json": json.dumps(labels)},
+    ).json()
+    keys = []
+
+    def lost(*_args, **_kwargs):
+        keys.append(current_call_id())
+        raise ValueError("合成连接中断")
+
+    monkeypatch.setattr(routes, "refine_proposal", lost)
+
+    async def unsupported(*_args):
+        return {"supported": False}
+
+    monkeypatch.setattr(routes, "_lookup_market_call", unsupported)
+    preview = {
+        "expected_actor": "1:7",
+        "classification_id": item["classification_id"],
+        "classification_version": confirmed["version"],
+        "region_sheet": "生产单",
+        "region_range": labels[0]["range"],
+    }
+
+    def send():
+        return client.post(
+            "/api/templates/reviewed-excel/preview",
+            data=preview,
+            files={"file": ("生产单.xlsx", body)},
+        )
+
+    assert send().status_code == 503
+    assert send().status_code == 409 and len(keys) == 1 and keys[0]
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    unsettled = client.get(url).json()["unsettled_candidate_requests"]
+    assert [claim["state"] for claim in unsettled] == ["unknown"]
+    abandoned = client.post(
+        url + "/analyze/abandon",
+        data={
+            "version": confirmed["version"],
+            "candidate_key": unsettled[0]["candidate_key"],
+            "confirm": "abandon_unknown_call",
+        },
+    )
+    assert abandoned.status_code == 200, abandoned.text
+    assert send().status_code == 503 and len(keys) == 2 and keys[0] != keys[1]

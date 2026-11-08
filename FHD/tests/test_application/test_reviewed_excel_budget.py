@@ -362,6 +362,56 @@ def test_coordinate_checkpoint_tampering_is_rejected(tamper):
         restore_coordinate_plan(review, checkpoint)
 
 
+def _split_review(merges=(), drawings=()):
+    cells = [
+        {"sheet": "S", "cell": f"A{row}", "value": "x", "kind": "review"} for row in range(1, 9)
+    ]
+    return {
+        "sha256": "synthetic-source",
+        "sheets": ["S"],
+        "cells": cells,
+        "sheet_overview": [{"sheet": "S", "merged_regions": list(merges)}],
+        "drawing_evidence": list(drawings),
+    }
+
+
+def test_a_truncated_unit_splits_into_restorable_halves_that_keep_merges_whole():
+    from app.application.reviewed_excel_plan import restore_coordinate_plan, split_plan_step
+
+    review = _split_review(merges=["A3:B5"])
+    checkpoint = saved_plan(review, [review["cells"]])
+    assert split_plan_step(checkpoint, 0, review) is True
+    halves = restore_coordinate_plan(review, checkpoint)
+    assert checkpoint["total"] == 2
+    rows = [{int(c["cell"][1:]) for c in half if not c["context_only"]} for half in halves]
+    assert rows[0] | rows[1] == set(range(1, 9)) and not rows[0] & rows[1]
+    assert {3, 4, 5} <= rows[0] or {3, 4, 5} <= rows[1]
+
+
+def test_a_unit_that_cannot_be_cut_legally_is_not_split():
+    from app.application.reviewed_excel_plan import split_plan_step
+
+    whole = _split_review(merges=["A1:A8"])
+    checkpoint = saved_plan(whole, [whole["cells"]])
+    before = json.dumps(checkpoint, sort_keys=True)
+    assert split_plan_step(checkpoint, 0, whole) is False
+    assert json.dumps(checkpoint, sort_keys=True) == before
+    unbounded = _split_review(drawings=[{"sheet": "S", "from": {"row": 0}, "geometry_error": "x"}])
+    checkpoint = saved_plan(unbounded, [unbounded["cells"]])
+    assert split_plan_step(checkpoint, 0, unbounded) is False
+
+
+def test_a_drawing_anchor_span_is_never_cut_by_a_split():
+    from app.application.reviewed_excel_plan import split_plan_step
+
+    review = _split_review(drawings=[{"sheet": "S", "from": {"row": 2}, "to": {"row": 5}}])
+    checkpoint = saved_plan(review, [review["cells"]])
+    assert split_plan_step(checkpoint, 0, review) is True
+    plan = checkpoint["coordinate_plan"]
+    rows = [{int(item[1][1:]) for item in half if not item[2]} for half in plan]
+    assert len(plan) == 2 and any({3, 4, 5, 6} <= half for half in rows)
+
+
 def test_optional_large_context_never_excludes_valid_primary_rows():
     book = Workbook()
     sheet = book.active

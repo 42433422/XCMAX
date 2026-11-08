@@ -68,6 +68,12 @@ class ModelAnswerRejected(ReviewedExcelError):
         self.answer = answer
 
 
+class ModelAnswerTruncated(ModelAnswerRejected):
+    """The provider stopped at the output limit; the unit must shrink, not be resent."""
+
+    finish_reason = "length"
+
+
 # Statuses where the provider refused the request without producing an answer.
 DEFINITE_PROVIDER_STATUSES = frozenset({400, 401, 402, 403, 404, 429})
 
@@ -90,7 +96,7 @@ def is_definite_provider_failure(exc: Exception) -> bool:
 
 
 def model_call_outcome(exc: Exception, *, stored_status: int | None = None) -> str:
-    """not_sent, rejected, answered_invalid or unknown for one failed model call.
+    """not_sent, rejected, answered_invalid, truncated or unknown for one failed call.
 
     ``stored_status`` is the HTTP status of a provider body already archived for
     this call. Without a stored body, only a validator's ModelAnswerRejected
@@ -100,9 +106,14 @@ def model_call_outcome(exc: Exception, *, stored_status: int | None = None) -> s
         return "not_sent"
     if is_definite_provider_failure(exc) or stored_status in DEFINITE_PROVIDER_STATUSES:
         return "rejected"
-    if stored_status is not None:
-        return "answered_invalid" if 200 <= stored_status < 300 else "unknown"
-    return "answered_invalid" if isinstance(exc, ModelAnswerRejected) else "unknown"
+    answered = isinstance(exc, ModelAnswerRejected)
+    if stored_status is not None and not 200 <= stored_status < 300:
+        return "unknown"
+    if stored_status is None and not answered:
+        return "unknown"
+    if isinstance(exc, ModelAnswerTruncated) or getattr(exc, "finish_reason", None) == "length":
+        return "truncated"
+    return "answered_invalid"
 
 
 def public_excel_error(exc: Exception) -> str:

@@ -151,15 +151,12 @@ def test_settle_call_keeps_the_lock_only_for_an_unknown_outcome():
     assert rejected["model_audit"][-1]["state"] == "rejected"
     unknown = state("inflight")
     settle_call(unknown, "a", "unknown", "lost")
-    assert unknown["model_audit"][-1]["state"] == "inflight"
-    answered = state("response_received")
+    assert unknown["model_audit"][-1]["state"] == "unknown"
+    answered = state("streaming")
     settle_call(answered, "a", "answered_invalid", "模型区域重叠")
-    assert answered["model_audit"][-1] == {
-        "request_sha256": "a",
-        "state": "response_received",
-        "outcome": "answered_invalid",
-        "reason": "模型区域重叠",
-    }
+    record = answered["model_audit"][-1]
+    assert record["state"] == "answered_invalid" and record["reason"] == "模型区域重叠"
+    assert record["transitions"][-1]["from"] == "streaming"
 
 
 def test_a_claim_reads_in_progress_only_while_its_request_runs():

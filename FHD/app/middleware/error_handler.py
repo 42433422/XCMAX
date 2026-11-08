@@ -107,11 +107,12 @@ _ELT_MODEL_MESSAGES = {
     "model_connection_error": "当前账户的模型连接不可用，未调用模型；请检查智能对话的模型连接。",
     "model_processing_failed": "模型处理未完成，结果可能已产生费用；请先核对处理状态，勿重复提交。",
     "model_answer_rejected": "模型已回答，但答案未通过校验，未写入任何数据。",
+    "model_answer_truncated": "模型输出达到长度上限被截断，未写入任何数据，也未原样重发。",
 }
 _ELT_OUTCOME_MESSAGES = {
     "rejected": "模型供应商拒绝了本次请求，未产生答案，也未自动重发。",
 }
-_ELT_OUTCOMES = {"not_sent", "rejected", "answered_invalid", "unknown"}
+_ELT_OUTCOMES = {"not_sent", "rejected", "answered_invalid", "truncated", "unknown"}
 
 
 def _elt_model_error(detail: object) -> dict:
