@@ -15,16 +15,16 @@ from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy import update
 from starlette.concurrency import run_in_threadpool
 
 from app.application.elt.errors import (
     EltError,
+    ModelAnswerRejected,
     ReviewedExcelError,
-    is_definite_provider_failure,
-    provider_http_status,
+    model_call_outcome,
     public_excel_error,
 )
 from app.application.elt.service_support import dump_json, load_json, new_id, utcnow
@@ -35,7 +35,6 @@ from app.application.elt_login_authorization import (
     require_model_session,
     template_model_authorization,
 )
-from app.application.reviewed_excel_audit import ModelRequestNotSent, record_not_sent
 from app.application.reviewed_excel_classification import (
     _classify_semantic_batch,
     apply_classification_corrections,
@@ -318,9 +317,11 @@ def _checkpoint_view(checkpoint):
     phase = checkpoint["phase"]
     message = {
         "inflight": "结果未知，不可重发；需人工核对，当前无解锁入口",
-        "failed": "已收到响应但校验失败；可明确授权重试，保留已完成批次",
+        "failed": "模型答案多轮未通过校验，已停止；保留已完成批次，需人工核对",
         "paused": "本轮预算已用完；确认后可继续剩余批次",
-        "ready": "可继续剩余批次",
+        "ready": "上一轮答案未通过校验，下一次请求请模型按原因修正"
+        if checkpoint.get("repair")
+        else "可继续剩余批次",
     }[phase]
     return {
         "phase": phase,
@@ -665,8 +666,13 @@ def reviewed_excel_classification_confirm(
 def _call_with_response_audit(function, callback, *args, **kwargs):
     from app.application.reviewed_excel_audit import capture_response
 
-    with capture_response(callback):
-        return function(*args, **kwargs)
+    with capture_response(callback) as answer:
+        try:
+            return function(*args, **kwargs)
+        except ReviewedExcelError as exc:
+            if not getattr(exc, "answer", ""):
+                exc.answer = answer.get("text", "")
+            raise
 
 
 def _response_audit_writer(state, claimed_draft, classification_id, tenant, owner, request_sha):
@@ -685,13 +691,69 @@ def _response_audit_writer(state, claimed_draft, classification_id, tenant, owne
     return holder, save
 
 
-def _release_rejected(db, run, state, request_sha, claimed_draft, exc) -> None:
-    """A terminal provider rejection with no stored body cannot have produced an answer."""
-    if not is_definite_provider_failure(exc):
-        return
-    status = provider_http_status(exc)
-    record_not_sent(state, request_sha, f"provider rejected HTTP {status}", outcome="rejected")
-    _classification_cas(db, run, claimed_draft, state)
+def _settle_failed_step(
+    db, run, state, draft, request_sha, exc, *, stored, step, previous_calls, classification_id
+):
+    """Record a failed call's real outcome. A rejected answer continues as a bounded repair."""
+    from app.application.elt.errors import model_call_outcome
+    from app.application.reviewed_excel_audit import REPAIR_ROUNDS, settle_call
+
+    checkpoint = state["analysis_checkpoint"]
+    stored_status = state["model_audit"][-1].get("http_status") if stored else None
+    outcome = model_call_outcome(exc, stored_status=stored_status)
+    reason = public_excel_error(exc)
+    settle_call(state, request_sha, outcome, reason)
+    checkpoint["results"] = checkpoint["results"][:step]
+    rounds, exhausted = 0, False
+    if outcome == "answered_invalid":
+        checkpoint["calls_in_round"] = previous_calls + 1
+        earlier = checkpoint.get("repair") or {}
+        rounds = earlier.get("rounds", 0) + 1 if earlier.get("step") == step else 1
+        exhausted = rounds > REPAIR_ROUNDS
+        checkpoint["repair"] = {"step": step, "rounds": rounds, "reason": reason[:300]}
+        if exhausted:
+            checkpoint["repair"]["exhausted"] = True
+        else:
+            checkpoint["repair"]["answer"] = str(getattr(exc, "answer", "") or "")[:12_000]
+        over_budget = checkpoint["calls_in_round"] >= checkpoint["max_calls"]
+        checkpoint["phase"] = "failed" if exhausted else ("paused" if over_budget else "ready")
+    elif outcome != "unknown":
+        checkpoint["phase"] = "ready"
+    try:
+        _classification_cas(db, run, draft, state)
+    except HTTPException:
+        if outcome != "unknown":
+            raise
+    if outcome == "answered_invalid" and not exhausted:
+        logger.info("analyze answer rejected; repair round %s of %s queued", rounds, REPAIR_ROUNDS)
+        return {
+            "classification_id": classification_id,
+            "version": checkpoint["version"],
+            "phase": "paused" if checkpoint["phase"] == "paused" else "pending",
+            "repair": {"round": rounds, "max_rounds": REPAIR_ROUNDS, "reason": reason[:300]},
+            "checkpoint": _checkpoint_view(checkpoint),
+        }
+    raise _model_processing_failure(
+        exc, stored_status=stored_status, retryable=False if exhausted else None
+    )
+
+
+def _analysis_in_flight(classification_id, version, state):
+    """A claim whose request is still running is polled; one that ended unsettled is unknown."""
+    from app.application.reviewed_excel_audit import is_live
+
+    if not is_live((state.get("model_audit") or [{}])[-1].get("request_sha256")):
+        raise HTTPException(status_code=409, detail="上次请求结果未知，请核对后处理；不会自动重发")
+    return JSONResponse(
+        status_code=202,
+        content={
+            "classification_id": classification_id,
+            "version": version,
+            "phase": "inflight",
+            "retry_after": 30,
+            "checkpoint": _checkpoint_view(state["analysis_checkpoint"]),
+        },
+    )
 
 
 @router.post("/api/templates/reviewed-excel/classifications/{classification_id}/analyze")
@@ -705,7 +767,9 @@ async def reviewed_excel_classification_analyze(
     request.state.elt_stage = "analyze"
     tenant, owner = _identity(user)
     model_session = require_model_session(request, tenant, owner)
-    with _docking_channel():
+    from app.application.reviewed_excel_audit import live_claims
+
+    with _docking_channel(), live_claims():
         return await _reviewed_excel_classification_analyze_body(
             classification_id, request, version, auto_group, tenant, owner, model_session
         )
@@ -748,11 +812,19 @@ async def _reviewed_excel_classification_analyze_body(
                 from app.application.reviewed_excel_audit import release_unanswered_inflight
 
                 if not release_unanswered_inflight(state, getattr(run, "updated_at", None)):
-                    raise HTTPException(
-                        status_code=409, detail="上次请求结果未知，请核对后处理；不会自动重发"
-                    )
+                    return _analysis_in_flight(classification_id, version, state)
                 logger.info("analyze released an unanswered inflight claim with no stored response")
+            repair = (checkpoint or {}).get("repair") or {}
             if checkpoint and checkpoint.get("phase") == "failed":
+                if repair.get("exhausted"):
+                    raise _model_processing_failure(
+                        ModelAnswerRejected(
+                            f"模型连续 {repair['rounds']} 轮答案未通过校验：{repair['reason']}；"
+                            "未再调用模型，请人工核对或重新归档"
+                        ),
+                        stored_status=200,
+                        retryable=False,
+                    )
                 if checkpoint.get("calls_in_round", 0) >= checkpoint["max_calls"]:
                     checkpoint["calls_in_round"] = 0
                 checkpoint["phase"] = "ready"
@@ -776,7 +848,6 @@ async def _reviewed_excel_classification_analyze_body(
                 )
                 from app.application.reviewed_excel_template import (
                     configured_template_llm_provider,
-                    template_llm_model_label,
                 )
 
                 template_provider = configured_template_llm_provider()
@@ -803,28 +874,22 @@ async def _reviewed_excel_classification_analyze_body(
                 }
                 store_coordinate_plan(checkpoint, batches)
             validate_remaining_audit_budget(state, checkpoint, len(batches))
-            plan_digest = checkpoint["plan_digest"]
             index = len(checkpoint["results"])
             if index > len(batches):
                 raise HTTPException(status_code=409, detail="分析批次状态无效")
-            if index < len(batches):
-                batch_review = {
-                    **review,
-                    "cells": batches[index],
-                    "full_cells": review["cells"],
-                }
-                prepared = await run_in_threadpool(
-                    _classify_semantic_batch,
-                    batch_review,
-                    prepare_only=True,
-                    reference_ids=auto_group,
-                )
+            state["analysis_checkpoint"] = checkpoint
 
-                from app.application.reviewed_excel_audit import claim_request
-                from app.application.reviewed_excel_template import (
-                    configured_template_llm_provider,
-                    template_llm_model_label,
-                )
+            def turn_for(step):
+                from app.application.reviewed_excel_audit import repair_turn
+
+                if repair.get("step") != step or repair.get("exhausted"):
+                    return None
+                return repair_turn(repair.get("answer", ""), repair.get("reason", ""))
+
+            async def audited(draft, prepared, phase, step, function, *args, **kwargs):
+                """Send one claimed call: (result, draft), or a repair continuation dict."""
+                from app.application.reviewed_excel_audit import claim_request, mark_live
+                from app.application.reviewed_excel_template import template_llm_model_label
                 from app.build_identity import build_identity
 
                 request_sha = claim_request(
@@ -835,51 +900,71 @@ async def _reviewed_excel_classification_analyze_body(
                     classification_id=classification_id,
                     code_version=build_identity()["git_sha"] or "unavailable",
                     model=template_llm_model_label(),
-                    phase="classification",
+                    phase=phase,
                 )
-                checkpoint.update({"phase": "inflight", "plan_digest": plan_digest})
-                state["analysis_checkpoint"] = checkpoint
+                checkpoint["phase"] = "inflight"
                 _recheck(request, (tenant, owner))
-                _classification_cas(db, run, old, state)
-                claimed_draft = dump_json(state)
-                audit_holder, save_response = _response_audit_writer(
-                    state, claimed_draft, classification_id, tenant, owner, request_sha
+                _classification_cas(db, run, draft, state)
+                mark_live(request_sha)
+                draft = dump_json(state)
+                holder, save = _response_audit_writer(
+                    state, draft, classification_id, tenant, owner, request_sha
                 )
                 previous_calls = checkpoint.get("calls_in_round", 0)
-                audit_draft_before_response = claimed_draft
                 try:
                     with bind_model_session(model_session):
-                        batch_result = await run_in_threadpool(
+                        value = await run_in_threadpool(
                             _call_with_response_audit,
-                            _classify_semantic_batch,
-                            save_response,
-                            batch_review,
-                            reference_ids=auto_group,
+                            function,
+                            save,
+                            *args,
                             expected_request_sha256=request_sha,
                             owner_id=owner,
+                            **kwargs,
                         )
-                    claimed_draft = audit_holder[0]
-                    _recheck(request, (tenant, owner))
-                    _source(db, run, tenant, owner)
-                    checkpoint["results"].append(batch_result)
-                    checkpoint["calls_in_round"] = previous_calls + 1
-                    checkpoint["phase"] = "ready"
-                    result = combine_semantic_batches(
-                        review, batches[: index + 1], checkpoint["results"], max_calls
-                    )
-                except ModelRequestNotSent as exc:
-                    record_not_sent(state, request_sha, exc.public_message)
-                    _classification_cas(db, run, claimed_draft, state)
-                    raise _model_processing_failure(exc) from None
                 except (ValueError, TypeError, EltError) as exc:
-                    if audit_holder[0] != audit_draft_before_response:
-                        checkpoint["results"] = checkpoint["results"][:index]
-                        checkpoint["phase"] = "failed"
-                        checkpoint["calls_in_round"] = previous_calls + 1
-                        _classification_cas(db, run, audit_holder[0], state)
-                    else:
-                        _release_rejected(db, run, state, request_sha, claimed_draft, exc)
-                    raise _model_processing_failure(exc) from None
+                    return _settle_failed_step(
+                        db,
+                        run,
+                        state,
+                        holder[0],
+                        request_sha,
+                        exc,
+                        stored=holder[0] != draft,
+                        step=step,
+                        previous_calls=previous_calls,
+                        classification_id=classification_id,
+                    )
+                _recheck(request, (tenant, owner))
+                _source(db, run, tenant, owner)
+                checkpoint["calls_in_round"] = previous_calls + 1
+                checkpoint["phase"] = "ready"
+                checkpoint.pop("repair", None)
+                return value, holder[0]
+
+            claimed_draft = old
+            if index < len(batches):
+                batch_review = {**review, "cells": batches[index], "full_cells": review["cells"]}
+                options = {"reference_ids": auto_group, "repair": turn_for(index)}
+                prepared = await run_in_threadpool(
+                    _classify_semantic_batch, batch_review, prepare_only=True, **options
+                )
+                step = await audited(
+                    claimed_draft,
+                    prepared,
+                    "classification",
+                    index,
+                    _classify_semantic_batch,
+                    batch_review,
+                    **options,
+                )
+                if isinstance(step, dict):
+                    return step
+                batch_result, claimed_draft = step
+                checkpoint["results"].append(batch_result)
+                result = combine_semantic_batches(
+                    review, batches[: index + 1], checkpoint["results"], max_calls
+                )
                 if index + 1 < len(batches):
                     if checkpoint["calls_in_round"] >= max_calls:
                         checkpoint["phase"] = "paused"
@@ -893,7 +978,6 @@ async def _reviewed_excel_classification_analyze_body(
             else:
                 if not auto_group or len(batches) <= 1:
                     raise HTTPException(status_code=409, detail="分析批次状态无效")
-                claimed_draft = old
                 result = combine_semantic_batches(review, batches, checkpoint["results"], max_calls)
             from app.application.reviewed_excel_partition import boundary_left_for_confirmation
 
@@ -914,64 +998,25 @@ async def _reviewed_excel_classification_analyze_body(
                             "phase": "paused",
                             "checkpoint": _checkpoint_view(checkpoint),
                         }
+                options = {"repair": turn_for(len(batches))}
                 grouping_request: dict | list[dict] = await run_in_threadpool(
-                    group_semantic_fragments, review, result, prepare_only=True
+                    group_semantic_fragments, review, result, prepare_only=True, **options
                 )
                 if not isinstance(grouping_request, dict):
                     raise ReviewedExcelError("分组请求格式无效")
-
-                from app.application.reviewed_excel_audit import claim_request
-                from app.application.reviewed_excel_template import (
-                    configured_template_llm_provider,
-                    template_llm_model_label,
-                )
-                from app.build_identity import build_identity
-
-                request_sha = claim_request(
-                    state,
+                step = await audited(
+                    claimed_draft,
                     grouping_request,
-                    source_sha256=run.file_sha256,
-                    version=version,
-                    classification_id=classification_id,
-                    code_version=build_identity()["git_sha"] or "unavailable",
-                    model=template_llm_model_label(),
-                    phase="grouping",
+                    "grouping",
+                    len(batches),
+                    group_semantic_fragments,
+                    review,
+                    result,
+                    **options,
                 )
-                checkpoint["phase"] = "inflight"
-                _recheck(request, (tenant, owner))
-                _classification_cas(db, run, claimed_draft, state)
-                claimed_draft = dump_json(state)
-                audit_holder, save_response = _response_audit_writer(
-                    state, claimed_draft, classification_id, tenant, owner, request_sha
-                )
-                previous_calls = checkpoint.get("calls_in_round", 0)
-                try:
-                    with bind_model_session(model_session):
-                        result["suggested_documents"] = await run_in_threadpool(
-                            _call_with_response_audit,
-                            group_semantic_fragments,
-                            save_response,
-                            review,
-                            result,
-                            expected_request_sha256=request_sha,
-                            owner_id=owner,
-                        )
-                except ModelRequestNotSent as exc:
-                    record_not_sent(state, request_sha, exc.public_message)
-                    _classification_cas(db, run, claimed_draft, state)
-                    raise _model_processing_failure(exc) from None
-                except (ValueError, TypeError, EltError) as exc:
-                    if audit_holder[0] != claimed_draft:
-                        checkpoint["phase"] = "failed"
-                        checkpoint["calls_in_round"] = previous_calls + 1
-                        _classification_cas(db, run, audit_holder[0], state)
-                    else:
-                        _release_rejected(db, run, state, request_sha, claimed_draft, exc)
-                    raise _model_processing_failure(exc) from None
-                claimed_draft = audit_holder[0]
-                _recheck(request, (tenant, owner))
-                _source(db, run, tenant, owner)
-                checkpoint["calls_in_round"] = checkpoint.get("calls_in_round", 0) + 1
+                if isinstance(step, dict):
+                    return step
+                result["suggested_documents"], claimed_draft = step
                 result["budget"]["grouping_calls"] = 1
             old = claimed_draft
             state.pop("analysis_checkpoint", None)
@@ -1119,8 +1164,12 @@ async def reviewed_excel_preview(
     model_session = require_model_session(request, tenant, owner)
     if not classification_id or not classification_version:
         raise HTTPException(status_code=409, detail="请先建立文件分类记录，再生成候选")
+    from app.application.reviewed_excel_audit import is_live, live_claims, mark_live
+
     _dock_cm = _docking_channel()
     _dock_cm.__enter__()
+    _live_cm = live_claims()
+    _live_cm.__enter__()
     try:
         request.state.elt_stage = "read_workbook"
         body = await _body(file)
@@ -1286,6 +1335,10 @@ async def reviewed_excel_preview(
                 if existing:
                     if existing.get("state") == "completed" and existing.get("review_id"):
                         return _stored_candidate_response(db, existing["review_id"], tenant, owner)
+                    if is_live(candidate_key):
+                        return JSONResponse(
+                            status_code=202, content={"phase": "inflight", "retry_after": 30}
+                        )
                     # Unknown-outcome inflight must stay locked (no double-send). Definite
                     # config/404 failures release the claim in the except path below.
                     error = _model_processing_failure(
@@ -1302,6 +1355,7 @@ async def reviewed_excel_preview(
                 claims[candidate_key] = {"state": "inflight"}
                 _recheck(request, (tenant, owner))
                 _classification_cas(db, classification, old, state)
+                mark_live(candidate_key)
         try:
             request.state.elt_stage = "model_candidates"
             with (
@@ -1318,12 +1372,8 @@ async def reviewed_excel_preview(
                 )
             versions.append(proposal)
         except ValueError as exc:
-            # Release claim when the model was never sent OR the provider gave a
-            # definite config/404 failure so retry is not stuck on inflight.
-            release = classification_id and (
-                isinstance(exc, ModelRequestNotSent) or is_definite_provider_failure(exc)
-            )
-            if release:
+            # Only a call that may have been answered without our seeing it keeps the claim.
+            if classification_id and model_call_outcome(exc) != "unknown":
                 with tenant_scope(tenant), get_db() as db:
                     try:
                         _update_candidate_claim(db, classification_id, candidate_key, tenant, owner)
@@ -1404,6 +1454,7 @@ async def reviewed_excel_preview(
     except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
     finally:
+        _live_cm.__exit__(None, None, None)
         _dock_cm.__exit__(None, None, None)
 
 
@@ -1527,7 +1578,7 @@ async def _reviewed_excel_refine_body(
                         initial=True,
                     )
             except ValueError as exc:
-                if isinstance(exc, ModelRequestNotSent):
+                if model_call_outcome(exc) != "unknown":
                     _cas(
                         db,
                         run,

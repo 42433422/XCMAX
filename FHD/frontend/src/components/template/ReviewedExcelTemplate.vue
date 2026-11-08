@@ -866,6 +866,11 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
           form.append('auto_group', 'true')
           const result = await templatePreviewApi.analyzeClassification(item.classification_id, form) as { phase?: string; checkpoint?: Checkpoint; version: string; sheets: ClassificationSheet[]; model_status: string; budget?: Classification['budget']; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; fragment_links?: FragmentLinks; coverage: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] }
           if (!current()) return
+          if (result.phase === 'inflight') {
+            analysisProgress.value = `${item.name}：上一请求仍在处理，稍后自动查询`
+            await new Promise((resolve) => setTimeout(resolve, 15_000))
+            continue
+          }
           if (result.phase === 'pending' || result.phase === 'paused') {
             item.checkpoint = result.checkpoint
             analysisProgress.value = `${item.name}：已完成 ${result.checkpoint?.completed}/${result.checkpoint?.total} 批`

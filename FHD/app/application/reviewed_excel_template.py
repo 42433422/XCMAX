@@ -16,7 +16,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.print_settings import PrintArea
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.application.elt.errors import ReviewedExcelError
+from app.application.elt.errors import ModelAnswerRejected, ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 from app.application.reviewed_excel_formula_cells import (
     content_bounds,
@@ -257,7 +257,11 @@ def _template_platform_complete(
     import asyncio
     import logging
 
-    from app.application.reviewed_excel_audit import ModelRequestNotSent, response_capture
+    from app.application.reviewed_excel_audit import (
+        ModelRequestNotSent,
+        note_answer,
+        response_capture,
+    )
     from app.infrastructure.modstore_transport import MarketModelError
     from app.utils.operational_errors import BOUNDARY_ERRORS, INFRA_TRANSIENT
 
@@ -327,13 +331,15 @@ def _template_platform_complete(
             response = _run_coroutine(call)
             choice = (response or {}).get("choices", [])[0]
             finish = choice.get("finish_reason")
+            raw_content = str((choice.get("message") or {}).get("content") or "")
+            note_answer(raw_content)
             if finish not in {None, "stop"}:
-                err = ReviewedExcelError(
-                    "模型输出不完整" if finish == "length" else "模型输出未正常结束"
+                err = ModelAnswerRejected(
+                    "模型输出不完整" if finish == "length" else "模型输出未正常结束",
+                    answer=raw_content,
                 )
                 err.finish_reason = finish
                 raise err
-            raw_content = str((choice.get("message") or {}).get("content") or "")
             data = extract_json(raw_content)
             if schema.get("required") == ["sheets"]:
                 data = _coerce_sheet_name_payload(data, raw_content)
@@ -349,11 +355,11 @@ def _template_platform_complete(
                     finish,
                     len(raw_content),
                 )
-                raise ReviewedExcelError("invalid")
+                raise ModelAnswerRejected("模型答案不是符合输出格式的 JSON", answer=raw_content)
             model = str((response or {}).get("model") or template_llm_model_label())
             provider_name = str((response or {}).get("provider") or "platform")
             return llm_assist.LlmAssistResult(
-                used_llm=True, model=model, data=data, provider=provider_name
+                used_llm=True, model=model, data=data, provider=provider_name, answer=raw_content
             )
         except ModelRequestNotSent:
             raise
@@ -1316,35 +1322,6 @@ def make_proposals(review: dict) -> dict:
     }
 
 
-def _fill_instance_cells(review: dict, base: dict, validated: list[dict]) -> None:
-    """Add non-formula instance cells when a model plan only names a few remarks."""
-    import logging
-    protected = {(item["sheet"], item["cell"]) for item in base["protected"]}
-    instance = []
-    for cell in review["cells"]:
-        if cell.get("kind") == "formula":
-            continue
-        pair = (cell["sheet"], cell["cell"])
-        if pair in protected or not str(cell.get("value") or "").strip():
-            continue
-        instance.append(pair)
-    if len(instance) < 8:
-        return
-    instance_set = set(instance)
-    for candidate in validated:
-        have = {(item["sheet"], item["cell"]) for item in candidate["clear"]}
-        if len(have & instance_set) * 2 >= len(instance_set):
-            continue
-        missing = [pair for pair in instance if pair not in have]
-        candidate["clear"].extend({"sheet": sheet, "cell": cell} for sheet, cell in missing)
-        note = "单据实例格已补入清理，公式和表头保留。"
-        candidate["explanation"] = f"{candidate['explanation']} {note}".strip()[:300]
-        logging.getLogger(__name__).info(
-            "template candidate filled %s instance cells the model left in place",
-            len(missing),
-        )
-
-
 def refine_proposal(
     review: dict,
     parent_version: str,
@@ -1462,91 +1439,93 @@ def refine_proposal(
             ),
         },
     ]
-    token = bind_etl_llm_owner(owner_id)
-    output_tokens = 1400
-    result = None
-    try:
-        try:
-            result = _template_llm_complete(messages, schema, output_tokens, owner_id=owner_id)
-        except ReviewedExcelError as exc:
-            if getattr(exc, "finish_reason", None) == "length":
-                logging.getLogger(__name__).info(
-                    "template preview truncated finish_reason=length max_tokens=%s; raising cap to 4096",
-                    output_tokens,
-                )
-                output_tokens = 4096
-                result = _template_llm_complete(messages, schema, output_tokens, owner_id=owner_id)
-            elif initial and exc.public_message == "invalid":
-                logging.getLogger(__name__).info(
-                    "template preview kept the local plan after an unusable model payload"
-                )
-            else:
-                raise
-    finally:
-        reset_etl_llm_owner(token)
-    if result is None and initial:
-        _fill_instance_cells(review, base, base["candidates"])
-        base["parent_version"] = parent_version
-        base["model"] = {
-            "status": "returned",
-            "adopted": False,
-            "fallback": "local_plan",
-        }
-        return base
-    if not result.used_llm or result.degraded:
-        state = (
-            "模型调用失败" if result.used_llm or result.degraded else "模型未调用（未配置或已关闭）"
-        )
-        raise ReviewedExcelError(f"{state}，自然语言修改不可用；原候选未改变")
+    from app.application.reviewed_excel_audit import REPAIR_ROUNDS, ask_until_valid
+
     allowed = {(c["sheet"], c["cell"]) for c in bounded if c["kind"] != "formula"}
     protected = {(c["sheet"], c["cell"]) for c in base["protected"]}
-    if initial and (not isinstance(result.data, dict) or set(result.data) != {"candidates"}):
-        raise ReviewedExcelError("模型返回格式无效，原候选未改变")
-    answers = result.data.get("candidates") if initial else [result.data]
-    if not isinstance(answers, list) or len(answers) != (3 if initial else 1):
-        raise ReviewedExcelError("模型未返回所需候选，原候选未改变")
-    validated: list[dict[str, Any]] = []
-    for answer in answers:
-        if (
-            not isinstance(answer, dict)
-            or set(answer) != {"clear", "reason"}
-            or not isinstance(answer.get("clear"), list)
-            or not isinstance(answer.get("reason"), str)
-        ):
-            raise ReviewedExcelError("模型返回格式无效，原候选未改变")
-        kept = []
-        pairs = []
-        dropped = 0
-        for item in answer["clear"]:
-            if (
-                not isinstance(item, dict)
-                or set(item) != {"sheet", "cell"}
-                or not isinstance(item["sheet"], str)
-                or not isinstance(item["cell"], str)
-            ):
-                dropped += 1
-                continue
-            pair = (item["sheet"], item["cell"])
-            if pair not in allowed or pair in protected or pair in pairs:
-                dropped += 1
-                continue
-            pairs.append(pair)
-            kept.append({"sheet": item["sheet"], "cell": item["cell"]})
-        if dropped:
-            logging.getLogger(__name__).info(
-                "template candidate dropped %s cells outside the supplied range", dropped
+    instance = {pair for pair in allowed - protected if pair in bounded_coordinates}
+    budget = {"tokens": 1400, "instance_asked": False, "model": "", "asks": 0}
+
+    def ask(turn):
+        budget["asks"] += 1
+        try:
+            result = _template_llm_complete(turn, schema, budget["tokens"], owner_id=owner_id)
+        except ModelAnswerRejected as exc:
+            if getattr(exc, "finish_reason", None) == "length":
+                budget["tokens"] = 4096
+            raise
+        if not result.used_llm or result.degraded:
+            state = (
+                "模型调用失败"
+                if result.used_llm or result.degraded
+                else "模型未调用（未配置或已关闭）"
             )
-        index = len(validated) + 1
-        validated.append(
-            {
-                "id": f"model_initial_{index}" if initial else "model_revision",
-                "label": f"模型候选 {index}" if initial else "模型反馈候选",
-                "clear": kept,
-                "explanation": answer["reason"][:300],
-            }
+            raise ReviewedExcelError(f"{state}，自然语言修改不可用；原候选未改变")
+        budget["model"] = result.model
+        return result
+
+    def judge(result):
+        if initial and (not isinstance(result.data, dict) or set(result.data) != {"candidates"}):
+            raise ReviewedExcelError("模型返回格式无效，原候选未改变")
+        answers = result.data.get("candidates") if initial else [result.data]
+        if not isinstance(answers, list) or len(answers) != (3 if initial else 1):
+            raise ReviewedExcelError("模型未返回所需候选，原候选未改变")
+        validated: list[dict[str, Any]] = []
+        for answer in answers:
+            if (
+                not isinstance(answer, dict)
+                or set(answer) != {"clear", "reason"}
+                or not isinstance(answer.get("clear"), list)
+                or not isinstance(answer.get("reason"), str)
+            ):
+                raise ReviewedExcelError("模型返回格式无效，原候选未改变")
+            kept, pairs, dropped = [], [], 0
+            for item in answer["clear"]:
+                pair = (item.get("sheet"), item.get("cell")) if isinstance(item, dict) else None
+                if (
+                    pair is None
+                    or set(item) != {"sheet", "cell"}
+                    or pair not in allowed
+                    or pair in protected
+                    or pair in pairs
+                ):
+                    dropped += 1
+                    continue
+                pairs.append(pair)
+                kept.append({"sheet": item["sheet"], "cell": item["cell"]})
+            if dropped:
+                logging.getLogger(__name__).info(
+                    "template candidate dropped %s cells outside the supplied range", dropped
+                )
+            index = len(validated) + 1
+            validated.append(
+                {
+                    "id": f"model_initial_{index}" if initial else "model_revision",
+                    "label": f"模型候选 {index}" if initial else "模型反馈候选",
+                    "clear": kept,
+                    "explanation": answer["reason"][:300],
+                }
+            )
+        cleared = max(
+            len({(c["sheet"], c["cell"]) for c in v["clear"]} & instance) for v in validated
         )
+        ask_instance = initial and not budget["instance_asked"] and budget["asks"] <= REPAIR_ROUNDS
+        if ask_instance and len(instance) >= 8 and cleared * 2 < len(instance):
+            # Asked once, never fatal: the model decides what is instance data or fixed text.
+            budget["instance_asked"] = True
+            raise ReviewedExcelError(
+                f"候选最多清理 {cleared} 个，仍保留 {len(instance) - cleared} 个已发送的非公式、非表头单元格。"
+                "本单实例值（客户、日期、单号、货品、数量、金额）放入 clear；固定说明保留并在 reason 写明"
+            )
+        return validated
+
+    token = bind_etl_llm_owner(owner_id)
+    try:
+        validated = ask_until_valid(ask, messages, judge)
+    finally:
+        reset_etl_llm_owner(token)
+    output_tokens = budget["tokens"]
     if initial:
-        _fill_instance_cells(review, base, validated)
         base["candidates"] = validated
     else:
         base["candidates"][2] = validated[0]
@@ -1570,7 +1549,7 @@ def refine_proposal(
         bounded,
         source_sha256=review["sha256"],
         provider=configured_template_llm_provider(),
-        model=result.model,
+        model=budget["model"],
         max_output_tokens=output_tokens,
     )
     base["model"] = {

@@ -24,6 +24,8 @@ class LlmAssistResult:
     billing: dict[str, Any] = field(default_factory=dict)
     data: dict[str, Any] = field(default_factory=dict)
     provider: str = ""
+    # Raw model text, kept in memory only so a repair round can show it back.
+    answer: str = field(default="", repr=False)
 
     def public_metadata(self) -> dict[str, Any]:
         result: dict[str, Any] = {

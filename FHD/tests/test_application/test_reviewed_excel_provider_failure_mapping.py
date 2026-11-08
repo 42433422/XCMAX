@@ -77,3 +77,93 @@ def test_cause_chain_preserves_404():
     wrapped.__cause__ = root
     assert provider_http_status(wrapped) == 404
     assert is_definite_provider_failure(wrapped)
+
+
+def test_one_outcome_taxonomy_for_every_model_call():
+    from app.application.elt.errors import ModelAnswerRejected, model_call_outcome
+
+    lost = ReviewedExcelError("模型调用失败或结果不完整，可能已产生费用；未自动重试")
+    cases = [
+        (ModelRequestNotSent("未调用模型"), None, "not_sent", 503),
+        (ReviewedExcelError("余额不足", provider_status=402), None, "rejected", 503),
+        (ReviewedExcelError("答案无效"), 402, "rejected", 503),
+        (ReviewedExcelError("模型区域重叠"), 200, "answered_invalid", 422),
+        (ModelAnswerRejected("模型答案不是 JSON"), None, "answered_invalid", 422),
+        (lost, 502, "unknown", 503),
+        (lost, None, "unknown", 503),
+    ]
+    for exc, stored, outcome, status in cases:
+        assert model_call_outcome(exc, stored_status=stored) == outcome
+        error = _model_processing_failure(exc, stored_status=stored)
+        assert (error.status_code, error.detail["outcome"]) == (status, outcome)
+        assert error.detail["outcome_unknown"] is (outcome == "unknown")
+        assert error.detail["retryable"] is (outcome != "unknown")
+    assert model_call_outcome(ReviewedExcelError("网关错误", provider_status=502)) == "unknown"
+
+
+def test_repair_rounds_are_bounded_and_never_resend_an_unknown_call():
+    import pytest
+
+    from app.application.elt.errors import ModelAnswerRejected
+    from app.application.reviewed_excel_audit import REPAIR_ROUNDS, ask_until_valid
+
+    asked = []
+
+    class Answer:
+        answer = "{bad}"
+
+    def ask(messages):
+        asked.append(messages)
+        return Answer()
+
+    def judge(_result):
+        raise ReviewedExcelError("模型区域重叠，原分类未改变")
+
+    with pytest.raises(ModelAnswerRejected, match="模型区域重叠"):
+        ask_until_valid(ask, [{"role": "user", "content": "q"}], judge)
+    assert len(asked) == REPAIR_ROUNDS + 1
+    assert asked[1][-2] == {"role": "assistant", "content": "{bad}"}
+    assert "模型区域重叠" in asked[1][-1]["content"]
+
+    sends = []
+
+    def lost(messages):
+        sends.append(messages)
+        raise ReviewedExcelError("模型调用失败或结果不完整，可能已产生费用；未自动重试")
+
+    with pytest.raises(ReviewedExcelError, match="未自动重试"):
+        ask_until_valid(lost, [], judge)
+    assert len(sends) == 1
+
+
+def test_settle_call_keeps_the_lock_only_for_an_unknown_outcome():
+    from app.application.reviewed_excel_audit import settle_call
+
+    def state(record_state):
+        return {"model_audit": [{"request_sha256": "a", "state": record_state}]}
+
+    rejected = state("inflight")
+    settle_call(rejected, "a", "rejected", "provider rejected HTTP 402")
+    assert rejected["model_audit"][-1]["state"] == "rejected"
+    unknown = state("inflight")
+    settle_call(unknown, "a", "unknown", "lost")
+    assert unknown["model_audit"][-1]["state"] == "inflight"
+    answered = state("response_received")
+    settle_call(answered, "a", "answered_invalid", "模型区域重叠")
+    assert answered["model_audit"][-1] == {
+        "request_sha256": "a",
+        "state": "response_received",
+        "outcome": "answered_invalid",
+        "reason": "模型区域重叠",
+    }
+
+
+def test_a_claim_reads_in_progress_only_while_its_request_runs():
+    from app.application.reviewed_excel_audit import is_live, live_claims, mark_live
+
+    mark_live("outside")
+    assert not is_live("outside")
+    with live_claims():
+        mark_live("claimed")
+        assert is_live("claimed")
+    assert not is_live("claimed") and not is_live(None)
