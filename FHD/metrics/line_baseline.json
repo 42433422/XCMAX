@@ -1,5 +1,5 @@
 {
-  "lines": 2453119,
+  "lines": 2453157,
   "updated": "2026-11-08",
-  "note": "drawing-cut rejection names object outer bounds (+few lines) for repair guidance"
+  "note": "drawing footprint context cells in stamp packs (+~40 lines) so empty stamp columns are visible to the model"
 }
