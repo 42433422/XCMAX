@@ -573,6 +573,16 @@ def _coordinate_missing(row: dict) -> bool:
     )
 
 
+def _uncited_sheets(lines: dict[tuple[str, str], set[str]], rows: list[dict]) -> list[str]:
+    """Sheet labels present in the text and absent from the model's rows."""
+    cited = {row.get("source_sheet") for row in rows if row.get("source_sheet")}
+    sheets: list[str] = []
+    for sheet, _row in lines:
+        if sheet not in sheets:
+            sheets.append(sheet)
+    return [sheet for sheet in sheets if sheet not in cited]
+
+
 def _unit_untraceable(row: dict, lines: dict[tuple[str, str], set[str]]) -> bool:
     """A purchase unit the model did not copy from the cited sheet."""
     from app.application.elt.candidate_table import _sheet_customer
@@ -632,7 +642,8 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
             break
         missing = any(_coordinate_missing(row) for row in rows)
         borrowed = any(_unit_untraceable(row, lines) for row in rows)
-        if not missing and not borrowed:
+        skipped = _uncited_sheets(lines, rows)
+        if not missing and not borrowed and not skipped:
             break
         notes = []
         if missing:
@@ -644,6 +655,12 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
             notes.append(
                 "有购买单位不在该行所在工作表的正文里，也不等于该表名称。"
                 "改成这一张表正文里的客户，或留空。不要借用其他工作表的客户。"
+            )
+        if skipped:
+            names = "、".join(skipped[:12])
+            notes.append(
+                f"这些工作表在正文里，但 rows 没有引用：{names}。"
+                "是货品明细就按该表的 R 标签补上，是借还台账或测算就不要补，不要编造正文里没有的行。"
             )
         follow = [
             *messages,

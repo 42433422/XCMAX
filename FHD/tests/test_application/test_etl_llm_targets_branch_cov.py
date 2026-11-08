@@ -311,6 +311,59 @@ def test_business_import_asks_again_when_purchase_unit_is_off_sheet(monkeypatch)
     assert "unit_in_source" not in result.data["rows"][0]
 
 
+def test_business_import_asks_again_for_a_sheet_it_did_not_cite(monkeypatch):
+    from app.application.elt import llm_assist
+
+    calls = []
+
+    def complete(messages, **kwargs):
+        calls.append(messages[-1]["content"])
+        if len(calls) == 1:
+            return llm_assist.LlmAssistResult(
+                used_llm=True,
+                data={
+                    "rows": [
+                        {
+                            "purchase_unit": "本客",
+                            "product_name": "螺母",
+                            "quantity": "5",
+                            "source_sheet": "送货",
+                            "source_row": "2",
+                        }
+                    ]
+                },
+            )
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={
+                "rows": [
+                    {
+                        "purchase_unit": "本客",
+                        "product_name": "螺母",
+                        "quantity": "5",
+                        "source_sheet": "送货",
+                        "source_row": "2",
+                    },
+                    {
+                        "purchase_unit": "本客",
+                        "product_name": "弹垫",
+                        "quantity": "2",
+                        "source_sheet": "出货",
+                        "source_row": "3",
+                    },
+                ]
+            },
+        )
+
+    monkeypatch.setattr(llm_assist, "_complete", complete)
+    text = "# sheet:送货\nR2 | 本客 | 螺母 | 5\n# sheet:出货\nR3 | 本客 | 弹垫 | 2"
+    result = llm_assist.advise_business_import(text)
+    assert len(calls) == 2
+    assert "出货" in calls[1]
+    sheets = {row["source_sheet"] for row in result.data["rows"]}
+    assert sheets == {"送货", "出货"}
+
+
 def test_business_import_marks_a_unit_the_model_will_not_place(monkeypatch):
     from app.application.elt import llm_assist
     from app.application.elt.candidate_table import dataset_from_business_rows
