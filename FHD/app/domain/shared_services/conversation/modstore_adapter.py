@@ -487,7 +487,7 @@ class ModstorePlatformAdapter:
     ) -> Dict[str, Any]:
         """同一条流式调用收成完整响应。处理中的状态不另开请求。"""
         kwargs.pop("_stream_status", None)
-        status_cb = kwargs.pop("_processing_status", None)
+        status_cb = kwargs.get("_processing_status")
         pieces: list[str] = []
         async for data in self.stream_chat_completion(
             messages, temperature, max_tokens, provider, model, **kwargs
@@ -535,7 +535,7 @@ class ModstorePlatformAdapter:
     ) -> Dict[str, Any]:
         """同步版也走同一条流，收成完整响应。处理中的状态不另开请求。"""
         kwargs.pop("_stream_status", None)
-        status_cb = kwargs.pop("_processing_status", None)
+        status_cb = kwargs.get("_processing_status")
         pieces: list[str] = []
         for data in self.stream_chat_completion_sync(
             messages, temperature, max_tokens, provider, model, **kwargs

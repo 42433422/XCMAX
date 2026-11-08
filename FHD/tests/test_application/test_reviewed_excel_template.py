@@ -346,6 +346,36 @@ def test_streamed_tokens_keep_the_template_call_alive():
     assert len(seen) == 3 and pieces == ["{}"]
 
 
+def test_audited_body_reports_each_chunk_while_it_is_archived():
+    import asyncio
+
+    import httpx
+
+    from app.application.market_llm.completions import _buffer_audited_async_body
+    from app.application.market_llm.protocols import ChatInput
+
+    class Chunks(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for part in (b'data: {"status": "processing"}\n\n', b'data: {"content": "{}"}\n\n'):
+                yield part
+
+    seen = []
+    request = ChatInput(
+        messages=[],
+        extra={"_reviewed_excel_audit_response": object(), "_processing_status": lambda: seen.append(1)},
+    )
+    response = httpx.Response(200, stream=Chunks())
+
+    async def run():
+        await _buffer_audited_async_body(request, response)
+        return [line async for line in response.aiter_lines()]
+
+    lines = asyncio.run(run())
+    assert len(seen) == 2
+    assert response.content.endswith(b'{"content": "{}"}\n\n')
+    assert 'data: {"content": "{}"}' in lines
+
+
 def test_template_platform_keeps_the_same_call_while_status_arrives(monkeypatch):
     import asyncio
     import json

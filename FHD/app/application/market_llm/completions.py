@@ -93,17 +93,39 @@ def _replay_read_body(response: httpx.Response, raw: bytes) -> None:
     )
 
 
+def _keep_body(response: httpx.Response, chunks: list[bytes]) -> None:
+    raw = b"".join(chunks)
+    response._content = raw
+    _replay_read_body(response, raw)
+
+
 async def _buffer_audited_async_body(request: ChatInput, response: httpx.Response) -> None:
-    """Archive the provider body before SSE parsing stops at the done event."""
+    """Archive the provider body before SSE parsing stops at the done event.
+
+    The caller's wait is an idle limit, so every arriving chunk must reach it while
+    the whole body is still being collected for the archive.
+    """
     if request.extra.get("_reviewed_excel_audit_response") is None:
         return
-    _replay_read_body(response, await response.aread())
+    alive = request.extra.get("_processing_status")
+    chunks: list[bytes] = []
+    async for chunk in response.aiter_bytes():
+        chunks.append(chunk)
+        if chunk and alive is not None:
+            alive()
+    _keep_body(response, chunks)
 
 
 def _buffer_audited_sync_body(request: ChatInput, response: httpx.Response) -> None:
     if request.extra.get("_reviewed_excel_audit_response") is None:
         return
-    _replay_read_body(response, response.read())
+    alive = request.extra.get("_processing_status")
+    chunks: list[bytes] = []
+    for chunk in response.iter_bytes():
+        chunks.append(chunk)
+        if chunk and alive is not None:
+            alive()
+    _keep_body(response, chunks)
 
 
 def _capture_reviewed_response(
