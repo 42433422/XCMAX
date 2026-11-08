@@ -355,18 +355,70 @@ def test_subtotal_export_keeps_recursive_dependencies_hidden_filter_and_wps_meta
     verify_range_objects(output, plan_range_objects(source, "Synthetic", fragments("A1:C4")))
 
 
-def test_cleaning_is_explicitly_blocked_only_for_raw_filter_metadata():
+WPS_FILTER = (
+    b'<autoFilter ref="A1:C4" xmlns:etc="http://www.wps.cn/officeDocument/2017/etCustomData"'
+    b' etc:filterBottomFollowUsedRange="0"><extLst/></autoFilter>'
+)
+
+
+def _wps_local(body=None):
+    """WPS writes its namespace on the filter itself; splice that shape byte for byte."""
+    book = load_workbook(BytesIO(body or sample(filter_area="")))
+    book.active.auto_filter.ref = "A1:C4"
+    out = BytesIO()
+    book.save(out)
+    target = BytesIO()
+    with ZipFile(BytesIO(out.getvalue())) as source, ZipFile(target, "w") as written:
+        for entry in source.infolist():
+            data = source.read(entry.filename)
+            if entry.filename == "xl/worksheets/sheet1.xml":
+                assert data.count(b'<autoFilter ref="A1:C4"/>') == 1
+                data = data.replace(b'<autoFilter ref="A1:C4"/>', WPS_FILTER)
+            written.writestr(entry, data)
+    return target.getvalue()
+
+
+def _sheet_xml(body):
+    with ZipFile(BytesIO(body)) as archive:
+        return archive.read("xl/worksheets/sheet1.xml")
+
+
+def test_cleaning_keeps_an_unchanged_wps_filter_byte_for_byte():
     from app.application.reviewed_excel_template import clean_workbook, inspect_workbook
 
-    source = sample()
-    derived = derive_document_workbook(source, fragments("A1:C4"))
-    with pytest.raises(ReviewedExcelError, match="切片可下载；清理/模板保存尚未支持"):
-        clean_workbook(derived, inspect_workbook(derived)["sha256"], [])
-    ordinary = load_workbook(BytesIO(source))
-    out = BytesIO()
-    ordinary.save(out)  # Synthetic control without WPS attributes/extension.
-    normal = out.getvalue()
-    assert clean_workbook(normal, inspect_workbook(normal)["sha256"], [])
+    source = _wps_local()
+    cleaned = clean_workbook(
+        source, inspect_workbook(source)["sha256"], [{"sheet": "Synthetic", "cell": "B2"}]
+    )
+    assert _sheet_xml(cleaned).count(WPS_FILTER) == 1
+    assert load_workbook(BytesIO(cleaned)).active["B2"].value is None
+
+
+def test_cleaning_carries_root_declared_filter_metadata_without_loss():
+    from app.application.reviewed_excel_template import clean_workbook, inspect_workbook
+
+    for source in (sample(), derive_document_workbook(sample(), fragments("A1:C4"))):
+        cleaned = clean_workbook(source, inspect_workbook(source)["sha256"], [])
+        node = ET.fromstring(_sheet_xml(cleaned)).find(f"{{{S}}}autoFilter")
+        assert node.get(_WPS_FOLLOW) == "0" and node.find(f"{{{S}}}extLst") is not None
+
+
+def test_a_filter_that_would_need_rewriting_fails_closed():
+    from app.application.reviewed_excel_raw_parts import preserved_filters, restore_filters
+
+    kept = preserved_filters(_wps_local())
+    book = load_workbook(BytesIO(sample(filter_area="")))
+    book.active.auto_filter.ref = "A1:B4"
+    moved = BytesIO()
+    book.save(moved)
+    with pytest.raises(ReviewedExcelError, match="需要改写"):
+        restore_filters(moved.getvalue(), kept)
+    book.active.auto_filter.ref = "A1:C4"
+    book.active.auto_filter.add_filter_column(0, ["1"])
+    criteria = BytesIO()
+    book.save(criteria)
+    with pytest.raises(ReviewedExcelError, match="需要改写"):
+        restore_filters(criteria.getvalue(), kept)
 
 
 def test_dtd_xml_is_rejected_as_business_error():
@@ -457,26 +509,14 @@ def test_inherited_row_font_only_is_kept_with_exact_geometry_and_font_readback()
         verify_range_objects(rewrite(output, "xl/worksheets/sheet1.xml", alter_height), plan)
 
 
-def test_http_template_preview_refuses_raw_filter_metadata_without_blocking_plain_xlsx(
-    review_store,
-):
-    source = sample()
-    response = review_store.client.post(
-        "/api/templates/reviewed-excel/preview",
-        data={"expected_actor": "1:7"},
-        files={"file": ("synthetic.xlsx", source)},
-    )
-    assert response.status_code == 400
-    assert "清理/模板保存尚未支持" in response.text
-    wb = load_workbook(BytesIO(source))
-    out = BytesIO()
-    wb.save(out)
-    ordinary = review_store.client.post(
-        "/api/templates/reviewed-excel/preview",
-        data={"expected_actor": "1:7"},
-        files={"file": ("ordinary.xlsx", out.getvalue())},
-    )
-    assert ordinary.status_code == 200, ordinary.text
+def test_http_template_preview_accepts_preserved_filter_metadata(review_store):
+    for name, body in (("wps.xlsx", _wps_local()), ("synthetic.xlsx", sample())):
+        response = review_store.client.post(
+            "/api/templates/reviewed-excel/preview",
+            data={"expected_actor": "1:7"},
+            files={"file": (name, body)},
+        )
+        assert response.status_code == 200, response.text
 
 
 def test_conditional_format_blank_context_is_preserved_without_expanding_selection():

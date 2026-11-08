@@ -31,6 +31,71 @@ def store_coordinate_plan(checkpoint: dict, batches: list[list[dict]]) -> None:
     checkpoint["plan_digest"] = _digest(checkpoint)
 
 
+def split_plan_step(checkpoint: dict, step: int, review: dict) -> bool:
+    """Replace a truncated unit by two row-halves that no merge or drawing spans.
+
+    False when the unit is a single closed row band or the plan has no room; the
+    caller then fails closed instead of resending the same prompt.
+    """
+    from openpyxl.utils.cell import coordinate_from_string, range_boundaries
+
+    plan = checkpoint.get("coordinate_plan")
+    if not isinstance(plan, list) or not 0 <= step < len(plan):
+        return False
+    if len(plan) >= MAX_CLASSIFICATION_BATCHES:
+        return False
+    spans: dict[str, list[tuple[int, int]]] = {}
+    for overview in review.get("sheet_overview", []):
+        for area in overview.get("merged_regions", []):
+            _c1, r1, _c2, r2 = range_boundaries(area)
+            spans.setdefault(overview["sheet"], []).append((r1, r2))
+    for drawing in review.get("drawing_evidence", []):
+        last = drawing.get("last_row") or (
+            int(drawing["to"]["row"]) + 1 if drawing.get("to") is not None else None
+        )
+        if drawing.get("geometry_error") or not last:
+            return False
+        spans.setdefault(drawing["sheet"], []).append((drawing["from"]["row"] + 1, int(last)))
+
+    closed: dict[str, list[list[int]]] = {}
+    for sheet, intervals in spans.items():
+        for first, last in sorted(intervals):
+            merged = closed.setdefault(sheet, [])
+            if merged and first <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], last)
+            else:
+                merged.append([first, last])
+
+    def band(item) -> tuple[str, int]:
+        row = coordinate_from_string(item[1])[1]
+        start = next((a for a, b in closed.get(item[0], []) if a <= row <= b), row)
+        return item[0], start
+
+    primary = [item for item in plan[step] if not item[2]]
+    context = [item for item in plan[step] if item[2]]
+    groups: dict[tuple[str, int], list] = {}
+    for item in primary:
+        groups.setdefault(band(item), []).append(item)
+    ordered = [groups[key] for key in sorted(groups)]
+    if len(ordered) < 2:
+        return False
+    total, running, cut = len(primary), 0, 0
+    for index, group in enumerate(ordered):
+        running += len(group)
+        if running * 2 >= total:
+            cut = index + 1
+            break
+    cut = min(max(cut, 1), len(ordered) - 1)
+    halves = [
+        [item for group in ordered[:cut] for item in group],
+        [item for group in ordered[cut:] for item in group],
+    ]
+    plan[step : step + 1] = [half + [list(item) for item in context] for half in halves]
+    checkpoint["total"] = len(plan)
+    checkpoint["plan_digest"] = _digest(checkpoint)
+    return True
+
+
 def restore_coordinate_plan(review: dict, checkpoint: dict) -> list[list[dict]]:
     def invalid() -> NoReturn:
         raise ReviewedExcelError("分类坐标计划缺失或已改变，请显式重新分类；原审计保留")

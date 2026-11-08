@@ -2,62 +2,185 @@
 
 import hashlib
 import json
+import os
 import threading
 from copy import deepcopy
 from datetime import UTC
+from uuid import uuid4
 
 from app.application.elt.errors import ModelRequestNotSent as ModelRequestNotSent
 from app.application.elt.errors import ReviewedExcelError
 
 MAX_ARCHIVE_BYTES = 20_000_000
 
-# A live template call is at most 180s. Past this, an inflight claim with no
-# stored provider body is a dead request, not a call still in flight.
-UNANSWERED_INFLIGHT_SECONDS = 900
+# One record per model call. ``streaming`` means the provider body is archived and
+# not yet judged; ``unknown`` keeps the analyze lock until recovery or the user.
+CALL_STATES = frozenset(
+    {
+        "not_sent",
+        "sent",
+        "streaming",
+        "answered_valid",
+        "answered_invalid",
+        "truncated",
+        "rejected",
+        "unknown",
+        "recovered",
+        "abandoned",
+    }
+)
+_TRANSITIONS = {
+    "sent": {"streaming", "recovered", "not_sent", "rejected", "unknown", "abandoned"},
+    "streaming": {"answered_valid", "answered_invalid", "truncated", "rejected", "unknown"},
+    "recovered": {"answered_valid", "answered_invalid", "truncated", "rejected", "unknown"},
+    "unknown": {"sent", "abandoned"},
+}
+_LEGACY_OUTCOME_STATES = {"answered_invalid", "rejected", "unknown", "not_sent", "truncated"}
+# A fresh token per backend process: a claim owned by another token has no live sender here.
+PROCESS_BOOT = uuid4().hex
 
 
-def release_unanswered_inflight(state: dict, updated_at) -> bool:
-    """Let analyze continue when a claimed call stored no response and has gone stale.
+def call_state(record: dict) -> str:
+    """Lifecycle state of one record, mapping pre-lifecycle archives lazily."""
+    state = record.get("state")
+    if state in CALL_STATES:
+        return state
+    if state == "inflight":
+        return "unknown" if record.get("outcome") == "unknown" else "sent"
+    if state == "unanswered":
+        return "unknown"
+    if state == "response_received":
+        outcome = record.get("outcome")
+        if outcome in _LEGACY_OUTCOME_STATES - {"not_sent"}:
+            return outcome
+        status = record.get("http_status")
+        return "answered_valid" if isinstance(status, int) and 200 <= status < 300 else "unknown"
+    raise ReviewedExcelError("模型归档状态无效，未调用模型")
 
-    A response body keeps the lock. A recent claim keeps the lock so a live call
-    is not sent twice.
-    """
+
+def normalize_audit(state: dict) -> None:
+    """Rewrite legacy record states in place; the original name stays as legacy_state."""
+    for record in state.get("model_audit") or []:
+        if isinstance(record, dict) and record.get("state") not in CALL_STATES:
+            current = call_state(record)
+            record["legacy_state"] = record.get("state")
+            record["state"] = current
+
+
+def transition(record: dict, target: str, **fields) -> dict:
     from datetime import datetime
 
-    checkpoint = state.get("analysis_checkpoint")
-    records = state.get("model_audit")
-    if not isinstance(checkpoint, dict) or checkpoint.get("phase") != "inflight":
-        return False
-    if not isinstance(records, list) or not records or not isinstance(records[-1], dict):
-        return False
-    latest = records[-1]
-    if latest.get("state") != "inflight" or latest.get("response_base64"):
-        return False
-    if not isinstance(updated_at, datetime):
-        return False
-    moment = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=UTC)
-    age = (datetime.now(UTC) - moment).total_seconds()
-    if age < UNANSWERED_INFLIGHT_SECONDS:
-        return False
-    latest["state"] = "unanswered"
-    latest["reason"] = "no provider response stored before the analyze claim expired"
-    checkpoint["phase"] = "ready"
-    return True
+    current = call_state(record)
+    if current == target == "unknown":
+        record.update(fields)
+        return record
+    if target not in _TRANSITIONS.get(current, set()):
+        raise ReviewedExcelError("模型归档状态已改变，未解除请求锁")
+    record.update(fields)
+    record["state"] = target
+    history = record.setdefault("transitions", [])
+    history.append(
+        {"from": current, "to": target, "at": datetime.now(UTC).isoformat(timespec="seconds")}
+    )
+    del history[:-12]
+    return record
+
+
+def owner_stamp() -> dict:
+    """Liveness is by claim owner: another boot's unsettled claim died with that process."""
+    return {"boot": PROCESS_BOOT, "pid": os.getpid()}
+
+
+def owned_here(record: dict) -> bool:
+    owner = record.get("owner")
+    return isinstance(owner, dict) and owner.get("boot") == PROCESS_BOOT
+
+
+_SETTLED_STATE = {
+    "not_sent": "not_sent",
+    "rejected": "rejected",
+    "answered_invalid": "answered_invalid",
+    "truncated": "truncated",
+    "unknown": "unknown",
+}
 
 
 def settle_call(state: dict, expected: str, outcome: str, reason: str) -> dict:
-    """Write a failed call's outcome onto its audit record; ``unknown`` keeps the lock."""
+    """Write a failed call's outcome as its lifecycle state; ``unknown`` keeps the lock."""
     records = state.get("model_audit")
     latest = records[-1] if records else {}
-    stored = latest.get("state") == "response_received"
-    if latest.get("request_sha256") != expected or not (
-        latest.get("state") == "inflight" or (stored and outcome != "not_sent")
-    ):
+    if latest.get("request_sha256") != expected:
         raise ReviewedExcelError("模型归档状态已改变，未解除请求锁")
-    latest.update({"outcome": outcome, "reason": str(reason)[:300]})
-    if not stored and outcome in {"not_sent", "rejected"}:
-        latest["state"] = outcome
+    stored = bool(latest.get("response_base64"))
+    if stored and outcome == "not_sent":
+        raise ReviewedExcelError("模型归档状态已改变，未解除请求锁")
+    if not stored and outcome in {"answered_invalid", "truncated"}:
+        # A validator saw an answer the transport did not archive (in-process replays).
+        if call_state(latest) == "sent":
+            transition(latest, "streaming")
+    transition(latest, _SETTLED_STATE[outcome], outcome=outcome, reason=str(reason)[:300])
     return latest
+
+
+def mark_answered(state: dict, expected: str) -> None:
+    records = state.get("model_audit") or []
+    if records and records[-1].get("request_sha256") == expected:
+        if call_state(records[-1]) == "sent":
+            transition(records[-1], "streaming")
+        transition(records[-1], "answered_valid")
+
+
+def abandon_call(state: dict, expected: str, *, authorized_by: str, note: str) -> dict:
+    """Unlock an unknown call only on an explicit user decision that may cost twice."""
+    from datetime import datetime
+
+    records = state.get("model_audit") or []
+    latest = records[-1] if records else {}
+    if latest.get("request_sha256") != expected or call_state(latest) not in {"sent", "unknown"}:
+        raise ReviewedExcelError("没有可放弃的未知结果请求")
+    if is_live(expected) or (owned_here(latest) and call_state(latest) == "sent"):
+        raise ReviewedExcelError("该请求仍在本进程处理中，不能放弃")
+    transition(
+        latest,
+        "abandoned",
+        abandoned_by=str(authorized_by)[:80],
+        abandoned_note=str(note)[:300],
+        abandoned_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        possible_duplicate_charge=True,
+    )
+    checkpoint = state.get("analysis_checkpoint")
+    if isinstance(checkpoint, dict):
+        checkpoint["phase"] = "ready"
+        checkpoint.pop("recovery", None)
+    return latest
+
+
+def recovery_action(record: dict, lookup: dict | None) -> str:
+    """resend, wait or locked for a call with no live sender in this process.
+
+    Only a market that confirms idempotency for this call_id makes a resend safe:
+    it starts a never-received request once or replays the stored answer.
+    """
+    if not record.get("call_id") or not isinstance(lookup, dict) or not lookup.get("supported"):
+        return "locked"
+    market_state = lookup.get("state")
+    if market_state == "processing":
+        return "wait"
+    if market_state in {"not_found", "completed", "failed"}:
+        return "resend"
+    return "locked"
+
+
+def resume_claim(state: dict, expected: str) -> None:
+    """Reopen the same record for a same-key recovery resend."""
+    records = state.get("model_audit") or []
+    latest = records[-1] if records else {}
+    if latest.get("request_sha256") != expected or call_state(latest) not in {"sent", "unknown"}:
+        raise ReviewedExcelError("恢复请求与已归档请求不一致，未调用模型")
+    if call_state(latest) == "unknown":
+        transition(latest, "sent")
+    latest["attempts"] = int(latest.get("attempts") or 1) + 1
+    latest["owner"] = owner_stamp()
 
 
 def record_not_sent(state: dict, expected: str, reason: str, *, outcome: str = "not_sent") -> None:
@@ -93,9 +216,10 @@ def ask_until_valid(ask, messages: list[dict], judge, *, rounds: int = REPAIR_RO
 
     A validator error raised by ``judge`` means an answer arrived. Every failure
     before an answer propagates unchanged, so an unknown outcome is never resent.
-    After the bound the last rejection is raised.
+    After the bound the last rejection is raised. A truncated answer is raised at
+    once: the same prompt would stop at the same limit.
     """
-    from app.application.elt.errors import ModelAnswerRejected
+    from app.application.elt.errors import ModelAnswerRejected, ModelAnswerTruncated
 
     turn: list[dict] = []
     for round_index in range(rounds + 1):
@@ -109,7 +233,7 @@ def ask_until_valid(ask, messages: list[dict], judge, *, rounds: int = REPAIR_RO
                 answer = getattr(result, "answer", "")
                 raise ModelAnswerRejected(exc.public_message, answer=answer) from exc
         except ModelAnswerRejected as exc:
-            if round_index == rounds:
+            if round_index == rounds or isinstance(exc, ModelAnswerTruncated):
                 raise
             turn = repair_turn(exc.answer, exc.public_message)
     raise AssertionError("unreachable")
@@ -143,13 +267,26 @@ def claim_request(
         (source_sha256, version, classification_id, code_version, model)
     ):
         raise ReviewedExcelError("归档身份信息不完整，未调用模型")
+    from datetime import datetime
+
     from app.application.reviewed_excel_template import configured_template_llm_provider
 
     digest = request_digest(request)
+    checkpoint = state.get("analysis_checkpoint")
+    recovery = checkpoint.pop("recovery", None) if isinstance(checkpoint, dict) else None
+    if recovery:
+        if recovery.get("request_sha256") != digest:
+            raise ReviewedExcelError("恢复请求与已归档请求不一致，未调用模型")
+        resume_claim(state, digest)
+        return digest
     resolved_provider = provider or configured_template_llm_provider()
     record = {
         "phase": phase,
-        "state": "inflight",
+        "state": "sent",
+        "call_id": uuid4().hex,
+        "owner": owner_stamp(),
+        "sent_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "attempts": 1,
         "classification_id": classification_id,
         "classification_version": version,
         "source_sha256": source_sha256,
@@ -214,21 +351,40 @@ def is_live(request_sha: str | None) -> bool:
         return bool(request_sha) and request_sha in _LIVE_CLAIMS
 
 
+_call_id = ContextVar("reviewed_excel_call_id", default=None)
+
+
 @contextmanager
-def capture_response(callback):
+def capture_response(callback, *, call_id: str | None = None):
     """Yield a box that receives the model's raw answer text for a repair round."""
     box: dict = {}
     token = _capture.set(callback)
     answer_token = _answer.set(box)
+    call_token = _call_id.set(call_id)
     try:
         yield box
     finally:
+        _call_id.reset(call_token)
         _answer.reset(answer_token)
         _capture.reset(token)
 
 
+@contextmanager
+def call_key(call_id: str | None):
+    token = _call_id.set(call_id)
+    try:
+        yield
+    finally:
+        _call_id.reset(token)
+
+
 def response_capture():
     return _capture.get()
+
+
+def current_call_id() -> str | None:
+    """The idempotency key the market sees for the call being sent."""
+    return _call_id.get()
 
 
 def note_answer(text: str) -> None:
@@ -248,7 +404,7 @@ def record_response(state: dict, expected: str, body: bytes, status: int, reques
     if (
         not records
         or records[-1].get("request_sha256") != expected
-        or records[-1].get("state") != "inflight"
+        or call_state(records[-1]) != "sent"
     ):
         raise ReviewedExcelError("模型归档状态已改变，结果状态未知；不会自动重试")
     if request_id and not re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", request_id):
@@ -259,9 +415,12 @@ def record_response(state: dict, expected: str, body: bytes, status: int, reques
     except (ValueError, UnicodeDecodeError):
         parsed = None
         usage = None
+    entry = transition(
+        deepcopy(records[-1]),
+        "recovered" if re.search(rb'"replayed"\s*:\s*true', body) else "streaming",
+    )
     entry = {
-        **records[-1],
-        "state": "response_received",
+        **entry,
         "http_status": status,
         "request_id": request_id,
         "usage": usage,

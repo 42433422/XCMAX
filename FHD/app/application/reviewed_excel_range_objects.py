@@ -483,19 +483,3 @@ def restore_range_objects(body, plan):
     result = output.getvalue()
     verify_range_objects(result, plan)
     return result
-
-
-def require_cleanable_range_metadata(body):
-    """Cleaning is separate from lossless slicing; do not silently drop WPS nodes."""
-    with _package(body) as archive:
-        workbook = _xml(archive.read("xl/workbook.xml"))
-        for entry in workbook.findall(f"{{{S}}}sheets/{{{S}}}sheet"):
-            _, sheet = _sheet(archive, entry.get("name"))
-            for node in sheet.findall(f"{{{S}}}autoFilter"):
-                if (
-                    any(name.startswith("{") for name in node.attrib)
-                    or node.find(f"{{{S}}}extLst") is not None
-                ):
-                    _fail(
-                        "此文件筛选器含需原始 XML 保留的元数据，切片可下载；清理/模板保存尚未支持，未改写文件"
-                    )

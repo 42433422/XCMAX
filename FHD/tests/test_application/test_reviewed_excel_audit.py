@@ -1,12 +1,18 @@
 import json
-from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
 from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_audit import (
+    PROCESS_BOOT,
+    abandon_call,
     claim_request,
-    release_unanswered_inflight,
+    mark_answered,
+    normalize_audit,
+    record_response,
+    recovery_action,
+    settle_call,
+    transition,
     verify_request,
 )
 
@@ -31,7 +37,7 @@ def test_claim_binds_source_version_and_exact_request_without_headers():
     request["messages"][0]["content"] = "changed"
     record = state["model_audit"][0]
     assert record["request"]["messages"][0]["content"] == "合成内容"
-    assert record["state"] == "inflight" and record["source_sha256"] == "source"
+    assert record["state"] == "sent" and record["source_sha256"] == "source"
     verify_request(record["request"], digest)
     with pytest.raises(ReviewedExcelError, match="不一致"):
         verify_request(request, digest)
@@ -103,7 +109,7 @@ def test_response_record_rejects_duplicate_and_over_budget():
     )
     with pytest.raises(ReviewedExcelError, match="预算"):
         record_response(state, digest, b"x" * 2_000_001, 200, "req")
-    assert state["model_audit"][-1]["state"] == "inflight"
+    assert state["model_audit"][-1]["state"] == "sent"
     record_response(state, digest, b"{}", 200, "req")
     with pytest.raises(ReviewedExcelError, match="状态"):
         record_response(state, digest, b"{}", 200, "req")
@@ -129,7 +135,7 @@ def test_unsent_audit_cannot_release_a_received_or_different_request():
     record_response(state, digest, b"{}", 200, "synthetic")
     with pytest.raises(ReviewedExcelError, match="未解除"):
         record_not_sent(state, digest, "未发送")
-    assert state["model_audit"][-1]["state"] == "response_received"
+    assert state["model_audit"][-1]["state"] == "streaming"
     assert state["analysis_checkpoint"]["calls_in_round"] == 2
 
 
@@ -378,21 +384,107 @@ def test_audited_stream_keeps_provider_body_and_parsed_result(monkeypatch):
     assert archived == [(sse, 200, "upstream-synthetic")]
 
 
-def test_unanswered_inflight_releases_only_after_the_claim_expires():
+def _claimed(state=None):
+    state = state if state is not None else {"analysis_checkpoint": {"phase": "ready"}}
+    digest = claim_request(
+        state,
+        {"messages": [{"role": "user", "content": "合成"}], "schema": {}, "max_tokens": 10},
+        source_sha256="s",
+        version="v",
+        classification_id="i",
+        code_version="c",
+        model="m",
+        phase="classification",
+        provider="mimo",
+    )
+    return state, digest
+
+
+def test_claim_records_call_id_owner_and_sent_state():
+    state, digest = _claimed()
+    record = state["model_audit"][0]
+    assert record["state"] == "sent" and record["attempts"] == 1
+    assert len(record["call_id"]) == 32 and record["owner"]["boot"] == PROCESS_BOOT
+    assert record["request_sha256"] == digest
+
+
+def test_legacy_states_load_lazily_without_rewriting_meaning():
     state = {
-        "analysis_checkpoint": {"phase": "inflight", "results": [], "calls_in_round": 0},
-        "model_audit": [{"state": "inflight", "request_sha256": "abc"}],
+        "model_audit": [
+            {"state": "inflight"},
+            {"state": "inflight", "outcome": "unknown"},
+            {"state": "unanswered"},
+            {"state": "response_received", "http_status": 200},
+            {"state": "response_received", "http_status": 200, "outcome": "answered_invalid"},
+            {"state": "response_received", "http_status": 502},
+            {"state": "rejected"},
+        ]
     }
-    recent = datetime.now(UTC) - timedelta(minutes=5)
-    assert release_unanswered_inflight(state, recent) is False
-    assert state["analysis_checkpoint"]["phase"] == "inflight"
-    stale = datetime.now(UTC) - timedelta(minutes=16)
-    assert release_unanswered_inflight(state, stale) is True
+    normalize_audit(state)
+    assert [r["state"] for r in state["model_audit"]] == [
+        "sent",
+        "unknown",
+        "unknown",
+        "answered_valid",
+        "answered_invalid",
+        "unknown",
+        "rejected",
+    ]
+    assert state["model_audit"][0]["legacy_state"] == "inflight"
+
+
+def test_an_old_unanswered_claim_is_never_released_by_age():
+    old = {"state": "inflight", "request_sha256": "abc"}
+    assert recovery_action(old, None) == "locked"
+    assert recovery_action(old, {"supported": True, "state": "not_found"}) == "locked"
+
+
+def test_recovery_needs_a_market_that_confirms_idempotency():
+    record = {"call_id": "a" * 32}
+    assert recovery_action(record, None) == "locked"
+    assert recovery_action(record, {"supported": False}) == "locked"
+    assert recovery_action(record, {"supported": True, "state": "processing"}) == "wait"
+    for market_state in ("not_found", "completed", "failed"):
+        assert recovery_action(record, {"supported": True, "state": market_state}) == "resend"
+
+
+def test_same_key_recovery_reuses_the_record_instead_of_a_new_call():
+    state, digest = _claimed()
+    settle_call(state, digest, "unknown", "transport lost")
+    call_id = state["model_audit"][0]["call_id"]
+    state["analysis_checkpoint"]["recovery"] = {"call_id": call_id, "request_sha256": digest}
+    _state, again = _claimed(state)
+    assert again == digest and len(state["model_audit"]) == 1
+    record = state["model_audit"][0]
+    assert record["state"] == "sent" and record["attempts"] == 2 and record["call_id"] == call_id
+    state["analysis_checkpoint"]["recovery"] = {"call_id": call_id, "request_sha256": "0" * 64}
+    with pytest.raises(ReviewedExcelError, match="恢复请求"):
+        _claimed(state)
+
+
+def test_settled_states_follow_the_lifecycle():
+    state, digest = _claimed()
+    record_response(state, digest, b'{"choices":[]}', 200, "rid")
+    assert state["model_audit"][0]["state"] == "streaming"
+    settle_call(state, digest, "truncated", "length")
+    assert state["model_audit"][0]["state"] == "truncated"
+    with pytest.raises(ReviewedExcelError):
+        transition(state["model_audit"][0], "answered_valid")
+    state, digest = _claimed()
+    record_response(state, digest, b'event: done\ndata: {"replayed": true}\n\n', 200, None)
+    assert state["model_audit"][0]["state"] == "recovered"
+    mark_answered(state, digest)
+    assert state["model_audit"][0]["state"] == "answered_valid"
+
+
+def test_abandon_requires_an_unknown_call_and_marks_a_possible_duplicate_charge():
+    state, digest = _claimed()
+    with pytest.raises(ReviewedExcelError, match="本进程"):
+        abandon_call(state, digest, authorized_by="user:3", note="synthetic")
+    settle_call(state, digest, "unknown", "transport lost")
+    state["analysis_checkpoint"]["phase"] = "inflight"
+    record = abandon_call(state, digest, authorized_by="user:3", note="synthetic")
+    assert record["state"] == "abandoned" and record["possible_duplicate_charge"] is True
     assert state["analysis_checkpoint"]["phase"] == "ready"
-    assert state["model_audit"][0]["state"] == "unanswered"
-    stored = {
-        "analysis_checkpoint": {"phase": "inflight", "results": []},
-        "model_audit": [{"state": "inflight", "response_base64": "e30="}],
-    }
-    assert release_unanswered_inflight(stored, stale) is False
-    assert stored["analysis_checkpoint"]["phase"] == "inflight"
+    with pytest.raises(ReviewedExcelError):
+        abandon_call(state, digest, authorized_by="user:3", note="again")

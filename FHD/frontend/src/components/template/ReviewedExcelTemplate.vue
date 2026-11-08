@@ -330,7 +330,7 @@ async function pollIngestProgress() {
     if (!current()) return
     kbProgress.value = data.kb_progress || null
     businessProgress.value = data.business_progress || null
-    const terminal = ['applied', 'failed', 'withdrawn', 'awaiting_confirmation'].includes(String(data.status || ''))
+    const terminal = ['applied', 'partial', 'completed_empty', 'failed', 'withdrawn', 'awaiting_confirmation'].includes(String(data.status || ''))
     if (terminal) {
       stopIngestPoll()
       savedModelStatus.value = `自动入库批次 ${id}（状态 ${autoIngestStatusLabel(data.status)}）。请到审批工作台核对结果与可用的撤回操作。`

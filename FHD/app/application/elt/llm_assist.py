@@ -591,11 +591,73 @@ def _unit_untraceable(row: dict, lines: dict[tuple[str, str], set[str]]) -> bool
     return not any(unit == item or unit in item for item in pool)
 
 
+MODEL_WINDOW_CHARS = 20_000
+MAX_BUSINESS_UNITS = 12
+_UNIT_CONTEXT_ROWS = 8
+
+
+def business_units(source: str) -> list[str]:
+    """Bounded model inputs cut at row boundaries; nothing is dropped.
+
+    A unit that starts inside a sheet repeats that sheet's heading and first rows
+    as context, so the header customer stays visible. Rows are never split.
+    """
+    units: list[str] = []
+    current: list[str] = []
+    size = 0
+    sheet_head: list[str] = []
+    for line in source.splitlines():
+        if line.startswith("# sheet:"):
+            sheet_head = [line]
+        elif len(sheet_head) <= _UNIT_CONTEXT_ROWS:
+            sheet_head.append(line)
+        if current and size + len(line) + 1 > MODEL_WINDOW_CHARS - 2_000:
+            units.append("\n".join(current))
+            current = list(sheet_head) if not line.startswith("# sheet:") else []
+            if current and current[-1] == line:
+                current.pop()
+            size = sum(len(item) + 1 for item in current)
+        current.append(line)
+        size += len(line) + 1
+    if current:
+        units.append("\n".join(current))
+    return units
+
+
 def advise_business_import(sheet_text: str) -> LlmAssistResult:
-    """Import archived sheet rows on the database line only."""
+    """Import archived sheet rows on the database line, one bounded unit at a time.
+
+    Rows from every unit are merged by source coordinate. If any unit is degraded
+    the whole answer is degraded: a partial table is never offered as complete.
+    """
     source = str(sheet_text or "").strip()
     if not source:
         return LlmAssistResult()
+    units = business_units(source)
+    if len(units) > MAX_BUSINESS_UNITS:
+        return LlmAssistResult(degraded=True, degradation_code="ELT_DATABASE_INPUT_EXCEEDS_UNITS")
+    merged: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    result = LlmAssistResult()
+    for unit in units:
+        result = _advise_business_unit(unit)
+        if not result.used_llm or result.degraded:
+            return result
+        for row in result.data.get("rows") or []:
+            key = (
+                str(row.get("source_sheet") or ""),
+                str(row.get("source_row") or ""),
+                str(row.get("product_name") or ""),
+            )
+            if key[0] and key[1] and key in seen:
+                continue
+            seen.add(key)
+            merged.append(row)
+    result.data = {"rows": merged, "units": len(units)}
+    return result
+
+
+def _advise_business_unit(source: str) -> LlmAssistResult:
     lines = _sheet_line_index(source)
     cited = set(lines)
     messages = [
@@ -616,7 +678,7 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
                 "JSON 必须是单个对象、以 rows 开头、不要 markdown 代码块、不要解释文字。"
             ),
         },
-        {"role": "user", "content": source[:20_000]},
+        {"role": "user", "content": source},
     ]
     call: dict[str, Any] = {
         "schema": _BUSINESS_IMPORT_SCHEMA,
@@ -682,6 +744,9 @@ def advise_knowledge_import(document_text: str) -> LlmAssistResult:
     source = str(document_text or "").strip()
     if not source:
         return LlmAssistResult()
+    if len(source) > MODEL_WINDOW_CHARS:
+        # A summary of a prefix would read as the whole workbook; keep the archive text.
+        return LlmAssistResult(degraded=True, degradation_code="ELT_KNOWLEDGE_INPUT_EXCEEDS_WINDOW")
     messages = [
         {
             "role": "system",
@@ -690,7 +755,7 @@ def advise_knowledge_import(document_text: str) -> LlmAssistResult:
                 "content 保留客户、货品、数量、单价和金额，不要改成列名。"
             ),
         },
-        {"role": "user", "content": source[:20_000]},
+        {"role": "user", "content": source},
     ]
     result = _complete(
         messages,
@@ -702,7 +767,7 @@ def advise_knowledge_import(document_text: str) -> LlmAssistResult:
     )
     result.data = {
         "title": _cell(result.data.get("title")),
-        "content": str(result.data.get("content") or "").strip()[:20_000],
+        "content": str(result.data.get("content") or "").strip(),
     }
     return result
 

@@ -186,6 +186,8 @@ async def stream_openai_compatible(
                     cur["function"]["arguments"] += str(fn["arguments"])
                 if tc.get("id"):
                     cur["id"] = str(tc["id"])
+            if choice0.get("finish_reason"):
+                yield {"type": "finish", "finish_reason": str(choice0["finish_reason"])[:32]}
             if choice0.get("finish_reason") == "tool_calls" and tool_calls_accum:
                 ordered = [tool_calls_accum[i] for i in sorted(tool_calls_accum)]
                 yield {

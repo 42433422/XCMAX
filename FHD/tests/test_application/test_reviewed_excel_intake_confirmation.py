@@ -833,6 +833,8 @@ def test_knowledge_line_calls_its_own_model(intake_store, monkeypatch, tmp_path)
     assert plan["used_llm"] is True
     assert plan["degraded"] is False
     assert "螺母" in plan["content"]
+    assert "演示客户乙" in plan["content"]
+    assert plan["model_applied"] is True
 
 
 def test_unwritten_rows_stay_in_the_knowledge_document():
@@ -868,6 +870,8 @@ def test_knowledge_plan_uses_archived_text_when_the_model_fails(
             source_text="送货单\n客户 国圣 白浆 2",
         )
     assert plan["documents"] == 1
-    assert plan["degraded"] is False
+    assert plan["degraded"] is True
+    assert plan["degradation_code"] == "ELT_LLM_UNAVAILABLE"
+    assert plan["model_applied"] is False
     assert plan["action"] in {"new", "update", "skip"}
     assert "国圣" in plan["content"]

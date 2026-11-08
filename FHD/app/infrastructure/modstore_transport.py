@@ -164,6 +164,22 @@ class MarketSSEDecoder:
             public: dict[str, Any] = {}
             if route := safe_route_metadata(raw):
                 public["route_metadata"] = route
+            if isinstance(raw, dict):
+                if raw.get("replayed") is True:
+                    public["replayed"] = True
+                if self.done and isinstance(raw.get("finish_reason"), str):
+                    public["finish_reason"] = raw["finish_reason"][:32]
+                if self.done and isinstance(raw.get("usage"), dict):
+                    public["usage"] = {
+                        key: raw["usage"][key]
+                        for key in (
+                            "prompt_tokens",
+                            "completion_tokens",
+                            "total_tokens",
+                            "estimated",
+                        )
+                        if isinstance(raw["usage"].get(key), int | bool)
+                    }
             if self.done and not self.saw_delta_content and isinstance(raw, dict):
                 content = raw.get("content") or raw.get("text") or raw.get("delta") or ""
                 if content:

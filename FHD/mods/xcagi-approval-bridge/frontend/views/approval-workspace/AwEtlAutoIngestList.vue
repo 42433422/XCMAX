@@ -19,7 +19,7 @@
         </div>
         <button
           type="button"
-          :disabled="!!busyId || item.status !== 'applied'"
+          :disabled="!!busyId || !['applied', 'partial'].includes(String(item.status))"
           @click="withdraw(String(item.batch_id))"
         >
           {{ item.status === 'withdrawn' ? '已撤回' : '撤回' }}
@@ -76,7 +76,7 @@ async function reload() {
 
 async function withdraw(batchId: string) {
   const batch = items.value.find(item => item.batch_id === batchId)
-  if (!batchId || busyId.value || batch?.status !== 'applied') return
+  if (!batchId || busyId.value || !['applied', 'partial'].includes(String(batch?.status))) return
   const sessionCurrent = captureAuthSession()
   const current = () => active && sessionCurrent()
   busyId.value = batchId

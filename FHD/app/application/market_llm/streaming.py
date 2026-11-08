@@ -63,6 +63,12 @@ from .protocols import ChatInput, Connection, Route, StreamPorts
 from .responses import market_response_error
 
 
+def _own_attempt_key(payload: dict, index: int) -> None:
+    """A failover candidate is a different call; it must not reuse the first key."""
+    if index and isinstance(payload.get("client_request_id"), str):
+        payload["client_request_id"] = f"{payload['client_request_id']}-f{index}"
+
+
 def stream_sync(
     connection: Connection, route: Route, request: ChatInput, ports: StreamPorts
 ) -> Iterator[str]:
@@ -77,6 +83,7 @@ def stream_sync(
         payload = request.payload(
             connection, candidate, messages, stream=True, allow_failover=index == 0
         )
+        _own_attempt_key(payload, index)
         with ports.sync_client(
             timeout=httpx.Timeout(connection.timeout, connect=ports.connect_timeout()),
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
@@ -152,6 +159,7 @@ async def stream_async(
         payload = request.payload(
             connection, candidate, messages, stream=True, allow_failover=index == 0
         )
+        _own_attempt_key(payload, index)
         client = await ports.async_client()
         emitted = False
         try:

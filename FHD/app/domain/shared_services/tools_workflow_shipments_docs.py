@@ -465,10 +465,12 @@ def _registered_router_system_maintenance(
     if action == "invalidate_performance_cache":
         from app.utils.performance.performance_initializer import get_performance_optimizer
 
+        keys = list(params.get("keys") or [])
+        if not keys:
+            return {"success": False, "message": "keys 不能为空", "http_status_code": 400}
         optimizer = get_performance_optimizer()
         if not optimizer.redis_cache:
             return {"success": False, "message": "Redis 缓存未初始化", "http_status_code": 503}
-        keys = list(params.get("keys") or [])
         deleted = optimizer.redis_cache.delete(*keys)
         return {
             "success": True,
