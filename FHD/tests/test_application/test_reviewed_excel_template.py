@@ -6202,9 +6202,7 @@ def test_archived_model_slice_can_be_selected_for_template_without_coordinate_co
     )
 
 
-def test_auto_slice_blocks_unassigned_cells_until_the_model_allows_them(
-    review_store, monkeypatch
-):
+def test_auto_slice_blocks_unassigned_cells_until_the_model_allows_them(review_store, monkeypatch):
     """Unassigned cells stop slicing unless the model itself says the documents can be sliced."""
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 

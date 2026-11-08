@@ -421,7 +421,9 @@ def _compatibility_revision(fragments, message, overview, owner_id, earlier, all
     return revised or "again"
 
 
-def derive_classified_documents(body: bytes, classification: dict, *, owner_id: int | None = None) -> list[dict]:
+def derive_classified_documents(
+    body: bytes, classification: dict, *, owner_id: int | None = None
+) -> list[dict]:
     """Export only documents with explicit model grouping, without inferring missing groups.
 
     This internal function expects the output of classify_semantic_workbook, not

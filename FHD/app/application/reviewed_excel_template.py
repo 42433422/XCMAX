@@ -1323,6 +1323,7 @@ def make_proposals(review: dict) -> dict:
 def _fill_instance_cells(review: dict, base: dict, validated: list[dict]) -> None:
     """Add non-formula instance cells when a model plan only names a few remarks."""
     import logging
+
     protected = {(item["sheet"], item["cell"]) for item in base["protected"]}
     instance = []
     for cell in review["cells"]:
@@ -1488,15 +1489,17 @@ def refine_proposal(
                 raise
     finally:
         reset_etl_llm_owner(token)
-    if result is None and initial:
-        _fill_instance_cells(review, base, base["candidates"])
-        base["parent_version"] = parent_version
-        base["model"] = {
-            "status": "returned",
-            "adopted": False,
-            "fallback": "local_plan",
-        }
-        return base
+    if result is None:
+        if initial:
+            _fill_instance_cells(review, base, base["candidates"])
+            base["parent_version"] = parent_version
+            base["model"] = {
+                "status": "returned",
+                "adopted": False,
+                "fallback": "local_plan",
+            }
+            return base
+        raise ReviewedExcelError("模型未返回结果，原候选未改变")
     if not result.used_llm or result.degraded:
         state = (
             "模型调用失败" if result.used_llm or result.degraded else "模型未调用（未配置或已关闭）"

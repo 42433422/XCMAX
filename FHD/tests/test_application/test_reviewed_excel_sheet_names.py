@@ -18,9 +18,7 @@ def test_unknown_sheet_takes_the_model_name_and_type(monkeypatch):
             },
         )
 
-    monkeypatch.setattr(
-        "app.application.reviewed_excel_sheet_names._template_llm_complete", fake
-    )
+    monkeypatch.setattr("app.application.reviewed_excel_sheet_names._template_llm_complete", fake)
     sheets = [
         {
             "sheet": "26出货",
@@ -62,9 +60,7 @@ def test_naming_uses_reply_order_when_sheet_keys_differ(monkeypatch):
             data={"sheets": [{"sheet": "表1", "name": "白浆配方", "type": "原料"}]},
         )
 
-    monkeypatch.setattr(
-        "app.application.reviewed_excel_sheet_names._template_llm_complete", fake
-    )
+    monkeypatch.setattr("app.application.reviewed_excel_sheet_names._template_llm_complete", fake)
     sheets = [
         {
             "sheet": "白浆",
@@ -115,9 +111,7 @@ def test_names_without_sheet_keys_follow_sheet_order(monkeypatch):
             },
         )
 
-    monkeypatch.setattr(
-        "app.application.reviewed_excel_sheet_names._template_llm_complete", fake
-    )
+    monkeypatch.setattr("app.application.reviewed_excel_sheet_names._template_llm_complete", fake)
     sheets = [
         {"sheet": "国圣", "labels": ["delivery"], "processable": True, "regions": []},
         {
@@ -208,9 +202,7 @@ def test_a_missing_sheet_name_is_asked_again(monkeypatch):
             data={"sheets": [{"name": "白浆测算", "type": "测算表"}]},
         )
 
-    monkeypatch.setattr(
-        "app.application.reviewed_excel_sheet_names._template_llm_complete", fake
-    )
+    monkeypatch.setattr("app.application.reviewed_excel_sheet_names._template_llm_complete", fake)
     sheets = [
         {"sheet": "国圣", "labels": ["delivery"], "processable": True, "regions": []},
         {
@@ -232,9 +224,7 @@ def test_a_missing_sheet_name_is_asked_again(monkeypatch):
             "regions": [{"labels": ["unknown"]}],
         },
     ]
-    apply_unknown_sheet_names(
-        sheets, [{"sheet": "白浆", "value": "25.12.27亮光白浆"}], owner_id=1
-    )
+    apply_unknown_sheet_names(sheets, [{"sheet": "白浆", "value": "25.12.27亮光白浆"}], owner_id=1)
     assert len(calls) == 2
     assert "不能少、不能合并、不能跳过" in calls[0][0]["content"]
     assert "公式多的表" in calls[0][0]["content"]
@@ -263,9 +253,7 @@ def test_sheet_naming_retries_a_missing_name_only_once(monkeypatch):
             )
         return LlmAssistResult(used_llm=True, data={"sheets": []})
 
-    monkeypatch.setattr(
-        "app.application.reviewed_excel_sheet_names._template_llm_complete", fake
-    )
+    monkeypatch.setattr("app.application.reviewed_excel_sheet_names._template_llm_complete", fake)
     sheets = [
         {"sheet": "国圣", "labels": ["delivery"], "processable": True, "regions": []},
         {"sheet": "白浆", "labels": ["unknown"], "processable": True, "regions": []},
@@ -280,9 +268,7 @@ def test_naming_failure_leaves_unknown(monkeypatch):
     def boom(*_args, **_kwargs):
         raise RuntimeError("down")
 
-    monkeypatch.setattr(
-        "app.application.reviewed_excel_sheet_names._template_llm_complete", boom
-    )
+    monkeypatch.setattr("app.application.reviewed_excel_sheet_names._template_llm_complete", boom)
     sheets = [{"sheet": "白浆", "labels": ["unknown"], "processable": True, "regions": []}]
     apply_unknown_sheet_names(sheets, [], owner_id=1)
     assert sheets[0]["labels"] == ["unknown"] and "model_name" not in sheets[0]

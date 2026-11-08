@@ -142,9 +142,7 @@ def test_identify_prompt_states_the_three_rejection_rules():
 
 
 def test_model_slice_decision_is_kept_and_required(monkeypatch):
-    refused = execute(
-        monkeypatch, source(["A1", "B1", "C1"]), answer(region(), can_slice=False)
-    )
+    refused = execute(monkeypatch, source(["A1", "B1", "C1"]), answer(region(), can_slice=False))
     assert refused["input_summary"]["source_coverage"]["can_slice"] is False
     raw = answer(region())
     raw.pop("can_slice")
@@ -286,9 +284,7 @@ def synthetic_document_answer(payload):
             }
             for part in payload["ranges"]
         ]
-        return {
-            "documents": [{"ranges": ranges, "reason": "synthetic source relationship"}]
-        }
+        return {"documents": [{"ranges": ranges, "reason": "synthetic source relationship"}]}
     return answer(synthetic_source_region(payload))
 
 

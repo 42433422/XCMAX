@@ -813,7 +813,9 @@ def test_knowledge_line_calls_its_own_model(intake_store, monkeypatch, tmp_path)
 
     def knowledge(text):
         seen["text"] = text
-        return LlmAssistResult(used_llm=True, data={"title": "送货单", "content": "演示客户乙 螺母 5"})
+        return LlmAssistResult(
+            used_llm=True, data={"title": "送货单", "content": "演示客户乙 螺母 5"}
+        )
 
     monkeypatch.setenv("FHD_ETL_LLM", "on")
     monkeypatch.setattr("app.application.elt.llm_assist.etl_llm_enabled", lambda: True)
@@ -840,16 +842,19 @@ def test_unwritten_rows_stay_in_the_knowledge_document():
     assert kept.startswith("整理摘要")
     assert "桶数 -1" in kept
     assert knowledge_document_keeps_unwritten_rows("", "归档原文") == "归档原文"
-    assert knowledge_document_keeps_unwritten_rows("归档原文已含明细", "归档原文") == "归档原文已含明细"
+    assert (
+        knowledge_document_keeps_unwritten_rows("归档原文已含明细", "归档原文")
+        == "归档原文已含明细"
+    )
 
 
-def test_knowledge_plan_uses_archived_text_when_the_model_fails(intake_store, monkeypatch, tmp_path):
+def test_knowledge_plan_uses_archived_text_when_the_model_fails(
+    intake_store, monkeypatch, tmp_path
+):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     def knowledge(_text):
-        return LlmAssistResult(
-            used_llm=True, degraded=True, degradation_code="ELT_LLM_UNAVAILABLE"
-        )
+        return LlmAssistResult(used_llm=True, degraded=True, degradation_code="ELT_LLM_UNAVAILABLE")
 
     monkeypatch.setenv("FHD_ETL_LLM", "on")
     monkeypatch.setattr("app.application.elt.llm_assist.etl_llm_enabled", lambda: True)

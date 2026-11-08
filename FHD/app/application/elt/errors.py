@@ -23,6 +23,7 @@ class ReviewedExcelError(ValueError):
     """A validation message authored by the reviewed Excel boundary, safe for users."""
 
     provider_status: int | None = None
+    finish_reason: str | None = None
 
     def __init__(self, public_message: str, *, provider_status: int | None = None):
         super().__init__(public_message)
