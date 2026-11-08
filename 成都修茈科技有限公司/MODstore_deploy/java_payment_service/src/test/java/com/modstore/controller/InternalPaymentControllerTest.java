@@ -12,6 +12,8 @@ import com.modstore.service.WalletService;
 import com.modstore.service.WechatPayService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -37,6 +39,7 @@ class InternalPaymentControllerTest {
     private AlipayService alipayService;
     private WechatPayService wechatPayService;
     private WalletService walletService;
+    private TransactionRepository transactionRepository;
 
     @BeforeEach
     void setUp() {
@@ -45,6 +48,7 @@ class InternalPaymentControllerTest {
         alipayService = mock(AlipayService.class);
         wechatPayService = mock(WechatPayService.class);
         walletService = mock(WalletService.class);
+        transactionRepository = mock(TransactionRepository.class);
         controller = new InternalPaymentController(
                 userRepository,
                 orderService,
@@ -52,13 +56,36 @@ class InternalPaymentControllerTest {
                 wechatPayService,
                 walletService,
                 mock(WalletRepository.class),
-                mock(TransactionRepository.class)
+                transactionRepository
         );
         ReflectionTestUtils.setField(controller, "internalApiKey", "test-internal-key");
         ReflectionTestUtils.setField(controller, "deployTier", "production");
         ReflectionTestUtils.setField(controller, "alipayDebug", false);
         ReflectionTestUtils.setField(controller, "publicOrigin", "https://www.xiu-ci.com");
         ReflectionTestUtils.setField(controller, "marketPrefix", "/market");
+    }
+
+    @Test
+    void walletPaginationPreservesNonAlignedOffsets() {
+        when(userRepository.findAll(any(Pageable.class))).thenAnswer(invocation -> {
+            Pageable page = invocation.getArgument(0);
+            assertEquals(3, page.getOffset());
+            assertEquals(2, page.getPageSize());
+            return new PageImpl<>(List.of(), page, 5);
+        });
+        assertEquals(5L, controller.wallets("test-internal-key", 2, 3).get("total"));
+    }
+
+    @Test
+    void transactionPaginationPreservesOffsetAndBreaksTimestampTies() {
+        when(transactionRepository.findAll(any(Pageable.class))).thenAnswer(invocation -> {
+            Pageable page = invocation.getArgument(0);
+            assertEquals(3, page.getOffset());
+            assertEquals(2, page.getPageSize());
+            assertEquals("createdAt: DESC,id: DESC", page.getSort().toString());
+            return new PageImpl<>(List.of(), page, 5);
+        });
+        assertEquals(5L, controller.transactions("test-internal-key", 2, 3).get("total"));
     }
 
     @Test

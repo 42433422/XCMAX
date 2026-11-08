@@ -374,11 +374,11 @@ public class InternalPaymentController {
         requireInternalKey(key);
         int size = Math.max(1, Math.min(limit, 500));
         int off = Math.max(offset, 0);
-        Page<User> page = userRepository.findAll(PageRequest.of(
+        Page<User> page = userRepository.findAll(new PageRequest(
                 off / size,
                 size,
                 Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id"))
-        ));
+        ) { @Override public long getOffset() { return off; } });
         List<Map<String, Object>> items = new ArrayList<>();
         for (User account : page.getContent()) {
             Optional<Wallet> wallet = walletRepository.findByUserId(account.getId());
@@ -407,11 +407,11 @@ public class InternalPaymentController {
         requireInternalKey(key);
         int size = Math.max(1, Math.min(limit, 500));
         int off = Math.max(offset, 0);
-        Page<Transaction> page = transactionRepository.findAll(PageRequest.of(
+        Page<Transaction> page = transactionRepository.findAll(new PageRequest(
                 off / size,
                 size,
-                Sort.by(Sort.Direction.DESC, "createdAt")
-        ));
+                Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id"))
+        ) { @Override public long getOffset() { return off; } });
         List<Map<String, Object>> items = new ArrayList<>();
         for (Transaction txn : page.getContent()) {
             Map<String, Object> row = new HashMap<>();
