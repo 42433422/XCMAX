@@ -1,5 +1,5 @@
 {
-  "lines": 2453637,
+  "lines": 2453645,
   "updated": "2026-11-08",
-  "note": "elt: expand stamp-cut regions to cover intersecting drawings; cluster_outer_a1 on drawing packs"
+  "note": "elt: skip drawing expand when it would overlap a prior region"
 }

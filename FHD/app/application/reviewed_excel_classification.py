@@ -443,33 +443,41 @@ def _classify_semantic_batch(
                 row_span=tuple(batch_row_span) if batch_row_span else None,
             )
             if did_expand:
-                c1, r1, c2, r2 = grown
-                # Expanding into unread nonempty rows between observed primaries is unsafe.
+                gc1, gr1, gc2, gr2 = grown
+                overlaps_prior = any(
+                    gc1 <= old_c2 and old_c1 <= gc2 and gr1 <= old_r2 and old_r1 <= gr2
+                    for old_c1, old_r1, old_c2, old_r2 in rects.get(sheet, [])
+                )
                 unread_after = []
-                for cell in review.get("full_cells", review["cells"]):
-                    if cell["sheet"] != sheet or (sheet, cell["cell"]) in primary_keys:
-                        continue
-                    col, row = coordinate_from_string(cell["cell"])
-                    if c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2:
-                        unread_after.append(row)
-                observed_rows = [
-                    row
-                    for col, row in primary.get(sheet, [])
-                    if c1 <= col <= c2 and r1 <= row <= r2
-                ]
-                if observed_rows and unread_after:
-                    first, last = min(observed_rows), max(observed_rows)
-                    if any(first <= row <= last for row in unread_after):
-                        raise ReviewedExcelError(
-                            "所选范围切断绘图对象，暂不能提取"
-                        )
-                area = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
-                fragment_metadata = {
-                    **fragment_metadata,
-                    "model_original_range": fragment_metadata.get("model_original_range", original_area),
-                    "drawing_bounds_expanded": True,
-                }
-                region = {**region, "range": area}
+                if not overlaps_prior:
+                    for cell in review.get("full_cells", review["cells"]):
+                        if cell["sheet"] != sheet or (sheet, cell["cell"]) in primary_keys:
+                            continue
+                        col, row = coordinate_from_string(cell["cell"])
+                        if gc1 <= column_index_from_string(col) <= gc2 and gr1 <= row <= gr2:
+                            unread_after.append(row)
+                    observed_rows = [
+                        row
+                        for col, row in primary.get(sheet, [])
+                        if gc1 <= col <= gc2 and gr1 <= row <= gr2
+                    ]
+                    if observed_rows and unread_after:
+                        first, last = min(observed_rows), max(observed_rows)
+                        if any(first <= row <= last for row in unread_after):
+                            overlaps_prior = True  # treat as unsafe; keep original bounds
+                if not overlaps_prior:
+                    # Safe grow: covers stamp cuts without colliding with earlier regions.
+                    c1, r1, c2, r2 = gc1, gr1, gc2, gr2
+                    area = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+                    fragment_metadata = {
+                        **fragment_metadata,
+                        "model_original_range": fragment_metadata.get(
+                            "model_original_range", original_area
+                        ),
+                        "drawing_bounds_expanded": True,
+                    }
+                    region = {**region, "range": area}
+                # else keep original bounds; select_drawing_objects may still reject a cut
         for old_c1, old_r1, old_c2, old_r2 in rects.setdefault(sheet, []):
             if c1 <= old_c2 and old_c1 <= c2 and r1 <= old_r2 and old_r1 <= r2:
                 raise ReviewedExcelError("模型区域重叠，原分类未改变")
