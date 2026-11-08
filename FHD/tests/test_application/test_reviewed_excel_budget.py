@@ -604,3 +604,13 @@ def test_a_connection_that_never_opened_is_not_sent(monkeypatch, connected):
     with pytest.raises(ReviewedExcelError) as error:
         _template_platform_complete([], {}, 20, owner_id=7)
     assert isinstance(error.value, ModelRequestNotSent) is not connected
+
+
+def test_first_byte_deadline_defaults_to_the_template_timeout(monkeypatch):
+    from app.application.reviewed_excel_budget import template_first_byte_seconds
+
+    monkeypatch.delenv("FHD_TEMPLATE_LLM_FIRST_BYTE_SECONDS", raising=False)
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_TIMEOUT_SECONDS", "150")
+    assert template_first_byte_seconds() == 150
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_FIRST_BYTE_SECONDS", "30")
+    assert template_first_byte_seconds() == 30

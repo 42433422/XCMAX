@@ -245,14 +245,21 @@ def template_timeout_seconds() -> float:
 
 
 def template_first_byte_seconds() -> float:
-    """Deadline for the first market event; distinct from the idle wait between events."""
+    """Deadline for the first market event; distinct from the idle wait between events.
+
+    A market without the accepted status event sends nothing until the model answers,
+    so the default is the template timeout; only an explicit setting shortens it.
+    """
     import math
     import os
 
     from app.application.reviewed_excel_audit import ModelRequestNotSent
 
+    raw = os.environ.get("FHD_TEMPLATE_LLM_FIRST_BYTE_SECONDS", "").strip()
+    if not raw:
+        return template_timeout_seconds()
     try:
-        value = float(os.environ.get("FHD_TEMPLATE_LLM_FIRST_BYTE_SECONDS", "60"))
+        value = float(raw)
     except ValueError:
         raise ModelRequestNotSent("模板模型首包超时配置无效，未调用模型") from None
     if not math.isfinite(value) or not 5 <= value <= 180:
