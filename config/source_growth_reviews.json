@@ -135,14 +135,14 @@
     },
     "FHD/app/application/agent_orchestrator/tool_permission.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_permission.py",
-      "base_blob": "bbebfef818d3fd92412b51980fd4c2ec9e2ccb39",
-      "head_blob": "9ab6679cbf5eabc52d5f786be4d2a1f2afee30be",
-      "before_lines": 734,
-      "after_lines": 1098,
-      "reason": "The authorized integration adds approval-to-run binding and process-safe idempotency recovery. A customer creation is reconciled only through its scope and fingerprint bound transactional receipt, including uncertain commit acknowledgements.",
-      "boundary": "Existing approval and idempotency guards only. Customer receipt writing stays in customer_creation_receipt and the customer business transaction; no new table or public HTTP route is introduced.",
-      "validation": "Real SQLite crash, changed-parameter replay, legacy unknown receipt, post-commit disconnect, tenant and approval regressions pass locally. Final isolated execution and required checks run on the integration PR head.",
-      "follow_up": "Extract claim persistence and reconciliation behind the existing permission guard when their transaction contract can be reviewed independently; retain the same receipt identity and conservative unknown outcome.",
+      "base_blob": "9ab6679cbf5eabc52d5f786be4d2a1f2afee30be",
+      "head_blob": "8efcf3449ffff3e6206bd3cd8ced3f5bd2a3736a",
+      "before_lines": 1098,
+      "after_lines": 1103,
+      "reason": "Existing handoff context projection must retain workspace_id, workspace_path and root_run_id so persistent child runs keep the original scope and root association.",
+      "boundary": "Three non-secret fields are added to handoff_runtime_context only. Existing actor and Mod validation, claim storage and public interfaces retain their original ownership.",
+      "validation": "Handoff scope and durability regressions verify workspace/root inheritance, live actor and Mod checks, revoked entitlements and rejection of mismatched original parents.",
+      "follow_up": "Keep the context projection in the existing permission boundary; any later extraction must preserve sealed actor and Mod bindings and the same durable claim contract.",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_auth_api_merged.py": {
@@ -168,6 +168,18 @@
       "boundary": "Existing attendance pipeline only; static bound SQLite queries and 500-ID readback batches preserve idempotent writes and no new route.",
       "validation": "Synthetic attendance confirmation and customer Excel gate tests cover real workbook writes, exclusions, monthly marks and committed output.",
       "follow_up": "Review separation of monthly layout interpretation from attendance persistence after candidate-only ingestion is integrated; this record requests review, not approval."
+    },
+    "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
+      "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
+      "base_blob": "dc96991256dcede7a90397a8d3ad56cddfc6e395",
+      "head_blob": "2db257c2d2165d94aa6be977eec32a8497a92122",
+      "before_lines": 800,
+      "after_lines": 824,
+      "reason": "Persistent employee handoff needs parent saves to retain child receipts from concurrent or delayed writers, including immutable terminal child evidence.",
+      "boundary": "Only child_results merging inside the existing preserve_run_evidence transaction; no new table, repository, route or executor.",
+      "validation": "SQL repository concurrent-writer regression and handoff durability tests cover retained sibling receipts, mismatched identities, stable terminal results and process-crash readback.",
+      "follow_up": "Keep handoff lifecycle policy outside the repository; separate evidence merging only when the existing stream, step and child receipt contracts can be moved together.",
+      "review_owner": "@42433422"
     }
   }
 }
