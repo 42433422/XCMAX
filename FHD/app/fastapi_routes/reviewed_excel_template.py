@@ -950,14 +950,12 @@ async def _reviewed_excel_classification_analyze_body(
 
             normalize_audit(state)
             body = _source(db, run, tenant, owner)
-            review = inspect_workbook(body)
-            checkpoint = state.get("analysis_checkpoint")
-            # New analyzes omit hidden/veryHidden sheets from packing and coverage.
-            # Existing checkpoints keep the review they were planned against.
-            if not checkpoint:
-                from app.application.reviewed_excel_evidence import prepare_auto_slice_review
+            from app.application.reviewed_excel_evidence import prepare_auto_slice_review
 
-                review = prepare_auto_slice_review(review, skip_hidden_sheets=True)
+            # Analyze packs and coverage omit hidden/veryHidden sheets. Continuations
+            # must use the same filtered review the checkpoint was planned against.
+            review = prepare_auto_slice_review(inspect_workbook(body), skip_hidden_sheets=True)
+            checkpoint = state.get("analysis_checkpoint")
             from app.application.reviewed_excel_budget import (
                 BUDGET_VERSION,
                 validate_checkpoint_budget,
