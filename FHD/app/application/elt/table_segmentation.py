@@ -25,7 +25,7 @@ _DATE_RE = re.compile(
     r"^(?:19|20)?\d{2}(?:[-/.年月]\d{1,2}){1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$"
 )
 _TOTAL_RE = re.compile(r"^(合计|总计|小计|汇总|共计|累计)(?:\s|[:：]|$)")
-_NOTE_RE = re.compile(r"^(备注|说明|注[:：]|注意|制表|审核|签字|签名|条款|附注)")
+_NOTE_RE = re.compile(r"^(备注|说明|注|注意|制表|审核|签字|签名|条款|附注)(?:\s|[:：]|$)")
 _WEEKDAYS = {
     *"日一二三四五六天",
     *(f"周{d}" for d in "日一二三四五六天"),
@@ -772,7 +772,7 @@ class _Segmenter:
             wide = self.sheet.h_span(r, c) * 2 > (table.max_col - table.min_col + 1)
             if _is_data_like(value) and not wide:
                 return "data"
-            if wide or len(text) > 12 or _NOTE_RE.match(text) or c != table.min_col:
+            if wide or _NOTE_RE.match(text):
                 return "note"
             return "data"
         if kind == "summary":
@@ -787,17 +787,14 @@ class _Segmenter:
         cols = self.sheet.row_cols(r, table.min_col, table.max_col)
         if not cols:
             return False
-        width = table.max_col - table.min_col + 1
         values = [self.sheet.cells[(r, c)] for c in cols]
-        texts = [_text(value) for value in values]
-        if len(cols) <= 2 and _NOTE_RE.match(texts[0]):
-            return True
-        if any(
-            self.sheet.h_span(r, c) * 2 > width and not _is_data_like(value)
-            for c, value in zip(cols, values)
-        ):
-            return True
-        return not any(_is_data_like(value) for value in values) and max(map(len, texts)) > 30
+        # Text length, a keyword prefix, or a merged business field is not
+        # evidence of a footer. Keep ambiguous rows for downstream validation.
+        return (
+            len(cols) <= 2
+            and bool(_NOTE_RE.match(_text(values[0])))
+            and not any(_is_data_like(value) for value in values)
+        )
 
     def _leads_or_is_header(self, r: int, end: int, c1: int, c2: int) -> bool:
         return self._is_leaf(r, end, c1, c2) or self._is_parent_of_next(r, end, c1, c2)

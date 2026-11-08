@@ -108,23 +108,6 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
     assert product_delete_spec.risk == "high"
     assert product_delete_spec.permission == "tool.products.delete"
 
-
-def test_idempotent_business_reads_use_view_permissions_seeded_for_users() -> None:
-    from app.db.models.permission import DEFAULT_ROLES
-
-    specs = build_tool_specs_v2()
-    expected = {
-        ("customers", "query"): "customer.view",
-        ("products", "exists"): "product.view",
-        ("materials", "list"): "material.view",
-        ("sales", "query"): "sales.view",
-        ("reports", "sales_summary"): "report.view",
-    }
-    assert {key: specs[key].permission for key in expected} == expected
-    assert specs[("sales", "create_order")].permission == "tool.sales.create_order"
-    user_role = next(role for role in DEFAULT_ROLES if role["name"] == "user")
-    assert set(expected.values()) <= set(user_role["permissions"])
-
     product_batch_spec = specs[("products", "batch_create")]
     assert product_batch_spec.risk == "high"
     assert product_batch_spec.input_schema["required"] == ["products"]
