@@ -57,7 +57,13 @@ def list_transactions(limit: int, offset: int) -> dict[str, Any]:
     return payload
 
 
-def _call(method: str, path: str, *, json_body: dict[str, Any] | None = None, params: dict[str, int] | None = None) -> dict[str, Any]:
+def _call(
+    method: str,
+    path: str,
+    *,
+    json_body: dict[str, Any] | None = None,
+    params: dict[str, int] | None = None,
+) -> dict[str, Any]:
     key = (
         os.environ.get("MODSTORE_INTERNAL_API_KEY")
         or os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")

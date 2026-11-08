@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib
 
+from modstore_server import java_wallet_admin
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # --- from market_routes_part01_part01_part01.py ---
@@ -15,6 +16,20 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 def _facade():
     return importlib.import_module("modstore_server.api.market_routes")
+
+
+def _locked_wallet(session, user_id: int):
+    wallet = (
+        session.query(_facade().Wallet)
+        .filter(_facade().Wallet.user_id == user_id)
+        .with_for_update()
+        .first()
+    )
+    if not wallet:
+        wallet = _facade().Wallet(user_id=user_id, balance=0.0)
+        session.add(wallet)
+        session.flush()
+    return wallet
 
 
 def _enterprise_assignable_mod_ids() -> frozenset[str]:
@@ -596,16 +611,7 @@ def api_wallet_recharge(
         raise _facade().HTTPException(403, "无效的充值授权")
     sf = _facade().get_session_factory()
     with sf() as session:
-        wallet = (
-            session.query(_facade().Wallet)
-            .filter(_facade().Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
-        if not wallet:
-            wallet = _facade().Wallet(user_id=user.id, balance=0.0)
-            session.add(wallet)
-            session.flush()
+        wallet = _locked_wallet(session, user.id)
         wallet.balance += body.amount
         wallet.updated_at = _facade().datetime.now(_facade().timezone.utc)
         txn = _facade().Transaction(
@@ -643,16 +649,7 @@ def api_wallet_admin_self_credit(
         raise _facade().HTTPException(400, f"单次加款不能超过 {cap:g} 元")
     sf = _facade().get_session_factory()
     with sf() as session:
-        wallet = (
-            session.query(_facade().Wallet)
-            .filter(_facade().Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
-        if not wallet:
-            wallet = _facade().Wallet(user_id=user.id, balance=0.0)
-            session.add(wallet)
-            session.flush()
+        wallet = _locked_wallet(session, user.id)
         wallet.balance += body.amount
         wallet.updated_at = _facade().datetime.now(_facade().timezone.utc)
         txn = _facade().Transaction(
@@ -678,8 +675,6 @@ def api_admin_credit_user_wallet(
     if amount <= _facade().Decimal("0.00"):
         raise _facade().HTTPException(400, "加款金额必须大于 0")
     description = (body.description or "").strip() or "后台加款"
-    from modstore_server import java_wallet_admin
-
     if java_wallet_admin.payment_backend_is_java():
         return java_wallet_admin.credit_user(user_id, amount, description)
     sf = _facade().get_session_factory()
@@ -687,16 +682,7 @@ def api_admin_credit_user_wallet(
         target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
-        wallet = (
-            session.query(_facade().Wallet)
-            .filter(_facade().Wallet.user_id == user_id)
-            .with_for_update()
-            .first()
-        )
-        if not wallet:
-            wallet = _facade().Wallet(user_id=user_id, balance=0.0)
-            session.add(wallet)
-            session.flush()
+        wallet = _locked_wallet(session, user_id)
         wallet.balance = _facade()._wallet_money(wallet.balance) + amount
         wallet.updated_at = _facade().datetime.now(_facade().timezone.utc)
         txn = _facade().Transaction(
@@ -879,16 +865,7 @@ def api_wallet_ai_preauthorize(
     sf = _facade().get_session_factory()
     with sf() as session:
         existing = _facade()._find_ai_txn_by_key(session, user.id, "ai_preauth", key)
-        wallet = (
-            session.query(_facade().Wallet)
-            .filter(_facade().Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
-        if not wallet:
-            wallet = _facade().Wallet(user_id=user.id, balance=0.0)
-            session.add(wallet)
-            session.flush()
+        wallet = _locked_wallet(session, user.id)
         if existing:
             return {
                 "ok": True,
@@ -943,16 +920,7 @@ def api_wallet_ai_settle(
     sf = _facade().get_session_factory()
     with sf() as session:
         existing = _facade()._find_ai_txn_by_key(session, user.id, "ai_settle", key)
-        wallet = (
-            session.query(_facade().Wallet)
-            .filter(_facade().Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
-        if not wallet:
-            wallet = _facade().Wallet(user_id=user.id, balance=0.0)
-            session.add(wallet)
-            session.flush()
+        wallet = _locked_wallet(session, user.id)
         preauth = _facade()._find_ai_preauth_by_hold(session, user.id, body.hold_no.strip())
         if not preauth:
             raise _facade().HTTPException(404, "预授权不存在")
@@ -1006,16 +974,7 @@ def api_wallet_ai_release(
     sf = _facade().get_session_factory()
     with sf() as session:
         existing = _facade()._find_ai_txn_by_key(session, user.id, "ai_release", key)
-        wallet = (
-            session.query(_facade().Wallet)
-            .filter(_facade().Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
-        if not wallet:
-            wallet = _facade().Wallet(user_id=user.id, balance=0.0)
-            session.add(wallet)
-            session.flush()
+        wallet = _locked_wallet(session, user.id)
         preauth = _facade()._find_ai_preauth_by_hold(session, user.id, body.hold_no.strip())
         if not preauth:
             raise _facade().HTTPException(404, "预授权不存在")
@@ -1083,16 +1042,7 @@ def api_wallet_ai_refund(
     sf = _facade().get_session_factory()
     with sf() as session:
         existing = _facade()._find_ai_txn_by_key(session, user.id, "ai_refund", key)
-        wallet = (
-            session.query(_facade().Wallet)
-            .filter(_facade().Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
-        if not wallet:
-            wallet = _facade().Wallet(user_id=user.id, balance=0.0)
-            session.add(wallet)
-            session.flush()
+        wallet = _locked_wallet(session, user.id)
         preauth = _facade()._find_ai_preauth_by_hold(session, user.id, hold_no)
         if not preauth:
             raise _facade().HTTPException(404, "预授权不存在")
@@ -2224,8 +2174,6 @@ def api_admin_list_wallets(
     A wallet record is created lazily on first wallet use.  Listing the ``wallets`` table alone
     therefore made untouched accounts look as if their balance could not be queried.
     """
-    from modstore_server import java_wallet_admin
-
     if java_wallet_admin.payment_backend_is_java():
         return java_wallet_admin.list_wallets(limit, offset)
     sf = _facade().get_session_factory()
@@ -2263,8 +2211,6 @@ def api_admin_list_transactions(
     offset: int = _facade().Query(0, ge=0),
     user: _facade().User = _facade().Depends(_facade()._require_admin),
 ):
-    from modstore_server import java_wallet_admin
-
     if java_wallet_admin.payment_backend_is_java():
         return java_wallet_admin.list_transactions(limit, offset)
     sf = _facade().get_session_factory()
