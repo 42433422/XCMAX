@@ -1,0 +1,124 @@
+{
+ "measured_at": "2026-11-08T23:54:37+08:00",
+ "backend_git_sha": "dbb2beb6c6f75611dc58109aee3ad8eab3604532",
+ "pr": 3099,
+ "commits": [
+  "a4eb4e222",
+  "a82be2ff6",
+  "dbb2beb6c"
+ ],
+ "account_actor": "2:3",
+ "wallet": {
+  "start_this_pass": 425.69,
+  "end": 394.39,
+  "spend": 31.3,
+  "unreleased_preauths": []
+ },
+ "chat_check": {
+  "endpoint": "POST /api/ai/chat",
+  "message": "出货记录",
+  "http": 200,
+  "success": true,
+  "records": 20
+ },
+ "files": [
+  {
+   "file": "张总.xlsx",
+   "status": "done",
+   "classification_id": "8e78b06e-e7aa-4185-b526-3e59e6ed9c67",
+   "batch_id": "aib-e5bf62f30ac5446a",
+   "error": "",
+   "ingest_status": "applied",
+   "db_rows": "new=2 update=0 skip=0 error=0 executed=2 records=2",
+   "four_way": {
+    "preview": 2,
+    "written": 2,
+    "db": 2,
+    "file": 2
+   }
+  },
+  {
+   "file": "邻居贾总.xlsx",
+   "status": "failed",
+   "classification_id": "6fb31401-ed20-4703-8665-2e086fc0d36c",
+   "batch_id": null,
+   "error": "slices HTTP 400: 模型尚未完整覆盖原件，不能生成自动切片（阶段：request）",
+   "ingest_status": "",
+   "db_rows": "",
+   "four_way": null
+  },
+  {
+   "file": "澜宇电视柜.xlsx",
+   "status": "failed",
+   "classification_id": "b3a60ce1-c090-4835-b4d7-ac6aeabf1570",
+   "batch_id": null,
+   "error": "analyze HTTP 422 outcome=answered_invalid: 模型已回答，但答案未通过校验，未写入任何数据。原因：模型边界主体为空或重复覆盖（阶段：analyze）",
+   "ingest_status": "",
+   "db_rows": "",
+   "four_way": null
+  },
+  {
+   "file": "考勤表.xlsx",
+   "status": "failed",
+   "classification_id": "71e2f01f-4698-4558-8afb-d18c516df7a6",
+   "batch_id": null,
+   "error": "analyze HTTP 422 outcome=answered_invalid: 模型已回答，但答案未通过校验，未写入任何数据。原因：模型绘图证据不在区域内已发送范围（阶段：analyze）",
+   "ingest_status": "",
+   "db_rows": "",
+   "four_way": null
+  },
+  {
+   "file": "邻居杨总.xlsx",
+   "status": "failed",
+   "classification_id": "b396a22b-1463-4fc1-9bd0-548933b834ba",
+   "batch_id": null,
+   "error": "slices HTTP 400: 模型尚未完整覆盖原件，不能生成自动切片（阶段：request）",
+   "ingest_status": "",
+   "db_rows": "",
+   "four_way": null
+  },
+  {
+   "file": "侯雪梅.xlsx",
+   "status": "failed",
+   "classification_id": "ba9f3af8-2edf-4a7f-9bb9-fc327ea8f824",
+   "batch_id": null,
+   "error": "slices HTTP 400: 模型尚未完整覆盖原件，不能生成自动切片（阶段：request）",
+   "ingest_status": null,
+   "db_rows": null,
+   "four_way": null
+  },
+  {
+   "file": "国圣化工.xlsx",
+   "status": "done",
+   "classification_id": "2bc5343f-6ccd-4ad4-8caa-8c42298b25c7",
+   "batch_id": "aib-a21de82fc82f4261",
+   "error": "",
+   "ingest_status": "applied",
+   "db_rows": "new=34 update=0 skip=0 error=0 executed=34 records=34",
+   "four_way": {
+    "preview": 34,
+    "written": 34,
+    "db": 34,
+    "file": 34
+   }
+  },
+  {
+   "file": "尹玉华1.xlsx",
+   "status": "done",
+   "classification_id": "411a3620-4ad3-4a38-acf8-ea35f03203e7",
+   "batch_id": "aib-09a28adac00c4f35",
+   "error": "",
+   "ingest_status": "applied",
+   "db_rows": "new=92 update=0 skip=6 error=2 executed=92 records=92",
+   "four_way": null
+  }
+ ],
+ "blocked": [
+  "考勤表: answered_invalid on last drawing pack (3/4 packs valid after 400-unit split)",
+  "邻居贾总/邻居杨总: analyze returned but auto-slice blocked (incomplete source coverage / pending cells)",
+  "澜宇: answered_invalid (empty/duplicate boundary) after abandon-resend — not unknown",
+  "侯雪梅: N15/P15 nonempty; awaiting human; no confirm-cells API",
+  "尹玉华1: batch withdrawn via etl.rollback; legacy rows lacked coordinates; re-ingest not completed this pass",
+  "market request-id recovery deploy still required for true unknown recovery (not hit again on 贾总/澜宇 this pass)"
+ ]
+}

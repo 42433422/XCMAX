@@ -29,7 +29,57 @@
    "wallet_balance_before": 425.69,
    "wallet_balance_after": 424.45,
    "stop_rule": "full loop after abandon"
+  },
+  "邻居贾总.xlsx": {
+   "file": "邻居贾总.xlsx",
+   "authorization": {
+    "by": "user",
+    "at": "2026-11-08T22:41:00+08:00",
+    "scope": "abandon parked unknowns then continue; 贾总/澜宇 one resend each; stop if unknown again"
+   },
+   "backend_git_sha": "a82be2ff66e7a98e888dac4ead755241201940de",
+   "started_at": "2026-11-08T23:00:47+08:00",
+   "finished_at": "2026-11-08T23:07:37+08:00",
+   "abandon": {
+    "status": 200,
+    "abandoned_call_id": "54af944db8ab4df9b19394f609f98ebb",
+    "possible_duplicate_charge": true,
+    "message": null
+   },
+   "old_classification_id": "e133d94e-2341-4592-9efa-dbf46acdd0af",
+   "new_classification_id": "6fb31401-ed20-4703-8665-2e086fc0d36c",
+   "status": "failed",
+   "error": "analyze still paused after the continuation rounds",
+   "outcome_unknown_again": false,
+   "wallet_balance_before": 424.45,
+   "wallet_balance_after": 417.05,
+   "stop_rule": "if unknown again, do not resend"
+  },
+  "澜宇电视柜.xlsx": {
+   "file": "澜宇电视柜.xlsx",
+   "authorization": {
+    "by": "user",
+    "at": "2026-11-08T22:41:00+08:00",
+    "scope": "abandon parked unknowns then continue; 贾总/澜宇 one resend each; stop if unknown again"
+   },
+   "backend_git_sha": "a82be2ff66e7a98e888dac4ead755241201940de",
+   "started_at": "2026-11-08T23:09:54+08:00",
+   "finished_at": "2026-11-08T23:13:07+08:00",
+   "abandon": {
+    "status": 200,
+    "abandoned_call_id": "1d4784d2eac8416ba3109013e82bca4a",
+    "possible_duplicate_charge": true,
+    "message": null
+   },
+   "old_classification_id": "ad462d87-a0ff-4a58-abda-bdf4d6a36d4e",
+   "new_classification_id": "b3a60ce1-c090-4835-b4d7-ac6aeabf1570",
+   "status": "failed",
+   "error": "analyze HTTP 422 outcome=answered_invalid: 模型已回答，但答案未通过校验，未写入任何数据。原因：模型边界主体为空或重复覆盖（阶段：analyze）",
+   "outcome_unknown_again": false,
+   "wallet_balance_before": 417.05,
+   "wallet_balance_after": 413.79,
+   "stop_rule": "if unknown again, do not resend"
   }
  },
- "measured_at": "2026-11-08T22:59:34+08:00"
+ "measured_at": "2026-11-08T23:13:07+08:00"
 }
