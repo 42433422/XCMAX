@@ -1001,6 +1001,11 @@ def handoff_runtime_context(
         "task_id": parent.get("task_id") or parent_task_id,
         "parent_task_id": parent_task_id,
         "parent_run_id": parent_run_id,
+        **{
+            key: parent[key]
+            for key in ("workspace_id", "workspace_path", "root_run_id")
+            if key in parent
+        },
         "_actor_authorization": parent.get("_actor_authorization"),
         "_mod_authorization": parent.get("_mod_authorization"),
         "employee_id": employee_id,
