@@ -338,6 +338,40 @@ def test_coordinate_checkpoint_roundtrip_is_value_free_without_replanning(monkey
     assert [c["value"] for b in rebuilt for c in b] == [c["value"] for b in batches for c in b]
 
 
+def test_drawing_footprint_context_cells_restore_without_primary_veto():
+    """Blank stamp-footprint context_only cells must round-trip the coordinate plan."""
+    from app.application.reviewed_excel_drawing import plan_drawing_batches
+    from app.application.reviewed_excel_plan import restore_coordinate_plan
+
+    review = {
+        "sha256": "stamp-footprint",
+        "sheets": ["考勤"],
+        "cells": [
+            {"sheet": "考勤", "cell": f"A{row}", "value": "v", "kind": "review"}
+            for row in range(1, 4)
+        ],
+        "drawing_evidence": [
+            {
+                "sheet": "考勤",
+                "part": "xl/drawings/drawing1.xml",
+                "object_id": "2",
+                "from": {"row": 0, "col": 0},
+                "text": "章",
+                "last_row": 3,
+                "last_col": 2,
+            }
+        ],
+        "sheet_overview": [{"sheet": "考勤", "drawing_row_boundaries": [1, 5]}],
+    }
+    batches = plan_drawing_batches(review)
+    assert any(cell.get("context_only") for batch in batches for cell in batch)
+    checkpoint = saved_plan(review, batches)
+    rebuilt = restore_coordinate_plan(review, checkpoint)
+    assert [[(c["cell"], bool(c.get("context_only"))) for c in b] for b in rebuilt] == [
+        [(c["cell"], bool(c.get("context_only"))) for c in b] for b in batches
+    ]
+
+
 @pytest.mark.parametrize("tamper", ["missing", "digest", "source", "unknown", "duplicate", "omit"])
 def test_coordinate_checkpoint_tampering_is_rejected(tamper):
     from app.application.reviewed_excel_plan import _digest, restore_coordinate_plan

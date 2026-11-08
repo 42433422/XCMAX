@@ -155,6 +155,12 @@ def restore_coordinate_plan(review: dict, checkpoint: dict) -> list[list[dict]]:
         if all(cell["context_only"] for cell in rebuilt):
             invalid()
         result.append(rebuilt)
-    if primary != set(source):
+    # Drawing packs may include blank context_only footprint cells. Those must appear
+    # in the stored plan, but they are not primary coverage and must not fail restore.
+    plan_keys = {(item[0], item[1]) for batch in plan for item in batch}
+    if plan_keys != set(source):
+        invalid()
+    source_primary = {key for key, cell in source.items() if not cell.get("context_only")}
+    if primary != source_primary:
         invalid()
     return result
