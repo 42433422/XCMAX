@@ -48,6 +48,8 @@ def split_plan_step(checkpoint: dict, step: int, review: dict) -> bool:
     for overview in review.get("sheet_overview", []):
         for area in overview.get("merged_regions", []):
             _c1, r1, _c2, r2 = range_boundaries(area)
+            if r1 is None or r2 is None:
+                continue
             spans.setdefault(overview["sheet"], []).append((r1, r2))
     for drawing in review.get("drawing_evidence", []):
         last = drawing.get("last_row") or (

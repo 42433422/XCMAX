@@ -6,6 +6,7 @@ import os
 import threading
 from copy import deepcopy
 from datetime import UTC
+from typing import Any
 from uuid import uuid4
 
 from app.application.elt.errors import ModelRequestNotSent as ModelRequestNotSent
@@ -43,7 +44,7 @@ PROCESS_BOOT = uuid4().hex
 def call_state(record: dict) -> str:
     """Lifecycle state of one record, mapping pre-lifecycle archives lazily."""
     state = record.get("state")
-    if state in CALL_STATES:
+    if isinstance(state, str) and state in CALL_STATES:
         return state
     if state == "inflight":
         return "unknown" if record.get("outcome") == "unknown" else "sent"
@@ -51,7 +52,7 @@ def call_state(record: dict) -> str:
         return "unknown"
     if state == "response_received":
         outcome = record.get("outcome")
-        if outcome in _LEGACY_OUTCOME_STATES - {"not_sent"}:
+        if isinstance(outcome, str) and outcome in _LEGACY_OUTCOME_STATES - {"not_sent"}:
             return outcome
         status = record.get("http_status")
         return "answered_valid" if isinstance(status, int) and 200 <= status < 300 else "unknown"
@@ -316,10 +317,10 @@ def verify_request(request: dict, expected: str) -> None:
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-_capture = ContextVar("reviewed_excel_response_capture", default=None)
+_capture: ContextVar[Any] = ContextVar("reviewed_excel_response_capture", default=None)
 
 
-_answer = ContextVar("reviewed_excel_answer_text", default=None)
+_answer: ContextVar[Any] = ContextVar("reviewed_excel_answer_text", default=None)
 _request_claims = ContextVar("reviewed_excel_request_claims", default=None)
 _LIVE_CLAIMS: set[str] = set()
 _LIVE_LOCK = threading.Lock()
@@ -351,7 +352,7 @@ def is_live(request_sha: str | None) -> bool:
         return bool(request_sha) and request_sha in _LIVE_CLAIMS
 
 
-_call_id = ContextVar("reviewed_excel_call_id", default=None)
+_call_id: ContextVar[str | None] = ContextVar("reviewed_excel_call_id", default=None)
 
 
 @contextmanager

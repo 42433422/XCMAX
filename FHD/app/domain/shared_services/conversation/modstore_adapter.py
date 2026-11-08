@@ -486,8 +486,10 @@ class ModstorePlatformAdapter:
             "model": route.get("model") or model or self.default_model,
             **{key: value for key, value in route.items() if key not in {"provider", "model"}},
         }
+        ending = ending if isinstance(ending, dict) else {}
         finish = ending.get("finish_reason")
-        usage = ending.get("usage") if isinstance(ending.get("usage"), dict) else {}
+        usage_value = ending.get("usage")
+        usage: dict = usage_value if isinstance(usage_value, dict) else {}
         completion = usage.get("completion_tokens")
         if not finish and isinstance(completion, int) and max_tokens and completion >= max_tokens:
             # A market that does not relay finish_reason still reports the spent budget.
