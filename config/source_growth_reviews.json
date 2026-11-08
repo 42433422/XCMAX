@@ -100,9 +100,9 @@
     "FHD/app/application/reviewed_excel_template.py": {
       "base_file": "FHD/app/application/reviewed_excel_template.py",
       "base_blob": "6999cd18e774ea9306f6c89ccb2175815d57d225",
-      "head_blob": "8da42b4fc591765a30fe0ad607ca78257981d51a",
+      "head_blob": "887ea1d1128565c70a80b8b6c32f1ad2bcd3a2e2",
       "before_lines": 1375,
-      "after_lines": 1560,
+      "after_lines": 1565,
       "reason": "Outcome taxonomy, bounded repair rounds, provider 402 rejection, and public model-error detail require additional template-platform call control without changing the review workbook contract.",
       "boundary": "Existing reviewed-Excel template platform call path only; no new route, persistence model, or authorization change.",
       "validation": "Reviewed Excel audit, template schema, and intake regression tests plus push preflight and backend CI.",
@@ -208,7 +208,7 @@
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
       "base_blob": "acf93ca707e3e1d434ccacaf41d61ce3fcb427bf",
-      "head_blob": "325d69d8e8f35177e6502a70cf59f032078bb9f8",
+      "head_blob": "e5638e172a7846d78e281e30238c191e464bce91",
       "before_lines": 936,
       "after_lines": 1041,
       "reason": "Reviewed intake prepares knowledge from archived workbook text, keeps empty model rows, and preserves the deterministic preview/confirmation boundary through the outcome taxonomy.",
