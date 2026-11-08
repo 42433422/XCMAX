@@ -17,6 +17,7 @@ from app.application.elt.service_support import (
     load_json,
     utcnow,
 )
+from app.application.elt.service_uploads import discard_stored_upload
 from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.utils.path_io.path_utils import get_app_data_dir
 
@@ -30,10 +31,9 @@ class HistoryServiceMixin:
         run = self._owned_run(db, run_id, owner_user_id)
         recover_stale_owner(db, run)
         if self._execution_is_stale(run):
-            run.status = "interrupted"
-            run.stage = "interrupted"
-            run.error_code = "ELT_EXECUTION_INTERRUPTED"
-            run.error_message = "上次执行被意外中断，请重新预演或重试"
+            from app.application.elt.audit import note_interrupted
+
+            note_interrupted(db, run)
             db.commit()
         upload = self._owned_upload_record(db, run.upload_id, owner_user_id)
         return self.run_dict(
@@ -68,10 +68,9 @@ class HistoryServiceMixin:
         for run in rows:
             recover_stale_owner(db, run)
             if self._execution_is_stale(run):
-                run.status = "interrupted"
-                run.stage = "interrupted"
-                run.error_code = "ELT_EXECUTION_INTERRUPTED"
-                run.error_message = "上次执行被意外中断，请重新预演或重试"
+                from app.application.elt.audit import note_interrupted
+
+                note_interrupted(db, run)
                 interrupted = True
         if interrupted:
             db.commit()
@@ -115,7 +114,7 @@ class HistoryServiceMixin:
         for upload in expired_uploads:
             path = Path(upload.storage_path).resolve()
             if upload_root in path.parents and path.is_file():
-                path.unlink(missing_ok=True)
+                discard_stored_upload(path)
                 removed_files += 1
             upload.storage_path = ""
 
@@ -205,6 +204,7 @@ class HistoryServiceMixin:
             ),
             "created_at": run.created_at.isoformat() if run.created_at else None,
             "updated_at": run.updated_at.isoformat() if run.updated_at else None,
+            "confirmed_at": run.confirmed_at.isoformat() if run.confirmed_at else None,
             "executed_at": run.executed_at.isoformat() if run.executed_at else None,
         }
 

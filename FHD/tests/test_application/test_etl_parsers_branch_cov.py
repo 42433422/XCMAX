@@ -120,6 +120,7 @@ def test_is_auxiliary_sheet_name():
 def test_is_footer_or_note_row():
     assert is_footer_or_note_row(["合计", "100"]) is True
     assert is_footer_or_note_row(["备注：测试"]) is True
+    assert is_footer_or_note_row(["本合同一式两份，双方签字盖章后生效"]) is True
     assert is_footer_or_note_row(["签字"]) is True
     assert is_footer_or_note_row(["A", "B", "C"]) is False
     assert is_footer_or_note_row([]) is False
@@ -778,6 +779,15 @@ def test_parse_workbook_footer_and_repeated_headers(tmp_path):
     assert "ELT_REPEATED_HEADERS_SKIPPED" in codes
     assert "ELT_FOOTER_ROWS_SKIPPED" in codes
     assert len(ds.rows) == 1
+    reconciliation = ds.source_features["row_reconciliation"]
+    dropped = sum(item["count"] for item in reconciliation["differences"])
+    assert reconciliation["recognized_rows"] == reconciliation["preview_rows"] == 1
+    assert reconciliation["original_rows"] == 1 + dropped
+    assert {item["code"] for item in reconciliation["differences"]} >= {
+        "ELT_REPEATED_HEADERS_SKIPPED",
+        "ELT_FOOTER_ROWS_SKIPPED",
+    }
+    assert all(item["rows"] for item in reconciliation["differences"] if item["count"])
 
 
 def test_parse_workbook_row_limit(tmp_path):

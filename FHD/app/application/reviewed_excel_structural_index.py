@@ -530,7 +530,8 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
                     "headers": header_rows,
                     "order_key_columns": order_key_columns,
                     "block_title_rows": block_titles[:80],
-                    "candidate_row_ranges": candidate_ranges[:80],
+                    "candidate_row_ranges": _cap_candidate_ranges(candidate_ranges, 80),
+                    "candidate_row_range_total": len(candidate_ranges),
                     "ledger_run_hint_count": ledger_run_hint,
                     "cross_sheet_formula_refs": xref,
                 }
@@ -563,6 +564,22 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
         return index
     finally:
         wb.close()
+
+
+def _cap_candidate_ranges(ranges: list[dict], limit: int) -> list[dict]:
+    """Keep ``limit`` entries; fold the rest into one remainder so no rows go missing."""
+    if len(ranges) <= limit:
+        return ranges
+    rest = ranges[limit - 1 :]
+    return [
+        *ranges[: limit - 1],
+        {
+            "start_row": min(item["start_row"] for item in rest),
+            "end_row": max(item["end_row"] for item in rest),
+            "basis": "candidate_ranges_remainder",
+            "run_hint_count": sum(int(item.get("run_hint_count") or 1) for item in rest),
+        },
+    ]
 
 
 def compress_structural_index_for_model(

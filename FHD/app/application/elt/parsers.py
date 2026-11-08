@@ -4,23 +4,32 @@ from __future__ import annotations
 
 import csv
 import itertools
+import re
 from pathlib import Path
 from typing import Any
 
 from app.application.elt.errors import EltError
 from app.application.elt.parser_ocr_provenance import enrich_ocr_provenance
 from app.application.elt.parser_structure import (
+    business_note_text,
     detect_table_layout,
     header_match_score,
     is_auxiliary_sheet_name,
     is_footer_or_note_row,
     is_repeated_header,
 )
+from app.application.elt.parser_table_structure import (
+    load_sheet_segmentations,
+    plan_rows,
+    structured_layout,
+    table_values,
+)
 from app.application.elt.parser_target_match import (
     covers_required_target_fields,
     target_header_hints,
 )
 from app.application.elt.parser_types import ParsedDataset, ParsedRow, ParsedRows
+from app.application.elt.table_segmentation import SegmentedTable
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 MAX_ROWS = 100_000
@@ -28,6 +37,57 @@ STRUCTURED_SUFFIXES = {".xlsx", ".xlsm", ".csv"}
 OCR_SUFFIXES = {".pdf", ".jpg", ".jpeg", ".png"}
 KNOWLEDGE_ONLY_SUFFIXES = {".doc", ".docx", ".ppt", ".pptx"}
 SUPPORTED_SUFFIXES = STRUCTURED_SUFFIXES | OCR_SUFFIXES | KNOWLEDGE_ONLY_SUFFIXES
+_ROW_DIFFERENCE_LIMIT = 50
+
+
+def _row_reconciliation(
+    recognized: int,
+    row_groups: list[tuple[str, list[dict[str, Any]], str]],
+    sheet_groups: list[tuple[str, list[dict[str, Any]], str]] | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Explain original, recognized and preview counts without dropping a row silently."""
+    differences: list[dict[str, Any]] = []
+    dropped = 0
+    for code, rows, message in row_groups:
+        if not rows:
+            continue
+        dropped += len(rows)
+        item: dict[str, Any] = {
+            "code": code,
+            "count": len(rows),
+            "message": message,
+            "rows": rows[:_ROW_DIFFERENCE_LIMIT],
+        }
+        if len(rows) > _ROW_DIFFERENCE_LIMIT:
+            item["rows_omitted"] = len(rows) - _ROW_DIFFERENCE_LIMIT
+        differences.append(item)
+    for code, sheets, message in sheet_groups or []:
+        if not sheets:
+            continue
+        differences.append(
+            {
+                "code": code,
+                "count": 0,
+                "sheet_count": len(sheets),
+                "message": message,
+                "sheets": sheets,
+            }
+        )
+    if recognized == 0 and dropped == 0:
+        differences.append(
+            {
+                "code": "ELT_NO_DATA_ROWS",
+                "count": 0,
+                "message": "表头下没有可识别的业务数据行。",
+            }
+        )
+    reconciliation = {
+        "original_rows": recognized + dropped,
+        "recognized_rows": recognized,
+        "preview_rows": recognized,
+        "differences": differences,
+    }
+    return reconciliation, [dict(item) for item in differences]
 
 
 def _aligned_headers_by_sheet(
@@ -81,6 +141,28 @@ def _aligned_headers_by_sheet(
     return result
 
 
+_ZERO_PAD_FORMAT = re.compile(r"0{2,}")
+
+
+def _cell_value(cell: Any) -> Any:
+    """Cell value as displayed for zero-padded codes (number format ``00000``)."""
+    value = cell.value
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return value
+    number_format = str(getattr(cell, "number_format", "") or "")
+    if _ZERO_PAD_FORMAT.fullmatch(number_format) and value >= 0 and value == int(value):
+        return str(int(value)).zfill(len(number_format))
+    return value
+
+
+def _row_data(headers: list[str], values: Any) -> dict[str, Any]:
+    """Keep "" distinct from None; drop only absent cells and all-blank rows."""
+    row = values[: len(headers)]
+    if all(value in (None, "") for value in row):
+        return {}
+    return {headers[index]: value for index, value in enumerate(row) if value is not None}
+
+
 def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
     from openpyxl import load_workbook
 
@@ -94,9 +176,11 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
     all_headers: list[str] = []
     sheets: list[dict[str, Any]] = []
     skipped_sheets: list[dict[str, Any]] = []
+    blank_rows: list[dict[str, Any]] = []
+    repeated_rows: list[dict[str, Any]] = []
+    footer_rows: list[dict[str, Any]] = []
     warnings: list[dict[str, Any]] = []
-    repeated_header_count = 0
-    footer_count = 0
+    business_notes: list[str] = []
     header_hints = target_header_hints(target_type)
     complete = False
     try:
@@ -105,10 +189,20 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             probe = list(worksheet.iter_rows(min_row=1, max_row=60, values_only=True))
             layout = detect_table_layout(probe, header_hints=header_hints)
             candidates.append((worksheet, layout))
+        segmentations = (
+            load_sheet_segmentations(path)
+            if any(layout is not None for _, layout in candidates)
+            else {}
+        )
+        candidates = [
+            (worksheet, structured_layout(segmentations.get(worksheet.title), layout, header_hints))
+            for worksheet, layout in candidates
+        ]
         any_target_match = any(
             layout is not None and layout.matched_hint_count > 0 for _, layout in candidates
         )
         aligned_headers = _aligned_headers_by_sheet(candidates, target_type)
+        excluded_rows: list[dict[str, Any]] = []
 
         for worksheet, layout in candidates:
             if layout is None:
@@ -134,51 +228,97 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             }
             all_headers.extend(header for header in headers if header not in all_headers)
             sheet_count = 0
-            for row_number, values in enumerate(
-                worksheet.iter_rows(min_row=layout.header_end + 2, values_only=True),
+            plan = plan_rows(segmentations.get(worksheet.title), layout.header_end + 1)
+            for row_number, cells in enumerate(
+                worksheet.iter_rows(min_row=layout.header_end + 2),
                 start=layout.header_end + 2,
             ):
-                if is_repeated_header(values, layout.headers):
-                    repeated_header_count += 1
+                row_values = tuple(_cell_value(cell) for cell in cells)
+                located = {"sheet": worksheet.title, "row": row_number}
+                if all(value in (None, "") for value in row_values):
+                    blank_rows.append(located)
                     continue
-                if is_footer_or_note_row(values):
-                    footer_count += 1
+                slices: list[tuple[SegmentedTable | None, tuple[Any, ...]]]
+                if plan is not None:
+                    tables = plan.tables_by_row.get(row_number)
+                    if not tables:
+                        if any(value not in (None, "") for value in row_values):
+                            role, reason = plan.exclude(row_number)
+                            if role == "repeated_header":
+                                repeated_rows.append(located)
+                            else:
+                                footer_rows.append(located)
+                            note = business_note_text(row_values)
+                            if note and note not in business_notes:
+                                business_notes.append(note)
+                            excluded_rows.append(
+                                {
+                                    "sheet": worksheet.title,
+                                    "row": row_number,
+                                    "role": role,
+                                    "reason": reason,
+                                }
+                            )
+                        continue
+                    slices = [
+                        (table, table_values(row_values, table, plan, len(headers)))
+                        for table in tables
+                    ]
+                elif is_repeated_header(row_values, layout.headers):
+                    repeated_rows.append(located)
                     continue
-                data = {
-                    headers[index]: value
-                    for index, value in enumerate(values[: len(headers)])
-                    if value not in (None, "")
-                }
-                if not data:
+                elif is_footer_or_note_row(row_values):
+                    footer_rows.append(located)
+                    note = business_note_text(row_values)
+                    if note and note not in business_notes:
+                        business_notes.append(note)
                     continue
-                if len(result) >= max_rows:
-                    raise EltError(
-                        "ELT_ROW_LIMIT_EXCEEDED",
-                        f"文件超过 {max_rows} 行限制",
-                        status_code=413,
+                else:
+                    slices = [(None, row_values)]
+                for table, values in slices:
+                    data = _row_data(headers, values)
+                    if not data:
+                        continue
+                    if len(result) >= max_rows:
+                        raise EltError(
+                            "ELT_ROW_LIMIT_EXCEEDED",
+                            f"文件超过 {max_rows} 行限制",
+                            status_code=413,
+                        )
+                    offset = (
+                        table.min_col - min(t.min_col for t in plan.tables)
+                        if table is not None and plan is not None
+                        else 0
                     )
-                result.append(
-                    ParsedRow(
-                        sheet=worksheet.title,
-                        row_number=row_number,
-                        values=data,
-                        provenance={
-                            "sheet": worksheet.title,
-                            "row": row_number,
-                            "original_fragment": {
-                                layout.headers[index]: value
-                                for index, value in enumerate(values[: len(headers)])
-                            },
-                            "header_aliases": header_aliases,
-                            "columns": {headers[index]: index + 1 for index in range(len(headers))},
-                            "header_rows": {
-                                "start": layout.header_start + 1,
-                                "end": layout.header_end + 1,
-                            },
+                    provenance = {
+                        "sheet": worksheet.title,
+                        "row": row_number,
+                        "original_fragment": {
+                            layout.headers[index]: value
+                            for index, value in enumerate(values[: len(headers)])
                         },
+                        "header_aliases": header_aliases,
+                        "columns": {
+                            headers[index]: offset + index + 1 for index in range(len(headers))
+                        },
+                        "header_rows": {
+                            "start": layout.header_start + 1,
+                            "end": layout.header_end + 1,
+                        },
+                    }
+                    if table is not None:
+                        provenance["table_id"] = table.table_id
+                        provenance["table_range"] = table.range_ref()
+                        provenance["table_title"] = table.title
+                    result.append(
+                        ParsedRow(
+                            sheet=worksheet.title,
+                            row_number=row_number,
+                            values=data,
+                            provenance=provenance,
+                        )
                     )
-                )
-                sheet_count += 1
+                    sheet_count += 1
             sheets.append(
                 {
                     "name": worksheet.title,
@@ -192,6 +332,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                     "aligned_headers": list(headers),
                     "header_aliases": header_aliases,
                     "row_count": sheet_count,
+                    **({"table_structure": plan.public()} if plan is not None else {}),
                 }
             )
         complete = True
@@ -199,30 +340,29 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
         if not complete:
             result.close()
         workbook.close()
-    if skipped_sheets:
-        warnings.append(
-            {
-                "code": "ELT_AUXILIARY_SHEETS_SKIPPED",
-                "message": f"已跳过 {len(skipped_sheets)} 个非业务或无法识别的工作表。",
-                "sheets": skipped_sheets,
-            }
-        )
-    if repeated_header_count:
-        warnings.append(
-            {
-                "code": "ELT_REPEATED_HEADERS_SKIPPED",
-                "message": f"已跳过 {repeated_header_count} 行重复表头。",
-                "count": repeated_header_count,
-            }
-        )
-    if footer_count:
-        warnings.append(
-            {
-                "code": "ELT_FOOTER_ROWS_SKIPPED",
-                "message": f"已跳过 {footer_count} 行合计、备注或签字尾行。",
-                "count": footer_count,
-            }
-        )
+    reconciliation, warnings = _row_reconciliation(
+        len(result),
+        [
+            ("ELT_BLANK_ROWS_SKIPPED", blank_rows, f"已跳过 {len(blank_rows)} 行空白行。"),
+            (
+                "ELT_REPEATED_HEADERS_SKIPPED",
+                repeated_rows,
+                f"已跳过 {len(repeated_rows)} 行重复表头。",
+            ),
+            (
+                "ELT_FOOTER_ROWS_SKIPPED",
+                footer_rows,
+                f"已跳过 {len(footer_rows)} 行合计、备注或签字尾行。",
+            ),
+        ],
+        [
+            (
+                "ELT_AUXILIARY_SHEETS_SKIPPED",
+                skipped_sheets,
+                f"已跳过 {len(skipped_sheets)} 个非业务或无法识别的工作表，这些工作表不计入行数。",
+            )
+        ],
+    )
     return ParsedDataset(
         headers=all_headers,
         rows=result,
@@ -232,6 +372,9 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
             "skipped_sheets": skipped_sheets,
             "headers": all_headers,
             "structure_detection": "deterministic_v2",
+            "excluded_rows": excluded_rows,
+            "row_reconciliation": reconciliation,
+            "business_notes": business_notes,
         },
         warnings=warnings,
     )
@@ -270,25 +413,28 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
             dataset = ParsedDataset(headers=[], rows=rows, source_features={"kind": "csv"})
             return dataset
         headers = layout.headers
-        repeated_header_count = 0
-        footer_count = 0
+        blank_rows: list[dict[str, Any]] = []
+        repeated_rows: list[dict[str, Any]] = []
+        footer_rows: list[dict[str, Any]] = []
+        business_notes: list[str] = []
         remaining_probe = probe[layout.header_end + 1 :]
         for row_number, values in enumerate(
             itertools.chain(remaining_probe, reader),
             start=layout.header_end + 2,
         ):
+            located = {"sheet": "CSV", "row": row_number}
             if is_repeated_header(values, headers):
-                repeated_header_count += 1
+                repeated_rows.append(located)
                 continue
             if is_footer_or_note_row(values):
-                footer_count += 1
+                footer_rows.append(located)
+                note = business_note_text(values)
+                if note and note not in business_notes:
+                    business_notes.append(note)
                 continue
-            data = {
-                headers[index]: value
-                for index, value in enumerate(values[: len(headers)])
-                if value != ""
-            }
+            data = _row_data(headers, values)
             if not data:
+                blank_rows.append(located)
                 continue
             if len(rows) >= max_rows:
                 raise EltError(
@@ -311,23 +457,22 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
                     },
                 )
             )
-        warnings: list[dict[str, Any]] = []
-        if repeated_header_count:
-            warnings.append(
-                {
-                    "code": "ELT_REPEATED_HEADERS_SKIPPED",
-                    "message": f"已跳过 {repeated_header_count} 行重复表头。",
-                    "count": repeated_header_count,
-                }
-            )
-        if footer_count:
-            warnings.append(
-                {
-                    "code": "ELT_FOOTER_ROWS_SKIPPED",
-                    "message": f"已跳过 {footer_count} 行合计、备注或签字尾行。",
-                    "count": footer_count,
-                }
-            )
+        reconciliation, warnings = _row_reconciliation(
+            len(rows),
+            [
+                ("ELT_BLANK_ROWS_SKIPPED", blank_rows, f"已跳过 {len(blank_rows)} 行空白行。"),
+                (
+                    "ELT_REPEATED_HEADERS_SKIPPED",
+                    repeated_rows,
+                    f"已跳过 {len(repeated_rows)} 行重复表头。",
+                ),
+                (
+                    "ELT_FOOTER_ROWS_SKIPPED",
+                    footer_rows,
+                    f"已跳过 {len(footer_rows)} 行合计、备注或签字尾行。",
+                ),
+            ],
+        )
         dataset = ParsedDataset(
             headers=headers,
             rows=rows,
@@ -341,6 +486,8 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
                 "header_confidence": layout.confidence,
                 "header_reasons": list(layout.reasons),
                 "structure_detection": "deterministic_v2",
+                "row_reconciliation": reconciliation,
+                "business_notes": business_notes,
             },
             warnings=warnings,
         )

@@ -11,6 +11,27 @@ from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltError
 
+_NON_NEGATIVE_FIELDS = frozenset({"quantity", "quantity_kg", "quantity_tins", "received_quantity"})
+
+
+def _typed_value_issue(field: TargetField, value: Any) -> dict[str, Any] | None:
+    if value in (None, ""):
+        return None
+    if field.type == "date":
+        from app.application.elt.transforms import _date
+
+        try:
+            _date(value)
+        except EltError:
+            return {
+                "code": "ELT_VALUE_FORMAT_INVALID",
+                "field": field.key,
+                "severity": "error",
+                "message": f"{field.label}不是有效日期",
+            }
+        return None
+    return None
+
 
 def json_safe(value: Any) -> Any:
     if isinstance(value, dict):
@@ -24,6 +45,23 @@ def json_safe(value: Any) -> Any:
     return value
 
 
+def strict_decimal(value: Any) -> Decimal | None:
+    """Exact numeric value; None/blank stay None, booleans are never numbers."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if isinstance(value, bool):
+        raise EltError("ELT_NUMBER_INVALID", f"布尔值不能当作数字: {value}")
+    # Excel stores doubles but shows 15 significant digits; that is the business value.
+    text = format(value, ".15g") if isinstance(value, float) else str(value)
+    try:
+        number = Decimal(text.strip().replace(",", ""))
+    except ArithmeticError as exc:
+        raise EltError("ELT_NUMBER_INVALID", f"数字格式不正确: {value}") from exc
+    if not number.is_finite():
+        raise EltError("ELT_NUMBER_INVALID", f"数字格式不正确: {value}")
+    return number
+
+
 @dataclass(frozen=True, slots=True)
 class TargetField:
     key: str
@@ -32,6 +70,7 @@ class TargetField:
     required: bool = False
     aliases: tuple[str, ...] = ()
     updatable: bool = False
+    scale: int | None = None
 
 
 @dataclass(slots=True)
@@ -68,7 +107,8 @@ class TargetAdapter:
     def validate(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         issues: list[dict[str, Any]] = []
         for field in self.fields:
-            if field.required and data.get(field.key) in (None, ""):
+            value = data.get(field.key)
+            if field.required and value in (None, ""):
                 issues.append(
                     {
                         "code": "ELT_REQUIRED_FIELD_MISSING",
@@ -77,7 +117,52 @@ class TargetAdapter:
                         "message": f"{field.label}不能为空",
                     }
                 )
+                continue
+            if field.type in {"number", "integer"}:
+                issues.extend(self._numeric_issues(field, value))
+            else:
+                issue = _typed_value_issue(field, value)
+                if issue:
+                    issues.append(issue)
         return issues
+
+    @staticmethod
+    def _numeric_issues(field: TargetField, value: Any) -> list[dict[str, Any]]:
+        try:
+            number = strict_decimal(value)
+        except EltError as exc:
+            return [
+                {"code": exc.code, "field": field.key, "severity": "error", "message": exc.message}
+            ]
+        if number is None:
+            return []
+        if field.key in _NON_NEGATIVE_FIELDS and number < 0:
+            return [
+                {
+                    "code": "ELT_VALUE_INVALID",
+                    "field": field.key,
+                    "severity": "error",
+                    "message": f"{field.label}不能为负数",
+                }
+            ]
+        scale = 0 if field.type == "integer" else field.scale
+        # Count fractional digits without Decimal.normalize() context rounding.
+        digits = list(number.as_tuple().digits)
+        exponent = number.as_tuple().exponent
+        assert isinstance(exponent, int)  # strict_decimal already rejected non-finite values.
+        while digits and digits[-1] == 0:
+            digits.pop()
+            exponent += 1
+        if digits and scale is not None and -exponent > scale:
+            return [
+                {
+                    "code": "ELT_NUMBER_PRECISION_EXCEEDED",
+                    "field": field.key,
+                    "severity": "error",
+                    "message": f"{field.label}最多保留 {scale} 位小数，拒绝擅自舍入: {value}",
+                }
+            ]
+        return []
 
     def preview(
         self,

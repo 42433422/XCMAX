@@ -236,8 +236,12 @@ def register_tenant_shipment_routes(router) -> None:
             return shipment_orders.shipment_print(request, body)
 
     @router.get("/shipment/download/{filename:path}")
-    def mod_shipment_download(filename: str, user=Depends(require_permission("shipment.view"))):
+    def mod_shipment_download(
+        filename: str,
+        request: Request,
+        user=Depends(require_permission("shipment.view")),
+    ):
         if user.tenant_id is None:
             raise HTTPException(status_code=403, detail="企业归属缺失")
         with tenant_scope(user.tenant_id):
-            return shipment_orders.shipment_download(filename)
+            return shipment_orders.shipment_download(filename, request)

@@ -8,7 +8,7 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
@@ -83,6 +83,16 @@ def get_run(
         "success": True,
         "data": get_elt_service().get_run(db, run_id=run_id, owner_user_id=_user_id(user)),
     }
+
+
+@router.get("/runs/{run_id}/download")
+def download_run_export(
+    run_id: str,
+    db: Session = Depends(get_db_dependency),
+    user: Any = Depends(_read),
+):
+    path = get_elt_service().download_path(db, run_id=run_id, owner_user_id=_user_id(user))
+    return FileResponse(path, filename=path.name)
 
 
 sources_router = APIRouter(
