@@ -722,7 +722,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("system_maintenance", "invalidate_performance_cache"): {
         "type": "object",
         "required": ["keys"],
-        "properties": {"keys": {"type": "array"}},
+        "properties": {"keys": {"type": "array", "minItems": 1}},
     },
     ("system_maintenance", "reinitialize_performance"): {
         "type": "object",
