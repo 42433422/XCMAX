@@ -1,5 +1,5 @@
 {
-  "lines": 2452723,
+  "lines": 2452724,
   "updated": "2026-11-08",
-  "note": "市场端幂等台账测试夹具补建 users 行，使外键在全量顺序下成立（CI modstore-backend-test 失败修复），+3 行"
+  "note": "CHANGELOG 补一条面向非技术读者的说明（分类包上限、旧批次部分入库），+1 行"
 }
