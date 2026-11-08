@@ -1,0 +1,181 @@
+{
+  "measured_at": "2026-11-08T15:00:57+08:00",
+  "account_actor": "2:3",
+  "tenant_id": 2,
+  "owner_user_id": 3,
+  "chat": {
+    "path": "/api/ai/chat",
+    "status": 200,
+    "provider": "xiaomi",
+    "model": "mimo-v2.6-flash",
+    "route_source": "platform_configuration",
+    "key_source": "platform"
+  },
+  "commits": [
+    "bf741d4cf",
+    "8d4dc02be",
+    "9c2765fc5"
+  ],
+  "baseline": {
+    "from": 2447414,
+    "to": 2447610,
+    "reasons": [
+      "ELT model round rejects a purchase unit that is not on the cited sheet instead of writing it",
+      "ELT model round asks about workbook sheets the first answer did not cite"
+    ]
+  },
+  "four_way_pass": [
+    {
+      "file": "迎扬李总.xlsx",
+      "run_id": "0a2465a3-cd42-4892-a77a-62e704893207",
+      "target": "shipment_records",
+      "reason": "delivery_note_business_rows",
+      "ingest": "applied",
+      "download_status": 200,
+      "preview_rows": 5,
+      "written": 5,
+      "db_matched": 5,
+      "original_mismatch_count": 0,
+      "value_mismatch_count": 0
+    },
+    {
+      "file": "新旺博旺.xlsx",
+      "run_id": "fc740162-796a-4c8a-8181-eceb615fa336",
+      "target": "shipment_records",
+      "reason": "delivery_note_business_rows",
+      "ingest": "applied",
+      "download_status": 200,
+      "preview_rows": 1,
+      "written": 1,
+      "db_matched": 1,
+      "original_mismatch_count": 0,
+      "value_mismatch_count": 0
+    },
+    {
+      "file": "国圣化工.xlsx",
+      "run_id": "e382a51c-762b-4535-a8e4-e1534ca4d386",
+      "target": "shipment_records",
+      "reason": "database_llm",
+      "ingest": "applied",
+      "download_status": 200,
+      "preview_rows": 2,
+      "written": 2,
+      "db_matched": 2,
+      "original_mismatch_count": 0,
+      "value_mismatch_count": 0,
+      "scope_note": "Confirmed run cites the first delivery sheet only. A later preview 3c02bab8-92a4-493b-8e14-5a0dfa43a7f9 is preview_ready with 34 rows (2 same coordinates as the written run, 32 on the other delivery sheet) and was not executed, because those 2 would insert again."
+    },
+    {
+      "file": "刘英.xlsx",
+      "run_id": "84b7e4e2-6b0d-48a9-9edb-17b826646829",
+      "target": "shipment_records",
+      "reason": "database_llm",
+      "ingest": "applied",
+      "download_status": 200,
+      "preview_rows": 3,
+      "written": 3,
+      "db_matched": 3,
+      "original_mismatch_count": 0,
+      "value_mismatch_count": 0,
+      "scope_note": "Model rounds still cited only the first delivery sheet. The other delivery-labeled sheet was left uncited. Not resent."
+    }
+  ],
+  "ingest_applied_without_shipment_download": [
+    {
+      "file": "26年word计算的备用表格.xlsx",
+      "run_id": "eae0a502-fc6b-4098-926d-a11d7ec974b7",
+      "target": "knowledge",
+      "reason": "archived_document",
+      "ingest": "applied"
+    },
+    {
+      "file": "26年生产单.xlsx",
+      "run_id": "bb94d0a0-a21f-4132-9247-09f5fbe271f2",
+      "target": "knowledge",
+      "reason": "archived_document",
+      "ingest": "applied"
+    }
+  ],
+  "downloaded_with_gap": [
+    {
+      "file": "宗南.xlsx",
+      "run_id": "b5d45a18-b458-41cd-86ea-32f81e135ff7",
+      "ingest": "applied",
+      "download_status": 200,
+      "preview_rows": 97,
+      "written": 67,
+      "db_matched": 67,
+      "value_mismatch_count": 0,
+      "original_mismatch_count": 87,
+      "original_mismatch_field": "购买单位",
+      "note": "87 rows on the year sheet use one purchase unit that is not on that sheet. Not re-executed."
+    },
+    {
+      "file": "尹玉华1.xlsx",
+      "run_id": "b8d3c7ad-7d9c-4036-9ffe-72e6ca3dc5dd",
+      "ingest": "applied",
+      "download_status": 200,
+      "preview_rows": 100,
+      "written": 92,
+      "db_matched": 92,
+      "value_mismatch_count": 0,
+      "original_mismatch_count": 100,
+      "original_mismatch_field": "coordinate",
+      "note": "Later unexecuted preview 5f43329d located 100 rows whose business keys do not join the written rows. Withdraw returned 403. Not executed."
+    },
+    {
+      "file": "温总.xlsx",
+      "run_id": "69d9dd0f-c910-48e5-8ce8-2a16592e1852",
+      "ingest": "applied",
+      "download_status": 200,
+      "reason": "delivery_note_business_rows",
+      "preview_rows": 1,
+      "written": 1,
+      "db_matched": 1,
+      "original_mismatch_count": 0,
+      "value_mismatch_count": 0,
+      "note": "Database lane stored degraded=true with no degradation code and no provider body. Local delivery parser wrote 1 row. The large delivery sheet was not imported. Not resent."
+    }
+  ],
+  "blocked": [
+    {
+      "file": "26年材料总表.xlsx",
+      "classification_id": "83e6e55e-5c50-42b2-ab0e-cf91f485c216",
+      "owner_user_id": 3,
+      "updated_at": "2026-11-08T13:54:10+08:00",
+      "phase": "inflight",
+      "results_stored": 3,
+      "total": 7,
+      "audit_last": "inflight",
+      "provider_body": false,
+      "stop": "unknown outcome, do not resend"
+    },
+    {
+      "file": "侯雪梅.xlsx",
+      "classification_id": "bee18857-2a4f-4fb4-9298-f579f6fe7d2f",
+      "owner_user_id": 3,
+      "updated_at": "2026-11-08T14:56:00+08:00",
+      "phase": "inflight",
+      "total": 1,
+      "audit_last": "inflight",
+      "provider_body": false,
+      "client_status": 503,
+      "client_reason": "修茈市场模型余额不足，请在「模型支付」充值后重试",
+      "stop": "unknown outcome, do not resend"
+    }
+  ],
+  "not_started_this_pass": [
+    "七彩乐园.xlsx",
+    "小洋杨总、.xlsx",
+    "张总.xlsx",
+    "澜宇电视柜.xlsx",
+    "现金.xlsx",
+    "邻居杨总.xlsx",
+    "邻居贾总.xlsx",
+    "鑫顺.xlsx",
+    "26年综合表格.xlsx",
+    "26年销售明细.xlsx",
+    "考勤表.xlsx"
+  ],
+  "not_started_reason": "侯雪梅 analyze returned HTTP 503 for insufficient market balance and left an inflight checkpoint with no provider body. Further model calls were not started."
+}
