@@ -678,6 +678,10 @@ def api_admin_credit_user_wallet(
     if amount <= _facade().Decimal("0.00"):
         raise _facade().HTTPException(400, "加款金额必须大于 0")
     description = (body.description or "").strip() or "后台加款"
+    from modstore_server import java_wallet_admin
+
+    if java_wallet_admin.payment_backend_is_java():
+        return java_wallet_admin.credit_user(user_id, amount, description)
     sf = _facade().get_session_factory()
     with sf() as session:
         target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
@@ -2220,6 +2224,10 @@ def api_admin_list_wallets(
     A wallet record is created lazily on first wallet use.  Listing the ``wallets`` table alone
     therefore made untouched accounts look as if their balance could not be queried.
     """
+    from modstore_server import java_wallet_admin
+
+    if java_wallet_admin.payment_backend_is_java():
+        return java_wallet_admin.list_wallets(limit, offset)
     sf = _facade().get_session_factory()
     with sf() as session:
         total = session.query(_facade().User).count()
@@ -2255,6 +2263,10 @@ def api_admin_list_transactions(
     offset: int = _facade().Query(0, ge=0),
     user: _facade().User = _facade().Depends(_facade()._require_admin),
 ):
+    from modstore_server import java_wallet_admin
+
+    if java_wallet_admin.payment_backend_is_java():
+        return java_wallet_admin.list_transactions(limit, offset)
     sf = _facade().get_session_factory()
     with sf() as session:
         total = session.query(_facade().Transaction).count()

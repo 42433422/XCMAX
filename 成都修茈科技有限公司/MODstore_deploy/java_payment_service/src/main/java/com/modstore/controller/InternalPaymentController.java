@@ -1,10 +1,15 @@
 package com.modstore.controller;
 
 import com.modstore.model.Order;
+import com.modstore.model.Transaction;
 import com.modstore.model.User;
+import com.modstore.model.Wallet;
+import com.modstore.repository.TransactionRepository;
 import com.modstore.repository.UserRepository;
+import com.modstore.repository.WalletRepository;
 import com.modstore.service.AlipayService;
 import com.modstore.service.OrderService;
+import com.modstore.service.WalletService;
 import com.modstore.service.WechatPayService;
 import com.modstore.util.MoneyUtils;
 import lombok.RequiredArgsConstructor;
@@ -16,18 +21,25 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -45,6 +57,9 @@ public class InternalPaymentController {
     private final OrderService orderService;
     private final AlipayService alipayService;
     private final WechatPayService wechatPayService;
+    private final WalletService walletService;
+    private final WalletRepository walletRepository;
+    private final TransactionRepository transactionRepository;
 
     @Value("${modstore.internal-api-key:}")
     private String internalApiKey;
@@ -288,6 +303,133 @@ public class InternalPaymentController {
                 "enterprise_subject_id", subjectId,
                 "frozen", true
         );
+    }
+
+    /**
+     * 管理员给指定用户加款。写入 Java 钱包，模型预授权读的是这一本。
+     */
+    @PostMapping("/wallet/credit")
+    public Map<String, Object> creditWallet(
+            @RequestHeader(value = "X-Internal-Api-Key", required = false) String key,
+            @RequestBody Map<String, Object> body
+    ) {
+        requireInternalKey(key);
+        long userId;
+        try {
+            userId = Long.parseLong(String.valueOf(body.getOrDefault("user_id", "0")));
+        } catch (NumberFormatException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "user_id invalid");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在"));
+        BigDecimal amount;
+        try {
+            amount = MoneyUtils.parse(body.get("amount"));
+        } catch (RuntimeException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "加款金额无效");
+        }
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "加款金额必须大于 0");
+        }
+        String description = String.valueOf(body.getOrDefault("description", "后台加款")).trim();
+        if (description.isEmpty() || "null".equals(description)) {
+            description = "后台加款";
+        }
+        if (description.length() > 500) {
+            description = description.substring(0, 500);
+        }
+        String idempotencyKey = String.valueOf(body.getOrDefault("idempotency_key", "")).trim();
+        if (idempotencyKey.isEmpty() || "null".equals(idempotencyKey)) {
+            idempotencyKey = "admin_credit:" + userId + ":" + UUID.randomUUID().toString().replace("-", "");
+        }
+        if (idempotencyKey.length() > 128) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idempotency_key 过长");
+        }
+        Transaction txn;
+        try {
+            txn = walletService.credit(
+                    user, amount, "admin_credit", description, null, null, null, idempotencyKey
+            );
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage());
+        }
+        String balance = txn.getBalanceAfter().setScale(2, RoundingMode.HALF_UP).toPlainString();
+        Map<String, Object> result = new HashMap<>();
+        result.put("ok", true);
+        result.put("source", "java_postgresql");
+        result.put("user_id", userId);
+        result.put("amount", amount.toPlainString());
+        result.put("balance", balance);
+        result.put("new_balance", balance);
+        return result;
+    }
+
+    @GetMapping("/wallets")
+    @Transactional(readOnly = true)
+    public Map<String, Object> wallets(
+            @RequestHeader(value = "X-Internal-Api-Key", required = false) String key,
+            @RequestParam(defaultValue = "100") int limit,
+            @RequestParam(defaultValue = "0") int offset
+    ) {
+        requireInternalKey(key);
+        int size = Math.max(1, Math.min(limit, 500));
+        int off = Math.max(offset, 0);
+        Page<User> page = userRepository.findAll(PageRequest.of(
+                off / size,
+                size,
+                Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id"))
+        ));
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (User account : page.getContent()) {
+            Optional<Wallet> wallet = walletRepository.findByUserId(account.getId());
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", wallet.map(Wallet::getId).orElse(null));
+            row.put("user_id", account.getId());
+            row.put("balance", wallet.map(Wallet::getBalance).orElse(BigDecimal.ZERO));
+            row.put("updated_at", wallet.map(item -> item.getUpdatedAt() == null ? "" : item.getUpdatedAt().toString()).orElse(""));
+            items.add(row);
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("ok", true);
+        result.put("source", "java_postgresql");
+        result.put("items", items);
+        result.put("total", page.getTotalElements());
+        return result;
+    }
+
+    @GetMapping("/transactions")
+    @Transactional(readOnly = true)
+    public Map<String, Object> transactions(
+            @RequestHeader(value = "X-Internal-Api-Key", required = false) String key,
+            @RequestParam(defaultValue = "100") int limit,
+            @RequestParam(defaultValue = "0") int offset
+    ) {
+        requireInternalKey(key);
+        int size = Math.max(1, Math.min(limit, 500));
+        int off = Math.max(offset, 0);
+        Page<Transaction> page = transactionRepository.findAll(PageRequest.of(
+                off / size,
+                size,
+                Sort.by(Sort.Direction.DESC, "createdAt")
+        ));
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (Transaction txn : page.getContent()) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", txn.getId());
+            row.put("user_id", txn.getUser() == null ? null : txn.getUser().getId());
+            row.put("amount", txn.getAmount());
+            row.put("txn_type", txn.getTransactionType());
+            row.put("status", txn.getStatus());
+            row.put("description", txn.getDescription());
+            row.put("created_at", txn.getCreatedAt() == null ? "" : txn.getCreatedAt().toString());
+            items.add(row);
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("ok", true);
+        result.put("source", "java_postgresql");
+        result.put("items", items);
+        result.put("total", page.getTotalElements());
+        return result;
     }
 
     private void requireInternalKey(String key) {
