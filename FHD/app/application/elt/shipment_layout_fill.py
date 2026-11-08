@@ -431,14 +431,102 @@ def _saved_layout_path(db: Any, run: Any) -> Path | None:
     )
 
 
+_TRACE_HEADERS = (
+    "来源工作表",
+    "来源行",
+    "去向",
+    "购买单位",
+    "产品名称",
+    "型号",
+    "原数量",
+    "公斤数",
+    "桶数",
+    "单价",
+    "金额",
+    "日期",
+    "数据库记录",
+)
+
+
+def _text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _first(data: dict[str, Any], *names: str) -> str:
+    for name in names:
+        text = _text(data.get(name))
+        if text:
+            return text
+    return ""
+
+
+def _source_date(source: dict[str, Any]) -> str:
+    for key, value in source.items():
+        if "日期" in str(key):
+            text = _text(value)
+            if text:
+                return text
+    return ""
+
+
+def _trace_rows(db: Any, run_id: str) -> list[Any]:
+    from app.db.models.elt import EltRunRow
+
+    return (
+        db.query(EltRunRow)
+        .filter(EltRunRow.run_id == run_id)
+        .order_by(EltRunRow.source_sheet.asc(), EltRunRow.source_row.asc(), EltRunRow.id.asc())
+        .all()
+    )
+
+
+def write_submission_trace(db: Any, run: Any, destination: Path) -> str:
+    """One row per preview disposition, including rows that were not written."""
+    from openpyxl import Workbook
+
+    run_id = str(getattr(run, "id", "") or "")
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "本次提交"
+    sheet.append(list(_TRACE_HEADERS))
+    for row in _trace_rows(db, run_id):
+        source = load_json(row.source_json, {})
+        normal = load_json(row.normalized_json, {})
+        after = load_json(row.after_json, {})
+        source = source if isinstance(source, dict) else {}
+        normal = normal if isinstance(normal, dict) else {}
+        after = after if isinstance(after, dict) else {}
+        disposition = str(row.final_action or "")
+        if row.execution_status and row.execution_status != "success":
+            disposition = f"{disposition}:{row.execution_status}"
+        written = disposition.startswith(("new", "update"))
+        sheet.append(
+            [
+                row.source_sheet,
+                row.source_row,
+                disposition,
+                _first(normal, "purchase_unit") or _first(source, "购买单位"),
+                _first(normal, "product_name") or _first(source, "产品名称", "品名"),
+                _first(normal, "model_number") or _first(source, "型号"),
+                _first(source, "数量"),
+                _first(after, "quantity_kg") or _first(normal, "quantity_kg"),
+                _first(after, "quantity_tins") or _first(normal, "quantity_tins"),
+                _first(after, "unit_price") or _first(normal, "unit_price") or _first(source, "单价"),
+                _first(after, "amount") or _first(normal, "amount") or _first(source, "金额"),
+                _source_date(source),
+                after.get("id") if written else "",
+            ]
+        )
+    return save_stable_workbook(book, destination)
+
+
 def write_committed_shipment_workbook(db: Any, run: Any) -> dict[str, str] | None:
-    """Store the delivery note built from this run's committed rows."""
+    """Store this run's result: the saved layout, or the trace of every preview row."""
     if getattr(run, "target_type", "") != "shipment_records":
         return None
     if getattr(run, "status", "") not in {"completed", "partial"}:
-        return None
-    layout = _saved_layout_path(db, run)
-    if layout is None:
         return None
     run_id = str(getattr(run, "id", "") or "")
     if not run_id or "/" in run_id or "\\" in run_id or run_id in {".", ".."}:
@@ -447,7 +535,13 @@ def write_committed_shipment_workbook(db: Any, run: Any) -> dict[str, str] | Non
     destination = (root / f"etl-{run_id}.xlsx").resolve()
     if root not in destination.parents:
         return None
-    digest = fill_delivery_note_file(layout, _committed_rows(db, run), destination)
+    layout = _saved_layout_path(db, run)
+    if layout is None:
+        if not _trace_rows(db, run_id):
+            return None
+        digest = write_submission_trace(db, run, destination)
+    else:
+        digest = fill_delivery_note_file(layout, _committed_rows(db, run), destination)
     return {
         "file_name": destination.name,
         "sha256": digest,

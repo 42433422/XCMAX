@@ -17,7 +17,7 @@ from app.application.elt.shipment_layout_fill import (
     write_committed_shipment_workbook,
 )
 from app.db.db_base import Base
-from app.db.models.elt import EltTemplate, EltTemplateVersion
+from app.db.models.elt import EltRun, EltRunRow, EltTemplate, EltTemplateVersion, EltUpload
 from app.db.models.shipment import ShipmentRecord
 from app.infrastructure.tenant_scope import reset_current_tenant_id, set_current_tenant_id
 
@@ -298,6 +298,105 @@ def test_completed_run_writes_a_downloadable_snapshot(tmp_path, monkeypatch):
         workbook.close()
         assert write_committed_shipment_workbook(
             session, SimpleNamespace(id="run-1", target_type="orders", status="completed")
+        ) is None
+    finally:
+        reset_current_tenant_id(token)
+        session.close()
+        engine.dispose()
+
+
+def test_submission_without_layout_downloads_every_preview_row(tmp_path, monkeypatch):
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    engine = create_engine(f"sqlite:///{tmp_path / 'trace.sqlite'}")
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            EltUpload.__table__,
+            EltTemplate.__table__,
+            EltTemplateVersion.__table__,
+            EltRun.__table__,
+            EltRunRow.__table__,
+        ],
+    )
+    session = sessionmaker(bind=engine)()
+    token = set_current_tenant_id(7)
+    try:
+        session.add(
+            EltUpload(
+                id="up-trace",
+                tenant_id=7,
+                owner_user_id=11,
+                file_name="trace.xlsx",
+                suffix=".xlsx",
+                size_bytes=1,
+                sha256="a" * 64,
+                storage_path="trace.xlsx",
+            )
+        )
+        session.commit()
+        session.add(
+            EltRun(
+                id="run-trace",
+                tenant_id=7,
+                owner_user_id=11,
+                upload_id="up-trace",
+                target_type="shipment_records",
+                file_sha256="a" * 64,
+                status="completed",
+            )
+        )
+        session.commit()
+        session.add(
+            EltRunRow(
+                tenant_id=7,
+                run_id="run-trace",
+                owner_user_id=11,
+                source_sheet="送货",
+                source_row=12,
+                source_json=dump_json({"购买单位": "甲", "产品名称": "白漆", "数量": "5", "金额": "40"}),
+                normalized_json=dump_json(
+                    {"purchase_unit": "甲", "product_name": "白漆", "quantity_kg": "140", "quantity_tins": "5", "amount": "40"}
+                ),
+                final_action="new",
+                execution_status="success",
+                after_json=dump_json({"id": 9}),
+            )
+        )
+        session.add(
+            EltRunRow(
+                tenant_id=7,
+                run_id="run-trace",
+                owner_user_id=11,
+                source_sheet="送货",
+                source_row=13,
+                source_json=dump_json({"产品名称": "合计"}),
+                normalized_json=dump_json({}),
+                final_action="skip",
+                execution_status="success",
+                after_json=dump_json({}),
+            )
+        )
+        session.commit()
+        produced = write_committed_shipment_workbook(
+            session,
+            SimpleNamespace(
+                id="run-trace",
+                target_type="shipment_records",
+                status="completed",
+                summary_json="{}",
+            ),
+        )
+        assert produced["file_name"] == "etl-run-trace.xlsx"
+        book = load_workbook(tmp_path / "etl" / "exports" / "etl-run-trace.xlsx")
+        sheet = book.active
+        assert sheet["A2"].value == "送货" and sheet["B2"].value == 12
+        assert sheet["C2"].value == "new" and sheet["G2"].value == "5"
+        assert sheet["H2"].value == "140" and sheet["M2"].value == 9
+        assert sheet["C3"].value == "skip" and sheet["M3"].value in (None, "")
+        book.close()
+        assert write_committed_shipment_workbook(
+            session,
+            SimpleNamespace(id="empty", target_type="shipment_records", status="completed", summary_json="{}"),
         ) is None
     finally:
         reset_current_tenant_id(token)

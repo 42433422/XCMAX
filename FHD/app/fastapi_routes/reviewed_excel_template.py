@@ -1629,9 +1629,9 @@ def reviewed_excel_intake_preview(
             path = staged_path = Path(source.storage_path)
             from app.application.elt.auto_ingest_service import workbook_text
             from app.application.elt.candidate_table import (
+                confirmed_business_table,
                 dataset_from_business_rows,
-                match_business_target,
-                read_candidate_table,
+                dataset_from_document_text,
                 read_delivery_note_business,
             )
             from app.application.elt.llm_assist import advise_business_import, etl_llm_enabled
@@ -1670,9 +1670,16 @@ def reviewed_excel_intake_preview(
                         target_type = "shipment_records"
                         detection_reason = "delivery_note_business_rows"
                     else:
-                        chosen_table = read_candidate_table(path)
-                        target_type = match_business_target(chosen_table.headers)
-                        detection_reason = "candidate_headers"
+                        confirmed = confirmed_business_table(path) or confirmed_business_table(
+                            archived
+                        )
+                        if confirmed is None:
+                            chosen_table = dataset_from_document_text(original_text, name.strip())
+                            target_type = "knowledge"
+                            detection_reason = "archived_document"
+                        else:
+                            chosen_table, target_type = confirmed
+                            detection_reason = "candidate_headers"
                     detection = {
                         "target_type": target_type,
                         "reason": detection_reason,

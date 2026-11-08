@@ -733,6 +733,20 @@ def test_email_contract_keeps_validation_semantics(value, valid):
     assert (_string_constraint_error("email", value, {"format": "email"}) == "") is valid
 
 
+def test_required_empty_array_is_present_and_a_missing_key_is_not():
+    from app.application.agent_orchestrator.tool_spec import _validate_schema_payload
+
+    schema = {
+        "type": "object",
+        "required": ["rows"],
+        "properties": {"rows": {"type": "array", "items": {"type": "object"}}},
+    }
+    ok, message = _validate_schema_payload(schema, {"rows": []}, subject="LLM 输出")
+    assert ok and message == ""
+    ok, message = _validate_schema_payload(schema, {}, subject="LLM 输出")
+    assert not ok and message == "LLM 输出 缺少字段：rows"
+
+
 def test_email_contract_rejects_long_invalid_input_without_backtracking():
     started = perf_counter()
     assert _string_constraint_error("email", "x@" + "!" * 50_000, {"format": "email"})

@@ -29,9 +29,10 @@ def _cell_text(value) -> str:
     return str(value).strip()
 
 
-def read_candidate_table(path: str | Path) -> ParsedDataset:
+def read_candidate_table(path: str | Path | bytes | bytearray) -> ParsedDataset:
     """Keep each selected sheet's header row and the value rows under it."""
-    workbook = load_workbook(path, read_only=True, data_only=False, keep_links=False)
+    source = path if isinstance(path, (str, Path)) else BytesIO(bytes(path))
+    workbook = load_workbook(source, read_only=True, data_only=False, keep_links=False)
     rows: list[ParsedRow] = []
     headers: list[str] = []
     notes: list[str] = []
@@ -322,6 +323,50 @@ def dataset_from_business_rows(items: list[dict]) -> ParsedDataset | None:
     return ParsedDataset(
         headers=headers, rows=rows,
         source_features={"kind": "reviewed_candidate", "parser": "database_llm", "headers": headers, "sheet_name": "", "business_notes": []},
+    )
+
+
+def confirmed_business_table(
+    source: str | Path | bytes | bytearray,
+) -> tuple[ParsedDataset, str] | None:
+    """A table only when its headers name exactly one business target."""
+    try:
+        table = read_candidate_table(source)
+    except EltError as exc:
+        if exc.code != "ELT_CANDIDATE_EMPTY":
+            raise
+        return None
+    try:
+        return table, match_business_target(table.headers)
+    except EltError as exc:
+        if exc.code != "ELT_CANDIDATE_TARGET_UNCONFIRMED":
+            raise
+        return None
+
+
+def dataset_from_document_text(text: str, source_key: str) -> ParsedDataset:
+    """One knowledge row from the archived workbook when it is not a business table."""
+    body = str(text or "").strip()
+    if not body:
+        raise EltError("ELT_KNOWLEDGE_EMPTY", "归档正文为空，不能进入知识库", status_code=409)
+    headers = ["内容", "来源键"]
+    return ParsedDataset(
+        headers=headers,
+        rows=[
+            ParsedRow(
+                sheet="",
+                row_number=1,
+                values={"内容": body, "来源键": str(source_key or "")[:160]},
+                provenance={"source": "reviewed_candidate", "parser": "archived_document"},
+            )
+        ],
+        source_features={
+            "kind": "reviewed_candidate",
+            "parser": "archived_document",
+            "headers": headers,
+            "sheet_name": "",
+            "business_notes": [],
+        },
     )
 
 

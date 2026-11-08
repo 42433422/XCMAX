@@ -2260,6 +2260,21 @@ def test_export_xlsx_uses_committed_template(tmp_path, monkeypatch):
     book.save(path)
     book.close()
     dataset = read_candidate_table(path)
+    from app.application.elt.candidate_table import (
+        confirmed_business_table,
+        dataset_from_document_text,
+    )
+
+    form = tmp_path / "form.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["产品编号", "日期："])
+    sheet.append(["P-1", 1])
+    book.save(form)
+    book.close()
+    assert confirmed_business_table(form) is None
+    document = dataset_from_document_text("生产单正文", "生产单")
+    assert document.headers == ["内容", "来源键"] and len(document.rows) == 1
     assert [row.values["客户"] for row in dataset.rows] == ["甲公司", "乙公司"]
     assert dataset.rows[1].values["产品"] == "=CMD|probe"
     assert "本合同一式两份，双方签字盖章后生效" in dataset.source_features["business_notes"]
