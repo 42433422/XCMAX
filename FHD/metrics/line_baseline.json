@@ -1,5 +1,5 @@
 {
-  "lines": 2453365,
+  "lines": 2453421,
   "updated": "2026-11-08",
-  "note": "elt: park unfixable SUBTOTAL/style cuts without compatibility LLM rounds"
+  "note": "elt: only_index auto-slice for preview/download so large workbooks do not re-derive all docs"
 }

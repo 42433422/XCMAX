@@ -458,7 +458,9 @@ def _model_allows_unassigned_slice(latest: dict) -> bool:
     return True
 
 
-def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False):
+def _auto_slices(
+    db, classification_id, version, tenant, owner, with_rows=False, only_index: int | None = None
+):
     from app.application.reviewed_excel_auto_slice import derive_classified_documents
 
     run = _classification_run(db, classification_id, tenant, owner)
@@ -474,6 +476,10 @@ def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False)
         )
 
         slices = derive_rule_slices(body, latest)
+        if only_index is not None:
+            if only_index < 0 or only_index >= len(slices):
+                raise HTTPException(status_code=404, detail="切片不存在")
+            slices = [slices[only_index]]
         dispositions = rule_row_dispositions(body, latest, slices) if with_rows else []
         return slices, latest.get("coverage") or [], dispositions
     if latest.get("model_status") != "returned":
@@ -528,6 +534,7 @@ def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False)
             "coverage": latest.get("coverage", []),
         },
         owner_id=owner,
+        only_index=only_index,
     )
     from app.application.reviewed_excel_sheet_names import annotate_slice_titles
 
@@ -574,14 +581,16 @@ def reviewed_excel_auto_slice_download(
     tenant, owner = _identity(user)
     try:
         with tenant_scope(tenant), get_db() as db:
-            slices, _coverage, _rows = _auto_slices(db, classification_id, version, tenant, owner)
-        if index < 0 or index >= len(slices):
+            slices, _coverage, _rows = _auto_slices(
+                db, classification_id, version, tenant, owner, only_index=index
+            )
+        if not slices:
             raise HTTPException(status_code=404, detail="切片不存在")
         return Response(
-            slices[index]["workbook"],
+            slices[0]["workbook"],
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(slices[index]['filename'])}"
+                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(slices[0]['filename'])}"
             },
         )
     except (ValueError, TypeError, EltError) as exc:
@@ -1389,13 +1398,24 @@ async def reviewed_excel_preview(
                 if not archive_version_id:
                     raise ReviewedExcelError("自动切片须先归档原件")
                 slices, _coverage, _rows = _auto_slices(
-                    db, classification_id, classification_version, tenant, owner
+                    db,
+                    classification_id,
+                    classification_version,
+                    tenant,
+                    owner,
+                    only_index=auto_slice_index,
                 )
-                if auto_slice_index >= len(slices):
+                if not slices:
                     raise HTTPException(status_code=404, detail="切片不存在")
-                selected_slice = slices[auto_slice_index]
+                selected_slice = slices[0]
                 if selected_slice["basis"] != "model_group":
                     raise ReviewedExcelError("模型尚未确定此单据的完整关系")
+                if selected_slice.get("status") == "pending_review" or not selected_slice.get(
+                    "workbook"
+                ):
+                    raise ReviewedExcelError(
+                        selected_slice.get("error") or "所选切片暂不能保真导出，请另选单据"
+                    )
                 body = selected_slice["workbook"]
                 review = inspect_workbook(body)
                 fragments = selected_slice["fragments"]

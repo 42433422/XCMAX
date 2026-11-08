@@ -422,7 +422,11 @@ def _compatibility_revision(fragments, message, overview, owner_id, earlier, all
 
 
 def derive_classified_documents(
-    body: bytes, classification: dict, *, owner_id: int | None = None
+    body: bytes,
+    classification: dict,
+    *,
+    owner_id: int | None = None,
+    only_index: int | None = None,
 ) -> list[dict]:
     """Export only documents with explicit model grouping, without inferring missing groups.
 
@@ -430,7 +434,12 @@ def derive_classified_documents(
     arbitrary client data. It does not record user confirmation or modify the source.
     OLE/BIFF8 XLS bodies are converted to XLSX via ensure_slice_workbook before
     openpyxl load and document derivation.
+
+    only_index: when set, still validates the full model grouping but only runs
+    derive_document_workbook for that document index (preview/download path).
     """
+    if only_index is not None and (not isinstance(only_index, int) or only_index < 0):
+        raise ReviewedExcelError("切片序号无效")
     body, _receipt = ensure_slice_workbook(body)
     source = inspect_workbook(body)
     if classification.get("source_sha256") != source["sha256"]:
@@ -506,9 +515,13 @@ def derive_classified_documents(
         for item in source.get("sheet_overview") or []
         if isinstance(item, dict) and item.get("sheet_state") in {"hidden", "veryHidden"}
     }
+    emitted = 0
     for fragments, basis, reason in groups:
         if fragments and all(part.get("sheet") in hidden_sheets for part in fragments):
             logger.info("skip hidden sheet %s", fragments[0]["sheet"])
+            continue
+        if only_index is not None and emitted != only_index:
+            emitted += 1
             continue
         print_area_mode = "source"
         # A print area that crosses this fragment continues as the fragment.
@@ -652,4 +665,9 @@ def derive_classified_documents(
             record["error"] = hidden_hold
             record["review_reason"] = hold_reason
         results.append(record)
+        if only_index is not None:
+            break
+        emitted += 1
+    if only_index is not None and not results:
+        raise ReviewedExcelError("切片不存在")
     return results

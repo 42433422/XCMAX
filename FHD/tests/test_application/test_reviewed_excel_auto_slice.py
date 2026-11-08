@@ -484,6 +484,24 @@ def test_cross_sheet_formula_parks_without_aborting_sibling_documents(monkeypatc
     assert load_workbook(BytesIO(slices[1]["workbook"]))["One"]["A5"].value == "第二份"
 
 
+def test_only_index_derives_a_single_document(monkeypatch):
+    from app.application import reviewed_excel_auto_slice as auto_slice
+
+    calls = []
+    original = auto_slice.derive_document_workbook
+
+    def tracked(body, fragments, **kwargs):
+        calls.append([dict(part) for part in fragments])
+        return original(body, fragments, **kwargs)
+
+    monkeypatch.setattr(auto_slice, "derive_document_workbook", tracked)
+    body = workbook()
+    slices = derive_classified_documents(body, classification(body), only_index=1)
+    assert len(slices) == 1 and len(calls) == 1
+    assert calls[0] == [{"sheet": "One", "range": "A5:B5"}]
+    assert load_workbook(BytesIO(slices[0]["workbook"]))["One"]["A5"].value == "第二份"
+
+
 def test_hidden_model_document_is_skipped_and_visible_document_exports(monkeypatch):
     def fail_model(*_args, **_kwargs):
         raise AssertionError("hidden sheet must not call the model")
