@@ -215,7 +215,11 @@ def _atom_contract(payload: dict, schema: dict, review: dict) -> tuple[dict, dic
 
 def _boundary_contract(payload: dict, schema: dict, review: dict) -> tuple[dict, dict]:
     _, references, _ = reference_contract(payload["cells"], schema, sheets=payload["sheets"])
-    return references, source_ranges_schema(payload["sheets"], decide_slice=True)
+    # Other sheets stay visible as relationship context, but a range there would cover
+    # cells this pack never sent as primary and could only be rejected.
+    primary = {cell["sheet"] for cell in payload["cells"] if not cell.get("context_only")}
+    sheets = [sheet for sheet in payload["sheets"] if sheet["sheet"] in primary]
+    return references, source_ranges_schema(sheets, decide_slice=True)
 
 
 def normalize_reference_ids(

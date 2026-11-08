@@ -61,6 +61,16 @@ def test_source_proves_all_cells_without_model_numbering(monkeypatch):
     assert result["input_summary"]["source_coverage"]["can_slice"] is True
 
 
+def test_range_schema_names_only_sheets_with_primary_cells():
+    review = source(["A1", "B1", "C1"], second=True)
+    review["cells"] = [cell for cell in review["cells"] if cell["sheet"] == SHEET]
+    prepared = _classify_semantic_batch(review, prepare_only=True, reference_ids=True)
+    payload = json.loads(prepared["messages"][1]["content"])
+    area = payload["output_schema"]["properties"]["documents"]["items"]["properties"]["ranges"]
+    assert area["items"]["properties"]["sheet_name"]["enum"] == [SHEET]
+    assert {sheet["sheet"] for sheet in payload["sheets"]} == {SHEET, "第二"}
+
+
 def test_provider_envelope_reason_is_ignored(monkeypatch):
     # Live providers sometimes wrap the verified document list in one
     # informational root reason (and may append stray closing brackets).
