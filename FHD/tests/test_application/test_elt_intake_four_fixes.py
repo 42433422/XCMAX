@@ -173,6 +173,24 @@ def test_refresh_business_without_full_coverage_is_partial(monkeypatch):
     assert out["coverage"]["business_rows"]["error"] == 1
 
 
+@pytest.mark.parametrize(
+    ("detection", "error", "status"),
+    [({"degraded": True}, 0, "partial"), ({}, 2, "partial"), ({}, 0, "applied")],
+)
+def test_legacy_applied_batch_is_judged_by_coverage_on_read(monkeypatch, detection, error, status):
+    monkeypatch.setattr(ais, "get_request_active_mod_id", lambda: "")
+    batch = {
+        "mod_id": "",
+        "status": "applied",
+        "detection": detection,
+        "knowledge": {"action": "new"},
+        "business": {"run_id": "r", "summary": {"new": 3, "error": error}},
+    }
+    out = AutoIngestService()._refresh_business(dict(batch))
+    assert out["status"] == status
+    assert ("coverage" in out) is (status == "partial")
+
+
 def test_knowledge_index_meta_separates_rag_from_documents(monkeypatch):
     import app.infrastructure.rag as rag_mod
 

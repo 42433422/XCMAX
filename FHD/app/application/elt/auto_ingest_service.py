@@ -740,6 +740,16 @@ class AutoIngestService:
         if batch.get("mod_id") != get_request_active_mod_id():
             return batch
         business = batch.get("business") or {}
+        if batch.get("status") == "applied":
+            # Batches stored before the coverage rule are judged by it on read only.
+            coverage = _batch_coverage(
+                batch.get("knowledge") or {}, business, batch.get("detection")
+            )
+            return (
+                batch
+                if coverage["complete"]
+                else {**batch, "status": "partial", "coverage": coverage}
+            )
         if batch.get("status") not in {
             "running",
             "awaiting_confirmation",
