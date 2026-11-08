@@ -594,6 +594,66 @@ def test_unusable_compatibility_answer_is_asked_again(monkeypatch):
     assert slices[0].get("status") != "pending_review"
 
 
+def test_outside_model_region_asks_for_a_range_that_stays_inside(monkeypatch):
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "送货"
+    sheet["A1"] = "送货单"
+    sheet["A2"] = "面漆"
+    body = _save(book)
+    source = inspect_workbook(body)
+    fragment = {"sheet": "送货", "range": "A1:A2"}
+
+    def split_outside(*_args, **_kwargs):
+        return {
+            "groups": [
+                {
+                    "fragments": [{"sheet": "送货", "range": "A1:C9"}],
+                    "reason": "切后越界",
+                }
+            ]
+        }
+
+    answers = [
+        {"can_slice": True, "ranges": ["B1:C2"]},
+        {"can_slice": True, "ranges": ["A1:A2"]},
+    ]
+    calls = []
+
+    class Result:
+        def __init__(self, data):
+            self.used_llm = True
+            self.degraded = False
+            self.data = data
+
+    def complete(*args, **kwargs):
+        calls.append(args[0][0]["content"])
+        return Result(answers[len(calls) - 1])
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_verify_cut.verify_after_cut",
+        split_outside,
+    )
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete",
+        complete,
+    )
+    slices = derive_classified_documents(
+        body,
+        {
+            "source_sha256": source["sha256"],
+            "model_status": "returned",
+            "regions": [{**fragment, "dependencies": []}],
+            "suggested_documents": [{"fragments": [fragment], "reason": "送货单"}],
+        },
+        owner_id=7,
+    )
+    assert len(calls) == 2
+    assert "模型区域" in calls[0]
+    assert slices[0]["fragments"] == [{"sheet": "送货", "range": "A1:A2"}]
+    assert slices[0].get("status") != "pending_review"
+
+
 def test_compatibility_payload_accepts_the_wrapped_model_shape():
     from app.application.reviewed_excel_template import (
         _coerce_compatibility_payload,

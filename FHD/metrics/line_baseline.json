@@ -1,5 +1,5 @@
 {
-  "lines": 2447155,
+  "lines": 2447414,
   "updated": "2026-11-08",
-  "note": "Confirmed shipment runs download a trace of every preview row, and a workbook that is not a business table finishes intake as knowledge. An empty model rows array is a present field."
+  "note": "ELT model rounds cite original sheet and row, and ask again for slice ranges that stay inside the model region"
 }

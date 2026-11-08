@@ -103,13 +103,20 @@ def _patch_batch(tenant_id: int | str, batch_id: str, **fields: Any) -> dict[str
 
 
 def _workbook_lines(workbook) -> str:
+    """Visible sheets only, each kept row labeled with its original row number.
+
+    Hidden and veryHidden sheets are not sent to a model. The R label is the
+    worksheet row the model must cite; this function does not choose a row.
+    """
     lines: list[str] = []
     for worksheet in workbook.worksheets[:20]:
+        if getattr(worksheet, "sheet_state", "visible") in {"hidden", "veryHidden"}:
+            continue
         lines.append(f"# sheet:{worksheet.title}")
         for index, row in enumerate(worksheet.iter_rows(values_only=True)):
             cells = [str(cell).strip() for cell in row if cell not in (None, "")]
             if cells:
-                lines.append(" | ".join(cells))
+                lines.append(f"R{index + 1} | " + " | ".join(cells))
             if index >= 120:
                 break
     return "\n".join(lines)[:80_000]

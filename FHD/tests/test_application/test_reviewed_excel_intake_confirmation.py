@@ -608,11 +608,15 @@ def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch
                         "customer_name": "演示客户乙",
                         "product_name": "演示物料-螺母",
                         "quantity": "5",
+                        "source_sheet": "送货单",
+                        "source_row": "3",
                     },
                     {
                         "customer_name": "演示客户乙",
                         "product_name": "演示物料-弹垫",
                         "quantity": "2",
+                        "source_sheet": "送货单",
+                        "source_row": "4",
                     },
                 ]
             },
@@ -780,8 +784,26 @@ def test_database_model_rows_drop_header_labels():
     )
     assert dataset is not None
     assert len(dataset.rows) == 1
+    assert dataset.rows[0].sheet == ""
+    assert dataset.rows[0].provenance["location"] == "unlocated"
     assert dataset.rows[0].values["购买单位"] == "演示客户乙"
     assert dataset.rows[0].values["产品名称"] == "演示物料-螺母"
+    located = dataset_from_business_rows(
+        [
+            {
+                "customer_name": "演示客户乙",
+                "product_name": "演示物料-螺母",
+                "quantity": "5",
+                "source_sheet": "送货单",
+                "source_row": "4",
+                "source_range": "A4:D4",
+            }
+        ]
+    )
+    assert located is not None
+    assert located.rows[0].sheet == "送货单"
+    assert located.rows[0].row_number == 4
+    assert located.rows[0].provenance["location"] == "model"
 
 
 def test_knowledge_line_calls_its_own_model(intake_store, monkeypatch, tmp_path):

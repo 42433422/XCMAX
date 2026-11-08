@@ -512,44 +512,119 @@ def _cell(value: Any) -> str:
     return str(value or "").strip()[:160]
 
 
+_BUSINESS_ROW_KEYS = (
+    "customer_name",
+    "purchase_unit",
+    "product_name",
+    "quantity",
+    "unit_price",
+    "amount",
+    "model",
+    "source_sheet",
+    "source_row",
+    "source_range",
+)
+
+
+def _cited_source_rows(text: str) -> set[tuple[str, str]]:
+    """Sheet and row labels actually present in the archived text."""
+    sheet = ""
+    found: set[tuple[str, str]] = set()
+    for line in text.splitlines():
+        if line.startswith("# sheet:"):
+            sheet = line.removeprefix("# sheet:")
+            continue
+        if not sheet or not line.startswith("R"):
+            continue
+        token = line.split(" ", 1)[0][1:]
+        if token.isdigit():
+            found.add((sheet, token))
+    return found
+
+
+def _business_rows(data: dict, cited: set[tuple[str, str]]) -> list[dict]:
+    rows = []
+    for item in list(data.get("rows") or [])[:100]:
+        if not isinstance(item, dict):
+            continue
+        row = {key: _cell(item.get(key)) for key in _BUSINESS_ROW_KEYS}
+        if (row["source_sheet"], row["source_row"]) not in cited:
+            row["source_sheet"] = ""
+            row["source_row"] = ""
+            row["source_range"] = ""
+        rows.append(row)
+    return rows
+
+
+def _coordinate_missing(row: dict) -> bool:
+    return bool(row.get("product_name") or row.get("quantity")) and not (
+        row.get("source_sheet") and str(row.get("source_row") or "").isdigit()
+    )
+
+
 def advise_business_import(sheet_text: str) -> LlmAssistResult:
     """Import archived sheet rows on the database line only."""
     source = str(sheet_text or "").strip()
     if not source:
         return LlmAssistResult()
+    cited = _cited_source_rows(source)
     messages = [
         {
             "role": "system",
             "content": (
                 "你把归档原表导入业务数据库。只返回 JSON。"
                 "rows 的字段只能是 customer_name、purchase_unit、product_name、quantity、"
-                "unit_price、amount、model。只放货品明细。表头、合计、空行不要放入。"
+                "unit_price、amount、model、source_sheet、source_row、source_range。"
+                "只放货品明细。表头、合计、空行不要放入。"
                 "购买单位用单据上的客户，不要用列名。"
                 "每一张表都要扫，这一本有几张就扫几张，每一行货品单独成一条，不要在第一张送货单结束后停止。"
                 "行内没有购买单位时，用整本表头上的客户，不要留空。"
                 "合计、表头、协议文字不要放入。"
                 "借还台账和测算表不要导入，除非明确要求。"
+                "source_sheet 必须等于某一行 # sheet: 后面的名称，source_row 必须等于该行 R 标签的整数。"
+                "source_range 只在你能指出该行矩形时填写，不能就留空。对不上标签就让坐标为空，不要猜。"
                 "JSON 必须是单个对象、以 rows 开头、不要 markdown 代码块、不要解释文字。"
             ),
         },
         {"role": "user", "content": source[:20_000]},
     ]
-    result = _complete(
-        messages,
-        schema=_BUSINESS_IMPORT_SCHEMA,
-        max_tokens=8192,
-        lane="database",
-        max_repairs=1,
-        timeout_seconds=etl_llm_timeout_seconds(full_sheet=True),
-    )
-    rows = []
-    for item in list(result.data.get("rows") or [])[:100]:
-        if isinstance(item, dict):
-            rows.append({key: _cell(item.get(key)) for key in (
-                "customer_name", "purchase_unit", "product_name", "quantity",
-                "unit_price", "amount", "model",
-            )})
-    result.data = {"rows": rows}
+    call = {
+        "schema": _BUSINESS_IMPORT_SCHEMA,
+        "max_tokens": 8192,
+        "lane": "database",
+        "max_repairs": 1,
+        "timeout_seconds": etl_llm_timeout_seconds(full_sheet=True),
+    }
+    result = _complete(messages, **call)
+    rows = _business_rows(result.data, cited) if result.used_llm and not result.degraded else []
+    # Up to four stored rounds. A degraded or unknown call stops; it is not sent again.
+    for _round in range(3):
+        if not result.used_llm or result.degraded or not any(_coordinate_missing(row) for row in rows):
+            break
+        follow = [
+            *messages,
+            {
+                "role": "assistant",
+                "content": json.dumps({"rows": rows}, ensure_ascii=False)[:12_000],
+            },
+            {
+                "role": "user",
+                "content": (
+                    "有货品行缺少原表坐标。只根据上文 # sheet: 和 R 标签补 source_sheet 与 source_row。"
+                    "对不上就留空，不要猜行号。仍然只返回 rows。"
+                ),
+            },
+        ]
+        nxt = _complete(follow, **call)
+        if not nxt.used_llm or nxt.degraded:
+            break
+        fresh = _business_rows(nxt.data, cited)
+        if not fresh:
+            break
+        result = nxt
+        rows = fresh
+    if result.used_llm and not result.degraded:
+        result.data = {"rows": rows}
     return result
 
 

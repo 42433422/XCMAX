@@ -224,6 +224,48 @@ def test_archived_sheet_import_uses_full_sheet_timeout(monkeypatch):
     assert seen["timeout_seconds"] == 180.0
 
 
+def test_business_import_asks_again_only_for_a_stored_row_without_coordinates(monkeypatch):
+    from app.application.elt import llm_assist
+
+    calls = []
+
+    def complete(messages, **kwargs):
+        calls.append(messages[-1]["content"])
+        if len(calls) == 1:
+            return llm_assist.LlmAssistResult(
+                used_llm=True,
+                data={
+                    "rows": [
+                        {
+                            "product_name": "螺母",
+                            "quantity": "5",
+                            "source_sheet": "隐藏",
+                            "source_row": "9",
+                        }
+                    ]
+                },
+            )
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={
+                "rows": [
+                    {
+                        "product_name": "螺母",
+                        "quantity": "5",
+                        "source_sheet": "送货",
+                        "source_row": "2",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(llm_assist, "_complete", complete)
+    result = llm_assist.advise_business_import("# sheet:送货\nR2 | 螺母 | 5")
+    assert len(calls) == 2
+    assert result.data["rows"][0]["source_sheet"] == "送货"
+    assert result.data["rows"][0]["source_row"] == "2"
+
+
 def test_llm_assist_public_metadata():
     from app.application.elt.llm_assist import LlmAssistResult
 

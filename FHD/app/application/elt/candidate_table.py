@@ -291,9 +291,22 @@ def read_delivery_note_business(source: bytes | bytearray | str | Path) -> Parse
     )
 
 
+_UNLOCATED_ISSUE = {
+    "code": "ELT_SOURCE_COORDINATE_MISSING",
+    "field": "source_row",
+    "severity": "error",
+    "message": "模型未返回这一行的原表工作表和行号",
+}
+
+
 def dataset_from_business_rows(items: list[dict]) -> ParsedDataset | None:
-    """Shipment rows from the database-line model. A column title is not a row."""
+    """Shipment rows from the database-line model. A column title is not a row.
+
+    Original sheet and row come only from the model. A missing or repeated
+    coordinate stays unlocated; this function does not look up a cell.
+    """
     rows: list[ParsedRow] = []
+    used: set[tuple[str, int]] = set()
     for index, item in enumerate(items, start=1):
         if not isinstance(item, dict):
             continue
@@ -313,9 +326,25 @@ def dataset_from_business_rows(items: list[dict]) -> ParsedDataset | None:
             cell = _cell_text(item.get(source_key))
             if cell and not is_column_header_label(cell):
                 values[target] = cell
+        sheet = _cell_text(item.get("source_sheet"))
+        raw_row = _cell_text(item.get("source_row"))
+        located = bool(sheet) and raw_row.isdigit() and int(raw_row) >= 1
+        number = int(raw_row) if located else -index
+        if not located or (sheet, number) in used:
+            sheet, number, located = "", -index, False
+        used.add((sheet, number))
+        provenance: dict = {
+            "source": "reviewed_candidate",
+            "parser": "database_llm",
+            "location": "model" if located else "unlocated",
+        }
+        cited_range = _cell_text(item.get("source_range"))
+        if located and cited_range:
+            provenance["source_range"] = cited_range[:40]
+        if not located:
+            provenance["validation_issues"] = [dict(_UNLOCATED_ISSUE)]
         rows.append(ParsedRow(
-            sheet="", row_number=index, values=values,
-            provenance={"source": "reviewed_candidate", "parser": "database_llm"},
+            sheet=sheet, row_number=number, values=values, provenance=provenance,
         ))
     if not rows:
         return None

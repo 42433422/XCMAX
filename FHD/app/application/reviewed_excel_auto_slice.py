@@ -17,6 +17,7 @@ _COMPATIBILITY_MARKERS = (
     "派生公式写出后核验失败",
     "支撑数据写出后核验失败",
     "SUBTOTAL",
+    "模型区域之外",
 )
 
 from app.application.elt.errors import ReviewedExcelError
@@ -336,7 +337,18 @@ def rule_row_dispositions(body: bytes, latest: dict, slices: list[dict]) -> list
 _COMPATIBILITY_ROUNDS = 4
 
 
-def _compatibility_revision(fragments, message, overview, owner_id, earlier):
+def _range_inside(c1: int, r1: int, c2: int, r2: int, allowed: list[str]) -> bool:
+    for area in allowed:
+        try:
+            a1, b1, a2, b2 = bounded_range(area)
+        except (TypeError, ValueError):
+            continue
+        if a1 <= c1 and c2 <= a2 and b1 <= r1 and r2 <= b2:
+            return True
+    return False
+
+
+def _compatibility_revision(fragments, message, overview, owner_id, earlier, allowed=None):
     """One model turn for this sheet. None means stop this document."""
     from app.application.reviewed_excel_template import _template_llm_complete
 
@@ -345,6 +357,9 @@ def _compatibility_revision(fragments, message, overview, owner_id, earlier):
     ranges = ", ".join(str(part["range"]) for part in fragments)
     filt = str(sheet.get("auto_filter_ref") or "无")
     history = "\n".join(earlier) or "无"
+    limit = ""
+    if allowed:
+        limit = "新矩形必须完整落在这些模型区域之内，不要伸出：" + "、".join(allowed) + "。"
     messages = [
         {
             "role": "user",
@@ -355,7 +370,8 @@ def _compatibility_revision(fragments, message, overview, owner_id, earlier):
                 f"本轮障碍：{message}\n"
                 f"此前各轮：\n{history}\n"
                 "能切就返回新的矩形，把导出依赖放进这些矩形，不要并进无关内容。"
-                "不该切则 can_slice 为 false 且 ranges 为空。"
+                + limit
+                + "不该切则 can_slice 为 false 且 ranges 为空。"
                 "顶层只能有 can_slice 和 ranges，ranges 是矩形字符串，不要再包一层。"
             ),
         }
@@ -397,6 +413,8 @@ def _compatibility_revision(fragments, message, overview, owner_id, earlier):
             and 1 <= c1 <= c2 <= columns
             and 1 <= r1 <= r2 <= rows
         ):
+            return "again"
+        if allowed and not _range_inside(c1, r1, c2, r2, allowed):
             return "again"
         revised.append({"sheet": sheet_name, "range": raw})
     return revised or "again"
@@ -489,17 +507,6 @@ def derive_classified_documents(body: bytes, classification: dict, *, owner_id: 
         if fragments and all(part.get("sheet") in hidden_sheets for part in fragments):
             logger.info("skip hidden sheet %s", fragments[0]["sheet"])
             continue
-        for fragment in fragments:
-            region = _model_region_for_fragment(known, fragment)
-            for ref in region.get("dependencies", []):
-                column, row = coordinate_from_string(ref["cell"])
-                col = column_index_from_string(column)
-                if not any(
-                    ref["sheet"] == part["sheet"] and c1 <= col <= c2 and r1 <= row <= r2
-                    for part in fragments
-                    for c1, r1, c2, r2 in [bounded_range(part["range"])]
-                ):
-                    raise ReviewedExcelError("所选文档依赖外部说明或标题，暂不能保证保真提取")
         print_area_mode = "source"
         # A print area that crosses this fragment continues as the fragment.
         # The source workbook is not rewritten; the slice records the choice.
@@ -509,6 +516,17 @@ def derive_classified_documents(body: bytes, classification: dict, *, owner_id: 
         hidden_hold: str | None = None
         hold_reason = _HIDDEN_REASON
         try:
+            for fragment in fragments:
+                region = _model_region_for_fragment(known, fragment)
+                for ref in region.get("dependencies", []):
+                    column, row = coordinate_from_string(ref["cell"])
+                    col = column_index_from_string(column)
+                    if not any(
+                        ref["sheet"] == part["sheet"] and c1 <= col <= c2 and r1 <= row <= r2
+                        for part in fragments
+                        for c1, r1, c2, r2 in [bounded_range(part["range"])]
+                    ):
+                        raise ReviewedExcelError("所选文档依赖外部说明或标题，暂不能保证保真提取")
             output = derive_document_workbook(
                 body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
             )
@@ -532,8 +550,14 @@ def derive_classified_documents(body: bytes, classification: dict, *, owner_id: 
                 hold_reason = "兼容性各轮后仍不能保真导出，已保留复核副本"
                 output = b""
                 for round_index in range(1, _COMPATIBILITY_ROUNDS + 1):
+                    sheet_name = str(fragments[0]["sheet"])
+                    allowed = (
+                        [area for region_sheet, area in known if region_sheet == sheet_name]
+                        if "模型区域之外" in obstacle
+                        else None
+                    )
                     revised = _compatibility_revision(
-                        fragments, obstacle, overview, owner_id, earlier
+                        fragments, obstacle, overview, owner_id, earlier, allowed
                     )
                     logger.info(
                         "compatibility round %s sheet=%s", round_index, fragments[0]["sheet"]
