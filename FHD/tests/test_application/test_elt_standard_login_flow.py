@@ -126,7 +126,7 @@ def standard_login(tmp_path, monkeypatch):
     archive_root.mkdir()
     monkeypatch.setattr(path_utils, "get_desktop_state_dir", lambda: str(tmp_path))
     monkeypatch.setattr(path_utils, "get_business_archive_dir", lambda **_: str(archive_root))
-    for module in (archive_store, archive_routes, routes, reviewed_excel_review_store):
+    for module in (archive_store, archive_routes, reviewed_excel_review_store):
         monkeypatch.setattr(module, "default_archive_root", lambda: archive_root)
     monkeypatch.setattr(archive_store, "get_business_archive_dir", lambda **_: str(archive_root))
     for module in (service_uploads, routes, reviewed_excel_review_store):
