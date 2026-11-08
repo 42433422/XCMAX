@@ -79,7 +79,7 @@ def test_rejects_sheet_as_cell_and_unread_phantom_region():
         normalize_reference_ids(wrong, refs, id_schema, schema)
     wrong = deepcopy(data)
     wrong["physical_regions"][0]["range"] = "A50:T166"
-    with pytest.raises(ReviewedExcelError, match="主体证据"):
+    with pytest.raises(ReviewedExcelError, match=r"physical_regions\[0\] A50:T166 的 S1:"):
         normalize_reference_ids(wrong, refs, id_schema, schema)
     wrong = deepcopy(data)
     wrong["physical_regions"][0]["primary_id"] = "S1:D11"

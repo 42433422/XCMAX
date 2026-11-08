@@ -1235,7 +1235,9 @@ async def llm_chat_stream(
     request: _chat_endpoint_facade.Request,
     body: LlmChatDTO,
     db: _chat_endpoint_facade.Session = _chat_endpoint_facade.Depends(_chat_endpoint_facade.get_db),
-    user: _chat_endpoint_facade.User = _chat_endpoint_facade.Depends(_chat_endpoint_facade._get_current_user),
+    user: _chat_endpoint_facade.User = _chat_endpoint_facade.Depends(
+        _chat_endpoint_facade._get_current_user
+    ),
 ):
     msgs = [m.model_dump(exclude_none=True) for m in body.messages]
     snapshot = _requested_chat_snapshot(db, user, body)
@@ -1260,7 +1262,9 @@ async def llm_chat_stream(
 def llm_chat_request_state(
     client_request_id: str,
     db: _chat_endpoint_facade.Session = _chat_endpoint_facade.Depends(_chat_endpoint_facade.get_db),
-    user: _chat_endpoint_facade.User = _chat_endpoint_facade.Depends(_chat_endpoint_facade._get_current_user),
+    user: _chat_endpoint_facade.User = _chat_endpoint_facade.Depends(
+        _chat_endpoint_facade._get_current_user
+    ),
 ):
     """What this user's idempotency key reached; never the answer itself."""
     from modstore_server import llm_client_requests as ledger
