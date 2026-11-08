@@ -426,14 +426,45 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
     max_drawing_clusters = 2
     max_drawings = 24
 
+    from openpyxl.utils.cell import get_column_letter
+
     rows = defaultdict(list)
     for cell in review["cells"]:
         _, row = coordinate_from_string(cell["cell"])
         rows[(cell["sheet"], row)].append(dict(cell))
+    # Stamps often sit on empty columns (no value cell). Without those coordinates in
+    # the packet the model hugs nonempty columns and cuts the drawing horizontally.
+    # Inject blank context_only cells for every verified drawing footprint cell.
     for drawing in review["drawing_evidence"]:
         if drawing.get("geometry_error"):
             raise ReviewedExcelError(drawing["geometry_error"])
-        key = (drawing["sheet"], drawing["from"]["row"] + 1)
+        sheet = drawing["sheet"]
+        start = drawing["from"]
+        if "last_row" not in drawing or "last_col" not in drawing:
+            raise ReviewedExcelError("绘图边界尚未核验")
+        x1 = int(start.get("col", 0)) + 1
+        y1 = int(start["row"]) + 1
+        x2 = int(drawing["last_col"])
+        y2 = int(drawing["last_row"])
+        if x2 < x1 or y2 < y1:
+            raise ReviewedExcelError("绘图锚点顺序无效")
+        for row in range(y1, y2 + 1):
+            present = {cell["cell"] for cell in rows.get((sheet, row), [])}
+            for col in range(x1, x2 + 1):
+                addr = f"{get_column_letter(col)}{row}"
+                if addr in present:
+                    continue
+                rows[(sheet, row)].append(
+                    {
+                        "sheet": sheet,
+                        "cell": addr,
+                        "value": "",
+                        "kind": "review",
+                        "context_only": True,
+                    }
+                )
+                present.add(addr)
+        key = (sheet, int(start["row"]) + 1)
         if key not in rows:
             raise ReviewedExcelError("绘图锚点所在行没有单元格证据，暂不能安全分批")
         rows[key][0].setdefault("drawing_evidence", []).append(drawing)

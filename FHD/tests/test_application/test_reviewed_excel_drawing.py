@@ -166,7 +166,7 @@ def test_drawing_packs_split_between_stamp_clusters_not_through_spans():
                 "sheet": "考勤",
                 "part": "xl/drawings/drawing1.xml",
                 "object_id": f"{form}-span",
-                "from": {"row": base - 1},
+                "from": {"row": base - 1, "col": 0},
                 "text": "章",
                 "last_row": base + 2,
                 "last_col": 2,
@@ -178,7 +178,7 @@ def test_drawing_packs_split_between_stamp_clusters_not_through_spans():
                     "sheet": "考勤",
                     "part": "xl/drawings/drawing1.xml",
                     "object_id": f"{form}-{offset}",
-                    "from": {"row": base - 1 + offset},
+                    "from": {"row": base - 1 + offset, "col": 0},
                     "text": "章",
                     "last_row": base + offset,
                     "last_col": 1,
@@ -196,15 +196,22 @@ def test_drawing_packs_split_between_stamp_clusters_not_through_spans():
     batches = plan_drawing_batches(review)
     assert len(batches) >= 2
     assert sum(len(c.get("drawing_evidence", [])) for b in batches for c in b) == len(drawings)
+    from openpyxl.utils.cell import get_column_letter
+
     for batch in batches:
         bounds = batch[0]["drawing_batch_bounds"]
         assert bounds[1] - bounds[0] <= 80
         pack_drawings = [d for c in batch for d in c.get("drawing_evidence", [])]
         assert len(pack_drawings) <= 24
+        have = {(c["sheet"], c["cell"]) for c in batch}
         for obj in pack_drawings:
             first = obj["from"]["row"] + 1
             last = obj["last_row"]
             assert bounds[0] <= first and last < bounds[1]
+            from_col = int(obj["from"].get("col", 0)) + 1
+            for row in range(first, last + 1):
+                for col in range(from_col, int(obj["last_col"]) + 1):
+                    assert (obj["sheet"], f"{get_column_letter(col)}{row}") in have
 
 
 def test_classifier_sends_distinct_drawing_evidence_and_rejects_forged_reference(monkeypatch):
