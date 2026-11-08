@@ -161,10 +161,16 @@ def test_disjoint_nonempty_ranges_pass(monkeypatch):
     assert [item["range"] for item in result["regions"]] == ["A1:A1", "C1:C1"]
 
 
-def test_empty_trailing_merge_is_rejected(monkeypatch):
+def test_blank_range_is_left_out_and_the_slice_decision_is_kept(monkeypatch):
     review = source(["A1"], ["C10:E10"])
+    result = execute(monkeypatch, review, answer(region(1, 1, 1, 1), region(10, 10, 3, 5)))
+    assert [item["range"] for item in result["regions"]] == ["A1:A1"]
+    assert result["input_summary"]["source_coverage"]["can_slice"] is True
+
+
+def test_only_a_blank_range_is_still_rejected(monkeypatch):
     with pytest.raises(ReviewedExcelError, match="主体为空或重复覆盖"):
-        execute(monkeypatch, review, answer(region(1, 1, 1, 1), region(10, 10, 3, 5)))
+        execute(monkeypatch, source(["A1"], ["C10:E10"]), answer(region(10, 10, 3, 5)))
 
 
 def test_overlapping_primary_ranges_are_rejected(monkeypatch):

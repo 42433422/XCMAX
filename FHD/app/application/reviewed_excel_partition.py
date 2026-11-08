@@ -438,7 +438,11 @@ def _normalize_boundaries(data: dict, references: dict, review: dict) -> dict:
                     if key not in primary:
                         raise ReviewedExcelError("模型边界含上下文或未发送主体，不能裁剪或补齐")
                     covered.append(key)
-            if not covered or seen.intersection(covered):
+            if not covered:
+                # A blank rectangle is not a document. Leave the ranges that
+                # contain primary cells unchanged, and do not invent a replacement.
+                continue
+            if seen.intersection(covered):
                 raise ReviewedExcelError("模型边界主体为空或重复覆盖")
             decoded.append(
                 {
@@ -454,7 +458,11 @@ def _normalize_boundaries(data: dict, references: dict, review: dict) -> dict:
             )
             seen.update(covered)
             parts.append(part)
+        if not parts:
+            continue
         documents.append({"document_id": internal_document_id(document), "fragments": parts})
+    if not documents:
+        raise ReviewedExcelError("模型边界主体为空或重复覆盖")
     # A partial boundary is usable. Keep the covered rectangles and name the
     # uncovered source cells for a person. Do not invent the missing geometry
     # and do not send the model request again.
