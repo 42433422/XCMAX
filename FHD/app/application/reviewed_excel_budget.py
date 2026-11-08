@@ -26,6 +26,12 @@ def output_budget(cells: list[dict]) -> int:
     return min(MAX_OUTPUT_TOKENS, max(4000, 2000 + 40 * primary))
 
 
+def grouping_output_budget(fragments: list[dict]) -> int:
+    """Grouping returns every fragment id; attendance packs need a larger ceiling."""
+    count = len(fragments)
+    return min(MAX_OUTPUT_TOKENS, max(8000, 2000 + 120 * count))
+
+
 def validate_request_budget(request: dict) -> None:
     if request_bytes(request) > MAX_REQUEST_BYTES:
         raise RequestBudgetExceeded("完整模型请求超过安全预算，未调用模型")

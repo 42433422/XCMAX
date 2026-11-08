@@ -549,9 +549,12 @@ def group_semantic_fragments(
     from app.application.reviewed_excel_reference_ids import verify_contract
 
     verify_contract(messages[0]["content"], schema, "group")
-    from app.application.reviewed_excel_budget import output_budget, validate_request_budget
+    from app.application.reviewed_excel_budget import (
+        grouping_output_budget,
+        validate_request_budget,
+    )
 
-    max_output_tokens = output_budget(group_input["fragments"])
+    max_output_tokens = grouping_output_budget(group_input["fragments"])
     messages.extend(repair or [])
     audit_request = {"messages": messages, "schema": schema, "max_tokens": max_output_tokens}
     validate_request_budget(audit_request)

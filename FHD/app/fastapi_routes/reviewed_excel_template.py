@@ -1201,41 +1201,51 @@ async def _reviewed_excel_classification_analyze_body(
 
             # Uncovered cells stay for a person. Do not send another model call to fill them.
             if auto_group and len(batches) > 1 and not boundary_left_for_confirmation(result):
+                from app.application.reviewed_excel_budget import grouping_output_budget
                 from app.application.reviewed_excel_grouping import group_semantic_fragments
 
-                # Persist complete fragment results before beginning a separate model request.
-                if index < len(batches):
-                    if checkpoint["calls_in_round"] >= max_calls:
-                        checkpoint["phase"] = "paused"
-                    _classification_cas(db, run, claimed_draft, state)
-                    claimed_draft = dump_json(state)
-                    if checkpoint["phase"] == "paused":
-                        return {
-                            "classification_id": classification_id,
-                            "version": version,
-                            "phase": "paused",
-                            "checkpoint": _checkpoint_view(checkpoint),
-                        }
-                options = {"repair": turn_for(len(batches))}
-                grouping_request: dict | list[dict] = await run_in_threadpool(
-                    group_semantic_fragments, review, result, prepare_only=True, **options
-                )
-                if not isinstance(grouping_request, dict):
-                    raise ReviewedExcelError("分组请求格式无效")
-                step = await audited(
-                    claimed_draft,
-                    grouping_request,
-                    "grouping",
-                    len(batches),
-                    group_semantic_fragments,
-                    review,
-                    result,
-                    **options,
-                )
-                if isinstance(step, dict):
-                    return step
-                result["suggested_documents"], claimed_draft = step
-                result["budget"]["grouping_calls"] = 1
+                region_count = len(result.get("regions") or [])
+                # Dense stamp books (考勤) produce dozens of fragments; a truncated
+                # grouping call used to fail the whole analyze after packs succeeded.
+                # Leave fragments ungrouped when the answer would need the output cap.
+                if region_count >= 40 or grouping_output_budget([{}] * max(region_count, 1)) >= 16_000:
+                    result["suggested_documents"] = []
+                    result.setdefault("budget", {})["grouping_calls"] = 0
+                    result["budget"]["grouping_skipped_ungrouped"] = True
+                else:
+                    # Persist complete fragment results before beginning a separate model request.
+                    if index < len(batches):
+                        if checkpoint["calls_in_round"] >= max_calls:
+                            checkpoint["phase"] = "paused"
+                        _classification_cas(db, run, claimed_draft, state)
+                        claimed_draft = dump_json(state)
+                        if checkpoint["phase"] == "paused":
+                            return {
+                                "classification_id": classification_id,
+                                "version": version,
+                                "phase": "paused",
+                                "checkpoint": _checkpoint_view(checkpoint),
+                            }
+                    options = {"repair": turn_for(len(batches))}
+                    grouping_request: dict | list[dict] = await run_in_threadpool(
+                        group_semantic_fragments, review, result, prepare_only=True, **options
+                    )
+                    if not isinstance(grouping_request, dict):
+                        raise ReviewedExcelError("分组请求格式无效")
+                    step = await audited(
+                        claimed_draft,
+                        grouping_request,
+                        "grouping",
+                        len(batches),
+                        group_semantic_fragments,
+                        review,
+                        result,
+                        **options,
+                    )
+                    if isinstance(step, dict):
+                        return step
+                    result["suggested_documents"], claimed_draft = step
+                    result["budget"]["grouping_calls"] = 1
             old = claimed_draft
             state.pop("analysis_checkpoint", None)
             rule_sheets = classify_review_workbook(review)
