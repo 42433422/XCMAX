@@ -1,0 +1,800 @@
+{
+  "measured_at": "2026-11-08T22:20:00+08:00",
+  "account_actor": "2:3",
+  "tenant_id": 2,
+  "owner_user_id": 3,
+  "backend_git_sha_final": "4dacac28939ac7241c4f8168f8b434dd03dfd310",
+  "scope": "live retest after the lifecycle / task-sizing / workbook-fidelity / intake-truthfulness redesign; one workbook at a time; no unknown-outcome call resent",
+  "files": [
+    {
+      "file": "澜宇电视柜.xlsx",
+      "classification_id": "ad462d87",
+      "backend_git_sha": "015068b4ad92cd23d4ef2289f5cab938efb4f4cb",
+      "result": "stopped",
+      "outcome": "unknown",
+      "reason": "60 s first-byte default cancelled a sent analyze at 69 s; fixed (first-byte now defaults to the template timeout); not resent",
+      "spend": 0,
+      "wallet_entry": "none observed"
+    },
+    {
+      "file": "26年综合表格.xlsx",
+      "batch_id": "aib-dc10994aac5e43e6",
+      "result": "partial (on read)",
+      "reason": "database lane repair timed out after an 18k-char unit; knowledge archived 772 rows; fixed with 60-row units, 8-unit limit, max_repairs=0",
+      "unreleased_preauth": {
+        "reference": "llm_b76558fd0eea41c8a2339c9ea36a53e7",
+        "amount": 0.33,
+        "outcome": "unknown"
+      },
+      "spend": 2.15
+    },
+    {
+      "file": "邻居杨总.xlsx",
+      "batch_id": "aib-743869c1fd2e430f",
+      "result": "partial",
+      "business_counts": {
+        "new": 161,
+        "skip": 10,
+        "error": 8
+      },
+      "four_way": {
+        "preview_rows": 179,
+        "written": 161,
+        "db_matched": 161,
+        "result_rows": 171,
+        "unlocated": 8
+      },
+      "finding": "24 rows (sheet 26出货 rows 61-84) carry a purchase unit absent from the workbook; validator now checks purchase_unit or customer_name; withdraw needs etl.rollback (403 for actor 2:3)",
+      "spend": 6.3
+    },
+    {
+      "file": "邻居贾总.xlsx",
+      "result": "stopped",
+      "outcome": "unknown",
+      "authorized_resend": {
+        "call_id": "54af944db8ab4df9b19394f609f98ebb",
+        "sent_at": "2026-11-08T21:20:26+08:00",
+        "request_chars": "about 2.5M single pack (legacy plan)",
+        "wallet_entry": "none"
+      },
+      "abandoned_call": {
+        "reference": "llm_f1aa89bf02dd4a00ae48b82db10ebff9",
+        "preauth": 5.11,
+        "preauth_at": "2026-11-08T17:57:18+08:00",
+        "released": false
+      },
+      "reason": "the one authorized abandon-and-resend also ended unknown; stopped per instruction; packs now bounded at 2500 cells / 480 KB",
+      "spend": 0
+    },
+    {
+      "file": "侯雪梅.xlsx",
+      "classification_id": "ba9f3af8-2edf-4a7f-9bb9-fc327ea8f824",
+      "result": "analyzed 9/9 packs; slicing waits for a person",
+      "attempts": [
+        "e87b219b: HTTP 402 insufficient balance (definite)",
+        "105a094f: pack 7 answered_invalid x3 (ranges on overview-only sheets; enum fixed in 6c2fa425b)",
+        "ba9f3af8: returned"
+      ],
+      "pending_confirmation": [
+        {
+          "sheet_index": 4,
+          "cells": [
+            "N15",
+            "P15"
+          ]
+        }
+      ],
+      "reason": "two source cells not covered by any model boundary; auto-slice refuses until confirmed; not assigned by the agent",
+      "spend": 9.1
+    },
+    {
+      "file": "国圣化工.xlsx",
+      "run_id": "3c02bab8-92a4-493b-8e14-5a0dfa43a7f9",
+      "batch_id": "aib-a21de82fc82f4261",
+      "result": "applied",
+      "four_way": {
+        "run_id": "3c02bab8-92a4-493b-8e14-5a0dfa43a7f9",
+        "target": "shipment_records",
+        "preview_rows": 34,
+        "written": 34,
+        "db_matched": 34,
+        "result_rows": 34,
+        "unlocated": 0,
+        "download_status": 200,
+        "download_sha256": "69d32dcaaa7749203d759b9c735dc203f43c37e8cd24cd7aa0907a978bed02c1",
+        "original_mismatch_fields": {},
+        "value_mismatch_fields": {}
+      },
+      "spend": 0
+    },
+    {
+      "file": "26年材料总表.xlsx",
+      "reintake_batch_id": "aib-9295f4bf86284f3c",
+      "result": "deduplicated",
+      "knowledge": {
+        "action": "update",
+        "reason": "confirmed_source_replacement",
+        "document_version": 2,
+        "same_document_id": true,
+        "embedding_count": 1051
+      },
+      "business": "refused: direct auto-ingest without a confirmed routing plan (EltError, nothing written); batch status failed by existing design",
+      "spend": 0
+    },
+    {
+      "file": "考勤表.xlsx",
+      "result": "answered_invalid (definite)",
+      "attempts_this_session": 3,
+      "last_reasons": [
+        "$/physical_regions[1]/primary_id 不是提供的取值之一",
+        "所选范围切断绘图对象，暂不能提取"
+      ],
+      "spend_last_retry": 3.22,
+      "spend_earlier_retries": 6.86
+    },
+    {
+      "file": "张总.xlsx",
+      "result": "blocked",
+      "reason": "legacy candidate claim with unknown outcome; needs the abandon endpoint with candidate_key, which requires user authorization; not abandoned",
+      "spend": 0
+    }
+  ],
+  "applied_recheck": [
+    {
+      "file": "26年word计算的备用表格.xlsx",
+      "batch_id": "aib-a008124cea684482",
+      "status_on_read": "applied",
+      "coverage": null,
+      "detection": {
+        "target_type": "knowledge",
+        "used_llm": true,
+        "degraded": false,
+        "reason": "archived_document",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {},
+      "four_way": null
+    },
+    {
+      "file": "刘英.xlsx",
+      "batch_id": "aib-008838a51ebb493d",
+      "status_on_read": "applied",
+      "coverage": null,
+      "detection": {
+        "target_type": "shipment_records",
+        "used_llm": true,
+        "degraded": false,
+        "reason": "database_llm",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {
+        "new": 3,
+        "update": 0,
+        "skip": 0,
+        "error": 0,
+        "executed": 3
+      },
+      "four_way": {
+        "run_id": "84b7e4e2-6b0d-48a9-9edb-17b826646829",
+        "target": "shipment_records",
+        "preview_rows": 3,
+        "written": 3,
+        "db_matched": 3,
+        "result_rows": 3,
+        "unlocated": 0,
+        "download_status": 200,
+        "download_sha256": "9fb9a4fa7f5c9e4308f43d186fded1df95e8bab5f66307184cb919473fde8afe",
+        "original_mismatch_fields": {},
+        "value_mismatch_fields": {}
+      }
+    },
+    {
+      "file": "国圣化工.xlsx",
+      "batch_id": "aib-a21de82fc82f4261",
+      "status_on_read": "applied",
+      "coverage": {
+        "complete": true,
+        "knowledge_action": "update",
+        "business_rows": {
+          "new": 34,
+          "update": 0,
+          "skip": 0,
+          "error": 0
+        },
+        "routing_degraded": false
+      },
+      "detection": {
+        "target_type": "shipment_records",
+        "used_llm": true,
+        "degraded": false,
+        "reason": "database_llm",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "update",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {
+        "new": 34,
+        "update": 0,
+        "skip": 0,
+        "error": 0,
+        "executed": 34
+      },
+      "four_way": {
+        "run_id": "3c02bab8-92a4-493b-8e14-5a0dfa43a7f9",
+        "target": "shipment_records",
+        "preview_rows": 34,
+        "written": 34,
+        "db_matched": 34,
+        "result_rows": 34,
+        "unlocated": 0,
+        "download_status": 200,
+        "download_sha256": "69d32dcaaa7749203d759b9c735dc203f43c37e8cd24cd7aa0907a978bed02c1",
+        "original_mismatch_fields": {},
+        "value_mismatch_fields": {}
+      }
+    },
+    {
+      "file": "宗南.xlsx",
+      "batch_id": "aib-df55e0a7b6844586",
+      "status_on_read": "applied",
+      "coverage": null,
+      "detection": {
+        "target_type": "shipment_records",
+        "used_llm": true,
+        "degraded": false,
+        "reason": "database_llm",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {
+        "new": 67,
+        "update": 0,
+        "skip": 30,
+        "error": 0,
+        "executed": 67
+      },
+      "four_way": {
+        "run_id": "b5d45a18-b458-41cd-86ea-32f81e135ff7",
+        "target": "shipment_records",
+        "preview_rows": 97,
+        "written": 67,
+        "db_matched": 67,
+        "result_rows": 97,
+        "unlocated": 0,
+        "download_status": 200,
+        "download_sha256": "e0516b03d7325a4458a949fdd0366af628369ae15fafcf4d7e19e992d3196468",
+        "original_mismatch_fields": {
+          "购买单位": 87
+        },
+        "value_mismatch_fields": {}
+      }
+    },
+    {
+      "file": "小洋杨总、.xlsx",
+      "batch_id": "aib-277dd9f3b81b4d02",
+      "status_on_read": null,
+      "coverage": null,
+      "detection": {
+        "target_type": null,
+        "used_llm": null,
+        "degraded": null,
+        "reason": null,
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": null,
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {},
+      "four_way": null
+    },
+    {
+      "file": "尹玉华1.xlsx",
+      "batch_id": "aib-09a28adac00c4f35",
+      "status_on_read": "partial",
+      "coverage": {
+        "complete": false,
+        "knowledge_action": "new",
+        "business_rows": {
+          "new": 92,
+          "update": 0,
+          "skip": 6,
+          "error": 2
+        },
+        "routing_degraded": false
+      },
+      "detection": {
+        "target_type": "shipment_records",
+        "used_llm": true,
+        "degraded": false,
+        "reason": "database_llm",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {
+        "new": 92,
+        "update": 0,
+        "skip": 6,
+        "error": 2,
+        "executed": 92
+      },
+      "four_way": {
+        "run_id": "b8d3c7ad-7d9c-4036-9ffe-72e6ca3dc5dd",
+        "target": "shipment_records",
+        "preview_rows": 100,
+        "written": 92,
+        "db_matched": 92,
+        "result_rows": 100,
+        "unlocated": 0,
+        "download_status": 200,
+        "download_sha256": "6e99302b094851d1cfc5dd97326a742886ca70d08f7eeb7aeed92374edd38f90",
+        "original_mismatch_fields": {
+          "coordinate": 100
+        },
+        "value_mismatch_fields": {}
+      }
+    },
+    {
+      "file": "新旺博旺.xlsx",
+      "batch_id": "aib-f18c0780e472444a",
+      "status_on_read": "partial",
+      "coverage": {
+        "complete": false,
+        "knowledge_action": "new",
+        "business_rows": {
+          "new": 1,
+          "update": 0,
+          "skip": 0,
+          "error": 0
+        },
+        "routing_degraded": true
+      },
+      "detection": {
+        "target_type": "shipment_records",
+        "used_llm": true,
+        "degraded": true,
+        "reason": "delivery_note_business_rows",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {
+        "new": 1,
+        "update": 0,
+        "skip": 0,
+        "error": 0,
+        "executed": 1
+      },
+      "four_way": {
+        "run_id": "fc740162-796a-4c8a-8181-eceb615fa336",
+        "target": "shipment_records",
+        "preview_rows": 1,
+        "written": 1,
+        "db_matched": 1,
+        "result_rows": 1,
+        "unlocated": 0,
+        "download_status": 200,
+        "download_sha256": "ef51dfd8ce332e091396d455e1ea03990765763fb6633e06585557abd59f2bd3",
+        "original_mismatch_fields": {},
+        "value_mismatch_fields": {}
+      }
+    },
+    {
+      "file": "温总.xlsx",
+      "batch_id": "aib-b608310ea5c544e9",
+      "status_on_read": "partial",
+      "coverage": {
+        "complete": false,
+        "knowledge_action": "new",
+        "business_rows": {
+          "new": 1,
+          "update": 0,
+          "skip": 0,
+          "error": 0
+        },
+        "routing_degraded": true
+      },
+      "detection": {
+        "target_type": "shipment_records",
+        "used_llm": true,
+        "degraded": true,
+        "reason": "delivery_note_business_rows",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {
+        "new": 1,
+        "update": 0,
+        "skip": 0,
+        "error": 0,
+        "executed": 1
+      },
+      "four_way": {
+        "run_id": "69d9dd0f-c910-48e5-8ce8-2a16592e1852",
+        "target": "shipment_records",
+        "preview_rows": 1,
+        "written": 1,
+        "db_matched": 1,
+        "result_rows": 1,
+        "unlocated": 0,
+        "download_status": 200,
+        "download_sha256": "4fda76dcf647e32296527e4ca54b2739f2ade45f46ef3b23d5627cf6646afbfe",
+        "original_mismatch_fields": {},
+        "value_mismatch_fields": {}
+      }
+    },
+    {
+      "file": "现金.xlsx",
+      "batch_id": "aib-64d4397427764b17",
+      "status_on_read": "partial",
+      "coverage": {
+        "complete": false,
+        "knowledge_action": "new",
+        "business_rows": {
+          "new": 2,
+          "update": 0,
+          "skip": 0,
+          "error": 0
+        },
+        "routing_degraded": true
+      },
+      "detection": {
+        "target_type": "shipment_records",
+        "used_llm": true,
+        "degraded": true,
+        "reason": "delivery_note_business_rows",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {
+        "new": 2,
+        "update": 0,
+        "skip": 0,
+        "error": 0,
+        "executed": 2
+      },
+      "four_way": {
+        "run_id": "4759985e-9925-4ab5-8514-6ffc5ef576e0",
+        "target": "shipment_records",
+        "preview_rows": 2,
+        "written": 2,
+        "db_matched": 2,
+        "result_rows": 2,
+        "unlocated": 0,
+        "download_status": 200,
+        "download_sha256": "89068b12d62bf712fab98547e2963e4e4034d335c2ad3fd88a92c4f7f22b711f",
+        "original_mismatch_fields": {},
+        "value_mismatch_fields": {}
+      }
+    },
+    {
+      "file": "迎扬李总.xlsx",
+      "batch_id": "aib-5e42563462af4529",
+      "status_on_read": "partial",
+      "coverage": {
+        "complete": false,
+        "knowledge_action": "new",
+        "business_rows": {
+          "new": 5,
+          "update": 0,
+          "skip": 0,
+          "error": 0
+        },
+        "routing_degraded": true
+      },
+      "detection": {
+        "target_type": "shipment_records",
+        "used_llm": true,
+        "degraded": true,
+        "reason": "delivery_note_business_rows",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {
+        "new": 5,
+        "update": 0,
+        "skip": 0,
+        "error": 0,
+        "executed": 5
+      },
+      "four_way": {
+        "run_id": "0a2465a3-cd42-4892-a77a-62e704893207",
+        "target": "shipment_records",
+        "preview_rows": 5,
+        "written": 5,
+        "db_matched": 5,
+        "result_rows": 5,
+        "unlocated": 0,
+        "download_status": 200,
+        "download_sha256": "4e0a377f194fa6bba689b280304621e4cd1d194b865056e4d9dcff554062d8c9",
+        "original_mismatch_fields": {},
+        "value_mismatch_fields": {}
+      }
+    },
+    {
+      "file": "邻居杨总.xlsx",
+      "batch_id": "aib-743869c1fd2e430f",
+      "status_on_read": "partial",
+      "coverage": {
+        "complete": false,
+        "knowledge_action": "new",
+        "business_rows": {
+          "new": 161,
+          "update": 0,
+          "skip": 10,
+          "error": 8
+        },
+        "routing_degraded": false
+      },
+      "detection": {
+        "target_type": "shipment_records",
+        "used_llm": true,
+        "degraded": false,
+        "reason": "database_llm",
+        "llm_reason": ""
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {
+        "new": 161,
+        "update": 0,
+        "skip": 10,
+        "error": 8,
+        "executed": 161
+      },
+      "four_way": null
+    },
+    {
+      "file": "鑫顺.xlsx",
+      "batch_id": "aib-f125a70a082f472e",
+      "status_on_read": "applied",
+      "coverage": null,
+      "detection": {
+        "target_type": "shipment_records",
+        "used_llm": true,
+        "degraded": false,
+        "reason": "database_llm",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {
+        "new": 10,
+        "update": 0,
+        "skip": 2,
+        "error": 0,
+        "executed": 10
+      },
+      "four_way": {
+        "run_id": "18fbc11e-f34f-443e-89b1-340c2f57cb20",
+        "target": "shipment_records",
+        "preview_rows": 12,
+        "written": 10,
+        "db_matched": 10,
+        "result_rows": 12,
+        "unlocated": 0,
+        "download_status": 200,
+        "download_sha256": "b42f24040d69708493aef5cbc07752ad7b0a81f4b3e3ed762cb8bfd19c8c3163",
+        "original_mismatch_fields": {},
+        "value_mismatch_fields": {}
+      }
+    },
+    {
+      "file": "26年材料总表.xlsx",
+      "batch_id": "aib-aaa6f48a86b44858",
+      "status_on_read": "partial",
+      "coverage": {
+        "complete": false,
+        "knowledge_action": "new",
+        "business_rows": {},
+        "routing_degraded": true
+      },
+      "detection": {
+        "target_type": "knowledge",
+        "used_llm": true,
+        "degraded": true,
+        "reason": "archived_document",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {},
+      "four_way": null
+    },
+    {
+      "file": "26年生产单.xlsx",
+      "batch_id": "aib-2c301f8bbc1141bf",
+      "status_on_read": "applied",
+      "coverage": null,
+      "detection": {
+        "target_type": "knowledge",
+        "used_llm": true,
+        "degraded": false,
+        "reason": "archived_document",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {},
+      "four_way": null
+    },
+    {
+      "file": "26年综合表格.xlsx",
+      "batch_id": "aib-dc10994aac5e43e6",
+      "status_on_read": "partial",
+      "coverage": {
+        "complete": false,
+        "knowledge_action": "new",
+        "business_rows": {},
+        "routing_degraded": true
+      },
+      "detection": {
+        "target_type": "knowledge",
+        "used_llm": true,
+        "degraded": true,
+        "reason": "archived_document",
+        "llm_reason": "ELT_LLM_UNAVAILABLE"
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {},
+      "four_way": null
+    },
+    {
+      "file": "26年销售明细.xlsx",
+      "batch_id": "aib-8733381826664eba",
+      "status_on_read": "applied",
+      "coverage": null,
+      "detection": {
+        "target_type": "knowledge",
+        "used_llm": true,
+        "degraded": false,
+        "reason": "archived_document",
+        "llm_reason": null
+      },
+      "knowledge": {
+        "action": "new",
+        "used_llm": null,
+        "model_applied": null,
+        "degraded": null,
+        "degradation_code": null
+      },
+      "business_counts": {},
+      "four_way": null
+    },
+    {
+      "file": "小洋杨总、.xlsx",
+      "batch_id": "aib-277dd9f3b81b4d02",
+      "status_on_read": "not visible to actor 2:3",
+      "note": "legacy run 97d0b6a8 belongs to tenant 1 / owner 2; batch and download return 404 under tenant isolation"
+    },
+    {
+      "file": "七彩乐园.xlsx",
+      "status_on_read": "no intake receipt under actor 2:3",
+      "note": "legacy pre-redesign loop; not reconcilable here"
+    }
+  ],
+  "chat_check": {
+    "endpoint": "POST /api/ai/chat",
+    "message": "出货记录",
+    "http": 200,
+    "success": true,
+    "records": 20,
+    "tenant_id": 2
+  },
+  "wallet": {
+    "start": 453.32,
+    "end": 425.69,
+    "unreleased_preauths": [
+      {
+        "reference": "llm_b76558fd0eea41c8a2339c9ea36a53e7",
+        "amount": 0.33,
+        "file": "26年综合表格.xlsx"
+      },
+      {
+        "reference": "llm_f1aa89bf02dd4a00ae48b82db10ebff9",
+        "amount": 5.11,
+        "file": "邻居贾总.xlsx"
+      }
+    ],
+    "balance_steps": {
+      "start": 453.32,
+      "after_综合": 451.17,
+      "after_杨总": 444.87,
+      "after_考勤表_v2_v3": 438.01,
+      "after_贾总_resend": 438.01,
+      "after_侯雪梅": 428.91,
+      "after_考勤表_v4": 425.69
+    }
+  },
+  "needs_user": [
+    "deploy the market server change and alembic migration 20261108_llm_client_requests; until then recovery by request id fails closed",
+    "grant etl.rollback (or withdraw yourself) for 邻居杨总 aib-743869c1fd2e430f and legacy 尹玉华1 aib-09a28adac00c4f35 before any re-run; re-running without withdraw could write rows twice (no order number, legacy rows lack source coordinates)",
+    "authorize abandon with candidate_key for 张总",
+    "邻居贾总: two unknown calls; decide whether to authorize another resend (packs are now bounded)",
+    "侯雪梅: confirm the two uncovered cells",
+    "宗南: 87 rows take a purchase unit found only in another sheet's header (sheet index 1 A2); review the attribution"
+  ]
+}
