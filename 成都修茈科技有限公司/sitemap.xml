@@ -7,19 +7,7 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://xiu-ci.com/index.html</loc>
-    <lastmod>2026-07-19</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
     <loc>https://xiu-ci.com/about.html</loc>
-    <lastmod>2026-07-19</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://xiu-ci.com/services.html</loc>
     <lastmod>2026-07-19</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -31,16 +19,16 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://xiu-ci.com/pricing.html</loc>
+    <lastmod>2026-11-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://xiu-ci.com/cases.html</loc>
     <lastmod>2026-07-19</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://xiu-ci.com/case-manufacture.html</loc>
-    <lastmod>2026-07-19</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
   </url>
   <url>
     <loc>https://xiu-ci.com/case-edu.html</loc>
@@ -67,10 +55,28 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://xiu-ci.com/developer.html</loc>
+    <lastmod>2026-11-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://xiu-ci.com/contact.html</loc>
     <lastmod>2026-07-19</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://xiu-ci.com/download</loc>
+    <lastmod>2026-11-07</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://xiu-ci.com/download/releases</loc>
+    <lastmod>2026-11-07</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://xiu-ci.com/visualization</loc>
@@ -78,5 +84,4 @@
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
-  <url><loc>https://xiu-ci.com/case-coating.html</loc></url>
 </urlset>
