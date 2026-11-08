@@ -88,3 +88,21 @@ class LlmCallLog(Base):
     upstream_status = Column(Integer, nullable=True)
     error = Column(Text, default="")
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class LlmClientRequest(Base):
+    """One billed chat execution per client idempotency key (see llm_client_requests)."""
+
+    __tablename__ = "llm_client_requests"
+    __table_args__ = (
+        UniqueConstraint("user_id", "client_request_id", name="uq_llm_client_request"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    client_request_id = Column(String(128), nullable=False)
+    request_sha256 = Column(String(64), nullable=False)
+    state = Column(String(16), nullable=False, default="processing")
+    attempts = Column(Integer, nullable=False, default=1)
+    done_json = Column(Text, nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))

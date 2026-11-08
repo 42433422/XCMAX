@@ -1130,6 +1130,11 @@ class LlmChatDTO(_facade().BaseModel):
         None,
         description="OpenAI tool_choice，如 'auto' 或 {'type':'function','function':{...}}",
     )
+    client_request_id: str | None = Field(
+        None,
+        pattern=r"^[A-Za-z0-9_.:-]{8,128}$",
+        description="客户端幂等键：同键只执行一次，完成后重放回执",
+    )
 
 
 class LlmImageDTO(_facade().BaseModel):
@@ -1244,7 +1249,24 @@ async def llm_chat_stream(
         tools=body.tools,
         tool_choice=body.tool_choice,
         route_snapshot=snapshot,
+        client_request_id=body.client_request_id,
     )
+
+
+@_facade().router.get("/chat/requests/{client_request_id}")
+def llm_chat_request_state(
+    client_request_id: str,
+    db: _facade().Session = _facade().Depends(_facade().get_db),
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
+):
+    """What this user's idempotency key reached; never the answer itself."""
+    from modstore_server import llm_client_requests as ledger
+    from modstore_server.llm_billed_chat import _chat_total_deadline_s
+
+    if not ledger.KEY_PATTERN.fullmatch(client_request_id):
+        raise _facade().HTTPException(400, "请求键无效")
+    state = ledger.lookup(db, int(user.id), client_request_id, _chat_total_deadline_s())
+    return {"client_request_id": client_request_id, "state": state}
 
 
 @_facade().router.post("/image")

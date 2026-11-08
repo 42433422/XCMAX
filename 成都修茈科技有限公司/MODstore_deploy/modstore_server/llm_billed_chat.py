@@ -14,6 +14,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from modstore_server import llm_client_requests as ledger
 from modstore_server.llm_billed_once import (
     failed_chat_route_detail,
 )
@@ -236,6 +237,7 @@ async def stream_billed_llm_chat(
     tools: Optional[list[dict[str, Any]]] = None,
     tool_choice: Any = None,
     route_snapshot: ChatRouteSnapshot | None = None,
+    client_request_id: str | None = None,
 ) -> StreamingResponse:
     primary = route_snapshot or resolve_chat_route_snapshot(db, user.id, provider, model)
     primary_provider, primary_model = primary.provider, primary.model
@@ -266,6 +268,33 @@ async def stream_billed_llm_chat(
                 f"供应商「{primary_provider}」未配置可用 API Key（平台环境变量或 BYOK）。",
             ),
         )
+
+    ledger_row = None
+    if client_request_id:
+        digest = ledger.request_digest(
+            {
+                "provider": primary_provider,
+                "model": primary_model,
+                "messages": msgs,
+                "max_tokens": max_tokens,
+                "tools": tools,
+                "tool_choice": tool_choice,
+            }
+        )
+        outcome, value = ledger.begin(
+            db, int(user.id), client_request_id, digest, _chat_total_deadline_s()
+        )
+        if outcome == "replay":
+            return _stream_response(_replay(value))
+        if outcome != "run":
+            raise HTTPException(
+                409,
+                {
+                    **failed_chat_route_detail(primary, "同一请求键正在处理或内容不同"),
+                    "state": outcome,
+                },
+            )
+        ledger_row = value
 
     async def gen():
         queue = list(candidates)
@@ -302,7 +331,11 @@ async def stream_billed_llm_chat(
 
             is_byok = key_source == "user_override"
             base = route.base_url if prov in OAI_COMPAT_OPENAI_STYLE_PROVIDERS else None
-            request_id = new_request_id()
+            request_id = (
+                f"{ledger.attempt_request_id(int(user.id), client_request_id, ledger_row.attempts)}-{idx}"
+                if ledger_row is not None
+                else new_request_id()
+            )
             try:
                 enforce_risk_limits(db, user.id, prov, mdl, msgs, request)
             except HTTPException as exc:
@@ -373,6 +406,7 @@ async def stream_billed_llm_chat(
 
             parts: List[str] = []
             upstream_usage: Dict[str, Any] = {}
+            finish_reason = ""
             emitted_delta = False
             try:
                 async for ev in chat_dispatch_stream(
@@ -444,6 +478,9 @@ async def stream_billed_llm_chat(
                     if ev.get("type") == "usage":
                         upstream_usage = ev.get("usage") or {}
                         continue
+                    if ev.get("type") == "finish":
+                        finish_reason = str(ev.get("finish_reason") or "")[:32]
+                        continue
                     if ev.get("type") == "toolcall":
                         choices = ev.get("choices") or []
                         if choices:
@@ -463,6 +500,9 @@ async def stream_billed_llm_chat(
                         charge = Decimal("0")
                     else:
                         charge = calculate_charge(db, prov, mdl, usage)
+                        if ledger_row is not None:
+                            # A cancel during settle may have charged: never run this key again.
+                            ledger.mark_settling(db, ledger_row)
                         await wallet.settle(authorization_header(request), hold, charge, request_id)
                     saved_conversation_id = save_success_log(
                         db,
@@ -487,9 +527,13 @@ async def stream_billed_llm_chat(
                         "route_state": "completed",
                         "billed": not is_byok,
                     }
+                    if finish_reason:
+                        done["finish_reason"] = finish_reason
                     if len(attempted) > 1:
                         done["failover_from"] = f"{primary_provider}/{primary_model}"
                         done["failover_attempts"] = list(attempted)
+                    if ledger_row is not None:
+                        ledger.finish(db, ledger_row, done)
                     yield _sse("done", done)
                     return
                 # break from async for → try next candidate
@@ -527,8 +571,24 @@ async def stream_billed_llm_chat(
                 return
         yield _route_error(route, last_error)
 
+    async def ledgered():
+        try:
+            yield _sse("status", {"state": "accepted", "client_request_id": client_request_id})
+            async for frame in gen():
+                yield frame
+        finally:
+            ledger.finish(db, ledger_row, None)
+
+    return _stream_response(ledgered() if ledger_row is not None else gen())
+
+
+async def _replay(done: Dict[str, Any]):
+    yield _sse("done", {**done, "replayed": True})
+
+
+def _stream_response(body) -> StreamingResponse:
     return StreamingResponse(
-        gen(),
+        body,
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
