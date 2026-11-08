@@ -44,8 +44,8 @@ from app.application.reviewed_excel_classification import (
 )
 
 
-def _validate_template_schema(schema: dict, payload: object) -> bool:
-    """Validate the complete schema subset used by template requests; fail closed otherwise."""
+def _template_schema_problem(schema: dict, payload: object) -> str:
+    """First violation of the schema subset used by template requests; fail closed otherwise."""
     permitted = {
         "type",
         "required",
@@ -88,51 +88,67 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
             for key in ("minItems", "maxItems", "minLength", "maxLength", "minimum", "maximum")
         )
 
-    def matches(rule, value):
+    def problem(rule, value, path):
+        """The first violated rule as a path, or "" when the value matches."""
         kind = rule["type"]
         if kind == "object":
             if not isinstance(value, dict):
-                return False
+                return f"{path} 应为对象"
             properties = rule.get("properties", {})
-            if any(key not in value for key in rule.get("required", [])):
-                return False
-            if rule.get("additionalProperties") is False and any(
-                key not in properties for key in value
-            ):
-                return False
-            if any(
-                key in properties and not matches(properties[key], item)
-                for key, item in value.items()
-            ):
-                return False
-        elif kind == "array":
-            if (
-                not isinstance(value, list)
-                or len(value) < rule.get("minItems", 0)
-                or len(value) > rule.get("maxItems", len(value))
-            ):
-                return False
-            if "items" in rule and any(not matches(rule["items"], item) for item in value):
-                return False
-        elif kind == "boolean":
-            if type(value) is not bool:
-                return False
-        elif kind == "integer":
+            missing = [key for key in rule.get("required", []) if key not in value]
+            if missing:
+                return f"{path} 缺少 {missing[0]}"
+            if rule.get("additionalProperties") is False and set(value) - set(properties):
+                return f"{path} 含未定义的字段"
+            for key, item in value.items():
+                found = key in properties and problem(properties[key], item, f"{path}/{key}")
+                if found:
+                    return found
+            return ""
+        if kind == "array":
+            if not isinstance(value, list):
+                return f"{path} 应为数组"
+            if len(value) < rule.get("minItems", 0):
+                return f"{path} 少于 {rule['minItems']} 项"
+            if len(value) > rule.get("maxItems", len(value)):
+                return f"{path} 有 {len(value)} 项，超过上限 {rule['maxItems']}"
+            for index, item in enumerate(value):
+                found = "items" in rule and problem(rule["items"], item, f"{path}[{index}]")
+                if found:
+                    return found
+            return ""
+        if kind == "boolean":
+            return "" if type(value) is bool else f"{path} 应为布尔值"
+        if kind == "integer":
             if (
                 type(value) is not int
                 or value < rule.get("minimum", value)
                 or value > rule.get("maximum", value)
             ):
-                return False
-        elif (
-            not isinstance(value, str)
-            or len(value) < rule.get("minLength", 0)
-            or len(value) > rule.get("maxLength", len(value))
+                return f"{path} 应为范围内整数"
+        elif not isinstance(value, str) or not (
+            rule.get("minLength", 0) <= len(value) <= rule.get("maxLength", len(value))
         ):
-            return False
-        return "enum" not in rule or value in rule["enum"]
+            return f"{path} 应为长度合规的字符串"
+        if "enum" in rule and value not in rule["enum"]:
+            return f"{path} 不是提供的取值之一"
+        return ""
 
-    return bool(supported(schema) and matches(schema, payload))
+    if not supported(schema):
+        return "输出格式定义不受支持"
+    first = problem(schema, payload, "$")
+    if not first or not isinstance(payload, dict) or schema.get("type") != "object":
+        return first
+    # One violation per top-level field, so a repair round sees every failing part.
+    properties = schema.get("properties", {})
+    parts = [
+        problem(properties[key], payload[key], f"$/{key}") for key in properties if key in payload
+    ]
+    return "；".join(item for item in parts if item) or first
+
+
+def _validate_template_schema(schema: dict, payload: object) -> bool:
+    return not _template_schema_problem(schema, payload)
 
 
 def configured_template_llm_provider() -> str:
@@ -390,13 +406,18 @@ def _template_platform_complete(
                 from app.application.reviewed_excel_partition import coerce_payload_document_labels
 
                 data = coerce_payload_document_labels(data)
-            if data is None or not _validate_template_schema(schema, data):
+            violation = "不是 JSON" if data is None else _template_schema_problem(schema, data)
+            if violation:
                 logging.getLogger(__name__).info(
-                    "template model payload rejected finish_reason=%s chars=%s",
+                    "template model payload rejected finish_reason=%s chars=%s violation=%s",
                     finish,
                     len(raw_content),
+                    violation[:80],
                 )
-                raise ModelAnswerRejected("模型答案不是符合输出格式的 JSON", answer=raw_content)
+                # The path names schema keys and positions only, never answer text.
+                raise ModelAnswerRejected(
+                    f"模型答案不符合输出格式：{violation[:200]}", answer=raw_content
+                )
             model = str((response or {}).get("model") or template_llm_model_label())
             provider_name = str((response or {}).get("provider") or "platform")
             return llm_assist.LlmAssistResult(

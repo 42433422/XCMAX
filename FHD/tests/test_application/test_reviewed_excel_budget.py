@@ -614,3 +614,22 @@ def test_first_byte_deadline_defaults_to_the_template_timeout(monkeypatch):
     assert template_first_byte_seconds() == 150
     monkeypatch.setenv("FHD_TEMPLATE_LLM_FIRST_BYTE_SECONDS", "30")
     assert template_first_byte_seconds() == 30
+
+
+def test_schema_rejection_names_each_failing_field():
+    from app.application.reviewed_excel_template import _template_schema_problem
+
+    schema = {
+        "type": "object",
+        "required": ["regions", "refs"],
+        "additionalProperties": False,
+        "properties": {
+            "regions": {"type": "array", "items": {"type": "string", "enum": ["S1:A1"]}},
+            "refs": {"type": "array", "maxItems": 1, "items": {"type": "string"}},
+        },
+    }
+    assert _template_schema_problem(schema, {"regions": ["S1:A1"], "refs": []}) == ""
+    problem = _template_schema_problem(schema, {"regions": ["S1:A1", "S9:Z9"], "refs": ["a", "b"]})
+    assert "$/regions[1] 不是提供的取值之一" in problem
+    assert "$/refs 有 2 项，超过上限 1" in problem
+    assert "S9" not in problem

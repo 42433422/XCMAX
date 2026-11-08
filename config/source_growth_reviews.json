@@ -100,9 +100,9 @@
     "FHD/app/application/reviewed_excel_template.py": {
       "base_file": "FHD/app/application/reviewed_excel_template.py",
       "base_blob": "3c400640973806cb37897da3512c4e9c8168a23d",
-      "head_blob": "f0fd753e805cff647f3b3408953af7130e9e21ce",
+      "head_blob": "36698b35ba5cdeac5b328ed5bae676167554654c",
       "before_lines": 1376,
-      "after_lines": 1613,
+      "after_lines": 1634,
       "reason": "Outcome taxonomy, bounded repair rounds, provider 402 rejection, and public model-error detail require additional template-platform call control without changing the review workbook contract.",
       "boundary": "Existing reviewed-Excel template platform call path only; no new route, persistence model, or authorization change.",
       "validation": "Reviewed Excel audit, template schema, and intake regression tests plus push preflight and backend CI.",
