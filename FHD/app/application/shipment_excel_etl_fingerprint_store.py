@@ -87,17 +87,6 @@ def has_fingerprint(tenant_key: str, fingerprint: str) -> bool:
     return _legacy_has(tenant_key, fp)
 
 
-def get_fingerprint(tenant_key: str, fingerprint: str) -> dict[str, Any] | None:
-    fp = str(fingerprint or "").strip()
-    if not fp:
-        return None
-    if _use_orm_backend():
-        row = _orm_get(tenant_key, fp)
-        if row:
-            return row
-    return _legacy_get(tenant_key, fp)
-
-
 def record_fingerprint(
     tenant_key: str,
     fingerprint: str,
@@ -158,36 +147,6 @@ def _orm_has(tenant_key: str, fingerprint: str) -> bool:
             return row is not None
     except RECOVERABLE_ERRORS:
         return False
-
-
-def _orm_get(tenant_key: str, fingerprint: str) -> dict[str, Any] | None:
-    try:
-        from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
-        from app.db.session import get_db
-
-        _ensure_orm_table()
-        with get_db() as db:
-            row = (
-                db.query(ShipmentEtlImportFingerprint)
-                .filter(
-                    ShipmentEtlImportFingerprint.tenant_key == str(tenant_key),
-                    ShipmentEtlImportFingerprint.fingerprint == fingerprint,
-                )
-                .first()
-            )
-            if not row:
-                return None
-            return {
-                "tenant_key": row.tenant_key,
-                "fingerprint": row.fingerprint,
-                "shipment_id": row.shipment_id,
-                "unit_name": row.unit_name,
-                "order_number": row.order_number,
-                "file_name": row.file_name,
-                "source_kind": row.source_kind,
-            }
-    except RECOVERABLE_ERRORS:
-        return None
 
 
 def _orm_record(
@@ -275,19 +234,6 @@ def _legacy_has(tenant_key: str, fingerprint: str) -> bool:
                 (str(tenant_key), fingerprint),
             ).fetchone()
             return row is not None
-        finally:
-            conn.close()
-
-
-def _legacy_get(tenant_key: str, fingerprint: str) -> dict[str, Any] | None:
-    with _LOCK:
-        conn = _legacy_connect()
-        try:
-            row = conn.execute(
-                "SELECT * FROM shipment_etl_fingerprints WHERE tenant_key=? AND fingerprint=?",
-                (str(tenant_key), fingerprint),
-            ).fetchone()
-            return dict(row) if row else None
         finally:
             conn.close()
 

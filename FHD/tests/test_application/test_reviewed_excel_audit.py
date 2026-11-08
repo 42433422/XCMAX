@@ -1,10 +1,9 @@
 import json
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
 from app.application.elt.errors import ReviewedExcelError
-from datetime import datetime, timedelta, timezone
-
 from app.application.reviewed_excel_audit import (
     claim_request,
     release_unanswered_inflight,
@@ -384,10 +383,10 @@ def test_unanswered_inflight_releases_only_after_the_claim_expires():
         "analysis_checkpoint": {"phase": "inflight", "results": [], "calls_in_round": 0},
         "model_audit": [{"state": "inflight", "request_sha256": "abc"}],
     }
-    recent = datetime.now(timezone.utc) - timedelta(minutes=5)
+    recent = datetime.now(UTC) - timedelta(minutes=5)
     assert release_unanswered_inflight(state, recent) is False
     assert state["analysis_checkpoint"]["phase"] == "inflight"
-    stale = datetime.now(timezone.utc) - timedelta(minutes=16)
+    stale = datetime.now(UTC) - timedelta(minutes=16)
     assert release_unanswered_inflight(state, stale) is True
     assert state["analysis_checkpoint"]["phase"] == "ready"
     assert state["model_audit"][0]["state"] == "unanswered"

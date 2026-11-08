@@ -442,6 +442,10 @@ class ModstorePlatformAdapter:
         )
 
     def _absorb_stream_payload(self, data: str, status_cb, pieces: list[str]) -> None:
+        # Every streamed payload, reasoning deltas included, shows the same call is still
+        # producing; the caller's wait is an idle limit, not a cap on a live answer.
+        if data and status_cb is not None:
+            status_cb()
         try:
             payload = json.loads(data)
         except (ValueError, TypeError):
@@ -451,8 +455,6 @@ class ModstorePlatformAdapter:
         if not isinstance(payload, dict):
             return
         if payload.get("status") == "processing":
-            if status_cb is not None:
-                status_cb()
             return
         delta = payload.get("delta")
         content = delta if isinstance(delta, str) and delta else payload.get("content")
@@ -485,7 +487,7 @@ class ModstorePlatformAdapter:
     ) -> Dict[str, Any]:
         """同一条流式调用收成完整响应。处理中的状态不另开请求。"""
         kwargs.pop("_stream_status", None)
-        status_cb = kwargs.pop("_processing_status", None)
+        status_cb = kwargs.get("_processing_status")
         pieces: list[str] = []
         async for data in self.stream_chat_completion(
             messages, temperature, max_tokens, provider, model, **kwargs
@@ -533,7 +535,7 @@ class ModstorePlatformAdapter:
     ) -> Dict[str, Any]:
         """同步版也走同一条流，收成完整响应。处理中的状态不另开请求。"""
         kwargs.pop("_stream_status", None)
-        status_cb = kwargs.pop("_processing_status", None)
+        status_cb = kwargs.get("_processing_status")
         pieces: list[str] = []
         for data in self.stream_chat_completion_sync(
             messages, temperature, max_tokens, provider, model, **kwargs

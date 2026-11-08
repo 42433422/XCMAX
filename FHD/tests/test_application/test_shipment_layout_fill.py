@@ -371,6 +371,22 @@ def test_submission_without_layout_downloads_every_preview_row(tmp_path, monkeyp
                 final_action="new",
                 execution_status="success",
                 after_json=dump_json({"id": 9}),
+                provenance_json=dump_json({"parser": "database_llm", "source_range": "A12:F12"}),
+            )
+        )
+        session.add(
+            EltRunRow(
+                tenant_id=7,
+                run_id="run-trace",
+                owner_user_id=11,
+                source_sheet="",
+                source_row=-3,
+                source_json=dump_json({"购买单位": "乙", "产品名称": "清漆", "数量": "2"}),
+                normalized_json=dump_json({}),
+                final_action="error",
+                execution_status="success",
+                after_json=dump_json({}),
+                provenance_json=dump_json({"location": "unlocated"}),
             )
         )
         session.add(
@@ -400,10 +416,12 @@ def test_submission_without_layout_downloads_every_preview_row(tmp_path, monkeyp
         assert produced["file_name"] == "etl-run-trace.xlsx"
         book = load_workbook(tmp_path / "etl" / "exports" / "etl-run-trace.xlsx")
         sheet = book.active
-        assert sheet["A2"].value == "送货" and sheet["B2"].value == 12
-        assert sheet["C2"].value == "new" and sheet["G2"].value == "5"
-        assert sheet["H2"].value == "140" and sheet["M2"].value == 9
-        assert sheet["C3"].value == "skip" and sheet["M3"].value in (None, "")
+        assert sheet["A2"].value in (None, "") and sheet["B2"].value in (None, "")
+        assert sheet["D2"].value == "error" and sheet["E2"].value == "乙"
+        assert sheet["A3"].value == "送货" and sheet["B3"].value == 12
+        assert sheet["C3"].value == "A12:F12" and sheet["D3"].value == "new"
+        assert sheet["H3"].value == "5" and sheet["I3"].value == "140" and sheet["N3"].value == 9
+        assert sheet["D4"].value == "skip" and sheet["N4"].value in (None, "")
         book.close()
         assert (
             write_committed_shipment_workbook(

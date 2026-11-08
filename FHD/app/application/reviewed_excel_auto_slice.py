@@ -389,11 +389,11 @@ def _compatibility_revision(fragments, message, overview, owner_id, earlier, all
     try:
         result = _template_llm_complete(messages, schema, 800, owner_id=owner_id)
     except BOUNDARY_ERRORS as exc:
-        logger.info("compatibility round failed")
-        text = str(exc)
-        if "未自动重试" in text or "结果状态未知" in text:
-            return "stop"
-        return "again"
+        from app.application.elt.errors import model_call_outcome
+
+        outcome = model_call_outcome(exc)
+        logger.info("compatibility round failed outcome=%s", outcome)
+        return "again" if outcome == "answered_invalid" else "stop"
     if not getattr(result, "used_llm", False) or getattr(result, "degraded", False):
         return "stop"
     payload = result.data if isinstance(getattr(result, "data", None), dict) else {}

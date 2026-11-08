@@ -2,7 +2,7 @@
 
 Verdict: **BLOCKED**. This is not an ELT full-business-loop PASS. No customer workbook was uploaded, classified, confirmed, committed, read back from ERP, or exported. Prior per-branch PASS claims were not reused.
 
-This file is an evidence snapshot for the review candidate. It is not a product SSOT and it is not a release record.
+This file is an evidence snapshot for the review candidate. It is not a living product document and it is not a release record.
 
 ## Identity
 

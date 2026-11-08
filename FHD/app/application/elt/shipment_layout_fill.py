@@ -443,6 +443,7 @@ def _saved_layout_path(db: Any, run: Any) -> Path | None:
 _TRACE_HEADERS = (
     "来源工作表",
     "来源行",
+    "来源范围",
     "去向",
     "购买单位",
     "产品名称",
@@ -514,10 +515,13 @@ def write_submission_trace(db: Any, run: Any, destination: Path) -> str:
         if row.execution_status and row.execution_status != "success":
             disposition = f"{disposition}:{row.execution_status}"
         written = disposition.startswith(("new", "update"))
+        cited = load_json(row.provenance_json, {})
         sheet.append(
             [
                 row.source_sheet,
-                row.source_row,
+                # A row the model did not place keeps a synthetic negative key, not a coordinate.
+                row.source_row if row.source_row > 0 else "",
+                cited.get("source_range", "") if isinstance(cited, dict) else "",
                 disposition,
                 _first(normal, "purchase_unit") or _first(source, "购买单位"),
                 _first(normal, "product_name") or _first(source, "产品名称", "品名"),

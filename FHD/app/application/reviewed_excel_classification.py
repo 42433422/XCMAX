@@ -33,8 +33,12 @@ def _classify_semantic_batch(
     reference_ids: bool = False,
     expected_request_sha256: str | None = None,
     owner_id: int | None = None,
+    repair: list[dict] | None = None,
 ) -> dict:
-    """Request bounded semantic regions; validate every reference before adoption."""
+    """Request bounded semantic regions; validate every reference before adoption.
+
+    ``repair`` is the audited follow-up turn after a rejected answer for this batch.
+    """
     import json
 
     from openpyxl.utils.cell import (
@@ -295,6 +299,7 @@ def _classify_semantic_batch(
     from app.application.reviewed_excel_budget import output_budget, validate_request_budget
 
     max_output_tokens = output_budget(chosen)
+    messages.extend(repair or [])
     audit_request = {
         "messages": messages,
         "schema": provider_schema,

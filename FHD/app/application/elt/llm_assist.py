@@ -522,11 +522,6 @@ _BUSINESS_ROW_KEYS = (
 )
 
 
-def _cited_source_rows(text: str) -> set[tuple[str, str]]:
-    """Sheet and row labels actually present in the archived text."""
-    return set(_sheet_line_index(text))
-
-
 def _sheet_line_index(text: str) -> dict[tuple[str, str], set[str]]:
     """Cells under each ``# sheet:`` and ``R`` label. Hidden sheets are already omitted."""
     sheet = ""

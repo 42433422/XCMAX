@@ -15,7 +15,6 @@ from app.application.elt.archive_store import default_archive_root, read_origina
 from app.application.elt.errors import ReviewedExcelError, public_excel_error
 from app.application.elt.service_support import dump_json, load_json, utcnow
 from app.application.elt_login_authorization import require_model_session
-from app.application.reviewed_excel_audit import ModelRequestNotSent
 from app.application.reviewed_excel_classification_store import (
     _CLASS_READY,
     _classification_cas,
@@ -37,24 +36,32 @@ _CLASS_SAVING = "classification_template_saving"
 _MODEL_PENDING = "template_review_model_pending"
 
 
-def _model_processing_failure(exc: Exception) -> HTTPException:
-    from app.application.elt.errors import is_definite_provider_failure
+_OUTCOME_HTTP = {
+    "not_sent": (503, "model_configuration_error", "模型连接异常，未调用模型。"),
+    "rejected": (503, "model_configuration_error", "模型配置或入口不可用。"),
+    "answered_invalid": (422, "model_answer_rejected", "模型已回答，但答案未通过校验。"),
+    "unknown": (503, "model_processing_failed", "模型处理未完成。"),
+}
 
-    not_sent = isinstance(exc, ModelRequestNotSent)
-    definite = (not not_sent) and is_definite_provider_failure(exc)
-    config_like = not_sent or definite
+
+def _model_processing_failure(
+    exc: Exception, *, stored_status: int | None = None, retryable: bool | None = None
+) -> HTTPException:
+    """One HTTP shape for every model-call outcome; only ``unknown`` locks a retry."""
+    from app.application.elt.errors import model_call_outcome
+
+    outcome = model_call_outcome(exc, stored_status=stored_status)
+    status, code, lead = _OUTCOME_HTTP[outcome]
+    reason = public_excel_error(exc)
     return HTTPException(
-        status_code=503,
+        status_code=status,
         detail={
-            "code": "model_configuration_error" if config_like else "model_processing_failed",
-            "message": (
-                "模型连接异常，未调用模型。"
-                if not_sent
-                else ("模型配置或入口不可用。" if definite else "模型处理未完成。")
-            )
-            + public_excel_error(exc),
-            "retryable": config_like,
-            "outcome_unknown": not config_like,
+            "code": code,
+            "outcome": outcome,
+            "reason": reason,
+            "message": lead + reason,
+            "retryable": outcome != "unknown" if retryable is None else retryable,
+            "outcome_unknown": outcome == "unknown",
         },
     )
 

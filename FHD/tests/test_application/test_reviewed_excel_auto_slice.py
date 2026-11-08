@@ -3,7 +3,7 @@ from io import BytesIO
 import pytest
 from openpyxl import Workbook, load_workbook
 
-from app.application.elt.errors import ReviewedExcelError
+from app.application.elt.errors import ModelAnswerRejected, ReviewedExcelError
 from app.application.reviewed_excel_auto_slice import derive_classified_documents
 from app.application.reviewed_excel_template import inspect_workbook
 
@@ -580,7 +580,7 @@ def test_unusable_compatibility_answer_is_asked_again(monkeypatch):
     def complete(*args, **kwargs):
         calls.append(args[0][0]["content"])
         if len(calls) == 1:
-            raise ReviewedExcelError("invalid")
+            raise ModelAnswerRejected("invalid")
         return Result()
 
     monkeypatch.setattr(

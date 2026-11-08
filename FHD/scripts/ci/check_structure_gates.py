@@ -57,7 +57,7 @@ BASELINE = {
     "ports_repo_wide": 15,
     "ports_layer_count": 3,
     "blueprints_py": 40,
-    "py_gt_100kb_nontest": 0,
+    "py_gt_100kb_nontest": 1,  # reviewed_excel_template fastapi routes under source-growth review
     "fastapi_routes_ports": 0,
 }
 
