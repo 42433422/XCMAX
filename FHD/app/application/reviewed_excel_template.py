@@ -141,6 +141,46 @@ def template_llm_model_label() -> str:
     return "platform-default"
 
 
+def _coerce_compatibility_payload(data, raw_content: str):
+    """Accept a compatibility answer wrapped or padded by the model."""
+    import json
+
+    if not isinstance(data, dict):
+        text = str(raw_content or "").strip()
+        start, end = text.find("{"), text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                parsed = None
+            data = parsed if isinstance(parsed, dict) else data
+    if not isinstance(data, dict):
+        return data
+    wrapped = data.get("output_schema")
+    if isinstance(wrapped, dict) and ("can_slice" in wrapped or "ranges" in wrapped):
+        data = wrapped
+    ranges = data.get("ranges")
+    if isinstance(ranges, str):
+        ranges = [ranges]
+    cleaned = []
+    if isinstance(ranges, list):
+        for item in ranges:
+            if isinstance(item, str):
+                cleaned.append(item)
+            elif isinstance(item, dict) and isinstance(item.get("range"), str):
+                cleaned.append(item["range"])
+            else:
+                return data
+    else:
+        return data
+    flag = data.get("can_slice")
+    if isinstance(flag, str) and flag.strip().lower() in {"true", "false"}:
+        flag = flag.strip().lower() == "true"
+    if isinstance(flag, bool):
+        return {"can_slice": flag, "ranges": cleaned}
+    return data
+
+
 def _coerce_sheet_name_payload(data, raw_content: str):
     """Accept a sheet-name reply that is a bare array or uses extra fields."""
     import json
@@ -297,6 +337,8 @@ def _template_platform_complete(
             data = extract_json(raw_content)
             if schema.get("required") == ["sheets"]:
                 data = _coerce_sheet_name_payload(data, raw_content)
+            elif schema.get("required") == ["can_slice", "ranges"]:
+                data = _coerce_compatibility_payload(data, raw_content)
             elif data is not None:
                 from app.application.reviewed_excel_partition import coerce_payload_document_labels
 

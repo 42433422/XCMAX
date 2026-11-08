@@ -490,6 +490,7 @@ def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False)
             "suggested_documents": latest.get("suggested_documents", []),
             "coverage": latest.get("coverage", []),
         },
+        owner_id=owner,
     )
     from app.application.reviewed_excel_sheet_names import annotate_slice_titles
 
