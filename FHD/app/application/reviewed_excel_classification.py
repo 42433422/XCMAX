@@ -26,6 +26,107 @@ from app.application.reviewed_excel_partition import (
 )
 
 
+def _union_overlapping_drawing_regions(physical: list) -> list:
+    """Union same-sheet overlapping regions when either cites drawings.
+
+    Models often emit a stamp-cluster rectangle and also separate header-row
+    rectangles inside/across it. Union only uses the model's own declared
+    ranges (no invented coordinates) so stamp packs stop failing as 区域重叠.
+    """
+    from openpyxl.utils.cell import get_column_letter
+
+    items: list[dict] = []
+    for region in physical:
+        if not isinstance(region, dict) or not isinstance(region.get("range"), str):
+            items.append({"region": region, "bounds": None, "drawing": False})
+            continue
+        try:
+            bounds = bounded_range(region["range"])
+        except (ValueError, TypeError, ReviewedExcelError):
+            items.append({"region": region, "bounds": None, "drawing": False})
+            continue
+        has_drawing = bool(region.get("drawing_ids") or region.get("drawing_evidence"))
+        items.append(
+            {
+                "region": region,
+                "bounds": bounds,
+                "drawing": has_drawing,
+                "sheet": region.get("sheet"),
+            }
+        )
+
+    changed = True
+    while changed:
+        changed = False
+        i = 0
+        while i < len(items):
+            a = items[i]
+            if a["bounds"] is None or not isinstance(a.get("sheet"), str):
+                i += 1
+                continue
+            j = i + 1
+            while j < len(items):
+                b = items[j]
+                if (
+                    b["bounds"] is None
+                    or b.get("sheet") != a["sheet"]
+                    or not (a["drawing"] or b["drawing"])
+                ):
+                    j += 1
+                    continue
+                ac1, ar1, ac2, ar2 = a["bounds"]
+                bc1, br1, bc2, br2 = b["bounds"]
+                if not (ac1 <= bc2 and bc1 <= ac2 and ar1 <= br2 and br1 <= ar2):
+                    j += 1
+                    continue
+                uc1, ur1 = min(ac1, bc1), min(ar1, br1)
+                uc2, ur2 = max(ac2, bc2), max(ar2, br2)
+                merged = {
+                    **a["region"],
+                    "range": f"{get_column_letter(uc1)}{ur1}:{get_column_letter(uc2)}{ur2}",
+                    "reason": (
+                        f"{a['region'].get('reason', '')}; {b['region'].get('reason', '')}"
+                    ).strip("; "),
+                }
+                for key in (
+                    "evidence",
+                    "evidence_ids",
+                    "dependencies",
+                    "dependency_ids",
+                    "drawing_ids",
+                    "drawing_evidence",
+                ):
+                    if key not in a["region"] and key not in b["region"]:
+                        continue
+                    left = a["region"].get(key) or []
+                    right = b["region"].get(key) or []
+                    if isinstance(left, list) and isinstance(right, list):
+                        merged[key] = list(left) + [x for x in right if x not in left]
+                # primary_id: keep the first region's if present
+                if "primary_id" in a["region"]:
+                    merged["primary_id"] = a["region"]["primary_id"]
+                elif "primary_id" in b["region"]:
+                    merged["primary_id"] = b["region"]["primary_id"]
+                # Drop keys the schema path does not use so set(region) checks stay exact.
+                if "evidence_ids" in merged:
+                    for key in ("evidence", "dependencies", "drawing_evidence"):
+                        merged.pop(key, None)
+                if "evidence" in merged:
+                    for key in ("evidence_ids", "dependency_ids", "drawing_ids", "primary_id"):
+                        merged.pop(key, None)
+                items[i] = {
+                    "region": merged,
+                    "bounds": (uc1, ur1, uc2, ur2),
+                    "drawing": True,
+                    "sheet": a["sheet"],
+                }
+                a = items[i]
+                del items[j]
+                changed = True
+            i += 1
+    return [item["region"] for item in items]
+
+
 def _classify_semantic_batch(
     review: dict,
     *,
@@ -391,6 +492,10 @@ def _classify_semantic_batch(
     physical = data.get("regions" if legacy else "physical_regions")
     if not isinstance(physical, list) or not 1 <= len(physical) <= 100:
         raise ReviewedExcelError("模型区域结构无效，原分类未改变")
+    if drawings and not legacy:
+        physical = _union_overlapping_drawing_regions(physical)
+        if not 1 <= len(physical) <= 100:
+            raise ReviewedExcelError("模型区域结构无效，原分类未改变")
     by_dimensions = {s["sheet"]: s for s in review["sheet_overview"]}
     rects: dict[str, list[tuple[int, int, int, int]]] = {}
     accepted = []
@@ -531,7 +636,13 @@ def _classify_semantic_batch(
                 # else keep original bounds; select_drawing_objects may still reject a cut
         for old_c1, old_r1, old_c2, old_r2 in rects.setdefault(sheet, []):
             if c1 <= old_c2 and old_c1 <= c2 and r1 <= old_r2 and old_r1 <= r2:
-                raise ReviewedExcelError("模型区域重叠，原分类未改变")
+                prior = (
+                    f"{get_column_letter(old_c1)}{old_r1}:"
+                    f"{get_column_letter(old_c2)}{old_r2}"
+                )
+                raise ReviewedExcelError(
+                    f"模型区域重叠（{area} 与 {prior}），原分类未改变"
+                )
         rects[sheet].append((c1, r1, c2, r2))
         # Merge cuts are tolerated here; derive_document_workbook flattens them
         # on export so sticky/row-band regions remain sliceable.
