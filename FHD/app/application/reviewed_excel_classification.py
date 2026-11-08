@@ -97,11 +97,28 @@ def _classify_semantic_batch(
             col, row = coordinate_from_string(cell["cell"])
             primary.setdefault(cell["sheet"], []).append((column_index_from_string(col), row))
     overview = []
+    batch_legal = next(
+        (
+            cell.get("drawing_legal_boundaries")
+            for cell in chosen
+            if cell.get("drawing_legal_boundaries")
+        ),
+        None,
+    )
     for sheet in review["sheet_overview"]:
         merges = sheet.get("merged_regions", [])
         # Complete structural facts are budgeted with the full prepared request.
         # Never silently omit later source merges and then claim full coverage.
         included = list(merges)
+        # Verified legal cut rows for drawings/merges in this transport batch only.
+        # Full-sheet lists stay off the wire; the model must not invent other cuts.
+        source_bounds = list(sheet.get("drawing_row_boundaries") or [])
+        if batch_legal is not None and sheet["sheet"] in {c["sheet"] for c in chosen}:
+            legal = [row for row in batch_legal if row in set(source_bounds) or not source_bounds]
+        elif source_bounds and sheet["sheet"] in {c["sheet"] for c in chosen}:
+            legal = source_bounds
+        else:
+            legal = []
         overview.append(
             {
                 "sheet": sheet["sheet"],
@@ -109,6 +126,7 @@ def _classify_semantic_batch(
                 "columns": sheet["columns"],
                 "merged": included,
                 "merged_omitted": len(merges) - len(included),
+                "drawing_row_boundaries": legal,
                 "sheet_state": sheet.get("sheet_state", "visible"),
                 "hidden_rows_count": len(sheet.get("hidden_rows", [])),
                 "hidden_columns_count": len(sheet.get("hidden_columns", [])),

@@ -73,8 +73,10 @@ def test_planner_accounts_for_multiple_drawings_at_same_cell_and_fails_on_uncove
     from app.application.reviewed_excel_drawing import plan_drawing_batches
     from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
 
-    # Two drawings on A1 add +2 to the count; width must exceed MAX so packing needs 2 batches.
-    n_cells = MAX_MODEL_CELLS
+    # Drawing packs use a tighter unit cap than plain cell packs; exceed it so
+    # packing needs more than one batch while still cutting only on legal rows.
+    drawing_pack_units = min(MAX_MODEL_CELLS, 800)
+    n_cells = drawing_pack_units
     cells = [
         {"sheet": "表", "cell": f"A{i}", "value": "v", "kind": "review"}
         for i in range(1, n_cells + 1)
@@ -99,7 +101,8 @@ def test_planner_accounts_for_multiple_drawings_at_same_cell_and_fails_on_uncove
     assert len(batches) == 2
     assert sum(len(c.get("drawing_evidence", [])) for b in batches for c in b) == 2
     assert all(
-        sum(1 + len(c.get("drawing_evidence", [])) for c in b) <= MAX_MODEL_CELLS for b in batches
+        sum(1 + len(c.get("drawing_evidence", [])) for c in b) <= drawing_pack_units
+        for b in batches
     )
     assert cells[0].get("drawing_evidence") is None
     review["drawing_evidence"] = [{**drawings[0], "from": {"row": n_cells + 100}}]
@@ -142,6 +145,8 @@ def test_classifier_sends_distinct_drawing_evidence_and_rejects_forged_reference
         request = json.loads(messages[1]["content"])
         assert request["drawing_evidence"] == [drawing]
         assert "drawing_evidence" in schema["properties"]["physical_regions"]["items"]["required"]
+        sheet = next(item for item in request["sheets"] if item["sheet"] == "报价")
+        assert sheet["drawing_row_boundaries"] == list(range(1, 6))
         region = {
             "sheet": "报价",
             "range": region_range[0],

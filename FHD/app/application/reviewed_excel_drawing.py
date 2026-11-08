@@ -414,6 +414,11 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
         _model_cell_cost,
     )
 
+    # Dense drawing sheets (attendance stamps, seals) answer poorly in one huge pack.
+    # Keep units under this cap while still only cutting on verified legal boundaries.
+    max_units = min(MAX_MODEL_CELLS, 800)
+    max_bytes = min(MAX_MODEL_TEXT_BYTES, 240_000)
+
     rows = defaultdict(list)
     for cell in review["cells"]:
         _, row = coordinate_from_string(cell["cell"])
@@ -445,8 +450,8 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
             group = [cell for row in range(start, end) for cell in rows.get((sheet, row), [])]
             n, size = sum(map(count, group)), sum(map(cost, group))
             if (
-                n > MAX_MODEL_CELLS
-                or size > MAX_MODEL_TEXT_BYTES
+                n > max_units
+                or size > max_bytes
                 or any(len(c["value"]) > MAX_VALUE_CHARS for c in group)
                 or any(
                     len(d["text"]) > MAX_VALUE_CHARS
@@ -455,7 +460,7 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
                 )
             ):
                 raise ReviewedExcelError("不可分绘图或合并区域超过模型安全预算，未调用模型")
-            if current and (amount + n > MAX_MODEL_CELLS or used + size > MAX_MODEL_TEXT_BYTES):
+            if current and (amount + n > max_units or used + size > max_bytes):
                 current[0]["drawing_batch_bounds"] = [first, start]
                 current[0]["drawing_legal_boundaries"] = [
                     x for x in boundaries if first <= x <= start

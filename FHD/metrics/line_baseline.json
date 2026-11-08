@@ -1,5 +1,5 @@
 {
-  "lines": 2452724,
+  "lines": 2452756,
   "updated": "2026-11-08",
-  "note": "CHANGELOG 补一条面向非技术读者的说明（分类包上限、旧批次部分入库），+1 行"
+  "note": "drawing pack boundaries in classify prompts + tighter drawing pack units for attendance-style sheets"
 }

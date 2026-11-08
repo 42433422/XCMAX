@@ -692,7 +692,7 @@ _EXPECTED = {
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
-        "4c4e9e766bc52906b012dc4af39efc45210da225bbb0b2f28e55484cd8bc6de6",
+        "66990f2c3ffcf60f0dd8a7eb669ee631bc6b3797a28ec548f0d38ceac83f053d",
         "15de0f5d41027cf4d1e6034fad68e704e3377763a0e91e37c3dda8509314209b",
     ),
     "group_drawing": (
