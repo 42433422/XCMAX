@@ -1000,12 +1000,15 @@ def derive_document_workbook(
             saved_sheet = checked[sheet_name]
             if not isinstance(saved_sheet, Worksheet):
                 raise ReviewedExcelError("派生对象不是工作表")
+            from app.application.reviewed_excel_formula_cells import same_cell_value
+
             if any(
-                saved_sheet[address].value != value for address, value in formula_values.items()
+                not same_cell_value(saved_sheet[address].value, value)
+                for address, value in formula_values.items()
             ):
                 raise ReviewedExcelError("派生公式写出后核验失败")
             if support_sheet and any(
-                checked[support_sheet][address].value != value
+                not same_cell_value(checked[support_sheet][address].value, value)
                 for address, value in support_values.items()
             ):
                 raise ReviewedExcelError("支撑数据写出后核验失败")

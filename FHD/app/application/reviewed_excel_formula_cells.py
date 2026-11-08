@@ -31,6 +31,22 @@ def formula_text(value: object) -> str:
     return raw
 
 
+def same_cell_value(left: object, right: object) -> bool:
+    """Array formulas compare by ref and text. openpyxl does not equate those objects."""
+    if left == right:
+        return True
+    left_ref = getattr(left, "ref", None)
+    right_ref = getattr(right, "ref", None)
+    if left_ref is None and right_ref is None:
+        return False
+    text = formula_text(left)
+    return (
+        str(left_ref or "") == str(right_ref or "")
+        and text.startswith("=")
+        and text == formula_text(right)
+    )
+
+
 def formula_facts(body: bytes) -> FormulaFacts:
     """XML formula text and cached `<v>`, including cells openpyxl drops."""
     from defusedxml import ElementTree as SafeET
