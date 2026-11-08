@@ -654,7 +654,11 @@ def select_drawing_objects(info: dict, sheet: str, rectangles: list[tuple]) -> l
         x1, y1, x2, y2 = bounds = drawing_bounds(obj)
         intersects = any(x1 <= c and a <= x2 and y1 <= d and b <= y2 for a, b, c, d in rectangles)
         if intersects and not rectangles_cover(bounds, rectangles):
-            raise ReviewedExcelError("所选范围切断绘图对象，暂不能提取")
+            oid = obj.get("object_id") or "?"
+            raise ReviewedExcelError(
+                "所选范围切断绘图对象，暂不能提取"
+                f"（对象{oid}需整枚落在列{x1}-{x2}行{y1}-{y2}内，或完全不碰）"
+            )
         if intersects:
             selected.append(obj)
     return selected
