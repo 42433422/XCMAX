@@ -297,6 +297,12 @@ _UNLOCATED_ISSUE = {
     "severity": "error",
     "message": "模型未返回这一行的原表工作表和行号",
 }
+_UNIT_ISSUE = {
+    "code": "ELT_PURCHASE_UNIT_NOT_IN_SOURCE",
+    "field": "purchase_unit",
+    "severity": "error",
+    "message": "模型给出的购买单位不在该行所在工作表正文里",
+}
 
 
 def dataset_from_business_rows(items: list[dict]) -> ParsedDataset | None:
@@ -341,8 +347,13 @@ def dataset_from_business_rows(items: list[dict]) -> ParsedDataset | None:
         cited_range = _cell_text(item.get("source_range"))
         if located and cited_range:
             provenance["source_range"] = cited_range[:40]
+        issues = []
         if not located:
-            provenance["validation_issues"] = [dict(_UNLOCATED_ISSUE)]
+            issues.append(dict(_UNLOCATED_ISSUE))
+        if _cell_text(item.get("unit_in_source")) == "0":
+            issues.append(dict(_UNIT_ISSUE))
+        if issues:
+            provenance["validation_issues"] = issues
         rows.append(ParsedRow(
             sheet=sheet, row_number=number, values=values, provenance=provenance,
         ))

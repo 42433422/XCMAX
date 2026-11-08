@@ -528,8 +528,13 @@ _BUSINESS_ROW_KEYS = (
 
 def _cited_source_rows(text: str) -> set[tuple[str, str]]:
     """Sheet and row labels actually present in the archived text."""
+    return set(_sheet_line_index(text))
+
+
+def _sheet_line_index(text: str) -> dict[tuple[str, str], set[str]]:
+    """Cells under each ``# sheet:`` and ``R`` label. Hidden sheets are already omitted."""
     sheet = ""
-    found: set[tuple[str, str]] = set()
+    found: dict[tuple[str, str], set[str]] = {}
     for line in text.splitlines():
         if line.startswith("# sheet:"):
             sheet = line.removeprefix("# sheet:")
@@ -537,8 +542,14 @@ def _cited_source_rows(text: str) -> set[tuple[str, str]]:
         if not sheet or not line.startswith("R"):
             continue
         token = line.split(" ", 1)[0][1:]
-        if token.isdigit():
-            found.add((sheet, token))
+        if not token.isdigit():
+            continue
+        cells = {
+            part.strip()
+            for part in (line.split("|", 1)[1] if "|" in line else "").split("|")
+            if part.strip()
+        }
+        found[(sheet, token)] = cells
     return found
 
 
@@ -562,12 +573,30 @@ def _coordinate_missing(row: dict) -> bool:
     )
 
 
+def _unit_untraceable(row: dict, lines: dict[tuple[str, str], set[str]]) -> bool:
+    """A purchase unit the model did not copy from the cited sheet."""
+    from app.application.elt.candidate_table import _sheet_customer
+
+    unit = row.get("purchase_unit") or ""
+    sheet = row.get("source_sheet") or ""
+    if not unit or not sheet:
+        return False
+    if unit == _sheet_customer(sheet):
+        return False
+    pool: set[str] = set()
+    for (label, _row), cells in lines.items():
+        if label == sheet:
+            pool.update(cells)
+    return not any(unit == item or unit in item for item in pool)
+
+
 def advise_business_import(sheet_text: str) -> LlmAssistResult:
     """Import archived sheet rows on the database line only."""
     source = str(sheet_text or "").strip()
     if not source:
         return LlmAssistResult()
-    cited = _cited_source_rows(source)
+    lines = _sheet_line_index(source)
+    cited = set(lines)
     messages = [
         {
             "role": "system",
@@ -576,9 +605,9 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
                 "rows 的字段只能是 customer_name、purchase_unit、product_name、quantity、"
                 "unit_price、amount、model、source_sheet、source_row、source_range。"
                 "只放货品明细。表头、合计、空行不要放入。"
-                "购买单位用单据上的客户，不要用列名。"
+                "购买单位用这一张表正文里的客户，不要用列名，也不要借用其他工作表的客户。"
                 "每一张表都要扫，这一本有几张就扫几张，每一行货品单独成一条，不要在第一张送货单结束后停止。"
-                "行内没有购买单位时，用整本表头上的客户，不要留空。"
+                "行内没有购买单位时，用这一张表表头上的客户；表头也没有就留空。"
                 "合计、表头、协议文字不要放入。"
                 "借还台账和测算表不要导入，除非明确要求。"
                 "source_sheet 必须等于某一行 # sheet: 后面的名称，source_row 必须等于该行 R 标签的整数。"
@@ -599,21 +628,30 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
     rows = _business_rows(result.data, cited) if result.used_llm and not result.degraded else []
     # Up to four stored rounds. A degraded or unknown call stops; it is not sent again.
     for _round in range(3):
-        if not result.used_llm or result.degraded or not any(_coordinate_missing(row) for row in rows):
+        if not result.used_llm or result.degraded:
             break
+        missing = any(_coordinate_missing(row) for row in rows)
+        borrowed = any(_unit_untraceable(row, lines) for row in rows)
+        if not missing and not borrowed:
+            break
+        notes = []
+        if missing:
+            notes.append(
+                "有货品行缺少原表坐标。只根据上文 # sheet: 和 R 标签补 source_sheet 与 source_row。"
+                "对不上就留空，不要猜行号。"
+            )
+        if borrowed:
+            notes.append(
+                "有购买单位不在该行所在工作表的正文里，也不等于该表名称。"
+                "改成这一张表正文里的客户，或留空。不要借用其他工作表的客户。"
+            )
         follow = [
             *messages,
             {
                 "role": "assistant",
                 "content": json.dumps({"rows": rows}, ensure_ascii=False)[:12_000],
             },
-            {
-                "role": "user",
-                "content": (
-                    "有货品行缺少原表坐标。只根据上文 # sheet: 和 R 标签补 source_sheet 与 source_row。"
-                    "对不上就留空，不要猜行号。仍然只返回 rows。"
-                ),
-            },
+            {"role": "user", "content": "".join(notes) + "仍然只返回 rows。"},
         ]
         nxt = _complete(follow, **call)
         if not nxt.used_llm or nxt.degraded:
@@ -623,6 +661,9 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
             break
         result = nxt
         rows = fresh
+    for row in rows:
+        if _unit_untraceable(row, lines):
+            row["unit_in_source"] = "0"
     if result.used_llm and not result.degraded:
         result.data = {"rows": rows}
     return result

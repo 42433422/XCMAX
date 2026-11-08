@@ -266,6 +266,80 @@ def test_business_import_asks_again_only_for_a_stored_row_without_coordinates(mo
     assert result.data["rows"][0]["source_row"] == "2"
 
 
+def test_business_import_asks_again_when_purchase_unit_is_off_sheet(monkeypatch):
+    from app.application.elt import llm_assist
+
+    calls = []
+
+    def complete(messages, **kwargs):
+        calls.append(messages[-1]["content"])
+        if len(calls) == 1:
+            return llm_assist.LlmAssistResult(
+                used_llm=True,
+                data={
+                    "rows": [
+                        {
+                            "purchase_unit": "外客",
+                            "product_name": "螺母",
+                            "quantity": "5",
+                            "source_sheet": "送货",
+                            "source_row": "2",
+                        }
+                    ]
+                },
+            )
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={
+                "rows": [
+                    {
+                        "purchase_unit": "本客",
+                        "product_name": "螺母",
+                        "quantity": "5",
+                        "source_sheet": "送货",
+                        "source_row": "2",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(llm_assist, "_complete", complete)
+    result = llm_assist.advise_business_import("# sheet:送货\nR2 | 本客 | 螺母 | 5")
+    assert len(calls) == 2
+    assert "其他工作表" in calls[1]
+    assert result.data["rows"][0]["purchase_unit"] == "本客"
+    assert "unit_in_source" not in result.data["rows"][0]
+
+
+def test_business_import_marks_a_unit_the_model_will_not_place(monkeypatch):
+    from app.application.elt import llm_assist
+    from app.application.elt.candidate_table import dataset_from_business_rows
+
+    def complete(messages, **kwargs):
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={
+                "rows": [
+                    {
+                        "purchase_unit": "外客",
+                        "product_name": "螺母",
+                        "quantity": "5",
+                        "source_sheet": "送货",
+                        "source_row": "2",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(llm_assist, "_complete", complete)
+    result = llm_assist.advise_business_import("# sheet:送货\nR2 | 螺母 | 5")
+    assert result.data["rows"][0]["unit_in_source"] == "0"
+    dataset = dataset_from_business_rows(result.data["rows"])
+    assert dataset is not None
+    codes = [item["code"] for item in dataset.rows[0].provenance["validation_issues"]]
+    assert "ELT_PURCHASE_UNIT_NOT_IN_SOURCE" in codes
+
+
 def test_llm_assist_public_metadata():
     from app.application.elt.llm_assist import LlmAssistResult
 
