@@ -416,8 +416,11 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
 
     # Dense drawing sheets (attendance stamps, seals) answer poorly in one huge pack.
     # Keep units under this cap while still only cutting on verified legal boundaries.
+    # Also cap row span: a sparse tail after the last stamp must not stay in the same
+    # pack as the drawings (model then cites edge stamps into too-narrow ranges).
     max_units = min(MAX_MODEL_CELLS, 400)
     max_bytes = min(MAX_MODEL_TEXT_BYTES, 160_000)
+    max_row_span = 80
 
     rows = defaultdict(list)
     for cell in review["cells"]:
@@ -442,13 +445,16 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
 
     result = []
     overview = {entry["sheet"]: entry for entry in review["sheet_overview"]}
+    drawing_tail_margin = 8
     for sheet in review["sheets"]:
         boundaries = overview[sheet]["drawing_row_boundaries"]
         current: list[dict] = []
         amount, used, first = 0, 0, boundaries[0]
+        last_drawing_row = first
         for start, end in zip(boundaries, boundaries[1:]):
             group = [cell for row in range(start, end) for cell in rows.get((sheet, row), [])]
             n, size = sum(map(count, group)), sum(map(cost, group))
+            group_drawings = sum(len(c.get("drawing_evidence", [])) for c in group)
             if (
                 n > max_units
                 or size > max_bytes
@@ -460,16 +466,30 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
                 )
             ):
                 raise ReviewedExcelError("不可分绘图或合并区域超过模型安全预算，未调用模型")
-            if current and (amount + n > max_units or used + size > max_bytes):
+            past_drawing_cluster = (
+                current
+                and last_drawing_row > first
+                and group_drawings == 0
+                and start - last_drawing_row > drawing_tail_margin
+            )
+            if current and (
+                amount + n > max_units
+                or used + size > max_bytes
+                or start - first >= max_row_span
+                or past_drawing_cluster
+            ):
                 current[0]["drawing_batch_bounds"] = [first, start]
                 current[0]["drawing_legal_boundaries"] = [
                     x for x in boundaries if first <= x <= start
                 ]
                 result.append(current)
                 current, amount, used, first = [], 0, 0, start
+                last_drawing_row = first
             current.extend(group)
             amount += n
             used += size
+            if group_drawings:
+                last_drawing_row = end - 1
         if current:
             current[0]["drawing_batch_bounds"] = [first, boundaries[-1]]
             current[0]["drawing_legal_boundaries"] = [

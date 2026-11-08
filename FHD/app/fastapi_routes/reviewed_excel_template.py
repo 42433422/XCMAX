@@ -415,21 +415,47 @@ def reviewed_excel_classification_history(classification_id: str, user=Depends(_
 
 
 def _model_allows_unassigned_slice(latest: dict) -> bool:
-    """Only an explicit model decision lets covered documents slice while cells remain outside."""
+    """Allow slice only when every remaining unassigned cell was authorized by its pack.
+
+    Multi-pack workbooks must not AND every pack's can_slice. A pack that fully
+    covered its own primary cells often returns can_slice=false (schema field);
+    that must not veto another pack that left cells outside with can_slice=true.
+    Packs with no pending_confirmation neither authorize nor veto leftovers.
+    """
     summaries = latest.get("input_summaries") or []
     if not isinstance(summaries, list):
         return False
-    allowed = False
+    coverage = latest.get("coverage") or []
+    unassigned = {
+        (item.get("sheet"), cell)
+        for item in coverage
+        if isinstance(item, dict)
+        for cell in (item.get("unassigned") or [])
+    }
+    if not unassigned:
+        return True
+    decisions: dict[tuple, list[bool]] = {}
     for item in summaries:
         if not isinstance(item, dict):
             continue
-        decision = (item.get("source_coverage") or {}).get("can_slice")
-        if decision is None:
+        sc = item.get("source_coverage") or {}
+        pending = sc.get("pending_confirmation") or []
+        if not pending:
             continue
-        if decision is not True:
+        decision = sc.get("can_slice")
+        if not isinstance(decision, bool):
             return False
-        allowed = True
-    return allowed
+        for ref in pending:
+            if not isinstance(ref, dict):
+                return False
+            key = (ref.get("sheet"), ref.get("cell"))
+            if key in unassigned:
+                decisions.setdefault(key, []).append(decision)
+    for key in unassigned:
+        votes = decisions.get(key)
+        if not votes or any(vote is not True for vote in votes):
+            return False
+    return True
 
 
 def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False):
@@ -926,6 +952,12 @@ async def _reviewed_excel_classification_analyze_body(
             body = _source(db, run, tenant, owner)
             review = inspect_workbook(body)
             checkpoint = state.get("analysis_checkpoint")
+            # New analyzes omit hidden/veryHidden sheets from packing and coverage.
+            # Existing checkpoints keep the review they were planned against.
+            if not checkpoint:
+                from app.application.reviewed_excel_evidence import prepare_auto_slice_review
+
+                review = prepare_auto_slice_review(review, skip_hidden_sheets=True)
             from app.application.reviewed_excel_budget import (
                 BUDGET_VERSION,
                 validate_checkpoint_budget,

@@ -557,6 +557,46 @@ def _classify_semantic_batch(
     }
 
 
+def _apply_model_excluded_cells(coverage: list[dict], input_summaries: list[dict]) -> None:
+    """Move cells the model left outside with can_slice=true out of unassigned.
+
+    Disposition is explicit: model_excluded with reason. Packs that returned
+    can_slice=false for the same pending cell keep it unassigned (fail closed).
+    Packs with no pending_confirmation do not authorize or veto.
+    """
+    authorized: set[tuple[str, str]] = set()
+    blocked: set[tuple[str, str]] = set()
+    for summary in input_summaries:
+        if not isinstance(summary, dict):
+            continue
+        sc = summary.get("source_coverage") or {}
+        pending = sc.get("pending_confirmation") or []
+        if not pending:
+            continue
+        keys = {
+            (ref.get("sheet"), ref.get("cell"))
+            for ref in pending
+            if isinstance(ref, dict) and ref.get("sheet") and ref.get("cell")
+        }
+        if sc.get("can_slice") is True:
+            authorized |= keys
+        else:
+            blocked |= keys
+    authorized -= blocked
+    for item in coverage:
+        name = item.get("sheet")
+        kept, excluded = [], []
+        for cell in item.get("unassigned") or []:
+            if (name, cell) in authorized:
+                excluded.append(cell)
+            else:
+                kept.append(cell)
+        item["unassigned"] = kept
+        if excluded:
+            item["model_excluded"] = excluded
+            item["model_excluded_reason"] = "pack_can_slice_true_outside_region"
+
+
 def combine_semantic_batches(
     review: dict, batches: list[list[dict]], results: list[dict], max_calls: int
 ) -> dict:
@@ -662,6 +702,7 @@ def combine_semantic_batches(
                 "deferred_oversized_rows": deferred,
             }
         )
+    _apply_model_excluded_cells(coverage, input_summaries)
     from app.application.reviewed_excel_evidence import (
         candidate_fragment_links,
         flag_repeated_header_conflicts,

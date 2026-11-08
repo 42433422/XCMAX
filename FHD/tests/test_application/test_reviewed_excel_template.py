@@ -4363,6 +4363,79 @@ def test_fragment_identity_conflict_is_preserved_across_batches():
     assert [region["range"] for region in combined["regions"]] == ["A1:F10", "A11:F12"]
 
 
+def test_combine_excludes_cells_authorized_by_pack_can_slice():
+    """Multi-pack: can_slice=true pending cells become model_excluded; false keeps them."""
+    from app.application.reviewed_excel_classification import combine_semantic_batches
+    from app.application.reviewed_excel_template import inspect_workbook
+
+    wb = Workbook()
+    sheet = wb.active
+    sheet.title = "表"
+    sheet["A1"], sheet["C1"], sheet["A10"] = "单据", "备注", "其它包"
+    out = BytesIO()
+    wb.save(out)
+    review = inspect_workbook(out.getvalue())
+    first = [cell for cell in review["cells"] if cell["cell"] in {"A1", "C1"}]
+    second = [cell for cell in review["cells"] if cell["cell"] == "A10"]
+
+    def result(area, *, can_slice, pending):
+        return {
+            "regions": [
+                {
+                    "sheet": "表",
+                    "range": area,
+                    "labels": ["delivery"],
+                    "evidence": [],
+                    "dependencies": [],
+                }
+            ],
+            "coverage": [{"sheet": "表", "merged_sent": 0, "merged_ranges": []}],
+            "input_summary": {
+                "source_coverage": {
+                    "can_slice": can_slice,
+                    "pending_confirmation": pending,
+                    "regions": [],
+                }
+            },
+            "logical_documents": [],
+        }
+
+    combined = combine_semantic_batches(
+        review,
+        [first, second],
+        [
+            result(
+                "A1:A1",
+                can_slice=True,
+                pending=[{"sheet": "表", "cell": "C1"}],
+            ),
+            result("A10:A10", can_slice=False, pending=[]),
+        ],
+        2,
+    )
+    cov = next(item for item in combined["coverage"] if item["sheet"] == "表")
+    assert "C1" in cov.get("model_excluded", [])
+    assert "C1" not in cov["unassigned"]
+    assert cov.get("model_excluded_reason") == "pack_can_slice_true_outside_region"
+
+    blocked = combine_semantic_batches(
+        review,
+        [first, second],
+        [
+            result(
+                "A1:A1",
+                can_slice=False,
+                pending=[{"sheet": "表", "cell": "C1"}],
+            ),
+            result("A10:A10", can_slice=True, pending=[]),
+        ],
+        2,
+    )
+    blocked_cov = next(item for item in blocked["coverage"] if item["sheet"] == "表")
+    assert "C1" in blocked_cov["unassigned"]
+    assert "C1" not in (blocked_cov.get("model_excluded") or [])
+
+
 def test_cross_batch_document_ids_are_namespaced_and_links_need_evidence():
     from app.application.reviewed_excel_classification import combine_semantic_batches
 

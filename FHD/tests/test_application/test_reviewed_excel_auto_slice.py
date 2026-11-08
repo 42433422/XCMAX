@@ -500,13 +500,73 @@ def test_hidden_model_document_is_skipped_and_visible_document_exports(monkeypat
 def test_only_the_model_can_allow_a_slice_while_cells_remain_outside():
     from app.fastapi_routes.reviewed_excel_template import _model_allows_unassigned_slice
 
+    # No unassigned cells: slice is allowed regardless of pack-local can_slice noise.
     assert _model_allows_unassigned_slice(
-        {"input_summaries": [{"source_coverage": {"can_slice": True}}]}
+        {
+            "coverage": [{"sheet": "A", "unassigned": []}],
+            "input_summaries": [{"source_coverage": {"can_slice": True}}],
+        }
     )
+    assert _model_allows_unassigned_slice(
+        {
+            "coverage": [{"sheet": "A", "unassigned": []}],
+            "input_summaries": [{"source_coverage": {"can_slice": False}}],
+        }
+    )
+    # Unassigned cell authorized by the pack that left it out.
+    assert _model_allows_unassigned_slice(
+        {
+            "coverage": [{"sheet": "A", "unassigned": ["C1"]}],
+            "input_summaries": [
+                {
+                    "source_coverage": {
+                        "can_slice": True,
+                        "pending_confirmation": [{"sheet": "A", "cell": "C1"}],
+                    }
+                }
+            ],
+        }
+    )
+    # Same cell blocked when its pack said can_slice=false.
     assert not _model_allows_unassigned_slice(
-        {"input_summaries": [{"source_coverage": {"can_slice": False}}]}
+        {
+            "coverage": [{"sheet": "A", "unassigned": ["C1"]}],
+            "input_summaries": [
+                {
+                    "source_coverage": {
+                        "can_slice": False,
+                        "pending_confirmation": [{"sheet": "A", "cell": "C1"}],
+                    }
+                }
+            ],
+        }
     )
-    assert not _model_allows_unassigned_slice({"input_summaries": [{"source_coverage": {}}]})
+    # Fully-covered pack with can_slice=false must not veto another pack's authorization.
+    assert _model_allows_unassigned_slice(
+        {
+            "coverage": [{"sheet": "席章国", "unassigned": ["N15", "P15"]}],
+            "input_summaries": [
+                {
+                    "source_coverage": {
+                        "can_slice": True,
+                        "pending_confirmation": [
+                            {"sheet": "席章国", "cell": "N15"},
+                            {"sheet": "席章国", "cell": "P15"},
+                        ],
+                    }
+                },
+                {"source_coverage": {"can_slice": False, "pending_confirmation": []}},
+            ],
+        }
+    )
+    # No coverage rows and no pending: nothing to authorize.
+    assert _model_allows_unassigned_slice({"input_summaries": [{"source_coverage": {}}]})
+    assert not _model_allows_unassigned_slice(
+        {
+            "coverage": [{"sheet": "A", "unassigned": ["C1"]}],
+            "input_summaries": [{"source_coverage": {"can_slice": True}}],
+        }
+    )
 
 
 def _hole_filter_book():

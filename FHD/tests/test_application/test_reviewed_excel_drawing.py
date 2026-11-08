@@ -98,16 +98,57 @@ def test_planner_accounts_for_multiple_drawings_at_same_cell_and_fails_on_uncove
         "sheet_overview": [{"sheet": "表", "drawing_row_boundaries": list(range(1, n_cells + 2))}],
     }
     batches = plan_drawing_batches(review)
-    assert len(batches) == 2
+    # Unit cap and 80-row span both force splits; drawings stay in the first pack only.
+    assert len(batches) >= 2
     assert sum(len(c.get("drawing_evidence", [])) for b in batches for c in b) == 2
     assert all(
         sum(1 + len(c.get("drawing_evidence", [])) for c in b) <= drawing_pack_units
+        for b in batches
+    )
+    assert all(
+        (b[0].get("drawing_batch_bounds") or [0, 0])[1]
+        - (b[0].get("drawing_batch_bounds") or [0, 0])[0]
+        <= 80
         for b in batches
     )
     assert cells[0].get("drawing_evidence") is None
     review["drawing_evidence"] = [{**drawings[0], "from": {"row": n_cells + 100}}]
     with pytest.raises(ReviewedExcelError, match="没有单元格证据"):
         plan_drawing_batches(review)
+
+
+def test_drawing_packs_split_sparse_tail_on_row_span():
+    """Drawings clustered early must not share a pack with a long drawing-free tail."""
+    from app.application.reviewed_excel_drawing import plan_drawing_batches
+
+    cells = [
+        {"sheet": "表", "cell": f"A{i}", "value": "v", "kind": "review"} for i in range(1, 201)
+    ]
+    drawings = [
+        {
+            "sheet": "表",
+            "part": "xl/drawings/drawing1.xml",
+            "object_id": str(i),
+            "from": {"row": i - 1},
+            "text": "章",
+            "last_row": i,
+            "last_col": 1,
+        }
+        for i in range(1, 6)
+    ]
+    review = {
+        "sheets": ["表"],
+        "cells": cells,
+        "drawing_evidence": drawings,
+        "sheet_overview": [{"sheet": "表", "drawing_row_boundaries": list(range(1, 202))}],
+    }
+    batches = plan_drawing_batches(review)
+    assert len(batches) >= 2
+    first_bounds = batches[0][0]["drawing_batch_bounds"]
+    assert first_bounds[1] - first_bounds[0] <= 80
+    assert first_bounds[1] < 200
+    assert sum(len(c.get("drawing_evidence", [])) for c in batches[0]) == 5
+    assert all(not c.get("drawing_evidence") for b in batches[1:] for c in b)
 
 
 def test_classifier_sends_distinct_drawing_evidence_and_rejects_forged_reference(monkeypatch):
