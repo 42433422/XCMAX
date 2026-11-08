@@ -47,7 +47,7 @@ def release_unanswered_inflight(state: dict, updated_at) -> bool:
     return True
 
 
-def record_not_sent(state: dict, expected: str, reason: str) -> None:
+def record_not_sent(state: dict, expected: str, reason: str, *, outcome: str = "not_sent") -> None:
     records = state.get("model_audit")
     if (
         not records
@@ -55,7 +55,7 @@ def record_not_sent(state: dict, expected: str, reason: str) -> None:
         or records[-1].get("state") != "inflight"
     ):
         raise ReviewedExcelError("模型归档状态已改变，未解除请求锁")
-    records[-1].update({"state": "not_sent", "reason": reason})
+    records[-1].update({"state": outcome, "reason": reason})
     state["analysis_checkpoint"]["phase"] = "ready"
 
 

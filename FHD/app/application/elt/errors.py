@@ -55,7 +55,7 @@ def provider_http_status(exc: BaseException | None) -> int | None:
 
 def is_definite_provider_failure(exc: Exception) -> bool:
     """True when the provider answered with a terminal client/config error."""
-    return provider_http_status(exc) in {400, 401, 403, 404}
+    return provider_http_status(exc) in {400, 401, 402, 403, 404}
 
 
 def public_excel_error(exc: Exception) -> str:

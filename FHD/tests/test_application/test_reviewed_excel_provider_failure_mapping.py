@@ -63,6 +63,14 @@ def test_market_model_error_404_maps_configuration():
     assert error.detail["retryable"] is True
 
 
+def test_insufficient_balance_is_a_definite_rejection():
+    wrapped = ReviewedExcelError("余额不足", provider_status=MarketModelError({"status": 402}).status_code)
+    assert is_definite_provider_failure(wrapped)
+    error = _model_processing_failure(wrapped)
+    assert error.detail["outcome_unknown"] is False
+    assert error.detail["retryable"] is True
+
+
 def test_cause_chain_preserves_404():
     root = MarketModelError({"status": 404})
     wrapped = ReviewedExcelError("模型调用失败或结果不完整，可能已产生费用；未自动重试")

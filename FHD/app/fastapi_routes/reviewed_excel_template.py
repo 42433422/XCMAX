@@ -24,6 +24,7 @@ from app.application.elt.errors import (
     EltError,
     ReviewedExcelError,
     is_definite_provider_failure,
+    provider_http_status,
     public_excel_error,
 )
 from app.application.elt.service_support import dump_json, load_json, new_id, utcnow
@@ -684,6 +685,15 @@ def _response_audit_writer(state, claimed_draft, classification_id, tenant, owne
     return holder, save
 
 
+def _release_rejected(db, run, state, request_sha, claimed_draft, exc) -> None:
+    """A terminal provider rejection with no stored body cannot have produced an answer."""
+    if not is_definite_provider_failure(exc):
+        return
+    status = provider_http_status(exc)
+    record_not_sent(state, request_sha, f"provider rejected HTTP {status}", outcome="rejected")
+    _classification_cas(db, run, claimed_draft, state)
+
+
 @router.post("/api/templates/reviewed-excel/classifications/{classification_id}/analyze")
 async def reviewed_excel_classification_analyze(
     classification_id: str,
@@ -867,6 +877,8 @@ async def _reviewed_excel_classification_analyze_body(
                         checkpoint["phase"] = "failed"
                         checkpoint["calls_in_round"] = previous_calls + 1
                         _classification_cas(db, run, audit_holder[0], state)
+                    else:
+                        _release_rejected(db, run, state, request_sha, claimed_draft, exc)
                     raise _model_processing_failure(exc) from None
                 if index + 1 < len(batches):
                     if checkpoint["calls_in_round"] >= max_calls:
@@ -953,6 +965,8 @@ async def _reviewed_excel_classification_analyze_body(
                         checkpoint["phase"] = "failed"
                         checkpoint["calls_in_round"] = previous_calls + 1
                         _classification_cas(db, run, audit_holder[0], state)
+                    else:
+                        _release_rejected(db, run, state, request_sha, claimed_draft, exc)
                     raise _model_processing_failure(exc) from None
                 claimed_draft = audit_holder[0]
                 _recheck(request, (tenant, owner))
@@ -1306,12 +1320,8 @@ async def reviewed_excel_preview(
         except ValueError as exc:
             # Release claim when the model was never sent OR the provider gave a
             # definite config/404 failure so retry is not stuck on inflight.
-            from app.application.elt.errors import provider_http_status
-
             release = classification_id and (
-                isinstance(exc, ModelRequestNotSent)
-                or is_definite_provider_failure(exc)
-                or provider_http_status(exc) in {400, 401, 403, 404}
+                isinstance(exc, ModelRequestNotSent) or is_definite_provider_failure(exc)
             )
             if release:
                 with tenant_scope(tenant), get_db() as db:

@@ -374,7 +374,7 @@ def _template_platform_complete(
                 type(exc).__name__,
                 str(exc).replace("\n", " ")[:160],
             )
-            if status in {400, 401, 403, 404} or isinstance(exc, MarketModelError):
+            if status in {400, 401, 402, 403, 404} or isinstance(exc, MarketModelError):
                 raise ReviewedExcelError(
                     str(exc),
                     provider_status=status or getattr(exc, "status_code", None),
@@ -391,7 +391,7 @@ def _template_platform_complete(
                 type(exc).__name__,
                 str(exc).replace("\n", " ")[:160],
             )
-            if status in {400, 401, 403, 404}:
+            if status in {400, 401, 402, 403, 404}:
                 raise ReviewedExcelError(
                     "当前模型或模型服务入口不可用", provider_status=status
                 ) from None
