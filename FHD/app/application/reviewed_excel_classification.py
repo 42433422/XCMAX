@@ -395,7 +395,19 @@ def _classify_semantic_batch(
     rects: dict[str, list[tuple[int, int, int, int]]] = {}
     accepted = []
     range_map = {}
-    for region in physical:
+    # Original model rectangles in this answer — expand must not swallow a sibling's
+    # declared box (that previously turned a later non-overlap into 模型区域重叠).
+    sibling_originals: list[tuple[str, int, int, int, int] | None] = []
+    for peer in physical:
+        if not isinstance(peer, dict) or not isinstance(peer.get("range"), str):
+            sibling_originals.append(None)
+            continue
+        try:
+            pc1, pr1, pc2, pr2 = bounded_range(peer["range"])
+            sibling_originals.append((str(peer.get("sheet")), pc1, pr1, pc2, pr2))
+        except (ValueError, TypeError, ReviewedExcelError):
+            sibling_originals.append(None)
+    for region_index, region in enumerate(physical):
         if not isinstance(region, dict) or set(region) != {
             "sheet",
             "range",
@@ -476,6 +488,17 @@ def _classify_semantic_batch(
                     gc1 <= old_c2 and old_c1 <= gc2 and gr1 <= old_r2 and old_r1 <= gr2
                     for old_c1, old_r1, old_c2, old_r2 in rects.get(sheet, [])
                 )
+                overlaps_sibling = any(
+                    peer is not None
+                    and peer[0] == sheet
+                    and gc1 <= peer[3]
+                    and peer[1] <= gc2
+                    and gr1 <= peer[4]
+                    and peer[2] <= gr2
+                    for j, peer in enumerate(sibling_originals)
+                    if j != region_index
+                )
+                overlaps_prior = overlaps_prior or overlaps_sibling
                 unread_after = []
                 if not overlaps_prior:
                     for cell in review.get("full_cells", review["cells"]):
@@ -563,6 +586,15 @@ def _classify_semantic_batch(
                         and er1 <= old_r2
                         and old_r1 <= er2
                         for old_c1, old_r1, old_c2, old_r2 in rects.get(sheet, [])[:-1]
+                    ) or any(
+                        peer is not None
+                        and peer[0] == sheet
+                        and ec1 <= peer[3]
+                        and peer[1] <= ec2
+                        and er1 <= peer[4]
+                        and peer[2] <= er2
+                        for j, peer in enumerate(sibling_originals)
+                        if j != region_index
                     )
                     unread_block = False
                     if not overlaps_prior and not legacy:
