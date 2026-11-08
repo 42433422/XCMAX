@@ -575,10 +575,14 @@ def _uncited_sheets(lines: dict[tuple[str, str], set[str]], rows: list[dict]) ->
 
 
 def _unit_untraceable(row: dict, lines: dict[tuple[str, str], set[str]]) -> bool:
-    """A purchase unit the model did not copy from the cited sheet."""
+    """A purchase unit the model did not copy from the cited sheet.
+
+    The dataset falls back to customer_name when purchase_unit is empty, so the
+    value checked is the one that would be written.
+    """
     from app.application.elt.candidate_table import _sheet_customer
 
-    unit = row.get("purchase_unit") or ""
+    unit = row.get("purchase_unit") or row.get("customer_name") or ""
     sheet = row.get("source_sheet") or ""
     if not unit or not sheet:
         return False
