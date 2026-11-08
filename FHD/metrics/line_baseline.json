@@ -1,5 +1,5 @@
 {
-  "lines": 2448242,
+  "lines": 2448258,
   "updated": "2026-11-08",
-  "note": "ELT 收口续：采纳 sibling 未发送连接判定与预算测试，并对 backend-quality 要求的 ELT 相关文件执行 ruff format（换行导致行数上升）；相对上一基线净增 101 行（2448141→2448242）。"
+  "note": "ELT 收口：流式 reasoning/delta 刷新 idle 等待，避免仍在产出的模型调用被 idle 截断；+16 行含回归测试。"
 }
