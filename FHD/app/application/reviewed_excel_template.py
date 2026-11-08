@@ -138,7 +138,7 @@ def _template_schema_problem(schema: dict, payload: object) -> str:
         return "输出格式定义不受支持"
     first = problem(schema, payload, "$")
     if not first or not isinstance(payload, dict) or schema.get("type") != "object":
-        return first
+        return str(first)
     # One violation per top-level field, so a repair round sees every failing part.
     properties = schema.get("properties", {})
     parts = [
@@ -421,7 +421,11 @@ def _template_platform_complete(
             model = str((response or {}).get("model") or template_llm_model_label())
             provider_name = str((response or {}).get("provider") or "platform")
             return llm_assist.LlmAssistResult(
-                used_llm=True, model=model, data=data, provider=provider_name, answer=raw_content
+                used_llm=True,
+                model=model,
+                data=cast(dict[str, Any], data),
+                provider=provider_name,
+                answer=raw_content,
             )
         except ModelRequestNotSent:
             raise
