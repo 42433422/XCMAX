@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 from io import BytesIO
 
+import pytest
 from openpyxl import Workbook
 
 from app.application.reviewed_excel_reference_ids import neutralize_messages
 from app.application.reviewed_excel_structural_index import (
     SCHEMA_VERSION,
+    _cap_candidate_ranges,
     attach_structural_index_to_draft,
     build_workbook_structural_index,
     compress_structural_index_for_model,
@@ -200,3 +202,33 @@ def test_additional_return_note_absorbs_form_meta():
     assert 21 not in starts
     ret = next(c for c in title_cands if c["start_row"] == 20)
     assert ret["end_row"] >= 21
+
+
+@pytest.mark.parametrize("count", [79, 80, 81, 1000])
+def test_candidate_range_limit_retains_overflow_evidence_through_projection(count):
+    ranges = [
+        {
+            "start_row": i * 3 + 1,
+            "end_row": i * 3 + 2,
+            "basis": "ledger_key_run",
+            "run_hint_count": 2,
+        }
+        for i in range(count)
+    ]
+    capped = _cap_candidate_ranges(ranges, 80)
+    assert len(capped) == min(count, 80)
+    assert capped[: min(count, 79)] == ranges[: min(count, 79)]
+    if count <= 80:
+        assert capped == ranges
+    else:
+        assert capped[-1] == {
+            "start_row": 238,
+            "end_row": (count - 1) * 3 + 2,
+            "basis": "candidate_ranges_remainder",
+            "run_hint_count": 2 * (count - 79),
+        }
+    projected = compress_structural_index_for_model(
+        {"sheets": [{"sheet": "S", "candidate_row_ranges": capped}]}
+    )
+    tail = projected["sheets"][0]["candidate_row_ranges"][-1]
+    assert {key: tail[key] for key in capped[-1]} == capped[-1]

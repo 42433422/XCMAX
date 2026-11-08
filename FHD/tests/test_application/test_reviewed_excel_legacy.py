@@ -164,7 +164,9 @@ def test_archive_separate_hashes_quota_and_persisted_restrictions(review_store):
 
         with pytest.raises(HTTPException):
             _source(db, run, 1, 99)
-        Path(db.get(EltUpload, run.upload_id).storage_path).write_bytes(b"tampered")
+        stored = Path(db.get(EltUpload, run.upload_id).storage_path)
+        stored.chmod(0o600)
+        stored.write_bytes(b"tampered")
         with pytest.raises(HTTPException):
             _source(db, run, 1, 7)
 
@@ -461,3 +463,14 @@ def test_slice_convert_still_fail_closed_on_unsupported(monkeypatch):
     monkeypatch.setattr(legacy, "_derive", lambda *a: pytest.fail("no output before admission"))
     with pytest.raises(ReviewedExcelError):
         legacy.convert_xls_to_xlsx_for_slice(fixture(record(0x6)))
+
+
+def test_password_protected_workbook_is_reported_as_encrypted_not_legacy():
+    body = legacy.OLE_MAGIC + b"\0" * 64 + "EncryptedPackage".encode("utf-16-le")
+    for call in (
+        lambda: legacy.prepare_archive_workbook(body),
+        lambda: legacy.ensure_slice_workbook(body),
+    ):
+        with pytest.raises(ReviewedExcelError, match="已加密") as error:
+            call()
+        assert "旧 XLS" not in str(error.value)

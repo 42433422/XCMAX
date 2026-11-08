@@ -49,10 +49,18 @@ def _svc():
     return get_shipment_application_service_core()
 
 
-def _resolve_shipment_output_path(file_arg: object) -> Path | None:
-    from app.utils.path_io.path_utils import get_shipment_output_dir
+def _resolve_shipment_output_path(file_arg: object, tenant_id: int | None = None) -> Path | None:
+    from app.utils.path_io.path_utils import get_app_data_dir, get_shipment_output_dir
 
-    output_dir = Path(get_shipment_output_dir()).resolve()
+    if tenant_id is None:
+        output_dir = Path(get_shipment_output_dir()).resolve()
+    else:
+        output_dir = (
+            Path(get_app_data_dir()).resolve()
+            / "tenants"
+            / str(int(tenant_id))
+            / "shipment_outputs"
+        ).resolve()
     try:
         candidate = resolve_under_allowed_dirs(str(file_arg or ""), [output_dir])
     except (OSError, UnsafeDownloadPathError):
@@ -195,10 +203,14 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
 
 
 @router.get("/api/shipment/download/{filename:path}")
-def shipment_download(filename: str):
-    if not filename or "/" in filename or "\\" in filename:
+def shipment_download(filename: str, request: Request):
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
         return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
-    file_path = _resolve_shipment_output_path(filename)
+    from app.infrastructure.auth.dependencies import resolve_session_user
+
+    user = resolve_session_user(request)
+    tenant_id = getattr(user, "tenant_id", None) if user is not None else None
+    file_path = _resolve_shipment_output_path(filename, tenant_id=tenant_id)
     if file_path is None:
         return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
     return FileResponse(file_path, filename=filename, media_type="application/octet-stream")
@@ -413,16 +425,22 @@ def shipment_records_delete(request: Request, payload: dict[str, Any] = Body(...
 
 @router.get("/api/shipment/shipment-records/export")
 def shipment_records_export(
+    request: Request,
     unit: str | None = Query(default=None),
     unit_name: str | None = Query(default=None),
     template_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
 ):
+    from app.infrastructure.auth.dependencies import resolve_session_user
+
+    user = resolve_session_user(request)
     u = (unit or unit_name or "").strip() or None
     result = _svc().export_shipment_records(
         unit_name=u,
         template_id=template_id,
         status_filter=status,
+        layout_owner_user_id=getattr(user, "id", None) if user is not None else None,
+        layout_tenant_id=getattr(user, "tenant_id", None) if user is not None else None,
     )
     fp = _safe_shipment_export_path(result)
     if result.get("success") and fp:

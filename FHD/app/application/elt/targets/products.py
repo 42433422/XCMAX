@@ -15,7 +15,7 @@ from app.application.elt.targets.customer_product_support import owned_query
 from app.application.elt.targets.helpers import (
     assert_created_row_unchanged,
     assert_rollback_image_matches,
-    decimal_or_zero,
+    decimal_or_none,
     model_values,
     optional_text,
 )
@@ -52,6 +52,7 @@ class ProductAdapter(TargetAdapter):
             type="number",
             aliases=("价格", "单价", "售价"),
             updatable=True,
+            scale=2,
         ),
         TargetField("category", "分类", aliases=("分类",), updatable=True),
         TargetField("brand", "品牌", aliases=("品牌",), updatable=True),
@@ -183,7 +184,7 @@ class ProductAdapter(TargetAdapter):
                 model_number=optional_text(data.get("model_number")),
                 name=str(data.get("name") or ""),
                 specification=optional_text(data.get("specification")),
-                price=decimal_or_zero(data.get("price")),
+                price=decimal_or_none(data.get("price")),
                 category=optional_text(data.get("category")),
                 brand=optional_text(data.get("brand")),
                 description=optional_text(data.get("description")),

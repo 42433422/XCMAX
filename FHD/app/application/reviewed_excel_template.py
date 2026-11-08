@@ -28,7 +28,8 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_UNPACKED = 100 * 1024 * 1024
-MAX_CELLS = 20_000
+# Full-workbook nonempty-cell budget; per-sheet structural sampling is separate.
+MAX_CELLS = 100_000
 
 
 from app.application.reviewed_excel_classification import (
@@ -454,7 +455,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                         sample_full = True
                         break
                     if not structural and len(cells) >= MAX_CELLS:
-                        raise ReviewedExcelError("非空单元格超过 20000 个，暂不能完整预览")
+                        raise ReviewedExcelError(f"非空单元格超过 {MAX_CELLS} 个，暂不能完整预览")
                     if structural:
                         sampled += 1
                     if formula:

@@ -89,7 +89,9 @@ def test_reviewed_version_rejects_content_changes(preview_store, monkeypatch, ch
         elif change == "target":
             run.target_type = "export_csv"
         elif change == "source":
-            Path(db.get(EltUpload, run.upload_id).storage_path).write_bytes(b"changed source")
+            stored = Path(db.get(EltUpload, run.upload_id).storage_path)
+            stored.chmod(0o600)
+            stored.write_bytes(b"changed source")
         else:
             row.normalized_json = dump_json({"customer_name": "unreviewed customer"})
         db.commit()
