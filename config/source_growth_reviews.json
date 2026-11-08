@@ -100,9 +100,9 @@
     "FHD/app/application/reviewed_excel_template.py": {
       "base_file": "FHD/app/application/reviewed_excel_template.py",
       "base_blob": "6999cd18e774ea9306f6c89ccb2175815d57d225",
-      "head_blob": "b3c88aa6c3f673f97d7b86ed9bdd74f1084136ba",
+      "head_blob": "ed62fae98b19a19608bf45de5b5e2de8664931d0",
       "before_lines": 1375,
-      "after_lines": 1587,
+      "after_lines": 1591,
       "reason": "Workbook inspection keeps formula text and cached results, and raises the non-empty cell preview bound to the per-sheet extent so large tables are not truncated.",
       "boundary": "Inspection loop only. Formula XML parsing and cached-value loading stay in reviewed_excel_formula_cells; classification and derivation are unchanged.",
       "validation": "Formula-cache, Word conversion and large-table synthetic regression tests. Private customer workbooks are not part of this check.",
