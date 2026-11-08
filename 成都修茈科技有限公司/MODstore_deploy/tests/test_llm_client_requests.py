@@ -21,11 +21,13 @@ KEY = "a" * 32
 
 @pytest.fixture
 def db():
-    from modstore_server.models import Base
+    from modstore_server.models import Base, User
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
+    session.add_all(User(id=i, username=f"u{i}", password_hash="test-only") for i in (7, 8))
+    session.commit()
     yield session
     session.close()
 
