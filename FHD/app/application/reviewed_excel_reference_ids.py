@@ -248,20 +248,22 @@ def normalize_reference_ids(
             raise ReviewedExcelError("原分类schema校验失败")
         return normalized
     normalized = deepcopy(data)
-    for region in normalized["physical_regions"]:
+    for index, region in enumerate(normalized["physical_regions"]):
         # Internal compatibility label, not model output.
         region["labels"] = ["unknown"]
         primary_id = region.pop("primary_id")
         entry = references[primary_id]
+        # Index, range and evidence ids are coordinates the repair turn can act on.
+        where = f"physical_regions[{index}] {str(region['range'])[:20]} 的 {primary_id}"
         if not entry["primary"]:
-            raise ReviewedExcelError("主体证据不能只来自上下文")
+            raise ReviewedExcelError(f"主体证据不能只来自上下文：{where}")
         ref = entry["ref"]
         col, row = coordinate_from_string(ref["cell"])
         c1, r1, c2, r2 = bounded_range(region["range"])
         if ref["sheet"] != region["sheet"] or not (
             c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2
         ):
-            raise ReviewedExcelError("模型区域没有区域内主体证据")
+            raise ReviewedExcelError(f"模型区域没有区域内主体证据：{where} 不在该区域内")
         if "drawing_ids" in region:
             identifiers = region.pop("drawing_ids")
             if len(set(identifiers)) != len(identifiers):
