@@ -113,6 +113,32 @@ def _classify_semantic_batch(
         ),
         None,
     )
+    batch_primary_outer = next(
+        (
+            cell.get("pack_primary_outer_a1")
+            for cell in chosen
+            if cell.get("pack_primary_outer_a1")
+        ),
+        None,
+    )
+    if batch_primary_outer is None and primary:
+        # Non-drawing packs still expose the primary outer box so the model covers
+        # trailing note/summary columns that sit outside stamp cluster bounds.
+        boxes = []
+        for sheet_name, coords in primary.items():
+            if sheet_name not in {c["sheet"] for c in chosen}:
+                continue
+            boxes.append(
+                (
+                    sheet_name,
+                    f"{get_column_letter(min(col for col, _r in coords))}"
+                    f"{min(r for _c, r in coords)}:"
+                    f"{get_column_letter(max(col for col, _r in coords))}"
+                    f"{max(r for _c, r in coords)}",
+                )
+            )
+        if len(boxes) == 1:
+            batch_primary_outer = boxes[0][1]
     batch_row_span = next(
         (cell.get("drawing_batch_bounds") for cell in chosen if cell.get("drawing_batch_bounds")),
         None,
@@ -148,6 +174,8 @@ def _classify_semantic_batch(
         }
         if batch_cluster_outer and sheet["sheet"] in {c["sheet"] for c in chosen}:
             entry["drawing_cluster_outer_a1"] = batch_cluster_outer
+        if batch_primary_outer and sheet["sheet"] in {c["sheet"] for c in chosen}:
+            entry["pack_primary_outer_a1"] = batch_primary_outer
         overview.append(entry)
     rule_hints = build_rule_hints(rules, sent)
     cell_schema = {
@@ -511,6 +539,7 @@ def _classify_semantic_batch(
             if field == "evidence":
                 if labels != ["unknown"] and not refs:
                     raise ReviewedExcelError("模型分类缺少依据，原分类未改变")
+                outside_refs = []
                 for ref in refs:
                     col, row = coordinate_from_string(ref["cell"])
                     if not legacy and sent[(ref["sheet"], ref["cell"])].get("context_only"):
@@ -518,7 +547,65 @@ def _classify_semantic_batch(
                     if ref["sheet"] != sheet or not (
                         c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2
                     ):
-                        raise ReviewedExcelError("模型证据不在区域内，原分类未改变")
+                        outside_refs.append(ref)
+                if outside_refs:
+                    # Grow the model range to cover its own in-pack primary citations
+                    # when that does not invent new coordinates or collide with priors.
+                    ec1, er1, ec2, er2 = c1, r1, c2, r2
+                    for ref in outside_refs:
+                        col, row = coordinate_from_string(ref["cell"])
+                        ci = column_index_from_string(col)
+                        ec1, er1 = min(ec1, ci), min(er1, row)
+                        ec2, er2 = max(ec2, ci), max(er2, row)
+                    overlaps_prior = any(
+                        ec1 <= old_c2
+                        and old_c1 <= ec2
+                        and er1 <= old_r2
+                        and old_r1 <= er2
+                        for old_c1, old_r1, old_c2, old_r2 in rects.get(sheet, [])[:-1]
+                    )
+                    unread_block = False
+                    if not overlaps_prior and not legacy:
+                        unread_rows = []
+                        for cell in review.get("full_cells", review["cells"]):
+                            if cell["sheet"] != sheet or (sheet, cell["cell"]) in primary_keys:
+                                continue
+                            col, row = coordinate_from_string(cell["cell"])
+                            if ec1 <= column_index_from_string(col) <= ec2 and er1 <= row <= er2:
+                                unread_rows.append(row)
+                        observed = [
+                            row
+                            for col, row in primary.get(sheet, [])
+                            if ec1 <= col <= ec2 and er1 <= row <= er2
+                        ]
+                        if observed and unread_rows:
+                            first, last = min(observed), max(observed)
+                            unread_block = any(first <= row <= last for row in unread_rows)
+                    if (
+                        not overlaps_prior
+                        and not unread_block
+                        and 1 <= er1 <= er2 <= int(dimensions["rows"])
+                        and 1 <= ec1 <= ec2 <= int(dimensions["columns"])
+                    ):
+                        # Drop the tentative prior rect, replace with grown bounds.
+                        rects[sheet][-1] = (ec1, er1, ec2, er2)
+                        c1, r1, c2, r2 = ec1, er1, ec2, er2
+                        area = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+                        fragment_metadata = {
+                            **fragment_metadata,
+                            "model_original_range": fragment_metadata.get(
+                                "model_original_range", original_area
+                            ),
+                            "evidence_bounds_expanded": True,
+                        }
+                        region = {**region, "range": area}
+                    else:
+                        sample = ", ".join(
+                            f"{ref['sheet']}:{ref['cell']}" for ref in outside_refs[:4]
+                        )
+                        raise ReviewedExcelError(
+                            f"模型证据不在区域内（{sample} 相对 {original_area}），原分类未改变"
+                        )
         if drawings:
             from app.application.reviewed_excel_drawing import validate_region_drawings
 

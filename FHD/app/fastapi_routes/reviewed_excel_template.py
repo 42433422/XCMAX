@@ -810,6 +810,17 @@ def _settle_failed_step(
         rounds = earlier.get("rounds", 0) + 1 if earlier.get("step") == step else 1
         exhausted = rounds > REPAIR_ROUNDS
         checkpoint["repair"] = {"step": step, "rounds": rounds, "reason": reason[:300]}
+        # Persist pack evidence whitelists so the repair turn can force pack-only IDs
+        # without rebuilding the request (resume/paused paths reuse this checkpoint).
+        from app.application.reviewed_excel_audit import pack_evidence_id_lists
+
+        req = (state.get("model_audit") or [{}])[-1].get("request") or {}
+        primary_ids, source_ids = pack_evidence_id_lists(
+            req.get("schema") if isinstance(req, dict) else None
+        )
+        if primary_ids:
+            checkpoint["repair"]["primary_ids"] = primary_ids[:200]
+            checkpoint["repair"]["source_ids"] = (source_ids or primary_ids)[:200]
         if exhausted:
             checkpoint["repair"]["exhausted"] = True
         else:
@@ -1077,7 +1088,12 @@ async def _reviewed_excel_classification_analyze_body(
 
                 if repair.get("step") != step or repair.get("exhausted"):
                     return None
-                return repair_turn(repair.get("answer", ""), repair.get("reason", ""))
+                return repair_turn(
+                    repair.get("answer", ""),
+                    repair.get("reason", ""),
+                    primary_ids=repair.get("primary_ids"),
+                    source_ids=repair.get("source_ids"),
+                )
 
             async def audited(draft, prepared, phase, step, function, *args, **kwargs):
                 """Send one claimed call: (result, draft), or a repair continuation dict."""

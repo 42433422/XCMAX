@@ -401,11 +401,22 @@ def drawing_row_boundaries(sheet, drawings: list[dict]) -> list[int]:
 
 
 def _stamp_pack_meta(batch: list[dict], first: int, end: int, boundaries: list[int]) -> None:
-    """Record pack row span, legal cuts, and the axis-aligned union of pack drawings."""
-    from openpyxl.utils.cell import get_column_letter
+    """Record pack row span, legal cuts, drawing union, and primary-cell outer box."""
+    from openpyxl.utils.cell import coordinate_from_string, get_column_letter
+    from openpyxl.utils.cell import column_index_from_string
 
     batch[0]["drawing_batch_bounds"] = [first, end]
     batch[0]["drawing_legal_boundaries"] = [x for x in boundaries if first <= x <= end]
+    primary = [cell for cell in batch if not cell.get("context_only")]
+    if primary:
+        coords = [coordinate_from_string(cell["cell"]) for cell in primary]
+        pc1 = min(column_index_from_string(col) for col, _row in coords)
+        pr1 = min(row for _col, row in coords)
+        pc2 = max(column_index_from_string(col) for col, _row in coords)
+        pr2 = max(row for _col, row in coords)
+        batch[0]["pack_primary_outer_a1"] = (
+            f"{get_column_letter(pc1)}{pr1}:{get_column_letter(pc2)}{pr2}"
+        )
     pack_drawings = [d for cell in batch for d in cell.get("drawing_evidence", [])]
     if not pack_drawings:
         return

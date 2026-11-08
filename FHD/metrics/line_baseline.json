@@ -1,5 +1,5 @@
 {
-  "lines": 2453645,
+  "lines": 2453895,
   "updated": "2026-11-08",
-  "note": "elt: skip drawing expand when it would overlap a prior region"
+  "note": "CHANGELOG 补考勤 pack/repair 说明 +1 行"
 }

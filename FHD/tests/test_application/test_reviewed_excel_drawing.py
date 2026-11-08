@@ -831,6 +831,8 @@ def test_drawing_packs_expose_cluster_outer_a1():
     assert len(batches) >= 2
     assert batches[0][0]["drawing_cluster_outer_a1"] == "A1:D4"
     assert batches[1][0]["drawing_cluster_outer_a1"] == "A10:B10"
+    assert "pack_primary_outer_a1" in batches[0][0]
+    assert batches[0][0]["pack_primary_outer_a1"]
 
 
 def test_nonzero_transform_is_readable_but_not_derivable():

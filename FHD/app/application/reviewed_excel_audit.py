@@ -194,8 +194,39 @@ REPAIR_ROUNDS = 2
 _REPAIR_ANSWER_CHARS = 12_000
 
 
-def repair_turn(answer: str, reason: str) -> list[dict]:
-    """Show the model its own rejected answer and the validator's cell-free reason."""
+def _pack_id_repair_clause(
+    primary_ids: list[str] | None, source_ids: list[str] | None
+) -> str:
+    """Force the repair turn to reuse only pack-whitelisted evidence identities."""
+    if not primary_ids:
+        return ""
+    shown = list(primary_ids)[:80]
+    extra = len(primary_ids) - len(shown)
+    clause = (
+        f" evidence_ids 与 primary_id 必须全部选自本批主体白名单（共 {len(primary_ids)} 个"
+        f"{'，示例如下' if extra else ''}）：{', '.join(shown)}"
+        + (f" …其余见 output_schema.physical_regions.items.properties.evidence_ids。" if extra else "。")
+        + " context_only 的 evidence_id 只能放进 dependency_ids，禁止写入 evidence_ids/primary_id；"
+        "没有主体证据的空白区域请删除，不要编造白名单之外的编号。"
+    )
+    if source_ids and set(source_ids) - set(primary_ids):
+        clause += " dependency_ids 可使用含 context_only 的本批全部 evidence_id，但仍不得编造未发送编号。"
+    clause += (
+        " 每条 evidence_ids 坐标必须落在同一 physical_region.range 内；"
+        "可按 sheets[].pack_primary_outer_a1 / drawing_cluster_outer_a1 扩大矩形覆盖本批主体格，"
+        "禁止发明未发送的 range 或 evidence_id。"
+    )
+    return clause
+
+
+def repair_turn(
+    answer: str,
+    reason: str,
+    *,
+    primary_ids: list[str] | None = None,
+    source_ids: list[str] | None = None,
+) -> list[dict]:
+    """Show the model its rejected answer and force pack-only evidence IDs on repair."""
     return [
         {
             "role": "assistant",
@@ -207,9 +238,29 @@ def repair_turn(answer: str, reason: str) -> list[dict]:
                 f"上一轮答案未通过校验：{str(reason)[:300]}。"
                 "只用已发送的内容和坐标修正这一处，不要编造坐标、范围或数据；"
                 "仍按 output_schema 返回完整 JSON。"
+                f"{_pack_id_repair_clause(primary_ids, source_ids)}"
             ),
         },
     ]
+
+
+def pack_evidence_id_lists(schema: dict | None) -> tuple[list[str] | None, list[str] | None]:
+    """Read primary / full evidence_id enums from an identify provider schema."""
+    if not isinstance(schema, dict):
+        return None, None
+    try:
+        props = schema["properties"]["physical_regions"]["items"]["properties"]
+    except (KeyError, TypeError):
+        return None, None
+    primary = props.get("primary_id", {}).get("enum") or props.get("evidence_ids", {}).get(
+        "items", {}
+    ).get("enum")
+    source = props.get("dependency_ids", {}).get("items", {}).get("enum") or primary
+    if not isinstance(primary, list) or not primary:
+        return None, None
+    if not isinstance(source, list) or not source:
+        source = primary
+    return [str(x) for x in primary], [str(x) for x in source]
 
 
 def ask_until_valid(ask, messages: list[dict], judge, *, rounds: int = REPAIR_ROUNDS):
@@ -221,6 +272,15 @@ def ask_until_valid(ask, messages: list[dict], judge, *, rounds: int = REPAIR_RO
     once: the same prompt would stop at the same limit.
     """
     from app.application.elt.errors import ModelAnswerRejected, ModelAnswerTruncated
+
+    primary_ids = source_ids = None
+    try:
+        payload = json.loads(messages[1]["content"]) if len(messages) > 1 else {}
+        primary_ids, source_ids = pack_evidence_id_lists(
+            payload.get("output_schema") if isinstance(payload, dict) else None
+        )
+    except (TypeError, ValueError, json.JSONDecodeError, IndexError, KeyError):
+        primary_ids = source_ids = None
 
     turn: list[dict] = []
     for round_index in range(rounds + 1):
@@ -236,7 +296,12 @@ def ask_until_valid(ask, messages: list[dict], judge, *, rounds: int = REPAIR_RO
         except ModelAnswerRejected as exc:
             if round_index == rounds or isinstance(exc, ModelAnswerTruncated):
                 raise
-            turn = repair_turn(exc.answer, exc.public_message)
+            turn = repair_turn(
+                exc.answer,
+                exc.public_message,
+                primary_ids=primary_ids,
+                source_ids=source_ids,
+            )
     raise AssertionError("unreachable")
 
 

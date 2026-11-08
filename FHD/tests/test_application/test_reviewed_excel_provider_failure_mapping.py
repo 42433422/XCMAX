@@ -140,6 +140,68 @@ def test_repair_rounds_are_bounded_and_never_resend_an_unknown_call():
     assert len(sends) == 1
 
 
+def test_repair_turn_forces_pack_only_evidence_ids():
+    import json
+
+    import pytest
+
+    from app.application.elt.errors import ModelAnswerRejected
+    from app.application.reviewed_excel_audit import ask_until_valid, repair_turn
+
+    turn = repair_turn(
+        '{"physical_regions":[]}',
+        "模型答案不符合输出格式：$/physical_regions[0]/evidence_ids[0] 不是提供的取值之一",
+        primary_ids=["S1:A1", "S1:C11"],
+        source_ids=["S1:A1", "S1:C11", "S1:A11"],
+    )
+    assert turn[0]["role"] == "assistant"
+    assert "S1:A1" in turn[1]["content"] and "S1:C11" in turn[1]["content"]
+    assert "context_only" in turn[1]["content"]
+    assert "编造" in turn[1]["content"]
+
+    asked = []
+
+    class Answer:
+        answer = "{bad}"
+
+    def ask(messages):
+        asked.append(messages)
+        return Answer()
+
+    def judge(_result):
+        raise ReviewedExcelError("模型证据编号不在本批白名单")
+
+    payload = {
+        "output_schema": {
+            "properties": {
+                "physical_regions": {
+                    "items": {
+                        "properties": {
+                            "primary_id": {"enum": ["S1:A7"]},
+                            "evidence_ids": {"items": {"enum": ["S1:A7"]}},
+                            "dependency_ids": {"items": {"enum": ["S1:A7", "S1:A11"]}},
+                        }
+                    }
+                }
+            }
+        }
+    }
+    with pytest.raises(ModelAnswerRejected, match="白名单"):
+        ask_until_valid(
+            ask,
+            [
+                {"role": "system", "content": "p"},
+                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+            ],
+            judge,
+            rounds=1,
+        )
+    repair_text = asked[1][-1]["content"]
+    assert "S1:A7" in repair_text
+    assert "主体白名单" in repair_text
+    assert "dependency_ids" in repair_text
+
+
 def test_settle_call_keeps_the_lock_only_for_an_unknown_outcome():
     from app.application.reviewed_excel_audit import settle_call
 
