@@ -1,0 +1,20 @@
+{
+  "measured_at": "2026-11-08T17:00:00+08:00",
+  "timezone": "Asia/Shanghai",
+  "pr": 3099,
+  "backend_git_sha": "9060f31498e82c5c4ab1dff1faf45ce723868106",
+  "fix_commits": ["68c2822d8", "210b4f7f4", "870748737", "9060f3149"],
+  "account_actor": "2:3",
+  "root_cause": "Multi-pack can_slice was ANDed globally; packs with full local coverage and can_slice=false vetoed packs that authorized leftover cells (侯雪梅 N15/P15). Not a send-gap. Fix: pack-scoped can_slice + model_excluded; skip-hidden analyze (incl. continuation); drawing packs max_row_span=80 + cluster margin.",
+  "wallet": {"start_this_pass": 394.39, "end": 388.14, "spend": 6.25, "unreleased_preauths": []},
+  "chat_check": {"endpoint": "POST /api/ai/chat", "message": "出货记录", "http": 200, "success": true, "records": 20},
+  "files": {
+    "侯雪梅.xlsx": {"status": "done", "batch_id": "aib-36bb48faa83a4e39", "ingest": "applied", "four_way": {"preview": 118, "written": 91, "db": 91, "file": 118}},
+    "澜宇电视柜.xlsx": {"status": "done", "batch_id": "aib-dbc0e7e96086415b", "ingest": "applied", "four_way": {"preview": 137, "written": 70, "db": 70, "file": 137, "mismatched": false}},
+    "邻居贾总.xlsx": {"status": "blocked", "reason": "unassigned with pack can_slice=false"},
+    "邻居杨总.xlsx": {"status": "blocked", "reason": "邻居!L4 can_slice=false"},
+    "考勤表.xlsx": {"status": "blocked", "reason": "answered_invalid: region cuts multi-row stamp at legal cut row; pack bounds fixed"},
+    "尹玉华1.xlsx": {"status": "skipped_reingest", "reason": "shipment_records lacks source coordinates; double-write risk"}
+  },
+  "remaining": ["贾总/杨总 can_slice=false leftovers", "考勤 model cutting stamps", "market request-id recovery deploy"]
+}
