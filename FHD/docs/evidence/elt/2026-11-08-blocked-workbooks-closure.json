@@ -1,112 +1,107 @@
 {
-  "measured_at": "2026-11-09T07:41:31+08:00",
+  "measured_at": "2026-11-09T08:03:31+08:00",
   "timezone": "Asia/Shanghai",
   "pr": 3099,
-  "backend_git_sha": "97c18c5f1ebfde48b7957a3c6cfd8dd4a87016fe",
-  "fix_commits_this_pass": [
-    "0d798fe78",
-    "ed55c09d7",
-    "96c3feb5b",
-    "8b4b07343",
-    "1889e578d",
-    "97c18c5f1"
+  "backend_git_sha": "a07acc046d4dd7a0894b3462fe67517cd7683c61",
+  "product_commits_this_pass": [
+    "a07acc046"
   ],
   "account_actor": "2:3",
   "wallet": {
-    "start_this_pass": 347.48,
-    "end": 337.81,
-    "spend": 9.67
+    "start_this_pass": 337.81,
+    "end": 337.66,
+    "spend": 0.15
   },
   "chat_check": {
     "endpoint": "POST /api/ai/chat",
     "message": "出货记录",
     "http": 200,
-    "success": true,
-    "records": 20
+    "success": true
   },
-  "root_cause_考勤表": {
-    "invented_evidence_ids": "model put context_only footprint cells (e.g. S1:A11) into evidence_ids; schema enum is primary-only",
-    "evidence_outside_region": "model cited in-pack primary cells (AH2/AI12) outside its declared range",
-    "overlap_after_expand": "stamp expand of earlier region swallowed sibling original boxes; model also double-boxed stamp cluster + date headers",
-    "grouping_truncate": "63 model regions: grouping max_tokens ~4520 truncated after packs succeeded"
+  "root_cause_考勤表_slice_confirm": {
+    "external_title_note": "dense ungrouped one-doc-per-region left mutual deps among A73/A74/A75 title-note cells; auto-slice hard-failed",
+    "merge_cut": "identity confirm rejected cut merges A111:AF119 / A120:B122 even though export flattens; expand unsafe vs rule tails"
   },
   "product_fixes": [
-    "pack_primary_outer_a1 on stamp packs",
-    "safe evidence-bounds expand for in-pack primary citations",
-    "repair_turn forces pack primary evidence_id whitelist",
-    "skip stamp expand that would hit sibling original ranges",
-    "invalid logical_documents/layout refs → ungrouped / drop (keep physical regions)",
-    "union overlapping model ranges when either cites drawings",
-    "raise grouping_output_budget; skip dense grouping with one document per model region"
+    "documents_for_ungrouped_regions + derive union of dependency-connected model fragments (no invented ranges)",
+    "identity confirm: expand cut merges when safe, else merge_cut_flattened_on_export; user splits still fail closed",
+    "drawing-cut validator not loosened"
   ],
   "hard_constraints": {
     "drawing_cut_validator_loosened": false,
-    "invented_ranges": false
+    "invented_ranges": false,
+    "attendance_industry_mod_committed": false
   },
   "files": {
     "侯雪梅.xlsx": {
       "status": "done",
-      "ingest": "applied",
-      "four_way": {"preview": 118, "written": 91, "db": 91, "file": 118}
+      "ingest": "applied"
     },
     "澜宇电视柜.xlsx": {
       "status": "done",
-      "ingest": "applied",
-      "four_way": {"preview": 137, "written": 70, "db": 70, "file": 137}
+      "ingest": "applied"
     },
     "邻居杨总.xlsx": {
       "status": "done",
-      "batch_id": "aib-426611620c7a49ed",
       "ingest": "partial",
-      "note": "honest partial; 15 invalid rows held out; not forced to applied",
-      "four_way": {
-        "preview": 77,
-        "written": 60,
-        "db": 60,
-        "file": 77,
-        "mismatched": true
-      }
+      "note": "honest partial retained"
     },
     "邻居贾总.xlsx": {
       "status": "done_partial_ingest",
-      "batch_id": "aib-ef9533254f304e7c",
-      "classification_id": "9e871d06-8232-476e-ba67-3f6771aae991",
       "ingest": "partial",
-      "note": "honest partial; one slice of multi-doc book; not forced to applied",
-      "four_way": {
-        "preview": 7,
-        "written": 7,
-        "db": 7,
-        "file": 7,
-        "mismatched": false
-      },
-      "kb_documents": 1
+      "note": "honest partial retained"
     },
     "考勤表.xlsx": {
-      "status": "analyze_returned_slice_blocked",
+      "status": "done_partial_ingest",
       "classification_id": "a088a2bf-444c-4398-b6e2-7372cf8b2aeb",
-      "classification_version": "290f08f7a222bf9c964f7c061a2dc5ea000208ac8e7c139de72ca7f3702f097b",
+      "classification_version_confirmed": "77ce97507c3eadf3897c475db3fe2b12c239e093f2cbf572e986ea150e1d482d",
       "analyze": {
         "packs_completed": 19,
         "model_status": "returned",
         "model_regions": 63
       },
       "auto_slice": {
-        "blocked": true,
-        "http": 400,
-        "reason": "所选文档依赖外部说明或标题，暂不能保证保真提取"
+        "blocked": false,
+        "http": 200,
+        "slices": 61
       },
       "confirm": {
-        "blocked": true,
-        "http": 400,
-        "reason": "分类区域切断合并单元格"
+        "blocked": false,
+        "http": 200
       },
-      "note": "Analyze closed after pack evidence/repair/union fixes. Auto-slice/confirm blocked without inventing ranges or loosening drawing-cut. Drawing-cut validator not loosened."
+      "preview": {
+        "http": 200,
+        "candidates": 3,
+        "slice_index": 0,
+        "slice_name": "欧意宝2025年6月考勤表.xlsx"
+      },
+      "intake": {
+        "run_id": "a365286a-55b4-45c0-b0a0-a647005259e0",
+        "batch_id": "aib-5d9f704076124bb6",
+        "target_type": "knowledge",
+        "detection_reason": "archived_document",
+        "kb_documents": 1,
+        "business": "skipped knowledge_only_target",
+        "ingest_status": "partial",
+        "note": "attendance target blocked by _authorize_intake workspace gate; knowledge path is honest safe path"
+      },
+      "download": {
+        "http": 404,
+        "note": "no business export for knowledge_only"
+      },
+      "four_way": {
+        "preview": 1,
+        "written": 0,
+        "db": 0,
+        "file": null,
+        "mismatched": null,
+        "note": "knowledge-only partial; business skipped; not forced to attendance applied"
+      }
     }
   },
   "remaining": [
     "邻居杨总 honest partial (15 invalid held out)",
     "邻居贾总 ingest partial (multi-doc book; one slice applied)",
-    "考勤表 analyze returned; auto-slice/confirm blocked on external title dependency / merge cuts (no invented ranges)"
+    "考勤表 slice/confirm/preview/intake closed; knowledge partial (attendance write needs workspace auth)"
   ]
 }
