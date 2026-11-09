@@ -42,6 +42,7 @@ export function useMpMarketData(deps: {
 
   const lastSyncTime = ref<number | null>(null);
   const isRefreshing = ref(false);
+  const marketSyncPending = ref(false);
   let lifetime = 0;
   let overviewRequest = 0;
   let catalogRequest = 0;
@@ -57,6 +58,7 @@ export function useMpMarketData(deps: {
     lastSyncTime.value = null;
     llmCatalogLoading.value = false;
     isRefreshing.value = false;
+    marketSyncPending.value = false;
   }, { flush: 'sync' });
   if (getCurrentScope()) onScopeDispose(() => { lifetime++; stop(); });
 
@@ -119,14 +121,23 @@ export function useMpMarketData(deps: {
 
   // ========== 数据加载函数（带智能缓存）==========
 
-  async function refreshMarketOverview(auth?: string, forceRefresh = false) {
+  function syncFailureCopy(error: unknown): string {
+    const status = Number((error as { status?: unknown } | null)?.status);
+    const message = error instanceof Error ? error.message : String(error || '');
+    if (status === 401 || status === 0 || /请求超时|timeout|timed out|abort|登录状态已失效|尚未绑定/i.test(message)) {
+      return '暂时没有同步到';
+    }
+    return `账户同步失败：${message}。请重试或重新登录。`;
+  }
+
+  async function refreshMarketOverview(auth?: string, forceRefresh = false, preferSession = false) {
     const sessionCurrent = currentRequest();
     const request = ++overviewRequest;
     const owner = marketCacheOwner();
     const current = () => sessionCurrent() && request === overviewRequest;
     // 账户概览优先走后端当前会话绑定的 market token；若 handoff 未确认，则用登录时写入的本地 token 兜底。
     const storedToken = readStoredMarketToken();
-    let token = auth === undefined ? (hasSessionMarketToken.value ? '' : storedToken) : (auth || storedToken);
+    let token = auth === undefined ? (preferSession || hasSessionMarketToken.value ? '' : storedToken) : (auth || storedToken);
 
     if (!forceRefresh) {
       const cacheAge = getCacheAge(CACHE_KEYS.OVERVIEW);
@@ -136,6 +147,7 @@ export function useMpMarketData(deps: {
       }
     }
 
+    marketSyncPending.value = true;
     try {
       let data: MarketAccountOverviewData;
       try {
@@ -178,8 +190,7 @@ export function useMpMarketData(deps: {
       try { window.localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify(data.user)); } catch { /* private mode */ }
     } catch (e) {
       if (!current()) return;
-      const msg = e instanceof Error ? e.message : String(e);
-      marketSyncWarning.value = `账户同步失败：${msg}。请重试或重新登录。`;
+      marketSyncWarning.value = syncFailureCopy(e);
       if (!marketOverview.value) {
         const cached = getCachedData<MarketAccountOverviewData>(CACHE_KEYS.OVERVIEW, owner);
         if (cached) {
@@ -188,6 +199,8 @@ export function useMpMarketData(deps: {
         }
       }
       console.warn('[ModelPayment] 拉取市场余额失败:', e);
+    } finally {
+      if (current()) marketSyncPending.value = false;
     }
   }
 
@@ -258,6 +271,7 @@ export function useMpMarketData(deps: {
   });
 
   const marketBalanceHint = computed(() => {
+    if (marketSyncPending.value && !marketOverview.value) return '正在同步账户信息…';
     if (marketSyncWarning.value) return marketSyncWarning.value;
     if (isOffline.value) return '离线模式：显示本地缓存数据';
     if (!marketOverview.value) {

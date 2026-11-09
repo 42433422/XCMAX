@@ -12,11 +12,11 @@ export interface Industry {
 
 export const systemApi = {
   getIndustries(): Promise<ApiResponse<Industry[]>> {
-    return api.get<ApiResponse<Industry[]>>('/api/system/industries', {}, { timeoutMs: 8_000 })
+    return api.get<ApiResponse<Industry[]>>('/api/system/industries', {}, { timeoutMs: 8_000, quiet: true })
   },
 
   getCurrentIndustry(): Promise<ApiResponse<Industry>> {
-    return api.get<ApiResponse<Industry>>('/api/system/industry', {}, { timeoutMs: 8_000 })
+    return api.get<ApiResponse<Industry>>('/api/system/industry', {}, { timeoutMs: 8_000, quiet: true })
   },
 
   getIndustryDetail(industryId: number | string): Promise<ApiResponse<Industry>> {

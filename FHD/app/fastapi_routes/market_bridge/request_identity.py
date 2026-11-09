@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from logging import Logger
 from typing import Any
 
-from fastapi import Request
+from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 
 from app.application.market_bridge.protocols import (
@@ -56,11 +56,19 @@ class RequestIdentity:
             self.save(self.session_id(request), token, refresh or None)
         return (token, refresh)
 
-    async def handoff(self, request: Request) -> Any:
+    async def refresh_entitlements(self, session_id: str) -> None:
+        try:
+            await self.sync_entitlements(session_id)
+        except RECOVERABLE_ERRORS:
+            self.logger.warning("current-session entitlement refresh unavailable")
+
+    async def handoff(self, request: Request, background: BackgroundTasks) -> Any:
         """Return credentials only to their verified local session, for API calls.
 
         Browser navigation uses POST /browser-handoff. Anonymous, mismatched and
         unavailable sessions must never borrow another session's credentials.
+        Entitlement refresh calls the market (default 20s) and must not hold this
+        response: the settings page's 8s timer would otherwise fail sibling reads.
         """
         headers = {"Cache-Control": "no-store", "Pragma": "no-cache"}
         try:
@@ -89,10 +97,7 @@ class RequestIdentity:
             refresh = self.refresh_token(sid)
             if refresh:
                 data["market_refresh_token"] = refresh
-            try:
-                await self.sync_entitlements(sid)
-            except RECOVERABLE_ERRORS:
-                self.logger.warning("current-session entitlement refresh unavailable")
+            background.add_task(self.refresh_entitlements, sid)
             return JSONResponse({"success": True, "data": data}, headers=headers)
         except RECOVERABLE_ERRORS:
             self.logger.warning("market session authentication unavailable")

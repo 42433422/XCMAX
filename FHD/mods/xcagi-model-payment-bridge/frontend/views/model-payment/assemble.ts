@@ -31,55 +31,38 @@ export function assembleMpModelPayment() {
     forceRefreshAll: marketData.forceRefreshAll,
   })
 
-  onMounted(async () => {
+  onMounted(() => {
     const sessionCurrent = captureAuthSession()
     const current = () => sessionCurrent() && !handoffController.signal.aborted
-    // 0. 初始化离线状态监听
     offline.setupOnlineListeners();
     offline.updateOnlineStatus();
-
-    // 0b. 会员套餐改从后端代理市场接口读取（失败保底 FALLBACK_PLANS）
     void plans.loadMembershipPlans();
-
-    // 1. 立即从缓存恢复数据（秒开体验）
-    const hasCache = marketData.restoreFromCache();
-    if (hasCache) {
-      console.log('[ModelPayment] 从缓存恢复数据');
-
-      // 如果离线，标记数据来源为缓存
-      if (offline.isOffline.value) {
-        offline.dataSource.value = 'cache';
-        offline.cacheTimestamp.value = marketData.lastSyncTime.value;
-      }
+    if (marketData.restoreFromCache() && offline.isOffline.value) {
+      offline.dataSource.value = 'cache';
+      offline.cacheTimestamp.value = marketData.lastSyncTime.value;
     }
-
-    // 1b. 会话内有修茈 JWT 时优先覆盖本地旧 token，避免模型页读到另一个市场账号的缓存余额。
-    if (!offline.isOffline.value) {
+    if (offline.isOffline.value) return
+    // Session handoff waits on market entitlement sync. Paint and the wallet read do not.
+    void marketData.refreshMarketOverview(undefined, true, true)
+    void marketData.refreshLlmCatalog()
+    void (async () => {
       try {
         const handoffData = await fetchSessionMarketHandoff({ signal: handoffController.signal });
         if (!current()) return;
         const mt = handoffData?.token?.trim();
         if (mt && persistMarketTokensFromHandoff(handoffData)) {
           marketData.hasSessionMarketToken.value = true;
-          const changed = marketData.applyMarketToken(mt);
-          if (changed) {
-            console.log('[ModelPayment] 市场 token 已随当前会话更新，已清理旧账号缓存');
+          if (marketData.applyMarketToken(mt)) {
+            void marketData.refreshMarketOverview(undefined, true, true)
+            void marketData.refreshLlmCatalog(undefined, true)
           }
         } else {
           marketData.hasSessionMarketToken.value = false;
         }
       } catch {
-        if (!current()) return;
-        marketData.hasSessionMarketToken.value = false;
-        /* 静默：无会话映射或非登录态属正常 */
+        if (current()) marketData.hasSessionMarketToken.value = false;
       }
-    }
-
-    // 2. 后台静默刷新（不阻塞UI）
-    if (current() && !offline.isOffline.value) {
-      marketData.refreshMarketOverview(undefined, true).catch(() => {});
-      marketData.refreshLlmCatalog().catch(() => {});
-    }
+    })()
   });
 
   onUnmounted(() => {

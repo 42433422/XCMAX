@@ -222,7 +222,7 @@ export const authApi = {
     }, 10_000, options.signal)
   },
 
-  async getCurrentUser(options: Pick<RequestOptions, 'signal' | 'timeoutMs'> = {}): Promise<ApiResponse<{ user: User; permissions: string[] }>> {
+  async getCurrentUser(options: Pick<RequestOptions, 'signal' | 'timeoutMs' | 'quiet'> = {}): Promise<ApiResponse<{ user: User; permissions: string[] }>> {
     return api.get<ApiResponse<{ user: User; permissions: string[] }>>('/api/auth/me', {}, { timeoutMs: 8_000, ...options })
   },
 
@@ -242,7 +242,7 @@ export const authApi = {
     return api.post<ApiResponse<{ avatar_url: string }>>('/api/auth/profile/avatar', form)
   },
 
-  async validateSession(options: Pick<RequestOptions, 'signal' | 'timeoutMs'> = {}): Promise<ApiResponse<unknown>> {
+  async validateSession(options: Pick<RequestOptions, 'signal' | 'timeoutMs' | 'quiet'> = {}): Promise<ApiResponse<unknown>> {
     return api.get<ApiResponse<unknown>>('/api/auth/session/validate', {}, { timeoutMs: 8_000, ...options })
   },
 
