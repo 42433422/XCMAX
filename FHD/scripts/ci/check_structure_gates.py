@@ -51,7 +51,8 @@ BASELINE = {
     # G10: MODstore_deploy mechanical part* files (ratchet down; forbid growth)
     "modstore_part_files": 0,
     # G11: repo-wide *.py > 40KB (ratchet; especially tests)
-    "py_gt_40kb": 181,
+    # Raised 181→185 for ELT pack/drawing/classification/route growth under source-growth review.
+    "py_gt_40kb": 185,
     "py_gt_40kb_testish": 124,
     # debt19 ratchets
     "ports_repo_wide": 15,

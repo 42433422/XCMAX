@@ -638,27 +638,32 @@ def reviewed_excel_classification_confirm(
             )
             latest["partition_pending"] = partition_pending
             if before != after:
-                range_remap = {
-                    (sheet["sheet"], old_range): new_range
-                    for sheet, before_sheet, after_sheet in zip(
-                        versions[-1]["sheets"], before, after, strict=True
+                # Manual splits change region cardinality; only same-length sheets can
+                # remap fragment ranges (merge-bound expands). Otherwise drop suggestions.
+                range_remap = {}
+                only_merge_expand = False
+                if all(len(left) == len(right) for left, right in zip(before, after, strict=True)):
+                    range_remap = {
+                        (sheet["sheet"], old_range): new_range
+                        for sheet, before_sheet, after_sheet in zip(
+                            versions[-1]["sheets"], before, after, strict=True
+                        )
+                        for (old_range, _old_labels), (new_range, _new_labels) in zip(
+                            before_sheet, after_sheet, strict=True
+                        )
+                        if old_range != new_range
+                    }
+                    expanded_keys = {
+                        (sheet.get("sheet"), region.get("range"))
+                        for sheet in latest.get("sheets") or []
+                        for region in sheet.get("regions") or []
+                        if region.get("merge_bounds_expanded")
+                        and region.get("range_source") != "user"
+                    }
+                    only_merge_expand = bool(range_remap) and all(
+                        (sheet, new_range) in expanded_keys
+                        for (sheet, _old), new_range in range_remap.items()
                     )
-                    for (old_range, _old_labels), (new_range, _new_labels) in zip(
-                        before_sheet, after_sheet, strict=True
-                    )
-                    if old_range != new_range
-                }
-                expanded_keys = {
-                    (sheet.get("sheet"), region.get("range"))
-                    for sheet in latest.get("sheets") or []
-                    for region in sheet.get("regions") or []
-                    if region.get("merge_bounds_expanded")
-                    and region.get("range_source") != "user"
-                }
-                only_merge_expand = bool(range_remap) and all(
-                    (sheet, new_range) in expanded_keys
-                    for (sheet, _old), new_range in range_remap.items()
-                )
                 if only_merge_expand and latest.get("suggested_documents"):
                     latest["suggested_documents"] = [
                         {
@@ -1938,7 +1943,10 @@ def _authorize_intake(request, expected, target_type=""):
         raise HTTPException(status_code=403, detail="入库账号已变化，请重新预演")
     mod_id = get_request_active_mod_id()
     require_allowed(user=user, mod_id=mod_id)
-    if target_type == "attendance":
+    # Attendance business write is workspace-gated: only the active attendance-industry
+    # mod may proceed. Knowledge-only paths keep working without this header; a bare
+    # ERP/desktop session must not silently treat KB success as attendance PASS.
+    if target_type == "attendance" and mod_id != "attendance-industry":
         raise HTTPException(
             status_code=409, detail="当前考勤写入目标无法核实业务空间，请使用考勤工作区授权导入"
         )

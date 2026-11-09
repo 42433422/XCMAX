@@ -160,16 +160,25 @@ def test_nonblank_merge_layout_id_is_not_a_substitute_for_primary(monkeypatch):
     assert result["regions"][0]["range"] == "A1:C1"
 
 
-@pytest.mark.parametrize(
-    "fragments,error", [(["S1:Z99"], "未知主体"), (["S1:A1", "S1:A1"], "重复")]
-)
-def test_documents_reference_only_decoded_region_primary_ids(monkeypatch, fragments, error):
-    with pytest.raises(ReviewedExcelError, match=error):
+def test_documents_unknown_fragment_fails_closed(monkeypatch):
+    with pytest.raises(ReviewedExcelError, match="未知主体"):
         execute(
             monkeypatch,
             source(["A1"]),
-            answer(region("S1:A1"), documents=[{"document_id": "d", "fragments": fragments}]),
+            answer(region("S1:A1"), documents=[{"document_id": "d", "fragments": ["S1:Z99"]}]),
         )
+
+
+def test_documents_duplicate_fragments_stay_ungrouped(monkeypatch):
+    # Invalid grouping must not discard already-valid physical regions; documents
+    # soften to ungrouped ([]) so analyze can continue without silent row loss.
+    result = execute(
+        monkeypatch,
+        source(["A1"]),
+        answer(region("S1:A1"), documents=[{"document_id": "d", "fragments": ["S1:A1", "S1:A1"]}]),
+    )
+    assert result["regions"][0]["range"] == "A1:A1"
+    assert result["logical_documents"] == []
 
 
 def test_atom_contract_has_no_free_geometry_and_keeps_existing_region_limits():

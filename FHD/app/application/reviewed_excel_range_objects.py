@@ -428,7 +428,12 @@ def plan_range_objects(body, sheet_name, fragments):
 
 def verify_range_objects(body, plan):
     for proof in plan.get("tail_proofs", []):
-        if _blank_snapshot(body, plan["sheet"], proof["tail"]) != proof:
+        actual = _blank_snapshot(body, plan["sheet"], proof["tail"])
+        # Font/border paint on empty filter-tail cells is not business data and is not
+        # copied into the derived workbook; compare structural blank proof only.
+        comparable = {key: value for key, value in proof.items() if key != "styled_empty_cells"}
+        actual_cmp = {key: value for key, value in actual.items() if key != "styled_empty_cells"}
+        if actual_cmp != comparable:
             _fail("空白上下文或源尺寸读回不一致")
     with _package(body) as archive:
         _, sheet = _sheet(archive, plan["sheet"])

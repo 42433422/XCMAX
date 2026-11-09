@@ -402,8 +402,11 @@ def drawing_row_boundaries(sheet, drawings: list[dict]) -> list[int]:
 
 def _stamp_pack_meta(batch: list[dict], first: int, end: int, boundaries: list[int]) -> None:
     """Record pack row span, legal cuts, drawing union, and primary-cell outer box."""
-    from openpyxl.utils.cell import coordinate_from_string, get_column_letter
-    from openpyxl.utils.cell import column_index_from_string
+    from openpyxl.utils.cell import (
+        column_index_from_string,
+        coordinate_from_string,
+        get_column_letter,
+    )
 
     batch[0]["drawing_batch_bounds"] = [first, end]
     batch[0]["drawing_legal_boundaries"] = [x for x in boundaries if first <= x <= end]

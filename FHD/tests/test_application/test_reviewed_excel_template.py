@@ -2298,6 +2298,38 @@ def test_private_intake_requires_model_before_a_business_plan(
         assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 0
 
 
+def test_attendance_intake_requires_attendance_industry_workspace(monkeypatch):
+    """Attendance business write is workspace-gated; knowledge paths stay unblocked."""
+    from fastapi import HTTPException
+
+    from app.fastapi_routes import reviewed_excel_template as routes
+
+    class _User:
+        tenant_id = 1
+        id = 7
+
+    monkeypatch.setattr(routes, "_execute", lambda _request: _User())
+    monkeypatch.setattr(routes, "_identity", lambda _user: (1, 7))
+    monkeypatch.setattr(
+        "app.domain.app_pure.auth_permission_resolver.require_allowed",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "app.request_active_mod_ctx.get_request_active_mod_id", lambda: "erp"
+    )
+    with pytest.raises(HTTPException) as blocked:
+        routes._authorize_intake(object(), (1, 7), "attendance")
+    assert blocked.value.status_code == 409
+    assert "考勤工作区" in blocked.value.detail
+
+    monkeypatch.setattr(
+        "app.request_active_mod_ctx.get_request_active_mod_id",
+        lambda: "attendance-industry",
+    )
+    assert routes._authorize_intake(object(), (1, 7), "attendance") == "attendance-industry"
+    assert routes._authorize_intake(object(), (1, 7), "delivery") == "attendance-industry"
+
+
 def test_quotation_proposals_identify_table_and_identity_without_touching_rules():
     from app.application.reviewed_excel_template import make_proposals
 
@@ -3772,6 +3804,7 @@ def test_preview_budget_covers_the_worst_case_and_length_is_not_resent(monkeypat
 
 
 def test_real_failure_outside_region_evidence_is_rejected(monkeypatch):
+    from app.application.elt.errors import ReviewedExcelError
     from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
@@ -3805,8 +3838,42 @@ def test_real_failure_outside_region_evidence_is_rejected(monkeypatch):
         )
 
     monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
-    with pytest.raises(ValueError, match="模型证据不在区域内"):
-        classify_semantic_workbook(inspect_workbook(out.getvalue()))
+    # Safe in-pack primary citations may grow the proposed range with confirmation;
+    # expansion that would invent geometry still fails closed (cross-sheet evidence).
+    grown = classify_semantic_workbook(inspect_workbook(out.getvalue()))
+    region = grown["regions"][0]
+    assert region["evidence_bounds_expanded"] is True
+    assert region["needs_confirmation"] is True
+    assert region["range"] == "H19:M40"
+
+    def cross_sheet(messages, schema, tokens, **_model_kwargs):
+        return LlmAssistResult(
+            used_llm=True,
+            data={
+                "regions": [
+                    {
+                        "sheet": "往来资料",
+                        "range": "H22:M40",
+                        "labels": ["unknown"],
+                        "evidence": [{"sheet": "其他表", "cell": "A1"}],
+                        "dependencies": [],
+                        "reason": "合成复现",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete", cross_sheet
+    )
+    wb2 = Workbook()
+    wb2.active.title = "往来资料"
+    wb2.active["H22"] = "合成数据"
+    wb2.create_sheet("其他表")["A1"] = "外泄"
+    blocked = BytesIO()
+    wb2.save(blocked)
+    with pytest.raises(ReviewedExcelError, match="模型证据不在区域内|模型区域坐标越界"):
+        classify_semantic_workbook(inspect_workbook(blocked.getvalue()))
 
 
 def test_repeated_generic_header_does_not_establish_purchase(monkeypatch):
@@ -4882,8 +4949,8 @@ def _nine_batch_workbook():
     for index, count in enumerate((7600, 2400, 2400, 1060)):
         ws = wb.active if index == 0 else wb.create_sheet()
         ws.title = f"表{index}"
-        if index == 0:
-            ws.sheet_state = "hidden"
+        # Keep all sheets visible so pause/resume/confirm covers the full 9-batch plan.
+        # Hidden-sheet analyze omission is covered by dedicated skip-hidden tests.
         for row in range(1, count + 1):
             ws.cell(row, 1, f"合成记录{row}")
     out = BytesIO()

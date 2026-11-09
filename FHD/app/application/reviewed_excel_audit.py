@@ -205,7 +205,7 @@ def _pack_id_repair_clause(
     clause = (
         f" evidence_ids 与 primary_id 必须全部选自本批主体白名单（共 {len(primary_ids)} 个"
         f"{'，示例如下' if extra else ''}）：{', '.join(shown)}"
-        + (f" …其余见 output_schema.physical_regions.items.properties.evidence_ids。" if extra else "。")
+        + (" …其余见 output_schema.physical_regions.items.properties.evidence_ids。" if extra else "。")
         + " context_only 的 evidence_id 只能放进 dependency_ids，禁止写入 evidence_ids/primary_id；"
         "没有主体证据的空白区域请删除，不要编造白名单之外的编号。"
     )

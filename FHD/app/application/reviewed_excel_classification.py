@@ -577,7 +577,9 @@ def _classify_semantic_batch(
                 area = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
                 region = {**region, "range": area}
         if drawings:
-            from app.application.reviewed_excel_drawing import expand_range_for_intersecting_drawings
+            from app.application.reviewed_excel_drawing import (
+                expand_range_for_intersecting_drawings,
+            )
 
             grown, did_expand = expand_range_for_intersecting_drawings(
                 review,
