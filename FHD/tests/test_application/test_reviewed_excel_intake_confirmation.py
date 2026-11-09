@@ -553,6 +553,45 @@ def test_spaced_delivery_headers_use_the_sheet_name_as_customer():
     assert not str(dataset.rows[0].values.get("金额") or "").startswith("=")
 
 
+def test_shipment_ledger_borrows_unique_customer_sheet_and_reads_all_blocks():
+    from openpyxl import Workbook
+
+    from app.application.elt.candidate_table import read_delivery_note_business
+
+    workbook = Workbook()
+    named = workbook.active
+    named.title = "贾总"
+    named["A1"] = "送货单"
+    named["A2"] = "产品名称"
+    named["B2"] = "数量"
+    named["A3"] = "色漆A"
+    named["B3"] = 2
+    ledger = workbook.create_sheet("26出货")
+    ledger["A1"] = "日期"
+    ledger["B1"] = "产品名称"
+    ledger["C1"] = "数量"
+    ledger["A2"] = "1"
+    ledger["B2"] = "色漆B"
+    ledger["C2"] = 3
+    ledger["A4"] = "日期"
+    ledger["B4"] = "产品名称"
+    ledger["C4"] = "数量"
+    ledger["A5"] = "2"
+    ledger["B5"] = "色漆C"
+    ledger["C5"] = 5
+    stream = BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    dataset = read_delivery_note_business(stream.getvalue())
+    assert dataset is not None
+    by_sheet = {}
+    for row in dataset.rows:
+        by_sheet.setdefault(row.sheet, []).append(row.values["产品名称"])
+        assert row.values["购买单位"] == "贾总"
+    assert by_sheet["贾总"] == ["色漆A"]
+    assert by_sheet["26出货"] == ["色漆B", "色漆C"]
+
+
 def test_degraded_header_label_is_not_master_data():
     from app.application.elt.targets.helpers import degraded_header_master
 

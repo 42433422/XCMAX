@@ -736,6 +736,35 @@ def test_two_dimensional_selection_rejects_horizontal_cut_and_holes():
             select_drawing_objects(info, "表", boxes)
 
 
+def test_touching_regions_union_when_union_covers_cut_stamp():
+    from app.application.reviewed_excel_classification import (
+        _union_overlapping_drawing_regions,
+    )
+    from app.application.reviewed_excel_drawing import select_drawing_objects
+
+    # Object 86 style: stamp on A116:A117; model split mid-stamp into adjacent blocks.
+    physical = [
+        {"sheet": "考勤", "range": "A111:AF116", "reason": "上块", "drawing_ids": []},
+        {"sheet": "考勤", "range": "A117:AF119", "reason": "下块", "drawing_ids": []},
+    ]
+    stamp = (1, 116, 1, 117)
+    merged = _union_overlapping_drawing_regions(physical, [("考勤", stamp)])
+    assert len(merged) == 1
+    assert merged[0]["range"] == "A111:AF119"
+    review = {
+        "drawing_evidence": [
+            {
+                "sheet": "考勤",
+                "object_id": "86",
+                "from": {"row": 115, "col": 0},
+                "last_row": 117,
+                "last_col": 1,
+            }
+        ]
+    }
+    assert select_drawing_objects(review, "考勤", [(1, 111, 32, 119)])
+
+
 def test_expand_range_covers_cut_drawings_without_loosening_validator():
     from app.application.reviewed_excel_drawing import (
         expand_range_for_intersecting_drawings,

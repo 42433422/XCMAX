@@ -393,6 +393,23 @@ describe('reviewed Excel template', () => {
     expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
     expect((api.analyzeClassification.mock.calls.at(-1)![1] as FormData).has('continue_authorized')).toBe(false)
   })
+  it('adopts a saved model classification instead of resending an unknown analyze', async () => {
+    const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
+    api.classifyExcel.mockResolvedValue({ files: [{ name: '宗南.xlsx', status: 'classified', classification_id: 'new-id', sha256: 'zongnan', version: 'v1', sheets: [sheet] }] })
+    api.analyzeClassification.mockReset()
+    api.recentClassifications.mockReset().mockResolvedValue({ files: [{ classification_id: 'saved-id', sha256: 'zongnan', latest: { version: 'saved-v', confirmed: false, model_status: 'returned', sheets: [sheet] } }] })
+    api.autoSlices.mockReset().mockResolvedValue({ slices: [] })
+    const wrapper = mount(ReviewedExcelTemplate)
+    const input = wrapper.find('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], '宗南.xlsx')] })
+    await input.trigger('change')
+    await wrapper.findAll('button').find(b => b.text() === '开始处理')!.trigger('click'); await flushPromises()
+    await wrapper.findAll('button').find(b => b.text().includes('模型分析已分类'))!.trigger('click'); await flushPromises()
+    expect(api.analyzeClassification).not.toHaveBeenCalled()
+    expect(api.autoSlices).toHaveBeenCalledWith('saved-id', 'saved-v')
+    expect(wrapper.text()).not.toContain('勿重复发送')
+    wrapper.unmount()
+  })
   it('isolates model failures and never retries unknown outcomes automatically', async () => {
     const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
     api.classifyExcel.mockResolvedValue({ files: [1, 2, 3].map((n) => ({ name: `${n}.xlsx`, status: 'classified', classification_id: `id${n}`, version: 'v1', sheets: [sheet] })) })
@@ -543,10 +560,13 @@ describe('reviewed Excel template', () => {
     const sheets = [{ sheet: '报价', labels: ['quotation'], checked_cells: 1, evidence: [], regions: [] }]
     api.classifyExcel.mockResolvedValue({ files: [{ name: '报价.xlsx', status: 'classified', classification_id: 'slices', sha256: 'source-hash', version: 'v1', sheets }] })
     api.analyzeClassification.mockReset().mockResolvedValue({ version: 'v2', model_status: 'returned', sheets })
-    api.recentClassifications.mockReset()
+    api.recentClassifications.mockReset().mockResolvedValue({ files: [] })
     if (checkpoint) {
-      api.analyzeClassification.mockRejectedValueOnce(new Error('模型响应验证失败'))
-      api.recentClassifications.mockResolvedValue({ files: [{ classification_id: 'slices', sha256: checkpoint.source_sha256 || 'source-hash', latest: { version: 'v1' }, checkpoint: { version: 'v1', completed: 0, total: 2, message: '已核对状态', ...checkpoint } }] })
+      const saved = { files: [{ classification_id: 'slices', sha256: checkpoint.source_sha256 || 'source-hash', latest: { version: 'v1', confirmed: false, model_status: 'not_called', sheets }, checkpoint: { version: 'v1', completed: 0, total: 2, message: '已核对状态', ...checkpoint } }] }
+      api.analyzeClassification.mockReset().mockImplementationOnce(async () => {
+        api.recentClassifications.mockResolvedValue(saved)
+        throw new Error('模型响应验证失败')
+      })
     }
     api.autoSlices.mockReset().mockResolvedValue({ slices: sliceResults })
     api.reviewExcel.mockReset().mockResolvedValue(sliceReview('甲'))

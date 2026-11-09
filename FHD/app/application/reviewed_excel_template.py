@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import warnings
+from contextlib import contextmanager
+from contextvars import ContextVar
 from io import BytesIO
 from typing import Any, cast
 from xml.etree.ElementTree import ParseError
@@ -275,6 +277,61 @@ def _run_coroutine(factory):
     return box["value"]
 
 
+_ARCHIVED_REPLAY: ContextVar[Any] = ContextVar("reviewed_excel_archived_replay", default=None)
+
+
+def completion_from_archived_provider(record: dict):
+    """Rebuild a model result from a provider body already stored on the call.
+
+    Used to settle an inflight analyze on another machine. No market request.
+    """
+    import base64
+    import json
+
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_audit import call_state
+    from app.infrastructure.llm.structured_output import extract_json
+
+    if not isinstance(record, dict) or call_state(record) not in {
+        "streaming",
+        "recovered",
+        "unknown",
+        "sent",
+    }:
+        return None
+    raw = record.get("response_base64")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        body = json.loads(base64.b64decode(raw))
+        if not isinstance(body, dict):
+            return None
+        choice = body.get("choices", [])[0]
+        content = str((choice.get("message") or {}).get("content") or "")
+        data = extract_json(content)
+    except (AttributeError, ValueError, TypeError, KeyError, IndexError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict) or not content:
+        return None
+    return LlmAssistResult(
+        used_llm=True,
+        model=str(body.get("model") or record.get("model") or ""),
+        provider=str(body.get("provider") or record.get("provider") or "archived"),
+        data=data,
+        answer=content,
+    )
+
+
+@contextmanager
+def replay_archived_completion(result):
+    """Make the next platform complete return an already archived answer."""
+    token = _ARCHIVED_REPLAY.set(result)
+    try:
+        yield
+    finally:
+        _ARCHIVED_REPLAY.reset(token)
+
+
 def _template_platform_complete(
     messages: list[dict], schema: dict, max_tokens: int, *, owner_id: int | None = None
 ):
@@ -283,6 +340,13 @@ def _template_platform_complete(
     import logging
 
     import httpx
+
+    replayed = _ARCHIVED_REPLAY.get()
+    if replayed is not None:
+        from app.application.reviewed_excel_audit import note_answer
+
+        note_answer(getattr(replayed, "answer", "") or "")
+        return replayed
 
     from app.application.reviewed_excel_audit import (
         ModelRequestNotSent,

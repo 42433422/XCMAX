@@ -7261,6 +7261,70 @@ def test_unknown_outcome_stays_locked_without_market_recovery(review_store, monk
     assert len(keys) == 1 and audit()[-1]["state"] == "unknown"
 
 
+def test_market_completed_call_is_not_resent(review_store, monkeypatch):
+    client, url, data, keys, audit = _unknown_outcome_run(review_store, monkeypatch)
+
+    async def completed(*_args):
+        return {"supported": True, "state": "completed"}
+
+    monkeypatch.setattr(routes, "_lookup_market_call", completed)
+    locked = client.post(url + "/analyze", data=data)
+    assert locked.status_code == 409 and "不会自动重发" in locked.text
+    assert len(keys) == 1 and audit()[-1]["state"] == "unknown" and audit()[-1]["attempts"] == 1
+
+
+def test_archived_unknown_analyze_settles_without_resending_the_key(review_store, monkeypatch):
+    from app.application.reviewed_excel_audit import response_capture
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("合成.xlsx", sample())},
+    ).json()["files"][0]
+    calls = []
+
+    def fake(messages, schema, tokens, **_model_kwargs):
+        from app.application.reviewed_excel_audit import current_call_id
+
+        calls.append(current_call_id())
+        payload = synthetic_document_answer(json.loads(messages[1]["content"]))
+        raw = json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {"content": json.dumps(payload, ensure_ascii=False)},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "model": "synthetic",
+                "provider": "synthetic",
+            },
+            ensure_ascii=False,
+        ).encode()
+        response_capture()(raw, 500, "synthetic")
+        raise ValueError("合成连接在回执归档后中断")
+
+    from app.application import reviewed_excel_template as template_module
+
+    real_complete = template_module._template_platform_complete
+    monkeypatch.setattr(template_module, "_template_platform_complete", fake)
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    form = {"version": item["version"], "sample_authorized": "true", "auto_group": "true"}
+    failed = client.post(url + "/analyze", data=form)
+    assert failed.status_code == 503, failed.text
+    monkeypatch.setattr(template_module, "_template_platform_complete", real_complete)
+    settled = client.post(url + "/analyze", data=form)
+    assert settled.status_code == 200, settled.text
+    body = settled.json()
+    assert body["model_status"] == "returned" and body.get("adopted_saved") is not True
+    assert len(calls) == 1
+    parent = client.post(url + "/analyze", data=form)
+    assert parent.status_code == 200 and parent.json()["adopted_saved"] is True
+    assert parent.json()["version"] == body["version"] and len(calls) == 1
+
+
 def test_market_confirmed_recovery_resends_with_the_same_key(review_store, monkeypatch):
     client, url, data, keys, audit = _unknown_outcome_run(review_store, monkeypatch)
 

@@ -422,6 +422,7 @@ def _reconcile_unassigned_against_regions(latest: dict) -> None:
     falsely block auto-slice even though their disposition is already explicit.
     """
     from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
+    from openpyxl.utils.exceptions import CellCoordinatesException
 
     from app.application.reviewed_excel_evidence import bounded_range
 
@@ -435,9 +436,13 @@ def _reconcile_unassigned_against_regions(latest: dict) -> None:
         for region in sheet.get("regions") or []:
             if not isinstance(region, dict) or not isinstance(region.get("range"), str):
                 continue
+            # Only note/title leftovers the rules already excluded. Model gaps stay
+            # unassigned so an incomplete answer cannot unlock slicing.
+            if region.get("label_source") != "unassigned" or not region.get("exclusion_role"):
+                continue
             try:
                 rectangles.setdefault(name, []).append(bounded_range(region["range"]))
-            except Exception:
+            except (ValueError, TypeError, ReviewedExcelError, CellCoordinatesException):
                 continue
     for item in latest.get("coverage") or []:
         if not isinstance(item, dict):
@@ -452,7 +457,7 @@ def _reconcile_unassigned_against_regions(latest: dict) -> None:
             try:
                 col, row = coordinate_from_string(cell)
                 number = column_index_from_string(col)
-            except Exception:
+            except (ValueError, TypeError, CellCoordinatesException):
                 kept.append(cell)
                 continue
             if any(c1 <= number <= c2 and r1 <= row <= r2 for c1, r1, c2, r2 in rects):
@@ -1048,6 +1053,18 @@ def _abandon_candidate_claim(state, candidate_key, owner, note):
     return record
 
 
+def _returned_child(versions, requested: str):
+    """A model result already saved for this exact parent version, if any."""
+    if not isinstance(versions, list) or not versions:
+        return None
+    latest = versions[-1]
+    if not isinstance(latest, dict) or latest.get("version") == requested:
+        return None
+    if latest.get("model_status") != "returned" or latest.get("parent_version") != requested:
+        return None
+    return latest
+
+
 async def _reviewed_excel_classification_analyze_body(
     classification_id, request, version, auto_group, tenant, owner, model_session
 ):
@@ -1057,6 +1074,9 @@ async def _reviewed_excel_classification_analyze_body(
             old = run.draft_json
             state = load_json(old, {})
             versions = state.get("versions", [])
+            saved = _returned_child(versions, version)
+            if saved is not None:
+                return {"classification_id": classification_id, "adopted_saved": True, **saved}
             if not versions or versions[-1].get("version") != version:
                 raise HTTPException(status_code=409, detail="分类版本已改变，请刷新")
             from app.application.reviewed_excel_audit import normalize_audit
@@ -1089,27 +1109,52 @@ async def _reviewed_excel_classification_analyze_body(
             if checkpoint and checkpoint.get("auto_group", False) != auto_group:
                 raise HTTPException(status_code=409, detail="分组模式已改变，请核对已有批次")
             if checkpoint and checkpoint.get("phase") == "inflight":
-                from app.application.reviewed_excel_audit import is_live, recovery_action
+                from app.application.reviewed_excel_audit import (
+                    call_state,
+                    is_live,
+                    recovery_action,
+                    transition,
+                )
+                from app.application.reviewed_excel_template import (
+                    completion_from_archived_provider,
+                )
 
                 latest = (state.get("model_audit") or [{}])[-1]
                 if is_live(latest.get("request_sha256")):
                     return _analysis_in_flight(classification_id, version, state)
-                lookup = await _lookup_market_call(latest.get("call_id"), owner, model_session)
-                action = recovery_action(latest, lookup)
-                if action == "wait":
-                    return _analysis_in_flight(classification_id, version, state)
-                if action == "locked":
-                    raise HTTPException(
-                        status_code=409,
-                        detail="上次请求结果未知且市场无法确认；不会自动重发。"
-                        "如需放弃并重发，须由用户明确授权（可能重复计费）",
-                    )
-                checkpoint["recovery"] = {
-                    "call_id": latest["call_id"],
-                    "request_sha256": latest["request_sha256"],
-                }
-                checkpoint["phase"] = "ready"
-                logger.info("analyze resumes an unsettled call by same-key market recovery")
+                archived = completion_from_archived_provider(latest)
+                if archived is not None:
+                    # The provider body is already on this classification. Judge it
+                    # here; do not send the same request key to the market again.
+                    if call_state(latest) == "unknown":
+                        transition(latest, "sent")
+                    checkpoint["settle_archived"] = latest.get("request_sha256")
+                    checkpoint["phase"] = "ready"
+                    logger.info("analyze settles an archived provider body without resending")
+                else:
+                    lookup = await _lookup_market_call(latest.get("call_id"), owner, model_session)
+                    action = recovery_action(latest, lookup)
+                    # completed/failed already reached the market. Resending that key
+                    # can bill again when replay is not what the desktop observed.
+                    if action == "resend" and (lookup or {}).get("state") in {
+                        "completed",
+                        "failed",
+                    }:
+                        action = "locked"
+                    if action == "wait":
+                        return _analysis_in_flight(classification_id, version, state)
+                    if action == "locked":
+                        raise HTTPException(
+                            status_code=409,
+                            detail="上次请求结果未知且市场无法确认；不会自动重发。"
+                            "如需放弃并重发，须由用户明确授权（可能重复计费）",
+                        )
+                    checkpoint["recovery"] = {
+                        "call_id": latest["call_id"],
+                        "request_sha256": latest["request_sha256"],
+                    }
+                    checkpoint["phase"] = "ready"
+                    logger.info("analyze resumes an unsettled call by same-key market recovery")
             repair = (checkpoint or {}).get("repair") or {}
             if checkpoint and checkpoint.get("phase") == "failed":
                 if repair.get("exhausted"):
@@ -1190,9 +1235,72 @@ async def _reviewed_excel_classification_analyze_body(
 
             async def audited(draft, prepared, phase, step, function, *args, **kwargs):
                 """Send one claimed call: (result, draft), or a repair continuation dict."""
-                from app.application.reviewed_excel_audit import claim_request, mark_live
-                from app.application.reviewed_excel_template import template_llm_model_label
+                from app.application.reviewed_excel_audit import (
+                    claim_request,
+                    mark_answered,
+                    mark_live,
+                )
+                from app.application.reviewed_excel_template import (
+                    completion_from_archived_provider,
+                    replay_archived_completion,
+                    template_llm_model_label,
+                )
                 from app.build_identity import build_identity
+
+                settle_sha = checkpoint.get("settle_archived")
+                if isinstance(settle_sha, str) and settle_sha:
+                    record = (state.get("model_audit") or [None])[-1]
+                    replayed = (
+                        completion_from_archived_provider(record)
+                        if isinstance(record, dict)
+                        and record.get("request_sha256") == settle_sha
+                        and record.get("phase") == phase
+                        else None
+                    )
+                    if replayed is None:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="已保存的模型回执与当前批次不一致，未重新发送",
+                        )
+                    checkpoint.pop("settle_archived", None)
+                    previous_calls = checkpoint.get("calls_in_round", 0)
+                    try:
+                        with (
+                            bind_model_session(model_session),
+                            replay_archived_completion(replayed),
+                        ):
+                            value = await run_in_threadpool(
+                                function,
+                                *args,
+                                expected_request_sha256=settle_sha,
+                                owner_id=owner,
+                                **kwargs,
+                            )
+                    except (ValueError, TypeError, EltError) as exc:
+                        failed = _settle_failed_step(
+                            db,
+                            run,
+                            state,
+                            draft,
+                            settle_sha,
+                            exc,
+                            stored=True,
+                            step=step,
+                            previous_calls=previous_calls,
+                            classification_id=classification_id,
+                        )
+                        if isinstance(failed, dict):
+                            raise HTTPException(
+                                status_code=409,
+                                detail="已保存的模型回执未通过校验，未重新发送",
+                            ) from None
+                        return failed
+                    _recheck(request, (tenant, owner))
+                    mark_answered(state, settle_sha)
+                    checkpoint["calls_in_round"] = previous_calls + 1
+                    checkpoint["phase"] = "ready"
+                    checkpoint.pop("repair", None)
+                    return value, draft
 
                 request_sha = claim_request(
                     state,
@@ -2065,9 +2173,16 @@ def reviewed_excel_intake_preview(
                 dataset_from_document_text,
                 read_delivery_note_business,
             )
-            from app.application.elt.llm_assist import advise_business_import, etl_llm_enabled
+            from app.application.elt.llm_assist import (
+                advise_business_import,
+                delivery_scoped_workbook_text,
+                etl_llm_enabled,
+            )
 
             original_text = workbook_text(archived)
+            # Database lane reads delivery-scoped sheets first so a multi-ledger
+            # book does not trip the unit budget before shipment pages are seen.
+            business_text = delivery_scoped_workbook_text(original_text)
             from app.application.elt.llm_session_provider import (
                 bind_etl_llm_owner,
                 reset_etl_llm_owner,
@@ -2080,7 +2195,7 @@ def reviewed_excel_intake_preview(
             try:
                 with bind_model_session(model_session):
                     business_llm = (
-                        advise_business_import(original_text) if etl_llm_enabled() else None
+                        advise_business_import(business_text) if etl_llm_enabled() else None
                     )
                     ai_table = None
                     if (
@@ -2113,28 +2228,40 @@ def reviewed_excel_intake_preview(
                             detection_reason = "candidate_headers"
                     from app.application.elt.auto_ingest_service import row_coverage
 
+                    llm_reason = (business_llm.degradation_code if business_llm else "") or (
+                        "no_business_rows"
+                        if business_llm and business_llm.used_llm and ai_table is None
+                        else ""
+                    )
+                    # Deterministic delivery parse after a unit-budget refuse is complete
+                    # coverage, not a silent drop — keep llm_reason for audit, clear degraded.
+                    routing_degraded = bool(business_llm and business_llm.degraded)
+                    if (
+                        detection_reason == "delivery_note_business_rows"
+                        and llm_reason == "ELT_DATABASE_INPUT_EXCEEDS_UNITS"
+                    ):
+                        routing_degraded = False
+                    if ai_table is not None and business_llm is not None:
+                        coverage_rows = list(business_llm.data.get("rows") or [])
+                    elif detection_reason == "delivery_note_business_rows" and chosen_table is not None:
+                        coverage_rows = [
+                            {"source_sheet": row.sheet, "source_row": row.row_number}
+                            for row in chosen_table.rows
+                        ]
+                    else:
+                        coverage_rows = []
                     detection = {
                         "target_type": target_type,
                         "reason": detection_reason,
                         "confirmed": True,
                         "llm_lane": "database",
                         "used_llm": bool(business_llm and business_llm.used_llm),
-                        "degraded": bool(business_llm and business_llm.degraded),
-                        "llm_reason": (business_llm.degradation_code if business_llm else "")
-                        or (
-                            "no_business_rows"
-                            if business_llm and business_llm.used_llm and ai_table is None
-                            else ""
-                        ),
+                        "degraded": routing_degraded,
+                        "llm_reason": llm_reason,
                         "llm_units": int((business_llm.data or {}).get("units") or 0)
                         if business_llm
                         else 0,
-                        "coverage": row_coverage(
-                            original_text,
-                            list(business_llm.data.get("rows") or [])
-                            if ai_table is not None and business_llm
-                            else [],
-                        ),
+                        "coverage": row_coverage(original_text, coverage_rows),
                     }
                     _authorize_intake(request, (tenant, owner), target_type)
                     intake = get_auto_ingest_service()

@@ -839,14 +839,46 @@ function invalidateClassification(item: Classification) {
     emit('stage', 'fragments')
   }
 }
-async function reconcileCheckpoint(item: Classification, current: () => boolean) {
+function applySavedModel(item: Classification, saved: RecentClassification) {
+  const latest = saved.latest
+  if (!latest) return
+  const previousSheets = item.sheets
+  item.classification_id = saved.classification_id
+  item.checkpoint = null
+  item.version = latest.version
+  item.sheets = latest.sheets.map(sheet => {
+    const source = previousSheets.find(entry => entry.sheet === sheet.sheet)
+    return { ...sheet, sheet_state: source?.sheet_state || sheet.sheet_state, processable: source?.processable === false ? false : sheet.processable, processing_message: sheet.processing_message || source?.processing_message }
+  })
+  item.model_status = latest.model_status
+  item.confirmed = !!latest.confirmed
+  item.fragment_links = latest.fragment_links
+  item.logical_documents = latest.logical_documents
+  item.coverage = latest.coverage
+  item.input_messages = latest.input_messages
+  item.input_summaries = latest.input_summaries
+  item.usage_restrictions = latest.usage_restrictions ?? saved.usage_restrictions
+  item.conversion_receipt = latest.conversion_receipt ?? saved.conversion_receipt ?? item.conversion_receipt
+}
+async function reconcileCheckpoint(item: Classification, current: () => boolean): Promise<'adopted' | 'locked' | 'open'> {
+  if (!item.classification_id || !item.sha256) return item.checkpoint?.phase === 'inflight' ? 'locked' : 'open'
   try {
     const result = await templatePreviewApi.recentClassifications() as { files: RecentClassification[] }
-    if (!current()) return
-    const saved = result.files.find(entry => entry.classification_id === item.classification_id && !!item.sha256 && entry.sha256 === item.sha256 && entry.latest?.version === item.version)
-    const checkpoint = saved?.checkpoint
+    if (!current()) return 'locked'
+    const sameSha = result.files.filter(entry => entry.sha256 === item.sha256)
+    const returned = sameSha.filter(entry => entry.latest?.model_status === 'returned')
+    const saved = returned.find(entry => entry.classification_id === item.classification_id) || returned[0]
+    if (saved?.latest && (saved.classification_id !== item.classification_id || saved.latest.version !== item.version || item.model_status !== 'returned')) {
+      applySavedModel(item, saved)
+      return 'adopted'
+    }
+    if (saved?.latest) return 'adopted'
+    const currentSaved = sameSha.find(entry => entry.classification_id === item.classification_id && entry.latest?.version === item.version)
+    const checkpoint = currentSaved?.checkpoint
     if (checkpoint && checkpoint.version === item.version && ['ready', 'paused', 'failed', 'inflight'].includes(checkpoint.phase)) item.checkpoint = checkpoint
-  } catch { /* Keep the unknown-outcome lock when the persisted state cannot be verified. */ }
+    if (item.checkpoint?.phase === 'inflight' || sameSha.some(entry => entry.checkpoint?.phase === 'inflight')) return 'locked'
+    return 'open'
+  } catch { return item.checkpoint?.phase === 'inflight' ? 'locked' : 'open' }
 }
 async function analyzeClassifications(retryItem?: Classification, extendBudget = false, pipeline = false) {
   const current = captureFileOperation()
@@ -854,13 +886,26 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
   if (retryItem && (retryItem.checkpoint?.phase !== 'failed' || ((retryItem.checkpoint.calls_in_round ?? 0) >= retryItem.checkpoint.max_calls && !extendBudget))) return
   busy.value = true; error.value = ''; if (!pipeline) cancelAnalysis.value = false
   const selectedFile = currentClassification.value
-  const pending = classifications.value.filter((item) => (!pipeline || item === selectedFile) && item.status === 'classified' && item.model_status !== 'returned' && (pipeline || !item.confirmed) && item.checkpoint?.phase !== 'inflight' && (retryItem ? item === retryItem : item.checkpoint?.phase !== 'failed'))
+  const pending = classifications.value.filter((item) => (!pipeline || item === selectedFile) && item.status === 'classified' && item.model_status !== 'returned' && (pipeline || !item.confirmed) && (retryItem ? item === retryItem : item.checkpoint?.phase !== 'failed'))
   try {
     for (const [index, item] of pending.entries()) {
       if (cancelAnalysis.value) break
       analysisProgress.value = `模型分析 ${index + 1}/${pending.length}：${item.name}`
       try {
         if (!item.classification_id || !item.version) throw new Error('分类来源或版本缺失，请重新分类')
+        const gate = await reconcileCheckpoint(item, current)
+        if (!current()) return
+        if (gate === 'adopted') {
+          delete analysisErrors.value[item.classification_id || item.name]
+          if (!cancelAnalysis.value) await loadAutoSlices(item, current)
+          continue
+        }
+        if (gate === 'locked') {
+          const key = item.classification_id || item.name
+          const note = '请求结果可能未知，请查看已保存分类核对，勿重复发送'
+          if (!analysisErrors.value[key]?.includes('勿重复发送')) analysisErrors.value[key] = analysisErrors.value[key] ? `${analysisErrors.value[key]}；${note}` : note
+          continue
+        }
         while (!cancelAnalysis.value) {
           const form = new FormData(); form.append('version', item.version)
           form.append('auto_group', 'true')
@@ -888,10 +933,17 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
       } catch (err) { if (!current()) return;
         const message = err instanceof Error ? err.message : '分析失败'
         const key = item.classification_id || item.name
-        analysisErrors.value[key] = message
-        item.checkpoint = { phase: 'inflight', version: item.version || '', completed: item.checkpoint?.completed || 0, total: item.checkpoint?.total || 0, max_calls: item.checkpoint?.max_calls || 1, message: '结果未知，不可重发；需人工核对服务端记录' }
-        await reconcileCheckpoint(item, current)
+        const gate = await reconcileCheckpoint(item, current)
         if (!current()) return
+        if (gate === 'adopted') {
+          delete analysisErrors.value[key]
+          if (!cancelAnalysis.value) await loadAutoSlices(item, current)
+          continue
+        }
+        analysisErrors.value[key] = message
+        if (!item.checkpoint || !['ready', 'paused', 'failed'].includes(item.checkpoint.phase)) {
+          item.checkpoint = { phase: 'inflight', version: item.version || '', completed: item.checkpoint?.completed || 0, total: item.checkpoint?.total || 0, max_calls: item.checkpoint?.max_calls || 1, message: '结果未知，不可重发；需人工核对服务端记录' }
+        }
         if (item.checkpoint?.phase === 'inflight') analysisErrors.value[key] += '；请求结果可能未知，请查看已保存分类核对，勿重复发送'
       }
     }

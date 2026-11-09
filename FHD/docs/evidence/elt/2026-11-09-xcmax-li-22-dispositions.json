@@ -84,6 +84,14 @@
       "path": "sources/uploads/2026.10月综合系列/26年出货单打印/宗南.xlsx",
       "slot_status": "done",
       "disposition": "BUSINESS_APPLIED",
+      "later_desktop_defect": {
+        "request_id": "96ee243738c44a9bab09c3a26f5c67ab",
+        "stage": "模型分析",
+        "symptom": "勿重复发送",
+        "reproduced_on": "another computer, shipped desktop client",
+        "resend": false,
+        "unblock": "settle archived provider body; do not resend completed or failed keys; adopt a saved returned classification"
+      },
       "recognized_type": "delivery",
       "db_target": "shipment_records",
       "db_status": "completed",

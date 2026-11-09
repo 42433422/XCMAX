@@ -564,6 +564,60 @@ def _coordinate_missing(row: dict) -> bool:
     )
 
 
+def _line_mentions(cells: set[str], value: str) -> bool:
+    if not value:
+        return False
+    if value in cells:
+        return True
+    compact = value.replace(",", "")
+    return any(value in cell or compact == cell.replace(",", "") for cell in cells)
+
+
+def _recover_missing_coordinates(
+    rows: list[dict], lines: dict[tuple[str, str], set[str]]
+) -> list[dict]:
+    """Fill blank coordinates only when the product matches one unused archive line.
+
+    Prefer a line that also carries the quantity when the model returned one.
+    Ambiguous or absent matches stay unlocated — never invent sheet/row labels.
+    """
+    used = {
+        (str(row.get("source_sheet") or ""), str(row.get("source_row") or ""))
+        for row in rows
+        if row.get("source_sheet") and str(row.get("source_row") or "").isdigit()
+    }
+    recovered: list[dict] = []
+    for row in rows:
+        if not _coordinate_missing(row):
+            recovered.append(row)
+            continue
+        product = str(row.get("product_name") or "").strip()
+        quantity = str(row.get("quantity") or "").strip()
+        if not product:
+            recovered.append(row)
+            continue
+        product_hits = [
+            key
+            for key, cells in lines.items()
+            if key not in used and _line_mentions(cells, product)
+        ]
+        hits = [
+            key
+            for key in product_hits
+            if not quantity or _line_mentions(lines[key], quantity)
+        ] or product_hits
+        if len(hits) != 1:
+            recovered.append(row)
+            continue
+        sheet, number = hits[0]
+        fixed = dict(row)
+        fixed["source_sheet"] = sheet
+        fixed["source_row"] = number
+        used.add((sheet, number))
+        recovered.append(fixed)
+    return recovered
+
+
 def _uncited_sheets(lines: dict[tuple[str, str], set[str]], rows: list[dict]) -> list[str]:
     """Sheet labels present in the text and absent from the model's rows."""
     cited = {row.get("source_sheet") for row in rows if row.get("source_sheet")}
@@ -634,11 +688,43 @@ def business_units(source: str) -> list[str]:
     return units
 
 
+def delivery_scoped_workbook_text(sheet_text: str) -> str:
+    """Keep delivery-labeled sheets so large ledgers do not drown the database lane.
+
+    Sheets whose title or body names a delivery/shipment form stay; others drop.
+    When nothing qualifies the original text is returned unchanged.
+    """
+    source = str(sheet_text or "")
+    if not source.strip():
+        return source
+    tokens = ("送货单", "发货单", "出货单", "送货", "发货", "出货")
+    chunks: list[str] = []
+    current: list[str] = []
+    keep = False
+    for line in source.splitlines():
+        if line.startswith("# sheet:"):
+            if keep and current:
+                chunks.append("\n".join(current))
+            title = line.removeprefix("# sheet:")
+            current = [line]
+            keep = any(token in title for token in tokens)
+            continue
+        current.append(line)
+        if not keep and any(token in line for token in ("送货单", "发货单", "出货单")):
+            keep = True
+    if keep and current:
+        chunks.append("\n".join(current))
+    return "\n".join(chunks) if chunks else source
+
+
 def advise_business_import(sheet_text: str) -> LlmAssistResult:
     """Import archived sheet rows on the database line, one bounded unit at a time.
 
-    Rows from every unit are merged by source coordinate. If any unit is degraded
-    the whole answer is degraded: a partial table is never offered as complete.
+    Rows from every unit are merged by source coordinate. Callers should pass
+    delivery-scoped text first. A book that still exceeds the per-request unit
+    budget degrades with ``ELT_DATABASE_INPUT_EXCEEDS_UNITS`` so intake can use
+    the deterministic delivery parser instead of hanging on dozens of model calls.
+    If any unit is degraded the whole answer is degraded.
     """
     source = str(sheet_text or "").strip()
     if not source:
@@ -743,6 +829,8 @@ def _advise_business_unit(source: str) -> LlmAssistResult:
             break
         result = nxt
         rows = fresh
+    if result.used_llm and not result.degraded:
+        rows = _recover_missing_coordinates(rows, lines)
     for row in rows:
         if _unit_untraceable(row, lines):
             row["unit_in_source"] = "0"
@@ -792,6 +880,7 @@ __all__ = [
     "advise_row_decisions",
     "advise_workbook_regions",
     "clear_etl_llm_circuit",
+    "delivery_scoped_workbook_text",
     "etl_llm_enabled",
     "etl_llm_mode",
     "etl_llm_timeout_seconds",

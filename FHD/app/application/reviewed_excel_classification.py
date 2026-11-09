@@ -26,15 +26,70 @@ from app.application.reviewed_excel_partition import (
 )
 
 
-def _union_overlapping_drawing_regions(physical: list) -> list:
-    """Union same-sheet overlapping regions when either cites drawings.
+def _regions_overlap_or_touch(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> bool:
+    """Inclusive AABB overlap, or shared-edge contact (no gap). Corner-only kisses stay apart."""
+    ac1, ar1, ac2, ar2 = a
+    bc1, br1, bc2, br2 = b
+    cols_overlap = ac1 <= bc2 and bc1 <= ac2
+    rows_overlap = ar1 <= br2 and br1 <= ar2
+    cols_touch = ac1 <= bc2 + 1 and bc1 <= ac2 + 1
+    rows_touch = ar1 <= br2 + 1 and br1 <= ar2 + 1
+    return (cols_overlap and rows_touch) or (rows_overlap and cols_touch)
+
+
+def _drawing_fully_inside(bounds: tuple[int, int, int, int], box: tuple[int, int, int, int]) -> bool:
+    c1, r1, c2, r2 = bounds
+    bc1, br1, bc2, br2 = box
+    return c1 <= bc1 and r1 <= br1 and c2 >= bc2 and r2 >= br2
+
+
+def _drawing_intersects(bounds: tuple[int, int, int, int], box: tuple[int, int, int, int]) -> bool:
+    c1, r1, c2, r2 = bounds
+    bc1, br1, bc2, br2 = box
+    return c1 <= bc2 and bc1 <= c2 and r1 <= br2 and br1 <= r2
+
+
+def _union_covers_cut_drawing(
+    sheet: str,
+    a: tuple[int, int, int, int],
+    b: tuple[int, int, int, int],
+    drawing_boxes: list[tuple[str, tuple[int, int, int, int]]],
+) -> bool:
+    """True when A∪B fully covers a same-sheet drawing that A or B alone would cut."""
+    uc1, ur1 = min(a[0], b[0]), min(a[1], b[1])
+    uc2, ur2 = max(a[2], b[2]), max(a[3], b[3])
+    union = (uc1, ur1, uc2, ur2)
+    for label, box in drawing_boxes:
+        if label != sheet:
+            continue
+        if _drawing_fully_inside(union, box) and (
+            (
+                _drawing_intersects(a, box) and not _drawing_fully_inside(a, box)
+            )
+            or (
+                _drawing_intersects(b, box) and not _drawing_fully_inside(b, box)
+            )
+        ):
+            return True
+    return False
+
+
+def _union_overlapping_drawing_regions(
+    physical: list,
+    drawing_boxes: list[tuple[str, tuple[int, int, int, int]]] | None = None,
+) -> list:
+    """Union same-sheet overlapping or touching regions when either cites drawings
+    or the union alone would stop a mid-stamp cut.
 
     Models often emit a stamp-cluster rectangle and also separate header-row
-    rectangles inside/across it. Union only uses the model's own declared
-    ranges (no invented coordinates) so stamp packs stop failing as 区域重叠.
+    rectangles inside/across it, or split mid-stamp into adjacent blocks
+    (``A111:AF116`` + ``A117:AF119``). Union only uses the model's own declared
+    ranges (no invented coordinates) so stamp packs stop failing as 区域重叠 or
+    切断绘图对象 when the sibling-expand guard would otherwise keep the cut.
     """
     from openpyxl.utils.cell import get_column_letter
 
+    boxes = list(drawing_boxes or [])
     items: list[dict] = []
     for region in physical:
         if not isinstance(region, dict) or not isinstance(region.get("range"), str):
@@ -67,18 +122,20 @@ def _union_overlapping_drawing_regions(physical: list) -> list:
             j = i + 1
             while j < len(items):
                 b = items[j]
-                if (
-                    b["bounds"] is None
-                    or b.get("sheet") != a["sheet"]
-                    or not (a["drawing"] or b["drawing"])
-                ):
+                if b["bounds"] is None or b.get("sheet") != a["sheet"]:
+                    j += 1
+                    continue
+                if not _regions_overlap_or_touch(a["bounds"], b["bounds"]):
+                    j += 1
+                    continue
+                should_merge = a["drawing"] or b["drawing"] or _union_covers_cut_drawing(
+                    a["sheet"], a["bounds"], b["bounds"], boxes
+                )
+                if not should_merge:
                     j += 1
                     continue
                 ac1, ar1, ac2, ar2 = a["bounds"]
                 bc1, br1, bc2, br2 = b["bounds"]
-                if not (ac1 <= bc2 and bc1 <= ac2 and ar1 <= br2 and br1 <= ar2):
-                    j += 1
-                    continue
                 uc1, ur1 = min(ac1, bc1), min(ar1, br1)
                 uc2, ur2 = max(ac2, bc2), max(ar2, br2)
                 merged = {
@@ -493,7 +550,17 @@ def _classify_semantic_batch(
     if not isinstance(physical, list) or not 1 <= len(physical) <= 100:
         raise ReviewedExcelError("模型区域结构无效，原分类未改变")
     if drawings and not legacy:
-        physical = _union_overlapping_drawing_regions(physical)
+        from app.application.reviewed_excel_drawing import drawing_bounds
+
+        drawing_boxes: list[tuple[str, tuple[int, int, int, int]]] = []
+        for obj in drawings:
+            if not isinstance(obj, dict) or not isinstance(obj.get("sheet"), str):
+                continue
+            try:
+                drawing_boxes.append((obj["sheet"], drawing_bounds(obj)))
+            except (KeyError, TypeError, ReviewedExcelError):
+                continue
+        physical = _union_overlapping_drawing_regions(physical, drawing_boxes)
         if not 1 <= len(physical) <= 100:
             raise ReviewedExcelError("模型区域结构无效，原分类未改变")
     by_dimensions = {s["sheet"]: s for s in review["sheet_overview"]}

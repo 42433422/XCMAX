@@ -255,6 +255,47 @@ def test_business_import_refuses_more_units_than_the_limit_without_calling(monke
     assert out.degraded and out.degradation_code == "ELT_DATABASE_INPUT_EXCEEDS_UNITS"
 
 
+def test_recover_missing_coordinates_only_when_unique():
+    from app.application.elt.llm_assist import (
+        _recover_missing_coordinates,
+        _sheet_line_index,
+    )
+
+    text = (
+        "# sheet:邻居\n"
+        "R4 | 46322 | 108C | 1 | 4\n"
+        "R5 | 46322 | D-10 | 1 | 0.7\n"
+        "R6 | 46322 | 108C | 2 | 8\n"
+    )
+    lines = _sheet_line_index(text)
+    rows = _recover_missing_coordinates(
+        [
+            {"product_name": "D-10", "quantity": "1", "source_sheet": "", "source_row": ""},
+            {"product_name": "108C", "quantity": "1", "source_sheet": "", "source_row": ""},
+            {"product_name": "missing", "quantity": "1", "source_sheet": "", "source_row": ""},
+        ],
+        lines,
+    )
+    assert rows[0]["source_sheet"] == "邻居" and rows[0]["source_row"] == "5"
+    # 108C appears twice — leave unlocated rather than invent.
+    assert rows[1]["source_sheet"] == "" and rows[1]["source_row"] == ""
+    assert rows[2]["source_sheet"] == ""
+
+
+def test_delivery_scoped_workbook_text_keeps_shipment_sheets():
+    from app.application.elt.llm_assist import delivery_scoped_workbook_text
+
+    text = (
+        "# sheet:贾总\nR1 | 送货单\nR2 | 货\n"
+        "# sheet:26材料\nR1 | 原料\n"
+        "# sheet:26出货\nR1 | 台账\nR2 | 货\n"
+        "# sheet:26回款\nR1 | 回款\n"
+    )
+    scoped = delivery_scoped_workbook_text(text)
+    assert "# sheet:贾总" in scoped and "# sheet:26出货" in scoped
+    assert "# sheet:26材料" not in scoped and "# sheet:26回款" not in scoped
+
+
 def test_knowledge_import_does_not_summarize_a_prefix(monkeypatch):
     from app.application.elt import llm_assist
 

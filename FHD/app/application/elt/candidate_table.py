@@ -128,7 +128,23 @@ def _is_quantity(value) -> bool:
 
 
 _DELIVERY_TITLES = ("送货单", "发货单", "出货单")
-_GENERIC_SHEET_TITLES = ("出货", "送货", "发货", "回款", "明细", "编号", "台账", "模板", "合计")
+# Title tokens that mark a shipment ledger even without the full 「…单」 form name.
+_DELIVERY_TITLE_HINTS = ("出货", "送货", "发货")
+_GENERIC_SHEET_TITLES = (
+    "出货",
+    "送货",
+    "发货",
+    "回款",
+    "明细",
+    "编号",
+    "台账",
+    "模板",
+    "合计",
+    "成本",
+    "报价",
+    "材料",
+    "代号",
+)
 _CUSTOMER_LABELS = ("客户名称", "购货单位", "购买单位", "客户")
 _OUTPUT_COLUMNS = {
     "产品名称": "产品名称",
@@ -181,10 +197,24 @@ def _pair_after(raw, labels: tuple[str, ...]) -> str:
 def _delivery_sheet(title: str, occupied: list[tuple[int, tuple]]) -> bool:
     if any(token in title for token in _DELIVERY_TITLES):
         return True
+    if any(token in title for token in _DELIVERY_TITLE_HINTS):
+        return True
     return any(
         any(token in _cell_text(cell) for token in _DELIVERY_TITLES for cell in raw)
         for _, raw in occupied
     )
+
+
+def _workbook_customer_fallback(workbook) -> str:
+    """Unique customer-named sheet in the book, used when a ledger title has no party."""
+    names = [
+        customer
+        for worksheet in workbook.worksheets
+        for customer in [_sheet_customer(worksheet.title)]
+        if customer
+    ]
+    unique = sorted(set(names))
+    return unique[0] if len(unique) == 1 else ""
 
 
 def read_delivery_note_business(source: bytes | bytearray | str | Path) -> ParsedDataset | None:
@@ -192,6 +222,8 @@ def read_delivery_note_business(source: bytes | bytearray | str | Path) -> Parse
 
     Template cleanup blanks those lines. Business rows stay on the filled sheet:
     the banner customer, the column-header row, and the total are not records.
+    A shipment ledger titled only 「出货」 borrows the book's unique customer sheet
+    name when the banner and sheet title do not name a party.
     """
     if isinstance(source, (bytes, bytearray)):
         workbook = load_workbook(BytesIO(source), read_only=True, data_only=False, keep_links=False)
@@ -206,6 +238,7 @@ def read_delivery_note_business(source: bytes | bytearray | str | Path) -> Parse
         for worksheet in cached_book.worksheets
         for number, raw in enumerate(worksheet.iter_rows(values_only=True), start=1)
     }
+    book_customer = _workbook_customer_fallback(workbook)
     rows: list[ParsedRow] = []
     sheet_name = ""
     try:
@@ -216,60 +249,65 @@ def read_delivery_note_business(source: bytes | bytearray | str | Path) -> Parse
                     occupied.append((number, raw))
             if not _delivery_sheet(worksheet.title, occupied):
                 continue
-            header_at = next(
-                (
-                    index
-                    for index, (_, raw) in enumerate(occupied)
-                    if {"产品名称", "数量"} <= {_output_key(cell) for cell in raw}
-                ),
-                None,
-            )
-            if header_at is None:
+            # Multi-block ledgers (repeated 产品名称/数量 headers) keep every block.
+            header_indexes = [
+                index
+                for index, (_, raw) in enumerate(occupied)
+                if {"产品名称", "数量"} <= {_output_key(cell) for cell in raw}
+            ]
+            if not header_indexes:
                 continue
-            customer = ""
-            for _, raw in occupied[:header_at]:
-                customer = _pair_after(raw, _CUSTOMER_LABELS) or customer
-            if not customer:
-                customer = _sheet_customer(worksheet.title)
-            if not customer:
-                continue
-            columns: list[tuple[int, str]] = []
-            for pos, cell in enumerate(occupied[header_at][1]):
-                key = _output_key(cell)
-                if key and key not in {item[1] for item in columns}:
-                    columns.append((pos, key))
-            if not any(key == "产品名称" for _, key in columns):
-                continue
-            if not any(key == "数量" for _, key in columns):
-                continue
-            if not sheet_name:
-                sheet_name = worksheet.title
-            for number, raw in occupied[header_at + 1 :]:
-                if is_footer_or_note_row(raw):
-                    continue
-                values = {"购买单位": customer}
-                stored = cached_rows.get((worksheet.title, number)) or ()
-                for pos, key in columns:
-                    if pos >= len(raw) or is_column_header_label(raw[pos]):
-                        continue
-                    cell = raw[pos]
-                    if isinstance(cell, str) and cell.startswith("="):
-                        cell = stored[pos] if pos < len(stored) else None
-                        if isinstance(cell, bool) or not isinstance(cell, (int, float)):
-                            continue
-                    if _cell_text(cell):
-                        values[key] = cell
-                product = _cell_text(values.get("产品名称"))
-                if not product or not _is_quantity(values.get("数量")):
-                    continue
-                rows.append(
-                    ParsedRow(
-                        sheet=worksheet.title,
-                        row_number=number,
-                        values=values,
-                        provenance={"source": "reviewed_candidate", "parser": "delivery_note"},
-                    )
+            for block, header_at in enumerate(header_indexes):
+                next_header = (
+                    header_indexes[block + 1]
+                    if block + 1 < len(header_indexes)
+                    else len(occupied)
                 )
+                customer = ""
+                banner_from = 0 if block == 0 else header_indexes[block - 1] + 1
+                for _, raw in occupied[banner_from:header_at]:
+                    customer = _pair_after(raw, _CUSTOMER_LABELS) or customer
+                if not customer:
+                    customer = _sheet_customer(worksheet.title) or book_customer
+                if not customer:
+                    continue
+                columns: list[tuple[int, str]] = []
+                for pos, cell in enumerate(occupied[header_at][1]):
+                    key = _output_key(cell)
+                    if key and key not in {item[1] for item in columns}:
+                        columns.append((pos, key))
+                if not any(key == "产品名称" for _, key in columns):
+                    continue
+                if not any(key == "数量" for _, key in columns):
+                    continue
+                if not sheet_name:
+                    sheet_name = worksheet.title
+                for number, raw in occupied[header_at + 1 : next_header]:
+                    if is_footer_or_note_row(raw):
+                        continue
+                    values = {"购买单位": customer}
+                    stored = cached_rows.get((worksheet.title, number)) or ()
+                    for pos, key in columns:
+                        if pos >= len(raw) or is_column_header_label(raw[pos]):
+                            continue
+                        cell = raw[pos]
+                        if isinstance(cell, str) and cell.startswith("="):
+                            cell = stored[pos] if pos < len(stored) else None
+                            if isinstance(cell, bool) or not isinstance(cell, (int, float)):
+                                continue
+                        if _cell_text(cell):
+                            values[key] = cell
+                    product = _cell_text(values.get("产品名称"))
+                    if not product or not _is_quantity(values.get("数量")):
+                        continue
+                    rows.append(
+                        ParsedRow(
+                            sheet=worksheet.title,
+                            row_number=number,
+                            values=values,
+                            provenance={"source": "reviewed_candidate", "parser": "delivery_note"},
+                        )
+                    )
     finally:
         workbook.close()
         cached_book.close()

@@ -1,17 +1,19 @@
 {
-  "at": "2026-11-09T03:43:03+08:00",
-  "git_sha": "62fc922d8",
+  "at": "2026-11-09T13:09:00+08:00",
+  "git_sha_base": "b1b069c7f",
   "file": "邻居杨总.xlsx",
-  "disposition": "PARTIAL",
-  "not_pass_reason": "ingest_status=partial with 6 invalid rows excluded from business tables",
-  "db_rows": "new=128 update=0 skip=8 error=6 executed=128 records=128",
-  "db_status": "completed",
-  "ingest_status": "partial",
-  "template_id": "db:35",
-  "prior_compare": {
-    "previous": "new=60 error=15 executed=0 preview_ready",
-    "now": "new=128 update=0 skip=8 error=6 executed=128 records=128",
-    "improvement": "more business rows executed (128) and fewer errors (6); still PARTIAL≠PASS"
+  "disposition": "BUSINESS_APPLIED",
+  "prior_partial": {
+    "was": "PARTIAL ingest_status=partial new=128 error=6",
+    "root_cause": "ELT_SOURCE_COORDINATE_MISSING on uncited LLM rows"
   },
-  "error_rows_policy": "invalid rows kept out of business tables; knowledge doc retained"
+  "fix": {
+    "ingest_status": "applied",
+    "db_status": "completed",
+    "db_rows": "new=119 update=0 skip=13 error=0 executed=119 records=119",
+    "db_used_llm": true,
+    "db_degraded": false,
+    "template_saved": true
+  },
+  "fix_note": "coordinate recovery fills unique product+quantity archive lines only; no invented coords; error=0 so PARTIAL≠PASS cleared"
 }
