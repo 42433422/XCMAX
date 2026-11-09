@@ -468,6 +468,7 @@ class DatasetRagApplicationService:
         metadata_filter: dict[str, Any] | None = None,
         rerank: bool = False,
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
+        include_sheet_context: bool = False,
     ) -> dict[str, Any]:
         return self._retrieval.query(
             dataset_id=dataset_id,
@@ -478,6 +479,7 @@ class DatasetRagApplicationService:
             metadata_filter=metadata_filter,
             rerank=rerank,
             access_context=access_context,
+            include_sheet_context=include_sheet_context,
         )
 
     def knowledge_graph(

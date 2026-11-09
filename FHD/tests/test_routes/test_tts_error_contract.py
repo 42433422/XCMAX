@@ -16,6 +16,7 @@ from app.fastapi_routes import ai_assistant_tts
 
 @pytest.fixture
 def client(monkeypatch):
+    monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "0")
     app = FastAPI()
     app.include_router(ai_assistant_tts.router)
     monkeypatch.setattr(tts_facade, "trigger_common_tts_warmup", lambda: None)
@@ -24,6 +25,16 @@ def client(monkeypatch):
     monkeypatch.setattr(tts_service, "_EDGE_BLOCKED_UNTIL", 0.0)
     monkeypatch.setattr(mimo_tts_service, "is_configured", lambda: False)
     return TestClient(app, raise_server_exceptions=False)
+
+
+def test_platform_only_does_not_fall_back_to_edge(client, monkeypatch):
+    monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "1")
+    monkeypatch.setattr(ai_assistant_tts, "_platform_mimo_payload", lambda *args: None)
+    fallback = MagicMock()
+    monkeypatch.setattr(tts_facade, "synthesize_to_data_uri", fallback)
+    response = client.post("/api/tts", json={"text": "你好"})
+    assert response.status_code == 503
+    fallback.assert_not_called()
 
 
 @pytest.mark.parametrize(

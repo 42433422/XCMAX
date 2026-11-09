@@ -424,6 +424,7 @@ class TestEdgeUpstreamFailure:
         from app.fastapi_routes import ai_assistant_tts
 
         clock = [1000.0]
+        monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "0")
         monkeypatch.setattr(tts.time, "monotonic", lambda: clock[0])
         monkeypatch.setenv("XCAGI_TTS_EDGE_COOLDOWN_S", "30.5")
         monkeypatch.setattr(tts_facade, "trigger_common_tts_warmup", lambda: None)
@@ -458,6 +459,7 @@ class TestEdgeUpstreamFailure:
         class ForbiddenHandshake(Exception):
             status = 403
 
+        monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "0")
         monkeypatch.setenv("XCAGI_TTS_EDGE_COOLDOWN_S", cooldown)
         monkeypatch.setattr(tts.time, "monotonic", lambda: 1000.0)
         monkeypatch.setattr(tts_facade, "trigger_common_tts_warmup", lambda: None)

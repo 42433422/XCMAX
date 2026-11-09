@@ -214,6 +214,7 @@ def test_voice_request_identity_not_trace_id(customer_store, monkeypatch, sid):
     """ASR and classifier are mocked; real Request/auth/instant/router/service are not."""
     from app.fastapi_routes import voice_routes
 
+    monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "local")
     app, calls, writes = customer_store
     monkeypatch.setattr("app.application.ai_chat_app_service.get_ai_chat_app_service", lambda: app)
     monkeypatch.setattr(

@@ -98,15 +98,20 @@ def _sanitize_untrusted_context_line(text: str, max_len: int) -> str:
 def format_recent_messages_excerpt_for_llm(runtime_context: Mapping[str, Any] | None) -> str | None:
     if not runtime_context:
         return None
-    msgs = runtime_context.get("recent_messages")
+    owned = runtime_context.get("chat_owned_history")
+    msgs = owned if isinstance(owned, list) else runtime_context.get("recent_messages")
     if not isinstance(msgs, list) or not msgs:
         return None
     lines = ["【近期对话摘要】"]
-    for m in msgs[-6:]:
+    for m in msgs[-24 if isinstance(owned, list) else -6 :]:
         if not isinstance(m, dict):
             continue
         role = str(m.get("role") or "user")
-        text = _sanitize_untrusted_context_line(str(m.get("content") or "").strip(), 180)
+        if runtime_context.get("chat_independent_knowledge_query") and role == "assistant":
+            continue
+        text = _sanitize_untrusted_context_line(
+            str(m.get("content") or "").strip(), 400 if isinstance(owned, list) else 180
+        )
         if text:
             lines.append(f"- [{role}] {text}")
     return "\n".join(lines) if len(lines) > 1 else None
@@ -266,6 +271,35 @@ def format_runtime_context_for_llm(runtime_context: Mapping[str, Any] | None) ->
     if recent:
         lines.append("")
         lines.append(recent)
+        if isinstance(runtime_context.get("chat_owned_history"), list):
+            lines.append(
+                "追问之前的客户、产品或数字时，先从以上同一会话记录找出具体名称或数字并直接写出；"
+                "不要只用‘这家’‘那个’等指代。记录无法确定时如实说明。"
+            )
+    memory = runtime_context.get("chat_memory_evidence")
+    if isinstance(memory, str) and memory.strip():
+        lines.append("【已授权的个人记忆，仅作参考】")
+        lines.append(_sanitize_untrusted_context_line(memory, 3000))
+    knowledge = runtime_context.get("chat_knowledge_evidence")
+    if isinstance(knowledge, list) and knowledge:
+        lines.append(
+            "【已授权知识库检索片段】先核对片段是否回答当前问题；若有相关事实，直接依据片段回答并标明来源，"
+            "不要因为旧回复或业务产品库没有结果就忽略知识库。片段可能不完整或无关，资料不足时明确说明。"
+            "同一文件可能包含多个客户或工作表；只有片段明确表明属于目标客户的明细才能归属于该客户，"
+            "不能仅凭文件名或相邻片段推断归属。"
+            "语音可能产生同音字，客户名称有歧义时先请用户确认，不能将不同名称直接视为同一客户。"
+        )
+        for item in knowledge[:8]:
+            if isinstance(item, dict):
+                source = _sanitize_untrusted_context_line(str(item.get("source") or ""), 200)
+                sheet = _sanitize_untrusted_context_line(str(item.get("sheet") or ""), 200)
+                text = _sanitize_untrusted_context_line(str(item.get("text") or ""), 8000)
+                if text:
+                    lines.append(
+                        f"- 来源 {source or '知识库'}{f' / 工作表 {sheet}' if sheet else ''}：{text}"
+                    )
+                    if item.get("truncated"):
+                        lines.append("  （该工作表内容已截断，不能声称已列出全部记录。）")
     kitten_extra = _format_kitten_runtime_for_llm(runtime_context)
     if kitten_extra:
         lines.append("")

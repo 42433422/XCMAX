@@ -311,6 +311,34 @@ async def test_stream_cancellation_during_gate_never_enters_planner(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_ambiguous_spoken_customer_is_confirmed_before_issue_or_tool(monkeypatch):
+    from app.application.planner_compat.application import FastPaths
+    from app.application.planner_compat.streaming import CompatStream
+    from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody
+
+    monkeypatch.setattr(
+        "app.application.ai_chat.chat_evidence.prepare_chat_evidence",
+        lambda *_: {"recent_messages": [{"role": "user", "content": "宗南产品有哪些"}]},
+    )
+    issue, slot, backend = AsyncMock(), AsyncMock(), Mock()
+    stream = CompatStream(
+        admission=SimpleNamespace(context=lambda *args: {}),
+        fast_paths=FastPaths(issue, Mock(), slot, AsyncMock()),
+        persona=Mock(),
+        trace=lambda payload, **_: payload,
+        encode_event=lambda event: str(event).encode(),
+        resolve_tier=Mock(),
+        backend=backend,
+        logger=Mock(),
+    ).run(request(72), XcagiCompatChatBody(message="有个问题，帮我查一下中南那个账单"))
+    events = [event async for event in stream]
+    assert "宗南" in b"".join(events).decode()
+    issue.assert_not_called()
+    slot.assert_not_called()
+    backend.assert_not_called()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "message", ["列出所有产品", "不要删除客户", "导出库存为Excel文件", "照例核对一下"]
 )

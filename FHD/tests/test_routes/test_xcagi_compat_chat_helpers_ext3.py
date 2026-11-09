@@ -990,14 +990,13 @@ class TestXcagiPlannerStreamBytesAdditional:
         body = self._make_body(message="查询数据库", db_read_token="valid")
         with (
             _planner_stream_context(return_value=iter([{"type": "token", "text": "result"}])) as (
-                _planner,
-                mock_tier,
+                planner,
+                _mock_tier,
             ),
         ):
             list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        # runtime_context_with_tier should be called with context that has chat_db_read_authorized
-        call_args = mock_tier.call_args
-        ctx = call_args[0][0]
+        # Evidence preparation copies the context; assert what reaches the planner.
+        ctx = planner.call_args.kwargs["runtime_context"]
         assert ctx.get("chat_db_read_authorized") is True
 
 

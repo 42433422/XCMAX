@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -80,6 +81,22 @@ class CompatChatApplication:
         context = self.admission.context(request, body.context, body.message)
         self.assert_access(request)
         context = self.admission.with_tier(context, self.resolve_tier(request))
+        from app.application.ai_chat.chat_evidence import (
+            _CUSTOMER_LOOKUP,
+            customer_name_question,
+            prepare_chat_evidence,
+        )
+
+        if _CUSTOMER_LOOKUP.search(body.message):
+            enriched = await asyncio.to_thread(
+                prepare_chat_evidence, request, context, body.message
+            )
+            question = customer_name_question(body.message, enriched)
+            if question:
+                return self._attach(
+                    self.admission.reply(question),
+                    ChatTurn(body, body.message, context, "compat_chat_customer_disambiguation"),
+                )
         issue = await self.fast_paths.issue(request, context, body.message)
         if issue is not None:
             return self._attach(
@@ -94,6 +111,14 @@ class CompatChatApplication:
         slot = await self.fast_paths.slot(
             body.message, request=request, user_id=str(body.user_id or "default")
         )
+        from app.application.ai_chat.chat_evidence import (
+            prepare_chat_evidence,
+            use_contextual_reply,
+        )
+
+        context = await asyncio.to_thread(prepare_chat_evidence, request, context, body.message)
+        if isinstance(slot, dict) and use_contextual_reply(slot, context, body.message):
+            slot = None
         if isinstance(slot, dict) and slot.get("response"):
             channel = (
                 "compat_chat_agent_tool" if slot.get("agent_tool_dispatch") else "compat_chat_slot"

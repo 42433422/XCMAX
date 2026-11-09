@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+from contextlib import nullcontext
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
@@ -39,6 +42,145 @@ def client(monkeypatch):
         AsyncMock(return_value=(None, "unavailable", {})),
     )
     return TestClient(app, raise_server_exceptions=False)
+
+
+def test_platform_tts_uses_current_users_xiaomi_credentials(monkeypatch):
+    from modstore_server import llm_key_resolver, models
+
+    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext("db"))
+
+    def resolve(db, user, provider):
+        assert (db, user, provider) == ("db", 42, "xiaomi")
+        return "account-key", "https://example.test/v1", "user_override"
+
+    monkeypatch.setattr(llm_key_resolver, "resolve_credentials", resolve)
+    synth = AsyncMock(return_value=(b"RIFFaudio", "", {"mime": "audio/wav"}))
+    monkeypatch.setattr(mimo_tts_service, "synthesize_mimo_tts_async", synth)
+    app = FastAPI()
+
+    @app.post("/tts")
+    async def unified(body: WorkbenchUnifiedTtsBody):
+        return await speech_api.workbench_unified_tts(
+            body, SimpleNamespace(id=42), ports=speech_api.SpeechPorts(edge=None)
+        )
+
+    response = TestClient(app).post("/tts", json={"text": "你好"})
+    assert response.status_code == 200
+    assert response.headers["x-tts-voice"] == "%E5%86%B0%E7%B3%96"
+    assert synth.await_args.kwargs["credentials"] == (
+        "account-key",
+        "https://example.test/v1",
+    )
+
+
+def test_mimo_asr_uses_audio_protocol_and_current_account(monkeypatch):
+    from modstore_server import llm_key_resolver, models
+
+    monkeypatch.delenv("MODSTORE_MIMO_ASR_ENABLED", raising=False)
+    monkeypatch.delenv("MODSTORE_MIMO_ASR_USER_IDS", raising=False)
+    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext("db"))
+    monkeypatch.setattr(
+        llm_key_resolver,
+        "resolve_credentials",
+        lambda db, uid, p: ("key", "https://example.test/v1", "user_override"),
+    )
+    response = httpx.Response(
+        200,
+        json={"choices": [{"message": {"content": "你好"}}]},
+        request=httpx.Request("POST", "https://example.test"),
+    )
+    post = AsyncMock(return_value=response)
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, *args, **kwargs):
+            return await post(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", Client)
+    import io
+    import wave
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(b"\0\0" * 1600)
+    result = asyncio.run(speech_api.mimo_asr(buffer.getvalue(), "zh", 42))
+    assert result["text"] == "你好"
+    assert post.await_args.kwargs["json"]["model"] == "mimo-v2.5-asr"
+    assert post.await_args.kwargs["json"]["messages"][0]["content"][0]["input_audio"][
+        "data"
+    ].startswith("data:audio/wav;base64,")
+
+
+def test_mimo_asr_disabled_without_billing_configuration(monkeypatch):
+    monkeypatch.setenv("MODSTORE_MIMO_ASR_ENABLED", "0")
+    with pytest.raises(speech_api.HTTPException) as exc:
+        asyncio.run(speech_api.mimo_asr(b"RIFF0000WAVEaudio", "zh", 42))
+    assert exc.value.status_code == 503
+
+
+def test_mimo_asr_does_not_spend_quota_for_other_accounts(monkeypatch):
+    monkeypatch.setenv("MODSTORE_MIMO_ASR_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_MIMO_ASR_USER_IDS", "42")
+    with pytest.raises(speech_api.HTTPException) as exc:
+        asyncio.run(speech_api.mimo_asr(b"audio", "zh", 43))
+    assert exc.value.status_code == 503
+
+
+def test_asr_workbench_route_passes_authenticated_user(monkeypatch):
+    import io
+
+    from fastapi import UploadFile
+
+    from modstore_server.workbench_api import workbench_asr
+
+    stub = AsyncMock(return_value={"text": "你好", "provider": "mimo"})
+    monkeypatch.setattr(speech_api, "mimo_asr", stub)
+    upload = UploadFile(filename="test.wav", file=io.BytesIO(b"voice"))
+    result = asyncio.run(workbench_asr(upload, "zh", SimpleNamespace(id=42)))
+    assert result["text"] == "你好"
+    stub.assert_awaited_once_with(b"voice", "zh", 42)
+
+
+def test_mimo_required_does_not_fall_back_to_edge(monkeypatch):
+    synth = AsyncMock(return_value=(None, "missing mimo api key", {}))
+    monkeypatch.setattr(mimo_tts_service, "synthesize_mimo_tts_async", synth)
+    with pytest.raises(speech_api.HTTPException) as exc:
+        asyncio.run(
+            speech_api.workbench_unified_tts(
+                WorkbenchUnifiedTtsBody(text="你好", require_mimo=True),
+                None,
+                ports=speech_api.SpeechPorts(edge=object()),
+            )
+        )
+    assert exc.value.status_code == 503
+
+
+def test_mimo_asr_rejects_oversized_duration_before_network(monkeypatch):
+    import io
+    import wave
+
+    monkeypatch.setenv("MODSTORE_MIMO_ASR_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_MIMO_ASR_USER_IDS", "42")
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(b"\0\0" * (120 * 16000 + 1))
+    with pytest.raises(speech_api.HTTPException) as exc:
+        asyncio.run(speech_api.mimo_asr(buffer.getvalue(), "zh", 42))
+    assert exc.value.status_code == 422
 
 
 @pytest.mark.parametrize("path", ["/tts", "/edge", "/edge/stream"])
@@ -113,7 +255,12 @@ def test_internal_mimo_bug_is_not_hidden_by_fallback(client, monkeypatch):
 
 @pytest.mark.parametrize(
     "data",
-    [None, [], {"choices": [None]}, {"choices": [{"message": {"audio": {"data": "YWJj!!!!"}}}]}],
+    [
+        None,
+        [],
+        {"choices": [None]},
+        {"choices": [{"message": {"audio": {"data": "YWJj!!!!"}}}]},
+    ],
 )
 @pytest.mark.parametrize("asynchronous", [False, True])
 async def test_mimo_malformed_response_is_rejected(monkeypatch, data, asynchronous):

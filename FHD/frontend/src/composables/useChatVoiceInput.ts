@@ -5,6 +5,7 @@ import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 const MIN_RECORD_MS = 300
 const MAX_RECORD_MS = 60_000
+const TRANSCRIPTION_TIMEOUT_MS = 90_000
 const VOICE_PREFERRED_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4', 'audio/wav']
 type VoiceState = 'idle' | 'requesting' | 'recording' | 'transcribing' | 'error'
 
@@ -46,7 +47,7 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
     if (voiceState.value === 'requesting') return '等待麦克风授权…'
     if (voiceState.value === 'recording') return `松开发送 ${voiceElapsedSecs.value.toFixed(1)}s`
     if (voiceState.value === 'transcribing') {
-      return voiceColdHint.value || !voiceModelWarm.value ? '首次识别需加载模型…' : '识别中...'
+      return '识别中...'
     }
     return voiceState.value === 'error' ? voiceErrorText.value || '语音失败' : '按住说话'
   })
@@ -54,16 +55,14 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
     if (voiceState.value === 'requesting') return '正在等待麦克风权限；松开或移出按钮可取消'
     if (voiceState.value === 'recording') return '松开立即识别并填入输入框；移出按钮可取消本次录音'
     if (voiceState.value === 'transcribing') {
-      return voiceColdHint.value || !voiceModelWarm.value
-        ? '首次识别需加载语音模型，可能需要数秒；这不是服务断开'
-        : '正在把语音转成文字...'
+      return '正在把语音转成文字...'
     }
     return voiceState.value === 'error' ? voiceErrorText.value || '语音识别失败' : '按住这里说话，松开后会自动转写成文字填入输入框'
   })
   const voiceFeedbackText = computed(() => {
     if (voiceState.value === 'error') return voiceErrorText.value || '语音识别失败，请重试'
     if (voiceState.value === 'transcribing' && (voiceColdHint.value || !voiceModelWarm.value)) {
-      return '首次识别需加载模型，请稍候（通常数秒）；语音可用时不代表业务健康检查失败'
+      return '语音识别正在处理，请稍候'
     }
     return ''
   })
@@ -117,7 +116,7 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
   async function submitVoiceBlob(blob: Blob, isCurrent: () => boolean) {
     const controller = new AbortController()
     transcription = controller
-    const timeout = window.setTimeout(() => controller.abort(), MAX_RECORD_MS)
+    const timeout = window.setTimeout(() => controller.abort(), TRANSCRIPTION_TIMEOUT_MS)
     voiceColdHint.value = !voiceModelWarm.value
     voiceState.value = 'transcribing'
     try {
@@ -150,7 +149,7 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
       try { input?.setSelectionRange(input.value.length, input.value.length) } catch { /* unsupported input */ }
     } catch (error) {
       if (!isCurrent()) return
-      const message = controller.signal.aborted ? '语音识别超时，请重试' : error instanceof Error ? error.message : '语音识别失败'
+      const message = controller.signal.aborted ? '语音识别超时，结果可能仍在处理，请稍后核对' : error instanceof Error ? error.message : '语音识别失败'
       setVoiceError(message.length > 48 ? `${message.slice(0, 48)}...` : message)
     } finally {
       window.clearTimeout(timeout)
