@@ -354,13 +354,12 @@ class PreflightTest(unittest.TestCase):
         self.assertNotIn('SECRET', str(records))
 
     def test_no_container_started_without_cleanup_time_budget(self):
-        namespace = {'time': time, 'subprocess': subprocess, 'probe_deadline': 20}
-        function = 'def container_command' + PROBE.split('def container_command', 1)[1].split('def container_restore_candidates', 1)[0]
-        exec(function, namespace)
-        with patch('time.monotonic', return_value=1), patch('subprocess.run') as run:
-            with self.assertRaises(subprocess.TimeoutExpired):
-                namespace['container_command'](['docker', 'run'])
-            run.assert_not_called()
+        import itertools
+        clock = itertools.chain([0], itertools.repeat(130))
+        with patch('time.monotonic', side_effect=lambda: next(clock)):
+            code, _, calls = self.run_probe(self.container_setup, command_hook=self.container_hook)
+        self.assertEqual(code, 1)
+        self.assertFalse(any(c[:2] == ['docker', 'run'] for c in calls))
 
     def test_cleanup_failure_is_not_success(self):
         for failure in ('exit', 'timeout'):
@@ -385,7 +384,7 @@ def fake_run(args, **kwargs):
         print('cleaned', flush=True)
         return subprocess.CompletedProcess(args, 0)
     print('started', flush=True)
-    time.sleep(60)
+    signal.pause()
 subprocess.run = fake_run
 container_command(['docker', 'run'], version=True)
 """
