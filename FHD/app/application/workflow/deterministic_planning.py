@@ -311,18 +311,49 @@ class DeterministicPlanner:
             and bool(route.get("payload"))
         ):
             intent = "sales_write"
-            todo = ["解析销售到收款闭环写载荷", "高风险审批后执行销售闭环", "返回执行结果"]
+            payload = route["payload"]
+            staged = payload.get("acceptance_profile") == "sales-order-v1"
+            todo = (
+                [
+                    "核对当前企业的客户、商品和可用库存",
+                    "生成待确认销售订单",
+                    "人工批准后出库、发货并登记会计凭证",
+                    "没有到账凭证时不登记收款",
+                    "按已提交数据导出结果",
+                ]
+                if staged
+                else ["解析销售到收款闭环写载荷", "高风险审批后执行销售闭环", "返回执行结果"]
+            )
             nodes.append(
                 WorkflowNode(
                     node_id="sales_execute_closed_loop",
                     tool_id="sales",
                     action="execute_closed_loop",
-                    params={"payload": route["payload"]},
+                    params={"payload": payload},
                     risk="high",
                     idempotent=True,
-                    description="执行销售到收款闭环",
+                    description="核对后经批准执行销售出库与会计凭证"
+                    if staged
+                    else "执行销售到收款闭环",
                 )
             )
+            if staged and "导出" in message and "reports" in tool_registry:
+                nodes.append(
+                    WorkflowNode(
+                        node_id="export_sales",
+                        tool_id="reports",
+                        action="export",
+                        params={
+                            "report_type": "sales",
+                            "group_by": "product",
+                            "filename": "销售订单验收",
+                        },
+                        risk="low",
+                        idempotent=True,
+                        depends_on=["sales_execute_closed_loop"],
+                        description="按已提交销售数据导出结果",
+                    )
+                )
         if not nodes and (
             any(k in lower for k in ("db", "database"))
             or any(k in message for k in ("数据库", "查数据库", "读数据库"))

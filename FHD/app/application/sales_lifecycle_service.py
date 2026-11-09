@@ -12,6 +12,7 @@ W1-02 独占文件：只操作 ``SalesOrder.state`` 正交维度
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -114,8 +115,8 @@ class SalesLifecycleService:
         """取消订单（仅未履行且未开票的单允许）。
 
         履行 / 开票为独立维度：一旦发生履行（delivered/returned）或开票
-        （invoice_status != not_invoiced），取消即被拒绝，且本命令不触碰
-        履行 / 开票 / 收款任何字段。
+        （invoice_status != not_invoiced），取消即被拒绝。尚未出库的预留
+        会退回可用库存；开票和收款字段仍不在这里改写。
         """
         order = self._get_order(order_id)
         if order.state == STATE_CANCEL:
@@ -128,4 +129,41 @@ class SalesLifecycleService:
             raise SalesLifecycleCancelBlocked(
                 f"订单 {order.id} 已开票（{order.invoice_status}），不可取消"
             )
+        self._release_open_reservations(order)
         return self._apply(order, STATE_CANCEL, "cancel_date")
+
+    def _release_open_reservations(self, order: SalesOrder) -> None:
+        """未出库的预留随取消退回可用库存；找不到预留流水时拒绝取消。"""
+        from app.db.models import InventoryTransaction
+        from app.domain.shared_services.inventory_service import InventoryService
+
+        inventory = InventoryService()
+        for item in list(order.items or []):
+            reserved = Decimal(str(item.reserved_quantity or 0))
+            if reserved <= 0:
+                continue
+            reservation = (
+                self._session.query(InventoryTransaction)
+                .filter(
+                    InventoryTransaction.sales_order_item_id == item.id,
+                    InventoryTransaction.transaction_type == "reserve",
+                )
+                .order_by(InventoryTransaction.id.desc())
+                .first()
+            )
+            if reservation is None or item.product_id is None:
+                raise SalesLifecycleCancelBlocked(f"订单 {order.id} 的预留流水缺失，拒绝取消")
+            released = inventory.release_for_order(
+                product_id=int(item.product_id),
+                warehouse_id=int(reservation.warehouse_id),
+                quantity=float(reserved),
+                sales_order_id=int(order.id),
+                sales_order_item_id=int(item.id),
+                batch_no=reservation.batch_no,
+                location_id=reservation.location_id,
+                remark="取消未履约订单，释放预留",
+                db=self._session,
+            )
+            if not released.get("success"):
+                raise SalesLifecycleCancelBlocked(str(released.get("message") or "释放预留失败"))
+            item.reserved_quantity = Decimal("0")
