@@ -252,6 +252,18 @@
       "validation": "8 result security regressions and layout tests passed within 95 combined tests; traversal, parent/leaf links, parent swap and interrupted-write preservation covered.",
       "follow_up": "Keep managed result path resolution in this security boundary; future large refactor needs separate behavior-preserving review. This entry is not reviewer approval.",
       "review_owner": "@42433422"
+    },
+    "FHD/app/application/reviewed_excel_classification.py": {
+      "base_file": "FHD/app/application/reviewed_excel_classification.py",
+      "base_blob": "5c4251a1d6861948d010fcb08debcdffdf4e6dfc",
+      "head_blob": "b33f4d5b837165a1e68a465e606f830a89572b21",
+      "before_lines": 787,
+      "after_lines": 801,
+      "reason": "Model batch decision must distinguish unsent sheets from uncertainty in the current packet.",
+      "boundary": "Only request context and replay of previously archived request digests; original model false decisions and source boundary verification remain authoritative.",
+      "validation": "Multi-sheet packet scope and old/new archived request replay tests, plus classification contracts and provider failure regressions.",
+      "follow_up": "Keep model request context aligned with the packet contract; this entry requests human architecture review and is not approval.",
+      "review_owner": "@42433422"
     }
   }
 }

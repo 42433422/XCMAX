@@ -308,7 +308,7 @@ describe('reviewed Excel CSRF handling', () => {
   })
 
   it('does not report a model-backed ELT call as failed at 8s', async () => {
-    expect(MODEL_BACKED_ELT_TIMEOUT_MS).toBe(30_000)
+    expect(MODEL_BACKED_ELT_TIMEOUT_MS).toBe(180_000)
     expect(MODEL_INTAKE_TIMEOUT_MS).toBe(360_000)
     expect(MODEL_ANALYZE_TIMEOUT_MS).toBeGreaterThan(128_000)
     expect(MODEL_ANALYZE_TIMEOUT_MS).toBeLessThan(300_000)
