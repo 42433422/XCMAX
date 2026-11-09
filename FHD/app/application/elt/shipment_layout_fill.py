@@ -274,8 +274,10 @@ def save_stable_workbook(workbook: Workbook, destination: Path) -> str:
             entry.external_attr = info.external_attr
             target.writestr(entry, payload)
     body = fixed.getvalue()
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_bytes(body)
+    from app.application.shipment_excel_etl_security import open_shipment_result_file
+
+    with open_shipment_result_file(destination) as stream:
+        stream.write(body)
     return hashlib.sha256(body).hexdigest()
 
 

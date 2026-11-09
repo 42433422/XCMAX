@@ -1,0 +1,16 @@
+{
+  "schema": "gitleaks-disposition-evidence/v1",
+  "n": 28,
+  "disposition": "false-positive",
+  "rule": "generic-api-key",
+  "path": "FHD/tests/test_application/test_employee_closed_loop_e01_e30.py",
+  "line": 414,
+  "commit_sha": "e93ca976a0d236010669aae8cbb64c2b8f9be12f",
+  "note": "pytest loop fixture uses monkeypatch, tmp_path audit/idempotency files and temporary SQLite.",
+  "scope": "Historical source fixture review only; no production credential-use verification or provider request. Secret literal intentionally omitted.",
+  "author": "dot-agent:security_code_audit",
+  "reviewer": "dot-agent:release_scan_deploy",
+  "review_method": "Two separate AI agent source reviews; not a human or GitHub owner approval.",
+  "reviewed_at": "2026-11-09T03:16:07Z",
+  "review_due": "2027-02-07T00:00:00Z"
+}

@@ -1,0 +1,16 @@
+{
+  "schema": "gitleaks-disposition-evidence/v1",
+  "n": 27,
+  "disposition": "false-positive",
+  "rule": "generic-api-key",
+  "path": "FHD/tests/test_application/test_approval_executor_gate.py",
+  "line": 63,
+  "commit_sha": "4bb970f307bbcb905f629b8cc7c0b7a5f7c44bb8",
+  "note": "pytest monkeypatch SECRET_KEY scoped to temporary SQLite and audit test fixture.",
+  "scope": "Historical source fixture review only; no production credential-use verification or provider request. Secret literal intentionally omitted.",
+  "author": "dot-agent:security_code_audit",
+  "reviewer": "dot-agent:release_scan_deploy",
+  "review_method": "Two separate AI agent source reviews; not a human or GitHub owner approval.",
+  "reviewed_at": "2026-11-09T03:16:07Z",
+  "review_due": "2027-02-07T00:00:00Z"
+}
