@@ -112,6 +112,12 @@ _SYSTEM_PROMPT = f"""你是业务助手的意图分类器。用户消息已经�
 _MUTATION_RE = re.compile(
     r"(新增|新建|添加|创建|写入|入库|导入|修改|更新|改为|改成|删除|移除|删掉|删了)"
 )
+_GENERAL_EXPLANATION = re.compile(
+    r"^(?:请|帮我|麻烦)?(?:简要|简单|用三句话)?(?:解释|介绍|讲解)\s*"
+    r"(?:HTTP\s*(?:和|与)\s*HTTPS|HTTPS?|TCP|DNS|TLS|SSL|流式输出)"
+    r"(?:\s*(?:是什么|的区别))?[？?。.]?"
+    r"(?:\s*[,，]?\s*不要调用工具[。.]?)?$", re.IGNORECASE
+)
 
 _CONFIDENCE_MIN = 0.7
 # 低置信带：模型有倾向但不够把握 → 不猜测执行，返回 clarify 让主链反问用户。
@@ -182,7 +188,7 @@ def _normalize_slots(intent: str, raw_slots: dict[str, Any]) -> dict[str, Any]:
 
 def _eligible_text(message: str) -> str | None:
     text = str(message or "").strip()
-    if len(text) < 2 or not _gate_enabled():
+    if len(text) < 2 or _GENERAL_EXPLANATION.fullmatch(text) or not _gate_enabled():
         return None
     if _MUTATION_RE.search(text):
         return None

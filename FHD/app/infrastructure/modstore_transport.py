@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 def safe_route_metadata(payload: Any) -> dict[str, str | int]:
@@ -197,9 +201,14 @@ def iter_market_sse_data_payloads(
 ) -> Iterator[str]:
     """Yield public route metadata and deltas, avoiding duplicate done content."""
     decoder = MarketSSEDecoder(payload_has_content)
+    started = time.monotonic()
+    first_content = False
     for line in response.iter_lines():
         data = decoder.feed(line)
         if data is not None:
+            if not first_content and payload_has_content(data):
+                first_content = True
+                logger.info("market_stream_first_content_ms=%.1f", (time.monotonic() - started) * 1000)
             yield data
         if decoder.done:
             break
@@ -212,9 +221,14 @@ async def aiter_market_sse_data_payloads(
 ) -> AsyncIterator[str]:
     """Apply the same event and completion rules to an async HTTP response."""
     decoder = MarketSSEDecoder(payload_has_content, accept_raw=False)
+    started = time.monotonic()
+    first_content = False
     async for line in response.aiter_lines():
         data = decoder.feed(line)
         if data is not None:
+            if not first_content and payload_has_content(data):
+                first_content = True
+                logger.info("market_stream_first_content_ms=%.1f", (time.monotonic() - started) * 1000)
             yield data
         if decoder.done:
             break
