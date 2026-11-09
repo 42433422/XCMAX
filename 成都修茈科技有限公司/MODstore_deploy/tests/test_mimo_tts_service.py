@@ -8,11 +8,59 @@ from unittest.mock import MagicMock, patch
 from modstore_server import mimo_tts_service as mts
 
 
+def _clear_mimo_env(monkeypatch):
+    for name in (
+        "XIAOMI_API_KEY",
+        "MIMO_API_KEY",
+        "XIAOMI_MIMO_API_KEY",
+        "XIAOMI_BASE_URL",
+        "MIMO_BASE_URL",
+        "XIAOMI_MIMO_BASE_URL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
 def test_is_configured_false_without_key(monkeypatch):
-    monkeypatch.delenv("XIAOMI_API_KEY", raising=False)
-    monkeypatch.delenv("MIMO_API_KEY", raising=False)
-    monkeypatch.delenv("XIAOMI_MIMO_API_KEY", raising=False)
+    _clear_mimo_env(monkeypatch)
+    monkeypatch.setattr(mts, "_platform_xiaomi_credentials", lambda: ("", ""))
     assert mts.is_configured() is False
+
+
+def test_platform_key_is_used_when_env_is_empty(monkeypatch):
+    _clear_mimo_env(monkeypatch)
+    monkeypatch.setattr(
+        mts,
+        "_platform_xiaomi_credentials",
+        lambda: ("platform-key", "https://token-plan-cn.xiaomimimo.com/v1"),
+    )
+    key, root = mts.resolve_mimo_credentials()
+    assert key == "platform-key"
+    assert root == "https://token-plan-cn.xiaomimimo.com"
+    assert mts.is_configured() is True
+
+
+def test_platform_helper_reads_xiaomi_store(monkeypatch):
+    seen = {}
+
+    def fake(provider):
+        seen["provider"] = provider
+        return ("stored-key", "https://token-plan-cn.xiaomimimo.com/v1")
+
+    monkeypatch.setattr("modstore_server.llm_key_resolver.platform_credentials", fake)
+    assert mts._platform_xiaomi_credentials() == (
+        "stored-key",
+        "https://token-plan-cn.xiaomimimo.com/v1",
+    )
+    assert seen["provider"] == "xiaomi"
+
+
+def test_env_key_beats_platform_key(monkeypatch):
+    _clear_mimo_env(monkeypatch)
+    monkeypatch.setenv("MIMO_API_KEY", "env-key")
+    monkeypatch.setattr(mts, "_platform_xiaomi_credentials", lambda: ("platform-key", "https://other.example/v1"))
+    key, root = mts.resolve_mimo_credentials()
+    assert key == "env-key"
+    assert root == mts._DEFAULT_ROOT
 
 
 def test_synthesize_missing_key():

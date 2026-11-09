@@ -145,6 +145,55 @@ def test_mimo_malformed_response_falls_back_to_edge(client, monkeypatch, data):
     assert base64.b64decode(result.json()["data"]["audioBase64"].split(",", 1)[1]) == b"edge-audio"
 
 
+def test_logged_in_software_uses_platform_mimo_instead_of_edge(client, monkeypatch):
+    audio = b"RIFFplatform"
+    response = httpx.Response(
+        200,
+        content=audio,
+        headers={"content-type": "audio/wav", "x-tts-provider": "mimo", "x-tts-voice": "Chloe"},
+    )
+    client_cm = MagicMock()
+    client_cm.__enter__.return_value = client_cm
+    client_cm.__exit__.return_value = False
+    client_cm.post.return_value = response
+    edge = MagicMock(return_value=b"edge-audio")
+    monkeypatch.setattr(ai_assistant_tts, "_session_market_token", lambda request: "market-token")
+    monkeypatch.setattr(tts_service, "_run_edge_sync", edge)
+    with patch("httpx.Client", return_value=client_cm):
+        result = client.post("/api/tts", json={"text": "你好", "voice": "zh-CN-XiaoxiaoNeural", "rate": "+15%"})
+    assert result.status_code == 200
+    body = result.json()["data"]
+    assert body["provider"] == "mimo"
+    assert body["voice"] == "Chloe"
+    assert base64.b64decode(body["audioBase64"].split(",", 1)[1]) == audio
+    edge.assert_not_called()
+    sent = client_cm.post.call_args
+    assert sent.args[0].endswith("/api/workbench/tts")
+    assert sent.kwargs["json"]["edge_voice"] == "zh-CN-XiaoxiaoNeural"
+    assert sent.kwargs["json"]["rate"] == 1.15
+    assert "voice" not in sent.kwargs["json"]
+    assert sent.kwargs["headers"]["Authorization"] == "Bearer market-token"
+
+
+def test_platform_edge_audio_does_not_replace_local_fallback(client, monkeypatch):
+    response = httpx.Response(
+        200,
+        content=b"edge-from-platform",
+        headers={"content-type": "audio/mpeg", "x-tts-provider": "edge"},
+    )
+    client_cm = MagicMock()
+    client_cm.__enter__.return_value = client_cm
+    client_cm.__exit__.return_value = False
+    client_cm.post.return_value = response
+    monkeypatch.setattr(ai_assistant_tts, "_session_market_token", lambda request: "market-token")
+    monkeypatch.setattr(tts_service, "_run_edge_sync", lambda req: b"local-edge")
+    with patch("httpx.Client", return_value=client_cm):
+        result = client.post("/api/tts", json={"text": "hello"})
+    assert result.status_code == 200
+    assert result.json()["data"]["provider"] == "edge"
+    assert base64.b64decode(result.json()["data"]["audioBase64"].split(",", 1)[1]) == b"local-edge"
+
+
 def test_mimo_internal_error_does_not_fall_back(client, monkeypatch):
     monkeypatch.setattr(mimo_tts_service, "is_configured", lambda: True)
     monkeypatch.setattr(
