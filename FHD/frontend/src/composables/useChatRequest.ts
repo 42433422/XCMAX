@@ -5,6 +5,7 @@ import chatApi from '../api/chat'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
+import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 export type ChatRequestScope = {
   signal?: AbortSignal
   isCurrent?: () => boolean
@@ -246,10 +247,12 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     plannerOpts?: PlannerChatOptions,
     scope?: ChatRequestScope,
   ): Promise<ChatPlannerPayload> {
+    if (isOfficeEltToolMessage(message)) return requestChatByMode(message, {}, plannerOpts, scope)
     return withRequestTimeout(signal => requestChatByMode(message, { signal }, plannerOpts, scope), timeoutMs, scope?.signal)
   }
 
   function requestChatByModeBatchWithTimeout(batchTexts: string[], timeoutMs = 90_000, scope?: ChatRequestScope): Promise<ChatPlannerPayload> {
+    if (batchTexts.some(isOfficeEltToolMessage)) return requestChatByModeBatch(batchTexts, {}, scope)
     return withRequestTimeout(signal => requestChatByModeBatch(batchTexts, { signal }, scope), timeoutMs, scope?.signal)
   }
 

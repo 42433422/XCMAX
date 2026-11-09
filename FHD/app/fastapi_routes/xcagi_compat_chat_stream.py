@@ -212,6 +212,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         ):
             yield sse_event_line(event)
         return
+    from app.application.office_parse_app_service import is_office_elt_chat_message
+
+    office_elt_tool = is_office_elt_chat_message(message_text)
     if (
         has_pending_workflow
         or references_recent_business_record(message_text)
@@ -223,6 +226,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             controlled_entity_named
             and _looks_like_business_db_write(message_text, message_text.lower())
         )
+        or office_elt_tool
     ):
         from app.fastapi_routes.xcagi_compat_chat_helpers import (
             create_modstore_openai_client_from_request,

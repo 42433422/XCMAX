@@ -47,7 +47,7 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
     createStep({
       id: 'tutorial-excel-import-customers',
       title: '导入部门到数据库',
-      description: `关联工作表选「部门」，在输入框发送：「导入数据库，类型客户，确认导入」。若提示写入令牌，按界面指引输入 DB 写入授权后重试。`,
+      description: `工作表模板（可选）选「部门」，在输入框发送：「导入数据库，类型客户，确认导入」。若提示写入令牌，按界面指引输入 DB 写入授权后重试。`,
       routeName: 'chat',
       targetSelector: '#messageInput',
       highlightSelector: '#view-chat .input-wrapper',
@@ -58,7 +58,7 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
     createStep({
       id: 'tutorial-excel-import-products',
       title: '导入人员到数据库',
-      description: `切换关联工作表为「人员」，发送：「导入数据库，类型产品，确认导入」。系统会按「产品单位」「产品名称」列写入人员/产品表。`,
+      description: `工作表模板改选「人员」，发送：「导入数据库，类型产品，确认导入」。系统会按「产品单位」「产品名称」列写入人员/产品表。`,
       routeName: 'chat',
       targetSelector: '#messageInput',
       highlightSelector: '#view-chat .sheet-link-bar, #view-chat .input-wrapper',

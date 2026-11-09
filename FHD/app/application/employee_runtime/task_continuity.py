@@ -89,6 +89,14 @@ class _SummaryCache:
         self.summary_fingerprint = ""
 
 
+def named_tool_timeout_seconds(name: str) -> float | None:
+    """Office-file ELT and docking writes run to completion. Other named tools stay at 8s."""
+    key = str(name or "")
+    if key in {"parse_office_file", "office_parse_elt", "data_docking"} or key.startswith("elt_"):
+        return None
+    return 8.0
+
+
 class TaskContinuityRuntime:
     """Process runtime with a JSON ledger. Restart drops memory and reloads the file."""
 
@@ -1484,7 +1492,7 @@ class TaskContinuityRuntime:
                     ),
                     capture_output=True,
                     text=True,
-                    timeout=8,
+                    timeout=named_tool_timeout_seconds(name),
                     cwd=str(self.workspace),
                     check=False,
                 )

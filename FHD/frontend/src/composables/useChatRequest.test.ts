@@ -295,6 +295,27 @@ describe('useChatRequest', () => {
     expect(deps.consumeMultimodalIntoPlannerContext).toHaveBeenCalled()
   })
 
+  it('does not abort an office ELT import at 8s or when the chat disconnects', async () => {
+    vi.useFakeTimers()
+    const chatApi = (await import('@/api/chat')).default
+    let release: (value: unknown) => void = () => {}
+    vi.mocked(chatApi.sendUnifiedChat).mockImplementation(() => new Promise((resolve) => { release = resolve }))
+    const controller = new AbortController()
+    const pending = request.requestChatByModeWithTimeout(
+      '@uploads/宗南.xlsx导入数据库',
+      8_000,
+      undefined,
+      { sessionId: 's', messages: [], signal: controller.signal },
+    )
+    controller.abort()
+    await vi.advanceTimersByTimeAsync(9_000)
+    const signal = vi.mocked(chatApi.sendUnifiedChat).mock.calls.at(-1)?.[1]?.signal
+    expect(signal?.aborted).not.toBe(true)
+    release({ success: true, response: '已提交审批' })
+    await expect(pending).resolves.toMatchObject({ success: true })
+    vi.useRealTimers()
+  })
+
   it('resolveChatDbTokensForPayload is called in buildPlannerChatRequestPayload', () => {
     const deps = makeDeps()
     deps.resolveChatDbTokensForPayload = () => ({ db_read_token: 'token123' })

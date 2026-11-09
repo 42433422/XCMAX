@@ -26,6 +26,7 @@ import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDelive
 import type { UiChatMessageExtras } from '@/types/chat-ui'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
 import { captureAuthSession, probeEnterpriseSession } from '@/utils/authSessionCache'
+import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -317,15 +318,19 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const timeoutMsS = Math.min(120000, baseS)
       const controller = new AbortController()
       const streamState = { stalled: false }
+      const officeToolRun = isOfficeEltToolMessage(primaryForStream)
       const abort = () => controller.abort()
-      requestScope.signal?.addEventListener('abort', abort, { once: true })
-      if (requestScope.signal?.aborted) abort()
+      if (!officeToolRun) {
+        requestScope.signal?.addEventListener('abort', abort, { once: true })
+        if (requestScope.signal?.aborted) abort()
+      }
       let killTimer = 0
-      const stallTimer = window.setTimeout(() => {
+      const stallTimer = officeToolRun ? 0 : window.setTimeout(() => {
         streamState.stalled = true
         controller.abort()
       }, CHAT_STREAM_STALL_MS)
       const armDeadline = () => {
+        if (officeToolRun) return
         window.clearTimeout(killTimer)
         killTimer = window.setTimeout(() => {
           controller.abort()

@@ -123,12 +123,15 @@ class WorkspaceReadFilesBody(BaseModel):
 
 
 class OfficeConfirmBody(BaseModel):
-    intent: str = Field(..., description="attendance | erp_products | knowledge_only")
+    intent: str = Field(
+        ..., description="attendance | erp_products | knowledge_only | elt_parse | elt_save"
+    )
     file_path: str = ""
     workspace_root: str = ""
     source_name: str = ""
     knowledge_text: str = ""
     field_mapping: dict[str, str] = Field(default_factory=dict)
+    template_index: int = -1
 
 
 def _office_upload_suffixes() -> set[str]:
@@ -184,6 +187,46 @@ async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Reques
     from fastapi import HTTPException
 
     intent = str(body.intent or "").strip().lower()
+    if intent in {"elt_parse", "elt_save"}:
+        import asyncio
+
+        from app.application.elt.errors import EltError
+        from app.application.office_parse_app_service import (
+            parse_office_file_elt,
+            save_office_file_elt,
+        )
+        from app.application.session_account_meta import enrich_session_meta_with_tenant
+        from app.infrastructure.auth.dependencies import (
+            resolve_session_user,
+            session_id_from_request,
+        )
+
+        if not body.file_path:
+            raise HTTPException(status_code=400, detail="file_path 不能为空")
+        user = resolve_session_user(request)
+        if user is None or getattr(user, "id", None) is None:
+            raise HTTPException(status_code=401, detail="请先登录")
+        tenant_id = getattr(user, "tenant_id", None)
+        if not tenant_id:
+            sid = session_id_from_request(request)
+            meta = enrich_session_meta_with_tenant(sid, user) if sid else {}
+            tenant_id = meta.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=400, detail="缺少 tenant_id，无法入库")
+        try:
+            if intent == "elt_parse":
+                result = await asyncio.to_thread(parse_office_file_elt, body.file_path)
+            else:
+                result = await asyncio.to_thread(
+                    save_office_file_elt,
+                    body.file_path,
+                    tenant_id=int(tenant_id),
+                    owner_user_id=int(user.id),
+                    template_index=int(body.template_index),
+                )
+        except EltError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.message) from None
+        return {"success": True, "data": result}
     if intent == "knowledge_only":
         text = str(body.knowledge_text or "").strip()
         if not text:

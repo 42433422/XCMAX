@@ -199,7 +199,7 @@
               当前：Sheet {{ linkedSheetIndex }}（{{ linkedSheetName }}）
             </template>
             <template v-else>
-              尚未关联 Sheet，请先在聊天页点击关联工作表按钮
+              尚未选择工作表模板。模板可选，可在聊天页打开「选择工作表模板」
             </template>
           </div>
           <div class="assistant-grid-actions">

@@ -148,8 +148,8 @@ def try_deterministic_chat_reply(
     *,
     runtime_context: dict[str, Any] | None = None,
     workspace_root: str | None = None,
-) -> dict[str, str] | None:
-    """命中常见计数问题时返回 {response, text, thinking_steps}，否则 None。"""
+) -> dict[str, Any] | None:
+    """命中常见计数或办公入库时返回回复，否则 None。"""
     text = str(message or "").strip()
     if not text:
         return None
@@ -162,6 +162,12 @@ def try_deterministic_chat_reply(
     # Fact and version questions belong to the conversation ledger, never smalltalk.
     if is_dialogue_fact_message(text) or is_client_version_question(text):
         return None
+
+    from app.application.office_parse_app_service import office_chat_elt_reply
+
+    office = office_chat_elt_reply(text, runtime_context)
+    if office is not None:
+        return office
 
     smalltalk = _try_smalltalk_reply(text)
     if smalltalk is not None:
