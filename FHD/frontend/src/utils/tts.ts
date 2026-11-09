@@ -507,7 +507,7 @@ export async function speakText(text: string, options?: { onEnd?: () => void; on
       || message.includes('音频播放失败')
       || message.includes('play rejected')
     const offlineMode = getEngineMode() === 'offline'
-    const fallbackOk = offlineMode || abortedByUser || playbackError ? false : await speakWithFallback(plain, controller)
+    const fallbackOk = getEngineMode() !== 'system' || offlineMode || abortedByUser || playbackError ? false : await speakWithFallback(plain, controller)
     if (!fallbackOk) {
       if (speechController === controller && (!controller.signal.aborted || error?.name === 'TimeoutError')) {
         showAppToast(error?.name === 'NotAllowedError'

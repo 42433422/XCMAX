@@ -34,6 +34,11 @@ from app.fastapi_routes.voice_routes import (
 )
 
 
+@pytest.fixture(autouse=True)
+def legacy_local_voice(monkeypatch):
+    monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "local")
+
+
 @pytest.fixture
 def client() -> TestClient:
     app = FastAPI()

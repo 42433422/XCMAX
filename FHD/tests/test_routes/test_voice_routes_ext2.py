@@ -30,6 +30,11 @@ from app.fastapi_routes.voice_routes import (
 )
 
 
+@pytest.fixture(autouse=True)
+def legacy_local_voice(monkeypatch):
+    monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "local")
+
+
 @pytest.mark.parametrize(
     "disabled,loaded,unavailable",
     [(True, False, False), (False, True, False), (False, False, False), (False, False, True)],
@@ -545,6 +550,11 @@ class TestRunTranscribe:
 
 
 class TestTranscribeAudioRoute:
+    def test_default_voice_provider_is_mimo(self, client, monkeypatch):
+        monkeypatch.delenv("XCAGI_CHAT_ASR_PROVIDER", raising=False)
+        response = client.get("/api/voice/health")
+        assert response.json()["data"]["model"] == "mimo-v2.5-asr"
+
     def test_mimo_conversion_rejects_audio_over_two_minutes(self, tmp_path):
         import wave
 

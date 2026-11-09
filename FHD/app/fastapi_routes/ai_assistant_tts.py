@@ -7,6 +7,7 @@ import base64
 import binascii
 import logging
 import math
+import os
 import re
 from typing import Any
 from urllib.parse import unquote
@@ -116,7 +117,8 @@ def _platform_mimo_payload(
     from app.fastapi_routes.market_bridge.http_transport import _auth_header
     from app.fastapi_routes.market_bridge.settings import _market_api_base_url
 
-    if is_configured():
+    platform_only = os.environ.get("XCAGI_TTS_PLATFORM_ONLY", "1").lower() not in {"0", "false"}
+    if is_configured() and not platform_only:
         return None
     token = _session_market_token(request)
     if not token:
@@ -137,6 +139,7 @@ def _platform_mimo_payload(
                     "text": text,
                     "edge_voice": edge_voice,
                     "rate": _speech_rate_float(rate),
+                    "require_mimo": platform_only,
                 },
             )
         provider = (resp.headers.get("x-tts-provider") or "").strip().lower()
@@ -149,7 +152,9 @@ def _platform_mimo_payload(
     if resp.status_code != 200 or provider != "mimo" or not mime.startswith("audio/"):
         logger.info(
             "platform MiMo TTS rejected: status=%s provider=%s content_type=%s",
-            resp.status_code, provider or "missing", mime or "missing",
+            resp.status_code,
+            provider or "missing",
+            mime or "missing",
         )
         return None
     if not audio or len(audio) > 8_000_000:
@@ -195,6 +200,10 @@ def compat_tts(request: Request, payload: dict[str, Any] = Body(default_factory=
         )
 
         if platform is None:
+            if os.environ.get("XCAGI_TTS_PLATFORM_ONLY", "1").lower() not in {"0", "false"}:
+                return JSONResponse(
+                    {"success": False, "message": "平台 MiMo 语音合成暂不可用"}, status_code=503
+                )
             trigger_common_tts_warmup()
             result = synthesize_to_data_uri(
                 text=text,

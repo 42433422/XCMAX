@@ -47,9 +47,7 @@ def client(monkeypatch):
 def test_platform_tts_uses_current_users_xiaomi_credentials(monkeypatch):
     from modstore_server import llm_key_resolver, models
 
-    monkeypatch.setattr(
-        models, "get_session_factory", lambda: lambda: nullcontext("db")
-    )
+    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext("db"))
 
     def resolve(db, user, provider):
         assert (db, user, provider) == ("db", 42, "xiaomi")
@@ -78,11 +76,9 @@ def test_platform_tts_uses_current_users_xiaomi_credentials(monkeypatch):
 def test_mimo_asr_uses_audio_protocol_and_current_account(monkeypatch):
     from modstore_server import llm_key_resolver, models
 
-    monkeypatch.setenv("MODSTORE_MIMO_ASR_ENABLED", "1")
-    monkeypatch.setenv("MODSTORE_MIMO_ASR_USER_IDS", "42")
-    monkeypatch.setattr(
-        models, "get_session_factory", lambda: lambda: nullcontext("db")
-    )
+    monkeypatch.delenv("MODSTORE_MIMO_ASR_ENABLED", raising=False)
+    monkeypatch.delenv("MODSTORE_MIMO_ASR_USER_IDS", raising=False)
+    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext("db"))
     monkeypatch.setattr(
         llm_key_resolver,
         "resolve_credentials",
@@ -127,7 +123,7 @@ def test_mimo_asr_uses_audio_protocol_and_current_account(monkeypatch):
 
 
 def test_mimo_asr_disabled_without_billing_configuration(monkeypatch):
-    monkeypatch.delenv("MODSTORE_MIMO_ASR_ENABLED", raising=False)
+    monkeypatch.setenv("MODSTORE_MIMO_ASR_ENABLED", "0")
     with pytest.raises(speech_api.HTTPException) as exc:
         asyncio.run(speech_api.mimo_asr(b"RIFF0000WAVEaudio", "zh", 42))
     assert exc.value.status_code == 503
@@ -153,6 +149,20 @@ def test_asr_workbench_route_passes_authenticated_user(monkeypatch):
     result = asyncio.run(workbench_asr(upload, "zh", SimpleNamespace(id=42)))
     assert result["text"] == "你好"
     stub.assert_awaited_once_with(b"voice", "zh", 42)
+
+
+def test_mimo_required_does_not_fall_back_to_edge(monkeypatch):
+    synth = AsyncMock(return_value=(None, "missing mimo api key", {}))
+    monkeypatch.setattr(mimo_tts_service, "synthesize_mimo_tts_async", synth)
+    with pytest.raises(speech_api.HTTPException) as exc:
+        asyncio.run(
+            speech_api.workbench_unified_tts(
+                WorkbenchUnifiedTtsBody(text="你好", require_mimo=True),
+                None,
+                ports=speech_api.SpeechPorts(edge=object()),
+            )
+        )
+    assert exc.value.status_code == 503
 
 
 def test_mimo_asr_rejects_oversized_duration_before_network(monkeypatch):
@@ -281,11 +291,7 @@ async def test_mimo_internal_bug_propagates(monkeypatch):
 
 async def test_mimo_valid_audio_async(monkeypatch):
     monkeypatch.setenv("MIMO_API_KEY", "test-key")
-    payload = {
-        "choices": [
-            {"message": {"audio": {"data": base64.b64encode(b"audio").decode()}}}
-        ]
-    }
+    payload = {"choices": [{"message": {"audio": {"data": base64.b64encode(b"audio").decode()}}}]}
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
     )
@@ -319,9 +325,7 @@ def test_edge_stream_keeps_first_and_following_chunks(client, monkeypatch, path)
 @pytest.mark.parametrize("asynchronous", [False, True])
 async def test_mimo_invalid_json_is_rejected(monkeypatch, asynchronous):
     monkeypatch.setenv("MIMO_API_KEY", "test-key")
-    transport = httpx.MockTransport(
-        lambda request: httpx.Response(200, content=b"not json")
-    )
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=b"not json"))
     if asynchronous:
         client = httpx.AsyncClient(transport=transport)
         monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client)

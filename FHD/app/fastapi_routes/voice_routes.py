@@ -261,7 +261,7 @@ async def transcribe_audio(
     try:
         result = (
             await _platform_transcribe(request, tmp_path, language)
-            if _env("XCAGI_CHAT_ASR_PROVIDER").lower() == "mimo"
+            if _env("XCAGI_CHAT_ASR_PROVIDER", "mimo").lower() == "mimo"
             else _run_transcribe(tmp_path, language)
         )
     finally:
@@ -284,7 +284,7 @@ async def transcribe_audio(
 @router.get("/health")
 async def voice_health():
     """轻量健康检查：只检查 faster-whisper 是否可导入，不触发模型加载（避免健康检查拖慢冷启动）。"""
-    if _env("XCAGI_CHAT_ASR_PROVIDER").lower() == "mimo":
+    if _env("XCAGI_CHAT_ASR_PROVIDER", "mimo").lower() == "mimo":
         return {
             "success": True,
             "data": {
@@ -322,7 +322,7 @@ def voice_warm():
     Safe: only loads into memory; does not delete data or change config.
     Disabled when XCAGI_CHAT_ASR_WARM=0.
     """
-    if _env("XCAGI_CHAT_ASR_PROVIDER").lower() == "mimo":
+    if _env("XCAGI_CHAT_ASR_PROVIDER", "mimo").lower() == "mimo":
         return {
             "success": True,
             "data": {"warmed": False, "skipped": True, "model_loaded": False, "provider": "mimo"},
@@ -572,7 +572,7 @@ async def voice_command(
     try:
         text = (
             (await _platform_transcribe(request, tmp_path, language))["text"]
-            if _env("XCAGI_CHAT_ASR_PROVIDER").lower() == "mimo"
+            if _env("XCAGI_CHAT_ASR_PROVIDER", "mimo").lower() == "mimo"
             else _transcribe_audio(tmp_path, language)
         )
     finally:
