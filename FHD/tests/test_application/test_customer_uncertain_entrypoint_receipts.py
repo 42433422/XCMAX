@@ -26,6 +26,7 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
     from app.fastapi_routes import ai_intent, voice_routes
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "local")
     actor = trusted_actor(permissions=["customer.edit"])
     engine = actor.factory.kw["bind"]
     request = Request(
