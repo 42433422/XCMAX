@@ -1,5 +1,5 @@
 {
-  "lines": 2454575,
+  "lines": 2455205,
   "updated": "2026-11-09",
-  "note": "ELT acceptance evidence for Jia/Kaoqin/22-file dispositions"
+  "note": "ELT 桌面未知分析改为采纳已保存分类并就地结算已归档回执，不重发 completed/failed 请求键（约 +64 路由/模板完成与测试）；出货台账多块解析、相邻印章合并与切片门禁收窄另增测试。用户要求跨机器缺陷修复，净增约 630 行随本 PR 抬升基线。"
 }
