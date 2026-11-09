@@ -1526,8 +1526,8 @@ class TestProductDomainHandlersBranches:
 class TestEmployeeAgentBranches:
     """补充 EmployeeAgent.run() 未覆盖分支。"""
 
-    def test_run_with_workspace_root_in_payload_not_overwritten(self) -> None:
-        """payload 已有 workspace_root → 不被参数覆盖。"""
+    def test_run_uses_server_workspace_without_mutating_caller_payload(self) -> None:
+        """执行采用可信参数 workspace；不修改调用方原始输入。"""
         agent = EmployeeAgent("emp-1")
         pack = {
             "pack_id": "emp-1",
@@ -1580,16 +1580,15 @@ class TestEmployeeAgentBranches:
             mock_mm.recall.return_value = MemoryContext()
             mock_mm.remember.return_value = None
 
-            # payload 已有 workspace_root
+            original = {"file_path": "/tmp/f.txt", "workspace_root": "/payload-ws"}
             agent.run(
                 "task",
-                input_data={"file_path": "/tmp/f.txt", "workspace_root": "/payload-ws"},
+                input_data=original,
                 workspace_root="/param-ws",
             )
-        # 验证 payload 中的 workspace_root 不被覆盖
         actions_call = mock_actions.call_args
-        # workspace_root 参数应传给 _actions_fhd
-        assert actions_call.args[5] == "/payload-ws"
+        assert actions_call.args[5] == "/param-ws"
+        assert original == {"file_path": "/tmp/f.txt", "workspace_root": "/payload-ws"}
 
     def test_run_direct_python_no_file_path_uses_cognition(self) -> None:
         """handler_list=['direct_python'] 但无 file_path → 走 cognition 路径。"""
