@@ -12,7 +12,7 @@ from typing import Any
 
 import aiohttp
 import httpx
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
 from app.domain.shared_services.tts_service import (
@@ -85,8 +85,78 @@ def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
         )
 
 
+def _session_market_token(request: Request) -> str:
+    try:
+        from app.fastapi_routes.market_account import session_id_from_request, session_market_token
+
+        return (session_market_token(session_id_from_request(request)) or "").strip()
+    except RECOVERABLE_ERRORS:
+        return ""
+
+
+def _speech_rate_float(rate: str | None) -> float:
+    raw = (rate or "").strip()
+    if len(raw) > 1 and raw.endswith("%") and raw[0] in "+-":
+        try:
+            value = 1 + int(raw[:-1]) / 100
+        except ValueError:
+            value = 1.0
+    else:
+        value = 1.0
+    return max(0.6, min(1.6, value))
+
+
+def _platform_mimo_payload(
+    request: Request, text: str, voice: str | None, rate: str | None
+) -> dict[str, str] | None:
+    """本机没有 MiMo 密钥时，用当前登录会话向平台要音频。密钥留在平台。"""
+    from app.domain.shared_services.mimo_tts_service import is_configured
+    from app.domain.shared_services.tts_service import _EDGE_VOICE_RE
+    from app.fastapi_routes.market_bridge.http_transport import _auth_header
+    from app.fastapi_routes.market_bridge.settings import _market_api_base_url
+
+    if is_configured():
+        return None
+    token = _session_market_token(request)
+    if not token:
+        return None
+    edge_voice = (voice or "").strip()
+    if not _EDGE_VOICE_RE.match(edge_voice):
+        edge_voice = "zh-CN-XiaoxiaoNeural"
+    try:
+        with httpx.Client(timeout=20.0) as client:
+            resp = client.post(
+                f"{_market_api_base_url()}/api/workbench/tts",
+                headers={
+                    "Authorization": _auth_header(token),
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "text": text,
+                    "edge_voice": edge_voice,
+                    "rate": _speech_rate_float(rate),
+                },
+            )
+        provider = (resp.headers.get("x-tts-provider") or "").strip().lower()
+        mime = (resp.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+        voice_name = (resp.headers.get("x-tts-voice") or "").strip()
+        audio = resp.content
+    except RECOVERABLE_ERRORS as exc:
+        logger.info("platform MiMo TTS unavailable: %s", type(exc).__name__)
+        return None
+    if resp.status_code != 200 or provider != "mimo" or not mime.startswith("audio/"):
+        return None
+    if not audio or len(audio) > 8_000_000:
+        return None
+    return {
+        "audioBase64": f"data:{mime};base64,{base64.b64encode(audio).decode('ascii')}",
+        "voice": voice_name or "冰糖",
+        "provider": "mimo",
+    }
+
+
 @router.post("/api/tts")
-def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
+def compat_tts(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
     text = payload.get("text")
     fields = ("voice", "speakerId", "lang", "rate", "pitch")
     valid = isinstance(text, str) and 0 < len(text.strip()) <= 4000
@@ -111,21 +181,25 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
     text = text.strip()
     speaker_id = payload.get("speakerId")
     lang = (payload.get("lang") or "zh").strip().lower()
+    platform = _platform_mimo_payload(request, text, payload.get("voice"), payload.get("rate"))
     try:
         from app.application.facades.tts_facade import (
             synthesize_to_data_uri,
             trigger_common_tts_warmup,
         )
 
-        trigger_common_tts_warmup()
-        result = synthesize_to_data_uri(
-            text=text,
-            voice=payload.get("voice"),
-            speaker_id=speaker_id,
-            lang=lang,
-            rate=payload.get("rate"),
-            pitch=payload.get("pitch"),
-        )
+        if platform is None:
+            trigger_common_tts_warmup()
+            result = synthesize_to_data_uri(
+                text=text,
+                voice=payload.get("voice"),
+                speaker_id=speaker_id,
+                lang=lang,
+                rate=payload.get("rate"),
+                pitch=payload.get("pitch"),
+            )
+        else:
+            result = {**platform, "lang": lang}
         audio = result.get("audioBase64") if isinstance(result, dict) else None
         if not isinstance(audio, str) or not re.match(
             r"^data:audio/[a-zA-Z0-9.+-]+;base64,", audio

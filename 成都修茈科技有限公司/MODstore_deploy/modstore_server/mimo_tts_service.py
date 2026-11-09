@@ -1,6 +1,7 @@
 """小米 MiMo-V2.5 TTS（chat/completions + audio 参数）。
 
-优先于 Edge 神经音；无密钥或调用失败时由调用方回退 edge-tts。
+优先于 Edge 神经音。密钥先读环境变量，没有则用平台模型配置里的小米 MiMo；
+无密钥或调用失败时由调用方回退 edge-tts。
 """
 
 from __future__ import annotations
@@ -27,15 +28,29 @@ def _env(name: str) -> str:
     return (os.environ.get(name) or "").strip()
 
 
+def _platform_xiaomi_credentials() -> tuple[str, str]:
+    """平台管理里保存的小米密钥。环境变量为空时 TTS 仍应走这条，而不是系统语音。"""
+    try:
+        from modstore_server.llm_key_resolver import platform_credentials
+        from modstore_server.platform_model_config import PlatformConfigError
+    except ImportError:
+        return "", ""
+    try:
+        key, base = platform_credentials("xiaomi")
+    except (PlatformConfigError, OSError, RuntimeError, ValueError):
+        return "", ""
+    return (str(key or "").strip(), str(base or "").strip())
+
+
 def resolve_mimo_credentials() -> Tuple[Optional[str], str]:
     key = _env("XIAOMI_API_KEY") or _env("MIMO_API_KEY") or _env("XIAOMI_MIMO_API_KEY")
-    root = (
-        _env("XIAOMI_BASE_URL")
-        or _env("MIMO_BASE_URL")
-        or _env("XIAOMI_MIMO_BASE_URL")
-        or _DEFAULT_ROOT
-    )
-    root = root.rstrip("/")
+    root = _env("XIAOMI_BASE_URL") or _env("MIMO_BASE_URL") or _env("XIAOMI_MIMO_BASE_URL")
+    if not key:
+        platform_key, platform_root = _platform_xiaomi_credentials()
+        key = platform_key
+        if not root:
+            root = platform_root
+    root = (root or _DEFAULT_ROOT).rstrip("/")
     if root.endswith("/v1"):
         root = root[: -len("/v1")]
     return (key or None), root
