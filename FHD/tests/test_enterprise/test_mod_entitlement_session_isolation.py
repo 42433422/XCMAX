@@ -89,6 +89,63 @@ def isolated_cache(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_same_session_sync_is_serialized_without_blocking_another_account(monkeypatch):
+    entered = []
+    release = asyncio.Event()
+
+    async def sync(sid, *, force=False):
+        entered.append(sid)
+        if sid == "a" and entered.count("a") == 1:
+            await release.wait()
+        return {sid}
+
+    monkeypatch.setattr(entitlements, "_sync_entitlements_for_session", sync)
+    first = asyncio.create_task(entitlements.sync_entitlements_for_session("a"))
+    await asyncio.sleep(0)
+    second = asyncio.create_task(entitlements.sync_entitlements_for_session("a"))
+    other = asyncio.create_task(entitlements.sync_entitlements_for_session("b"))
+    await asyncio.sleep(0)
+    assert entered == ["a", "b"]
+    release.set()
+    assert await asyncio.gather(first, second, other) == [{"a"}, {"a"}, {"b"}]
+    assert entered == ["a", "b", "a"]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_session_requests_share_one_market_refresh(monkeypatch):
+    sid = "concurrent-session"
+    entitlements._entitlement_sync_at_by_session.pop(sid, None)
+    entitlements._reloaded_entitlement_ids_by_session.pop(sid, None)
+    started, release = asyncio.Event(), asyncio.Event()
+    async def refresh(**kwargs):
+        started.set()
+        await release.wait()
+        return {"mod-a"}
+    monkeypatch.setattr("app.db.bootstrap.guarded.enabled", lambda: False)
+    monkeypatch.setattr("app.fastapi_routes.market_account.resolve_valid_market_access_token", AsyncMock(return_value="token"))
+    monkeypatch.setattr(entitlements, "_session_username_for_entitlements", lambda sid: "a")
+    monkeypatch.setattr(entitlements, "refresh_session_entitlements_from_market", AsyncMock(side_effect=refresh))
+    monkeypatch.setattr(entitlements, "persist_entitlements_to_session_row", lambda sid, ids: None)
+    def restore(sid):
+        entitlements.set_session_entitlements(market_user_id=1, market_username="a", entitled_client_mod_ids={"mod-a"})
+        return True
+    monkeypatch.setattr(entitlements, "restore_entitlements_from_session_row", restore)
+    reload_mods = AsyncMock()
+    monkeypatch.setattr(entitlements, "reload_enterprise_mods_after_login", reload_mods)
+    async def request():
+        with entitlements.request_entitlement_scope():
+            return await entitlements.sync_entitlements_for_session(sid)
+    first = asyncio.create_task(request())
+    await started.wait()
+    second = asyncio.create_task(request())
+    await asyncio.sleep(0)
+    release.set()
+    assert await asyncio.gather(first, second) == [{"mod-a"}, {"mod-a"}]
+    assert entitlements.refresh_session_entitlements_from_market.await_count == 1
+    assert reload_mods.await_count == 1
+
+
+@pytest.mark.asyncio
 async def test_cached_session_does_not_return_last_accounts_entitlements(monkeypatch):
     entitlements.set_session_entitlements(
         market_user_id=2, market_username="account-b", entitled_client_mod_ids={"mod-b"}
