@@ -777,7 +777,10 @@ def test_trace_handoff_and_audit_isolation(business, local_tools):
     )
 
 
-def test_real_effects_match_database_file_and_failure_status(business, local_tools, tmp_path):
+def test_real_effects_match_database_file_and_failure_status(
+    business, local_tools, tmp_path, monkeypatch
+):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     actor, _other, repo, factory = business
     orchestrator = AgentOrchestrator(repository=repo)
     executions = []
@@ -887,7 +890,7 @@ def test_real_effects_match_database_file_and_failure_status(business, local_too
         runtime_context=_ctx(actor, task_id="export", workspace_root=str(tmp_path)),
     )
     assert exported.status == "waiting_user"
-    grant = issue_approval_grant(exported, principal_id=str(actor.user_id))
+    issue_approval_grant(exported, principal_id=str(actor.user_id))
     finished = orchestrator.continue_run(
         exported.run_id,
         approved_by=str(actor.user_id),

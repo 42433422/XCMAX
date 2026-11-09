@@ -25,6 +25,7 @@ _TENANT_TOOLS: dict[str, set[str]] = {}
 _SECRET_PARTS = ("password", "secret", "token", "api_key", "authorization")
 _SERVER_FIELDS = frozenset(
     {
+        "workspace_root",
         "tenant_id",
         "user_id",
         "employee_id",
@@ -933,7 +934,11 @@ def reject_empty_business_result(result: dict[str, Any], *, action: str) -> dict
 
 def seal_server_context(context: dict[str, Any] | None) -> dict[str, Any]:
     """Drop client control fields. Server identity and tenant stay as already bound."""
+    from app.infrastructure.workspace import workspace_root
+
     sealed = dict(context or {})
+    # Rebind legacy persisted runs as well as new HTTP requests at execution.
+    sealed["workspace_root"] = str(workspace_root())
     for key in _UNTRUSTED_CONTROL:
         if key not in _SERVER_FIELDS:
             sealed.pop(key, None)
