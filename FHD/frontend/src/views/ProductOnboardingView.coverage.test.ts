@@ -274,6 +274,7 @@ async function mountComponent(
     baselineReject?: boolean
     // productSku 是否 reject
     productSkuReject?: boolean
+    prefs?: (patch: Record<string, unknown>) => Promise<{ success: boolean }>
   } = {},
 ) {
   if (currentWrapper) {
@@ -326,7 +327,8 @@ async function mountComponent(
       product: { id: 1, name: '新手演示商品' },
     })
     mockContainer.appAlert.mockResolvedValue(undefined)
-    mockContainer.patchWorkspacePrefs.mockResolvedValue({ success: true, data: {} })
+    if (options.prefs) mockContainer.patchWorkspacePrefs.mockImplementation(options.prefs)
+    else mockContainer.patchWorkspacePrefs.mockResolvedValue({ success: true, data: {} })
     mockContainer.promptAdvancedTutorialAfterInstall.mockResolvedValue('dismissed')
     mockContainer.readProductFlowCompleted.mockReturnValue(false)
   }
@@ -499,8 +501,7 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
   })
 
   it('completes configuration with a confirmed server receipt and no demo task', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'host-pack' }, baseline: createBaselinePlan({ baseline_ready: true }) })
-    await press(wrapper, '进入我的工作空间')
+    await mountComponent({ route: { step: 'host-pack' }, baseline: createBaselinePlan({ baseline_ready: true }) })
     expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith({ host_pack_acknowledged: true, product_flow_completed: true })
     expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
     expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
@@ -508,13 +509,17 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
   })
 
   it('does not complete configuration when the server rejects its receipt', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'host-pack' }, baseline: createBaselinePlan({ baseline_ready: true }) })
-    mockContainer.patchWorkspacePrefs.mockImplementation(async (patch) => ({ success: patch.product_flow_completed !== true }))
-    await press(wrapper, '进入我的工作空间')
+    const { wrapper } = await mountComponent({
+      route: { step: 'host-pack' },
+      baseline: createBaselinePlan({ baseline_ready: true }),
+      prefs: async (patch) => ({ success: patch.product_flow_completed !== true }),
+    })
     expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith({ selected_industry_id: expect.any(String), industry_mod_id: '' })
     expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith({ host_pack_acknowledged: true, product_flow_completed: true })
     expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
     expect(mockContainer.appAlert).toHaveBeenCalledWith('工作空间配置未保存，请重试')
+    await press(wrapper, '进入我的工作空间')
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
   })
 
   it('installs missing features and enters the workspace without adding extra setup steps', async () => {
@@ -527,12 +532,11 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: true })
   })
 
-  it('offers the example separately and waits for another explicit click before seeding', async () => {
-    const { wrapper, router } = await mountComponent({ route: { step: 'host-pack' }, baseline: createBaselinePlan({ baseline_ready: true }) })
-    await press(wrapper, '查看演示业务体验')
-    expect(router.currentRoute.value.query.step).toBe('seed-demo')
+  it('enters a ready workspace without seeding or another click', async () => {
+    const { wrapper } = await mountComponent({ route: { step: 'host-pack' }, baseline: createBaselinePlan({ baseline_ready: true }) })
+    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
     expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
-    expect(mockContainer.flowState.markProductFlowCompleted).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('查看演示业务体验')
   })
 
   it('returns tutorial replay to the source without modifying configuration', async () => {
@@ -563,14 +567,16 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     })
     await flushPromises()
     await flushPromises()
-    mockContainer.installIndustrySeed.mockResolvedValue({ success: true, message: '' })
-    mockContainer.installIndustrySeed.mockClear()
-    mockBaselineForInstallation(mockContainer.installIndustrySeed, createBaselinePlan({ baseline_ready: ready, missing_industry_mod_ids: ['ind-1'] }))
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
+    if (!ready) {
+      mockContainer.installIndustrySeed.mockResolvedValue({ success: true, message: '' })
+      mockContainer.installIndustrySeed.mockClear()
+      mockBaselineForInstallation(mockContainer.installIndustrySeed, createBaselinePlan({ baseline_ready: ready, missing_industry_mod_ids: ['ind-1'] }))
+      const bootstrapBtn = wrapper.find('.btn.primary')
+      await bootstrapBtn.trigger('click')
+      await flushPromises()
+      await flushPromises()
+      await flushPromises()
+    }
     expect(mockContainer.installIndustrySeed).toHaveBeenCalled()
     await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: true })
     expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
@@ -834,7 +840,6 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     expect(wrapper.text()).toContain('待供应商交付')
     expect(await (wrapper.vm as any).runBootstrap()).toBe(true)
     expect(mockContainer.installHostFoundation).toHaveBeenCalledOnce()
-    await press(wrapper, '进入我的工作空间')
     expect(mockContainer.installPrivateMod).not.toHaveBeenCalled()
     expect(mockContainer.installMod).not.toHaveBeenCalled()
     expect(mockContainer.installCustomerDeliverySeed).not.toHaveBeenCalled()

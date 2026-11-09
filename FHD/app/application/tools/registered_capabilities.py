@@ -275,7 +275,7 @@ def execute_registered_capability(
     if decision.pending_approval:
         response.update(
             pending_approval=True,
-            message="该 ERP 操作已创建审批请求，审批前不会执行。",
+            message="该 ERP 操作已创建审批请求，审批通过后将执行。",
         )
     elif decision.any_rejected or run_result is None:
         response["message"] = "该 ERP 操作未获风险门批准，未执行。"

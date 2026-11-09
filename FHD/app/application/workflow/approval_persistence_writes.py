@@ -14,6 +14,7 @@ def persist_workflow_approval(
     *,
     flow_key: str,
     plan: PlanGraph | None = None,
+    title: str | None = None,
 ) -> dict[str, Any] | None:
     """Persist an interactive approval and its resumable workflow snapshot."""
     from app.application.workflow import approval_persistence as facade
@@ -107,7 +108,10 @@ def persist_workflow_approval(
                     applicant_name=str(
                         applicant.display_name or applicant.username or applicant.id
                     ),
-                    title=f"智能对话写操作：{request.tool_id}.{request.action}",
+                    title=(
+                        str(title or "").strip()
+                        or f"智能对话写操作：{request.tool_id}.{request.action}"
+                    ),
                     description=facade.json.dumps(
                         request.params or {}, ensure_ascii=False, default=str
                     )[:500],

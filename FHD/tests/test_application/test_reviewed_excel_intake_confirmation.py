@@ -88,15 +88,54 @@ def intake_store(review_store, rag_service, monkeypatch, account_session_client)
             role="enterprise_owner",
         )
 
-    def start(**kwargs):
-        store.starts.append(kwargs)
-        with tenant_scope(kwargs["tenant_id"]), store.factory() as db:
-            result = store.intake.run(db, **kwargs)
+    def launch(stored):
+        store.starts.append(stored)
+        with tenant_scope(stored["tenant_id"]), store.factory() as db:
+            result = store.intake.run(
+                db,
+                owner_user_id=stored["owner_user_id"],
+                tenant_id=stored["tenant_id"],
+                source_path=stored["source_path"],
+                file_name=stored.get("file_name") or "",
+                template_id=stored.get("template_id") or "",
+                review_id=stored.get("review_id") or "",
+                classification_id=stored.get("classification_id") or "",
+                composer_note=stored.get("composer_note") or "",
+                labels=stored.get("labels"),
+                batch_id=stored.get("batch_id"),
+                prepared_plan=stored.get("prepared_plan"),
+                owned_upload_user_id=stored.get("owner_user_id"),
+            )
             db.commit()
             return result
 
     monkeypatch.setattr(routes, "_execute", execute)
-    monkeypatch.setattr(store.intake, "start_background", start)
+    monkeypatch.setattr(store.intake, "_launch_worker", launch)
+    from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRequest
+    from app.db.models.user import User
+
+    Base.metadata.create_all(
+        store.engine,
+        tables=[
+            User.__table__,
+            ApprovalFlow.__table__,
+            ApprovalFlowNode.__table__,
+            ApprovalRequest.__table__,
+        ],
+    )
+    with store.factory() as db:
+        if db.get(User, 7) is None:
+            db.add(
+                User(
+                    id=7,
+                    username="owner-7",
+                    password="x",
+                    display_name="owner",
+                    is_active=True,
+                    tenant_id=1,
+                )
+            )
+            db.commit()
     with ObservedExecutor() as executor:
         store.executor = executor
         for module in (service_preview, service_draft, service_execution):
@@ -170,7 +209,7 @@ def test_auto_ingest_start_failure_keeps_safe_diagnostics_and_saved_receipt(
     def failed_start(**_):
         raise RuntimeError("synthetic-private-cell-and-provider-credential")
 
-    monkeypatch.setattr(store.intake, "start_background", failed_start)
+    monkeypatch.setattr("app.application.elt.docking_approval.submit_docking_write", failed_start)
     result = store.client.post(f"{BASE}/save", data=data)
     assert result.status_code == 200
     failure = result.json()["auto_ingest"]
@@ -211,8 +250,15 @@ def test_exact_prepared_run_ingests_the_selected_candidate(intake_store, monkeyp
         assert saved.status_code == 200, saved.text
         result = saved.json()
         assert result["auto_ingest"].get("error") is None, result
-        assert result["auto_ingest"]["status"] == "running"
-        assert result["auto_ingest"]["business_progress"]["pct"] < 100
+        assert result["auto_ingest"]["status"] == "awaiting_approval"
+        assert store.starts == []
+        with store.factory() as db:
+            assert db.query(PurchaseUnit).count() == 0
+        released = store.intake.release_approved_batch(
+            batch_id=result["auto_ingest"]["batch_id"], tenant_id=1
+        )
+        assert released["status"] == "running"
+        assert released["business_progress"]["pct"] < 100
     finally:
         release.set()
     store.executor.futures[-1].result(timeout=10)
@@ -264,6 +310,9 @@ def test_selected_candidate_clears_are_not_recovered_from_original(intake_store,
     assert plan["candidate_sha256"] != plan["source_sha256"]
     saved = store.client.post(f"{BASE}/save", data=data)
     assert saved.status_code == 200, saved.text
+    store.intake.release_approved_batch(
+        batch_id=saved.json()["auto_ingest"]["batch_id"], tenant_id=1
+    )
     store.executor.futures[-1].result(timeout=10)
     with tenant_scope(1), store.factory() as db:
         customer = db.query(PurchaseUnit).one()
@@ -302,6 +351,8 @@ def test_receipt_refresh_preserves_concurrent_withdrawal_and_mod_visibility(
     response = store.client.post(f"{BASE}/save", data=data)
     assert response.status_code == 200, response.text
     batch_id = response.json()["auto_ingest"]["batch_id"]
+    assert response.json()["auto_ingest"]["status"] == "awaiting_approval"
+    store.intake.release_approved_batch(batch_id=batch_id, tenant_id=1)
     store.executor.futures[-1].result(timeout=10)
     get_run = store.service.get_run
 
@@ -742,6 +793,9 @@ def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch
         },
     )
     assert saved.status_code == 200, saved.text
+    store.intake.release_approved_batch(
+        batch_id=saved.json()["auto_ingest"]["batch_id"], tenant_id=1
+    )
     store.executor.futures[-1].result(timeout=10)
     with tenant_scope(1), store.factory() as db:
         units = [row.unit_name for row in db.query(PurchaseUnit).all()]

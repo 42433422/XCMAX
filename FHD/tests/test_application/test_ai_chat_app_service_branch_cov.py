@@ -3208,7 +3208,11 @@ class TestTryHandleDynamicWorkflow:
             "approval_required": True,
             "approval_nodes": [{"node_id": "n1", "tool_id": "products", "action": "create"}],
         }
-        waiting_run = SimpleNamespace(status="waiting_user", run_id="run-approval-1")
+        waiting_run = SimpleNamespace(
+            status="waiting_user",
+            run_id="run-approval-1",
+            steps=[SimpleNamespace(status="waiting_user", node_id="n1")],
+        )
         with (
             patch.object(svc.approval_service, "create_approval_request") as mock_create,
             patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_orchestrator,

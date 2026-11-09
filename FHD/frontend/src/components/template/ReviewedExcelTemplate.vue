@@ -330,7 +330,7 @@ async function pollIngestProgress() {
     if (!current()) return
     kbProgress.value = data.kb_progress || null
     businessProgress.value = data.business_progress || null
-    const terminal = ['applied', 'partial', 'completed_empty', 'failed', 'withdrawn', 'awaiting_confirmation'].includes(String(data.status || ''))
+    const terminal = ['applied', 'partial', 'completed_empty', 'failed', 'withdrawn', 'awaiting_confirmation', 'rejected'].includes(String(data.status || ''))
     if (terminal) {
       stopIngestPoll()
       savedModelStatus.value = `自动入库批次 ${id}（状态 ${autoIngestStatusLabel(data.status)}）。请到审批工作台核对结果与可用的撤回操作。`
@@ -1165,7 +1165,9 @@ async function save() {
     if (ingest?.batch_id) {
       kbProgress.value = ingest.kb_progress || { stage: 'queued', pct: 0, message: '排队写入知识库' }
       businessProgress.value = ingest.business_progress || { stage: 'queued', pct: 0, message: '排队写入业务域' }
-      savedModelStatus.value = `正在自动入库（批次 ${ingest.batch_id}，状态 ${autoIngestStatusLabel(ingest.status)}）…`
+      savedModelStatus.value = ingest.status === 'awaiting_approval'
+        ? `已提交审批工作台，通过后才会写入（批次 ${ingest.batch_id}）。`
+        : `正在自动入库（批次 ${ingest.batch_id}，状态 ${autoIngestStatusLabel(ingest.status)}）…`
       startIngestPoll(String(ingest.batch_id))
     } else if (ingest?.success === false) {
       savedModelStatus.value = ingest.error === 'confirmation_required' ? '仅模板已保存；知识与业务入库尚未确认，因此未启动。' : ingest.error === 'outcome_unknown' ? '模板已保存，入库回执尚未确认；请到审批工作台核对，勿重复提交。' : '模板已保存，但自动入库未能启动；请到审批工作台核对批次，勿重复提交。'

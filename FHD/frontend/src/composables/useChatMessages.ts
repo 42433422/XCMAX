@@ -186,7 +186,8 @@ export function useChatMessages(sessionId: Ref<string>) {
       if (isWelcomeMessage(sanitized[0]) && /<[a-z]+[\s>]/i.test(sanitized[0].content)) {
         sanitized[0] = getDefaultWelcome()[0]
       }
-      return sanitized
+      const collapsed = withoutRepeatedWelcomes(sanitized)
+      return collapsed.length ? collapsed : getDefaultWelcome()
     } catch (_e) {
       return getDefaultWelcome()
     }
@@ -312,9 +313,33 @@ export function useChatMessages(sessionId: Ref<string>) {
     return extractPlainText(raw)
   }
 
+  function isIndustryGreeting(plain: string): boolean {
+    const first = plain.trim().split('\n')[0]?.trim() || ''
+    if (first.startsWith('您好！我是您的智能考勤助手')) return true
+    return /^你好，(?:我是)?[^。\n]{0,24}助手。$/.test(first)
+  }
+
   function isWelcomeMessage(msg: Pick<ChatMessage, 'role' | 'content'>): boolean {
     if (msg.role !== 'ai') return false
-    return toPlainText(msg.content).startsWith(WELCOME_MESSAGE_PREFIX)
+    const plain = toPlainText(msg.content)
+    if (plain.includes('未收到完成回执') || plain.includes('上次保存未确认')) return false
+    if (plain.startsWith(WELCOME_MESSAGE_PREFIX)) return true
+    return isIndustryGreeting(plain)
+  }
+
+  function withoutRepeatedWelcomes(list: ChatMessage[]): ChatMessage[] {
+    let keptWelcome = false
+    const kept: ChatMessage[] = []
+    for (const message of list) {
+      if (!isWelcomeMessage(message)) {
+        kept.push(message)
+        continue
+      }
+      if (keptWelcome || kept.length) continue
+      keptWelcome = true
+      kept.push(message)
+    }
+    return kept
   }
 
   function deriveSessionTitle(list: ChatMessage[]): string {
@@ -502,7 +527,7 @@ export function useChatMessages(sessionId: Ref<string>) {
         if (index >= 0) { matched.add(index); sanitized[index] = { ...local, ...sanitized[index] }; return false }
         return local.persistence?.status !== 'saved'
       })
-      loadMessages([...sanitized, ...unsaved.filter(message => !isWelcomeMessage(message))])
+      loadMessages(withoutRepeatedWelcomes([...sanitized, ...unsaved.filter(message => !isWelcomeMessage(message))]))
       return true
     } catch (_e) {
       if (options.required) throw _e

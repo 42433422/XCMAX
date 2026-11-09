@@ -6,6 +6,7 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .run_models import AgentRun
 from .run_repository import AgentRunRepository
@@ -146,7 +147,28 @@ class TraceRunService:
             run.add_event("run.completed", "Legacy planner 工具调用追踪完成", run.final_output)
         else:
             self._record_unfinished(run, payload)
-        return self.repository.save(run)
+        saved = self.repository.save(run)
+        self._link_observed_approval(saved)
+        return saved
+
+    @staticmethod
+    def _link_observed_approval(run: AgentRun | None) -> None:
+        if run is None or run.status != "waiting_user":
+            return
+        request_ids: list[str] = []
+        for call in run.tool_calls:
+            approval = call.output.get("approval") if isinstance(call.output, dict) else None
+            ids = approval.get("approval_request_ids") if isinstance(approval, dict) else None
+            if isinstance(ids, list):
+                request_ids.extend(str(item) for item in ids if str(item or "").strip())
+        if len(request_ids) != 1:
+            return
+        try:
+            from app.application.workflow.approval_service import get_approval_service
+
+            get_approval_service().note_observed_legacy_run(request_ids[0], run.run_id)
+        except RECOVERABLE_ERRORS:
+            return
 
     def create_tool_plan(
         self,
