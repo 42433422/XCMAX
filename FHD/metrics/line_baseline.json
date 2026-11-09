@@ -1,5 +1,5 @@
 {
-  "lines": 2454376,
-  "updated": "2026-11-08",
-  "note": "ELT 考勤表 closure: dependency-union for dense ungrouped packs + identity-confirm merge flatten/expand; required for auto-slice/confirm without inventing ranges or loosening drawing-cut"
+  "lines": 2454496,
+  "updated": "2026-11-09",
+  "note": "ELT attendance workspace gate + confirm/CI fixes for PR #3101 real-loop acceptance; source-growth reviewed Excel growth"
 }
