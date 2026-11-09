@@ -112,13 +112,13 @@
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
       "base_file": "FHD/app/fastapi_routes/reviewed_excel_template.py",
       "base_blob": "fb3577ec2a4c049b0263a5cf5b4cf867a8b91469",
-      "head_blob": "897b348d00e60b705b953b086d208a75bf0bfe66",
+      "head_blob": "37f544dc08c1474b50ba39f2cc826e732d8b54c3",
       "before_lines": 2418,
-      "after_lines": 2549,
-      "reason": "Route handlers surface model_call_outcome classes, release known claims, and keep download/provenance paths aligned with the product loop.",
-      "boundary": "Existing reviewed-Excel FastAPI routes only; no new top-level router module.",
-      "validation": "Route golden snapshot, reviewed Excel route regressions, and backend CI shards.",
-      "follow_up": "Split oversized route helpers once outcome taxonomy and claim release are on main.",
+      "after_lines": 2598,
+      "reason": "Attendance workspace gate, confirm split safety, and coverage reconcile so note regions no longer leave stale unassigned cells blocking auto-slice.",
+      "boundary": "Existing reviewed-excel FastAPI routes only; no new top-level router.",
+      "validation": "Unassigned-slice unit tests, manual-split and attendance authorize regressions; full CI.",
+      "follow_up": "Split oversized route helpers after ELT acceptance is on main.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/ai_chat_app_service.py": {
