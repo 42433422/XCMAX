@@ -1,0 +1,57 @@
+{
+  "at": "2026-11-09T03:30:41+08:00",
+  "git_sha": "808976f7df3961055f12c83e5bdf30db39db65d9",
+  "golden_file": "刘英.xlsx",
+  "four_way": {
+    "model_status": 200,
+    "provider": "xiaomi",
+    "model": "mimo-v2.6-flash",
+    "route_source": "platform_configuration",
+    "key_source": "platform",
+    "chat_status": 200,
+    "chat_success": true,
+    "chat_payload_rows": 0,
+    "files": [
+      {
+        "file": "刘英.xlsx",
+        "target": "shipment_records",
+        "reason": "database_llm",
+        "ingest": "applied",
+        "run_id": "84b7e4e2-6b0d-48a9-9edb-17b826646829",
+        "download_status": 200,
+        "download_sha256": "9fb9a4fa7f5c9e4308f43d186fded1df95e8bab5f66307184cb919473fde8afe",
+        "download_bytes": 5320,
+        "result_sheet": "本次提交",
+        "result_headers_ok": true,
+        "unlocated_rows": 0,
+        "checked": true,
+        "preview_rows": 3,
+        "written": 3,
+        "unlocated": 0,
+        "result_rows": 3,
+        "db_matched": 3,
+        "original_mismatches": [],
+        "value_mismatches": []
+      }
+    ]
+  },
+  "chat": {
+    "status": 200,
+    "success": true,
+    "agent_run_id": "run_e15d2774a1d946799cd495c7b298a321",
+    "reply_len": 29
+  },
+  "notes": "Four-way PASS on 刘英.xlsx (preview=written=db=file=3). Attendance workspace gate shipped; kaoqin/yang/jia live retests in flight.",
+  "chat_shipment_query": {
+    "status": 200,
+    "success": true,
+    "agent_run_id": "run_3c0bb66208db4448b13fdcf1990c0faf",
+    "reply": "需要澄清"
+  },
+  "agent_run_restore": {
+    "run_id": "run_3c0bb66208db4448b13fdcf1990c0faf",
+    "http": 200,
+    "status": "completed"
+  },
+  "db_purchase_unit_liuying_count": 62
+}
