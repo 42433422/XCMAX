@@ -414,6 +414,53 @@ def reviewed_excel_classification_history(classification_id: str, user=Depends(_
         }
 
 
+def _reconcile_unassigned_against_regions(latest: dict) -> None:
+    """Drop coverage.unassigned cells already covered by current sheet regions.
+
+    Rule/note regions promoted from leftovers (label_source=unassigned) land on
+    sheets after coverage is frozen. Leaving those cells in unassigned would
+    falsely block auto-slice even though their disposition is already explicit.
+    """
+    from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
+
+    from app.application.reviewed_excel_evidence import bounded_range
+
+    rectangles: dict[str, list[tuple[int, int, int, int]]] = {}
+    for sheet in latest.get("sheets") or []:
+        if not isinstance(sheet, dict):
+            continue
+        name = sheet.get("sheet")
+        if not isinstance(name, str):
+            continue
+        for region in sheet.get("regions") or []:
+            if not isinstance(region, dict) or not isinstance(region.get("range"), str):
+                continue
+            try:
+                rectangles.setdefault(name, []).append(bounded_range(region["range"]))
+            except Exception:
+                continue
+    for item in latest.get("coverage") or []:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("sheet")
+        rects = rectangles.get(name) or []
+        kept = []
+        for cell in item.get("unassigned") or []:
+            if not isinstance(cell, str):
+                kept.append(cell)
+                continue
+            try:
+                col, row = coordinate_from_string(cell)
+                number = column_index_from_string(col)
+            except Exception:
+                kept.append(cell)
+                continue
+            if any(c1 <= number <= c2 and r1 <= row <= r2 for c1, r1, c2, r2 in rects):
+                continue
+            kept.append(cell)
+        item["unassigned"] = kept
+
+
 def _model_allows_unassigned_slice(latest: dict) -> bool:
     """Allow slice only when every remaining unassigned cell was authorized by its pack.
 
@@ -422,6 +469,7 @@ def _model_allows_unassigned_slice(latest: dict) -> bool:
     that must not veto another pack that left cells outside with can_slice=true.
     Packs with no pending_confirmation neither authorize nor veto leftovers.
     """
+    _reconcile_unassigned_against_regions(latest)
     summaries = latest.get("input_summaries") or []
     if not isinstance(summaries, list):
         return False
@@ -484,6 +532,7 @@ def _auto_slices(
         return slices, latest.get("coverage") or [], dispositions
     if latest.get("model_status") != "returned":
         raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
+    _reconcile_unassigned_against_regions(latest)
     coverage = latest.get("coverage")
     sheets = latest.get("sheets", [])
     source_names = (

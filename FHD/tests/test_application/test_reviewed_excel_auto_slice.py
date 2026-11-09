@@ -649,6 +649,36 @@ def test_only_the_model_can_allow_a_slice_while_cells_remain_outside():
             "input_summaries": [{"source_coverage": {"can_slice": True}}],
         }
     )
+    # Rule/note regions promoted from leftovers clear those cells from unassigned.
+    latest = {
+        "coverage": [{"sheet": "贾总", "unassigned": ["L26", "L27"]}],
+        "sheets": [
+            {
+                "sheet": "贾总",
+                "regions": [
+                    {
+                        "range": "L26:M27",
+                        "range_source": "rule",
+                        "label_source": "unassigned",
+                        "exclusion_role": "note",
+                    }
+                ],
+            }
+        ],
+        "input_summaries": [
+            {
+                "source_coverage": {
+                    "can_slice": False,
+                    "pending_confirmation": [
+                        {"sheet": "贾总", "cell": "L26"},
+                        {"sheet": "贾总", "cell": "L27"},
+                    ],
+                }
+            }
+        ],
+    }
+    assert _model_allows_unassigned_slice(latest)
+    assert latest["coverage"][0]["unassigned"] == []
 
 
 def _hole_filter_book():
