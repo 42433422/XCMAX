@@ -12,6 +12,18 @@ from app.application.reviewed_excel_review_store import _model_processing_failur
 from app.infrastructure.modstore_transport import MarketModelError
 
 
+def test_detached_slice_decision_recovers_only_unchanged_complete_document():
+    from app.application.reviewed_excel_template import _recover_detached_slice_decision
+
+    schema = {"type": "object", "required": ["documents", "can_slice"], "additionalProperties": False,
+              "properties": {"documents": {"type": "array"}, "can_slice": {"type": "boolean"}}}
+    raw = '{"documents":[]}] , "can_slice":false}'
+    assert _recover_detached_slice_decision(raw, schema) == {"documents": [], "can_slice": False}
+    assert _recover_detached_slice_decision(raw.replace('false}', 'false},{}'), schema) is None
+    assert _recover_detached_slice_decision(raw.replace('false}', '"false"}'), schema) is None
+    assert _recover_detached_slice_decision('{"documents":[]}, {"documents":[]}] , "can_slice":true}', schema) is None
+
+
 def test_paused_invalid_answer_reports_repair_without_exposing_answer():
     from app.fastapi_routes.reviewed_excel_template import _checkpoint_view
 
