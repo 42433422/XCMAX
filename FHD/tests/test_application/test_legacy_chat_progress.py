@@ -113,6 +113,32 @@ def test_buffered_model_activity_is_emitted_before_the_model_finishes(fixture_to
         next(events)
 
 
+def test_explicit_explanation_streams_before_completion_without_tools(fixture_tools):
+    def chunks():
+        yield chunk("第一段", finish=None)
+        raise ValueError("upstream interrupted")
+
+    cli = client(lambda **_: chunks())
+    events = adapter.chat_stream_sse_events(
+        "请简要解释 HTTPS 是什么，不要调用工具。", client=cli, model="synthetic"
+    )
+    assert next(events) == {"type": "token", "text": "第一段"}
+    assert cli.chat.completions.create.call_args.kwargs["tools"] is None
+    assert next(events) == {"type": "model_activity"}
+    with pytest.raises(ValueError, match="upstream interrupted"):
+        next(events)
+    fixture_tools.assert_not_called()
+
+
+def test_explicit_explanation_rejects_unexpected_tool_calls(fixture_tools):
+    cli = client(lambda **_: iter([chunk(calls=[tool()], finish="tool_calls")]))
+    events = list(adapter.chat_stream_sse_events(
+        "解释 DNS 是什么", client=cli, model="synthetic"
+    ))
+    assert any(event["type"] == "error" for event in events)
+    fixture_tools.assert_not_called()
+
+
 def test_failed_tool_return_does_not_claim_completed(fixture_tools):
     fixture_tools.return_value = json.dumps({"success": False, "message": "拒绝"})
     rounds = iter([iter([chunk(calls=[tool()], finish="tool_calls")]), iter([chunk("未成功。")])])

@@ -258,6 +258,13 @@ def chat_stream_text(
     messages, has_image_input, cli, mdl, tools, tool_choice, backup_required = _prepare_chat(
         user_message, runtime_context, system_prompt, client, model
     )
+    from app.application.llm_intent_gate import _GENERAL_EXPLANATION
+
+    direct_stream = bool(_GENERAL_EXPLANATION.fullmatch(user_message.strip())) and not (
+        has_image_input or backup_required
+    )
+    if direct_stream:
+        tools = []
     for _ in range(max_iterations):
         check_stream_active()
         stream = cli.chat.completions.create(
@@ -282,9 +289,14 @@ def chat_stream_text(
                 if delta is None:
                     continue
                 content = getattr(delta, "content", None)
+                tc_list = getattr(delta, "tool_calls", None) or []
+                if direct_stream and tc_list:
+                    yield {"_planner_sse": "error", "message": "解释请求收到意外的工具调用，已停止。"}
+                    return
                 if content:
                     text_parts.append(str(content))
-                tc_list = getattr(delta, "tool_calls", None) or []
+                    if direct_stream and not tc_list:
+                        yield str(content)
                 if content or tc_list:
                     yield {"_planner_sse": "model_activity"}
                 for position, tc in enumerate(tc_list):
@@ -389,7 +401,8 @@ def chat_stream_text(
             yield {"_planner_sse": "error", "message": _BACKUP_NOT_EXECUTED}
             return
         if "".join(text_parts).strip():
-            yield from text_parts
+            if not direct_stream:
+                yield from text_parts
             return
         if has_image_input:
             raise _facade().EmptyMultimodalResponseError(
