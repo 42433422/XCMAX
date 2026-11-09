@@ -51,14 +51,14 @@
     },
     "FHD/app/application/employee_runtime/task_continuity.py": {
       "base_file": "FHD/app/application/employee_runtime/task_continuity.py",
-      "base_blob": "6b94c3e2aca11b7591832ba3e2c55be29d4ebc36",
-      "head_blob": "75408da92682d3e375139a032351f2ac5a2f6f58",
-      "before_lines": 1655,
-      "after_lines": 1927,
-      "reason": "Employee chains must persist actual authorized child receipts and resume only failed or pending hops. Registered same-tenant role identities now resolve before chain persistence, handoff metadata, retry counters or default idempotency keys, preventing arbitrary input from becoming durable identity fields.",
-      "boundary": "The existing continuity ledger owns chain progress and recovery. Shared card identity validation lives in handoff_identity; availability remains a per-hop decision. Completed historical chains remain readable after card removal. Existing tool execution, ledger format and public routes are unchanged.",
-      "validation": "Real-disk boundary regressions prove rejection without input reflection or ledger changes, canonical IDs, legacy recovery checks and completed-history compatibility. Existing synchronous continuity and authorization tests pass. Strict E01-E30 and real E26/E27 failed-hop recovery remain required on the final integration CI head.",
-      "follow_up": "Separate chain progression from the existing continuity handler after the four-hop and restart contracts are stable; keep card identity validation in its shared module and preserve completed receipts and original call parameters.",
+      "base_blob": "75408da92682d3e375139a032351f2ac5a2f6f58",
+      "head_blob": "59230b94db6a28630769398c7adbca6f953611de",
+      "before_lines": 1927,
+      "after_lines": 1982,
+      "reason": "Pin ledger and lock file descriptors to the configured workspace and scope recovery/metrics to authorized tasks; 55 net lines in the existing continuity coordinator avoid changing recovery semantics during this security fix.",
+      "boundary": "Only ledger I/O and authorized-task selection; workspace handle primitives are already extracted to workspace_io.py. No new public routes or ledger format.",
+      "validation": "95 focused project tests passed including complete continuity acceptance, E25 and durability. Native Windows identity tests and complete integration CI remain pending.",
+      "follow_up": "Keep handle primitives in workspace_io; extract recovery projection separately after the security change is accepted. This entry requests review, not human approval.",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_merged.py": {
@@ -240,6 +240,18 @@
       "boundary": "仅限该合并路由模块中的流式分块回报与空闲计时；模型选择、配额和鉴权未改动。",
       "validation": "已有流式空闲与会话回执回归；本次进一步减少动态 facade 引用。需在最新 HEAD 重跑 CI 和真实业务闭环。",
       "follow_up": "后续把流式保活抽成独立模块；本条为评审请求，不代表批准。"
+    },
+    "FHD/app/application/shipment_excel_etl_security.py": {
+      "base_file": "FHD/app/application/shipment_excel_etl_security.py",
+      "base_blob": "95fceb733cd3346d157c6a049b17358e17174ce9",
+      "head_blob": "2e8d2f425dfc0151711b6e7dbb015f0797088643",
+      "before_lines": 987,
+      "after_lines": 1011,
+      "reason": "Route spreadsheet result writes through the existing atomic pinned-handle output boundary rather than direct path writes; 24 net lines reuse the existing cross-platform security implementation.",
+      "boundary": "Only managed shipment result output path validation and context manager; workbook business layout and all public APIs are unchanged.",
+      "validation": "8 result security regressions and layout tests passed within 95 combined tests; traversal, parent/leaf links, parent swap and interrupted-write preservation covered.",
+      "follow_up": "Keep managed result path resolution in this security boundary; future large refactor needs separate behavior-preserving review. This entry is not reviewer approval.",
+      "review_owner": "@42433422"
     }
   }
 }

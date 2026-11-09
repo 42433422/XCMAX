@@ -899,9 +899,33 @@ def open_etl_output_file(
             break
     if root is None:
         raise ShipmentEtlPathError("path not under allowed dirs")
-    if Path(os.path.realpath(path_text)) != path:
+    with _open_etl_output_under_root(path, root) as stream:
+        yield stream
+
+
+@contextmanager
+def open_shipment_result_file(output_path: str | Path) -> Iterator[BinaryIO]:
+    """Write managed shipment results without granting general ETL read access."""
+    from app.utils.path_io.path_utils import get_app_data_dir
+
+    root = Path(get_app_data_dir()).resolve()
+    path = Path(os.path.abspath(output_path))
+    exports = root / "etl" / "exports"
+    if path != exports and path.is_relative_to(exports):
+        if ".." in Path(output_path).parts:
+            raise ShipmentEtlPathError("output path contains traversal")
+        with _open_etl_output_under_root(path, root) as stream:
+            yield stream
+    else:
+        # Standalone callers still need an operator-configured ETL root.
+        with open_etl_output_file(output_path) as stream:
+            yield stream
+
+
+@contextmanager
+def _open_etl_output_under_root(path: Path, root: Path) -> Iterator[BinaryIO]:
+    if Path(os.path.realpath(path)) != path:
         raise ShipmentEtlPathError("output path resolves through a symbolic link")
-    path = Path(path_text)
     if not _secure_output_handles_available():
         raise ShipmentEtlPathError(
             "secure ETL output is unavailable: this platform lacks no-follow directory handles"

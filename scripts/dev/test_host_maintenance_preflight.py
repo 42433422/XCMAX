@@ -282,6 +282,155 @@ class PreflightTest(unittest.TestCase):
                 with self.assertRaises(subprocess.TimeoutExpired):
                     capture([sys.executable, '-c', 'import time; time.sleep(60)'])
 
+    def container_setup(self, path, value="postgres:16", payment=True):
+        self.backup_fixture(path)
+        config = path('/etc/xcmax-ops.env')
+        config.parent.mkdir(parents=True, exist_ok=True)
+        content = 'PASSWORD=SECRET_PASSWORD\nOPS_PG_DUMP_CONTAINER_IMAGE=' + value + '\n'
+        if payment:
+            content += 'OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE=postgres:16\n'
+        config.write_text(content)
+
+    def container_hook(self, args):
+        if Path(args[0]).name == 'pg_restore' and args[-1] == '--version':
+            return subprocess.CompletedProcess(args, 0, 'pg_restore (PostgreSQL) 10.23\n', '')
+        if Path(args[0]).name == 'pg_restore':
+            return subprocess.CompletedProcess(args, 1, b'SECRET_TABLES', b'unsupported version')
+        if args[:3] == ['docker', 'image', 'inspect']:
+            if args[4] == '{{json .Config.Volumes}}':
+                return subprocess.CompletedProcess(args, 0, 'null', '')
+            return subprocess.CompletedProcess(args, 0, 'sha256:' + 'a' * 64, '')
+        if args[:2] == ['docker', 'run']:
+            return subprocess.CompletedProcess(args, 0, 'pg_restore (PostgreSQL) 16.4\n' if args[-1] == '--version' else 'SECRET_TABLES', '')
+
+    def test_installed_container_readability_does_not_hide_host_failure(self):
+        code, records, calls = self.run_probe(self.container_setup, command_hook=self.container_hook)
+        self.assertEqual(code, 0)
+        host = [r['value'] for r in records if r['check'] == 'archive_validator']
+        self.assertEqual([r['category'] for r in host[:3]], ['unsupported_version'] * 3)
+        fallback = [r['value'] for r in records if r['check'] == 'container_archive_validator']
+        self.assertEqual([r['category'] for r in fallback], ['ok'] * 3)
+        runs = [c for c in calls if c[:2] == ['docker', 'run']]
+        self.assertEqual(len(runs), 5)
+        for args in runs:
+            for flag in ('--pull=never', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--no-healthcheck'):
+                self.assertIn(flag, args)
+            self.assertIn('sha256:' + 'a' * 64, args)
+            self.assertNotIn('postgres:16', args)
+            self.assertFalse(any(a.startswith(('--mount', '--volume', '--env')) for a in args))
+        self.assertEqual(len([c for c in calls if c[:2] == ['docker', 'rm']]), 5)
+        self.assertTrue(all('--volumes' in c for c in calls if c[:2] == ['docker', 'rm']))
+        self.assertNotIn('SECRET', str(records))
+        self.assertIn('not proof of the historical dump producer', str(records))
+        self.assertIn('not maintenance clearance', str(records))
+
+    def test_container_missing_invalid_config_and_missing_image_stay_unknown(self):
+        for value in ('$(curl SECRET)', '-privileged', 'postgres:16\nOPS_PG_DUMP_CONTAINER_IMAGE=other:16'):
+            code, records, calls = self.run_probe(lambda p: self.container_setup(p, value, False), command_hook=self.container_hook)
+            self.assertEqual(code, 1)
+            self.assertFalse(any(c[0] == 'docker' for c in calls))
+            self.assertNotIn('SECRET', str(records))
+        def missing(args):
+            if args[:3] == ['docker', 'image', 'inspect']:
+                return subprocess.CompletedProcess(args, 1, 'SECRET_IMAGE', 'SECRET_ERROR')
+            return self.container_hook(args)
+        code, records, calls = self.run_probe(self.container_setup, command_hook=missing)
+        self.assertEqual(code, 1)
+        self.assertFalse(any(c[:2] == ['docker', 'run'] for c in calls))
+        self.assertNotIn('SECRET', str(records))
+
+    def test_payment_never_falls_back_to_general_image_and_timeout_is_cleaned(self):
+        code, records, calls = self.run_probe(lambda p: self.container_setup(p, payment=False), command_hook=self.container_hook)
+        self.assertEqual(code, 1)
+        fallback = [r['value']['file'] for r in records if r['check'] == 'container_archive_validator']
+        self.assertEqual(fallback, ['fhd_pg.dump', 'modstore_pg.dump'])
+        def timeout(args):
+            if args[:2] == ['docker', 'run']:
+                raise subprocess.TimeoutExpired(args, 15, output='SECRET')
+            return self.container_hook(args)
+        code, records, calls = self.run_probe(self.container_setup, command_hook=timeout)
+        self.assertEqual(code, 1)
+        self.assertTrue(any(c[:2] == ['docker', 'rm'] for c in calls))
+        self.assertNotIn('SECRET', str(records))
+
+    def test_no_container_started_without_cleanup_time_budget(self):
+        import itertools
+        clock = itertools.chain([0], itertools.repeat(130))
+        with patch('time.monotonic', side_effect=lambda: next(clock)):
+            code, _, calls = self.run_probe(self.container_setup, command_hook=self.container_hook)
+        self.assertEqual(code, 1)
+        self.assertFalse(any(c[:2] == ['docker', 'run'] for c in calls))
+
+    def test_cleanup_failure_is_not_success(self):
+        for failure in ('exit', 'timeout'):
+            def hook(args):
+                if args[:2] == ['docker', 'rm']:
+                    if failure == 'timeout':
+                        raise subprocess.TimeoutExpired(args, 15, output='SECRET')
+                    return subprocess.CompletedProcess(args, 1, 'SECRET', 'SECRET')
+                return self.container_hook(args)
+            code, records, _ = self.run_probe(self.container_setup, command_hook=hook)
+            self.assertEqual(code, 1)
+            self.assertIn('container_cleanup_unverified', str(records[-1]))
+            self.assertNotIn('SECRET', str(records))
+
+    def test_real_sigterm_unwinds_container_cleanup(self):
+        import signal
+        prefix = PROBE.split('class ProbeInterrupted', 1)[1].split('def command', 1)[0]
+        function = 'def container_command' + PROBE.split('def container_command', 1)[1].split('def container_restore_candidates', 1)[0]
+        source = 'import signal, time, uuid, subprocess, sys\nclass ProbeInterrupted' + prefix + function + """
+def fake_run(args, **kwargs):
+    if args[1] == 'rm':
+        print('cleaned', flush=True)
+        return subprocess.CompletedProcess(args, 0)
+    print('started', flush=True)
+    signal.pause()
+subprocess.run = fake_run
+container_command(['docker', 'run'], version=True)
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / 'signal_probe.py'
+            script.write_text(source)
+            process = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                self.assertEqual(process.stdout.readline().strip(), 'started')
+                process.send_signal(signal.SIGTERM)
+                out, err = process.communicate(timeout=5)
+                self.assertIn('cleaned', out)
+                self.assertNotEqual(process.returncode, 0)
+                self.assertIn('ProbeInterrupted', err)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.wait()
+
+    def test_declared_volumes_fail_closed_without_container_creation(self):
+        for raw, allowed in (('null', True), ('{}', True), ('{"/var/lib/postgresql/data": {}}', False),
+                             ('SECRET_INVALID', False), ('[]', False), ('false', False)):
+            with self.subTest(raw=raw):
+                def hook(args):
+                    if args[:3] == ['docker', 'image', 'inspect'] and args[4] == '{{json .Config.Volumes}}':
+                        self.assertEqual(args[-1], 'sha256:' + 'a' * 64)
+                        return subprocess.CompletedProcess(args, 0, raw, '')
+                    return self.container_hook(args)
+                code, records, calls = self.run_probe(self.container_setup, command_hook=hook)
+                self.assertEqual(code, 0 if allowed else 1)
+                self.assertEqual(any(c[:2] == ['docker', 'run'] for c in calls), allowed)
+                if not allowed:
+                    self.assertIn('candidate_rejected_declared_volumes', str(records))
+                self.assertNotIn('SECRET', str(records))
+        for failure in ('exit', 'timeout'):
+            def hook(args):
+                if args[:3] == ['docker', 'image', 'inspect'] and args[4] == '{{json .Config.Volumes}}':
+                    if failure == 'timeout':
+                        raise subprocess.TimeoutExpired(args, 15)
+                    return subprocess.CompletedProcess(args, 1, 'null', 'SECRET')
+                return self.container_hook(args)
+            code, records, calls = self.run_probe(self.container_setup, command_hook=hook)
+            self.assertEqual(code, 1)
+            self.assertFalse(any(c[:2] == ['docker', 'run'] for c in calls))
+            self.assertIn('candidate_rejected_declared_volumes', str(records))
+
     def test_real_df_inode_arguments(self):
         _, _, calls = self.run_probe()
         args = next(c for c in calls if c[0] == 'df' and 'itotal' in ' '.join(c))

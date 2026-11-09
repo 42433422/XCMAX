@@ -1431,7 +1431,7 @@ jobs:
   desktop-windows-release-script-smoke:
     name: desktop-windows-release-script-smoke
     needs: [guard-temp-scripts, classify]
-    # 仅 Windows 打包/发布脚本（.ps1、windows/win32、Authenticode）相关改动才跑。
+    # Windows 发布脚本及原生文件边界相关改动运行；分类器统一维护触发范围。
     if: needs.classify.outputs.windows != 'false'
     runs-on: windows-latest
     steps:
@@ -1450,7 +1450,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           # Import the real desktop package without installing unrelated audio/ML services.
-          $nativePackages = 'pytest,pytest-asyncio,pygments,sqlalchemy,annotated-doc,annotated-types,anyio,click,cryptography,fastapi,httpx,idna,orjson,pydantic,pydantic-core,python-dotenv,python-multipart,redis,setuptools,sniffio,starlette,typing-inspection,typing-extensions,zstandard'
+          $nativePackages = 'aiohappyeyeballs,aiohttp,aiosignal,attrs,frozenlist,multidict,propcache,yarl,pytest,pytest-asyncio,pygments,sqlalchemy,annotated-doc,annotated-types,anyio,click,cryptography,fastapi,httpx,idna,orjson,pydantic,pydantic-core,python-dotenv,python-multipart,redis,setuptools,sniffio,starlette,typing-inspection,typing-extensions,zstandard'
           $nativeRequirements = python -c "import sys,tomllib; p=tomllib.load(open('uv.lock','rb')); names=sys.argv[1].split(','); v={n:[x['version'] for x in p['package'] if x['name'].lower().replace('_','-')==n] for n in names}; assert all(len(x)==1 for x in v.values()); print(' '.join(n+'=='+v[n][0] for n in names))" $nativePackages
           if ($LASTEXITCODE -ne 0) { throw 'Locked native test dependencies unavailable' }
           python -m pip install --disable-pip-version-check ($nativeRequirements -split ' ')
@@ -1474,6 +1474,40 @@ jobs:
           print('Verified four executed native observation tests; no activation/durability claim')
           '@ | python -
           if ($LASTEXITCODE -ne 0) { throw 'Expected four executed native tests; skips are not acceptance' }
+      - name: Verify native Windows employee identity boundaries
+        shell: pwsh
+        env:
+          PYTHONPATH: "."
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -c "import sys; assert sys.platform == 'win32', 'Native Windows execution required'"
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows runtime unavailable' }
+          python -m pytest --noconftest -o addopts= -p no:cacheprovider -p pytest_asyncio.plugin -q tests/test_desktop/test_windows_employee_identity_native.py --junitxml=windows-employee-identity-native.xml
+          if ($LASTEXITCODE -ne 0) { throw 'Native employee identity tests failed' }
+          @'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('windows-employee-identity-native.xml').getroot()
+          expected = {
+              'test_native_employee_identity_round_trip',
+              'test_native_employee_identity_hardlink_is_refused',
+              'test_native_employee_identity_parent_junction_is_refused',
+              'test_native_employee_identity_workspace_junction_is_refused',
+          }
+          cases = root.findall('.//testcase')
+          assert len(cases) == 4 and {case.attrib['name'] for case in cases} == expected
+          assert not any(root.findall('.//' + tag) for tag in ('skipped', 'failure', 'error'))
+          print('Verified four executed native employee identity tests')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Native identity skips are not acceptance' }
+      - name: Retain native Windows identity results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-employee-identity-native
+          path: FHD/windows-employee-identity-native.xml
+          if-no-files-found: error
       - uses: actions/setup-node@v7
         with:
           node-version: "22"

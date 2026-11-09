@@ -9,9 +9,8 @@ _DB_URL = re.compile(
     r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s'\"<>]+",
     re.IGNORECASE,
 )
-_PRIVATE_KEY = re.compile(
-    r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]+?-----END [A-Z ]*PRIVATE KEY-----"
-)
+_PRIVATE_KEY_BEGIN = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+_PRIVATE_KEY_END = re.compile(r"-----END [A-Z ]*PRIVATE KEY-----")
 _AWS_KEY = re.compile(r"\bAKIA[0-9A-Z]{16}\b")
 _SK_KEY = re.compile(r"\bsk-[A-Za-z0-9_\-]{8,}\b")
 _JSON_SECRET = re.compile(
@@ -31,12 +30,26 @@ _PHONE = re.compile(r"\b1[3-9]\d{9}\b")
 _JWT = re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
 
 
+def _redact_private_keys(text: str) -> str:
+    """Scan non-overlapping PEM blocks; redact an unterminated block to EOF."""
+    parts: list[str] = []
+    cursor = 0
+    while begin := _PRIVATE_KEY_BEGIN.search(text, cursor):
+        parts.extend((text[cursor : begin.start()], "<redacted-private-key>"))
+        end = _PRIVATE_KEY_END.search(text, begin.end())
+        if end is None:
+            return "".join(parts)
+        cursor = end.end()
+    parts.append(text[cursor:])
+    return "".join(parts)
+
+
 def redact_log_text(text: str) -> str:
     """Return log text with common secret / PII patterns masked."""
     if not text:
         return text
     out = text
-    out = _PRIVATE_KEY.sub("<redacted-private-key>", out)
+    out = _redact_private_keys(out)
     out = _DB_URL.sub("<redacted-database-url>", out)
     out = _BEARER.sub(r"\1<redacted>", out)
     out = _JWT.sub("<redacted-jwt>", out)

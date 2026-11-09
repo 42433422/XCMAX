@@ -99,7 +99,8 @@ def _product(formula: str, worksheet) -> float:
     return _value(left, worksheet) * _value(right, worksheet)
 
 
-def test_fill_keeps_headers_date_formulas_and_contract(tmp_path):
+def test_fill_keeps_headers_date_formulas_and_contract(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     source = tmp_path / "layout.xlsx"
     _layout(source)
     first = tmp_path / "one.xlsx"
@@ -143,7 +144,8 @@ def test_fill_keeps_headers_date_formulas_and_contract(tmp_path):
     workbook.close()
 
 
-def test_fill_inserts_lines_without_dropping_the_contract(tmp_path):
+def test_fill_inserts_lines_without_dropping_the_contract(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     source = tmp_path / "layout.xlsx"
     _layout(source, slots=2)
     records = _records() + [

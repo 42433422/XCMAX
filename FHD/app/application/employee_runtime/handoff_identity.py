@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
+
+from app.application.employee_runtime.workspace_io import (
+    workspace_directory,
+    workspace_file,
+    workspace_names,
+)
 
 
 def load_identity_card(
@@ -25,15 +32,15 @@ def load_identity_card(
         return None, "handoff_identity_unverified"
     folder = Path(workspace) / "employees"
     try:
-        if folder.is_symlink() or not folder.is_dir() or not any(folder.glob("*.json")):
-            return None, "handoff_identity_unverified"
-        path = folder / f"{target}.json"
-        if path.is_symlink():
-            return None, "handoff_identity_unverified"
-        if not path.is_file():
-            return None, "handoff_unknown_employee"
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
+        with workspace_directory(workspace, folder) as parent_fd:
+            if not any(name.endswith(".json") for name in workspace_names(parent_fd)):
+                return None, "handoff_identity_unverified"
+            try:
+                with workspace_file(parent_fd, f"{target}.json", os.O_RDONLY, "r") as handle:
+                    loaded = json.load(handle)
+            except FileNotFoundError:
+                return None, "handoff_unknown_employee"
+    except (OSError, ValueError, UnicodeError, json.JSONDecodeError):
         return None, "handoff_identity_unverified"
     if not isinstance(loaded, dict):
         return None, "handoff_identity_unverified"

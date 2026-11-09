@@ -1,7 +1,7 @@
 {
   "schema": "gitleaks-disposition-registry/v1",
-  "generated_at": "2026-11-01T02:44:58Z",
-  "tip_basis_sha": "d20ae2492ddb00342ef2cc1ae83c3dbb7ecfb340",
+  "generated_at": "2026-11-09T03:16:07Z",
+  "tip_basis_sha": "852cbc23be8191663e6093945ff3b3cbe4e9c49c",
   "author": "codex-security-remediation",
   "reviewer": "42433422",
   "rows": [
@@ -441,6 +441,101 @@
         "evidence/n23.json"
       ],
       "attestation_sha256": "ec053cb803fe8497819f17d65271ffe61f0c9fa085d44da8ccbdaf7b9e1de8c7"
+    },
+    {
+      "n": 24,
+      "disposition": "false-positive",
+      "rule": "generic-api-key",
+      "path": "FHD/tests/test_application/test_employee_closed_loop_e01_e30.py",
+      "line": 547,
+      "commit_sha": "93087da7390cf8b3395504b760715656f75ef440",
+      "author": "dot-agent:security_code_audit",
+      "reviewer": "dot-agent:release_scan_deploy",
+      "reviewed_at": "2026-11-09T03:16:07Z",
+      "review_due": "2027-02-07T00:00:00Z",
+      "key": "generic-api-key|FHD/tests/test_application/test_employee_closed_loop_e01_e30.py|93087da7390cf8b3395504b760715656f75ef440|547",
+      "closed": true,
+      "evidence": "ClosedLoopRun.open_resources uses TemporaryDirectory and SQLite; _setenv records previous values and close restores them. Two separate AI agent source reviews; not a human or GitHub owner approval.",
+      "evidence_files": [
+        "evidence/n24.json"
+      ],
+      "attestation_sha256": "489ddd012b53514cd9fc5ce6e44f2d5fa3700aac2edbac5b99315a592ebc5cde"
+    },
+    {
+      "n": 25,
+      "disposition": "false-positive",
+      "rule": "generic-api-key",
+      "path": "FHD/tests/test_application/test_approval_executor_gate.py",
+      "line": 63,
+      "commit_sha": "671e28b04eebeb78d92aa7e60a8c34680b4b39ec",
+      "author": "dot-agent:security_code_audit",
+      "reviewer": "dot-agent:release_scan_deploy",
+      "reviewed_at": "2026-11-09T03:16:07Z",
+      "review_due": "2027-02-07T00:00:00Z",
+      "key": "generic-api-key|FHD/tests/test_application/test_approval_executor_gate.py|671e28b04eebeb78d92aa7e60a8c34680b4b39ec|63",
+      "closed": true,
+      "evidence": "pytest monkeypatch SECRET_KEY scoped to temporary SQLite and audit test fixture. Two separate AI agent source reviews; not a human or GitHub owner approval.",
+      "evidence_files": [
+        "evidence/n25.json"
+      ],
+      "attestation_sha256": "2b1560f1846e515c8d47348760712c259fbb68bcb99cead019623f30a67e5c51"
+    },
+    {
+      "n": 26,
+      "disposition": "false-positive",
+      "rule": "generic-api-key",
+      "path": "FHD/tests/test_application/test_employee_handoff_e25.py",
+      "line": 46,
+      "commit_sha": "484c83a2244cab0f1d76e72d12df0902b4666c36",
+      "author": "dot-agent:security_code_audit",
+      "reviewer": "dot-agent:release_scan_deploy",
+      "reviewed_at": "2026-11-09T03:16:07Z",
+      "review_due": "2027-02-07T00:00:00Z",
+      "key": "generic-api-key|FHD/tests/test_application/test_employee_handoff_e25.py|484c83a2244cab0f1d76e72d12df0902b4666c36|46",
+      "closed": true,
+      "evidence": "pytest monkeypatch SECRET_KEY scoped to tmp_path SQLite and audit fixture. Two separate AI agent source reviews; not a human or GitHub owner approval.",
+      "evidence_files": [
+        "evidence/n26.json"
+      ],
+      "attestation_sha256": "81b06c877b637ed4b28638f8d807bd97b5826f5ab1f0d0e1407d91ee3f1afe68"
+    },
+    {
+      "n": 27,
+      "disposition": "false-positive",
+      "rule": "generic-api-key",
+      "path": "FHD/tests/test_application/test_approval_executor_gate.py",
+      "line": 63,
+      "commit_sha": "4bb970f307bbcb905f629b8cc7c0b7a5f7c44bb8",
+      "author": "dot-agent:security_code_audit",
+      "reviewer": "dot-agent:release_scan_deploy",
+      "reviewed_at": "2026-11-09T03:16:07Z",
+      "review_due": "2027-02-07T00:00:00Z",
+      "key": "generic-api-key|FHD/tests/test_application/test_approval_executor_gate.py|4bb970f307bbcb905f629b8cc7c0b7a5f7c44bb8|63",
+      "closed": true,
+      "evidence": "pytest monkeypatch SECRET_KEY scoped to temporary SQLite and audit test fixture. Two separate AI agent source reviews; not a human or GitHub owner approval.",
+      "evidence_files": [
+        "evidence/n27.json"
+      ],
+      "attestation_sha256": "b000fc4b140e2d86440c846a5a370a44fcf69fac0975b563ce0be0e2a109a580"
+    },
+    {
+      "n": 28,
+      "disposition": "false-positive",
+      "rule": "generic-api-key",
+      "path": "FHD/tests/test_application/test_employee_closed_loop_e01_e30.py",
+      "line": 414,
+      "commit_sha": "e93ca976a0d236010669aae8cbb64c2b8f9be12f",
+      "author": "dot-agent:security_code_audit",
+      "reviewer": "dot-agent:release_scan_deploy",
+      "reviewed_at": "2026-11-09T03:16:07Z",
+      "review_due": "2027-02-07T00:00:00Z",
+      "key": "generic-api-key|FHD/tests/test_application/test_employee_closed_loop_e01_e30.py|e93ca976a0d236010669aae8cbb64c2b8f9be12f|414",
+      "closed": true,
+      "evidence": "pytest loop fixture uses monkeypatch, tmp_path audit/idempotency files and temporary SQLite. Two separate AI agent source reviews; not a human or GitHub owner approval.",
+      "evidence_files": [
+        "evidence/n28.json"
+      ],
+      "attestation_sha256": "2e81843a29f72bf1be2636d1fc0a476e0be435c5d73e2b06a6c2126ca5bf8fec"
     }
   ]
 }

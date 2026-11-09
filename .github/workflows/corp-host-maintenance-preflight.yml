@@ -20,7 +20,7 @@ jobs:
           command_timeout: 4m
           script: |
             set -eu
-            timeout --kill-after=5s 180s python3 - <<'PY'
+            timeout --kill-after=25s 180s python3 - <<'PY'
             import datetime
             import json
             import fcntl
@@ -32,8 +32,20 @@ jobs:
             import subprocess
             import selectors
             import time
+            import uuid
+            import signal
+            import sys
             from pathlib import Path
 
+            class ProbeInterrupted(BaseException):
+                pass
+
+            def interrupted(signum, frame):
+                raise ProbeInterrupted("probe_interrupted")
+
+            signal.signal(signal.SIGTERM, interrupted)
+            signal.signal(signal.SIGINT, interrupted)
+            probe_deadline = time.monotonic() + 150
             errors = []
             def emit(label, value):
                 print(json.dumps({"check": label, "value": value}, ensure_ascii=True), flush=True)
@@ -77,9 +89,9 @@ jobs:
                 emit(tool + "_host_candidate", result)
                 return binary
 
-            def run_validator(args):
+            def run_validator(args, stdin=None):
                 detail = bytearray()
-                with subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                with subprocess.Popen(args, stdin=stdin, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                       env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}) as process:
                     try:
                         deadline = time.monotonic() + 15
@@ -120,6 +132,106 @@ jobs:
                     result["category"] = "timeout"
                 except OSError:
                     result["category"] = "execution_error"
+                return result
+
+            def container_command(args, *, stdin=None, version=False):
+                # Reap only this probe's uniquely named transient container after timeout.
+                if time.monotonic() + 35 > probe_deadline:
+                    raise subprocess.TimeoutExpired(args, 15)
+                name = "xcmax-backup-probe-" + uuid.uuid4().hex
+                args = args[:2] + ["--name=" + name] + args[2:]
+                try:
+                    if version:
+                        return subprocess.run(args, capture_output=True, text=True, timeout=15,
+                                              env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+                    return run_validator(args, stdin=stdin)
+                finally:
+                    was_interrupted = isinstance(sys.exc_info()[1], ProbeInterrupted)
+                    previous = {sig: signal.signal(sig, signal.SIG_IGN) for sig in (signal.SIGTERM, signal.SIGINT)}
+                    try:
+                        cleanup = subprocess.run(["docker", "rm", "--force", "--volumes", name], stdout=subprocess.DEVNULL,
+                                                 stderr=subprocess.DEVNULL, timeout=15,
+                                                 env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+                        if cleanup.returncode != 0:
+                            raise ValueError("container_cleanup_unverified")
+                    except (OSError, ValueError, subprocess.TimeoutExpired):
+                        errors.append("container_cleanup_unverified")
+                        if not was_interrupted:
+                            raise ValueError("container_cleanup_unverified")
+                    finally:
+                        for sig, handler in previous.items():
+                            signal.signal(sig, handler)
+
+            def container_restore_candidates():
+                # Parse two literal image values only. Never evaluate shell configuration.
+                keys = ("OPS_PG_DUMP_CONTAINER_IMAGE", "OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE")
+                candidates = {}
+                try:
+                    config = Path("/etc/xcmax-ops.env")
+                    with open(config, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW | os.O_NONBLOCK)) as stream:
+                        info = os.fstat(stream.fileno())
+                        if not stat.S_ISREG(info.st_mode) or info.st_size > 65536:
+                            raise ValueError("unsafe_config")
+                        content = stream.read(65537).decode("utf-8")
+                    for key in keys:
+                        values = re.findall(r"^" + re.escape(key) + r"=(.*?)\s*$", content, re.MULTILINE)
+                        result = {"key": key, "status": "not_configured", "version": "unknown"}
+                        if values:
+                            value = values[0].strip()
+                            if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                                value = value[1:-1]
+                            # No options, whitespace, shell expansion or registry credentials.
+                            if len(values) != 1 or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._/:@-]{0,255}", value):
+                                result["status"] = "invalid_config"
+                            else:
+                                result["status"] = "installed_image_unknown"
+                                args = ["docker", "image", "inspect", "--format", "{{.Id}}", value]
+                                completed = subprocess.run(args, capture_output=True, text=True, timeout=15,
+                                                           env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+                                image_id = completed.stdout.strip()
+                                if completed.returncode == 0 and re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+                                    try:
+                                        volumes = subprocess.run(
+                                            ["docker", "image", "inspect", "--format", "{{json .Config.Volumes}}", image_id],
+                                            capture_output=True, text=True, timeout=15,
+                                            env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+                                        declared = json.loads(volumes.stdout) if volumes.returncode == 0 else "unknown"
+                                    except (OSError, ValueError, subprocess.TimeoutExpired):
+                                        declared = "unknown"
+                                    if declared is not None and not (isinstance(declared, dict) and not declared):
+                                        result["status"] = "candidate_rejected_declared_volumes"
+                                        emit("pg_restore_container_candidate", result)
+                                        continue
+                                    args = ["docker", "run", "--pull=never", "--network=none", "--read-only", "--no-healthcheck",
+                                            "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=32",
+                                            "--memory=128m", "--user=65534:65534", "-i", "--entrypoint=pg_restore", image_id]
+                                    completed = container_command(args + ["--version"], version=True)
+                                    match = re.fullmatch(r"pg_restore \(PostgreSQL\) ([0-9]+(?:\.[0-9]+){0,2})(?: [^\r\n]*)?\s*", completed.stdout)
+                                    if completed.returncode == 0 and match:
+                                        result.update(status="candidate_available", version=match[1], image_id=image_id)
+                                        candidates[key] = args
+                        emit("pg_restore_container_candidate", result)
+                except FileNotFoundError:
+                    emit("container_config", "missing_config_or_docker")
+                except (OSError, UnicodeError, ValueError, subprocess.TimeoutExpired):
+                    emit("container_config", "unreadable_invalid_or_timed_out")
+                return candidates
+
+            def validate_container_archive(args, path):
+                result = {"file": path.name, "exitcode": None, "category": "unknown"}
+                try:
+                    # No bind mounts, DB credentials, network or SQL execution; discard the TOC.
+                    with open(path, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW)) as stream:
+                        exitcode, detail = container_command(args + ["--list"], stdin=stream)
+                    result.update(exitcode=exitcode, category="ok" if exitcode == 0 else "other")
+                    if exitcode and b"unsupported version" in detail.lower():
+                        result["category"] = "unsupported_version"
+                except subprocess.TimeoutExpired:
+                    result["category"] = "timeout"
+                except OSError:
+                    result["category"] = "execution_error"
+                except ValueError:
+                    result["category"] = "cleanup_unverified"
                 return result
 
             def verify_latest_backup():
@@ -187,7 +299,8 @@ jobs:
                             if digest.hexdigest() != expected[name]:
                                 raise ValueError("checksum_mismatch")
                         restore = validator_version("pg_restore", "/usr/pgsql-16/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-                        emit("writer_version_limit", "Host candidates only; configured container writer and actual dump producer remain unverified.")
+                        emit("writer_version_limit", "Installed configured candidates are not proof of the historical dump producer; readability is not a restore test.")
+                        containers = container_restore_candidates()
                         for name in names[:3]:
                             with open(directory / name, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW)) as stream:
                                 header = stream.read(8)
@@ -201,8 +314,15 @@ jobs:
                             binary = restore if tool == "pg_restore" else shutil.which(tool, path="/usr/sbin:/usr/bin:/sbin:/bin")
                             result = validate_archive(binary, option, directory / name)
                             result["tool"] = tool
-                            results.append(result)
                             emit("archive_validator", result)
+                            if tool == "pg_restore" and result["category"] != "ok":
+                                key = "OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE" if name == "payment_pg.dump" else "OPS_PG_DUMP_CONTAINER_IMAGE"
+                                if key in containers:
+                                    candidate = validate_container_archive(containers[key], directory / name)
+                                    emit("container_archive_validator", candidate)
+                                    if candidate["category"] == "ok":
+                                        result = candidate
+                            results.append(result)
                         for path in paths:
                             info = path.lstat()
                             after = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)

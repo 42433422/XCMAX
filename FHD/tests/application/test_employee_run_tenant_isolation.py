@@ -101,7 +101,7 @@ def test_http_run_history_is_scoped_even_for_admin(ledger, monkeypatch):
     ],
 )
 def test_http_execution_does_not_replay_or_accept_body_identity(
-    ledger, monkeypatch, outcome, expected
+    ledger, monkeypatch, outcome, expected, tmp_path
 ):
     from unittest.mock import Mock
 
@@ -126,6 +126,7 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
     )
     monkeypatch.setattr(auth_permission_resolver, "require_allowed", lambda **kwargs: None)
     monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
 
     def invoke(*args, **kwargs):
         budget = tool_execution_deadline._DEADLINE.get()
@@ -151,6 +152,7 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
                     "user_id": 999,
                     "session_id": "other",
                     "tenant_id": 2,
+                    "workspace_root": "/untrusted-request-root",
                     "_runtime_context": {"tenant_id": 2},
                 },
             },
@@ -158,6 +160,7 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
     assert response.status_code == 200
     assert response.json()["attempts"] == 1
     assert execute.call_count == 1
+    assert execute.call_args.kwargs["workspace_root"] == str(tmp_path.resolve())
     assert execute.call_args.kwargs["user_id"] == 7
     assert execute.call_args.kwargs["session_id"] == "trusted-session"
 
@@ -166,6 +169,7 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
     payload = execute.call_args.args[2]
     assert payload["user_id"] == 7 and payload["session_id"] == "trusted-session"
     assert payload["tenant_id"] == 1 and "_runtime_context" not in payload
+    assert payload["workspace_root"] == str(tmp_path.resolve())
     assert payload["run_id"] == response.json()["run_id"]
 
 
@@ -196,3 +200,32 @@ def test_employee_decision_does_not_expose_internal_errors(monkeypatch):
         response = client.post("/decisions/employee-1/1", json={"decision": "approve"})
     assert response.status_code == 409
     assert response.json() == {"success": False, "message": "审批决定无效或任务状态已变化"}
+
+
+@pytest.mark.asyncio
+async def test_http_execution_rejects_foreign_workspace_before_run(monkeypatch, tmp_path):
+    from unittest.mock import Mock
+
+    from starlette.requests import Request
+
+    from app.domain.app_pure import auth_permission_resolver
+    from app.fastapi_routes.admin_control.employee_backend import EmployeePrincipal
+    from app.fastapi_routes.admin_control.employee_execution import EmployeeExecution
+
+    monkeypatch.setattr(auth_permission_resolver, "require_allowed", lambda **kwargs: None)
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    run = Mock()
+    service = EmployeeExecution(
+        errors=Mock(),
+        identity=lambda request: EmployeePrincipal(
+            "trusted", SimpleNamespace(id=7), {"tenant_id": 1}
+        ),
+        run=run,
+    )
+    response = await service.local_employee_execute(
+        Request({"type": "http", "headers": []}),
+        "clerk",
+        {"task": "run", "workspace_root": str(tmp_path.parent / "another-tenant")},
+    )
+    assert response.status_code == 403
+    run.assert_not_called()
