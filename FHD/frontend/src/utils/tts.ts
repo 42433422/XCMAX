@@ -1,7 +1,7 @@
 /**
  * 统一 TTS 入口：
- *   - online（默认 / auto）：`POST /api/tts` → 服务端优先 MiMo-V2.5 TTS，失败回退 Edge 神经音。
- *   - 在线合成失败时：优先使用已下载的离线包；否则回退浏览器/系统中文语音，避免彻底无声。
+ *   - online（默认 / auto）：`POST /api/tts` → 平台 MiMo-V2.5 TTS，失败时提示用户。
+ *   - system：用户显式选择时可使用已安装的离线包或系统语音作为回退。
  *   - offline：可选 MMS-TTS（需用户显式启用）；失败不再回退系统 TTS。
  *   - system：保留设置项兼容。
  */
