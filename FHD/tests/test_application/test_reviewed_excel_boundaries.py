@@ -149,6 +149,7 @@ def test_identify_prompt_states_the_three_rejection_rules():
     assert "不要覆盖全空尾部行" in IDENTIFY_PROMPT
     assert "范围之间不能重叠，否则整批拒绝" in IDENTIFY_PROMPT
     assert "由你决定这些单据现在能不能切片" in IDENTIFY_PROMPT
+    assert "无论是否有范围外的主单元格，顶层都必须返回布尔值 can_slice" in IDENTIFY_PROMPT
 
 
 def test_model_slice_decision_is_kept_and_required(monkeypatch):
@@ -356,7 +357,7 @@ def test_range_schema_fingerprint_and_boolean_dimension_drift():
         "schema"
     ]
     hashes = verify_contract(IDENTIFY_PROMPT, schema, "identify")
-    assert hashes["version"] == "independent-excel-v10-document-ranges"
+    assert hashes["version"] == "independent-excel-v11-document-ranges"
     assert (
         hashes["schema_template_sha256"]
         == "b1455573350323b3d7d3317c5202954d06e01f6675597532586facc2bdbc2b85"

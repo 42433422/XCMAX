@@ -676,7 +676,7 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "b703539150a32f5ed8bbc2761655cd8c545feb06d872a446b7e61aeae92d5108",
+        "0f78007fe2e169f8a552db62f75574469ad29a30f8e75a3daa42116e74fe44bb",
         "b1455573350323b3d7d3317c5202954d06e01f6675597532586facc2bdbc2b85",
     ),
     "group_ranges": (

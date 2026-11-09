@@ -1,6 +1,6 @@
 """Versioned, byte-stable Excel model instructions and contract labels."""
 
-CONTRACT_VERSION = "independent-excel-v10-document-ranges"
+CONTRACT_VERSION = "independent-excel-v11-document-ranges"
 SOURCE_PROTOCOL = (
     "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. If workbook_structural_index is supplied, it is optional whole-workbook structural context built by the program; use it with the packet cells, never as a substitute for supplied cells. "
     "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
@@ -83,7 +83,7 @@ IDENTIFY_PROMPT = (
     "Never include context_only or unread nonempty content, overlap ranges even on blanks, cut any source merge, or exceed source sheet dimensions. "
     "Every intersected merge must be wholly contained. Internal blanks are allowed; blank-only ranges are not. "
     "每个划定范围至少包含一个非空主单元格（合并格无值不算）。不要覆盖全空尾部行。范围之间不能重叠，否则整批拒绝。 "
-    "划定范围之外如果还有主单元格，由你决定这些单据现在能不能切片：能切则 can_slice 为 true，不能切则为 false。不要为了盖住这些格子去补范围。 "
+    "由你决定这些单据现在能不能切片；无论是否有范围外的主单元格，顶层都必须返回布尔值 can_slice：能切为 true，不能切为 false。不要为了盖住范围外的格子去补范围。 "
     "Invalid ranges are rejected, never clipped, expanded or repaired. Formula targets and merge metadata are source facts, not additional supplied cells or business boundaries. "
     "Use multiple ranges in one document only when the source supports that relationship. Technical batches are not documents. "
     "Sheet boundaries, adjacency and repeated headers alone do not prove one business document. "

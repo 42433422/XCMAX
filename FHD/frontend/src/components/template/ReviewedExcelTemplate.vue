@@ -616,7 +616,7 @@ async function classify(approvedRoundKey = '') {
   if (current() && cancelAnalysis.value) { archiveProgress.value = '已停止后续处理。'; return }
   if (current() && eligible.length) {
     const incomplete = eligible.some(({ item }) => item.model_status !== 'returned') || documentWorkspace.documents.value.some(doc => !doc.review || !!doc.error || doc.unknown)
-    archiveProgress.value = incomplete || failed.length ? '部分模板未完成，请核对。' : documentWorkspace.documents.value.length ? '模板已生成。' : '未识别到可处理模板。'
+    archiveProgress.value = incomplete || failed.length ? (documentWorkspace.documents.value.length ? '部分模板未完成，请核对。' : '模型分类尚未完成，未生成模板。') : documentWorkspace.documents.value.length ? '模板已生成。' : '未识别到可处理模板。'
     const failures = [...failed.map(item => item.message || `${item.name}未完成`), ...eligible.filter(({ item }) => item.model_status !== 'returned' || !!analysisErrors.value[item.classification_id!]).map(({ item }) => `${item.name}：${analysisErrors.value[item.classification_id!] || item.checkpoint?.message || '模型处理未完成'}`)]
     if (failures.length) error.value = failures.join('；')
   }
