@@ -160,7 +160,9 @@ def test_logged_in_software_uses_platform_mimo_instead_of_edge(client, monkeypat
     monkeypatch.setattr(ai_assistant_tts, "_session_market_token", lambda request: "market-token")
     monkeypatch.setattr(tts_service, "_run_edge_sync", edge)
     with patch("httpx.Client", return_value=client_cm):
-        result = client.post("/api/tts", json={"text": "你好", "voice": "zh-CN-XiaoxiaoNeural", "rate": "+15%"})
+        result = client.post(
+            "/api/tts", json={"text": "你好", "voice": "zh-CN-XiaoxiaoNeural", "rate": "+15%"}
+        )
     assert result.status_code == 200
     body = result.json()["data"]
     assert body["provider"] == "mimo"

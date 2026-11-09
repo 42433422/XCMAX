@@ -22,6 +22,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from starlette.requests import Request
 
 from app.domain.shared_services import tts_service as tts
 from app.domain.shared_services.tts_service import (
@@ -436,9 +437,10 @@ class TestEdgeUpstreamFailure:
             "_run_edge_sync",
             lambda req: (_ for _ in ()).throw(ForbiddenHandshake()),
         )
-        first = ai_assistant_tts.compat_tts({"text": "first"})
+        request = Request({"type": "http", "headers": []})
+        first = ai_assistant_tts.compat_tts(request, {"text": "first"})
         clock[0] += 20.0
-        second = ai_assistant_tts.compat_tts({"text": "second"})
+        second = ai_assistant_tts.compat_tts(request, {"text": "second"})
 
         assert first.headers["retry-after"] == "31"
         assert second.headers["retry-after"] == "11"
@@ -466,7 +468,9 @@ class TestEdgeUpstreamFailure:
         )
         monkeypatch.setattr(ai_assistant_tts, "_trace", lambda payload, **kwargs: payload)
 
-        response = ai_assistant_tts.compat_tts({"text": "hello"})
+        response = ai_assistant_tts.compat_tts(
+            Request({"type": "http", "headers": []}), {"text": "hello"}
+        )
 
         assert response.status_code == 503
         assert response.headers["retry-after"] == expected

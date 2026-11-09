@@ -57,7 +57,9 @@ def test_platform_helper_reads_xiaomi_store(monkeypatch):
 def test_env_key_beats_platform_key(monkeypatch):
     _clear_mimo_env(monkeypatch)
     monkeypatch.setenv("MIMO_API_KEY", "env-key")
-    monkeypatch.setattr(mts, "_platform_xiaomi_credentials", lambda: ("platform-key", "https://other.example/v1"))
+    monkeypatch.setattr(
+        mts, "_platform_xiaomi_credentials", lambda: ("platform-key", "https://other.example/v1")
+    )
     key, root = mts.resolve_mimo_credentials()
     assert key == "env-key"
     assert root == mts._DEFAULT_ROOT
