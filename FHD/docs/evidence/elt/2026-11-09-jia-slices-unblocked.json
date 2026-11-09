@@ -1,0 +1,8 @@
+{
+  "at": "2026-11-09T04:04:17+08:00",
+  "git_sha": "1a3c2c23f",
+  "file": "邻居贾总.xlsx",
+  "fix": "reconcile coverage.unassigned against sheet regions before auto-slice gate",
+  "verification": "GET/auto-slices after reload returned 30 slices (was HTTP 400 模型尚未完整覆盖)",
+  "root_cause": "L26/L27 had rule note region L26:M27 but coverage.unassigned still listed them; pack can_slice=false blocked gate"
+}

@@ -1,0 +1,10 @@
+{
+  "at": "2026-11-09T04:18:46+08:00",
+  "git_sha": "1a3c2c23f",
+  "file": "考勤表.xlsx",
+  "disposition": "FAILED_ANALYZE_DRAWING_CUT",
+  "not_pass": true,
+  "workspace_gate": "implemented; Active-Mod attendance-industry required for attendance intake",
+  "reached_intake": false,
+  "analyze_error": "所选范围切断绘图对象，暂不能提取（对象86需整枚落在列1-1行116-117内，或完全不碰）"
+}
