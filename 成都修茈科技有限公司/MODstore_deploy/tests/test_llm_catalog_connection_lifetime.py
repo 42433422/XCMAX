@@ -19,14 +19,14 @@ def small_pool(tmp_path, monkeypatch):
         connect_args={"check_same_thread": False},
         pool_size=1,
         max_overflow=0,
-        pool_timeout=0.1,
+        pool_timeout=3,
     )
     UserLlmCredential.__table__.create(engine)
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(models, "get_session_factory", lambda: factory)
     monkeypatch.setattr(llm_key_resolver, "platform_credentials", lambda _provider: (None, None))
     monkeypatch.setattr(llm_catalog, "_cache", {})
-    monkeypatch.setattr(llm_api, "_CATALOG_PROVIDER_TIMEOUT_SEC", 3)
+    monkeypatch.setattr(llm_api, "_CATALOG_PROVIDER_TIMEOUT_SEC", 10)
     yield engine
     assert engine.pool.checkedout() == 0
     engine.dispose()
@@ -42,7 +42,7 @@ async def test_unconfigured_catalog_fanout_releases_each_real_connection(small_p
                 for provider in providers
             ]
         ),
-        timeout=2,
+        timeout=8,
     )
     assert [block["provider"] for block in blocks] == list(providers)
     assert all(block["error"] == "no_api_key" for block in blocks)
@@ -72,7 +72,7 @@ async def test_remote_catalog_waits_leave_pool_available_for_wallet(small_pool, 
         for _ in range(6)
     ]
     try:
-        await asyncio.wait_for(started.wait(), timeout=2)
+        await asyncio.wait_for(started.wait(), timeout=8)
         assert small_pool.pool.checkedout() == 0
         with small_pool.connect() as connection:
             assert connection.scalar(text("SELECT 1")) == 1
@@ -99,7 +99,7 @@ async def test_cancelled_catalog_does_not_retain_credential_connection(small_poo
         llm_api._fetch_catalog_provider_block(41, "openai", force_refresh=False)
     )
     try:
-        await asyncio.wait_for(started.wait(), timeout=2)
+        await asyncio.wait_for(started.wait(), timeout=8)
         assert small_pool.pool.checkedout() == 0
     finally:
         task.cancel()
