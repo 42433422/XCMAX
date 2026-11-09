@@ -848,6 +848,20 @@ async function reconcileCheckpoint(item: Classification, current: () => boolean)
     if (checkpoint && checkpoint.version === item.version && ['ready', 'paused', 'failed', 'inflight'].includes(checkpoint.phase)) item.checkpoint = checkpoint
   } catch { /* Keep the unknown-outcome lock when the persisted state cannot be verified. */ }
 }
+async function recoverSavedAnswer() {
+  const current = captureFileOperation(), item = currentClassification.value
+  if (!current() || busy.value || !item?.classification_id || !item.version || item.checkpoint?.phase !== 'failed') return
+  busy.value = true; error.value = ''
+  try {
+    const form = new FormData(); form.append('version', item.version)
+    const result = await templatePreviewApi.recoverClassificationAnswer(item.classification_id, form) as { checkpoint: Checkpoint; can_slice?: boolean }
+    if (!current()) return
+    item.checkpoint = result.checkpoint
+    delete analysisErrors.value[item.classification_id]
+    archiveProgress.value = `已核验保存的回答，完成 ${result.checkpoint.completed}/${result.checkpoint.total} 批；未重新调用模型。${result.can_slice === false ? '模型表示不能自动切片，需人工核对。' : ''}`
+  } catch (err) { if (current()) error.value = err instanceof Error ? err.message : '保存的回答无法恢复，请人工核对。' }
+  finally { if (current()) busy.value = false }
+}
 async function analyzeClassifications(retryItem?: Classification, extendBudget = false, pipeline = false) {
   const current = captureFileOperation()
   if (!current() || busy.value) return
@@ -1596,6 +1610,8 @@ async function downloadCandidate(index: number) {
         <button type="button" :disabled="busy" @click="restoreClassification(item)">恢复此分类并继续</button>
       </div>
     </section>
+    <button v-if="archiveOnSelect && currentClassification?.checkpoint?.phase === 'failed'" type="button"
+      :disabled="busy || archiveRunPending" @click="recoverSavedAnswer">核验已保存回答</button>
     <div
       class="elt-composer"
       :class="{ 'elt-composer--dragover': composerDragOver }"

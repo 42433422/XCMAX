@@ -161,6 +161,34 @@ def test_model_slice_decision_is_kept_and_required(monkeypatch):
         execute(monkeypatch, source(["A1", "B1", "C1"]), raw)
 
 
+def test_saved_reply_replay_checks_request_and_never_calls_model(monkeypatch):
+    from app.application.reviewed_excel_audit import request_digest
+
+    review = source(["A1", "B1", "C1"])
+    prepared = _classify_semantic_batch(review, prepare_only=True, reference_ids=True)
+    payload = answer(region(), can_slice=False)
+    prefix = json.dumps({"documents": payload["documents"]}, ensure_ascii=False)
+    archived = prefix + '],"can_slice":false}'
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *a, **kw: pytest.fail("archived replay must not call model"),
+    )
+    result = _classify_semantic_batch(
+        review,
+        reference_ids=True,
+        archived_answer=archived,
+        expected_request_sha256=request_digest(prepared),
+    )
+    assert result["input_summary"]["source_coverage"]["can_slice"] is False
+    with pytest.raises(ReviewedExcelError):
+        _classify_semantic_batch(
+            review,
+            reference_ids=True,
+            archived_answer=archived,
+            expected_request_sha256="incorrect",
+        )
+
+
 def test_disjoint_nonempty_ranges_pass(monkeypatch):
     result = execute(
         monkeypatch,

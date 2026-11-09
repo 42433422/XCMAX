@@ -34,6 +34,7 @@ def _classify_semantic_batch(
     expected_request_sha256: str | None = None,
     owner_id: int | None = None,
     repair: list[dict] | None = None,
+    archived_answer: str | None = None,
 ) -> dict:
     """Request bounded semantic regions; validate every reference before adoption.
 
@@ -312,9 +313,25 @@ def _classify_semantic_batch(
         from app.application.reviewed_excel_audit import verify_request
 
         verify_request(audit_request, expected_request_sha256)
-    response = _template_llm_complete(
-        messages, provider_schema, max_output_tokens, owner_id=owner_id
-    )
+    if archived_answer is None:
+        response = _template_llm_complete(
+            messages, provider_schema, max_output_tokens, owner_id=owner_id
+        )
+    else:
+        if not expected_request_sha256:
+            raise ReviewedExcelError("已保存的模型请求缺少校验标识")
+        from app.application.elt.llm_assist_runtime import LlmAssistResult
+        from app.application.reviewed_excel_template import (
+            _recover_detached_slice_decision,
+            _template_schema_problem,
+        )
+
+        data = _recover_detached_slice_decision(archived_answer, provider_schema)
+        if data is None or _template_schema_problem(provider_schema, data):
+            raise ReviewedExcelError("已保存的模型回答仍未通过格式校验")
+        response = LlmAssistResult(
+            used_llm=True, provider="archived", data=data, answer=archived_answer
+        )
     data = response.data
     raw_reference_response = None
     if reference_ids:
