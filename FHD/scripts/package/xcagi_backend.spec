@@ -83,6 +83,7 @@ for package_dir in langgraph_vendor_packages:
     if not provenance.is_file():
         raise FileNotFoundError(f"missing LangGraph vendor provenance: {provenance}")
     datas.append((str(provenance), f"vendored-provenance/{package_dir}"))
+datas.append((str(ROOT / "packages/xcagi_langgraph_core/langgraph"), "langgraph"))
 
 _staged_industry = (os.environ.get("XCAGI_STAGED_INDUSTRY_SEEDS_DIR") or "").strip()
 if _staged_industry and Path(_staged_industry).is_dir():
