@@ -1,12 +1,13 @@
 {
-  "at": "2026-11-09T04:18:46+08:00",
-  "git_sha": "1a3c2c23f",
+  "at": "2026-11-09T14:30:00+08:00",
+  "git_sha": "06ed0f7d6",
+  "retest": "Jia and Kaoqin on desktop backend 127.0.0.1:17500. Jia health sha 76a40f7d4; Kaoqin health sha 06ed0f7d6 (frontend-only commit on the same Python process). Yang 119/0 is the earlier retest, not rerun.",
   "rule": "PARTIAL≠PASS; knowledge≠business PASS; no silent drop",
   "counts": {
     "KNOWLEDGE_OR_NON_BUSINESS": 5,
     "PARTIAL": 5,
-    "BUSINESS_APPLIED": 11,
-    "FAILED_ANALYZE_DRAWING_CUT": 1
+    "BUSINESS_APPLIED": 12,
+    "FAILED_ANALYZE_DRAWING_CUT": 0
   },
   "files": [
     {
@@ -90,6 +91,8 @@
         "symptom": "勿重复发送",
         "reproduced_on": "another computer, shipped desktop client",
         "resend": false,
+        "budget_message": "本轮预算已用完；确认后可继续剩余批次",
+        "continue_remaining_batches": "A paused checkpoint on the same classification stays open and the next confirm posts the remaining batches. A different saved classification is not adopted over that pause. Verified by the client test and by this head continuing Jia 1/10 and Kaoqin 1/18 after each pause. The unknown key was not resent.",
         "unblock": "settle archived provider body; do not resend completed or failed keys; adopt a saved returned classification"
       },
       "recognized_type": "delivery",
@@ -216,30 +219,31 @@
     {
       "file": "邻居杨总.xlsx",
       "path": "sources/uploads/2026.10月综合系列/26年出货单打印/邻居杨总.xlsx",
-      "slot_status": "failed",
-      "disposition": "PARTIAL",
-      "recognized_type": "delivery,ledger",
+      "slot_status": "done",
+      "disposition": "BUSINESS_APPLIED",
+      "recognized_type": "delivery,ledger,template",
       "db_target": "shipment_records",
       "db_status": "completed",
-      "db_rows": "new=128 update=0 skip=8 error=6 executed=128 records=128",
-      "ingest_status": "partial",
+      "db_rows": "new=119 update=0 skip=13 error=0 executed=119 records=119",
+      "ingest_status": "applied",
       "kb_documents": 1,
       "slice_count": 6,
-      "error": "128 executed with 6 invalid rows excluded; ingest partial"
+      "error": "",
+      "retest_note": "Earlier retest on this branch: db_used_llm true, db_degraded false, error=0. Not rerun this pass."
     },
     {
       "file": "邻居贾总.xlsx",
       "path": "sources/uploads/2026.10月综合系列/26年出货单打印/邻居贾总.xlsx",
       "slot_status": "failed",
       "disposition": "PARTIAL",
-      "recognized_type": "template,delivery,ledger",
+      "recognized_type": "material,delivery,ledger",
       "db_target": "shipment_records",
-      "db_status": "executing",
-      "db_rows": "new=7 update=0 skip=0 error=0 executed=0 records=7",
-      "ingest_status": "awaiting_confirmation",
+      "db_status": "completed",
+      "db_rows": "new=1344 update=0 skip=94 error=7 executed=1344 records=1344",
+      "ingest_status": "partial",
       "kb_documents": 1,
-      "slice_count": 30,
-      "error": "30 slices after reconcile; intake degraded awaiting_confirmation; 7 rows"
+      "slice_count": 18,
+      "error": "delivery_note_business_rows; db_used_llm false; db_degraded false; 7 invalid rows held out; knowledge skip degraded; ingest partial. Not PASS."
     },
     {
       "file": "鑫顺.xlsx",
@@ -315,16 +319,16 @@
       "file": "考勤表.xlsx",
       "path": "sources/uploads/2026.10月综合系列/考勤表.xlsx",
       "slot_status": "failed",
-      "disposition": "FAILED_ANALYZE_DRAWING_CUT",
+      "disposition": "PARTIAL",
       "recognized_type": "attendance",
-      "db_target": "",
-      "db_status": "",
-      "db_rows": "",
-      "ingest_status": "",
-      "kb_documents": null,
-      "slice_count": null,
-      "error": "所选范围切断绘图对象（对象86 需整枚落在列1-1行116-117）; attendance workspace gate not reached",
-      "auth_note": "X-XCAGI-Active-Mod-Id=attendance-industry wired in driver; analyze failed before intake"
+      "db_target": "knowledge",
+      "db_status": "preview_ready",
+      "db_rows": "new=0 update=0 skip=1 error=0 executed=0 records=0",
+      "ingest_status": "partial",
+      "kb_documents": 1,
+      "slice_count": 23,
+      "error": "Drawing-cut analyze no longer blocks: 23 slices, template saved. Business target stayed knowledge and degraded; 0 attendance rows executed. Knowledge update is not a business PASS. Ingest partial.",
+      "auth_note": "X-XCAGI-Active-Mod-Id=attendance-industry; intake reached the attendance workspace"
     }
   ]
 }
