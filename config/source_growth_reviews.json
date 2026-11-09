@@ -99,10 +99,10 @@
     },
     "FHD/app/application/reviewed_excel_template.py": {
       "base_file": "FHD/app/application/reviewed_excel_template.py",
-      "base_blob": "3c400640973806cb37897da3512c4e9c8168a23d",
-      "head_blob": "4df4e600d23c4c435d5d3d24d085b8197eaacf9a",
-      "before_lines": 1376,
-      "after_lines": 1638,
+      "base_blob": "4df4e600d23c4c435d5d3d24d085b8197eaacf9a",
+      "head_blob": "faa714af0404811ef441b17e306663f697565e50",
+      "before_lines": 1638,
+      "after_lines": 1647,
       "reason": "Outcome taxonomy, bounded repair rounds, provider 402 rejection, and public model-error detail require additional template-platform call control without changing the review workbook contract.",
       "boundary": "Existing reviewed-Excel template platform call path only; no new route, persistence model, or authorization change.",
       "validation": "Reviewed Excel audit, template schema, and intake regression tests plus push preflight and backend CI.",
@@ -111,10 +111,10 @@
     },
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
       "base_file": "FHD/app/fastapi_routes/reviewed_excel_template.py",
-      "base_blob": "dc09008a95ec9776708b1e1896bb8fa1ff2fb946",
-      "head_blob": "fb3577ec2a4c049b0263a5cf5b4cf867a8b91469",
-      "before_lines": 2039,
-      "after_lines": 2418,
+      "base_blob": "fb3577ec2a4c049b0263a5cf5b4cf867a8b91469",
+      "head_blob": "897b348d00e60b705b953b086d208a75bf0bfe66",
+      "before_lines": 2418,
+      "after_lines": 2549,
       "reason": "Route handlers surface model_call_outcome classes, release known claims, and keep download/provenance paths aligned with the product loop.",
       "boundary": "Existing reviewed-Excel FastAPI routes only; no new top-level router module.",
       "validation": "Route golden snapshot, reviewed Excel route regressions, and backend CI shards.",
@@ -232,9 +232,9 @@
     "FHD/app/application/reviewed_excel_drawing.py": {
       "base_file": "FHD/app/application/reviewed_excel_drawing.py",
       "base_blob": "9e5ccf7a69731d2bdf33c69ca0f19b6c1ae7346f",
-      "head_blob": "af1ef95823237ddc398ed78d0b863eb780da97cb",
+      "head_blob": "93f603c3b2000661c6194df5729ea21571435888",
       "before_lines": 832,
-      "after_lines": 837,
+      "after_lines": 996,
       "reason": "Dense drawing sheets need a tighter pack unit/byte cap (400 units / 160KB) while still cutting only on verified legal drawing and merge boundaries, so attendance-style packs stop failing answered_invalid from cut objects.",
       "boundary": "Existing plan_drawing_batches packing only; validators that refuse cut drawings and the classify prompt contract stay in their modules.",
       "validation": "Reviewed Excel drawing planner and classifier regressions plus push preflight and backend CI.",
@@ -252,6 +252,30 @@
       "boundary": "仅限该合并路由模块中的流式分块回报与空闲计时；模型选择、配额和鉴权未改动。",
       "validation": "已有流式空闲与会话回执回归；本次进一步减少动态 facade 引用。需在最新 HEAD 重跑 CI 和真实业务闭环。",
       "follow_up": "后续把流式保活抽成独立模块；本条为评审请求，不代表批准。"
+    },
+    "FHD/app/application/reviewed_excel_auto_slice.py": {
+      "base_file": "FHD/app/application/reviewed_excel_auto_slice.py",
+      "base_blob": "e9a1e5e50cf3ce3584b2acdb662cb6c98f586606",
+      "head_blob": "5f75c8863ebe0d1b93014d5be21e32b1f712b84a",
+      "before_lines": 631,
+      "after_lines": 805,
+      "reason": "Auto-slice unions title/note dependency clusters, skips dense stamp grouping with one-document-per-region fallback, and parks unfixable SUBTOTAL/style cuts without inventing LLM rounds.",
+      "boundary": "Existing reviewed_excel_auto_slice derive/grouping only; classification and route handlers stay elsewhere.",
+      "validation": "Reviewed Excel auto-slice and template route regressions; push preflight and backend CI shards.",
+      "follow_up": "Extract dependency-union helpers once stamp packing stays green on main.",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/reviewed_excel_classification.py": {
+      "base_file": "FHD/app/application/reviewed_excel_classification.py",
+      "base_blob": "ad63da4f5576b4cb8a28ed909889ecfda58ff274",
+      "head_blob": "7c5fb02ccb5258cfd1e4e99b2ada8b6eacb2686a",
+      "before_lines": 770,
+      "after_lines": 1131,
+      "reason": "Classification grows pack-scoped can_slice exclusions, evidence-bound range expansion with confirmation, and soft-fail invalid document grouping so physical regions are not discarded.",
+      "boundary": "Existing reviewed_excel_classification analyze/combine only; intake authorization stays in FastAPI routes.",
+      "validation": "Atoms, classification, and nine-batch pause/resume regressions; full backend CI.",
+      "follow_up": "Split pack coverage helpers after the can_slice contract is stable on main.",
+      "review_owner": "@42433422"
     }
   }
 }
