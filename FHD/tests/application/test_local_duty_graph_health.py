@@ -119,12 +119,25 @@ class TestLocalDutyGraphRoutes:
         assert resp.status_code == 200
         assert resp.json()["jobs"][0]["employee_id"] == "daily-orchestrator"
 
-    def test_employee_cron_job_run_ok(self, client: TestClient) -> None:
+    def test_employee_cron_job_run_ok(self, client: TestClient, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
         with (
             patch(
                 "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
                 return_value="sess",
             ),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=MagicMock(id=1),
+            ),
+            patch(
+                "app.application.session_account_meta.enrich_session_meta_with_tenant",
+                return_value={"tenant_id": 1, "account_kind": "admin"},
+            ),
+            patch(
+                "app.domain.app_pure.auth_permission_resolver.require_allowed",
+                return_value=None,
+            ) as permission,
             patch(
                 "app.application.employee_runtime.scheduler.run_employee_cron_job",
                 return_value={
@@ -141,7 +154,18 @@ class TestLocalDutyGraphRoutes:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
         assert run_job.call_args.kwargs["task"] == "run now"
-        assert run_job.call_args.kwargs["input_data"] == {"x": 1}
+        assert run_job.call_args.kwargs["input_data"] == {
+            "x": 1,
+            "user_id": 1,
+            "tenant_id": 1,
+            "session_id": "sess",
+            "workspace_root": str(tmp_path),
+        }
+        assert run_job.call_args.kwargs["user_id"] == 1
+        assert run_job.call_args.kwargs["session_id"] == "sess"
+        assert run_job.call_args.kwargs["workspace_root"] == str(tmp_path)
+        permission.assert_called_once()
+        assert permission.call_args.kwargs["route"] == "/local/employees/cron/execute"
 
     def test_employee_execute_ok(self, client: TestClient) -> None:
         with (
