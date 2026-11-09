@@ -79,6 +79,7 @@ def test_mimo_asr_uses_audio_protocol_and_current_account(monkeypatch):
     from modstore_server import llm_key_resolver, models
 
     monkeypatch.setenv("MODSTORE_MIMO_ASR_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_MIMO_ASR_USER_IDS", "42")
     monkeypatch.setattr(
         models, "get_session_factory", lambda: lambda: nullcontext("db")
     )
@@ -132,6 +133,14 @@ def test_mimo_asr_disabled_without_billing_configuration(monkeypatch):
     assert exc.value.status_code == 503
 
 
+def test_mimo_asr_does_not_spend_quota_for_other_accounts(monkeypatch):
+    monkeypatch.setenv("MODSTORE_MIMO_ASR_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_MIMO_ASR_USER_IDS", "42")
+    with pytest.raises(speech_api.HTTPException) as exc:
+        asyncio.run(speech_api.mimo_asr(b"audio", "zh", 43))
+    assert exc.value.status_code == 503
+
+
 def test_asr_workbench_route_passes_authenticated_user(monkeypatch):
     import io
 
@@ -151,6 +160,7 @@ def test_mimo_asr_rejects_oversized_duration_before_network(monkeypatch):
     import wave
 
     monkeypatch.setenv("MODSTORE_MIMO_ASR_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_MIMO_ASR_USER_IDS", "42")
     buffer = io.BytesIO()
     with wave.open(buffer, "wb") as wav:
         wav.setnchannels(1)

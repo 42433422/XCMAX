@@ -26,6 +26,7 @@ from app.fastapi_routes.voice_routes import router
 def test_recording_reaches_mimo_with_current_account_without_retry(monkeypatch):
     monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "mimo")
     monkeypatch.setenv("MODSTORE_MIMO_ASR_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_MIMO_ASR_USER_IDS", "42")
     monkeypatch.setattr(
         "app.fastapi_routes.ai_assistant_tts._session_market_token", lambda _: "session-token"
     )

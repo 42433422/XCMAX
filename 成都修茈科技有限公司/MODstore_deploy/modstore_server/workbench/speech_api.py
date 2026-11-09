@@ -42,7 +42,15 @@ class SpeechPorts:
 
 async def mimo_asr(audio: bytes, language: str, user_id: int) -> dict[str, str]:
     """One bounded, authenticated MiMo request; never retry an ambiguous call."""
-    if os.environ.get("MODSTORE_MIMO_ASR_ENABLED", "").lower() not in {"1", "true"}:
+    permitted = {
+        value.strip()
+        for value in os.environ.get("MODSTORE_MIMO_ASR_USER_IDS", "").split(",")
+        if value.strip()
+    }
+    if (
+        os.environ.get("MODSTORE_MIMO_ASR_ENABLED", "").lower() not in {"1", "true"}
+        or str(user_id) not in permitted
+    ):
         raise HTTPException(503, "MiMo 语音识别尚未启用，请先核对平台额度")
     if not audio or len(audio) > 8 * 1024 * 1024:
         raise HTTPException(413, "语音内容为空或超过大小限制")
