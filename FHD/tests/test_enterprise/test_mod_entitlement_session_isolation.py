@@ -117,24 +117,37 @@ async def test_concurrent_session_requests_share_one_market_refresh(monkeypatch)
     entitlements._entitlement_sync_at_by_session.pop(sid, None)
     entitlements._reloaded_entitlement_ids_by_session.pop(sid, None)
     started, release = asyncio.Event(), asyncio.Event()
+
     async def refresh(**kwargs):
         started.set()
         await release.wait()
         return {"mod-a"}
+
     monkeypatch.setattr("app.db.bootstrap.guarded.enabled", lambda: False)
-    monkeypatch.setattr("app.fastapi_routes.market_account.resolve_valid_market_access_token", AsyncMock(return_value="token"))
+    monkeypatch.setattr(
+        "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+        AsyncMock(return_value="token"),
+    )
     monkeypatch.setattr(entitlements, "_session_username_for_entitlements", lambda sid: "a")
-    monkeypatch.setattr(entitlements, "refresh_session_entitlements_from_market", AsyncMock(side_effect=refresh))
+    monkeypatch.setattr(
+        entitlements, "refresh_session_entitlements_from_market", AsyncMock(side_effect=refresh)
+    )
     monkeypatch.setattr(entitlements, "persist_entitlements_to_session_row", lambda sid, ids: None)
+
     def restore(sid):
-        entitlements.set_session_entitlements(market_user_id=1, market_username="a", entitled_client_mod_ids={"mod-a"})
+        entitlements.set_session_entitlements(
+            market_user_id=1, market_username="a", entitled_client_mod_ids={"mod-a"}
+        )
         return True
+
     monkeypatch.setattr(entitlements, "restore_entitlements_from_session_row", restore)
     reload_mods = AsyncMock()
     monkeypatch.setattr(entitlements, "reload_enterprise_mods_after_login", reload_mods)
+
     async def request():
         with entitlements.request_entitlement_scope():
             return await entitlements.sync_entitlements_for_session(sid)
+
     first = asyncio.create_task(request())
     await started.wait()
     second = asyncio.create_task(request())

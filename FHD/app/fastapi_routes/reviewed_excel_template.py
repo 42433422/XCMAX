@@ -325,8 +325,7 @@ def _checkpoint_view(checkpoint):
     }[phase]
     if phase == "paused" and checkpoint.get("repair"):
         message = (
-            "模型上次返回的格式不符合要求，尚未完成当前批次；"
-            "继续处理将请求模型修正，可能产生费用。"
+            "模型上次返回的格式不符合要求，尚未完成当前批次；继续处理将请求模型修正，可能产生费用。"
         )
     return {
         "phase": phase,
