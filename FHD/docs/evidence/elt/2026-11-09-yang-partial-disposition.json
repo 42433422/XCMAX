@@ -1,0 +1,17 @@
+{
+  "at": "2026-11-09T03:43:03+08:00",
+  "git_sha": "62fc922d8",
+  "file": "邻居杨总.xlsx",
+  "disposition": "PARTIAL",
+  "not_pass_reason": "ingest_status=partial with 6 invalid rows excluded from business tables",
+  "db_rows": "new=128 update=0 skip=8 error=6 executed=128 records=128",
+  "db_status": "completed",
+  "ingest_status": "partial",
+  "template_id": "db:35",
+  "prior_compare": {
+    "previous": "new=60 error=15 executed=0 preview_ready",
+    "now": "new=128 update=0 skip=8 error=6 executed=128 records=128",
+    "improvement": "more business rows executed (128) and fewer errors (6); still PARTIAL≠PASS"
+  },
+  "error_rows_policy": "invalid rows kept out of business tables; knowledge doc retained"
+}
