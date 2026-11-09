@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import logging
+import base64
+import os
+import io
+import wave
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Protocol
+from urllib.parse import quote
 
 from fastapi import Depends, HTTPException
 from fastapi.responses import Response, StreamingResponse
@@ -33,6 +38,78 @@ class EdgeBackend(Protocol):
 @dataclass(frozen=True)
 class SpeechPorts:
     edge: EdgeBackend | None
+
+
+async def mimo_asr(audio: bytes, language: str, user_id: int) -> dict[str, str]:
+    """One bounded, authenticated MiMo request; never retry an ambiguous call."""
+    if os.environ.get("MODSTORE_MIMO_ASR_ENABLED", "").lower() not in {"1", "true"}:
+        raise HTTPException(503, "MiMo 语音识别尚未启用，请先核对平台额度")
+    if not audio or len(audio) > 8 * 1024 * 1024:
+        raise HTTPException(413, "语音内容为空或超过大小限制")
+    try:
+        with wave.open(io.BytesIO(audio), "rb") as source:
+            frames = source.getnframes()
+            if (
+                source.getnchannels(),
+                source.getsampwidth(),
+                source.getframerate(),
+            ) != (1, 2, 16000):
+                raise ValueError("invalid audio format")
+            if (
+                not 0 < frames <= 120 * 16000
+                or len(source.readframes(frames)) != frames * 2
+            ):
+                raise ValueError("invalid audio length")
+    except (wave.Error, EOFError, ValueError):
+        raise HTTPException(422, "录音格式无效或超过 2 分钟") from None
+    if language not in {"auto", "zh", "en"}:
+        raise HTTPException(422, "不支持的识别语言")
+    from modstore_server.llm_key_resolver import resolve_credentials
+    from modstore_server.models import get_session_factory
+
+    with get_session_factory()() as session:
+        key, base, _source = resolve_credentials(session, user_id, "xiaomi")
+    if not key:
+        raise HTTPException(503, "当前账户的 MiMo 模型未配置")
+    from modstore_server.mimo_tts_service import _DEFAULT_ROOT, _chat_completions_url
+    import httpx
+
+    root = (base or _DEFAULT_ROOT).rstrip("/")
+    if root.endswith("/v1"):
+        root = root[:-3]
+    body = {
+        "model": "mimo-v2.5-asr",
+        "stream": False,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": f"data:audio/wav;base64,{base64.b64encode(audio).decode('ascii')}"
+                        },
+                    }
+                ],
+            }
+        ],
+        "asr_options": {"language": language},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                _chat_completions_url(root), headers={"api-key": key}, json=body
+            )
+            response.raise_for_status()
+        text = response.json()["choices"][0]["message"]["content"]
+        if not isinstance(text, str):
+            raise ValueError("invalid transcription")
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
+        _LOG.warning("MiMo ASR failed: %s", type(exc).__name__)
+        raise HTTPException(
+            502, "MiMo 识别失败，请核对平台状态；请勿自动重试"
+        ) from None
+    return {"text": text.strip(), "language": language, "provider": "mimo"}
 
 
 def _edge_tts_rate_str(rate: float) -> str:
@@ -93,7 +170,9 @@ async def _edge_response(body: WorkbenchEdgeTtsBody, ports: SpeechPorts):
     if ports.edge is None:
         raise HTTPException(503, "服务端未安装 edge-tts")
     voice = (body.voice or "").strip() or "zh-CN-XiaoxiaoNeural"
-    first, chunks = await _checked_edge_chunks(text, voice, _edge_tts_rate_str(body.rate))
+    first, chunks = await _checked_edge_chunks(
+        text, voice, _edge_tts_rate_str(body.rate)
+    )
 
     async def stream():
         try:
@@ -132,7 +211,16 @@ async def workbench_unified_tts(
     from modstore_server.mimo_tts_service import synthesize_mimo_tts_async
 
     mimo_voice = (body.voice or "").strip() or MIMO_VOICE
-    audio, err, meta = await synthesize_mimo_tts_async(text, voice=mimo_voice)
+    kwargs: dict[str, Any] = {}
+    if _user is not None:
+        from modstore_server.llm_key_resolver import resolve_credentials
+        from modstore_server.models import get_session_factory
+
+        with get_session_factory()() as session:
+            key, base, _source = resolve_credentials(session, _user.id, "xiaomi")
+        # A broken user override must not silently borrow the platform key.
+        kwargs["credentials"] = (key, base)
+    audio, err, meta = await synthesize_mimo_tts_async(text, voice=mimo_voice, **kwargs)
     if audio and (not err):
         mime = str(meta.get("mime") or "audio/wav")
         return Response(
@@ -141,9 +229,26 @@ async def workbench_unified_tts(
             headers={
                 "Cache-Control": "no-cache",
                 "X-TTS-Provider": "mimo",
-                "X-TTS-Voice": str(meta.get("voice") or mimo_voice),
+                "X-TTS-Voice": quote(str(meta.get("voice") or mimo_voice), safe=""),
             },
         )
+    # Do not log provider responses, text, keys, or account identifiers.
+    reason = (
+        err
+        if err
+        in {
+            "missing mimo api key",
+            "httpx not installed",
+            "mimo-tts request timed out",
+            "mimo-tts request failed",
+            "mimo-tts invalid JSON",
+            "mimo-tts response missing audio.data",
+            "mimo-tts invalid audio.data",
+            "mimo-tts returned empty audio",
+        }
+        else "unexpected response"
+    )
+    _LOG.warning("MiMo TTS failed: reason=%s status=%s", reason, meta.get("status"))
     if ports.edge is None:
         status = meta.get("status")
         raise HTTPException(
@@ -191,14 +296,18 @@ async def workbench_edge_tts(
     voice = (body.voice or "").strip() or "zh-CN-XiaoxiaoNeural"
     try:
         parts = []
-        async for chunk in _edge_tts_stream_chunks(text, voice, _edge_tts_rate_str(body.rate)):
+        async for chunk in _edge_tts_stream_chunks(
+            text, voice, _edge_tts_rate_str(body.rate)
+        ):
             if not isinstance(chunk, bytes):
                 raise HTTPException(502, "TTS 上游返回无效音频")
             parts.append(chunk)
         audio = b"".join(parts)
         if not audio:
             raise HTTPException(502, "TTS 上游未返回音频")
-        return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "no-cache"})
+        return Response(
+            audio, media_type="audio/mpeg", headers={"Cache-Control": "no-cache"}
+        )
     except UPSTREAM_ERRORS as exc:
         raise _edge_tts_http_exception(exc) from exc
 

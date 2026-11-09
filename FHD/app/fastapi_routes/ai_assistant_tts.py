@@ -9,6 +9,7 @@ import logging
 import math
 import re
 from typing import Any
+from urllib.parse import unquote
 
 import aiohttp
 import httpx
@@ -119,6 +120,7 @@ def _platform_mimo_payload(
         return None
     token = _session_market_token(request)
     if not token:
+        logger.info("platform MiMo TTS unavailable: current session has no market token")
         return None
     edge_voice = (voice or "").strip()
     if not _EDGE_VOICE_RE.match(edge_voice):
@@ -139,12 +141,16 @@ def _platform_mimo_payload(
             )
         provider = (resp.headers.get("x-tts-provider") or "").strip().lower()
         mime = (resp.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
-        voice_name = (resp.headers.get("x-tts-voice") or "").strip()
+        voice_name = unquote((resp.headers.get("x-tts-voice") or "").strip())
         audio = resp.content
     except RECOVERABLE_ERRORS as exc:
         logger.info("platform MiMo TTS unavailable: %s", type(exc).__name__)
         return None
     if resp.status_code != 200 or provider != "mimo" or not mime.startswith("audio/"):
+        logger.info(
+            "platform MiMo TTS rejected: status=%s provider=%s content_type=%s",
+            resp.status_code, provider or "missing", mime or "missing",
+        )
         return None
     if not audio or len(audio) > 8_000_000:
         return None

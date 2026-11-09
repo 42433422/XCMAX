@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -39,6 +39,22 @@ def client() -> TestClient:
     app = FastAPI()
     app.include_router(router)
     return TestClient(app, raise_server_exceptions=False)
+
+
+def test_voice_command_uses_platform_asr_without_executing(client, monkeypatch):
+    monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "mimo")
+    platform = AsyncMock(return_value={"text": ""})
+    monkeypatch.setattr("app.fastapi_routes.voice_routes._platform_transcribe", platform)
+    with patch("app.fastapi_routes.voice_routes._transcribe_audio") as local:
+        response = client.post(
+            "/api/voice/command",
+            files={"file": ("audio.wav", b"audio", "audio/wav")},
+            data={"auto_execute": "false"},
+        )
+    assert response.status_code == 200
+    assert response.json()["data"]["reason"] == "asr_empty"
+    assert platform.await_count == 1
+    local.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

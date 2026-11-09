@@ -5,6 +5,7 @@ import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 const MIN_RECORD_MS = 300
 const MAX_RECORD_MS = 60_000
+const TRANSCRIPTION_TIMEOUT_MS = 90_000
 const VOICE_PREFERRED_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4', 'audio/wav']
 type VoiceState = 'idle' | 'requesting' | 'recording' | 'transcribing' | 'error'
 
@@ -117,7 +118,7 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
   async function submitVoiceBlob(blob: Blob, isCurrent: () => boolean) {
     const controller = new AbortController()
     transcription = controller
-    const timeout = window.setTimeout(() => controller.abort(), MAX_RECORD_MS)
+    const timeout = window.setTimeout(() => controller.abort(), TRANSCRIPTION_TIMEOUT_MS)
     voiceColdHint.value = !voiceModelWarm.value
     voiceState.value = 'transcribing'
     try {
@@ -150,7 +151,7 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
       try { input?.setSelectionRange(input.value.length, input.value.length) } catch { /* unsupported input */ }
     } catch (error) {
       if (!isCurrent()) return
-      const message = controller.signal.aborted ? '语音识别超时，请重试' : error instanceof Error ? error.message : '语音识别失败'
+      const message = controller.signal.aborted ? '语音识别超时，结果可能仍在处理，请稍后核对' : error instanceof Error ? error.message : '语音识别失败'
       setVoiceError(message.length > 48 ? `${message.slice(0, 48)}...` : message)
     } finally {
       window.clearTimeout(timeout)

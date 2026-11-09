@@ -545,6 +545,103 @@ class TestRunTranscribe:
 
 
 class TestTranscribeAudioRoute:
+    def test_mimo_conversion_rejects_audio_over_two_minutes(self, tmp_path):
+        import wave
+
+        from app.fastapi_routes.voice_routes import _asr_wav
+
+        path = tmp_path / "too-long.wav"
+        with wave.open(str(path), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(16000)
+            wav.writeframes(b"\0\0" * (16000 * 120 + 1))
+        with pytest.raises(HTTPException) as exc:
+            _asr_wav(path)
+        assert exc.value.status_code == 422
+
+    def test_browser_webm_opus_converts_to_mimo_wav(self, tmp_path):
+        import av
+        import numpy as np
+
+        from app.fastapi_routes.voice_routes import _asr_wav
+
+        try:
+            av.codec.Codec("libopus", "w")
+        except av.codec.codec.UnknownCodecError:
+            pytest.skip("Opus encoder is not available in this test environment")
+        path = tmp_path / "recording.webm"
+        with av.open(str(path), "w", format="webm") as output:
+            stream = output.add_stream("libopus", rate=48000)
+            stream.layout = "mono"
+            frame = av.AudioFrame.from_ndarray(
+                np.zeros((1, 48000), dtype=np.float32), format="flt", layout="mono"
+            )
+            frame.sample_rate = 48000
+            for packet in stream.encode(frame):
+                output.mux(packet)
+            for packet in stream.encode(None):
+                output.mux(packet)
+        wav, duration = _asr_wav(path)
+        assert wav.startswith(b"RIFF")
+        assert duration == pytest.approx(1.0, abs=0.02)
+
+    def test_mimo_warm_skips_local_model_and_health_is_unknown(self, client, monkeypatch):
+        monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "mimo")
+        with patch("app.fastapi_routes.voice_routes._get_model") as load:
+            warm = client.post("/api/voice/warm")
+            health = client.get("/api/voice/health")
+        load.assert_not_called()
+        assert warm.json()["data"]["skipped"] is True
+        assert health.json()["data"]["ready"] is False
+        assert health.json()["data"]["model"] == "mimo-v2.5-asr"
+
+    def test_mimo_route_converts_and_uses_current_session(self, client, monkeypatch):
+        import io
+        import wave
+
+        import httpx
+
+        monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "mimo")
+        monkeypatch.setattr(
+            "app.fastapi_routes.ai_assistant_tts._session_market_token", lambda request: "token"
+        )
+        seen = []
+
+        class FakeClient:
+            def __init__(self, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def post(self, url, **kwargs):
+                seen.append((url, kwargs))
+                return httpx.Response(
+                    200, json={"text": "你好", "language": "zh", "provider": "mimo"}
+                )
+
+        monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+        stream = io.BytesIO()
+        with wave.open(stream, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(16000)
+            wav.writeframes(b"\0\0" * 1600)
+        response = client.post(
+            "/api/voice/transcribe",
+            files={"file": ("audio.wav", stream.getvalue(), "audio/wav")},
+            data={"language": "zh"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["text"] == "你好"
+        assert seen[0][0].endswith("/api/workbench/asr")
+        assert seen[0][1]["headers"]["Authorization"] == "Bearer token"
+        assert seen[0][1]["files"]["file"][1].startswith(b"RIFF")
+
     def test_empty_file_returns_400(self, client: TestClient):
         response = client.post(
             "/api/voice/transcribe",
