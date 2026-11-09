@@ -64,11 +64,9 @@ class RequestIdentity:
 
     async def handoff(self, request: Request, background: BackgroundTasks) -> Any:
         """Return credentials only to their verified local session, for API calls.
-
         Browser navigation uses POST /browser-handoff. Anonymous, mismatched and
         unavailable sessions must never borrow another session's credentials.
-        Entitlement refresh calls the market (default 20s) and must not hold this
-        response: the settings page's 8s timer would otherwise fail sibling reads.
+        Entitlement refresh talks to the market and must not hold this response.
         """
         headers = {"Cache-Control": "no-store", "Pragma": "no-cache"}
         try:
