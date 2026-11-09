@@ -585,16 +585,15 @@ export async function createWindow(): Promise<void> {
       updateSplashProgress(58, '本地服务已就绪，正在打开工作台…')
     })
 
-  // 登录后的工作台不必等待全部 Mod 和业务路由完成。先在本地服务
-  // 可响应时打开界面，模块继续在后台完成；更新观察期仍会等待两者。
-  const mainUiReady = pingReady.then(() => {
+  const backendApplicationReady = pingReady.then(() =>
+    waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true }),
+  )
+  // 不在业务路由注册完成前发起登录及工作台请求。
+  const mainUiReady = backendApplicationReady.then(() => {
       splashPhase = 'done'
       updateSplashProgress(88, '正在加载应用…')
       return loadMainApplication()
     })
-  const backendApplicationReady = pingReady.then(() =>
-    waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true }),
-  )
   const ready = Promise.all([mainUiReady, backendApplicationReady]).then(() => undefined)
   desktopRuntime.mainApplicationReady = ready
   void mainUiReady.then(

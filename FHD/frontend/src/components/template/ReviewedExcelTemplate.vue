@@ -616,7 +616,7 @@ async function classify(approvedRoundKey = '') {
   if (current() && cancelAnalysis.value) { archiveProgress.value = '已停止后续处理。'; return }
   if (current() && eligible.length) {
     const incomplete = eligible.some(({ item }) => item.model_status !== 'returned') || documentWorkspace.documents.value.some(doc => !doc.review || !!doc.error || doc.unknown)
-    archiveProgress.value = incomplete || failed.length ? '部分模板未完成，请核对。' : documentWorkspace.documents.value.length ? '模板已生成。' : '未识别到可处理模板。'
+    archiveProgress.value = incomplete || failed.length ? (documentWorkspace.documents.value.length ? '部分模板未完成，请核对。' : '模型分类尚未完成，未生成模板。') : documentWorkspace.documents.value.length ? '模板已生成。' : '未识别到可处理模板。'
     const failures = [...failed.map(item => item.message || `${item.name}未完成`), ...eligible.filter(({ item }) => item.model_status !== 'returned' || !!analysisErrors.value[item.classification_id!]).map(({ item }) => `${item.name}：${analysisErrors.value[item.classification_id!] || item.checkpoint?.message || '模型处理未完成'}`)]
     if (failures.length) error.value = failures.join('；')
   }
@@ -847,6 +847,20 @@ async function reconcileCheckpoint(item: Classification, current: () => boolean)
     const checkpoint = saved?.checkpoint
     if (checkpoint && checkpoint.version === item.version && ['ready', 'paused', 'failed', 'inflight'].includes(checkpoint.phase)) item.checkpoint = checkpoint
   } catch { /* Keep the unknown-outcome lock when the persisted state cannot be verified. */ }
+}
+async function recoverSavedAnswer() {
+  const current = captureFileOperation(), item = currentClassification.value
+  if (!current() || busy.value || !item?.classification_id || !item.version || item.checkpoint?.phase !== 'failed') return
+  busy.value = true; error.value = ''
+  try {
+    const form = new FormData(); form.append('version', item.version)
+    const result = await templatePreviewApi.recoverClassificationAnswer(item.classification_id, form) as { checkpoint: Checkpoint; can_slice?: boolean }
+    if (!current()) return
+    item.checkpoint = result.checkpoint
+    delete analysisErrors.value[item.classification_id]
+    archiveProgress.value = `已核验保存的回答，完成 ${result.checkpoint.completed}/${result.checkpoint.total} 批；未重新调用模型。${result.can_slice === false ? '模型表示不能自动切片，需人工核对。' : ''}`
+  } catch (err) { if (current()) error.value = err instanceof Error ? err.message : '保存的回答无法恢复，请人工核对。' }
+  finally { if (current()) busy.value = false }
 }
 async function analyzeClassifications(retryItem?: Classification, extendBudget = false, pipeline = false) {
   const current = captureFileOperation()
@@ -1589,6 +1603,15 @@ async function downloadCandidate(index: number) {
       </div>
       </template>
     </div>
+    <section v-if="archiveOnSelect && !files.length" aria-label="恢复已保存分类">
+      <button type="button" :disabled="busy" @click="loadRecentClassifications">查看已保存分类</button>
+      <div v-for="item in recentClassifications.filter(entry => entry.archive_version_id && entry.latest)" :key="item.classification_id">
+        <span>{{ item.name }} · 编号 {{ item.classification_id.slice(0, 8) }} · {{ item.checkpoint ? `已完成 ${item.checkpoint.completed}/${item.checkpoint.total} 批` : classificationStatus(item.latest) }}</span>
+        <button type="button" :disabled="busy" @click="restoreClassification(item)">恢复此分类并继续</button>
+      </div>
+    </section>
+    <button v-if="archiveOnSelect && currentClassification?.checkpoint?.phase === 'failed'" type="button"
+      :disabled="busy || archiveRunPending" @click="recoverSavedAnswer">核验已保存回答</button>
     <div
       class="elt-composer"
       :class="{ 'elt-composer--dragover': composerDragOver }"

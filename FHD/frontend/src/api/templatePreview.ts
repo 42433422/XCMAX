@@ -138,6 +138,10 @@ export const templatePreviewApi = {
     return reviewedExcelPost(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/analyze`, formData)
   },
 
+  recoverClassificationAnswer(id: string, formData: FormData) {
+    return reviewedExcelPost(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/recover-answer`, formData)
+  },
+
   autoSlices(id: string, version: string) {
     return api.get(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/auto-slices/${encodeURIComponent(version)}`)
   },
