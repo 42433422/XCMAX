@@ -54,6 +54,28 @@ logger = logging.getLogger(__name__)
 _INTERNAL_RUN_ERROR = "agent_run_internal_error"
 
 
+def _authorized_step_matches_plan(run: AgentRun, step: AgentStep) -> bool:
+    """The frozen plan is the authorization. A later param or dependency edit cannot reuse it."""
+    stored = run.metadata.get("plan")
+    if not isinstance(stored, dict):
+        return True
+    nodes = stored.get("nodes")
+    if not isinstance(nodes, list) or not nodes:
+        return True
+    node = next(
+        (item for item in nodes if isinstance(item, dict) and item.get("node_id") == step.node_id),
+        None,
+    )
+    if not isinstance(node, dict):
+        return False
+    return (
+        node.get("tool_id") == step.tool_id
+        and node.get("action") == step.action
+        and dict(node.get("params") or {}) == dict(step.params or {})
+        and list(node.get("depends_on") or []) == list(step.depends_on or [])
+    )
+
+
 def _verified_catalog_terminal(run: AgentRun, step: AgentStep) -> dict[str, Any] | None:
     """A terminal receipt is not permission to replay a non-retryable operation."""
     output = step.output
@@ -330,6 +352,20 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         context = overlay_resume_context(run.metadata.get("runtime_context") or {}, runtime_context)
         run.metadata["runtime_context"] = context
         apply_ai_budget_metadata(run, context)
+        if not _authorized_step_matches_plan(run, waiting_step):
+            waiting_step.status = "waiting_user"
+            run.status = "waiting_user"
+            run.add_event(
+                "approval.authorization_mismatch",
+                "步骤参数或依赖与已授权计划不一致，未执行",
+                {
+                    "step_id": waiting_step.step_id,
+                    "node_id": waiting_step.node_id,
+                    "tool_id": waiting_step.tool_id,
+                    "action": waiting_step.action,
+                },
+            )
+            return cast("AgentRun | None", self._repo.save(run))
         waiting_step.status = "pending"
         run.status = "running"
         run.error = ""
@@ -355,6 +391,31 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         self._execute_with_durable_lease(
             run, runtime_context=context, approved_step_id=waiting_step.step_id
         )
+        return cast("AgentRun | None", self._repo.save(run))
+
+    def resume_failed_safe_steps(self, run_id: str) -> AgentRun | None:
+        """Re-run only failed low-risk idempotent steps. Completed business writes stay completed."""
+        run = self._repo.get(run_id)
+        if run is None or run.status not in {"failed", "blocked"}:
+            return cast("AgentRun | None", run)
+        requeued = False
+        for step in run.steps:
+            if step.status == "completed":
+                continue
+            if step.status == "failed" and self._can_auto_execute(step):
+                step.status = "pending"
+                step.error = ""
+                step.output = {}
+                requeued = True
+                continue
+            if step.status == "failed":
+                return cast("AgentRun | None", self._repo.save(run))
+        if not requeued:
+            return cast("AgentRun | None", self._repo.save(run))
+        run.status = "running"
+        run.error = ""
+        context = dict(run.metadata.get("runtime_context") or {})
+        self._execute_with_durable_lease(run, runtime_context=context)
         return cast("AgentRun | None", self._repo.save(run))
 
     def reject_waiting_step(self, run_id: str, *, rejector: str, reason: str) -> AgentRun | None:

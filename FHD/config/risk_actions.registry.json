@@ -753,6 +753,15 @@
           "availability": "shared",
           "action_class": "business_db.write",
           "approval": "always"
+        },
+        "verify_closed_loop": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "payload"
+          ],
+          "availability": "shared",
+          "approval": "never"
         }
       }
     },

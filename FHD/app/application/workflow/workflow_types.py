@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -432,7 +433,7 @@ def plan_to_dict(plan: PlanGraph) -> dict[str, Any]:
                 "node_id": n.node_id,
                 "tool_id": n.tool_id,
                 "action": n.action,
-                "params": dict(n.params),
+                "params": copy.deepcopy(n.params),
                 "risk": n.risk,
                 "idempotent": n.idempotent,
                 "description": n.description,

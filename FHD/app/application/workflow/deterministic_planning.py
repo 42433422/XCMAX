@@ -319,6 +319,7 @@ class DeterministicPlanner:
                     "生成待确认销售订单",
                     "人工批准后出库、发货并登记会计凭证",
                     "没有到账凭证时不登记收款",
+                    "核对订单、库存、履约和应收",
                     "按已提交数据导出结果",
                 ]
                 if staged
@@ -337,6 +338,19 @@ class DeterministicPlanner:
                     else "执行销售到收款闭环",
                 )
             )
+            if staged:
+                nodes.append(
+                    WorkflowNode(
+                        node_id="verify_sales_result",
+                        tool_id="sales",
+                        action="verify_closed_loop",
+                        params={"payload": payload},
+                        risk="low",
+                        idempotent=True,
+                        depends_on=["sales_execute_closed_loop"],
+                        description="核对订单、库存、履约和应收与已批准载荷一致",
+                    )
+                )
             if staged and "导出" in message and "reports" in tool_registry:
                 nodes.append(
                     WorkflowNode(
@@ -350,7 +364,7 @@ class DeterministicPlanner:
                         },
                         risk="low",
                         idempotent=True,
-                        depends_on=["sales_execute_closed_loop"],
+                        depends_on=["verify_sales_result"],
                         description="按已提交销售数据导出结果",
                     )
                 )

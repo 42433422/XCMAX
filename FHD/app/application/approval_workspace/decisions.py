@@ -354,6 +354,19 @@ class ApprovalDecisions:
             business.get("tool_id"),
             business.get("action"),
         ) == ("system_maintenance", "restore_database")
+        request_no = str(req.request_no or "")
+        from app.application.workflow.approval_persistence import (
+            load_durable_workflow_snapshot,
+            mark_durable_request_approved_and_load,
+        )
+
+        if load_durable_workflow_snapshot(request_no, allow_terminal=False) is not None:
+            if mark_durable_request_approved_and_load(request_no) is None:
+                return JSONResponse(
+                    {"success": False, "message": "审批决定未能先于执行落库"},
+                    status_code=409,
+                )
+            db.refresh(req)
         workflow_execution = self.workflows.resume(
             request_no=str(req.request_no or ""), opinion=opinion, approved_by=str(actor)
         )

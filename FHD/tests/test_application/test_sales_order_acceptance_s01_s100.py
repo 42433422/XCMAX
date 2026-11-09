@@ -164,10 +164,12 @@ def test_acceptance_sentence_is_a_gated_sales_plan():
     plan = _plan(SENTENCE)
     assert [node.node_id for node in plan.nodes] == [
         "sales_execute_closed_loop",
+        "verify_sales_result",
         "export_sales",
     ]
     assert plan.nodes[0].risk == "high"
     assert plan.nodes[1].depends_on == ["sales_execute_closed_loop"]
+    assert plan.nodes[2].depends_on == ["verify_sales_result"]
     approval = ApprovalService()
     decision, run_result = _engine(approval).run(
         plan, {"message": SENTENCE}, strategy="interactive"

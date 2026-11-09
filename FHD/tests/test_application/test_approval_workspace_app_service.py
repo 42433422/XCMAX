@@ -289,11 +289,39 @@ class TestGenerateRequestNo:
 
 
 class TestAiWorkflowAuthorization:
-    def test_applicant_can_review_own_request(self):
+    def test_applicant_without_grant_cannot_review_own_request(self):
         db = MagicMock()
-        req = SimpleNamespace(applicant_id=7)
+        db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            id=7, role="user", tenant_id=1, is_active=True
+        )
+        req = SimpleNamespace(
+            applicant_id=7, tenant_id=1, tool_id="sales", action="execute_closed_loop"
+        )
+        assert _can_review_ai_workflow_request(db, req, 7) is False
+
+    def test_applicant_with_business_grant_can_review_own_request(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            id=7,
+            role="user",
+            tenant_id=1,
+            is_active=True,
+            permissions={"approval.sales.execute_closed_loop"},
+        )
+        req = SimpleNamespace(
+            applicant_id=7, tenant_id=1, tool_id="sales", action="execute_closed_loop"
+        )
         assert _can_review_ai_workflow_request(db, req, 7) is True
-        db.query.assert_not_called()
+
+    def test_other_tenant_admin_cannot_review(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            id=8, role="admin", tenant_id=2, is_active=True
+        )
+        req = SimpleNamespace(
+            applicant_id=7, tenant_id=1, tool_id="sales", action="execute_closed_loop"
+        )
+        assert _can_review_ai_workflow_request(db, req, 8) is False
 
     def test_non_admin_cannot_review_another_users_request(self):
         db = MagicMock()

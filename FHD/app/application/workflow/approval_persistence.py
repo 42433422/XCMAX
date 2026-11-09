@@ -464,14 +464,21 @@ def mark_durable_request_approved_and_load(request_id: str) -> dict[str, Any] | 
             )
             if persisted is None:
                 return None
-            if str(persisted.status or "").strip() != "pending":
+            updated = (
+                db.query(ApprovalRequestModel)
+                .filter(
+                    ApprovalRequestModel.request_no == request_id,
+                    ApprovalRequestModel.status == "pending",
+                    ApprovalRequestModel.business_type == "workflow_tool",
+                )
+                .update(
+                    {"status": "approved", "approved_at": datetime.now()},
+                    synchronize_session=False,
+                )
+            )
+            if updated != 1:
+                db.rollback()
                 return None
-            if str(persisted.business_type or "").strip() != "workflow_tool":
-                return None
-            # 仅记录获批时点；审批人由调用方（_approve_ai_workflow_request_*）负责写入，
-            # 本函数不涉及 actor，避免越权/失真。
-            persisted.status = "approved"
-            persisted.approved_at = datetime.now()
             db.commit()
         return snapshot
     except _APPROVAL_STORAGE_ERRORS as exc:

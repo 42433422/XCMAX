@@ -165,9 +165,16 @@ def _pending_snapshot(request_id: str) -> JsonObject | None:
 
 
 def _execution_snapshot(request_id: str) -> JsonObject | None:
-    from app.application.workflow.approval_persistence import load_workflow_snapshot_for_execution
+    from app.application.workflow.approval_persistence import (
+        load_durable_workflow_snapshot,
+        load_workflow_snapshot_for_execution,
+    )
 
-    return load_workflow_snapshot_for_execution(request_id)
+    pending = load_workflow_snapshot_for_execution(request_id)
+    if pending is not None:
+        return pending
+    # Approved, but the business write has not been recorded yet. A restarted process can continue.
+    return load_durable_workflow_snapshot(request_id, allow_terminal=True)
 
 
 def _workflow_engine() -> WorkflowRunner:
