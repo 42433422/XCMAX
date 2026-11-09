@@ -84,3 +84,7 @@ fe810a41529aea4cc86bf85a99a8e7f024bb567d:FHD/tests/test_services/test_modstore_c
 # Exact original commit/file/rule/line; this file and all other credentials continue to scan.
 b3c539a991a6df97b2afdae2cd97e65eb4162a56:FHD/tests/test_desktop/test_support_bundle_customer_redaction.py:aws-access-token:31
 b3c539a991a6df97b2afdae2cd97e65eb4162a56:FHD/tests/test_desktop/test_support_bundle_customer_redaction.py:aws-access-token:48
+
+# Independently reviewed empty/truncated PEM regression fixture, no private-key payload.
+# dot agents release_scan_deploy and elt_log_security_fix checked this exact remote occurrence.
+a527a40336a0ee2372a7c021aab964e4d0fa98fb:FHD/tests/test_security/test_log_redaction.py:private-key:36

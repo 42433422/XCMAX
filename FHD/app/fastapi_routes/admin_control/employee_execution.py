@@ -69,6 +69,17 @@ class EmployeeExecution:
         tenant_id = trusted_tenant(meta)
         if tenant_id is None:
             return JSONResponse({"success": False, "message": "缺少可信租户"}, status_code=403)
+        from app.infrastructure.workspace import workspace_root
+
+        # The authenticated local-execution route uses the configured host workspace,
+        # never an arbitrary filesystem root supplied in HTTP input.
+        server_workspace = str(workspace_root())
+        requested_workspace = str(body.get("workspace_root") or "").strip()
+        if requested_workspace and requested_workspace != server_workspace:
+            return JSONResponse(
+                {"success": False, "message": "员工工作区必须使用服务器配置"}, status_code=403
+            )
+        payload["workspace_root"] = server_workspace
         for reserved in ("_runtime_context", "runtime_context", "_mod_authorization"):
             payload.pop(reserved, None)
         payload.update(
@@ -83,7 +94,7 @@ class EmployeeExecution:
                 user_id=user_id,
                 tenant_id=tenant_id,
                 session_id=sid,
-                workspace_root=str(body.get("workspace_root") or "").strip() or None,
+                workspace_root=server_workspace,
             ),
         )
 

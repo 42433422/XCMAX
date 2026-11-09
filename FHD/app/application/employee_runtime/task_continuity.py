@@ -11,10 +11,12 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
 import uuid
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -24,6 +26,7 @@ from app.application.agent_orchestrator.context_window_manager import (
     estimate_messages_tokens,
 )
 from app.application.employee_runtime.handoff_identity import load_identity_card
+from app.application.employee_runtime.workspace_io import workspace_directory, workspace_file
 
 SOURCE = "employee_runtime.task_continuity"
 CONTINUE_TEXT = "继续执行剩余任务"
@@ -92,7 +95,11 @@ class TaskContinuityRuntime:
     def __init__(self, path: str | Path, *, workspace: str | Path | None = None) -> None:
         self.path = Path(path)
         self.workspace = Path(workspace) if workspace is not None else self.path.parent
+        self.path = Path(os.path.abspath(self.path))
+        self.workspace = Path(os.path.abspath(self.workspace))
+        self.path.relative_to(self.workspace)
         self.state = _empty_state()
+        self._ledger_fd: int | None = None
 
     def dispatch(
         self,
@@ -195,6 +202,12 @@ class TaskContinuityRuntime:
                 if child_id not in ids:
                     bad.append(str(child_id))
         return bad
+
+    def _scoped_orphans(self, visible: set[str]) -> list[str]:
+        related = visible | {
+            child for key in visible for child in self.state["tasks"][key].get("child_task_ids", [])
+        }
+        return [key for key in self.orphans() if key in related]
 
     def _start(
         self, actor: str, text: str, payload: dict[str, Any], **scope: str
@@ -725,14 +738,22 @@ class TaskContinuityRuntime:
     def _restart(
         self, actor: str, text: str, payload: dict[str, Any], **scope: str
     ) -> dict[str, Any]:
+        focus_id = str(payload.get("task_id") or "")
+        if focus_id:
+            checked = self._authorized(payload, actor, scope, write=True)
+            if not _is_task(checked):
+                return checked
+        visible = {
+            key for key, row in self.state["tasks"].items() if self._allows(row, actor, scope)
+        }
         cause = str(payload.get("cause") or "backend_restart")
         self._write()
         self.state = _empty_state()
         self._read()
-        before = self._fingerprint()
+        before = self._fingerprint(visible)
         recovered: list[str] = []
         for call in self.state["tool_calls"].values():
-            if call["status"] != "running":
+            if call["task_id"] not in visible or call["status"] != "running":
                 continue
             pid = int(call.get("submit_pid") or 0)
             if _pid_alive(pid):
@@ -745,13 +766,13 @@ class TaskContinuityRuntime:
             if step is not None and step["status"] == "running":
                 step["status"] = "recovering"
         for task in self.state["tasks"].values():
-            if task["status"] == _TERMINAL_OK:
+            if task["task_id"] not in visible or task["status"] == _TERMINAL_OK:
                 continue
             if any(step["status"] == "recovering" for step in task["steps"]):
                 task["status"] = "recovering"
                 task["error_code"] = task.get("error_code") or "restart_inflight"
                 task["error_message"] = "重启时有未完成工具，未重复提交"
-        after = self._fingerprint()
+        after = self._fingerprint(visible)
         record = {
             "restart_id": _new_id("restart"),
             "cause": cause,
@@ -761,7 +782,7 @@ class TaskContinuityRuntime:
             "memory_dropped": True,
             "reloaded_from": str(self.path),
             "timestamp": _now(),
-            "orphan_count": len(self.orphans()),
+            "orphan_count": len(self._scoped_orphans(visible)),
         }
         self.state["restarts"].append(record)
         focus_id = str(payload.get("task_id") or "")
@@ -922,8 +943,19 @@ class TaskContinuityRuntime:
     def _metrics_op(
         self, actor: str, text: str, payload: dict[str, Any], **scope: str
     ) -> dict[str, Any]:
-        pollution = self.pollution_findings()
-        duplicates = self.duplicate_side_effects()
+        visible = {
+            key for key, row in self.state["tasks"].items() if self._allows(row, actor, scope)
+        }
+        pollution = [
+            dict(row, foreign_task_id="[redacted]", marker="[redacted]")
+            for row in self.pollution_findings()
+            if row["task_id"] in visible
+        ]
+        duplicates = [
+            key
+            for key in self.duplicate_side_effects()
+            if self.state["side_effects"][key].get("task_id") in visible
+        ]
         return {
             "success": True,
             "business_success": not pollution and not duplicates,
@@ -932,7 +964,7 @@ class TaskContinuityRuntime:
             "pollution_findings": pollution,
             "duplicate_side_effects": len(duplicates),
             "duplicate_keys": duplicates,
-            "orphan_count": len(self.orphans()),
+            "orphan_count": len(self._scoped_orphans(visible)),
             "evidence": _blank_evidence(),
         }
 
@@ -1383,7 +1415,12 @@ class TaskContinuityRuntime:
         if op == "restart":
             # Restart recovers all in-flight calls even when a focus task is supplied.
             # Completed history does not require its role cards to remain installed.
-            tasks = [row for row in self.state["tasks"].values() if row["status"] != _TERMINAL_OK]
+            tasks = [
+                row
+                for row in self.state["tasks"].values()
+                if row["status"] != _TERMINAL_OK
+                and self._allows(row, actor, {"tenant": tenant, "user": user})
+            ]
         else:
             tasks = (
                 [task]
@@ -1413,22 +1450,19 @@ class TaskContinuityRuntime:
             return {"task_id": raw, "active": False}
         return None
 
+    @contextmanager
     def _exclusive(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path = self.path.with_suffix(".lock")
-        handle = lock_path.open("a+")
-
-        class _Guard:
-            def __enter__(self_inner):
+        with workspace_directory(self.workspace, self.path.parent, create=True) as parent_fd:
+            with workspace_file(
+                parent_fd, self.path.with_suffix(".lock").name, os.O_RDWR | os.O_CREAT, "a+"
+            ) as handle:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-                return self_inner
-
-            def __exit__(self_inner, exc_type, exc, tb):
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-                handle.close()
-                return False
-
-        return _Guard()
+                try:
+                    self._ledger_fd = parent_fd
+                    yield
+                finally:
+                    self._ledger_fd = None
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _execute_named_tool(
         self,
@@ -1437,6 +1471,8 @@ class TaskContinuityRuntime:
         task_id: str,
         runtime_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name):
+            return {"ok": False, "error_code": "tool_invalid", "error_message": "工具名称无效"}
         script = self.workspace / "tools" / f"{name}.py"
         if script.is_file():
             try:
@@ -1630,9 +1666,11 @@ class TaskContinuityRuntime:
             "evidence": self._evidence(task, redact=redact),
         }
 
-    def _fingerprint(self) -> str:
+    def _fingerprint(self, task_ids: set[str] | None = None) -> str:
         view: list[Any] = []
         for task_id in sorted(self.state["tasks"]):
+            if task_ids is not None and task_id not in task_ids:
+                continue
             task = self.state["tasks"][task_id]
             view.append(
                 {
@@ -1655,19 +1693,40 @@ class TaskContinuityRuntime:
         encoded = json.dumps(view, ensure_ascii=False, sort_keys=True).encode()
         return hashlib.sha256(encoded).hexdigest()
 
+    @contextmanager
+    def _directory(self, *, create=False):
+        if self._ledger_fd is not None:
+            yield self._ledger_fd
+        else:
+            with workspace_directory(self.workspace, self.path.parent, create=create) as fd:
+                yield fd
+
     def _write(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(
-            json.dumps(self.state, ensure_ascii=False, default=str), encoding="utf-8"
-        )
-        temporary.replace(self.path)
+        with self._directory(create=True) as parent_fd:
+            temporary = f".ledger-{uuid.uuid4().hex}.tmp"
+            try:
+                with workspace_file(
+                    parent_fd, temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, "w"
+                ) as handle:
+                    json.dump(self.state, handle, ensure_ascii=False, default=str)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, self.path.name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+                os.fsync(parent_fd)
+            finally:
+                try:
+                    os.unlink(temporary, dir_fd=parent_fd)
+                except FileNotFoundError:
+                    pass
 
     def _read(self) -> None:
-        if not self.path.is_file():
+        try:
+            with self._directory() as parent_fd:
+                with workspace_file(parent_fd, self.path.name, os.O_RDONLY, "r") as handle:
+                    loaded = json.load(handle)
+        except FileNotFoundError:
             self.state = _empty_state()
             return
-        loaded = json.loads(self.path.read_text(encoding="utf-8"))
         state = _empty_state()
         state.update(loaded if isinstance(loaded, dict) else {})
         self.state = state
@@ -1844,13 +1903,9 @@ def ledger_path(workspace_root: str | Path) -> Path:
 
 
 def load_employee_task_ledger(workspace_root: str | Path) -> dict[str, Any]:
-    path = ledger_path(workspace_root)
-    if not path.is_file():
-        return _empty_state()
-    loaded = json.loads(path.read_text(encoding="utf-8"))
-    state = _empty_state()
-    state.update(loaded if isinstance(loaded, dict) else {})
-    return state
+    runtime = TaskContinuityRuntime(ledger_path(workspace_root), workspace=workspace_root)
+    runtime._read()
+    return runtime.state
 
 
 def audit_employee_task_ledger(workspace_root: str | Path) -> dict[str, Any]:
@@ -1901,7 +1956,7 @@ def maybe_continue_employee_task(
     text = str(task or "").strip()
     if not action and "steps" not in body and text != CONTINUE_TEXT:
         return None
-    workspace = workspace_root or body.get("workspace_root")
+    workspace = workspace_root
     if not workspace:
         return {
             "success": False,

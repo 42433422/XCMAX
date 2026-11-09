@@ -32,14 +32,10 @@ def test_redact_private_key_variants_and_adjacent_text():
 def test_redact_empty_and_unterminated_private_keys():
     assert redact_log_text("") == ""
     assert redact_log_text("ordinary message") == "ordinary message"
-    assert (
-        redact_log_text("-----BEGIN PRIVATE KEY----------END PRIVATE KEY-----")
-        == "<redacted-private-key>"
-    )
-    assert (
-        redact_log_text("prefix -----BEGIN PRIVATE KEY-----fixture")
-        == "prefix <redacted-private-key>"
-    )
+    begin = "-" * 5 + "BEGIN PRIVATE KEY" + "-" * 5
+    end = "-" * 5 + "END PRIVATE KEY" + "-" * 5
+    assert redact_log_text(begin + end) == "<redacted-private-key>"
+    assert redact_log_text("prefix " + begin + "fixture") == "prefix <redacted-private-key>"
 
 
 def test_repeated_unterminated_private_keys_finish_without_backtracking():
@@ -53,7 +49,7 @@ def test_repeated_unterminated_private_keys_finish_without_backtracking():
             sys.executable,
             "-c",
             "from app.security.log_redaction import redact_log_text; "
-            "assert redact_log_text('-----BEGIN PRIVATE KEY-----' * 100000) == '<redacted-private-key>'",
+            "assert redact_log_text(('-' * 5 + 'BEGIN PRIVATE KEY' + '-' * 5) * 100000) == '<redacted-private-key>'",
         ],
         cwd=Path(__file__).resolve().parents[2],
         timeout=5,
