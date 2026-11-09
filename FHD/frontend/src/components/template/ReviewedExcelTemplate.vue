@@ -1589,6 +1589,13 @@ async function downloadCandidate(index: number) {
       </div>
       </template>
     </div>
+    <section v-if="archiveOnSelect && !files.length" aria-label="恢复已保存分类">
+      <button type="button" :disabled="busy" @click="loadRecentClassifications">查看已保存分类</button>
+      <div v-for="item in recentClassifications.filter(entry => entry.archive_version_id && entry.latest)" :key="item.classification_id">
+        <span>{{ item.name }} · 编号 {{ item.classification_id.slice(0, 8) }} · {{ item.checkpoint ? `已完成 ${item.checkpoint.completed}/${item.checkpoint.total} 批` : classificationStatus(item.latest) }}</span>
+        <button type="button" :disabled="busy" @click="restoreClassification(item)">恢复此分类并继续</button>
+      </div>
+    </section>
     <div
       class="elt-composer"
       :class="{ 'elt-composer--dragover': composerDragOver }"

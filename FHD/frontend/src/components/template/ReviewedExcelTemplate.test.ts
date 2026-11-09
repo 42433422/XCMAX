@@ -77,6 +77,23 @@ describe('reviewed Excel template', () => {
       return { version: 'confirmed-version', confirmed: true, sheets }
     })
   })
+
+  it('lists distinct archived checkpoints for the same filename without starting analysis', async () => {
+    api.recentClassifications.mockResolvedValueOnce({ files: [
+      { name: '合成.xlsx', classification_id: 'aaaaaaaa-1', archive_version_id: 'v1', latest: { version: 'v1' }, checkpoint: { completed: 0, total: 4 } },
+      { name: '合成.xlsx', classification_id: 'bbbbbbbb-2', archive_version_id: 'v2', latest: { version: 'v2' }, checkpoint: { completed: 1, total: 4 } },
+    ] })
+    api.analyzeClassification.mockClear()
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      await wrapper.get('button').trigger('click'); await flushPromises()
+      const recovery = wrapper.get('[aria-label="恢复已保存分类"]')
+      expect(recovery.text()).toContain('aaaaaaaa')
+      expect(recovery.text()).toContain('bbbbbbbb')
+      expect(recovery.findAll('button').filter(button => button.text() === '恢复此分类并继续')).toHaveLength(2)
+      expect(api.analyzeClassification).not.toHaveBeenCalled()
+    } finally { wrapper.unmount() }
+  })
   it('offers legacy XLS through the archive conversion boundary in chatlike intake', () => {
     const archived = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     expect(archived.find('input[type=file]').attributes('accept')).toBe('.xlsx,.xls,.docx')
