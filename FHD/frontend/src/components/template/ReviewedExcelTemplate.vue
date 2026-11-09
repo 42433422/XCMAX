@@ -12,6 +12,7 @@ import { autoIngestStatusLabel, actionLabel, targetLabel } from '@/views/eltCent
 import TemplateCandidatePreview from './TemplateCandidatePreview.vue'
 import WorkbookEmployeeReport from './WorkbookEmployeeReport.vue'
 import { workbookEmployeeReports } from './workbookEmployeeReport'
+import { initialOptionalTemplateIndex, pickOptionalTemplate } from '@/domain/optionalTemplateSelection'
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
@@ -125,7 +126,7 @@ const currentRestrictions = computed(() => [...new Set([
 ])])
 const publicationRestricted = computed(() => currentRestrictions.value.length > 0)
 
-const candidateIndex = ref(props.archiveOnSelect ? -1 : 0)
+const candidateIndex = ref(initialOptionalTemplateIndex(props.archiveOnSelect))
 const proposals = ref<Proposal[]>([])
 const selectedVersion = ref(0)
 const proposal = computed(() => proposals.value[selectedVersion.value])
@@ -390,7 +391,7 @@ function equivalentTo(index: number): number | null {
 function cellStyle(cell: LayoutCell): CSSProperties {
   return { fontWeight: cell.bold ? 'bold' : 'normal', fontStyle: cell.italic ? 'italic' : 'normal', fontSize: `${cell.font_size}pt`, color: /^[0-9a-fA-F]{6}$/.test(cell.font_color) ? `#${cell.font_color}` : undefined, backgroundColor: /^[0-9a-fA-F]{6}$/.test(cell.fill) ? `#${cell.fill}` : undefined, textAlign: ['left', 'right', 'center'].includes(cell.align) ? cell.align as CSSProperties['textAlign'] : undefined }
 }
-function switchVersion(index: number) { selectedVersion.value = index; candidateIndex.value = props.archiveOnSelect ? -1 : 0 }
+function switchVersion(index: number) { selectedVersion.value = index; candidateIndex.value = initialOptionalTemplateIndex(props.archiveOnSelect) }
 let alive = true
 let operationEpoch = 0
 let selectionEpoch = 0
@@ -405,7 +406,7 @@ function captureFileOperation() {
 }
 function resetReview() {
   resetIntake()
-  review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = props.archiveOnSelect ? -1 : 0
+  review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = initialOptionalTemplateIndex(props.archiveOnSelect)
   savedId.value = ''; savedModelStatus.value = ''; ingestBatchId.value = ''; kbProgress.value = null; businessProgress.value = null; stopIngestPoll(); sheetIndex.value = 0
   feedback.value = ''; publishToTenant.value = false
 }
@@ -1102,7 +1103,7 @@ async function preview(slice?: AutoSlice) {
     if (props.archiveOnSelect && result.proposal.model.status !== 'returned') throw new Error('模型连接异常：模型未返回有效候选，请核对服务端处理记录后重试。')
     proposals.value = result.versions?.length ? result.versions : [result.proposal]
     selectedVersion.value = proposals.value.length - 1
-    candidateIndex.value = props.archiveOnSelect ? -1 : 0
+    candidateIndex.value = initialOptionalTemplateIndex(props.archiveOnSelect)
     review.value = result
     if (props.archiveOnSelect) archiveProgress.value = '平台模型候选已生成，请核对。'
     emit('stage', 'template')
@@ -1126,8 +1127,9 @@ function canCommitSelectedTemplate() {
   return true
 }
 function pickCandidate(index: number) {
-  if (busy.value || !Number.isInteger(index) || !proposal.value?.candidates[index]) return
-  candidateIndex.value = index
+  const next = pickOptionalTemplate(proposal.value?.candidates.length || 0, index, busy.value)
+  if (next === null) return
+  candidateIndex.value = next
   closeCandidatePicker()
   if (props.archiveOnSelect) void nextTick(() => candidateCapsule.value?.focus({ preventScroll: true }))
 }
@@ -1200,7 +1202,7 @@ async function refine() {
     if (!current()) return
     proposals.value.push(result.proposal)
     selectedVersion.value = proposals.value.length - 1
-    candidateIndex.value = props.archiveOnSelect ? -1 : 0
+    candidateIndex.value = initialOptionalTemplateIndex(props.archiveOnSelect)
     return true
   } catch (err) {
     if (!current()) return

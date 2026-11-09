@@ -7,7 +7,6 @@ import type { useChatTaskList } from '../useChatTaskList'
 import {
   persistExcelAnalysisContext,
   resolveExcelFilePathFromAnalysis,
-  resolveExcelSheetOptionsFromContext,
 } from '../useChatPersistence'
 import { useExcelAnalysis } from '../useExcelAnalysis'
 import type { useChatExcelContext } from '../useChatExcelContext'
@@ -68,8 +67,7 @@ export function useChatOrchestrationExcelTasks(deps: ChatOrchestrationExcelTasks
           }
           lastExcelAnalysisContext.value = payload
           linkedExcelAllSheets.value = false
-          const sheetOptions = resolveExcelSheetOptionsFromContext(payload)
-          linkedExcelSheet.value = sheetOptions[0] || null
+          linkedExcelSheet.value = null
           window.dispatchEvent(
             new CustomEvent('xcagi:excel-sheet-context', {
               detail: {
