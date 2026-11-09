@@ -856,7 +856,11 @@ class TestTryHandleDynamicWorkflowExtended:
             "approval_nodes": [{"node_id": "n1", "tool_id": "products", "action": "create"}],
         }
         approval_request = Mock(request_id="approval-1")
-        agent_run = Mock(run_id="run-1", status="waiting_user")
+        agent_run = Mock(
+            run_id="run-1",
+            status="waiting_user",
+            steps=[Mock(status="waiting_user", node_id="n1")],
+        )
         with (
             patch(
                 "app.application.agent_orchestrator.AgentOrchestrator.start_run_from_plan",
