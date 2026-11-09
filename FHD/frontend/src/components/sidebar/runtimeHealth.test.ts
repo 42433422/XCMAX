@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { runtimeHealthPresentation } from './runtimeHealthPresentation'
 import { useSidebarAppVersion } from './useSidebarAppVersion'
+import { noteModelPath, resetModelPath } from './modelPathHealth'
 
 afterEach(() => {
+  resetModelPath()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   vi.useRealTimers()
@@ -79,6 +81,11 @@ describe('live sidebar health', () => {
     await sidebar.refreshHealthAppVersion()
     expect(sidebar.runtimeHealth.value.text).toBe('系统正常')
     expect(sidebar.sidebarAppVersionText.value).toBe('v1.0.0.1')
+    noteModelPath('degraded')
+    expect(sidebar.runtimeHealth.value.text).toBe('模型服务异常')
+    expect(sidebar.runtimeHealth.value.text).not.toBe('系统正常')
+    noteModelPath('healthy')
+    expect(sidebar.runtimeHealth.value.text).toBe('系统正常')
     sidebar.stopHealthPolling()
   })
 

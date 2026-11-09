@@ -1,5 +1,12 @@
 /** Translate service health into a state users can act on without exposing internal errors. */
-export function runtimeHealthPresentation(data, connection = 'ready') {
+export function runtimeHealthPresentation(data, connection = 'ready', modelPath = 'unknown') {
+  if (modelPath === 'degraded') {
+    return {
+      tone: 'warning',
+      text: '模型服务异常',
+      detail: '最近一次模型或对话请求未成功。其它健康检查不会把这项显示成系统正常；模型请求恢复后才回到正常。',
+    }
+  }
   if (connection === 'reachable') {
     return { tone: 'pending', text: '服务可连接，状态待确认', detail: '接口已响应，整体健康状态仍待健康检查确认。' }
   }

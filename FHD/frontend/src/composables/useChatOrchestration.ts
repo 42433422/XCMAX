@@ -487,7 +487,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     addMessage('已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。', 'ai', routeMetadata ? { routeMetadata } : undefined)
   }
 
-  async function sendMessage(message: string) {
+  async function sendMessage(message: string, turn?: { retryOf?: string; idempotencyKey?: string; destructiveConfirmed?: boolean }) {
     const taskSessionId = String(sessionId.value || '').trim() || 'default'
     if (isLoading.value) stopReply({ supersede: true })
     const generation = chatSessionActivity.beginRound(taskSessionId)
@@ -531,7 +531,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       const debounceMs = getChatBatchDebounceMs()
       if (debounceMs <= 0) {
         try {
-          await executeRemoteChatRound([message], undefined, requestScope)
+          await executeRemoteChatRound([message], turn, requestScope)
         } finally {
           await refreshHistorySessions()
         }
@@ -539,7 +539,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       }
       queued = true
       enqueueChatBatchMessage(message, debounceMs, (msgs) => {
-        void executeRemoteChatRound(msgs, undefined, requestScope).finally(async () => {
+        void executeRemoteChatRound(msgs, turn, requestScope).finally(async () => {
           if (localScope.isCurrent()) await syncFromServer()
           await refreshHistorySessions()
         })
@@ -704,6 +704,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     generateSessionId,
     scrollToBottom,
     sendMessage,
+    retryModelOnly: (message: string, turnId: string) => sendMessage(message, { retryOf: turnId, idempotencyKey: turnId }),
+    confirmDestructive: (message: string, idempotencyKey: string) => sendMessage(message, { destructiveConfirmed: true, idempotencyKey }),
     stopReply,
     confirmWorkflowFromCard,
     cancelWorkflowFromCard,

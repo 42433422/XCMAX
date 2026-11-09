@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import Context, ContextVar, copy_context
 from typing import Any, cast
 
+from app.application.chat_turn_guard import mutation_block, note_tool_commit
 from app.application.workflow.multimodal_user_content import (
     EmptyMultimodalResponseError as EmptyMultimodalResponseError,
 )
@@ -363,6 +364,26 @@ def append_tool_messages(
     max_workers = _planner_tools_max_workers()
     use_parallel = len(parsed) > 1 and max_workers > 1 and not any_token_sensitive
 
+    def _run_tool(name: str, raw_eff: str) -> str:
+        blocked = mutation_block(name, raw_eff, runtime_context)
+        if blocked is not None:
+            return json.dumps(blocked, ensure_ascii=False)
+        raw = execute_tool(
+            name,
+            raw_eff,
+            workspace_root,
+            runtime_context=runtime_context,
+            db_write_token=db_write_token,
+        )
+        text = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False)
+        try:
+            parsed_payload = json.loads(text)
+        except json.JSONDecodeError:
+            parsed_payload = None
+        if isinstance(parsed_payload, dict) and parsed_payload.get("success") is True:
+            note_tool_commit(runtime_context, name)
+        return text
+
     if not use_parallel:
         for tc, name, raw_eff, key in parsed:
             dedup_state = _tool_dedup_state()
@@ -377,15 +398,7 @@ def append_tool_messages(
                     "hint": "same tool+arguments already executed",
                 }
             else:
-                payload = json.loads(
-                    execute_tool(
-                        name,
-                        raw_eff,
-                        workspace_root,
-                        runtime_context=runtime_context,
-                        db_write_token=db_write_token,
-                    )
-                )
+                payload = json.loads(_run_tool(name, raw_eff))
             _append_last_tool_record(tc, name, raw_eff, payload)
             if payload.get("requires_token"):
                 return payload
@@ -420,14 +433,7 @@ def append_tool_messages(
             _append_last_tool_record(tc, name, raw_eff, duplicate_payload)
 
     def _execute_idx(idx: int, name: str, raw_eff: str) -> tuple[int, dict[str, Any]]:
-        raw = execute_tool(
-            name,
-            raw_eff,
-            workspace_root,
-            runtime_context=runtime_context,
-            db_write_token=db_write_token,
-        )
-        return idx, json.loads(raw)
+        return idx, json.loads(_run_tool(name, raw_eff))
 
     def _execute_in_context(
         context: Context, item: tuple[int, str, str]

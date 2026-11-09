@@ -152,9 +152,13 @@
           </button>
         </div>
         <div v-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg)" class="proactive-suggestions" data-testid="chat-error-recovery">
-          <p>请先检查模型状态。重试会发起新请求，已执行的业务操作不会撤销。</p>
+          <p>{{ recoveryText(msg) }}</p>
           <details v-if="originalRequest(idx)"><summary>查看本次原始输入</summary><p>{{ originalRequest(idx) }}</p></details>
-          <button v-if="originalRequest(idx)" type="button" class="btn btn-secondary btn-sm" :disabled="isLoading" @click="$emit('fill-example', originalRequest(idx))">重试本次请求（填入原文）</button>
+          <button v-if="originalRequest(idx)" type="button" class="btn btn-secondary btn-sm" :disabled="isLoading" @click="retryModel(idx)">重试模型请求（不重复写入）</button>
+        </div>
+        <div v-else-if="msg.role === 'ai' && !msg.streamingShell && msg.execution?.effect === 'preview' && !msg.execution.committed" class="proactive-suggestions" data-testid="chat-destructive-preview">
+          <p>上述范围尚未删除。确认后才会写入，且同一请求不会重复执行。</p>
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="isLoading" @click="confirmPreview(idx)">确认删除该范围</button>
         </div>
         <div
           v-else-if="!isMessageCollapsed(msg, idx) && suggestionsFor(msg).length"
@@ -198,6 +202,7 @@ import { approvalCardId } from '@/utils/chatApprovalCard'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 import { CHAT_HISTORY_WINDOW, useChatHistoryWindow } from '@/composables/useChatHistoryWindow'
 import { isFailedChatReply, proactiveReplyMessageId, type ProactiveReplySuggestion } from '@/composables/useProactiveReplySuggestions'
+import { chatFailureRecoveryText } from '@/components/chat/chatFailureRecovery'
 
 useI18n()
 
@@ -233,6 +238,8 @@ const emit = defineEmits<{
   'approve-run': [runId: string]
   'pick-proactive-suggestion': [item: ProactiveReplySuggestion]
   'fill-example': [text: string]
+  'retry-model': [payload: { text: string; turnId: string }]
+  'confirm-destructive': [payload: { text: string; idempotencyKey: string }]
 }>()
 
 function originalRequest(index: number): string {
@@ -240,6 +247,22 @@ function originalRequest(index: number): string {
   const user = props.messages.slice(0, index).reverse().find(message => message.role === 'user'
     && (!reply?.turnId || reply.turnId === message.turnId))
   return user ? plainTextFromChatHtml(user.content) : ''
+}
+
+function recoveryText(message: ChatMessage): string {
+  return chatFailureRecoveryText(message.execution)
+}
+
+function retryModel(index: number) {
+  const text = originalRequest(index)
+  const turnId = String(props.messages[index]?.turnId || '').trim()
+  if (text && turnId) emit('retry-model', { text, turnId })
+}
+
+function confirmPreview(index: number) {
+  const text = originalRequest(index)
+  const idempotencyKey = String(props.messages[index]?.execution?.idempotencyKey || props.messages[index]?.turnId || '').trim()
+  if (text && idempotencyKey) emit('confirm-destructive', { text, idempotencyKey })
 }
 
 function suggestionsFor(message: ChatMessage): readonly ProactiveReplySuggestion[] {

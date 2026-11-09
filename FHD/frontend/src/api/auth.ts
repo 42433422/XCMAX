@@ -242,8 +242,10 @@ export const authApi = {
     return api.post<ApiResponse<{ avatar_url: string }>>('/api/auth/profile/avatar', form)
   },
 
-  async validateSession(options: Pick<RequestOptions, 'signal' | 'timeoutMs'> = {}): Promise<ApiResponse<unknown>> {
-    return api.get<ApiResponse<unknown>>('/api/auth/session/validate', {}, { timeoutMs: 8_000, ...options })
+  async validateSession(options: Pick<RequestOptions, 'signal' | 'timeoutMs' | 'quiet'> = {}): Promise<ApiResponse<unknown>> {
+    // Desktop probes this about every 5s. The 8s abort lives in api/core and, unless quiet,
+    // toasts `请求超时（>8s）。该请求未成功。` even though this is not the model call.
+    return api.get<ApiResponse<unknown>>('/api/auth/session/validate', {}, { timeoutMs: 8_000, quiet: true, ...options })
   },
 
   async forgotAccount(email: string): Promise<ApiResponse<{ usernames: string[]; found: boolean }>> {
