@@ -866,16 +866,24 @@ async function reconcileCheckpoint(item: Classification, current: () => boolean)
     const result = await templatePreviewApi.recentClassifications() as { files: RecentClassification[] }
     if (!current()) return 'locked'
     const sameSha = result.files.filter(entry => entry.sha256 === item.sha256)
-    const returned = sameSha.filter(entry => entry.latest?.model_status === 'returned')
-    const saved = returned.find(entry => entry.classification_id === item.classification_id) || returned[0]
+    const mine = sameSha.find(entry => entry.classification_id === item.classification_id)
+    if (mine?.latest?.model_status === 'returned') {
+      if (mine.latest.version !== item.version || item.model_status !== 'returned') applySavedModel(item, mine)
+      return 'adopted'
+    }
+    const phase = mine?.checkpoint?.phase
+    const pausedHere = phase === 'paused' || phase === 'ready' || item.checkpoint?.phase === 'paused' || item.checkpoint?.phase === 'ready'
+    if (pausedHere && phase !== 'inflight') {
+      if (mine?.checkpoint && (phase === 'paused' || phase === 'ready') && (!mine.checkpoint.version || mine.checkpoint.version === item.version)) item.checkpoint = mine.checkpoint
+      return 'open'
+    }
+    const saved = sameSha.find(entry => entry.latest?.model_status === 'returned')
     if (saved?.latest && (saved.classification_id !== item.classification_id || saved.latest.version !== item.version || item.model_status !== 'returned')) {
       applySavedModel(item, saved)
       return 'adopted'
     }
     if (saved?.latest) return 'adopted'
-    const currentSaved = sameSha.find(entry => entry.classification_id === item.classification_id && entry.latest?.version === item.version)
-    const checkpoint = currentSaved?.checkpoint
-    if (checkpoint && checkpoint.version === item.version && ['ready', 'paused', 'failed', 'inflight'].includes(checkpoint.phase)) item.checkpoint = checkpoint
+    if (mine?.checkpoint && mine.checkpoint.version === item.version && (phase === 'failed' || phase === 'inflight')) item.checkpoint = mine.checkpoint
     if (item.checkpoint?.phase === 'inflight' || sameSha.some(entry => entry.checkpoint?.phase === 'inflight')) return 'locked'
     return 'open'
   } catch { return item.checkpoint?.phase === 'inflight' ? 'locked' : 'open' }

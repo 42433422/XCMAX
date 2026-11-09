@@ -410,6 +410,34 @@ describe('reviewed Excel template', () => {
     expect(wrapper.text()).not.toContain('勿重复发送')
     wrapper.unmount()
   })
+  it('continues a paused round instead of adopting another saved classification', async () => {
+    const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
+    const paused = { phase: 'paused', version: 'v1', completed: 1, total: 2, max_calls: 1, message: '本轮预算已用完；确认后可继续剩余批次' }
+    api.classifyExcel.mockResolvedValue({ files: [{ name: '宗南.xlsx', status: 'classified', classification_id: 'pause-id', sha256: 'zongnan', version: 'v1', sheets: [sheet] }] })
+    api.recentClassifications.mockReset().mockResolvedValue({ files: [
+      { classification_id: 'pause-id', sha256: 'zongnan', checkpoint: paused, latest: { version: 'v1', confirmed: false, model_status: 'not_called', sheets: [sheet] } },
+      { classification_id: 'saved-id', sha256: 'zongnan', latest: { version: 'saved-v', confirmed: false, model_status: 'returned', sheets: [sheet] } },
+    ] })
+    api.analyzeClassification.mockReset().mockResolvedValueOnce({ phase: 'paused', version: 'v1', checkpoint: paused }).mockResolvedValue({ version: 'v2', model_status: 'returned', sheets: [sheet] })
+    api.autoSlices.mockReset().mockResolvedValue({ slices: [] })
+    const wrapper = mount(ReviewedExcelTemplate)
+    const input = wrapper.find('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], '宗南.xlsx')] })
+    await input.trigger('change')
+    await wrapper.findAll('button').find(b => b.text() === '开始处理')!.trigger('click'); await flushPromises()
+    const analyze = wrapper.findAll('button').find(b => b.text().includes('模型分析已分类'))!
+    await analyze.trigger('click'); await flushPromises()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
+    expect(api.analyzeClassification.mock.calls[0][0]).toBe('pause-id')
+    expect(wrapper.text()).toContain('本轮预算已用完')
+    expect(api.autoSlices).not.toHaveBeenCalled()
+    await analyze.trigger('click'); await flushPromises()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
+    expect(api.analyzeClassification.mock.calls[1][0]).toBe('pause-id')
+    expect(api.autoSlices).toHaveBeenCalledWith('pause-id', 'v2')
+    expect(wrapper.text()).not.toContain('勿重复发送')
+    wrapper.unmount()
+  })
   it('isolates model failures and never retries unknown outcomes automatically', async () => {
     const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
     api.classifyExcel.mockResolvedValue({ files: [1, 2, 3].map((n) => ({ name: `${n}.xlsx`, status: 'classified', classification_id: `id${n}`, version: 'v1', sheets: [sheet] })) })
