@@ -402,7 +402,11 @@ export function useCustomers() {
     loadTemplateOptions({ background });
   };
   onMounted(() => refreshCustomersView(false));
-  onActivated(() => refreshCustomersView(customersLoaded));
+  let firstActivation = true;
+  onActivated(() => {
+    if (firstActivation) firstActivation = false;
+    else refreshCustomersView(customersLoaded);
+  });
 
   return {
     pageNavTitle, entityName,
