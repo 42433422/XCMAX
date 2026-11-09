@@ -38,6 +38,7 @@ vi.mock('@/stores/industry', () => ({
 
 vi.mock('@/constants/industryPresets', () => ({
   getIndustryWelcomeMarkdown: () => '您好！我是您的智能助手',
+  isIndustryWelcomePlainText: (text: string) => text.startsWith('你好，我是业务助手。'),
 }))
 
 vi.mock('@/utils/chatStorageKeys', () => ({
@@ -387,6 +388,16 @@ describe('useChatMessages', () => {
     })
     const result = await messages.syncFromServer()
     expect(result).toBe(true)
+  })
+
+  it('does not append a provisional industry greeting to restored conversation history', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    messages.loadMessages([{ role: 'ai', content: '你好，我是业务助手。<br>- 查数据与单据<br>- 导出打印<br>请说出需求。', time: '14:35' }])
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ messages: [
+      { role: 'user', content: '你好' }, { role: 'ai', content: '你好，有什么要处理的？' },
+    ] })
+    expect(await messages.syncFromServer()).toBe(true)
+    expect(messages.messages.value.map(message => message.content)).toEqual(['你好', '你好，有什么要处理的？'])
   })
 
   it('does not copy the provisional welcome onto a newly signed-in scope', async () => {
