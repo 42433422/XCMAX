@@ -69,6 +69,8 @@ def test_range_schema_names_only_sheets_with_primary_cells():
     area = payload["output_schema"]["properties"]["documents"]["items"]["properties"]["ranges"]
     assert area["items"]["properties"]["sheet_name"]["enum"] == [SHEET]
     assert {sheet["sheet"] for sheet in payload["sheets"]} == {SHEET, "第二"}
+    assert "其他表或后续批次未提供单元格，不代表本批不能切片" in payload["batch_decision_scope"]
+    assert "若本批自身边界不确定或有未解决依赖，仍须返回 false" in payload["batch_decision_scope"]
 
 
 def test_provider_envelope_reason_is_ignored(monkeypatch):
@@ -161,11 +163,18 @@ def test_model_slice_decision_is_kept_and_required(monkeypatch):
         execute(monkeypatch, source(["A1", "B1", "C1"]), raw)
 
 
-def test_saved_reply_replay_checks_request_and_never_calls_model(monkeypatch):
+@pytest.mark.parametrize("legacy", [False, True])
+def test_saved_reply_replay_checks_request_and_never_calls_model(monkeypatch, legacy):
     from app.application.reviewed_excel_audit import request_digest
 
     review = source(["A1", "B1", "C1"])
     prepared = _classify_semantic_batch(review, prepare_only=True, reference_ids=True)
+    if legacy:
+        body = json.loads(prepared["messages"][1]["content"])
+        body.pop("batch_decision_scope")
+        prepared["messages"][1]["content"] = json.dumps(
+            body, ensure_ascii=False, separators=(",", ":")
+        )
     payload = answer(region(), can_slice=False)
     prefix = json.dumps({"documents": payload["documents"]}, ensure_ascii=False)
     archived = prefix + '],"can_slice":false}'

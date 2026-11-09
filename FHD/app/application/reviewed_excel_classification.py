@@ -299,6 +299,12 @@ def _classify_semantic_batch(
         verify_contract(messages[0]["content"], provider_schema, "identify")
     from app.application.reviewed_excel_budget import output_budget, validate_request_budget
 
+    if reference_ids:
+        payload = json.loads(messages[1]["content"])
+        payload["batch_decision_scope"] = (
+            "can_slice 只判断本次 cells 中非 context_only 的单元格及其可核验边界；sheets 和全工作簿索引只是背景。其他表或后续批次未提供单元格，不代表本批不能切片；若本批自身边界不确定或有未解决依赖，仍须返回 false。不得推测未读内容。"
+        )
+        messages[1]["content"] = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     max_output_tokens = output_budget(chosen)
     messages.extend(repair or [])
     audit_request = {
@@ -310,8 +316,16 @@ def _classify_semantic_batch(
     if prepare_only:
         return audit_request
     if expected_request_sha256 is not None:
-        from app.application.reviewed_excel_audit import verify_request
+        from app.application.reviewed_excel_audit import request_digest, verify_request
 
+        if (
+            archived_answer is not None
+            and reference_ids
+            and request_digest(audit_request) != expected_request_sha256
+        ):
+            payload = json.loads(messages[1]["content"])
+            payload.pop("batch_decision_scope", None)
+            messages[1]["content"] = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         verify_request(audit_request, expected_request_sha256)
     if archived_answer is None:
         response = _template_llm_complete(
