@@ -201,6 +201,21 @@ class RunIfAnyRelevantTests(unittest.TestCase):
         # Windows 专属产物不得算作 macOS 改动（item：Windows 改动不拉起 macOS 重测试）。
         self.assertFalse(decide("macos", WINDOWS_ONLY))
 
+    def test_employee_identity_native_dependencies_trigger_windows(self) -> None:
+        for path in (
+            "FHD/tests/test_desktop/test_windows_employee_identity_native.py",
+            "FHD/app/application/employee_runtime/__init__.py",
+            "FHD/app/application/employee_runtime/handoff_identity.py",
+            "FHD/app/application/employee_runtime/workspace_io.py",
+            "FHD/app/application/shipment_excel_etl_security.py",
+            "FHD/app/application/shipment_etl/directory_listing.py",
+            "FHD/.github/workflows/ci-cd.yml",
+            "FHD/uv.lock",
+            "FHD/pyproject.toml",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(decide("windows", [path]))
+
     def test_macos_only_change_runs_macos_not_windows(self) -> None:
         self.assertTrue(decide("macos", MACOS_ONLY))
         self.assertFalse(decide("windows", MACOS_ONLY))

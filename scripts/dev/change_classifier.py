@@ -139,7 +139,17 @@ RELEVANT = {
     "windows": {
         "prefixes": ["FHD/desktop/build/"],
         "suffixes": [".ps1"],
-        "exact": [".github/workflows/fhd-ci-cd.yml"],
+        "exact": [
+            ".github/workflows/fhd-ci-cd.yml",
+            "FHD/.github/workflows/ci-cd.yml",
+            "FHD/app/application/employee_runtime/__init__.py",
+            "FHD/app/application/employee_runtime/handoff_identity.py",
+            "FHD/app/application/employee_runtime/workspace_io.py",
+            "FHD/app/application/shipment_excel_etl_security.py",
+            "FHD/app/application/shipment_etl/directory_listing.py",
+            "FHD/uv.lock",
+            "FHD/pyproject.toml",
+        ],
         "contains": ["windows", "win32", "authenticode"],
     },
     # 移动端（Flutter 唯一交付主线）。
