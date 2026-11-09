@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import base64
-from unittest.mock import AsyncMock
-from types import SimpleNamespace
-from contextlib import nullcontext
 import asyncio
+import base64
+from contextlib import nullcontext
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -141,6 +141,7 @@ def test_asr_workbench_route_passes_authenticated_user(monkeypatch):
     import io
 
     from fastapi import UploadFile
+
     from modstore_server.workbench_api import workbench_asr
 
     stub = AsyncMock(return_value={"text": "你好", "provider": "mimo"})

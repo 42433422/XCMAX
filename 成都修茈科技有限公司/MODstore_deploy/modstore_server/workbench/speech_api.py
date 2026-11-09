@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 import base64
-import os
 import io
+import logging
+import os
 import wave
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -75,8 +75,9 @@ async def mimo_asr(audio: bytes, language: str, user_id: int) -> dict[str, str]:
         key, base, _source = resolve_credentials(session, user_id, "xiaomi")
     if not key:
         raise HTTPException(503, "当前账户的 MiMo 模型未配置")
-    from modstore_server.mimo_tts_service import _DEFAULT_ROOT, _chat_completions_url
     import httpx
+
+    from modstore_server.mimo_tts_service import _DEFAULT_ROOT, _chat_completions_url
 
     root = (base or _DEFAULT_ROOT).rstrip("/")
     if root.endswith("/v1"):
