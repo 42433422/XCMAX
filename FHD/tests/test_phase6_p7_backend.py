@@ -915,7 +915,8 @@ def test_compat_tts_whitespace_text_returns_422() -> None:
     assert resp.status_code == 422
 
 
-def test_compat_tts_success_returns_audio_payload() -> None:
+def test_compat_tts_success_returns_audio_payload(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "0")
     client = _ai_assistant_client()
     with (
         patch("app.application.facades.tts_facade.synthesize_to_data_uri") as mock_synth,
@@ -952,7 +953,8 @@ def test_compat_tts_success_returns_audio_payload() -> None:
     assert call_kwargs["speaker_id"] == "1"
 
 
-def test_compat_tts_trace_redacts_audio_payload() -> None:
+def test_compat_tts_trace_redacts_audio_payload(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "0")
     client = _ai_assistant_client()
     repo = InMemoryAgentRunRepository()
     with (
@@ -986,7 +988,8 @@ def test_compat_tts_trace_redacts_audio_payload() -> None:
     assert "redacted" in serialized
 
 
-def test_compat_tts_connection_error_returns_502_without_browser_voice() -> None:
+def test_compat_tts_connection_error_returns_502_without_browser_voice(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "0")
     client = _ai_assistant_client()
     with (
         patch("app.application.facades.tts_facade.synthesize_to_data_uri") as mock_synth,

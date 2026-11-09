@@ -9,7 +9,7 @@ import os
 import wave
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from urllib.parse import quote
 
 from fastapi import Depends, HTTPException
@@ -218,7 +218,7 @@ async def workbench_unified_tts(
         from modstore_server.models import get_session_factory
 
         with get_session_factory()() as session:
-            key, base, _source = resolve_credentials(session, _user.id, "xiaomi")
+            key, base, _source = resolve_credentials(session, cast(int, _user.id), "xiaomi")
         # A broken user override must not silently borrow the platform key.
         kwargs["credentials"] = (key, base)
     audio, err, meta = await synthesize_mimo_tts_async(text, voice=mimo_voice, **kwargs)

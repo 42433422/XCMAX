@@ -100,6 +100,14 @@ def test_report_classifier_requires_structured_product_defect():
     assert not looks_like_issue_report("请写入验收文本。不能用排队或待审批代替完成。")
 
 
+def test_spoken_business_question_does_not_enter_defect_intake():
+    assert not looks_like_issue_report(
+        "听得到我说话吗？就是我有个问题啊，你帮我查一下中南那个账单。"
+    )
+    assert looks_like_issue_report("软件页面有问题")
+    assert looks_like_issue_report("请提交产品问题工单")
+
+
 def test_report_classifier_does_not_escalate_usage_question_or_bad_json():
     client, _ = _client(
         '{"type":"usage_question","confidence":0.99,"expected":"",'

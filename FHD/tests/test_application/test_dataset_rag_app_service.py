@@ -100,6 +100,42 @@ def test_dataset_ingests_pdf_and_answers_with_citation(tmp_path: Path) -> None:
     assert answer["chunks"][0]["metadata"]["document_id"] == ingest["document"]["document_id"]
 
 
+def test_retrieval_keeps_worksheet_provenance_for_existing_chunks(tmp_path: Path) -> None:
+    from app.application.dataset_rag.models import _DatasetState
+
+    service = DatasetRagApplicationService(embedder=None, storage_path=tmp_path / "rag.json")
+    service._vector.backend = None
+    service._vector.embedder = None
+    document = {"document_id": "workbook", "tenant_id": "2", "source": "报表"}
+    chunks = [
+        RetrievedChunk(text="# sheet:宗南\n客户宗南", score=0, char_start=0, metadata=document),
+        RetrievedChunk(text="# sheet:2026年\n其他客户", score=0, char_start=100, metadata=document),
+        RetrievedChunk(text="AG-091 银珠漆", score=0, char_start=200, metadata=document),
+    ]
+    with service._repository.lock:
+        service._repository.datasets["office-docking"] = _DatasetState(
+            "office-docking", chunks=chunks
+        )
+        service._repository._persist_locked()
+    access = DatasetAccessContext(
+        actor_id="41", tenant_id="2", permissions=frozenset({"dataset.read"})
+    )
+    result = service.query(
+        dataset_id="office-docking",
+        query="2026年 AG-091",
+        tenant_id="2",
+        access_context=access,
+        include_sheet_context=True,
+    )
+    assert any(
+        row["metadata"].get("sheet_context") == "2026年" and "AG-091" in row["text"]
+        for row in result["chunks"]
+    )
+    sheet = result["sheet_contexts"][0]
+    assert sheet["sheet"] == "2026年" and "AG-091" in sheet["text"]
+    assert "客户宗南" not in sheet["text"]
+
+
 def test_dataset_rejects_file_outside_allowed_roots(tmp_path: Path) -> None:
     allowed = tmp_path / "allowed"
     allowed.mkdir()

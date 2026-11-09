@@ -873,6 +873,7 @@ def test_ai_print_pdf_labels_501(ai_client: TestClient) -> None:
 
 
 def test_ai_tts_success(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "0")
     monkeypatch.setattr(
         "app.application.facades.tts_facade.synthesize_to_data_uri",
         lambda **kwargs: {
@@ -894,6 +895,7 @@ def test_ai_tts_success(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_ai_tts_fallback_on_error(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "0")
     monkeypatch.setattr(
         "app.application.facades.tts_facade.trigger_common_tts_warmup",
         lambda: None,
