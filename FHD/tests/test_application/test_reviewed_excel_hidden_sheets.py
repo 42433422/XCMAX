@@ -28,6 +28,27 @@ def hidden_first_workbook(state):
     return output.getvalue()
 
 
+@pytest.mark.parametrize("scope", ["full", "visible", "legacy_visible"])
+def test_checkpoint_restores_saved_sheet_scope_and_rejects_missing_cells(scope):
+    from app.application.reviewed_excel_evidence import prepare_auto_slice_review
+    from app.application.reviewed_excel_plan import restore_checkpoint_review
+    from tests.test_application.test_reviewed_excel_budget import saved_plan
+
+    review = inspect_workbook(hidden_first_workbook("hidden"))
+    scoped = (
+        review if scope == "full" else prepare_auto_slice_review(review, skip_hidden_sheets=True)
+    )
+    checkpoint = saved_plan(scoped, [scoped["cells"]])
+    if scope == "visible":
+        checkpoint["skip_hidden_sheets"] = True
+    restored, batches = restore_checkpoint_review(review, checkpoint)
+    assert restored["sheets"] == scoped["sheets"]
+    assert batches == [[{**cell, "context_only": False} for cell in scoped["cells"]]]
+    assert review["sheets"] == ["Internal", "Visible"]
+    with pytest.raises(ReviewedExcelError, match="坐标计划"):
+        restore_checkpoint_review({**review, "cells": []}, checkpoint)
+
+
 @pytest.mark.parametrize("state", ["hidden", "veryHidden"])
 def test_classification_marks_hidden_unprocessable_without_omitting_or_unhiding(state):
     body = hidden_first_workbook(state)
@@ -85,3 +106,42 @@ def test_archive_classification_exposes_visibility_and_hidden_preview_stays_400(
     )
     assert blocked.status_code == 400 and "隐藏工作表" in blocked.text
     assert inspect_workbook(body)["sha256"] == hashlib.sha256(body).hexdigest()
+
+
+def test_route_ignores_only_hidden_refusal_and_hidden_coverage(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.fastapi_routes import reviewed_excel_template as routes
+
+    body = hidden_first_workbook("hidden")
+    visible = {"sheet": "Visible", "range": "A1:B1"}
+    latest = {
+        "version": "saved",
+        "model_status": "returned",
+        "sheets": [
+            {"sheet": "Internal", "sheet_state": "hidden", "regions": []},
+            {"sheet": "Visible", "regions": [{"range": "A1:B1", "range_source": "model"}]},
+        ],
+        "coverage": [
+            {"sheet": "Internal", "total": 2, "sent": 0, "unread": 2},
+            {"sheet": "Visible", "total": 2, "sent": 2},
+        ],
+        "input_summaries": [
+            {
+                "source_coverage": {"can_slice": False},
+                "reference_index": {"r1": {"ref": {"sheet": "Internal"}}},
+            }
+        ],
+        "suggested_documents": [{"fragments": [visible]}],
+    }
+    run = SimpleNamespace(
+        draft_json=json.dumps({"versions": [latest]}), file_sha256=inspect_workbook(body)["sha256"]
+    )
+    monkeypatch.setattr(routes, "_classification_run", lambda *_: run)
+    monkeypatch.setattr(routes, "_source", lambda *_: body)
+    slices, _, _ = routes._auto_slices(None, "saved", "saved", 1, 7)
+    assert [s["fragments"] for s in slices] == [[visible]]
+    latest["input_summaries"][0]["reference_index"]["r1"]["ref"]["sheet"] = "Visible"
+    run.draft_json = json.dumps({"versions": [latest]})
+    with pytest.raises(ReviewedExcelError, match="不能自动切片"):
+        routes._auto_slices(None, "saved", "saved", 1, 7)

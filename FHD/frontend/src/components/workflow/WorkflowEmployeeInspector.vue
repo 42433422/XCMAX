@@ -96,7 +96,6 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
 .wfe-inspector {
   display: flex;

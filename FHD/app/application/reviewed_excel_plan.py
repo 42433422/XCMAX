@@ -158,3 +158,26 @@ def restore_coordinate_plan(review: dict, checkpoint: dict) -> list[list[dict]]:
     if primary != set(source):
         invalid()
     return result
+
+
+def restore_checkpoint_review(review: dict, checkpoint: dict) -> tuple[dict, list[list[dict]]]:
+    """Recreate the exact source scope used by a checkpoint, including hidden-sheet skips."""
+    from app.application.reviewed_excel_evidence import prepare_auto_slice_review
+
+    if checkpoint.get("skip_hidden_sheets") is True:
+        scoped = prepare_auto_slice_review(review, skip_hidden_sheets=True)
+        return scoped, restore_coordinate_plan(scoped, checkpoint)
+    try:
+        return review, restore_coordinate_plan(review, checkpoint)
+    except ReviewedExcelError as original_error:
+        scoped = prepare_auto_slice_review(review, skip_hidden_sheets=True)
+        if scoped is review:
+            raise
+        try:
+            batches = restore_coordinate_plan(scoped, checkpoint)
+        except ReviewedExcelError:
+            raise original_error
+        # Older checkpoints created after hidden-sheet filtering did not persist
+        # the scope marker. The saved coordinate plan proves the filtered scope.
+        checkpoint["skip_hidden_sheets"] = True
+        return scoped, batches

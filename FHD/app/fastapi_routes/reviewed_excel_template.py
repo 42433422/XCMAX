@@ -482,23 +482,48 @@ def _auto_slices(
         return slices, latest.get("coverage") or [], dispositions
     if latest.get("model_status") != "returned":
         raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
+    sheets = latest.get("sheets", [])
+    hidden_sheets = {
+        sheet.get("sheet")
+        for sheet in sheets
+        if isinstance(sheet, dict) and sheet.get("sheet_state") in {"hidden", "veryHidden"}
+    }
+
+    def has_visible_source(item):
+        index = item.get("reference_index")
+        if not isinstance(index, dict) or not index:
+            return True
+        source_sheets = {
+            ref.get("ref", {}).get("sheet")
+            for ref in index.values()
+            if isinstance(ref, dict) and isinstance(ref.get("ref"), dict)
+        }
+        return not source_sheets or bool(source_sheets - hidden_sheets)
+
     if any(
-        isinstance(item, dict) and (item.get("source_coverage") or {}).get("can_slice") is False
+        isinstance(item, dict)
+        and (item.get("source_coverage") or {}).get("can_slice") is False
+        and has_visible_source(item)
         for item in (latest.get("input_summaries") or [])
     ):
         raise ReviewedExcelError("模型明确表示不能自动切片，请人工核对")
+    sheets = [
+        sheet
+        for sheet in sheets
+        if not isinstance(sheet, dict) or sheet.get("sheet") not in hidden_sheets
+    ]
     coverage = latest.get("coverage")
-    sheets = latest.get("sheets", [])
-    source_names = (
-        [sheet.get("sheet") for sheet in sheets if isinstance(sheet, dict)]
-        if isinstance(sheets, list)
-        else []
-    )
-    coverage_names = (
-        [item.get("sheet") for item in coverage if isinstance(item, dict)]
+    coverage = (
+        [
+            item
+            for item in coverage
+            if not isinstance(item, dict) or item.get("sheet") not in hidden_sheets
+        ]
         if isinstance(coverage, list)
         else []
     )
+    source_names = [sheet.get("sheet") for sheet in sheets if isinstance(sheet, dict)]
+    coverage_names = [item.get("sheet") for item in coverage if isinstance(item, dict)]
     if (
         not source_names
         or len(source_names) != len(sheets)
@@ -523,7 +548,7 @@ def _auto_slices(
         raise ReviewedExcelError("模型尚未完整覆盖原件，不能生成自动切片")
     regions = [
         {**region, "sheet": sheet["sheet"]}
-        for sheet in latest.get("sheets", [])
+        for sheet in sheets
         for region in sheet.get("regions", [])
         if region.get("range_source") == "model"
     ]
@@ -534,7 +559,7 @@ def _auto_slices(
             "model_status": latest["model_status"],
             "regions": regions,
             "suggested_documents": latest.get("suggested_documents", []),
-            "coverage": latest.get("coverage", []),
+            "coverage": coverage,
         },
         owner_id=owner,
         only_index=only_index,
@@ -1079,7 +1104,7 @@ def reviewed_excel_recover_answer(
 ):
     """Revalidate the saved failed reply once; never dispatch another model request."""
     from app.application.reviewed_excel_budget import validate_checkpoint_budget
-    from app.application.reviewed_excel_plan import restore_coordinate_plan
+    from app.application.reviewed_excel_plan import restore_checkpoint_review
     from app.application.reviewed_excel_saved_response import saved_classification_answer
 
     tenant, owner = _identity(user)
@@ -1123,7 +1148,7 @@ def reviewed_excel_recover_answer(
             if hashlib.sha256(body).hexdigest() != run.file_sha256:
                 raise ReviewedExcelError("原件哈希不一致，不能恢复")
             review = inspect_workbook(body)
-            batches = restore_coordinate_plan(review, checkpoint)
+            review, batches = restore_checkpoint_review(review, checkpoint)
             index = len(checkpoint.get("results") or [])
             if index >= len(batches) or (checkpoint.get("repair") or {}).get("step") != index:
                 raise ReviewedExcelError("已保存回答与当前批次不一致")
@@ -1321,18 +1346,21 @@ async def _reviewed_excel_classification_analyze_body(
                 checkpoint["phase"] = "ready"
                 checkpoint["calls_in_round"] = 0
             from app.application.reviewed_excel_plan import (
-                restore_coordinate_plan,
+                restore_checkpoint_review,
                 split_plan_step,
                 store_coordinate_plan,
             )
 
             if checkpoint:
                 try:
-                    batches = restore_coordinate_plan(review, checkpoint)
+                    review, batches = restore_checkpoint_review(review, checkpoint)
                 except ReviewedExcelError as exc:
                     raise HTTPException(status_code=409, detail=str(exc)) from exc
                 max_calls = checkpoint["max_calls"]
             else:
+                from app.application.reviewed_excel_evidence import prepare_auto_slice_review
+
+                review = prepare_auto_slice_review(review, skip_hidden_sheets=True)
                 batches, max_calls = await run_in_threadpool(
                     plan_semantic_batches, review, neutral=True
                 )
@@ -1345,6 +1373,7 @@ async def _reviewed_excel_classification_analyze_body(
                     "budget_version": BUDGET_VERSION,
                     "version": version,
                     "source_sha256": run.file_sha256,
+                    "skip_hidden_sheets": True,
                     "phase": "ready",
                     "results": [],
                     "total": len(batches),
