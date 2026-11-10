@@ -69,8 +69,12 @@
         <p class="startup-placeholder__mark">XCAGI</p>
         <p class="startup-placeholder__status">正在准备工作台…</p>
         <div class="startup-placeholder__bar" aria-hidden="true"></div>
+        <p class="startup-placeholder__hint">启动遇到问题？<button id="startup-reload" type="button">重新加载</button></p>
       </main>
     </div>
+    <script id="startup-recovery">
+      document.getElementById('startup-reload')?.addEventListener('click', () => location.reload())
+    </script>
     <script type="module" src="/src/main.ts"></script>
     <script>
       // Legacy static JS — opt-in only (Vue SPA is default). Set __ENABLE_LEGACY__ = true for old Flask shells.

@@ -52,7 +52,7 @@ export async function waitForCriticalFonts(): Promise<void> {
   }
 }
 
-/** A deadline exposes recovery; it must never count as readiness. */
+/** Slow startup stays pending; only completion admits the workspace, cancellation retires it. */
 export function useStartupSplash() {
   const startupVisible = ref(true)
   const appReady = ref(false)
