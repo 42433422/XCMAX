@@ -41,18 +41,12 @@ export function readWindowsInternetProxy(): string | null {
   }
 }
 
-export function buildOtaPacScript(proxyServer: string): string {
-  const proxy = proxyServer.replace(/'/g, '')
-  return `
-function FindProxyForURL(url, host) {
-  if (host === 'xiu-ci.com' || dnsDomainIs(host, '.xiu-ci.com') ||
-      host === 'update.xcagi.com' || dnsDomainIs(host, '.update.xcagi.com') ||
-      host === 'localhost' || host === '127.0.0.1') {
-    return 'DIRECT';
+export function buildOtaProxyConfig(proxyServer: string) {
+  return {
+    mode: 'fixed_servers' as const,
+    proxyRules: proxyServer,
+    proxyBypassRules: OTA_PROXY_BYPASS_RULES,
   }
-  return 'PROXY ${proxy}; DIRECT';
-}
-`.trim()
 }
 
 export function parseProxyEndpoint(proxyServer: string): { host: string; port: number } | null {
@@ -111,9 +105,9 @@ export function isProxyEndpointReachableSync(proxyServer: string, timeoutMs = 12
   return false
 }
 
-let systemProxyBypassMode: 'direct' | 'pac' | 'system' = 'system'
+let systemProxyBypassMode: 'direct' | 'fixed' | 'system' = 'system'
 
-export function resolveSystemProxyBypassMode(): 'direct' | 'pac' | 'system' {
+export function resolveSystemProxyBypassMode(): 'direct' | 'fixed' | 'system' {
   return systemProxyBypassMode
 }
 
@@ -129,10 +123,8 @@ export async function applyOtaProxyBypass(): Promise<void> {
       await session.defaultSession.setProxy({ mode: 'direct' })
       return
     }
-    systemProxyBypassMode = 'pac'
-    await session.defaultSession.setProxy({
-      pacScript: buildOtaPacScript(proxyServer),
-    })
+    systemProxyBypassMode = 'fixed'
+    await session.defaultSession.setProxy(buildOtaProxyConfig(proxyServer))
     return
   }
   systemProxyBypassMode = 'system'

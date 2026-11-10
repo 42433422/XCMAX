@@ -211,6 +211,11 @@ describe('getActiveExtensionModHeaders', () => {
     expect(getActiveExtensionModHeaders('/api/debug/info')).toEqual({})
   })
 
+  it.each(['/api/system/industry', '/api/system/industries', '/api/mods', '/api/mods/'])('keeps workspace bootstrap %s independent of the active mod', (path) => {
+    mockReadActiveExtensionModId.mockReturnValue('sz-qsm-pro')
+    expect(getActiveExtensionModHeaders(path)).toEqual({})
+  })
+
   it('returns header for full URL with non-skip path', () => {
     mockReadActiveExtensionModId.mockReturnValue('taiyangniao-pro')
     expect(getActiveExtensionModHeaders('https://example.com/api/users')).toEqual({

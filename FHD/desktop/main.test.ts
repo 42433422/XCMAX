@@ -339,12 +339,14 @@ describe('main — desktop splash & ping readiness', () => {
   })
 })
 
-describe('main — OTA proxy PAC', () => {
-  it('routes update hosts DIRECT and others via proxy with DIRECT fallback', async () => {
-    const { buildOtaPacScript } = await import('./main.js')
-    const pac = buildOtaPacScript('127.0.0.1:7890')
-    expect(pac).toContain("host === 'xiu-ci.com'")
-    expect(pac).toContain("return 'PROXY 127.0.0.1:7890; DIRECT'")
+describe('main — OTA proxy configuration', () => {
+  it('uses valid fixed-server settings and bypasses local/update hosts', async () => {
+    const { OTA_PROXY_BYPASS_RULES, buildOtaProxyConfig } = await import('./main.js')
+    expect(buildOtaProxyConfig('http://127.0.0.1:7890')).toEqual({
+      mode: 'fixed_servers',
+      proxyRules: 'http://127.0.0.1:7890',
+      proxyBypassRules: OTA_PROXY_BYPASS_RULES,
+    })
   })
 
   it('parses proxy endpoint host and port', async () => {
@@ -488,6 +490,12 @@ describe('main — backendEditionEnv', () => {
 })
 
 describe('desktopBackendEnv — development MOD source', () => {
+  it('uses an explicitly supplied development Mod directory', async () => {
+    const { desktopBackendEnv } = await import('./backend-env.js')
+    const env = desktopBackendEnv({ XCAGI_MODS_ROOT: '/tmp/dev-mods' }, '/repo/FHD')
+    expect(env.XCAGI_MODS_ROOT).toBe('/tmp/dev-mods')
+    expect(env.XCAGI_MODS_DIR).toBe('/tmp/dev-mods')
+  })
   it('pins development backend to the checkout MOD directory', async () => {
     const { desktopBackendEnv } = await import('./backend-env.js')
     const env = desktopBackendEnv({}, path.join('/repo', 'FHD'))

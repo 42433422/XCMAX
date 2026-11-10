@@ -13,7 +13,7 @@ export function desktopBackendEnv(
     isolated.XCAGI_DESKTOP_RESOURCES = packagedResourcesRoot
   }
   if (developmentSourceRoot) {
-    const modsRoot = path.join(developmentSourceRoot, 'mods')
+    const modsRoot = env.XCAGI_MODS_ROOT?.trim() || path.join(developmentSourceRoot, 'mods')
     isolated.XCAGI_MODS_ROOT = modsRoot
     isolated.XCAGI_MODS_DIR = modsRoot
   }

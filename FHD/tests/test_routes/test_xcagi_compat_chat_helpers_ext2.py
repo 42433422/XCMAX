@@ -115,7 +115,16 @@ class TestXcagiChatHttpExcExtended:
 
     def test_httpx_import_error_path(self):
         """When httpx import fails, should fall through to other branches."""
-        with patch("builtins.__import__", side_effect=ImportError("no httpx")):
+        import builtins
+
+        original_import = builtins.__import__
+
+        def import_without_httpx(name, *args, **kwargs):
+            if name == "httpx":
+                raise ImportError("no httpx")
+            return original_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=import_without_httpx):
             exc = RuntimeError("test")
             result = ch._xcagi_chat_http_exc(exc)
             assert result.status_code == 503
