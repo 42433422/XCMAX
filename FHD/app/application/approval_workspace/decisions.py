@@ -370,6 +370,11 @@ class ApprovalDecisions:
         workflow_execution = self.workflows.resume(
             request_no=str(req.request_no or ""), opinion=opinion, approved_by=str(actor)
         )
+        if isinstance(business, dict) and (business.get("tool_id"), business.get("action")) in {
+            ("customers", "batch_delete"),
+            ("products", "batch_delete"),
+        }:
+            db.refresh(req)
         bounded_outcome = execution_outcome(workflow_execution)
         _execution_success = bounded_outcome["success"]
         handed_off = execution_handed_off(workflow_execution)
@@ -446,7 +451,7 @@ class ApprovalDecisions:
                 "workflow_execution_message": bounded_outcome["message"],
             },
         )
-        if not _execution_success and not handed_off:
+        if not _execution_success and not handed_off and safe_code != "outcome_unknown":
             req.rejection_reason = WORKFLOW_EXECUTION_FAILED_CODE
             self.effects.audit(
                 db,

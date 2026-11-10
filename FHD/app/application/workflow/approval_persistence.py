@@ -378,13 +378,7 @@ def load_durable_workflow_snapshot(
 ) -> dict[str, Any] | None:
     """严格加载绑定 ``request_no`` 的可靠工作流快照（fail-closed）。
 
-    - 请求不存在 / 非 ``workflow_tool`` / 快照缺失 / 畸形 / 版本不符 / 计划不完整
-      / 计划无匹配节点 / 租户错配 / 跨请求替换 → ``None``。
-    - ``allow_terminal=False``（工作台列表/详情/审批门）：仅 ``pending`` 可恢复；
-      其它任何状态一律 fail-closed。
-    - ``allow_terminal=True``（获批后恢复执行）：仅 ``approved`` 这一个可执行获批态；
-      ``pending`` 与 rejected/cancelled/withdrawn 等任意/终态一律拒绝，杜绝重复审批重新进入。
-    - 重放守卫：一旦写入 ``workflow_execution``（无论成/败）即已执行过，一律拒绝。
+    校验快照、租户和状态；存在执行结果时拒绝加载。批量写入还须取得持久执行声明。
     """
     from app.db.models.approval import (
         ApprovalRequest as ApprovalRequestModel,
@@ -482,6 +476,7 @@ def mark_durable_request_approved_and_load(request_id: str) -> dict[str, Any] | 
     snapshot = load_durable_workflow_snapshot(request_id, allow_terminal=False)
     if snapshot is None:
         return None
+
     try:
         with get_db() as db:
             persisted = (
@@ -516,3 +511,43 @@ def mark_durable_request_approved_and_load(request_id: str) -> dict[str, Any] | 
             type(exc).__name__,
         )
         return None
+
+
+def claim_batch_dispatch(request_id: str, plan: PlanGraph, context: dict[str, Any]) -> bool:
+    """Claim a specific approved destructive dispatch once; a crash leaves unknown state."""
+    from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
+    from app.db.session import get_db
+
+    try:
+        with get_db() as db:
+            row = db.query(ApprovalRequestModel).filter_by(request_no=request_id).first()
+            if row is None or row.status != "approved":
+                return False
+            snapshot = _validated_snapshot(row)
+            if (
+                snapshot is None
+                or plan_to_dict(snapshot["plan"]) != plan_to_dict(plan)
+                or snapshot["runtime_context"] != context
+            ):
+                return False
+            previous = row.business_data
+            data = json.loads(previous or "{}")
+            if "workflow_dispatch_claim" in data or "workflow_execution" in data:
+                return False
+            data["workflow_dispatch_claim"] = {"state": "unknown"}
+            changed = (
+                db.query(ApprovalRequestModel)
+                .filter(
+                    ApprovalRequestModel.id == row.id,
+                    ApprovalRequestModel.status == "approved",
+                    ApprovalRequestModel.business_data == previous,
+                )
+                .update(
+                    {"business_data": json.dumps(data, ensure_ascii=False, default=str)},
+                    synchronize_session=False,
+                )
+            )
+            return changed == 1
+    except _APPROVAL_STORAGE_ERRORS:
+        logger.warning("batch dispatch claim failed request_no=%s", request_id)
+        return False

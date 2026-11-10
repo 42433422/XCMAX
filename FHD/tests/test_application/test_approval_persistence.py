@@ -42,6 +42,43 @@ from app.db.models.approval import ApprovalRequest, ApprovalStatus
 SNAPSHOT_VERSION = 1
 
 
+def test_batch_readback_uses_fresh_tenant_scoped_business_data(db):
+    from app.application.approval_workspace.workflow_bridge import _batch_absent
+    from app.application.workflow.workflow_types import WorkflowNode
+    from app.db.models import Product
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with tenant_scope(1):
+        with db.begin() as session:
+            session.add_all(
+                [
+                    Product(id=1, name="product", unit="件", tenant_id=1),
+                    PurchaseUnit(id=2, unit_name="customer", tenant_id=1),
+                    Product(id=3, name="other tenant", unit="件", tenant_id=2),
+                ]
+            )
+        product = WorkflowNode("p", "products", "batch_delete", {"ids": [1]})
+        customer = WorkflowNode("c", "customers", "batch_delete", {"ids": [2]})
+        assert not _batch_absent(product, 1) and not _batch_absent(customer, 1)
+        assert SQLAlchemyProductRepository().batch_delete([1])["deleted_count"] == 1
+        assert _batch_absent(product, 1) and not _batch_absent(customer, 1)
+        assert not _batch_absent(product, 2)
+    with tenant_scope(2), db() as session:
+        assert session.get(Product, 3) is not None
+
+
+def test_uncertain_execution_is_not_reported_as_failed_or_retried():
+    from app.application.approval_workspace.outcomes import execution_outcome
+
+    result = execution_outcome({"code": "outcome_unknown", "success": False})
+    assert result["status"] == "approved"
+    assert result["code"] == "outcome_unknown"
+    assert result["workflow_executed"] is False
+    assert "核对" in result["message"]
+
+
 def test_existing_approval_reuse_requires_same_pending_operation_and_applicant(db):
     from datetime import datetime
 
@@ -104,6 +141,10 @@ def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch):
     from datetime import timedelta
 
     from app.application.tools.registered_capabilities import execute_registered_capability
+    from app.application.workflow.approval_persistence import (
+        claim_batch_dispatch,
+        mark_durable_request_approved_and_load,
+    )
     from app.application.workflow.approval_service import ApprovalService
     from app.db.models.user import Session as UserSession
     from app.db.models.user import User
@@ -144,6 +185,11 @@ def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch):
             first["approval"]["approval_request_ids"] == second["approval"]["approval_request_ids"]
         )
         assert not changed.get("pending_approval") and not changed["success"]
+        request_no = first["approval"]["approval_request_ids"][0]
+        snapshot = mark_durable_request_approved_and_load(request_no)
+        assert snapshot is not None
+        assert claim_batch_dispatch(request_no, snapshot["plan"], snapshot["runtime_context"])
+        assert not claim_batch_dispatch(request_no, snapshot["plan"], snapshot["runtime_context"])
         with db.begin() as session:
             session.query(UserSession).filter_by(session_id="session").one().expires_at = (
                 utc_now_naive() - timedelta(seconds=1)

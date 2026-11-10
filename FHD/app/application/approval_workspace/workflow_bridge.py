@@ -39,6 +39,28 @@ def _is_cross_module_workflow(workflow: JsonObject) -> bool:
     return isinstance(context, dict) and context.get("cross_module_http") is True
 
 
+def _batch_absent(node: object, tenant_id: object) -> bool:
+    from app.db.models import Product
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.db.session import get_db
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    try:
+        tenant = int(str(tenant_id))
+        ids = getattr(node, "params", {}).get("ids")
+        if tenant <= 0 or tenant != current_tenant_id() or not isinstance(ids, list) or not ids:
+            return False
+        if any(type(item) is not int or item <= 0 for item in ids):
+            return False
+        model = Product if getattr(node, "tool_id", "") == "products" else PurchaseUnit
+        with get_db() as db:
+            return (
+                not db.query(model.id).filter(model.tenant_id == tenant, model.id.in_(ids)).first()
+            )
+    except (ValueError, TypeError):
+        return False
+
+
 class WorkflowApprovalBridge:
     def __init__(
         self,
@@ -175,6 +197,30 @@ class WorkflowApprovalBridge:
             trace_context["agent_run_id"] = observed
         engine = self.backends.engine()
         nodes = list(getattr(plan, "nodes", []) or [])
+        batch = len(nodes) == 1 and (
+            getattr(nodes[0], "tool_id", ""),
+            getattr(nodes[0], "action", ""),
+        ) in {
+            ("customers", "batch_delete"),
+            ("products", "batch_delete"),
+        }
+        unknown = {
+            "success": False,
+            "workflow_executed": False,
+            "approval_request_id": request_id,
+            "code": "outcome_unknown",
+            "message": "执行状态未确认，请核对业务数据，勿重复提交",
+        }
+        if batch:
+            from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+            from app.application.workflow.approval_persistence import claim_batch_dispatch
+            from app.infrastructure.auth.agent_mod_scope import _bound_actor
+
+            _bound_actor(context)
+            if actor_tool_denial(
+                nodes[0].tool_id, nodes[0].action, context
+            ) is not None or not claim_batch_dispatch(request_id, plan, context):
+                return unknown
         restore_run = (
             self.backends.load_run(str(context.get("agent_run_id") or ""))
             if len(nodes) == 1
@@ -183,6 +229,8 @@ class WorkflowApprovalBridge:
             else None
         )
         result = engine.run(plan=plan, runtime_context=context, max_retries=1)
+        if batch and (not result.success or not _batch_absent(nodes[0], context.get("tenant_id"))):
+            return unknown
         run_id = self.backends.legacy_trace(
             request_id, trace_context, result, run_before_restore=restore_run
         )
