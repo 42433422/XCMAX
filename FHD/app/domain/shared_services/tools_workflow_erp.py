@@ -67,6 +67,7 @@ def _registered_router_customers(
         return {
             "success": bool(result.get("success")),
             "data": result.get("data", []),
+            "total": result.get("total"),
             "raw": result,
         }
     if action == "update":

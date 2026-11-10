@@ -43,7 +43,10 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
 
 
 _PRODUCT_READ_ACTIONS = frozenset({("products", "exists"), ("products", "query")})
-_REVIEWED_QUERY_ACTIONS = frozenset({("finance", "ledger_query")}) | _PRODUCT_READ_ACTIONS
+_CUSTOMER_READ_ACTIONS = frozenset({("customers", "query")})
+_REVIEWED_QUERY_ACTIONS = (
+    frozenset({("finance", "ledger_query")}) | _PRODUCT_READ_ACTIONS | _CUSTOMER_READ_ACTIONS
+)
 _QUERY_IDENTITY_FIELDS = frozenset(
     {
         "tenant_id",
@@ -88,12 +91,17 @@ def _reviewed_query_tenant(
         return None, _query_failure("tool_identity_override")
     if spec is None:
         return None, _query_failure("tool_contract_unavailable")
-    if (spec.tool_id, spec.action) in _PRODUCT_READ_ACTIONS or (
+    if (spec.tool_id, spec.action) in _PRODUCT_READ_ACTIONS | _CUSTOMER_READ_ACTIONS or (
         (spec.tool_id, spec.action) == ("business_db", "read")
         and params.get("entity") == "products"
     ):
         try:
-            tenant = check_owned_business_permission(actor, "product.view")
+            permission = (
+                "customer.view"
+                if (spec.tool_id, spec.action) in _CUSTOMER_READ_ACTIONS
+                else "product.view"
+            )
+            tenant = check_owned_business_permission(actor, permission)
             if str(context.get("tenant_id")) != str(tenant):
                 return None, _query_failure("tool_scope_unavailable")
         except HTTPException:
@@ -369,7 +377,10 @@ class AgentToolExecutor:
             if denied is not None:
                 return denied
         params["_runtime_context"] = dict(runtime_context or {})
-        if (validation.tool_id, validation.action) in _PRODUCT_READ_ACTIONS or product_db_read:
+        if (
+            (validation.tool_id, validation.action) in _PRODUCT_READ_ACTIONS | _CUSTOMER_READ_ACTIONS
+            or product_db_read
+        ):
             for hint in ("service_source", "route_module"):
                 params["_runtime_context"].pop(hint, None)
         action = validation.action or step.action
@@ -408,7 +419,10 @@ class AgentToolExecutor:
             # string tenant keys and must not be coerced here.
             scope = (
                 owned_tenant_scope(runtime_tenant_id)
-                if ((validation.tool_id, action) in _PRODUCT_READ_ACTIONS or product_db_read)
+                if (
+                    (validation.tool_id, action) in _PRODUCT_READ_ACTIONS | _CUSTOMER_READ_ACTIONS
+                    or product_db_read
+                )
                 and isinstance(runtime_tenant_id, int)
                 else tenant_scope(runtime_tenant_id)
             )

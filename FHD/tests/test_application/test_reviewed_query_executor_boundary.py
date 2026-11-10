@@ -125,6 +125,102 @@ def test_tenantless_product_denied_without_invented_data_scope(trusted_actor, di
     assert dispatch_calls == []
 
 
+def test_customer_query_uses_view_permission_and_only_owned_tenant(trusted_actor, monkeypatch):
+    from app.application.customer_app_service import CustomerApplicationService
+    from app.db.models.purchase_unit import PurchaseUnit
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(permissions=["customer.view"])
+    service = CustomerApplicationService()
+    monkeypatch.setattr(service, "_get_session", actor.factory)
+    monkeypatch.setattr("app.application.get_customer_app_service", lambda: service)
+    with actor.factory.begin() as db:
+        db.add_all([PurchaseUnit(unit_name=f"owned-{i:02}", tenant_id=7) for i in range(21)])
+        db.add(PurchaseUnit(unit_name="foreign", tenant_id=8))
+    result = execute(actor, tool="customers", action="query")
+    assert result["success"] is True
+    assert result["total"] == 21
+    assert len(result["data"]) == 20
+    assert all(row["customer_name"].startswith("owned-") for row in result["data"])
+    from types import SimpleNamespace
+
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
+    item = SimpleNamespace(tool_id="customers", action="query", node_id="read", output=result)
+    lines = AIChatWorkflowResponseMixin()._format_workflow_tool_success_line(item, {})
+    assert "客户总数：21；本次显示 20 条" in lines[0]
+    assert all("foreign" not in line for line in lines)
+
+
+def test_empty_customer_query_reports_zero():
+    from types import SimpleNamespace
+
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
+    item = SimpleNamespace(
+        tool_id="customers", action="query", node_id="read", output={"data": [], "total": 0}
+    )
+    lines = AIChatWorkflowResponseMixin()._format_workflow_tool_success_line(item, {})
+    assert "客户总数：0；本次显示 0 条" in lines[0]
+
+
+def test_customer_reply_does_not_echo_internal_memory_or_plan():
+    from types import SimpleNamespace
+
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
+    node = SimpleNamespace(
+        node_id="read", tool_id="customers", action="query", description="", risk="low", params={}
+    )
+    plan = SimpleNamespace(
+        intent="customer_query",
+        plan_id="internal-plan",
+        nodes=[node],
+        todo_steps=[],
+        metadata={
+            "user_memory_rag_summary": "private-memory-marker",
+            "memory_v2_summary": "private-v2-marker",
+        },
+    )
+    step = SimpleNamespace(
+        status="completed",
+        tool_id="customers",
+        action="query",
+        node_id="read",
+        output={"success": True, "data": [], "total": 0},
+        duration_ms=1,
+    )
+    run = SimpleNamespace(
+        status="completed",
+        run_id="internal-run",
+        steps=[step],
+        metadata={},
+        artifacts=[],
+        tool_calls=[],
+    )
+    builder = AIChatWorkflowResponseMixin()
+    thinking = builder._build_workflow_thinking_steps(plan, "")
+    reply = builder._format_agent_run_response(plan, run, thinking_steps=thinking)
+    assert reply["response"] == "客户总数：0；本次显示 0 条。"
+    assert "private-memory-marker" not in str(reply)
+    assert "private-v2-marker" not in str(reply)
+    assert plan.metadata["user_memory_rag_summary"] == "private-memory-marker"
+
+
+def test_customer_query_denies_without_view_permission(trusted_actor, dispatch_calls):
+    actor = trusted_actor(role="no-customer", permissions=[])
+    result = execute(actor, tool="customers", action="query")
+    assert result["error_code"] == "tool_permission_denied"
+    assert dispatch_calls == []
+
+
+def test_customer_query_rejects_client_tenant_override(trusted_actor, dispatch_calls):
+    actor = trusted_actor(permissions=["customer.view"])
+    result = execute(actor, tool="customers", action="query", params={"tenant_id": 8})
+    assert result["error_code"] == "tool_identity_override"
+    assert dispatch_calls == []
+
+
 @pytest.mark.parametrize(
     "error", [RuntimeError("private-backend-detail"), OSError("private-io-detail")]
 )

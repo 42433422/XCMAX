@@ -11,6 +11,21 @@ from app.application.agent_orchestrator.public_step_errors import public_step_er
 _PUBLIC_WORKFLOW_FAILURE = "工作流执行失败，详细信息已记录"
 
 
+def _customer_query_summary(output: Any) -> str | None:
+    if not isinstance(output, dict):
+        return None
+    rows, total = output.get("data"), output.get("total")
+    if not isinstance(rows, list) or type(total) is not int or total < 0:
+        return None
+    lines = [f"客户总数：{total}；本次显示 {len(rows)} 条。"]
+    for row in rows:
+        if isinstance(row, dict):
+            name = str(row.get("customer_name") or row.get("unit_name") or "").strip()
+            if name:
+                lines.append(f"- {name}")
+    return "\n".join(lines)
+
+
 def normalize_product_float_query(raw: str) -> str:
     """Keep specific product terms while preserving an empty full-list query."""
     text = str(raw or "").strip()
@@ -64,17 +79,6 @@ class AIChatWorkflowResponseMixin:
                 description = f"{action_name}{tool_name}"
             node_lines.append(f"- {description}")
         nodes_text = "\n".join(node_lines) if node_lines else "- 直接生成答复，无需执行业务步骤"
-        metadata = getattr(plan, "metadata", {}) or {}
-        user_memory_rag_summary = str(metadata.get("user_memory_rag_summary") or "").strip()
-        memory_v2_summary = str(metadata.get("memory_v2_summary") or "").strip()
-        memory_block = (
-            f"3.5) 用户记忆 RAG 概览:\n{user_memory_rag_summary}\n"
-            if user_memory_rag_summary
-            else ""
-        )
-        memory_v2_block = (
-            f"3.6) Memory v2 已确认记忆:\n{memory_v2_summary}\n" if memory_v2_summary else ""
-        )
         raw_intent = str(getattr(plan, "intent", "") or "").strip()
         intent_text = intent_labels.get(raw_intent, "处理当前业务请求")
         risks = {str(getattr(node, "risk", "low") or "low") for node in (plan.nodes or [])}
@@ -87,7 +91,6 @@ class AIChatWorkflowResponseMixin:
             f"工作编排:\n1) 业务目标: {intent_text}\n"
             f"2) 执行计划: 共 {len(node_lines)} 个业务步骤\n"
             f"3) 安全边界: {risk_text}\n"
-            f"{memory_block}{memory_v2_block}"
             f"4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n"
             f"5) 业务步骤:\n{nodes_text}"
         )
@@ -162,6 +165,11 @@ class AIChatWorkflowResponseMixin:
         if artifact_payloads:
             lines.append(f"Artifacts: {len(artifact_payloads)} 个")
         response_text = "\n".join(lines)
+        steps = getattr(agent_run, "steps", []) or []
+        if success and len(steps) == 1:
+            step = steps[0]
+            if (step.status, step.tool_id, step.action) == ("completed", "customers", "query"):
+                response_text = _customer_query_summary(step.output) or response_text
         payload: dict[str, Any] = {
             "success": success,
             "message": "处理完成" if success else "处理失败",
@@ -320,6 +328,11 @@ class AIChatWorkflowResponseMixin:
         out = output if isinstance(output, dict) else {}
         message = self._workflow_output_message(out)
         preview = self._workflow_output_preview(out)
+
+        if item.tool_id == "customers" and item.action == "query":
+            summary = _customer_query_summary(out)
+            if summary is not None:
+                return [f"- {item.node_id}: {summary}"]
 
         if item.tool_id == "employee":
             if item.action in ("list", "query"):

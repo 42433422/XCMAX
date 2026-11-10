@@ -15,6 +15,7 @@ from app.application.agent_orchestrator.tool_spec import (
     validate_tool_result,
     validate_tool_spec_fixtures,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.mark.parametrize("customer", [{"customer_id": 1}, {"customer_name": "客户甲"}])
@@ -605,7 +606,9 @@ def test_agent_tool_executor_enforces_registered_output_schema() -> None:
     execute.assert_called_once()
 
 
-def test_agent_tool_executor_rejects_non_object_tool_result() -> None:
+def test_agent_tool_executor_rejects_non_object_tool_result(trusted_actor, monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(permissions=["product.view"])
     step = AgentStep(
         node_id="n1",
         tool_id="business_db",
@@ -619,7 +622,7 @@ def test_agent_tool_executor_rejects_non_object_tool_result() -> None:
         "app.application.facades.tools_facade.execute_registered_workflow_tool",
         return_value="not-json-object",
     ):
-        result = AgentToolExecutor().execute(step, runtime_context={"run_id": "run_1"})
+        result = AgentToolExecutor().execute(step, runtime_context={**actor.context, "run_id": "run_1"})
 
     assert result["success"] is False
     assert result["error_code"] == "tool_result_not_object"
@@ -642,7 +645,7 @@ def test_agent_tool_executor_rejects_non_object_tool_result() -> None:
     ],
 )
 def test_schema_failure_only_releases_a_certain_read_claim(
-    monkeypatch, tmp_path, mutation, uncertainty, unknown_io
+    monkeypatch, tmp_path, trusted_actor, mutation, uncertainty, unknown_io
 ):
     import time
     from types import SimpleNamespace
@@ -662,6 +665,9 @@ def test_schema_failure_only_releases_a_certain_read_claim(
         else {"entity": "products"},
     )
     context = {"task_id": "schema-contract", "idempotency_key": "original-call"}
+    if not mutation:
+        monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+        context.update(trusted_actor(permissions=["product.view"]).context)
     executor = SimpleNamespace(execute=AgentToolExecutor().execute)
     unknown = mutation or bool(uncertainty) or unknown_io
     raw_output = {"success": True, **uncertainty}
