@@ -23,6 +23,7 @@ from uuid import uuid4
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
+from app.application.elt import auto_ingest_liveness as liveness
 from app.application.elt.errors import EltError
 from app.application.elt.knowledge_index_meta import (
     business_completion_from_run,
@@ -514,6 +515,9 @@ class AutoIngestService:
         }
         with _LOCK:
             ledger = _load_ledger(tenant_id)
+            previous = ledger.get("batches", {}).get(batch_id, {})
+            if previous.get("worker_protocol") == 1:
+                batch["worker_protocol"] = 1
             ledger.setdefault("batches", {})[batch_id] = batch
             _save_ledger(tenant_id, ledger)
 
@@ -670,6 +674,7 @@ class AutoIngestService:
             raise EltError("ETL_AUTO_INGEST_FAILED", f"自动入库失败：{type(exc).__name__}") from exc
 
     def _launch_worker(self, batch: dict[str, Any]) -> None:
+        guard = batch.pop("_worker_guard", None)
         batch_id = str(batch.get("batch_id") or "")
         tenant_id = int(batch["tenant_id"])
         owner_user_id = int(batch["owner_user_id"])
@@ -678,10 +683,10 @@ class AutoIngestService:
         labels = batch.get("labels") if isinstance(batch.get("labels"), list) else None
 
         def _worker() -> None:
-            from app.db.session import get_db
-            from app.infrastructure.tenant_scope import tenant_scope
-
             try:
+                from app.db.session import get_db
+                from app.infrastructure.tenant_scope import tenant_scope
+
                 with tenant_scope(tenant_id), get_db() as db:
                     self.run(
                         db,
@@ -701,11 +706,28 @@ class AutoIngestService:
                     db.commit()
             except BOUNDARY_ERRORS:
                 logger.exception("background auto-ingest failed batch_id=%s", batch_id)
+            finally:
+                if guard is not None:
+                    liveness.release(guard)
 
         context = copy_context()
-        threading.Thread(
-            target=lambda: context.run(_worker), name=f"auto-ingest-{batch_id}", daemon=True
-        ).start()
+        try:
+            threading.Thread(
+                target=lambda: context.run(_worker), name=f"auto-ingest-{batch_id}", daemon=True
+            ).start()
+        except BOUNDARY_ERRORS:
+            if guard is not None:
+                liveness.release(guard)
+                _patch_batch(
+                    tenant_id,
+                    batch_id,
+                    status="failed",
+                    error="ELT_WORKER_NOT_STARTED",
+                    business_progress=_progress(
+                        "not_started", 0, message="执行线程未启动，未自动重试"
+                    ),
+                )
+            raise
 
     def queue_for_approval(
         self,
@@ -767,6 +789,7 @@ class AutoIngestService:
             batch = (ledger.get("batches") or {}).get(batch_id)
             if not isinstance(batch, dict) or int(batch.get("tenant_id") or 0) != int(tenant_id):
                 raise EltError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
+            batch = self._refresh_business(dict(batch))
             status = str(batch.get("status") or "")
             if status in {"running", "applied", "partial", "awaiting_confirmation"}:
                 return {
@@ -779,11 +802,22 @@ class AutoIngestService:
                 raise EltError(
                     "ETL_AUTO_INGEST_NOT_PENDING", "该批次不在待审批写入", status_code=409
                 )
-            batch["status"] = "running"
-            batch["updated_at"] = _utcnow()
-            _save_ledger(tenant_id, ledger)
+            guard = liveness.acquire(_ledger_path(tenant_id), batch_id)
+            try:
+                batch.update(status="running", worker_protocol=1, updated_at=_utcnow())
+                ledger["batches"][batch_id] = batch
+                _save_ledger(tenant_id, ledger)
+            except BaseException:
+                liveness.release(guard)
+                raise
             stored = dict(batch)
-        self._launch_worker(stored)
+            stored["_worker_guard"] = guard
+        try:
+            self._launch_worker(stored)
+        finally:
+            unused = stored.pop("_worker_guard", None)
+            if unused is not None:
+                liveness.release(unused)
         public = _public_batch(stored)
         public["success"] = True
         public["status"] = "running"
@@ -858,6 +892,28 @@ class AutoIngestService:
     def _refresh_business(self, batch: dict[str, Any]) -> dict[str, Any]:
         if batch.get("mod_id") != get_request_active_mod_id():
             return batch
+        if liveness.orphaned(_ledger_path(batch["tenant_id"]), batch):
+            with _LOCK:
+                ledger = _load_ledger(batch["tenant_id"])
+                latest = ledger.get("batches", {}).get(batch["batch_id"])
+                if latest != batch:
+                    return dict(latest) if isinstance(latest, dict) else batch
+                batch.update(
+                    status="failed",
+                    updated_at=_utcnow(),
+                    error="ELT_WORKER_INTERRUPTED",
+                    business_progress=_progress(
+                        "outcome_unknown", 0, message="执行已中断，结果待核对；请勿重复入库"
+                    ),
+                )
+                if not batch.get("knowledge"):
+                    batch["kb_progress"] = _progress(
+                        "outcome_unknown", 0, message="知识写入结果待核对；请勿重复入库"
+                    )
+                ledger["batches"][batch["batch_id"]] = batch
+                _save_ledger(batch["tenant_id"], ledger)
+            if not (batch.get("business") or {}).get("run_id"):
+                return batch
         business = batch.get("business") or {}
         if batch.get("status") not in {
             "running",
@@ -931,6 +987,8 @@ class AutoIngestService:
                     business_progress=progress,
                     updated_at=_utcnow(),
                 )
+                if batch_status == "applied":
+                    latest.pop("error", None)
                 _save_ledger(batch["tenant_id"], ledger)
                 return dict(latest)
         except BOUNDARY_ERRORS:
