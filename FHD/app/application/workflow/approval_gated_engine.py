@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class GatedNodeDecision:
-    """单个节点的审批决策。"""
-
     node_id: str
     tool_id: str
     action: str
@@ -32,8 +30,6 @@ class GatedNodeDecision:
 
 @dataclass
 class GatedPlanDecision:
-    """整个计划的门控决策。"""
-
     plan_id: str
     risk_decision: RiskDecision
     node_decisions: list[GatedNodeDecision] = field(default_factory=list)
@@ -125,7 +121,11 @@ class ApprovalGatedEngine:
                     runtime_context=runtime_context,
                     plan=plan,
                     require_persistence=self._require_persistence,
-                    request_id=self._approval_request_id,
+                    **(
+                        {"request_id": self._approval_request_id}
+                        if self._approval_request_id
+                        else {}
+                    ),
                 )
                 nd.approval_request_id = req.request_id
                 decision.approval_request_ids.append(req.request_id)
@@ -150,15 +150,12 @@ class ApprovalGatedEngine:
 
             decision.node_decisions.append(nd)
 
-        if any(nd.rejected for nd in decision.node_decisions):
-            decision.any_rejected = True
-        if all(nd.approved for nd in decision.node_decisions):
-            decision.all_approved = True
-        if any(
+        decision.any_rejected = any(nd.rejected for nd in decision.node_decisions)
+        decision.all_approved = all(nd.approved for nd in decision.node_decisions)
+        decision.pending_approval = any(
             nd.requires_approval and nd.approved is None and not nd.rejected
             for nd in decision.node_decisions
-        ):
-            decision.pending_approval = True
+        )
 
         return decision
 
