@@ -303,6 +303,10 @@ class SQLAlchemyAgentRunRepository:
             return False
         return self._save_if_unchanged(run, previous)
 
+    def save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        """Compare-and-save one durable lifecycle transition against its prior snapshot."""
+        return self._save_if_unchanged(run, previous)
+
     def save_control_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
         return valid_control_update(run, previous) and self._save_if_unchanged(run, previous)
 

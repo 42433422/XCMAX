@@ -1,4 +1,4 @@
-"""Enrich planner/runtime context for 小猫分析 (Kitten) before legacy_chat_adapter.chat."""
+"""Enrich planner/runtime context for 小猫分析 before LangGraph chat planning."""
 
 from __future__ import annotations
 

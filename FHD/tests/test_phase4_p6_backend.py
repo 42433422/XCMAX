@@ -32,7 +32,6 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _xcagi_chat_timeout_error_payload,
     _xcagi_chat_timeout_seconds,
     _xcagi_compat_reply_payload,
-    _xcagi_guarded_planner_stream_events,
     _xcagi_stream_first_token_timeout_seconds,
     _xcagi_stream_idle_notice_seconds,
 )
@@ -402,49 +401,3 @@ def test_thinking_steps_with_markers() -> None:
     assert "正在调用工具" in out
     assert "工具已返回" in out
     assert "需要授权" in out
-
-
-# ---------------------------------------------------------------------------
-# guarded planner stream generator
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("tenant_id", [1, 2, None])
-@pytest.mark.parametrize("domain", [False, True])
-def test_guarded_planner_stream_yields_events(tenant_id: int | None, domain: bool) -> None:
-    from app.fastapi_routes.domains.conversation import helpers
-    from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
-
-    facade = helpers if domain else mod
-    body = XcagiCompatChatBody.model_validate({"message": "hi"})
-
-    def _fake_stream(*a, **k):
-        assert current_tenant_id() == tenant_id
-        yield {"type": "token", "text": "A"}
-        yield {"type": "token", "text": "B"}
-
-    with tenant_scope(99), patch.object(facade, "chat_stream_sse_events", _fake_stream):
-        events = list(
-            facade._xcagi_guarded_planner_stream_events(
-                body, runtime_context={"tenant_id": tenant_id}, workspace_root="/tmp", client=None
-            )
-        )
-        assert current_tenant_id() == 99
-    texts = [e.get("text") for e in events if isinstance(e, dict)]
-    assert "A" in texts and "B" in texts
-
-
-def test_guarded_planner_stream_error_event() -> None:
-    body = XcagiCompatChatBody.model_validate({"message": "hi"})
-
-    def _fail_stream(*a, **k):
-        raise RuntimeError("stream blew up")
-        yield  # pragma: no cover
-
-    with patch.object(mod, "chat_stream_sse_events", _fail_stream):
-        events = list(
-            _xcagi_guarded_planner_stream_events(
-                body, runtime_context=None, workspace_root="/tmp", client=None
-            )
-        )
-    assert any(isinstance(e, dict) and e.get("type") == "error" for e in events)

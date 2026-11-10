@@ -29,6 +29,14 @@ _openai_client: Any | None = None
 _scoped_client: ContextVar[tuple[Any, str | None] | None] = ContextVar(
     "scoped_llm_client", default=None
 )
+_request_mode: ContextVar[Literal["online", "offline"] | None] = ContextVar(
+    "request_llm_mode", default=None
+)
+
+
+def has_request_llm_client() -> bool:
+    """Whether the current request explicitly owns a model client."""
+    return _scoped_client.get() is not None
 
 
 def _reset_scoped_client(token: Any) -> None:
@@ -259,6 +267,9 @@ def _resolve_openai_max_retries() -> int:
 
 
 def resolve_mode() -> Literal["online", "offline"]:
+    scoped = _request_mode.get()
+    if scoped is not None:
+        return scoped
     with _mode_lock:
         return _mode
 
@@ -304,10 +315,10 @@ def get_llm_client() -> Any | None:
 
     offline：返回 ``None``（由本地 Ollama 等路径处理，不强制云端客户端）。
     """
-    if scoped := _resolved_scoped_client():
-        return scoped[0]
     if resolve_mode() == "offline":
         return None
+    if scoped := _resolved_scoped_client():
+        return scoped[0]
     require_api_key()
     global _openai_client
     with _client_lock:
@@ -376,6 +387,8 @@ def get_offline_status() -> dict[str, Any]:
 
 
 def get_openai_compatible_client() -> Any:
+    if resolve_mode() == "offline":
+        raise RuntimeError("offline mode has no OpenAI-compatible client")
     if scoped := _resolved_scoped_client():
         return scoped[0]
     cli = get_llm_client()
@@ -385,6 +398,8 @@ def get_openai_compatible_client() -> Any:
 
 
 def resolve_chat_model() -> str:
+    if resolve_mode() == "offline":
+        return str(_offline_model or "")
     if scoped := _resolved_scoped_client():
         return scoped[1]
     from app.infrastructure.llm.providers.credentials import resolve_default_chat_model
@@ -404,3 +419,20 @@ __all__ = [
     "get_openai_compatible_client",
     "resolve_chat_model",
 ]
+
+
+@contextmanager
+def request_llm_mode(mode: str | None) -> Iterator[None]:
+    requested = str(mode or "").strip().lower()
+    selected = cast(
+        'Literal["online", "offline"] | None',
+        requested if requested in {"online", "offline"} else None,
+    )
+    token = _request_mode.set(selected)
+    try:
+        yield
+    finally:
+        try:
+            _request_mode.reset(token)
+        except ValueError:
+            logger.debug("request mode belongs to another context; reset skipped")

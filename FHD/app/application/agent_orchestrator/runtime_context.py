@@ -15,6 +15,9 @@ def merge_runtime_context(run: AgentRun, updates: dict[str, Any] | None) -> dict
     for key in (
         "_mod_authorization",
         "_actor_authorization",
+        "_bulk_preview_scope",
+        "_bulk_preview_scopes",
+        "mutation_policy",
         "mod_id",
         "active_mod_id",
         "user_id",

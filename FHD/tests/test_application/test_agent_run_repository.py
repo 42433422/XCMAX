@@ -382,7 +382,7 @@ def test_sql_plain_save_locks_before_reading_concurrently_returned_evidence(tmp_
     def returned_before_write(conn, cursor, statement, parameters, context, executemany):
         if statement.startswith("UPDATE agent_runs") and not injected:
             injected.append(True)
-            chat_trace.mark_legacy_chat_stream_interrupted(
+            chat_trace.mark_chat_stream_interrupted(
                 original, pending=True, reason="consumer_closed"
             )
             chat_trace.record_legacy_stream_tool_receipt(

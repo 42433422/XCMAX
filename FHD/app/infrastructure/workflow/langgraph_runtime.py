@@ -10,10 +10,12 @@ channels/reducers (never bare ``LastValue`` for accumulators), emit
 with failure short-circuit, and produce ``WorkflowRunResult`` /
 ``NodeExecutionResult`` from the final graph state.
 
-It never imports the legacy ``WorkflowEngine``. Checkpoint-based ``resume_run``
-rebuilds the graph from a ``CheckpointStore`` snapshot and skips executed nodes;
-``replay_run`` reconstructs results without re-executing. ``agentic_loop`` /
-``tool_registry`` are not implemented and fail closed with ``NotImplementedError``.
+It is the sole workflow graph executor. Checkpoint-based ``resume_run`` rebuilds
+the graph from a ``CheckpointStore`` snapshot and skips executed nodes;
+``replay_run`` reconstructs results without re-executing. Model planning happens
+before execution; this runtime executes the validated persisted plan and never
+runs a second model-directed tool loop. A tool registry is accepted for action
+and parameter validation.
 """
 
 from __future__ import annotations
@@ -62,6 +64,7 @@ _INTERNAL_CHANNELS = frozenset(
         "results",
         "failure",
         "message",
+        "next_node",
     }
 )
 

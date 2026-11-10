@@ -8,58 +8,27 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.ai_chat_app_service import AIChatApplicationService
-from app.application.normal_chat_dispatch import route_normal_mode_message
-from app.application.workflow.checkpointer import WorkflowCheckpointer
-from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.planner import LLMWorkflowPlanner
 from app.fastapi_routes import xcagi_compat_chat_helpers as ch
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 EXACT_SENTENCE = "把 A 产品卖给客户B，10 个，单价 100，开票收款"
 
 
-class _LLMBomb:
-    """Planner model/completion 网关炸弹：任何属性访问或调用即抛错。"""
-
-    def __getattr__(self, _name):
-        raise AssertionError("planner model/completion 网关不得被触达")
-
-    def __call__(self, *args, **kwargs):
-        raise AssertionError("planner model/completion 网关不得被触达")
-
-
 def _make_real_app_service():
-    """Real planning and approval with isolated persistence and forbidden dispatch/LLM."""
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.approval_service import ApprovalService
+    """Verify authenticated tenant scope reaches the single model planning boundary."""
+    svc = AIChatApplicationService()
+    captured = {}
 
-    def _dispatch_bomb(*args, **kwargs):
-        raise AssertionError("workflow 分发器不得在获批前被调用")
+    class TenantCapturingPlanner:
+        def plan(self, *_args, **_kwargs):
+            from app.infrastructure.tenant_scope import current_tenant_id
 
-    real_engine = WorkflowEngine(tool_dispatcher=_dispatch_bomb)
-    real_checkpointer = WorkflowCheckpointer()
+            captured["tenant_id"] = current_tenant_id()
+            return None
 
-    with (
-        patch("app.services.get_ai_conversation_service", return_value=MagicMock()),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=InMemoryAgentRunRepository(),
-        ),
-        patch(
-            "app.application.workflow.approval_persistence.persist_agent_run_link",
-            return_value=None,
-        ),
-    ):
-        svc = AIChatApplicationService(
-            workflow_runtime=real_engine,
-            workflow_checkpointer=real_checkpointer,
-        )
-    svc.approval_service = ApprovalService()
-    svc.approval_service._persist_request_to_db = lambda req, **k: {"request_no": req.request_id}
-    svc._persist_plan_state = lambda *a, **k: None
-    svc.workflow_planner._ai_service = _LLMBomb()
+    svc.workflow_planner = TenantCapturingPlanner()
+    svc._test_planner_capture = captured
     return svc
 
 
@@ -154,7 +123,7 @@ def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts(
     from app.infrastructure.tenant_scope import current_tenant_id
 
     svc = _make_real_app_service()
-    captured: dict[str, int | None] = {}
+    captured = svc._test_planner_capture
     real_process_chat = svc.process_chat
 
     def _spy_process_chat(*args, **kwargs):
@@ -184,31 +153,26 @@ def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts(
 
 
 @pytest.mark.parametrize(
-    "message,pending,use_app,source",
+    "message,pending,source",
     [
-        ("新增产品到数据库 产品:CHATCRUD-STREAM", False, True, "normal"),
-        (
-            "请给 Mac验收客户-7F1B17CE 出货，必须人工审批后才能执行。",
-            False,
-            True,
-            "normal",
-        ),
-        ("2桶，客户名称仍为用户需提供，必须人工审批后执行。", False, True, "normal"),
-        ("确认", False, True, "normal"),
-        (" 好的！ ", False, True, "normal"),
-        ("是的", False, True, "normal"),
-        ("执行", False, True, "normal"),
-        ("取消", False, True, "normal"),
-        (" NO. ", False, True, "normal"),
-        ("确认", True, True, "normal"),
-        ("下一步", True, True, "normal"),
-        ("刚才修改的测试客户，联系人现在是谁？请查询实际记录后回答。", False, True, "normal"),
-        ("查询刚才那个客户", False, True, "normal"),
-        ("你好，帮我写首诗", False, False, "pro"),
+        ("新增产品到数据库 产品:CHATCRUD-STREAM", False, "normal"),
+        ("请给 Mac验收客户-7F1B17CE 出货，必须人工审批后才能执行。", False, "normal"),
+        ("2桶，客户名称仍为用户需提供，必须人工审批后执行。", False, "normal"),
+        ("确认", False, "normal"),
+        (" 好的！ ", False, "normal"),
+        ("是的", False, "normal"),
+        ("执行", False, "normal"),
+        ("取消", False, "normal"),
+        (" NO. ", False, "normal"),
+        ("确认", True, "normal"),
+        ("下一步", True, "normal"),
+        ("刚才修改的测试客户，联系人现在是谁？请查询实际记录后回答。", False, "normal"),
+        ("查询刚才那个客户", False, "normal"),
+        ("你好，帮我写首诗", False, "pro"),
     ],
 )
-def test_stream_controls_and_business_writes_use_stateful_mainline(
-    message, pending, use_app, source
+def test_stream_controls_and_business_writes_always_use_stateful_mainline(
+    message, pending, source
 ):
     service = MagicMock()
     from app.application.agent_task_context import scoped_conversation_user_id
@@ -222,8 +186,6 @@ def test_stream_controls_and_business_writes_use_stateful_mainline(
     }
     request = MagicMock(headers={}, cookies={})
     body = ch.XcagiCompatChatBody(message=message, user_id="web_pro_session", source=source)
-    if "出货" in message or "人工审批" in message:
-        assert not AIChatApplicationService._is_pure_casual_chat(message)
     with (
         patch("app.application.get_ai_chat_app_service", return_value=service),
         patch.object(
@@ -232,163 +194,21 @@ def test_stream_controls_and_business_writes_use_stateful_mainline(
             side_effect=lambda _r, c: {**dict(c or {}), "local_user_id": 17},
         ),
         patch.object(ch, "runtime_context_with_tier", side_effect=lambda c, _t: c),
+        patch.object(ch, "_ensure_chat_db_read_authorized", return_value=(True, None)),
+        patch.object(ch, "_message_requires_db_read_token", return_value=False),
+        patch.object(ch, "planner_workflow_interrupt_reply", return_value=None),
+        patch.object(ch, "_ensure_vector_index_if_needed", return_value=None),
         patch(
             "app.fastapi_routes.xcagi_compat_chat_stream._classify_and_submit_client_issue",
             return_value=None,
         ),
-        patch.object(
-            ch, "create_modstore_openai_client_from_request", return_value=MagicMock()
-        ) as client,
-        patch.object(
-            ch, "start_legacy_chat_run", return_value=MagicMock(run_id="legacy")
-        ) as legacy,
-        patch.object(
-            ch,
-            "finalize_legacy_chat_run",
-            side_effect=lambda _id, payload, **_kwargs: payload,
-        ),
-        patch.object(
-            ch,
-            "_xcagi_guarded_planner_stream_events",
-            return_value=iter([{"type": "token", "text": "你好"}]),
-        ) as planner,
     ):
         events = _sse_payloads(
             list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         )
     assert any(event.get("type") == "done" for event in events)
-    if use_app:
-        assert len(events) == 2
-        service.process_chat.assert_called_once()
-        assert service.process_chat.call_args.kwargs["context"]["local_user_id"] == 17
-        legacy.assert_not_called()
-        planner.assert_not_called()
-        client.assert_not_called()
-    else:
-        service.process_chat.assert_not_called()
-        legacy.assert_called_once()
-        planner.assert_called_once()
-
-
-@pytest.mark.parametrize(
-    "message,source,node_id,tool_id,action,params",
-    [
-        (
-            "创建出货单：客户名称为Mac验收客户-7F1B17CE，产品名称Mac验收涂料-7F1B17CE，数量2桶，规格10公斤/桶，单价12.5元/公斤。必须人工审批后执行。",
-            "normal",
-            "write_business_shipment_record",
-            "business_db",
-            "write",
-            {
-                "entity": "shipment_records",
-                "operation": "create",
-                "payload": {
-                    "unit_name": "Mac验收客户-7F1B17CE",
-                    "products": [
-                        {
-                            "product_name": "Mac验收涂料-7F1B17CE",
-                            "name": "Mac验收涂料-7F1B17CE",
-                            "quantity_tins": 2,
-                            "tin_spec": 10.0,
-                            "unit_price": 12.5,
-                        }
-                    ],
-                },
-            },
-        ),
-        (
-            EXACT_SENTENCE,
-            "pro",
-            "sales_execute_closed_loop",
-            "sales",
-            "execute_closed_loop",
-            {"payload": route_normal_mode_message(EXACT_SENTENCE)["payload"]},
-        ),
-        (
-            "请打开 macOS 文本编辑应用 TextEdit。验收标记 C4-DESKTOP-001",
-            "normal",
-            "desktop_action",
-            "desktop_automation",
-            "open_app",
-            {"app_id": "textedit"},
-        ),
-    ],
-)
-def test_executable_sse_request_uses_real_plan_and_waits_for_approval(
-    message, source, node_id, tool_id, action, params
-):
-    """The active SSE path must plan deterministically and execute no tool before approval."""
-    svc = _make_real_app_service()
-    request = MagicMock()
-    request.headers = {}
-    request.cookies = {}
-    body = ch.XcagiCompatChatBody(message=message, user_id="web_pro_session", source=source)
-
-    def _bomb(*args, **kwargs):
-        raise AssertionError("LLM 客户端 / legacy planner / 工具执行路径不得被触达")
-
-    with (
-        patch("app.application.get_ai_chat_app_service", return_value=svc),
-        patch.object(
-            ch,
-            "create_modstore_openai_client_from_request",
-            side_effect=_bomb,
-        ),
-        patch.object(
-            ch,
-            "_xcagi_guarded_planner_stream_events",
-            side_effect=_bomb,
-        ),
-        patch.object(ch, "runtime_context_with_tier", side_effect=lambda c, _t: c),
-        patch.object(AgentToolExecutor, "execute", side_effect=_bomb),
-        patch.object(
-            LLMWorkflowPlanner,
-            "_plan_with_react_multiagent",
-            side_effect=_bomb,
-        ),
-        patch(
-            "app.application.workflow.planner.request_planner_completion",
-            side_effect=_bomb,
-        ),
-    ):
-        chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
-        assert svc._pending_workflows["web_pro_session"]["approval_required"] is True
-        resp2 = svc.process_chat(
-            user_id="web_pro_session", message="确认", context={}, source=source
-        )
-
-    events = _sse_payloads(chunks)
-    errors = [e for e in events if e.get("type") == "error"]
-    assert not errors, errors
-    done = [e for e in events if e.get("type") == "done"]
-    assert len(done) == 1
-
-    done_payload = done[0]["result"]
-    assert done_payload["data"]["action"] == "workflow_confirmation_required"
-    inner = done_payload["data"]["data"]
-    assert inner["approval_required"] is True
-    assert inner["approval_nodes"] == [
-        {
-            "node_id": node_id,
-            "tool_id": tool_id,
-            "action": action,
-        }
-    ]
-
-    assert resp2["data"]["action"] == "approval_pending"
-    inner = resp2["data"]["data"]
-    assert inner["approval_required"] is True
-    assert inner["approval_path"] == "/mod/xcagi-approval-bridge/approval-hub/workspace"
-    request_ids = inner["approval_request_ids"]
-    assert isinstance(request_ids, list) and len(request_ids) == 1
-    assert str(request_ids[0]).strip()
-    nodes = inner["approval_nodes"]
-    assert len(nodes) == 1
-    node = nodes[0]
-    assert node["node_id"] == node_id
-    assert node["tool_id"] == tool_id
-    assert node["action"] == action
-    assert node["params"] == params
+    service.process_chat.assert_called_once()
+    assert service.process_chat.call_args.kwargs["context"]["local_user_id"] == 17
 
 
 # XcagiCompatChatBody
@@ -682,66 +502,6 @@ class TestXcagiChatHttpExc:
 # ---------------------------------------------------------------------------
 # _xcagi_compat_reply_payload
 # ---------------------------------------------------------------------------
-
-
-class TestXcagiCompatReplyPayload:
-    def test_string_reply(self):
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
-            return_value=None,
-            create=True,
-        ):
-            result = ch._xcagi_compat_reply_payload("hello")
-            assert result["success"] is True
-            assert result["response"] == "hello"
-
-    def test_dict_reply(self):
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
-            return_value=None,
-            create=True,
-        ):
-            result = ch._xcagi_compat_reply_payload(
-                {"response": "world", "thinking_steps": "step1"}
-            )
-            assert result["response"] == "world"
-            assert result["data"]["thinking_steps"] == "step1"
-
-    def test_dict_reply_text_key(self):
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
-            return_value=None,
-            create=True,
-        ):
-            result = ch._xcagi_compat_reply_payload({"text": "msg"})
-            assert result["response"] == "msg"
-
-    def test_with_runtime_context(self):
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
-            return_value=None,
-            create=True,
-        ):
-            result = ch._xcagi_compat_reply_payload("hello", runtime_context_update={"k": "v"})
-            assert result["data"]["runtime_context"] == {"k": "v"}
-
-    def test_with_kitten_attachments(self):
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
-            return_value=None,
-            create=True,
-        ):
-            result = ch._xcagi_compat_reply_payload("hello", kitten_attachments={"chart": "data"})
-            assert result["data"]["chart"] == "data"
-
-    def test_kitten_attachments_none_skipped(self):
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
-            return_value=None,
-            create=True,
-        ):
-            result = ch._xcagi_compat_reply_payload("hello", kitten_attachments={"chart": None})
-            assert "chart" not in result["data"]
 
 
 # ---------------------------------------------------------------------------

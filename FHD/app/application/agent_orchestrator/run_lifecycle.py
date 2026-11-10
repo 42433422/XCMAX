@@ -273,10 +273,12 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         requested_by: str = "",
         command_id: str = "",
     ) -> None:
-        if run.metadata.get("trace_mode") in {
-            "legacy_planner_run",
-            "legacy_planner_run_with_tools",
-        } and run.status in {"planning", "running", "retrying"}:
+        channel = str(run.metadata.get("channel") or "").strip().lower()
+        if (
+            run.metadata.get("trace_mode")
+            in {"legacy_planner_run", "legacy_planner_run_with_tools"}
+            or channel in {"compat_chat_stream", "compat_chat_stream_langgraph"}
+        ) and run.status in {"planning", "running", "retrying"}:
             # The observation callback may not have run yet. Persist the replay
             # gate atomically with control while the original stream can write.
             run.metadata["non_retryable"] = True

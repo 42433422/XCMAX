@@ -39,8 +39,7 @@ def chat_svc() -> AIChatApplicationService:
         ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
+                patch("app.application.ai_chat_app_service.get_approval_service"),
     ):
         svc = AIChatApplicationService()
         svc.ai_service = mock_ai
@@ -536,33 +535,3 @@ def test_dynamic_workflow_excel_import_executes(
     assert out is not None
     assert out["success"] is True
     assert "入库" in out["response"] or "新增" in out["response"]
-
-
-@patch("app.application.normal_chat_dispatch.route_normal_mode_message")
-@patch("app.application.normal_chat_dispatch.resolve_tool_execution_profile", return_value="normal")
-def test_dynamic_workflow_normal_product_query(
-    mock_profile: MagicMock, mock_route: MagicMock, chat_svc: AIChatApplicationService
-) -> None:
-    mock_route.return_value = {"intent": "product_query", "keyword": "5003"}
-    with patch(
-        "app.application.normal_chat_dispatch.build_product_query_response_dict",
-        return_value={"success": True, "response": "找到产品"},
-    ):
-        out = chat_svc._try_handle_dynamic_workflow("u", "查5003产品", "pro", {}, {})
-    assert out is not None
-    assert out["success"] is True
-
-
-@patch("app.application.normal_chat_dispatch.route_normal_mode_message")
-@patch("app.application.normal_chat_dispatch.resolve_tool_execution_profile", return_value="normal")
-def test_dynamic_workflow_normal_shipment_preview(
-    mock_profile: MagicMock, mock_route: MagicMock, chat_svc: AIChatApplicationService
-) -> None:
-    mock_route.return_value = {"intent": "shipment"}
-    with patch(
-        "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview",
-        return_value={"success": True, "response": "预览发货单"},
-    ):
-        out = chat_svc._try_handle_dynamic_workflow("u", "甲公司2桶5003规格25", "pro", {}, {})
-    assert out is not None
-    assert out["success"] is True

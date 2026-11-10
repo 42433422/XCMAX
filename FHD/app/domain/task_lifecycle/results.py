@@ -177,6 +177,16 @@ def execution_result_error(data: dict[str, Any]) -> str:
     return ""
 
 
+def execution_result_outcome_unknown(data: dict[str, Any]) -> bool:
+    """Distinguish uncertain effects from ordinary pending or approval states."""
+    return any(
+        execution_result_states(result) & {"unknown", "interrupted", "partial", "partial_success"}
+        or result.get("reconciliation_required") is True
+        or result.get("requires_reconciliation") is True
+        for result in execution_result_envelopes(data)
+    )
+
+
 def execution_result_requires_reconciliation(data: dict[str, Any]) -> bool:
     """Preserve unresolved execution through the same envelopes used by verification."""
     return any(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,6 +11,49 @@ from fastapi.testclient import TestClient
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.fastapi_routes import shipment_orders
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+def test_approval_route_does_not_report_failed_execution_as_success(monkeypatch):
+    from app.fastapi_routes.domains.shipment import shipment_routes
+
+    plan = SimpleNamespace(plan_id="p", intent="test", nodes=[object()])
+    approvals = MagicMock()
+    approvals.get_pending_workflow.return_value = {"plan": plan, "runtime_context": {}}
+    resume = {"success": False, "workflow_executed": False, "code": "workflow_plan_unavailable"}
+    monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approvals)
+    monkeypatch.setattr("app.application.approval_workspace_app_service._pending_snapshot", lambda _: None)
+    monkeypatch.setattr(
+        "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
+        lambda **_: resume,
+    )
+    monkeypatch.setattr(shipment_routes, "_owned_request_id", lambda *_args: "req")
+    monkeypatch.setattr(shipment_routes, "_trace_approval_route", lambda payload, **_kwargs: payload)
+    result = shipment_routes.ai_approval_approve({"request_id": "req"}, user=object())
+    assert result["success"] is False
+    assert result["data"]["workflow_executed"] is False
+    approvals.approve.assert_not_called()
+
+
+def test_approval_route_missing_plan_does_not_claim_execution(monkeypatch):
+    from app.fastapi_routes.domains.shipment import shipment_routes
+
+    approvals = MagicMock()
+    approvals.get_pending_workflow.return_value = {"plan": None}
+    monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approvals)
+    monkeypatch.setattr("app.application.approval_workspace_app_service._pending_snapshot", lambda _: None)
+    monkeypatch.setattr(
+        "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
+        lambda **_: {
+            "success": False,
+            "workflow_executed": False,
+            "code": "agent_run_unavailable",
+        },
+    )
+    monkeypatch.setattr(shipment_routes, "_owned_request_id", lambda *_args: "req")
+    monkeypatch.setattr(shipment_routes, "_trace_approval_route", lambda payload, **_kwargs: payload)
+    result = shipment_routes.ai_approval_approve({"request_id": "req"}, user=object())
+    assert result["success"] is False
+    assert result["data"]["workflow_executed"] is False
 
 
 def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch, actor) -> TestClient:

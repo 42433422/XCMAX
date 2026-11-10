@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -365,24 +367,6 @@ def step_plan_nodes(plan: PlanGraph) -> tuple[list[WorkflowNode], str | None]:
     return ordered, None
 
 
-def skip_unselected_step(run: Any, step: Any) -> bool:
-    """Reconstruct routing from persisted plan and outputs, including after approval."""
-    from app.application.workflow.engine import WorkflowEngine
-
-    graph = plan_from_dict(run.metadata.get("plan"))
-    if graph is None or not graph.nodes:
-        return False  # Older persisted runs contain dependency-only AgentSteps.
-    executed = {item.node_id for item in run.steps if item.status == "completed"}
-    blocked = {item.node_id for item in run.steps if item.status == "skipped"}
-    outputs = {item.node_id: item.output for item in run.steps if item.node_id in executed}
-    if WorkflowEngine._routing_state(step, graph, executed, blocked, outputs) != "skipped":
-        return False
-    step.status = "skipped"
-    step.error = "conditional route not selected"
-    run.add_event("step.skipped", step.error, {"step_id": step.step_id})
-    return True
-
-
 def _find_conditional_cycle(nodes: list[WorkflowNode], node_ids: set[str]) -> str | None:
     """Detect cycles across dependency and conditional successor edges."""
     adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
@@ -448,10 +432,20 @@ def plan_to_dict(plan: PlanGraph) -> dict[str, Any]:
     }
 
 
-def plan_from_dict(data: dict[str, Any] | None) -> PlanGraph | None:
-    """从 ``plan_to_dict`` 产物还原 ``PlanGraph``；无数据时返回 ``None``。"""
+def plan_fingerprint(plan: PlanGraph) -> str:
+    """Stable digest used to bind approvals and resumable checkpoints to one graph."""
+    encoded = json.dumps(
+        plan_to_dict(plan), ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def plan_from_dict(data: dict[str, Any] | PlanGraph | None) -> PlanGraph | None:
+    """从序列化快照或已验证的图还原独立 ``PlanGraph``；无数据时返回 ``None``。"""
     if not data:
         return None
+    if isinstance(data, PlanGraph):
+        return copy.deepcopy(data)
     nodes: list[WorkflowNode] = []
     for n in data.get("nodes") or []:
         nodes.append(

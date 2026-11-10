@@ -6,7 +6,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.application.agent_task_context import scoped_conversation_user_id
+from app.application.agent_task_context import (
+    scoped_conversation_user_id,
+    scoped_personal_memory_id,
+)
 from app.domain.shared_services.conversation.api import ApiMixin
 from app.domain.shared_services.conversation.context import ConversationContext
 from app.domain.shared_services.conversation.prompts import PromptsMixin
@@ -31,6 +34,18 @@ def test_state_scope_binds_owner_tenant_mod_and_conversation():
         ("conversation_id", "other"),
     ]:
         assert scoped_conversation_user_id("caller", {**base, field: value}) != key
+
+
+def test_personal_memory_scope_survives_sessions_but_respects_owner_boundaries():
+    base = {"local_user_id": 1, "tenant_id": 1, "mod_id": "a", "session_id": "first"}
+    key = scoped_personal_memory_id(base)
+    assert scoped_personal_memory_id({**base, "session_id": "next"}) == key
+    for field, value in [
+        ("local_user_id", 2),
+        ("tenant_id", 2),
+        ("mod_id", "b"),
+    ]:
+        assert scoped_personal_memory_id({**base, field: value}) != key
 
 
 def test_follow_up_cannot_replace_a_pending_write_plan():

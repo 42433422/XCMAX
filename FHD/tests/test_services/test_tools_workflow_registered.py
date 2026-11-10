@@ -15,7 +15,6 @@ from app.domain.shared_services.tools_workflow_registered import (
     _registered_router_inventory,
     _registered_router_materials,
     _registered_router_mrp,
-    _registered_router_normal_slot_dispatch,
     _registered_router_print,
     _registered_router_printer_list,
     _registered_router_products,
@@ -28,56 +27,6 @@ from app.domain.shared_services.tools_workflow_registered import (
     execute_registered_workflow_tool,
 )
 
-# ---------------------------------------------------------------------------
-# _registered_router_normal_slot_dispatch
-# ---------------------------------------------------------------------------
-
-
-class TestNormalSlotDispatch:
-    def test_product_query(self):
-        with patch(
-            "app.application.normal_chat_dispatch.run_normal_slot_product_query_from_message",
-            return_value={"success": True, "products": []},
-        ):
-            result = _registered_router_normal_slot_dispatch(
-                "product_query", {}, {}, "normal", "hello"
-            )
-            assert result["success"] is True
-
-    def test_product_query_uses_params_message(self):
-        with patch(
-            "app.application.normal_chat_dispatch.run_normal_slot_product_query_from_message",
-            return_value={"success": True},
-        ) as mock:
-            _registered_router_normal_slot_dispatch(
-                "product_query", {"message": "from_params"}, {}, "normal", ""
-            )
-            mock.assert_called_once_with("from_params")
-
-    def test_shipment_preview(self):
-        with patch(
-            "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview",
-            return_value={"success": True, "records": []},
-        ):
-            result = _registered_router_normal_slot_dispatch(
-                "shipment_preview", {"order_text": "order1"}, {}, "normal", ""
-            )
-            assert result["success"] is True
-
-    def test_shipment_preview_uses_user_message(self):
-        with patch(
-            "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview",
-            return_value={"success": True},
-        ) as mock:
-            _registered_router_normal_slot_dispatch(
-                "shipment_preview", {}, {}, "normal", "user order text"
-            )
-            mock.assert_called_once_with("user order text")
-
-    def test_unknown_action(self):
-        result = _registered_router_normal_slot_dispatch("unknown_action", {}, {}, "normal", "")
-        assert result["success"] is False
-        assert "未注册" in result["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -206,80 +155,6 @@ class TestCustomersRouter:
 # ---------------------------------------------------------------------------
 
 
-class TestProductsRouter:
-    def test_query_normal_profile(self):
-        with patch(
-            "app.application.normal_chat_dispatch.run_workflow_products_query_normal_profile",
-            return_value={"success": True, "data": []},
-        ):
-            result = _registered_router_products("query", {}, {}, "normal", "show products")
-            assert result["success"] is True
-
-    def test_query_other_profile(self):
-        mock_svc = MagicMock()
-        mock_svc.get_products.return_value = {"success": True, "data": []}
-        with patch("app.services.get_products_service", return_value=mock_svc):
-            result = _registered_router_products("query", {"keyword": "abc"}, {}, "admin", "")
-            assert result["success"] is True
-
-    def test_exists_action_match_by_model(self):
-        mock_svc = MagicMock()
-        mock_svc.get_products.return_value = {
-            "success": True,
-            "data": [{"model_number": "M1", "name": "P1"}],
-        }
-        with patch("app.services.get_products_service", return_value=mock_svc):
-            result = _registered_router_products("exists", {"model_number": "M1"}, {}, "admin", "")
-            assert result["exists"] is True
-
-    def test_exists_action_match_by_name(self):
-        mock_svc = MagicMock()
-        mock_svc.get_products.return_value = {
-            "success": True,
-            "data": [{"name": "Widget", "model_number": ""}],
-        }
-        with patch("app.services.get_products_service", return_value=mock_svc):
-            result = _registered_router_products(
-                "exists", {"product_name": "Widget"}, {}, "admin", ""
-            )
-            assert result["exists"] is True
-
-    def test_exists_action_no_match(self):
-        mock_svc = MagicMock()
-        mock_svc.get_products.return_value = {"success": True, "data": []}
-        with patch("app.services.get_products_service", return_value=mock_svc):
-            result = _registered_router_products("exists", {"model_number": "X99"}, {}, "admin", "")
-            assert result["exists"] is False
-
-    def test_create_action_success(self):
-        mock_svc = MagicMock()
-        mock_svc.create_product.return_value = {"success": True}
-        with patch("app.services.get_products_service", return_value=mock_svc):
-            result = _registered_router_products(
-                "create",
-                {"name_or_model": "P1", "unit_name": "U1", "unit_price": 10.0},
-                {},
-                "admin",
-                "",
-            )
-            assert result["success"] is True
-
-    def test_create_action_missing_fields(self):
-        result = _registered_router_products("create", {}, {}, "admin", "")
-        assert result["success"] is False
-
-    def test_create_action_invalid_price(self):
-        mock_svc = MagicMock()
-        mock_svc.create_product.return_value = {"success": True}
-        with patch("app.services.get_products_service", return_value=mock_svc):
-            result = _registered_router_products(
-                "create",
-                {"name_or_model": "P1", "unit_name": "U1", "unit_price": "not_a_number"},
-                {},
-                "admin",
-                "",
-            )
-            assert result["success"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -560,7 +435,7 @@ class TestGenerateOfficeDocumentRouter:
 class TestExecuteRegisteredWorkflowTool:
     def test_known_tool(self):
         with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
             return_value="normal",
         ):
             result = execute_registered_workflow_tool("customers", "query", {"keyword": "test"})
@@ -568,7 +443,7 @@ class TestExecuteRegisteredWorkflowTool:
 
     def test_unknown_tool(self):
         with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
             return_value="normal",
         ):
             result = execute_registered_workflow_tool("nonexistent_tool", "query", {})
@@ -577,7 +452,7 @@ class TestExecuteRegisteredWorkflowTool:
 
     def test_runtime_context_extracted(self):
         with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
             return_value="normal",
         ) as mock_profile:
             execute_registered_workflow_tool(
@@ -588,7 +463,6 @@ class TestExecuteRegisteredWorkflowTool:
     def test_registered_routers_dict_completeness(self):
         expected_keys = {
             "desktop_automation",
-            "normal_slot_dispatch",
             "customers",
             "products",
             "materials",

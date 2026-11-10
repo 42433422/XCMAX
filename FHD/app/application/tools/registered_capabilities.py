@@ -201,14 +201,6 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
     }
 
 
-def _dispatch_registered_tool(
-    *, tool_id: str, action: str, params: dict[str, Any]
-) -> dict[str, Any]:
-    from app.application.facades.tools_facade import execute_registered_workflow_tool
-
-    return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
-
-
 def execute_registered_capability(
     args: dict[str, Any] | None,
     *,
@@ -221,8 +213,6 @@ def execute_registered_capability(
     if not resolved.get("success"):
         return json.dumps(resolved, ensure_ascii=False)
 
-    from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
-    from app.application.workflow.engine import WorkflowEngine
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     tool_id = str(resolved["tool_id"])
@@ -279,12 +269,35 @@ def execute_registered_capability(
     context["source"] = "erp_agent_capability_tool"
     context["workspace_root"] = workspace_root
     context.setdefault("message", str(params.get("user_request") or params.get("message") or ""))
+    actor_id = str(
+        context.get("user_id") or context.get("local_user_id") or context.get("actor_id") or ""
+    ).strip()
+    if not actor_id:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "ERP capability 缺少已认证的调用人上下文，未执行",
+                "tool_id": tool_id,
+                "action": action,
+            },
+            ensure_ascii=False,
+        )
     try:
-        decision, run_result = ApprovalGatedEngine(
-            WorkflowEngine(tool_dispatcher=_dispatch_registered_tool),
-            require_persistence=True,
-            approval_request_id=approval_request_id,
-        ).run(plan, runtime_context=context, strategy="interactive")
+        from app.application.agent_orchestrator import AgentOrchestrator
+        from app.application.workflow import get_approval_service
+
+        approvals = get_approval_service()
+        required_nodes = approvals.get_approval_required_nodes(plan)
+        required_ids = [node.node_id for node in required_nodes]
+        if required_ids:
+            plan.metadata["approval_required_node_ids"] = required_ids
+        agent_run = AgentOrchestrator().start_run_from_plan(
+            user_id=actor_id,
+            message=str(context.get("message") or ""),
+            plan=plan,
+            runtime_context=context,
+            auto_execute=True,
+        )
     except RECOVERABLE_ERRORS:
         return json.dumps(
             {
@@ -299,21 +312,61 @@ def execute_registered_capability(
     capability = {
         key: resolved[key] for key in ("tool_id", "action", "risk", "idempotent", "required_params")
     }
-    response = {"success": False, "capability": capability, "approval": decision.to_dict()}
-    if decision.pending_approval:
+    response = {"success": False, "capability": capability, "agent_run_id": agent_run.run_id}
+    if agent_run.status == "waiting_user":
+        waiting = next((step for step in agent_run.steps if step.status == "waiting_user"), None)
+        if waiting and waiting.node_id in required_ids:
+            node = next((item for item in plan.nodes if item.node_id == waiting.node_id), None)
+            request_id = ""
+            try:
+                if node is None or (node.tool_id, node.action, node.params) != (
+                    waiting.tool_id,
+                    waiting.action,
+                    waiting.params,
+                ):
+                    raise RuntimeError("审批节点与完整计划不一致")
+                request = approvals.create_approval_request(
+                    plan_id=plan.plan_id,
+                    node=node,
+                    runtime_context={**context, "_approval_agent_run_required": True},
+                    plan=plan,
+                    require_persistence=True,
+                    request_id=approval_request_id,
+                )
+                request_id = str(request.request_id or "").strip()
+                if not request_id or not approvals.attach_pending_agent_run(
+                    request_id, agent_run_id=agent_run.run_id, approved_step_id=waiting.node_id
+                ):
+                    raise RuntimeError("AgentRun 未关联到审批请求")
+            except RECOVERABLE_ERRORS:
+                response.update(
+                    message="ERP 操作已暂停，但审批请求未能安全保存；未执行等待审批的步骤。",
+                    run_status=agent_run.status,
+                )
+            else:
+                response.update(
+                    pending_approval=True,
+                    approval_request_id=request_id,
+                    message="该 ERP 操作已创建审批请求，审批前不会执行。",
+                )
+        else:
+            response.update(
+                requires_confirmation=True,
+                message="该 ERP 操作已在 AgentRun 中安全暂停，等待确认后继续。",
+                run_status=agent_run.status,
+            )
+    elif agent_run.status == "completed":
+        step = next((item for item in agent_run.steps if item.status == "completed"), None)
+        output = dict(step.output or {}) if step else {}
         response.update(
-            pending_approval=True,
-            message="该 ERP 操作已创建审批请求，审批通过后将执行。",
-        )
-    elif decision.any_rejected or run_result is None:
-        response["message"] = "该 ERP 操作未获风险门批准，未执行。"
-    else:
-        node_result = run_result.node_results[0] if run_result.node_results else None
-        output = dict(getattr(node_result, "output", {}) or {})
-        response.update(
-            success=bool(run_result.success and output.get("success")),
-            message=str(output.get("message") or run_result.message or ""),
+            success=bool(output.get("success", False)),
+            message=str(output.get("message") or ""),
             result=output,
+        )
+    else:
+        response.update(
+            message=str(agent_run.error or "该 ERP 操作未完成。"),
+            run_status=agent_run.status,
         )
     return json.dumps(response, ensure_ascii=False, default=json_safe)
 

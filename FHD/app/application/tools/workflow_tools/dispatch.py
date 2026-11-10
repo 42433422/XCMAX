@@ -81,7 +81,7 @@ class WorkflowToolDispatcher:
 
 def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | None = None) -> dict:
     """Authorize and execute registered tools at the application composition boundary."""
-    from app.application.normal_chat_dispatch import resolve_tool_execution_profile
+    from app.application.workflow.tool_profile import resolve_tool_execution_profile
     from app.domain.shared_services.tools_workflow_common import (
         _normalize_business_db_entity,
         _remember_business_db_target,

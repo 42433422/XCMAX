@@ -307,10 +307,30 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
                 product_scope,
             )
             _LEDGER[_scope_key(ctx)] = record
+            ctx["_bulk_preview_scopes"] = {
+                tool: digest
+                for tool, label, digest in (
+                    ("customers", "客户", customer_scope),
+                    ("products", "产品", product_scope),
+                )
+                if label in message and digest
+            }
         _use_policy("allow_once")
         return None
     _use_policy("allow")
     return None
+
+
+def admit_chat_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
+    """Derive mutation policy and preview scope only from the server-side turn."""
+    ctx.pop("_bulk_preview_scope", None)
+    ctx.pop("_bulk_preview_scopes", None)
+    try:
+        reply = prepare_turn(message, ctx)
+        ctx["mutation_policy"] = mutation_policy()
+        return reply
+    finally:
+        release_mutation_policy()
 
 
 def _is_mutation(name: str, raw_args: str) -> bool:

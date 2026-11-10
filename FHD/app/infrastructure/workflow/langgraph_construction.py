@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import operator
 from collections.abc import Hashable
+from copy import deepcopy
 from typing import TYPE_CHECKING, Annotated, Any, TypedDict, cast
 
 from app.application.workflow.ports import CheckpointStore
@@ -15,6 +16,8 @@ from app.application.workflow.workflow_types import (
     WorkflowNode,
     WorkflowRunResult,
     apply_state_schema,
+    normalize_workflow_risk,
+    plan_fingerprint,
 )
 from app.infrastructure.workflow.langgraph_runtime import (
     _INTERNAL_CHANNELS,
@@ -70,6 +73,18 @@ class LangGraphConstructionMixin:
         parallel: bool = True,
     ) -> StateGraph:
         """Compile-stage: build the vendored ``StateGraph`` for ``plan`` (uncompiled)."""
+        from app.application.workflow.workflow_types import validate_plan_graph
+
+        if error := validate_plan_graph(plan):
+            raise ValueError(f"工作流计划无效：{error}")
+        # LangGraph's parallel edge triggers do not express an AND-join when a
+        # child also sits behind a conditional route. Use the explicit ready
+        # scheduler whenever routing or multiple prerequisites are present.
+        serial_scheduler = not parallel or any(
+            node.branches or node.next or len(node.depends_on) > 1 for node in plan.nodes
+        )
+        if serial_scheduler and "__xcagi_schedule__" in {node.node_id for node in plan.nodes}:
+            raise ValueError("计划节点占用了 LangGraph 调度保留标识")
         gate = _ReadersWriterGate(parallel)
         effective = state_schema or self._state_schema
         graph = StateGraph(self._schema(runtime_context, effective))
@@ -77,10 +92,18 @@ class LangGraphConstructionMixin:
             graph.add_node(
                 node.node_id,
                 self._make_node_fn(
-                    node, max_retries, [n.node_id for n in plan.nodes], gate, effective
+                    node,
+                    max_retries,
+                    [n.node_id for n in plan.nodes],
+                    gate,
+                    effective,
+                    block_unselected=parallel,
                 ),
             )
-        self._add_edges(graph, plan)
+        if serial_scheduler:
+            self._add_serial_scheduler(graph, plan)
+        else:
+            self._add_edges(graph, plan)
         return graph
 
     def compile_graph(
@@ -134,7 +157,6 @@ class LangGraphConstructionMixin:
         plan: PlanGraph,
         runtime_context: dict[str, Any] | None = None,
         max_retries: int = 1,
-        agentic_loop: bool = False,
         tool_registry: dict[str, Any] | None = None,
         user_id: str | None = None,
         state_schema: StateSchema | None = None,
@@ -142,13 +164,32 @@ class LangGraphConstructionMixin:
         checkpointer: CheckpointStore | None = None,
         state_event_callback: Any | None = None,
     ) -> WorkflowRunResult:
-        if agentic_loop or tool_registry is not None:
-            raise NotImplementedError(
-                "XCAGILangGraphRuntime 不支持 agentic_loop / tool_registry（fail-closed）"
-            )
+        submitted_plan_sha256 = plan_fingerprint(plan)
+        registry_validated = tool_registry is not None
+        if tool_registry is not None:
+            from app.application.workflow.planning_graph_policy import validate_required_params
+
+            plan = deepcopy(plan)
+            for node in plan.nodes:
+                if node.tool_id == "clarify":
+                    continue
+                spec = tool_registry.get(node.tool_id)
+                actions = spec.get("actions") if isinstance(spec, dict) else None
+                if not isinstance(actions, dict) or node.action not in actions:
+                    raise ValueError(f"工作流计划包含未注册的工具动作：{node.tool_id}.{node.action}")
+                action_spec = actions[node.action]
+                if not isinstance(action_spec, dict):
+                    raise ValueError(f"工具动作配置无效：{node.tool_id}.{node.action}")
+                node.risk = normalize_workflow_risk(action_spec.get("risk"), default="high")
+                node.idempotent = action_spec.get("idempotent") is True
+            if error := validate_required_params(plan, tool_registry):
+                raise ValueError(f"工作流计划无效：{error}")
         self._callback = state_event_callback
         try:
             initial = self._initial_state(runtime_context)
+            initial["plan_audit"] = self._plan_audit_record(
+                plan, submitted_plan_sha256, registry_validated
+            )
             graph = self.compile_graph(
                 plan,
                 runtime_context=initial,
@@ -158,9 +199,13 @@ class LangGraphConstructionMixin:
             )
             final = self._stream_run(graph, plan, dict(initial), checkpointer, parallel=parallel)
             result = self._to_run_result(plan, final)
-            # On a successful run persist one extra final "completed" checkpoint so the
-            # most advanced snapshot always carries the completed workflow_status.
-            if checkpointer is not None and result.success:
+            # Persist terminal completion and interaction pauses. Failed-node
+            # supersteps remain excluded so recovery cannot mistake a failed call
+            # for completed work.
+            final_status = (final.get("workflow_status") or {}).get("state")
+            if checkpointer is not None and (
+                result.success or final_status in {"waiting_user", "waiting_approval", "blocked"}
+            ):
                 self._save_checkpoint(checkpointer, plan, final)
             return result
         finally:
@@ -184,18 +229,80 @@ class LangGraphConstructionMixin:
                 message=f"checkpoint 不存在: {checkpoint_id}",
             )
         initial = self._checkpoint_state(cp)
+        prior_audit = initial.get("plan_audit")
+        if not isinstance(prior_audit, dict) or prior_audit.get("passed") is not True or prior_audit.get(
+            "submitted_plan_sha256"
+        ) != plan_fingerprint(plan):
+            return WorkflowRunResult(
+                plan_id=plan.plan_id,
+                success=False,
+                message="工作流检查点未绑定当前审批计划，拒绝恢复；请重新规划并审批",
+            )
+        resume_plan = deepcopy(plan)
+        if prior_audit.get("registry_validated") is True:
+            from app.application.workflow.planning_graph_policy import validate_required_params
+            from app.application.workflow_registry_app import get_workflow_tool_registry
+
+            registry = get_workflow_tool_registry()
+            for node in resume_plan.nodes:
+                if node.tool_id == "clarify":
+                    continue
+                spec = registry.get(node.tool_id)
+                actions = spec.get("actions") if isinstance(spec, dict) else None
+                action = actions.get(node.action) if isinstance(actions, dict) else None
+                if not isinstance(action, dict):
+                    return WorkflowRunResult(
+                        plan_id=plan.plan_id,
+                        success=False,
+                        message=f"恢复计划中的工具动作已失效：{node.tool_id}.{node.action}",
+                    )
+                node.risk = normalize_workflow_risk(action.get("risk"), default="high")
+                node.idempotent = action.get("idempotent") is True
+            if error := validate_required_params(resume_plan, registry):
+                return WorkflowRunResult(
+                    plan_id=plan.plan_id, success=False, message=f"恢复计划复核失败：{error}"
+                )
+        if plan_fingerprint(resume_plan) != prior_audit.get("plan_sha256"):
+            return WorkflowRunResult(
+                plan_id=plan.plan_id,
+                success=False,
+                message="工作流检查点计划版本已变化，拒绝恢复；请重新规划并审批",
+            )
+        initial["plan_audit"] = self._plan_audit_record(
+            resume_plan,
+            str(prior_audit.get("submitted_plan_sha256") or ""),
+            prior_audit.get("registry_validated") is True,
+        )
         graph = self.compile_graph(
-            plan,
+            resume_plan,
             runtime_context=initial,
             state_schema=state_schema,
             max_retries=max_retries,
             parallel=parallel,
         )
-        final = self._stream_run(graph, plan, dict(initial), checkpointer, parallel=parallel)
-        result = self._to_run_result(plan, final)
-        if result.success:
-            self._save_checkpoint(checkpointer, plan, final)
+        final = self._stream_run(graph, resume_plan, dict(initial), checkpointer, parallel=parallel)
+        result = self._to_run_result(resume_plan, final)
+        final_status = (final.get("workflow_status") or {}).get("state")
+        if result.success or final_status in {"waiting_user", "waiting_approval", "blocked"}:
+            self._save_checkpoint(checkpointer, resume_plan, final)
         return result
+
+    @staticmethod
+    def _plan_audit_record(
+        plan: PlanGraph, submitted_plan_sha256: str, registry_validated: bool
+    ) -> dict[str, Any]:
+        """Structured, deterministic evidence that the graph was audited before dispatch."""
+        return {
+            "passed": True,
+            "plan_sha256": plan_fingerprint(plan),
+            "submitted_plan_sha256": submitted_plan_sha256,
+            "registry_validated": registry_validated,
+            "node_count": len(plan.nodes),
+            "actions": [
+                {"node_id": node.node_id, "tool_id": node.tool_id, "action": node.action}
+                for node in plan.nodes
+            ],
+        }
 
     def replay_run(
         self,
@@ -250,6 +357,7 @@ class LangGraphConstructionMixin:
             "results": Annotated[list, operator.add],
             "failure": Annotated[dict, _merge_dict],
             "message": str,
+            "next_node": str,
         }
         # Schema-declared keys get graph channels that mirror their merge semantics
         # (append → list reducer, merge_dict → dict reducer, set → LastValue).
@@ -332,6 +440,94 @@ class LangGraphConstructionMixin:
             path_map["__end__"] = END
             graph.add_conditional_edges(n.node_id, self._make_route_fn(n, targets), path_map)
 
+    def _add_serial_scheduler(self, graph: StateGraph, plan: PlanGraph) -> None:
+        """Schedule one ready node per graph turn, preserving AND deps and OR routes."""
+        schedule_id = "__xcagi_schedule__"
+        nodes = list(plan.nodes)
+        node_ids = {node.node_id for node in nodes}
+
+        def schedule(state: dict[str, Any]) -> dict[str, Any]:
+            executed = set(state.get("executed") or [])
+            blocked = set(state.get("blocked") or [])
+            outputs = state.get("node_outputs") or {}
+            if any(
+                isinstance(outputs.get(nid), dict)
+                and (outputs[nid].get("requires_confirmation") or outputs[nid].get("requires_approval"))
+                for nid in executed
+            ):
+                return {"next_node": "__end__"}
+            newly_blocked: list[str] = []
+            while True:
+                progressed = False
+                for node in nodes:
+                    nid = node.node_id
+                    if nid in executed or nid in blocked or nid in newly_blocked:
+                        continue
+                    if any(dep in blocked or dep in newly_blocked for dep in node.depends_on):
+                        newly_blocked.append(nid)
+                        progressed = True
+                        continue
+                    if any(dep not in executed for dep in node.depends_on):
+                        continue
+                    routers = [source for source in nodes if nid in self._candidates(source)]
+                    if any(source.node_id not in executed | blocked | set(newly_blocked) for source in routers):
+                        continue
+                    if any(
+                        source.node_id in executed
+                        and source.node_id not in blocked
+                        and not isinstance(outputs.get(source.node_id), dict)
+                        for source in routers
+                    ):
+                        return {
+                            "next_node": "__end__",
+                            "blocked": newly_blocked,
+                            "failure": {
+                                "node_id": nid,
+                                "error": "条件路由缺少已执行节点的结果证据",
+                                "recovery_hint": "检查 checkpoint 中的路由输出后再恢复。",
+                            },
+                            "workflow_status": {"state": "blocked", "message": "路由证据不完整"},
+                        }
+                    selected_by_router = any(
+                        source.node_id in executed
+                        and self._resolve_successor(source, outputs.get(source.node_id, {})) == nid
+                        for source in routers
+                    )
+                    if routers and not selected_by_router:
+                        newly_blocked.append(nid)
+                        progressed = True
+                        continue
+                    return {"next_node": nid, "blocked": newly_blocked}
+                if not progressed:
+                    break
+            remaining = node_ids - executed - blocked - set(newly_blocked)
+            if remaining:
+                return {
+                    "next_node": "__end__",
+                    "blocked": newly_blocked,
+                    "failure": {
+                        "node_id": schedule_id,
+                        "error": "LangGraph 无法找到满足依赖与路由条件的后续节点",
+                        "recovery_hint": "计划已暂停；请检查依赖和分支证据后重新规划。",
+                    },
+                    "workflow_status": {"state": "blocked", "message": "计划执行进入死端"},
+                }
+            return {"next_node": "__end__", "blocked": newly_blocked}
+
+        def route(state: dict[str, Any]) -> str:
+            target = str(state.get("next_node") or "__end__")
+            return target if target in node_ids else "__end__"
+
+        graph.add_node(schedule_id, schedule)
+        graph.add_edge(START, schedule_id)
+        for node in nodes:
+            graph.add_edge(node.node_id, schedule_id)
+        graph.add_conditional_edges(
+            schedule_id,
+            route,
+            {**{node_id: node_id for node_id in node_ids}, "__end__": END},
+        )
+
     @staticmethod
     def _candidates(node: WorkflowNode) -> list[str]:
         out: list[str] = []
@@ -348,9 +544,16 @@ class LangGraphConstructionMixin:
         def route(state: dict[str, Any]) -> Any:
             if state.get("failure"):
                 return "__end__"
+            # Clarification and approval are durable interaction checkpoints. The
+            # graph must stop at them; following a normal edge could execute a
+            # dependent write before the user has answered or approved it.
+            output = (state.get("node_outputs") or {}).get(nid, {})
+            if isinstance(output, dict) and (
+                output.get("requires_confirmation") or output.get("requires_approval")
+            ):
+                return "__end__"
             if candidates:
-                out = (state.get("node_outputs") or {}).get(nid, {})
-                chosen = self._resolve_successor(node, out)
+                chosen = self._resolve_successor(node, output)
                 return chosen if chosen in candidates else "__end__"
             return successors if successors else "__end__"
 
@@ -363,6 +566,7 @@ class LangGraphConstructionMixin:
         plan_node_ids: list[str],
         gate: _ReadersWriterGate,
         effective_schema: StateSchema | None = None,
+        block_unselected: bool = True,
     ) -> Any:
         nid = node.node_id
         candidates = set(self._candidates(node))
@@ -372,7 +576,8 @@ class LangGraphConstructionMixin:
             if nid in (state.get("blocked") or []) or nid in (state.get("executed") or []):
                 return {}
             with gate.execution(node):
-                result = self._execute_node(node, state, max_retries)
+                node_state = {**state, "_langgraph_node_id": nid}
+                result = self._execute_node(node, node_state, max_retries)
             update: dict[str, Any] = {
                 "executed": [nid],
                 "results": [self._result_dict(result)],
@@ -409,7 +614,7 @@ class LangGraphConstructionMixin:
                     "message": result.error,
                     "recovery_hint": result.recovery_hint,
                 }
-            if candidates:
+            if candidates and block_unselected:
                 chosen = self._resolve_successor(node, result.output)
                 to_block = [c for c in candidates if c != chosen]
                 if to_block:

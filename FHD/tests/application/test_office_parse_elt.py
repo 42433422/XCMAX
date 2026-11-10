@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from openpyxl import Workbook, load_workbook
 
 from app.application.elt.optional_template import (
@@ -18,7 +19,7 @@ from app.application.office_parse_app_service import (
     parse_office_file_elt,
     save_office_file_elt,
 )
-from app.application.workflow.chat_deterministic_fast_paths import try_deterministic_chat_reply
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _workbook(path: Path) -> Path:
@@ -173,6 +174,12 @@ def test_save_queues_docking_approval_and_optional_template(tmp_path, monkeypatc
 
 
 def test_chat_import_uses_elt_and_does_not_invent_success(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.domain.shared_services.tools_workflow_excel_ocr_ops import (
+        _registered_router_excel_import,
+    )
+
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     assert is_office_elt_chat_message("@uploads/宗南.xlsx导入数据库") is True
     missing = office_chat_elt_reply(
@@ -180,12 +187,150 @@ def test_chat_import_uses_elt_and_does_not_invent_success(tmp_path, monkeypatch)
     )
     assert missing["success"] is False
     assert missing["response"].startswith("处理失败：")
-    routed = try_deterministic_chat_reply(
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_mod_scope._bound_actor",
+        lambda context: SimpleNamespace(id=2, tenant_id=1),
+    )
+    routed = _registered_router_excel_import(
+        "office_stage",
+        {},
+        {"tenant_id": 1, "local_user_id": 999},
+        "",
         "@uploads/宗南.xlsx导入数据库",
-        runtime_context={"tenant_id": 1, "local_user_id": 2},
     )
     assert routed["success"] is False
     assert routed["response"].startswith("处理失败：")
+    denied = _registered_router_excel_import(
+        "office_stage", {}, {"tenant_id": 2}, "", "@uploads/宗南.xlsx导入数据库"
+    )
+    assert denied["success"] is False
+    assert "身份" in denied["message"]
+
+
+def test_office_tool_submits_for_authenticated_owner(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.domain.shared_services.tools_workflow_excel_ocr_ops import (
+        _registered_router_excel_import,
+    )
+
+    submitted = {}
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_mod_scope._bound_actor",
+        lambda context: SimpleNamespace(id=2, tenant_id=1),
+    )
+    monkeypatch.setattr(
+        "app.application.office_parse_app_service.parse_office_file_elt",
+        lambda path: {"file_name": "a.xlsx", "templates": []},
+    )
+
+    def save(path, **kwargs):
+        submitted.update(path=path, **kwargs)
+        return {"file_name": "a.xlsx"}
+
+    monkeypatch.setattr("app.application.office_parse_app_service.save_office_file_elt", save)
+    result = _registered_router_excel_import(
+        "office_stage", {}, {"tenant_id": 1, "local_user_id": 999}, "", "@uploads/a.xlsx导入数据库"
+    )
+    assert result["success"] is True
+    assert submitted["tenant_id"] == 1 and submitted["owner_user_id"] == 2
+
+
+@pytest.mark.parametrize("launch_failure", [False, True])
+def test_office_tool_runs_through_agent_after_confirmation(
+    trusted_actor, monkeypatch, tmp_path, launch_failure
+):
+    from sqlalchemy import text
+
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    actor = trusted_actor(role="admin")
+    spec = get_tool_action_spec("excel_import", "office_stage")
+    assert spec is not None and spec.risk == "medium" and not spec.idempotent
+    monkeypatch.setattr("app.db.session.SessionLocal", actor.factory)
+    monkeypatch.setattr("app.application.customer_app_service.get_customers_session", actor.factory)
+    from app.application.agent_orchestrator.tool_process import _caller_business_db_url
+
+    assert _caller_business_db_url() == str(actor.factory.kw["bind"].url)
+    message = "@uploads/a.xlsx导入数据库"
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    _workbook(tmp_path / "uploads" / "a.xlsx")
+    plan = PlanGraph(
+        plan_id="office-stage",
+        intent="office_import",
+        nodes=[
+            WorkflowNode(
+                node_id="stage",
+                tool_id="excel_import",
+                action="office_stage",
+                params={},
+                risk="medium",
+                idempotent=False,
+            )
+        ],
+    )
+    context = {**actor.context, "message": message}
+    with tenant_scope(actor.tenant_id):
+        orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+        waiting = orchestrator.start_run_from_plan(
+            user_id=str(actor.user_id), message=message, plan=plan, runtime_context=context
+        )
+        assert waiting.status == "waiting_user" and not waiting.tool_calls
+        completed = orchestrator.continue_run(
+            waiting.run_id, approved_by=str(actor.user_id), approved_step_id="stage"
+        )
+    assert completed is not None and completed.status == "completed", (
+        completed.error if completed else None,
+        [(step.status, step.error, step.output) for step in completed.steps] if completed else None,
+    )
+    assert "已提交审批" in str(completed.steps[0].output)
+    with actor.factory() as db:
+        requests = db.execute(
+            text("SELECT id, applicant_id, tenant_id, status FROM approval_requests")
+        ).all()
+        assert len(requests) == 1
+        request_id, applicant_id, tenant_id, status = requests[0]
+        assert (applicant_id, tenant_id, status) == (actor.user_id, actor.tenant_id, "pending")
+    from app.application.approval_workspace_app_service import approve_request
+    from app.application.elt.auto_ingest_service import AutoIngestService
+
+    launched = []
+
+    def launch(self, batch):
+        launched.append(batch)
+        if launch_failure:
+            raise RuntimeError("synthetic lost launch receipt")
+
+    monkeypatch.setattr(AutoIngestService, "_launch_worker", launch)
+    with tenant_scope(actor.tenant_id):
+        receipt = approve_request(request_id, actor.request, body={}, x_user_id=None)
+    if hasattr(receipt, "body"):
+        import json
+
+        receipt = json.loads(receipt.body)
+    assert receipt["success"] is False, receipt
+    if launch_failure:
+        assert receipt["data"]["workflow_execution"]["code"] == "outcome_unknown"
+    else:
+        assert receipt["accepted"] is True
+    assert len(launched) == 1 and launched[0]["tenant_id"] == actor.tenant_id
+    with actor.factory() as db:
+        status, business = db.execute(
+            text("SELECT status, business_data FROM approval_requests WHERE id = :id"),
+            {"id": request_id},
+        ).one()
+        assert status == "approved"
+        import json
+
+        assert json.loads(business)["workflow_dispatch_claim"]["state"] == "unknown"
+    with tenant_scope(actor.tenant_id):
+        repeated = approve_request(request_id, actor.request, body={}, x_user_id=None)
+    assert repeated.status_code == 400
+    assert len(launched) == 1
 
 
 def test_chat_save_picks_named_sheet_like_a_capsule(monkeypatch):

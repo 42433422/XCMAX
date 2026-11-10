@@ -15,7 +15,6 @@ from app.db.models.approval import ApprovalFlowNode, ApprovalRequest
 
 if TYPE_CHECKING:
     from app.application.agent_orchestrator.run_models import AgentRun
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowRunResult
 
 JsonObject = dict[str, Any]
 WorkspaceResponse = JsonObject | JSONResponse
@@ -108,6 +107,10 @@ class PendingApprovals(Protocol):
     def reject(self, request_id: str, comment: str = "") -> bool: ...
     def get_pending_workflow(self, request_id: str) -> JsonObject | None: ...
     def remove_pending_workflow(self, request_id: str) -> JsonObject | None: ...
+    def create_approval_request(self, *args: Any, **kwargs: Any) -> Any: ...
+    def attach_pending_agent_run(
+        self, request_id: str, *, agent_run_id: str, approved_step_id: str
+    ) -> bool: ...
 
 
 class AgentContinuation(Protocol):
@@ -117,27 +120,11 @@ class AgentContinuation(Protocol):
         *,
         approved_by: str = "",
         approved_step_id: str = "",
+        approval_request_id: str = "",
         runtime_context: JsonObject | None = None,
     ) -> AgentRun | None: ...
 
     def cancel_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None: ...
-
-
-class WorkflowRunner(Protocol):
-    def run(
-        self, plan: PlanGraph, runtime_context: JsonObject | None = None, max_retries: int = 1
-    ) -> WorkflowRunResult: ...
-
-
-class LegacyApprovalTrace(Protocol):
-    def __call__(
-        self,
-        request_id: str,
-        context: JsonObject,
-        result: WorkflowRunResult | None = None,
-        *,
-        run_before_restore: AgentRun | None = None,
-    ) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -145,7 +132,5 @@ class WorkflowBackends:
     approvals: Callable[[], PendingApprovals]
     pending_snapshot: Callable[[str], JsonObject | None]
     execution_snapshot: Callable[[str], JsonObject | None]
-    engine: Callable[[], WorkflowRunner]
     agent: Callable[[], AgentContinuation]
     load_run: Callable[[str], AgentRun | None]
-    legacy_trace: LegacyApprovalTrace

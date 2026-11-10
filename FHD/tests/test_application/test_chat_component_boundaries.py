@@ -12,7 +12,6 @@ from app.application.agent_orchestrator.run_usage import RunUsageLedger
 from app.application.agent_orchestrator.runtime_dependencies import RuntimeDependencies
 from app.application.agent_orchestrator.step_execution import StepExecution
 from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2, ToolValidationResult
-from app.application.ai_chat.agent_workflow_bridge import AgentWorkflowBridge
 from app.application.ai_chat.context_enrichment import (
     inject_excel_vector_context,
     inject_wechat_contact_context,
@@ -133,44 +132,6 @@ def test_checkpoint_resume_records_state_without_reexecuting_completed_nodes():
     ]
 
 
-def test_agentic_bridge_records_observed_results_in_the_injected_repository():
-    repository = InMemoryAgentRunRepository()
-    bridge = AgentWorkflowBridge(
-        repository,
-        lambda output: str(output.get("message", "")),
-        AgentWorkflowBridge.iter_artifact_payloads,
-    )
-    plan = _plan()
-    result = WorkflowRunResult(
-        plan_id=plan.plan_id,
-        success=False,
-        message="query failed",
-        node_results=[
-            NodeExecutionResult(
-                node_id="read",
-                tool_id="products",
-                action="query",
-                success=False,
-                output={"message": "query unavailable"},
-            )
-        ],
-    )
-
-    run = bridge.record_result(
-        user_id="owner",
-        message="查询产品",
-        plan=plan,
-        run_result=result,
-        runtime_context={"session_id": "same"},
-    )
-
-    assert repository.get(run.run_id).status == "failed"
-    assert run.steps[0].error == "query unavailable"
-    assert run.tool_calls[0].metadata["observed"] is True
-    assert run.metadata["tool_call_count"] == 1
-    assert len([event for event in run.events if event.event_type == "run.created"]) == 1
-
-
 def test_injected_validation_rejects_before_dispatch_or_billing():
     repository = InMemoryAgentRunRepository()
     executor = Mock()
@@ -277,7 +238,7 @@ async def test_sync_error_receipt_preserves_status_and_safe_history_for_any_deta
 
     from app.application import planner_compat_service as compat
 
-    body = SimpleNamespace()
+    body = SimpleNamespace(message="触发错误回执测试", context={}, mode="online")
     route = {"provider": "xiaomi", "model": "flash", "route_state": "failed"}
     monkeypatch.setattr(compat, "_prepare_compat_chat_body", lambda request, value: body)
     monkeypatch.setattr(
@@ -294,5 +255,5 @@ async def test_sync_error_receipt_preserves_status_and_safe_history_for_any_deta
     assert failure.value.detail == {"message": message, "route_metadata": route}
     assert persist.call_args.args == (
         body,
-        {"success": False, "response": message, "route_metadata": route},
+        {"success": False, "response": message, "route_metadata": route, "turn_id": None},
     )

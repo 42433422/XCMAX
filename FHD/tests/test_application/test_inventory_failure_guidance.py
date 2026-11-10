@@ -14,14 +14,10 @@ from app.db.db_base import Base
 from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
 from app.domain.shared_services.inventory_service import InventoryService
 from tests.test_application.ai_chat_test_helpers import (
-    _make_node_result,
-    _make_plan,
-    _make_run_result,
-    _make_svc,
-)
-from tests.test_application.test_ai_chat_app_service_branch_cov import (
     _make_agent_run,
+    _make_plan,
     _make_step,
+    _make_svc,
 )
 
 
@@ -35,34 +31,20 @@ def inventory_db():
     engine.dispose()
 
 
-def _format(output, kind, *, tool_id="inventory", action="stock_out"):
+def _format(output, *, tool_id="inventory", action="stock_out"):
     svc, plan = _make_svc(), _make_plan()
-    if kind == "agent":
-        step = _make_step(
-            status="failed",
-            tool_id=tool_id,
-            action=action,
-            output=output,
-            error="synthetic-secret-in-error",
-        )
-        run = _make_agent_run(status="failed", steps=[step])
-        return svc._format_agent_run_response(plan, run)
-    node = _make_node_result(
-        success=False,
+    step = _make_step(
+        status="failed",
         tool_id=tool_id,
         action=action,
         output=output,
         error="synthetic-secret-in-error",
-        retryable=False,
     )
-    return svc._format_workflow_run_response(
-        plan, _make_run_result(success=False, node_results=[node])
-    )
+    return svc._format_agent_run_response(plan, _make_agent_run(status="failed", steps=[step]))
 
 
 @pytest.mark.parametrize("condition", ["no-ledger", "insufficient", "no-warehouse", "ambiguous"])
-@pytest.mark.parametrize("kind", ["agent", "workflow"])
-def test_real_inventory_failure_has_safe_actionable_response(inventory_db, condition, kind):
+def test_real_inventory_failure_has_safe_actionable_response(inventory_db, condition):
     db = inventory_db
     product = Product(name="Synthetic stock", model_number="STOCK-GUIDANCE")
     db.add(product)
@@ -97,7 +79,7 @@ def test_real_inventory_failure_has_safe_actionable_response(inventory_db, condi
     if condition == "insufficient":
         assert float(db.query(InventoryLedger).one().available_quantity) == 1
     result["message"] = "synthetic-secret SQL SELECT * /private/path"
-    response = _format(result, kind)
+    response = _format(result)
     encoded = json.dumps(response, ensure_ascii=False)
     assert response["success"] is False
     assert "synthetic-secret" not in encoded and "SELECT *" not in encoded
@@ -113,7 +95,6 @@ def test_real_inventory_failure_has_safe_actionable_response(inventory_db, condi
         assert "库存管理 → 入库" in response["response"]
 
 
-@pytest.mark.parametrize("kind", ["agent", "workflow"])
 @pytest.mark.parametrize(
     "tool_id,action,code",
     [
@@ -123,9 +104,9 @@ def test_real_inventory_failure_has_safe_actionable_response(inventory_db, condi
         ("products", "query", "inventory_warehouse_missing"),
     ],
 )
-def test_untrusted_or_unrelated_tool_failures_remain_generic(kind, tool_id, action, code):
+def test_untrusted_or_unrelated_tool_failures_remain_generic(tool_id, action, code):
     output = {"success": False, "error_code": code, "message": "synthetic-secret private error"}
-    response = _format(output, kind, tool_id=tool_id, action=action)
+    response = _format(output, tool_id=tool_id, action=action)
     encoded = json.dumps(response, ensure_ascii=False)
     assert "synthetic-secret" not in encoded
     assert "详细信息已记录" in response["response"]
@@ -141,15 +122,11 @@ def test_existing_parameter_reference_guidance_is_preserved():
     assert public_step_error(step) == "前序结果为空"
 
 
-def test_legacy_workflow_does_not_gain_raw_reference_message_passthrough():
-    response = _format(
-        {"error_code": "unresolved_param_reference", "message": "synthetic-secret reference"},
-        "workflow",
-        tool_id="products",
-        action="query",
+def test_reference_message_can_be_suppressed():
+    step = _make_step(
+        output={"error_code": "unresolved_param_reference", "message": "synthetic-secret reference"}
     )
-    assert "synthetic-secret" not in json.dumps(response)
-    assert "详细信息已记录" in response["response"]
+    assert public_step_error(step, allow_reference_message=False) == ""
 
 
 def test_desktop_business_summary_uses_safe_inventory_guidance():

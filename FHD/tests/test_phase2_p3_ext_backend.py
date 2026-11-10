@@ -20,12 +20,6 @@ from app.application.tools.workflow import (
     _import_products_preview_or_execute,
     _read_excel_dataframe,
 )
-from app.application.workflow.planner import (
-    _execute_customers_tool,
-    _execute_products_tool,
-    _execute_shipment_records_tool,
-    execute_tool,
-)
 from app.infrastructure.rag.rag_service import RagQuery
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
 
@@ -70,40 +64,6 @@ def test_read_excel_dataframe_passes_header(mock_read: MagicMock, tmp_path) -> N
     df = _read_excel_dataframe(Path(fp), sheet_name="S1", header_row_1based=2)
     assert len(df) == 1
     mock_read.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# planner execute_tool (mocked services)
-# ---------------------------------------------------------------------------
-
-
-def test_execute_products_tool_list() -> None:
-    with patch("app.bootstrap.get_products_service") as mock_svc:
-        mock_svc.return_value.get_products.return_value = {
-            "success": True,
-            "data": [{"id": 1, "name": "漆"}],
-        }
-        out = _execute_products_tool({"action": "list", "keyword": "漆"})
-    assert out.get("success") is True or "data" in out
-
-
-def test_execute_customers_tool_list() -> None:
-    with patch("app.bootstrap.get_customer_app_service") as service:
-        service.return_value.get_all.return_value = {"success": True, "data": []}
-        out = _execute_customers_tool({"action": "list"})
-    assert out.get("success") is True or isinstance(out, dict)
-
-
-def test_execute_shipment_records_tool() -> None:
-    with patch("app.bootstrap.get_shipment_app_service") as service:
-        service.return_value.get_shipment_records.return_value = []
-        out = _execute_shipment_records_tool({"limit": 5})
-    assert isinstance(out, dict)
-
-
-def test_execute_tool_unknown_returns_error() -> None:
-    out = execute_tool("nonexistent_tool_xyz", {})
-    assert out.get("success") is False or "error" in out or out.get("status") == "error"
 
 
 # ---------------------------------------------------------------------------

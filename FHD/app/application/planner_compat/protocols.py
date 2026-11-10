@@ -44,20 +44,6 @@ class MainlineChat(Protocol):
     ) -> Payload: ...
 
 
-class LegacyChat(Protocol):
-    def __call__(
-        self,
-        message: str,
-        /,
-        *,
-        runtime_context: Context | None,
-        system_prompt: str | None,
-        workspace_root: str,
-        db_write_token: str | None,
-        client: Any,
-    ) -> str | Payload: ...
-
-
 class AttachTrace(Protocol):
     def __call__(
         self,
@@ -70,37 +56,6 @@ class AttachTrace(Protocol):
     ) -> Payload: ...
 
 
-class RunHandle(Protocol):
-    @property
-    def run_id(self) -> str: ...
-
-
-class StartTrace(Protocol):
-    def __call__(
-        self,
-        *,
-        message: str,
-        runtime_context: Context | None,
-        user_id: str | None,
-        source: str | None,
-        channel: str,
-    ) -> RunHandle: ...
-
-
-class FinalizeTrace(Protocol):
-    def __call__(
-        self,
-        run_id: str,
-        payload: Payload,
-        *,
-        message: str,
-        runtime_context: Context | None,
-        user_id: str | None,
-        source: str | None,
-        channel: str,
-    ) -> Payload: ...
-
-
 class ReadAuthorization(Protocol):
     def __call__(
         self, request: Request, *, message: str, provided_token: str | None
@@ -109,8 +64,6 @@ class ReadAuthorization(Protocol):
 
 @dataclass(frozen=True)
 class ChatResponses:
-    reply: ReplyFormatter
-    token_required: Callable[[Payload], Payload]
     timeout: Callable[[float], Payload]
     http_error: Callable[[BaseException], HTTPException]
 
@@ -118,17 +71,11 @@ class ChatResponses:
 @dataclass(frozen=True)
 class ChatBackends:
     mainline: MainlineChat
-    legacy: LegacyChat
-    client: Callable[[Request], Any]
-    use_mainline: Callable[[Context | None], bool]
-    allow_fallback: Callable[[Context | None], bool]
 
 
 @dataclass(frozen=True)
 class ChatTrace:
     attach: AttachTrace
-    start: StartTrace
-    finalize: FinalizeTrace
 
 
 @dataclass(frozen=True)

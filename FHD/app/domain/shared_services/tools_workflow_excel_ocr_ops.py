@@ -262,6 +262,22 @@ def _execute_excel_import_records(records: list[dict[str, Any]]) -> dict:
 def _registered_router_excel_import(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    if action == "office_stage":
+        from app.application.office_parse_app_service import office_chat_elt_reply
+        from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        try:
+            actor = _bound_actor(runtime_context)
+            tenant_id = int(runtime_context.get("tenant_id") or 0)
+            if tenant_id <= 0 or int(actor.tenant_id or 0) != tenant_id:
+                raise AgentModAuthorizationError("企业范围与登录账号不一致")
+            context = {**runtime_context, "local_user_id": int(actor.id), "tenant_id": tenant_id}
+        except (AgentModAuthorizationError, AttributeError, TypeError, ValueError):
+            return {"success": False, "message": "需要有效的企业登录身份"}
+        with tenant_scope(tenant_id):
+            result = office_chat_elt_reply(user_message, context)
+        return result or {"success": False, "message": "原始请求缺少办公文件或导入意图"}
     if action in {"import_delivery_notes", "execute_delivery_etl"}:
         file_path = str(params.get("file_path") or "").strip()
         notes = params.get("notes")

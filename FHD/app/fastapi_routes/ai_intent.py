@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Body, Request
@@ -54,6 +55,21 @@ def _authenticated_chat_body(request: Request, body: dict[str, Any]) -> dict[str
 
 def _public_unified_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Keep provider/tool exception details behind the public chat boundary."""
+    from app.domain.task_lifecycle.results import execution_result_outcome_unknown
+
+    if execution_result_outcome_unknown(payload):
+        message = "业务结果暂时无法核实，请核对原任务和业务数据，勿重复提交。"
+        run_id = str(payload.get("agent_run_id") or payload.get("run_id") or "")[:128]
+        return {
+            "success": False,
+            "message": message,
+            "response": message,
+            "execution_state": "unknown",
+            "requires_reconciliation": True,
+            "retryable": False,
+            **({"run_id": run_id, "agent_run_id": run_id} if run_id else {}),
+            "_http_status": 409,
+        }
     if bool(payload.get("success")):
         return payload
     raw_status = payload.get("_http_status", 500)
@@ -162,6 +178,7 @@ def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=di
             (body.get("source") or "").strip().lower(),
             body.get("mode"),
             body.get("context") or {},
+            request=request,
         )
     )
     status = int(payload.pop("_http_status", 200))
@@ -189,7 +206,17 @@ def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_fact
     if len(messages) > 20:
         return JSONResponse({"success": False, "message": "单次批量最多 20 条"}, status_code=400)
     results: list = []
-    for msg in messages:
+    shared_context = body.get("context") or {}
+    shared_context = shared_context if isinstance(shared_context, dict) else {}
+    request_turn = str(shared_context.get("turn_id") or f"batch_{uuid.uuid4().hex}")[:140]
+    request_task = str(shared_context.get("task_id") or f"batch_{uuid.uuid4().hex}")[:140]
+    for index, msg in enumerate(messages, start=1):
+        message_context = {
+            **shared_context,
+            "turn_id": f"{request_turn}:{index}",
+            "task_id": f"{request_task}:{index}",
+        }
+        trace_body = {**body, "context": message_context}
         payload = _public_unified_chat_payload(
             unified_chat_single_payload(
                 msg,
@@ -197,7 +224,8 @@ def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_fact
                 request.client.host if request.client else "",
                 (body.get("source") or "").strip().lower(),
                 body.get("mode"),
-                body.get("context") or {},
+                message_context,
+                request=request,
             )
         )
         status = int(payload.pop("_http_status", 200))
@@ -207,7 +235,7 @@ def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_fact
             payload,
             message=msg,
             request=request,
-            body=body,
+            body=trace_body,
             channel="chat_unified_batch_alias",
         )
         results.append(payload)

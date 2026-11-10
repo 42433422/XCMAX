@@ -10,11 +10,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.ai_chat_app_service import AIChatApplicationService
-from app.application.normal_chat_dispatch import (
-    build_customers_query_response_dict,
-    build_inventory_alert_response_dict,
-    route_normal_mode_message,
-)
 from app.infrastructure.auth.dependencies import CurrentUser, require_identified_user
 
 
@@ -26,8 +21,7 @@ def _chat_svc() -> AIChatApplicationService:
         ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
+                patch("app.application.ai_chat_app_service.get_approval_service"),
     ):
         return AIChatApplicationService()
 
@@ -116,27 +110,3 @@ def test_im_list_conversations_server_error(im_client_error: TestClient) -> None
 # ---------------------------------------------------------------------------
 # normal_chat — empty result messages
 # ---------------------------------------------------------------------------
-
-
-@patch("app.application.get_material_application_service")
-def test_build_inventory_alert_no_low_stock(mock_get: MagicMock) -> None:
-    mock_get.return_value.get_low_stock_materials.return_value = {"data": []}
-    rr = route_normal_mode_message("库存预警")
-    body = build_inventory_alert_response_dict(rr)
-    assert body is not None
-    assert "正常" in body["response"]
-
-
-def test_build_customers_query_empty_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.mod_sdk import erp_domain_dispatch as erp_domain_dispatch_mod
-
-    monkeypatch.setattr(
-        erp_domain_dispatch_mod,
-        "try_invoke_erp_domain_handler",
-        lambda *a, **kw: {"success": True, "data": []},
-    )
-
-    rr = {"intent": "customers_query", "slots": {"keyword": "不存在公司"}}
-    body = build_customers_query_response_dict(rr)
-    assert body is not None
-    assert "不存在公司" in body["response"]

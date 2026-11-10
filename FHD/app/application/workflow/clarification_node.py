@@ -343,11 +343,8 @@ def _has_multi_unit_text(value: Any) -> bool:
     text = str(value or "")
     if not text:
         return False
-    # 数量+单位：数字（含小数）后紧跟单位字面量
-    quantity_unit = re.compile(rf"\d+(\.\d+)?\s*({_ERP_UNIT_RE})")
-    if quantity_unit.search(text):
-        return True
-    # 多个不同单位字面量同时出现
+    # A single stated unit is concrete input, not ambiguity. Require at least two
+    # distinct unit tokens before asking the user to choose a conversion basis.
     raw_units = re.findall(rf"({_ERP_UNIT_RE})", text)
     return len({u.lower() for u in raw_units}) >= 2
 

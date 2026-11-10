@@ -9,7 +9,7 @@ Cover:
 from __future__ import annotations
 
 from app.application.workflow.checkpointer import WorkflowCheckpointer
-from app.application.workflow.engine import WorkflowEngine
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 

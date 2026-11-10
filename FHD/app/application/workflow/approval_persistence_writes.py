@@ -55,9 +55,15 @@ def persist_workflow_approval(
                     )
                 except (TypeError, ValueError):
                     raise RuntimeError("已有审批申请快照无效") from None
+                stored_snapshot = data.get(facade.SNAPSHOT_KEY) if isinstance(data, dict) else None
+                if isinstance(stored_snapshot, dict):
+                    stored_snapshot = dict(stored_snapshot)
+                    for key in ("agent_run_id", "approved_step_id", "observed_run_id"):
+                        stored_snapshot.pop(key, None)
+                        snapshot.pop(key, None)
                 if not isinstance(data, dict) or any(
                     (
-                        data.get(facade.SNAPSHOT_KEY) != snapshot,
+                        stored_snapshot != snapshot,
                         data.get("plan_id") != snapshot["plan_id"],
                         data.get("node_id") != request.node_id,
                         data.get("tool_id") != request.tool_id,

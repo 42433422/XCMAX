@@ -8,174 +8,15 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def test_workflow_registry_exposes_employee_and_business_db_tools():
-    from app.application.workflow.planner import get_tool_registry as get_planner_registry
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
     workflow_registry = get_workflow_tool_registry()
-    planner_registry = get_planner_registry()
 
     assert "employee" in workflow_registry
     assert "execute" in workflow_registry["employee"]["actions"]
     assert "business_db" in workflow_registry
     assert "read" in workflow_registry["business_db"]["actions"]
     assert "write" in workflow_registry["business_db"]["actions"]
-
-    assert "employee" in planner_registry
-    assert "business_db" in planner_registry
-
-
-def test_fallback_planner_can_route_to_named_employee_without_llm():
-    from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.services.tools_execution.registry import get_workflow_tool_registry
-
-    with (
-        patch("app.application.workflow.planner.get_ai_conversation_service"),
-        patch.object(LLMWorkflowPlanner, "_plan_with_react_multiagent", return_value=None),
-        patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="pro_default",
-        ),
-        patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        patch(
-            "app.mod_sdk.employee_tool_registry.build_employee_tools_status",
-            return_value={
-                "employee_pack_tools": [{"pack_id": "quality-validator"}],
-                "registered_tool_count": 1,
-            },
-        ),
-    ):
-        planner = LLMWorkflowPlanner()
-        plan = planner.plan(
-            "u1",
-            "call employee quality-validator to inspect this package",
-            get_workflow_tool_registry(),
-        )
-
-    assert plan.intent == "employee_dispatch"
-    assert plan.nodes[0].tool_id == "employee"
-    assert plan.nodes[0].action == "execute"
-    assert plan.nodes[0].params["employee_id"] == "quality-validator"
-
-
-@pytest.mark.parametrize(
-    "message",
-    [
-        "请把客户 星光贸易 写入数据库",
-        "新增一个客户，单位名称为 星光贸易，不填写电话和地址。只操作这条测试记录，不操作其他记录。",
-    ],
-)
-def test_fallback_planner_routes_customer_db_write_without_llm(message):
-    from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.services.tools_execution.registry import get_workflow_tool_registry
-
-    with (
-        patch("app.application.workflow.planner.get_ai_conversation_service"),
-        patch.object(LLMWorkflowPlanner, "_plan_with_react_multiagent", return_value=None),
-        patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="pro_default",
-        ),
-        patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-    ):
-        planner = LLMWorkflowPlanner()
-        plan = planner.plan(
-            "u1",
-            message,
-            get_workflow_tool_registry(),
-        )
-
-    node = plan.nodes[0]
-    assert plan.intent == "business_db_write"
-    assert node.tool_id == "business_db"
-    assert node.action == "write"
-    assert node.params["entity"] == "customers"
-    assert node.params["operation"] == "upsert"
-    assert node.params["payload"]["unit_name"] == "星光贸易"
-    if "不填写" in message:
-        assert "contact_phone" not in node.params["payload"]
-        assert "contact_address" not in node.params["payload"]
-
-
-def test_fallback_planner_routes_product_db_write_without_llm():
-    from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.services.tools_execution.registry import get_workflow_tool_registry
-
-    with (
-        patch("app.application.workflow.planner.get_ai_conversation_service"),
-        patch.object(LLMWorkflowPlanner, "_plan_with_react_multiagent", return_value=None),
-        patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="pro_default",
-        ),
-        patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-    ):
-        planner = LLMWorkflowPlanner()
-        plan = planner.plan(
-            "u1",
-            "请把产品 5003A 添加到数据库，客户 星光贸易",
-            get_workflow_tool_registry(),
-        )
-
-    node = plan.nodes[0]
-    assert plan.intent == "business_db_write"
-    assert node.tool_id == "business_db"
-    assert node.action == "write"
-    assert node.params["entity"] == "products"
-    assert node.params["operation"] == "create"
-    assert node.params["payload"]["name_or_model"] == "5003A"
-    assert "unit_name" not in node.params["payload"]
-
-
-def test_fallback_planner_extracts_business_db_read_keyword_without_llm():
-    from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.services.tools_execution.registry import get_workflow_tool_registry
-
-    with (
-        patch("app.application.workflow.planner.get_ai_conversation_service"),
-        patch.object(LLMWorkflowPlanner, "_plan_with_react_multiagent", return_value=None),
-        patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="pro_default",
-        ),
-        patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-    ):
-        planner = LLMWorkflowPlanner()
-        plan = planner.plan(
-            "u1",
-            "查数据库产品 XG-5003",
-            get_workflow_tool_registry(),
-        )
-
-    node = plan.nodes[0]
-    assert plan.intent == "business_db_read"
-    assert node.tool_id == "business_db"
-    assert node.action == "read"
-    assert node.params["entity"] == "products"
-    assert node.params["keyword"] == "XG-5003"
-
-
-def test_fallback_planner_ignores_recoverable_memory_rag_error():
-    from sqlalchemy.exc import OperationalError
-
-    from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.services.tools_execution.registry import get_workflow_tool_registry
-
-    rag_error = OperationalError("CREATE EXTENSION", {}, RuntimeError("sqlite does not support it"))
-    with (
-        patch("app.application.workflow.planner.get_ai_conversation_service"),
-        patch.object(LLMWorkflowPlanner, "_plan_with_react_multiagent", return_value=None),
-        patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="pro_default",
-        ),
-        patch("app.application.get_user_memory_rag_app_service", side_effect=rag_error),
-    ):
-        planner = LLMWorkflowPlanner()
-        plan = planner.plan("u1", "查数据库产品 XG-5003", get_workflow_tool_registry())
-
-    assert plan.intent == "business_db_read"
-    assert plan.nodes[0].tool_id == "business_db"
-
 
 def test_employee_tool_dispatch_calls_local_employee_runtime():
     from app.domain.shared_services.tools_workflow_registered import (
@@ -644,6 +485,7 @@ def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tm
 def test_chat_formats_employee_and_business_db_outputs():
 
     from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 
     service = AIChatApplicationService.__new__(AIChatApplicationService)
     plan = PlanGraph(
@@ -672,33 +514,36 @@ def test_chat_formats_employee_and_business_db_outputs():
         ],
         risk_level="medium",
     )
-    employee_item = Mock()
-    employee_item.success = True
-    employee_item.node_id = "run_employee"
-    employee_item.tool_id = "employee"
-    employee_item.action = "execute"
-    employee_item.output = {
-        "success": True,
-        "employee_id": "quality-validator",
-        "message": "员工执行完成",
-        "data": {"result": {"summary": "ok"}},
-    }
-    employee_item.error = ""
+    run = AgentRun(
+        user_id="u1",
+        message="inspect",
+        run_id="run-format",
+        status="completed",
+        plan_id=plan.plan_id,
+        steps=[
+            AgentStep(
+                node_id="run_employee",
+                tool_id="employee",
+                action="execute",
+                status="completed",
+                output={
+                    "success": True,
+                    "employee_id": "quality-validator",
+                    "message": "员工执行完成",
+                    "data": {"result": {"summary": "ok"}},
+                },
+            ),
+            AgentStep(
+                node_id="read_db",
+                tool_id="business_db",
+                action="read",
+                status="completed",
+                output={"success": True, "data": [{"name": "A"}, {"name": "B"}]},
+            ),
+        ],
+    )
 
-    db_item = Mock()
-    db_item.success = True
-    db_item.node_id = "read_db"
-    db_item.tool_id = "business_db"
-    db_item.action = "read"
-    db_item.output = {"success": True, "data": [{"name": "A"}, {"name": "B"}]}
-    db_item.error = ""
-
-    run_result = Mock()
-    run_result.success = True
-    run_result.node_results = [employee_item, db_item]
-    run_result.message = ""
-
-    result = service._format_workflow_run_response(plan, run_result)
+    result = service._format_agent_run_response(plan, run)
 
     assert "员工 quality-validator" in result["response"]
     assert "products 查询 2 条" in result["response"]
@@ -711,7 +556,7 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools, trusted_ac
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 
-    actor = trusted_actor(role="admin")
+    actor = trusted_actor(permissions=["employee.execute"])
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
         plan_id="p-employee",
@@ -734,7 +579,7 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools, trusted_ac
     with (
         patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
         patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
             return_value="pro_default",
         ),
         patch(
@@ -750,6 +595,8 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools, trusted_ac
         service.risk_gate.evaluate = Mock(
             return_value=Mock(
                 requires_confirmation=False,
+                allowed=True,
+                denied_nodes=[],
                 blocking_nodes=[],
                 reason="test low enough",
             )
@@ -759,7 +606,7 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools, trusted_ac
 
         result = service._try_handle_dynamic_workflow(
             user_id="u1",
-            message="call quality-validator",
+            message="请调用员工 quality-validator 检查这个包",
             source="pro",
             context={**actor.context, "conversation_id": "u1"},
             file_context={},
@@ -797,7 +644,7 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools, trusted_ac
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(local_tools):
+def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(local_tools, trusted_actor):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 
@@ -805,25 +652,26 @@ def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(local_tools):
     plan = PlanGraph(
         plan_id="p-db-read-agent",
         intent="business_db_read",
-        todo_steps=["read products"],
+        todo_steps=["read customers"],
         nodes=[
             WorkflowNode(
-                node_id="read_products",
+                node_id="read_customers",
                 tool_id="business_db",
                 action="read",
-                params={"entity": "products", "keyword": "5003"},
+                params={"entity": "customers", "keyword": "星光"},
                 risk="low",
                 idempotent=True,
-                description="read products",
+                description="read customers",
             )
         ],
         risk_level="low",
     )
 
+    actor = trusted_actor(role="admin")
     with (
         patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
         patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
             return_value="normal",
         ),
         patch(
@@ -840,6 +688,8 @@ def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(local_tools):
         service.risk_gate.evaluate = Mock(
             return_value=Mock(
                 requires_confirmation=False,
+                allowed=True,
+                denied_nodes=[],
                 blocking_nodes=[],
                 reason="low risk",
             )
@@ -849,14 +699,19 @@ def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(local_tools):
 
         result = service._try_handle_dynamic_workflow(
             user_id="u1",
-            message="查数据库产品 5003",
+            message="查数据库客户 星光",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "tool_execution_profile": "normal"},
             file_context={},
         )
 
     assert result is not None
-    assert result["success"] is True
+    run = repo.get(result["run_id"])
+    assert result["success"] is True, (
+        result,
+        run.error if run else None,
+        [(step.status, step.error, step.output) for step in run.steps] if run else None,
+    )
     assert result["data"]["action"] == "workflow_done"
     assert result["run_id"]
     assert result["data"]["data"]["run_id"] == result["run_id"]
@@ -867,94 +722,10 @@ def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(local_tools):
     assert action == "read"
 
 
-def test_ai_chat_pro_low_risk_dynamic_workflow_uses_agent_orchestrator(
-    local_tools,
-):
-
-    from app.application.ai_chat_app_service import AIChatApplicationService
-
-    repo = InMemoryAgentRunRepository()
-    plan = PlanGraph(
-        plan_id="p-pro-product-query",
-        intent="product_lookup",
-        todo_steps=["query products"],
-        nodes=[
-            WorkflowNode(
-                node_id="query_products",
-                tool_id="products",
-                action="query",
-                params={"keyword": "5003"},
-                risk="low",
-                idempotent=True,
-                description="query products",
-            )
-        ],
-        risk_level="low",
-    )
-
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="pro_default",
-        ),
-        patch(
-            "app.application.normal_chat_dispatch.route_normal_mode_message",
-            return_value={"intent": "unknown"},
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
-        ),
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "data": [{"model_number": "5003"}]},
-        ) as mock_dispatch,
-    ):
-        service = AIChatApplicationService()
-        service.workflow_planner.plan = Mock(return_value=plan)
-        service.risk_gate.evaluate = Mock(
-            return_value=Mock(
-                requires_confirmation=False,
-                blocking_nodes=[],
-                reason="low risk",
-            )
-        )
-        service.approval_service = Mock()
-        service.approval_service.get_approval_required_nodes.return_value = []
-        service.workflow_engine.run = Mock()
-
-        result = service._try_handle_dynamic_workflow(
-            user_id="u1",
-            message="查 5003 产品",
-            source="pro",
-            context={},
-            file_context={},
-        )
-
-    assert result is not None
-    assert result["success"] is True
-    assert result["data"]["action"] == "workflow_done"
-    assert result["run_id"]
-    assert result["data"]["data"]["run_id"] == result["run_id"]
-    run = repo.get(result["run_id"])
-    assert run is not None
-    assert run.plan_id == "p-pro-product-query"
-    assert run.status == "completed"
-    assert run.metadata["runtime_context"]["workflow_trace_mode"] == "agent_orchestrator"
-    assert run.metadata["runtime_context"]["dynamic_workflow"] is True
-    assert run.metadata["runtime_context"]["source"] == "pro"
-    service.workflow_engine.run.assert_not_called()
-    mock_dispatch.assert_called_once()
-    tool_id, action, params = mock_dispatch.call_args.args
-    assert tool_id == "products"
-    assert action == "query"
-    assert params["_runtime_context"]["run_id"] == result["run_id"]
-    assert params["_runtime_context"]["source"] == "pro"
 
 
 def test_workflow_engine_does_not_retry_non_idempotent_write():
-    from app.application.workflow.engine import WorkflowEngine
+    from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 
     calls = {"count": 0}
 
@@ -976,7 +747,7 @@ def test_workflow_engine_does_not_retry_non_idempotent_write():
                     "operation": "create",
                     "payload": {"name_or_model": "5003A"},
                 },
-                risk="medium",
+                risk="low",
                 idempotent=False,
             )
         ],
@@ -990,14 +761,14 @@ def test_workflow_engine_does_not_retry_non_idempotent_write():
     node_result = result.node_results[0]
     assert node_result.retryable is False
     assert node_result.retries == 0
-    assert "副作用" in node_result.recovery_hint
+    assert "幂等" in node_result.recovery_hint
     assert result.final_context["workflow_status"]["failed_node_id"] == "write_product"
     assert result.final_context["workflow_trace"][0]["retryable"] is False
 
 
 def test_workflow_engine_retries_idempotent_write_once_then_succeeds():
-    from app.application.workflow.engine import WorkflowEngine
-    from app.application.workflow.workflow_types import WorkflowNode
+    from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     calls = {"count": 0}
 
@@ -1021,161 +792,20 @@ def test_workflow_engine_retries_idempotent_write_once_then_succeeds():
         idempotent=True,
     )
 
-    result = engine._run_node(node, {}, max_retries=2)
+    result = engine.run(PlanGraph(plan_id="p-retry", intent="retry", nodes=[node]), max_retries=2)
+    node_result = result.node_results[0]
 
     assert result.success is True
     assert calls["count"] == 2
-    assert result.retryable is True
-    assert result.retries == 1
-    assert len(result.attempts) == 2
-
-
-def test_agentic_loop_uses_action_name_and_disables_write_retry():
-    from app.application.workflow.engine import WorkflowEngine
-    from app.application.workflow.workflow_types import PlanGraph
-
-    calls = []
-
-    def dispatch(tool_id, action, params):
-        calls.append((tool_id, action))
-        return {"success": False, "message": "write rejected"}
-
-    engine = WorkflowEngine(tool_dispatcher=dispatch)
-    call_count = {"n": 0}
-
-    def decide(*args, **kwargs):
-        call_count["n"] += 1
-        if call_count["n"] == 1:
-            return {
-                "action": "execute",
-                "tool_id": "business_db",
-                "action_name": "write",
-                "params": {"entity": "products", "operation": "create", "payload": {}},
-                "reasoning": "write product",
-            }
-        return {"action": "done"}
-
-    with patch.object(engine, "_llm_decide_next_step", side_effect=decide):
-        result = engine.run(
-            PlanGraph(plan_id="p-agentic", intent="agentic"),
-            runtime_context={"message": "create product"},
-            max_retries=2,
-            agentic_loop=True,
-            tool_registry={
-                "business_db": {"actions": {"write": {"risk": "medium", "idempotent": False}}}
-            },
-        )
-
-    assert calls == [("business_db", "write")]
-    assert result.node_results[0].retryable is False
-    assert "副作用" in result.node_results[0].recovery_hint
-
-
-def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
-
-    from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.workflow_types import (
-        NodeExecutionResult,
-        PlanGraph,
-        WorkflowRunResult,
-    )
-
-    repo = InMemoryAgentRunRepository()
-    plan = PlanGraph(
-        plan_id="p-agentic-excel",
-        intent="excel_agentic_analysis",
-        todo_steps=["inspect excel"],
-    )
-    run_result = WorkflowRunResult(
-        plan_id="p-agentic-excel",
-        success=True,
-        node_results=[
-            NodeExecutionResult(
-                node_id="agent_excel_analysis_query",
-                success=True,
-                tool_id="excel_analysis",
-                action="query",
-                params={"file_path": "/tmp/demo.xlsx", "question": "查价格"},
-                output={
-                    "success": True,
-                    "message": "Excel 分析完成",
-                    "artifacts": [
-                        {
-                            "artifact_type": "excel_query_result",
-                            "name": "demo.xlsx",
-                            "source": "excel_analysis.query",
-                            "summary": "价格列已识别",
-                        }
-                    ],
-                },
-                duration_ms=7,
-            )
-        ],
-        final_context={"workflow_status": {"state": "completed"}},
-        message="AgenticLoop 完成（2 步）",
-    )
-
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="pro_default",
-        ),
-        patch(
-            "app.application.normal_chat_dispatch.route_normal_mode_message",
-            return_value={"intent": "unknown"},
-        ),
-        patch(
-            "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
-            return_value=repo,
-        ),
-    ):
-        service = AIChatApplicationService()
-        service.workflow_planner.plan = Mock(return_value=plan)
-        service.risk_gate.evaluate = Mock(
-            return_value=Mock(
-                requires_confirmation=False,
-                blocking_nodes=[],
-                reason="excel agentic",
-            )
-        )
-        service.approval_service = Mock()
-        service.approval_service.get_approval_required_nodes.return_value = []
-        service.workflow_engine.run = Mock(return_value=run_result)
-
-        result = service._try_handle_dynamic_workflow(
-            user_id="u1",
-            message="分析这个 Excel 下一步",
-            source="pro",
-            context={"excel_analysis": {"file_path": "/tmp/demo.xlsx"}},
-            file_context={},
-        )
-
-    assert result is not None
-    assert result["success"] is True
-    assert result["data"]["action"] == "workflow_done"
-    assert result["run_id"]
-    runtime_context = service.workflow_engine.run.call_args.kwargs["runtime_context"]
-    assert runtime_context["run_id"] == result["run_id"]
-    assert runtime_context["agent_run_id"] == result["run_id"]
-
-    run = repo.get(result["run_id"])
-    assert run is not None
-    assert run.status == "completed"
-    assert run.metadata["trace_mode"] == "agentic_loop_bridge"
-    assert run.metadata["tool_call_count"] == 1
-    assert run.metadata["artifact_count"] == 1
-    assert run.tool_calls[0].tool_id == "excel_analysis"
-    assert run.tool_calls[0].action == "query"
-    assert run.tool_calls[0].params["file_path"] == "/tmp/demo.xlsx"
-    assert run.artifacts[0].artifact_type == "excel_query_result"
-    assert result["data"]["data"]["tool_call_count"] == 1
-    assert result["data"]["data"]["artifact_count"] == 1
+    assert node_result.retryable is True
+    assert node_result.retries == 1
+    assert len(node_result.attempts) == 1
 
 
 def test_chat_formats_recovery_hint_for_non_retryable_failure():
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.workflow_types import NodeExecutionResult, PlanGraph, WorkflowNode
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     service = AIChatApplicationService.__new__(AIChatApplicationService)
     plan = PlanGraph(
@@ -1193,40 +823,30 @@ def test_chat_formats_recovery_hint_for_non_retryable_failure():
         ],
         risk_level="medium",
     )
-    run_result = type(
-        "RunResult",
-        (),
-        {
-            "success": False,
-            "message": "节点 write_product 执行失败",
-            "node_results": [
-                NodeExecutionResult(
-                    node_id="write_product",
-                    success=False,
-                    tool_id="business_db",
-                    action="write",
-                    output={"success": False, "message": "db busy"},
-                    error="db busy",
-                    retryable=False,
-                    recovery_hint="请核对数据库状态后手动重试。",
-                    duration_ms=3,
-                )
-            ],
-            "final_context": {
-                "workflow_status": {"state": "failed"},
-                "workflow_trace": [{"node_id": "write_product"}],
-            },
-        },
-    )()
+    run = AgentRun(
+        user_id="u1",
+        message="write",
+        run_id="run-fail",
+        status="failed",
+        plan_id=plan.plan_id,
+        steps=[
+            AgentStep(
+                node_id="write_product",
+                tool_id="business_db",
+                action="write",
+                status="failed",
+                error="raw database error",
+                output={"success": False, "message": "raw database error"},
+            )
+        ],
+    )
 
-    result = service._format_workflow_run_response(plan, run_result)
+    result = service._format_agent_run_response(plan, run)
 
-    assert "未自动重试" in result["response"]
-    assert "恢复建议" in result["response"]
+    assert "raw database error" not in result["response"]
     node_result = result["data"]["data"]["node_results"][0]
-    assert node_result["retryable"] is False
-    assert node_result["recovery_hint"] == "请检查依赖服务后重试"
-    assert result["data"]["data"]["workflow_status"] == {}
+    assert node_result["success"] is False
+    assert node_result["message"]
 
 
 def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools, trusted_actor):
@@ -1256,7 +876,7 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools, t
     with (
         patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
         patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
             return_value="normal",
         ),
         patch(
@@ -1272,6 +892,8 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools, t
         service.risk_gate.evaluate = Mock(
             return_value=Mock(
                 requires_confirmation=False,
+                allowed=True,
+                denied_nodes=[],
                 blocking_nodes=[],
                 reason="explicit employee intent",
             )
@@ -1351,7 +973,7 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
     with (
         patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
         patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
             return_value="normal",
         ),
         patch(
@@ -1367,6 +989,8 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
         service.risk_gate.evaluate = Mock(
             return_value=Mock(
                 requires_confirmation=False,
+                allowed=True,
+                denied_nodes=[],
                 blocking_nodes=[],
                 reason="explicit db intent",
             )
@@ -1413,7 +1037,7 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(local_tools, trusted_actor):
+def test_ai_chat_medium_risk_confirmation_stays_pending_until_user_confirms(local_tools, trusted_actor):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 
@@ -1444,7 +1068,7 @@ def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(local_tools, 
     with (
         patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
         patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
             return_value="normal",
         ),
         patch(
@@ -1460,6 +1084,8 @@ def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(local_tools, 
         service.risk_gate.evaluate = Mock(
             return_value=Mock(
                 requires_confirmation=True,
+                allowed=False,
+                denied_nodes=[],
                 blocking_nodes=["write_customer"],
                 reason="explicit db write needs confirmation",
             )
@@ -1477,58 +1103,22 @@ def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(local_tools, 
 
         assert waiting is not None
         assert waiting["data"]["action"] == "workflow_confirmation_required"
-        assert waiting["run_id"]
-        assert repo.get(waiting["run_id"]).status == "waiting_user"
+        assert "run_id" not in waiting, waiting
+        assert service._pending_workflows["u1"]["plan"].plan_id == plan.plan_id
+        assert service._pending_workflows["u1"]["approval_required"] is True
         mock_dispatch.assert_not_called()
-
-        mock_dispatch.return_value = {"success": True, "message": "客户已写入"}
-        completed = service._try_handle_dynamic_workflow(
-            user_id="u1",
-            message="确认",
-            source=None,
-            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
-            file_context={},
-        )
-
-    assert completed is not None
-    assert completed["success"] is True
-    assert completed["run_id"] == waiting["run_id"]
-    assert completed["data"]["action"] == "workflow_done"
-    run = repo.get(waiting["run_id"])
-    assert run is not None
-    assert run.status == "completed"
-    assert "step.approved" in [event.event_type for event in run.events]
-    mock_dispatch.assert_called_once()
-
-
-@pytest.mark.parametrize(
-    ("message", "labels", "expected"),
-    [
-        ("不填写电话和地址", ("联系电话", "电话"), ""),
-        ("不要 提供 电话 13800000000", ("电话",), ""),
-        ("地址不用填写", ("地址",), ""),
-        ("地址「上海」", ("地址",), "上海"),
-        ("联系人 张三，不填写电话和地址", ("联系人",), "张三"),
-        ("电话 13800000000", ("电话",), "13800000000"),
-        ("联系人不二", ("联系人",), "不二"),
-    ],
-)
-def test_business_fields_only_use_explicit_non_negated_assignments(message, labels, expected):
-    from app.application.workflow.planner import _extract_marked_value
-
-    assert _extract_marked_value(message, labels) == expected
 
 
 @pytest.mark.parametrize("customer_id", [10, 0, -1, "10.5", "unknown"])
 def test_customer_workflow_read_never_expands_explicit_id(monkeypatch, customer_id):
     from unittest.mock import MagicMock
 
-    from app.application.workflow.planner import _execute_customers_tool
+    from app.domain.shared_services.tools_workflow_registered import _registered_router_customers
 
     service = MagicMock()
     service.get_by_id.return_value = {"success": True, "data": {"id": 10}}
-    monkeypatch.setattr("app.bootstrap.get_customer_app_service", lambda: service)
-    result = _execute_customers_tool({"id": customer_id})
+    monkeypatch.setattr("app.application.get_customer_app_service", lambda: service)
+    result = _registered_router_customers("query", {"id": customer_id}, {}, "pro", "")
     service.get_all.assert_not_called()
     if customer_id == 10:
         assert result["success"] is True

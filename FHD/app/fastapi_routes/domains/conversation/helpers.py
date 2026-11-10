@@ -24,9 +24,6 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run as attach_chat_trace_run,
 )
-from app.application.conversation import (
-    chat_stream_sse_events as chat_stream_sse_events,
-)
 from app.application.modstore_conversation_app import (
     create_modstore_openai_client_from_request as create_modstore_openai_client_from_request,
 )
@@ -260,6 +257,37 @@ def _model_upstream_http_exc(status_code: int) -> HTTPException | None:
 
 
 def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
+    from app.infrastructure.llm.model_admission import (
+        ModelCircuitOpenError,
+        ModelConcurrencyLimitError,
+        ModelRateLimitError,
+    )
+    from app.utils.resilience.rate_limiter import RateLimitBackendError
+
+    if isinstance(exc, ModelRateLimitError):
+        return HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+    if isinstance(exc, ModelConcurrencyLimitError):
+        return HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+    if isinstance(exc, ModelCircuitOpenError):
+        return HTTPException(
+            status_code=503,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+    if isinstance(exc, RateLimitBackendError):
+        return HTTPException(
+            status_code=503,
+            detail="模型限流服务暂不可用，本次模型请求已拒绝，请稍后重试。",
+            headers={"Retry-After": "5"},
+        )
     if isinstance(exc, MarketModelError):
         if exc.status_code == 402 or "余额不足" in str(exc):
             return HTTPException(
@@ -469,9 +497,6 @@ from app.fastapi_routes.domains.conversation.stream_helpers import (
 )
 from app.fastapi_routes.domains.conversation.stream_helpers import (
     _thinking_steps_from_planner_stream_text as _thinking_steps_from_planner_stream_text,
-)
-from app.fastapi_routes.domains.conversation.stream_helpers import (
-    _xcagi_guarded_planner_stream_events as _xcagi_guarded_planner_stream_events,
 )
 from app.fastapi_routes.domains.conversation.stream_helpers import (
     _xcagi_planner_stream_bytes as _xcagi_planner_stream_bytes,

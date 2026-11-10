@@ -92,8 +92,10 @@ class EmployeeAgent:
         payload: dict[str, Any],
         manifest: dict[str, Any],
         config: dict[str, Any],
+        runtime_context: dict[str, Any] | None = None,
+        authenticated_user_id: int = 0,
     ) -> dict[str, Any] | None:
-        if payload.get("skip_collaboration"):
+        if (runtime_context or {}).get("employee_collaboration_skip") is True:
             return None
         try:
             from app.application.employee_runtime.metrics import record_orchestration
@@ -106,24 +108,41 @@ class EmployeeAgent:
             if not deps:
                 return None
             record_orchestration(self.employee_id)
+            trusted = dict(runtime_context or {})
+            try:
+                trusted_user_id = int(trusted.get("user_id") or 0)
+            except (TypeError, ValueError):
+                trusted_user_id = 0
+            trusted.update(
+                task=task,
+                employee_id=self.employee_id,
+                user_id=trusted_user_id if trusted_user_id > 0 else authenticated_user_id,
+                workspace_root=trusted.get("workspace_root") or payload.get("workspace_root"),
+                session_id=trusted.get("session_id") or payload.get("session_id"),
+            )
             return orch.run_upstream(
                 self.employee_id,
                 task,
                 manifest=manifest,
                 config=config,
-                runtime_context={
-                    "task": task,
-                    "employee_id": self.employee_id,
-                    "user_id": payload.get("user_id"),
-                    "workspace_root": payload.get("workspace_root"),
-                    "session_id": payload.get("session_id"),
-                },
+                runtime_context=trusted,
             )
         except ImportError:
-            return None
+            logger.exception("employee collaboration runtime unavailable")
+            return {
+                "skipped": False,
+                "success": False,
+                "error_code": "employee_collaboration_unavailable",
+                "message": "声明的上游员工协作不可用，已阻止当前员工继续执行",
+            }
         except RECOVERABLE_ERRORS:
-            logger.debug("upstream collaboration skipped", exc_info=True)
-            return None
+            logger.exception("required employee collaboration failed")
+            return {
+                "skipped": False,
+                "success": False,
+                "error_code": "employee_collaboration_failed",
+                "message": "声明的上游员工协作失败，已阻止当前员工继续执行",
+            }
 
     def _perceive(self, config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -209,11 +228,35 @@ class EmployeeAgent:
         user_id: int = 0,
         workspace_root: str | None = None,
         session_id: str | None = None,
+        runtime_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         employee_id = self.employee_id
         t0 = time.perf_counter()
         payload = dict(input_data or {})
         payload.pop("workspace_root", None)
+        trusted_context = dict(runtime_context or {})
+        for key in (
+            "invoke_mode",
+            "mode",
+            "source",
+            "client_surface",
+            "root_employee_id",
+            "upstream_outputs",
+            "skip_collaboration",
+        ):
+            payload.pop(key, None)
+        if trusted_context.get("employee_collaboration_run") is True:
+            outputs = trusted_context.get("node_outputs")
+            payload.update(
+                invoke_mode="collaboration_context",
+                source="employee_collaboration",
+                client_surface="employee_runtime",
+                root_employee_id=str(trusted_context.get("employee_id") or employee_id),
+                upstream_outputs=dict(outputs) if isinstance(outputs, dict) else {},
+                skip_collaboration=True,
+            )
+        elif trusted_context.get("employee_collaboration_skip") is True:
+            payload["skip_collaboration"] = True
         if workspace_root:
             payload["workspace_root"] = workspace_root
         from app.application.employee_runtime.task_continuity import maybe_continue_employee_task
@@ -269,7 +312,36 @@ class EmployeeAgent:
             if not is_interactive_chat_payload(payload) and not is_collaboration_context_payload(
                 payload
             ):
-                upstream = self._run_upstream_collaboration(task, payload, manifest, config)
+                upstream = self._run_upstream_collaboration(
+                    task,
+                    payload,
+                    manifest,
+                    config,
+                    trusted_context,
+                    authenticated_user_id=user_id,
+                )
+            if upstream and upstream.get("success") is False:
+                from app.application.employee_runtime.metrics import record_employee_run
+
+                message = str(upstream.get("message") or "上游员工协作未完成，当前员工未执行")
+                record_employee_run(
+                    employee_id,
+                    success=False,
+                    blocked=True,
+                    task=task,
+                    summary=message,
+                )
+                return {
+                    "employee_id": employee_id,
+                    "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
+                    "success": False,
+                    "error_code": str(
+                        upstream.get("error_code") or "employee_collaboration_failed"
+                    ),
+                    "error": message,
+                    "collaboration": upstream,
+                    "executed_at": datetime.now(UTC).isoformat(),
+                }
             if upstream and upstream.get("node_outputs"):
                 payload["upstream_outputs"] = upstream["node_outputs"]
                 payload["collaboration"] = {

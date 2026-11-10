@@ -1,12 +1,10 @@
+import asyncio
 import logging
 import os
 import time
 from typing import Any, cast
 
-from app.domain.shared_services.conversation.api import ApiMixin
 from app.domain.shared_services.conversation.context import ContextMixin, ConversationContext
-from app.domain.shared_services.conversation.handlers import HandlersMixin
-from app.domain.shared_services.conversation.intent import IntentMixin
 from app.domain.shared_services.conversation.prompts import PromptsMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -30,13 +28,9 @@ def _resolve_history_max() -> int:
     return max(10, value)
 
 
-class AIConversationService(
-    ContextMixin,
-    IntentMixin,
-    HandlersMixin,
-    PromptsMixin,
-    ApiMixin,
-):
+class AIConversationService(ContextMixin, PromptsMixin):
+    """Model-provider configuration and context adapter for the unified chat service."""
+
     def __init__(self):
         self.contexts: dict[str, ConversationContext] = {}
 
@@ -148,39 +142,8 @@ class AIConversationService(
         self._llm_mode = llm_init_mode
         logger.info("🎯 LLM初始化完成，运行模式: %s", llm_init_mode)
 
-        from app.domain.shared_services.deepseek_intent_service import HybridIntentWithDeepSeek
-        from app.domain.shared_services.intent_confirmation_service import get_confirmation_service
-        from app.domain.shared_services.intent_service import recognize_intents
-        from app.domain.shared_services.task_agent import get_task_agent
-        from app.domain.shared_services.unified_intent_recognizer import (
-            get_unified_intent_recognizer,
-        )
         from app.domain.shared_services.user_memory_service import get_user_memory_service
-        from app.domain.shared_services.user_preference_service import get_user_preference_service
-
-        use_distilled = os.environ.get("USE_DISTILLED_MODEL", "0") == "1"
-        if use_distilled:
-            logger.info("已启用蒸馏意图识别开关：USE_DISTILLED_MODEL=1")
-
-        self.intent_service = recognize_intents
-        self.online_intent_service = HybridIntentWithDeepSeek(
-            use_deepseek=True,
-            rule_priority=True,
-            confidence_threshold=0.6,
-            use_distilled=use_distilled,
-        )
-        self.offline_intent_service = HybridIntentWithDeepSeek(
-            use_deepseek=False,
-            rule_priority=True,
-            confidence_threshold=0.6,
-            use_distilled=True,
-        )
-        self.deepseek_intent_service = self.online_intent_service
-        self.unified_recognizer = get_unified_intent_recognizer()
-        self.confirmation_service = get_confirmation_service()
-        self.task_agent = get_task_agent()
         self.user_memory = get_user_memory_service()
-        self.user_preference_service = get_user_preference_service()
         self.persona_service = None  # 默认 None，由外部注入
 
     def add_to_history(self, user_id: str, role: str, content: str) -> bool:
@@ -334,42 +297,31 @@ class AIConversationService(
         context: dict[str, Any] | None = None,
         source: str | None = None,
     ) -> dict[str, Any]:
-        from app.application.agent_task_context import scoped_conversation_user_id
-
-        user_id = scoped_conversation_user_id(user_id, context)
         try:
-            conv_context = await self._get_or_create_context_async(user_id, context, message)
+            from app.application import get_ai_chat_app_service
 
-            intent_result = await self._recognize_intent(message, source, user_id, context)
-            intent_result = self._enhance_intent_slots(message, intent_result, user_id)
-
-            logger.info(
-                "[INTENT_RESULT] final_intent=%s, primary_intent=%s, tool_key=%s, slots=%s, intent_source=%s",
-                intent_result.get("final_intent"),
-                intent_result.get("primary_intent"),
-                intent_result.get("tool_key"),
-                intent_result.get("slots"),
-                intent_result.get("intent_source"),
+            request_context = dict(context or {})
+            payload = await asyncio.to_thread(
+                get_ai_chat_app_service().process_chat,
+                user_id,
+                message,
+                request_context,
+                source,
+                request_context.get("file_context")
+                if isinstance(request_context.get("file_context"), dict)
+                else {},
             )
-            self._update_context_from_intent(conv_context, intent_result)
-
-            if result := await self._handle_special_intents(
-                message, intent_result, conv_context, user_id
-            ):
-                return self._maybe_attach_kitten_web(conv_context, result)
-
-            if result := await self._handle_pending_intent(
-                message, intent_result, conv_context, user_id
-            ):
-                return self._maybe_attach_kitten_web(conv_context, result)
-
-            out = await self._execute_or_generate_response(
-                message, intent_result, conv_context, user_id
-            )
-            return self._maybe_attach_kitten_web(conv_context, out)
+            if not isinstance(payload, dict):
+                return {"success": False, "text": "统一聊天服务没有返回有效结果", "action": "error"}
+            data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+            return {
+                **payload,
+                "text": str(payload.get("response") or payload.get("message") or ""),
+                "action": str(data.get("action") or "chat_reply"),
+            }
 
         except RECOVERABLE_ERRORS as e:
-            logger.error("处理聊天消息失败：%s", e)
+            logger.error("统一聊天服务处理消息失败：%s", e)
             return {
                 "text": f"抱歉，处理消息时出现问题：{str(e)}",
                 "action": "error",

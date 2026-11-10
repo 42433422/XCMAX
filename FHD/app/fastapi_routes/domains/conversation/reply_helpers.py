@@ -45,16 +45,14 @@ def _xcagi_compat_reply_payload(
             raw.setdefault("tool_params", dict(last_record.get("params") or {}))
             raw["_tool_records"] = reply_records
         else:
-            from app.application.conversation import get_last_tool_result
-
-            raw = get_last_tool_result()
+            raw = {}
         if isinstance(raw, dict) and raw:
             last_result = raw
             raw_records = raw.get("_tool_records")
             records = raw_records if isinstance(raw_records, list) else []
             if records:
                 tool_data["legacy_tool_records"] = records
-            from app.application.tools import flatten_tool_result_dict_for_client
+            from app.application.tools.tool_result_client import flatten_tool_result_dict_for_client
 
             tool_data = flatten_tool_result_dict_for_client(raw)
             if records:

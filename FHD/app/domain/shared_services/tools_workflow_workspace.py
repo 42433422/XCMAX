@@ -367,7 +367,7 @@ def _registered_router_employee(
             "message": f"已发现 {status.get('registered_tool_count', 0)} 个可调用员工",
             "data": status,
         }
-    if action != "execute":
+    if action not in {"execute", "context"}:
         return {"success": False, "message": f"未注册的 employee 动作: {action}"}
     employee_id = str(
         params.get("employee_id")
@@ -413,6 +413,28 @@ def _registered_router_employee(
         if key in {"employee_id", "pack_id", "tool_name", "id", "task", "user_request", "input"}:
             continue
         payload.setdefault(key, value)
+    for key in (
+        "invoke_mode",
+        "mode",
+        "source",
+        "client_surface",
+        "root_employee_id",
+        "upstream_outputs",
+        "skip_collaboration",
+    ):
+        payload.pop(key, None)
+    if action == "context" or runtime_context.get("employee_collaboration_run") is True:
+        runtime_context = dict(runtime_context)
+        runtime_context["employee_collaboration_run"] = True
+        outputs = runtime_context.get("node_outputs")
+        payload.update(
+            invoke_mode="collaboration_context",
+            source="employee_collaboration",
+            client_surface="employee_runtime",
+            root_employee_id=str(runtime_context.get("employee_id") or ""),
+            upstream_outputs=dict(outputs) if isinstance(outputs, dict) else {},
+            skip_collaboration=True,
+        )
     payload.setdefault("source", "workflow_tool.employee")
     payload.setdefault("user_message", user_message)
     workspace_root = str(runtime_context.get("workspace_root") or "").strip() or None
@@ -430,6 +452,7 @@ def _registered_router_employee(
         user_id=numeric_user_id,
         workspace_root=workspace_root,
         session_id=str(runtime_context.get("session_id") or params.get("session_id") or "") or None,
+        runtime_context=runtime_context,
     )
     ok = bool(result.get("success")) and (not bool(result.get("blocked_by_risk_gate")))
     return {

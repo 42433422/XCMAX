@@ -1,4 +1,4 @@
-"""员工写操作审批门（接 ApprovalGatedEngine 语义，轻量 tool_call 级 gate）。"""
+"""员工写操作审批门，使用确定性风险策略和审批服务。"""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ def build_write_approval_gate(
     """返回 agent_loop gate：(tool_name, args) -> {ok, reason}。
 
     代码修改工具（``patch_file`` / ``write_file``）统一委托 autonomy_guard；
-    写库类业务工具（``import_excel_to_database`` / ``products_bulk_import``）只接受
-    ApprovalGatedEngine 中已持久化的审批结果。模型参数和员工输入不能自我声明批准，
+    写库类业务工具（``import_excel_to_database`` / ``products_bulk_import``）只能由
+    ApprovalService 创建并持久化审批记录。模型参数和员工输入不能自我声明批准，
     也不能携带服务端写令牌绕过审批。
     """
     payload = dict(input_data or {})
@@ -49,10 +49,7 @@ def build_write_approval_gate(
                 "risk_decision": decision.to_dict(),
             }
         try:
-            from app.application.workflow.approval_gated_engine import (
-                ApprovalGatedEngine,
-            )
-            from app.application.workflow.engine import WorkflowEngine
+            from app.application.workflow.approval_policy import WorkflowApprovalPolicy
             from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
             from resources.config.risk_actions_loader import get_action_risk
 
@@ -74,10 +71,8 @@ def build_write_approval_gate(
                 ],
                 risk_level=normalize_workflow_risk(risk),
             )
-            gated = ApprovalGatedEngine(WorkflowEngine(lambda **kw: {"success": True}))
-            gated_decision = gated.evaluate_plan(
-                plan, runtime_context=payload, strategy="interactive"
-            )
+            gated = WorkflowApprovalPolicy()
+            gated_decision = gated.evaluate_plan(plan, runtime_context=payload)
             if gated_decision.all_approved and not gated_decision.any_rejected:
                 return {"ok": True}
             if gated_decision.pending_approval:

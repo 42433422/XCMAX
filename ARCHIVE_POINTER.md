@@ -138,3 +138,6 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 同日，覆盖率文档的旧测量快照外置至 `~/XCMAX-archives/docs-20261110-coverage-snapshot/`；现行文档指向可执行门槛与测量入口。
 
 同日，含过期 Node 要求和 API 示例的旧前端 README 外置至 `~/XCMAX-archives/docs-20261110-frontend-readme/`；现行入口以 `package.json` 与 Vite 配置为准。
+## LangGraph 单一执行器收敛（2026-11-10）
+
+未登记且与当前实现冲突的 LangGraph 迁移基线及运行时迁移设计已校验外置至 `~/XCMAX-archives/docs-20261110-langgraph-single-runtime/`；文件 SHA256 与字节数见该目录 `MANIFEST.json`。当前运行时由 `FHD/app/infrastructure/workflow/langgraph_runtime.py` 与 `FHD/app/application/agent_orchestrator/orchestrator.py` 实现。

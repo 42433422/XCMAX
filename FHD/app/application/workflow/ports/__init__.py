@@ -58,7 +58,6 @@ class WorkflowRuntime(Protocol):
         plan: PlanGraph,
         runtime_context: dict[str, Any] | None = None,
         max_retries: int = 1,
-        agentic_loop: bool = False,
         tool_registry: dict[str, Any] | None = None,
         user_id: str | None = None,
         state_schema: StateSchema | None = None,

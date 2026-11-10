@@ -43,11 +43,15 @@ class PersonaLlmClient:
 
         client = get_openai_compatible_client()
         model = resolve_chat_model()
-        resp = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=self._temperature,
-            max_tokens=self._max_tokens,
-        )
+        from app.infrastructure.llm.model_admission import admit_model_call, model_call_slot
+
+        with model_call_slot(None, profile="persona"):
+            admit_model_call(None, profile="persona")
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=self._temperature,
+                max_tokens=self._max_tokens,
+            )
         content = resp.choices[0].message.content
         return {"choices": [{"message": {"content": content}}]}

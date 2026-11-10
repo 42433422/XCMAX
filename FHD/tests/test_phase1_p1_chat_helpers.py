@@ -13,7 +13,6 @@ from app.fastapi_routes.domains.conversation.helpers import (
     _ensure_vector_index_if_needed,
     _message_requires_db_read_token,
     _xcagi_chat_http_exc,
-    _xcagi_guarded_planner_stream_events,
 )
 from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _chat_db_read_grace_seconds_left,

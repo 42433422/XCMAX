@@ -359,205 +359,25 @@ def voice_warm():
 
 
 # ---------------------------------------------------------------------------
-# 语音指令端到端：ASR → 意图识别 → 可选自动执行
+# 语音指令统一进入聊天应用服务与 LangGraph
 # ---------------------------------------------------------------------------
-
-# 高风险意图白名单：即使 auto_execute=True 也必须二次确认才执行。
-# delete / clear_all 为典型 destructive 操作；customer_edit 改客户档案、wechat_send 对外发消息，
-# 风险等级同样高，统一拒绝自动执行。
-HIGH_RISK_INTENTS: frozenset[str] = frozenset(
-    {
-        "delete",
-        "clear_all",
-        "customer_edit",
-        "wechat_send",
-    }
-)
-
-# 意图置信度阈值：高于此值才允许 auto_execute 直接执行；低于则只返回意图供前端二次确认。
-INTENT_CONFIDENCE_THRESHOLD: float = 0.7
 
 
 def _transcribe_audio(file_path: Path, language: str | None = None) -> str:
-    """对落盘的音频文件做 ASR，返回纯文本（不带 language / audio_seconds 等元信息）。
-
-    供 /api/voice/command 复用：把 _run_transcribe 的字典结果压平成字符串，
-    便于上层与意图识别链路串联。
-    """
+    """把 ASR 结果压成纯文本，供 /command 与 /transcribe 共用。"""
     result = _run_transcribe(file_path, language)
     return (result.get("text") or "").strip()
-
-
-def _recognize_intent(text: str) -> dict[str, Any]:
-    """对转写文本做意图识别，返回统一结构。
-
-    优先复用规则引擎（``app.domain.shared_services.intent_service.recognize_intents``），
-    规则未命中 tool_key 时再尝试 unified_intent_recognizer（覆盖蒸馏/BERT/DeepSeek 等慢路径，
-    失败回退为纯规则结果）。规则引擎同步、轻量、无外部依赖，适合语音指令场景。
-
-    返回字典字段：
-    - tool_key: 命中的工具 key（如 ``shipment_generate``）；未命中为 None
-    - primary_intent: 主意图 id
-    - confidence: 0~1 浮点；规则引擎命中给 0.85，heuristic fallback 给 0.6，未命中 0.0
-    - slots: 槽位 dict
-    - is_negated: 是否否定式（如 "不要发货"）
-    - is_greeting / is_goodbye / is_help / is_likely_unclear: 语义标记
-    - intent_hints: 附加 hint 列表
-    - source: 识别来源（rule / unified / unclear）
-    """
-    text_norm = (text or "").strip()
-    if not text_norm:
-        return {
-            "tool_key": None,
-            "primary_intent": None,
-            "confidence": 0.0,
-            "slots": {},
-            "is_negated": False,
-            "is_greeting": False,
-            "is_goodbye": False,
-            "is_help": False,
-            "is_likely_unclear": True,
-            "intent_hints": [],
-            "source": "empty",
-        }
-
-    try:
-        from app.application.business_route_facade import recognize_business_intents
-
-        rule_result = recognize_business_intents(text_norm)
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("语音指令意图识别失败（规则引擎）: %s", exc)
-        rule_result = {
-            "primary_intent": None,
-            "tool_key": None,
-            "intent_hints": [],
-            "is_negated": False,
-            "is_greeting": False,
-            "is_goodbye": False,
-            "is_help": False,
-            "is_confirmation": False,
-            "is_negation_intent": False,
-            "is_likely_unclear": True,
-            "all_matched_tools": [],
-            "slots": {},
-        }
-
-    tool_key = rule_result.get("tool_key")
-    primary_intent = rule_result.get("primary_intent")
-    slots = rule_result.get("slots", {}) or {}
-
-    # 规则引擎命中 → 高置信度；heuristic fallback（只有 primary_intent 没有 tool_key）→ 中等置信度；
-    # 完全未命中 → 0；is_likely_unclear 拉低置信度避免误触发。
-    if tool_key:
-        confidence = 0.85
-        source = "rule"
-    elif primary_intent:
-        confidence = 0.6
-        source = "rule_fallback"
-    else:
-        confidence = 0.0
-        source = "unclear"
-
-    if rule_result.get("is_likely_unclear"):
-        confidence = min(confidence, 0.4)
-
-    return {
-        "tool_key": tool_key,
-        "primary_intent": primary_intent,
-        "confidence": float(confidence),
-        "slots": slots,
-        "is_negated": bool(rule_result.get("is_negated", False)),
-        "is_greeting": bool(rule_result.get("is_greeting", False)),
-        "is_goodbye": bool(rule_result.get("is_goodbye", False)),
-        "is_help": bool(rule_result.get("is_help", False)),
-        "is_likely_unclear": bool(rule_result.get("is_likely_unclear", False)),
-        "intent_hints": list(rule_result.get("intent_hints", []) or []),
-        "source": source,
-    }
-
-
-def _execute_intent_tool(
-    tool_key: str,
-    text: str,
-    slots: dict[str, Any],
-    session_id: str = "",
-    runtime_context: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """复用 AIChatApplicationService._execute_pro_mode_tools 执行低风险工具。
-
-    构造与 ai_chat_app_service 内部一致的 response_data / ai_result / parsed_params 形状，
-    调用 mixin 方法触发真实工具执行（如 products 查询 / shipment_generate 开单）。
-    任何异常向上抛出，由 voice_command 路由层捕获并降级为"未执行"。
-    """
-    if not tool_key:
-        return {"executed": False, "result": None, "reason": "no_tool_key"}
-
-    # 延迟导入避免冷启动拖慢 /transcribe 端点；get_ai_chat_app_service 是单例。
-    from app.application.ai_chat_app_service import get_ai_chat_app_service
-
-    app_service = get_ai_chat_app_service()
-
-    response_data: dict[str, Any] = {
-        "response": "",
-        "data": {"data": {}},
-        "toolCall": None,
-    }
-    ai_result: dict[str, Any] = {"text": text, "data": {}}
-    parsed_params: dict[str, Any] = dict(slots or {})
-
-    executed_data = app_service._execute_pro_mode_tools(
-        response_data=response_data,
-        tool_key=tool_key,
-        slots=slots or {},
-        parsed_params=parsed_params,
-        ai_result=ai_result,
-        original_message=text,
-        runtime_context=runtime_context,
-    )
-
-    return {
-        "executed": True,
-        "result": {
-            "response": executed_data.get("response", ""),
-            "toolCall": executed_data.get("toolCall"),
-            "data": executed_data.get("data", {}).get("data", {}),
-        },
-        "reason": "executed",
-        "session_id": session_id,
-    }
 
 
 @router.post("/command")
 async def voice_command(
     request: Request,
     file: UploadFile = File(..., description="按住说话录制的音频（webm/ogg/wav/m4a）"),
-    auto_execute: bool = Form(default=False, description="是否自动执行识别到的低风险意图"),
-    session_id: str = Form(default="", description="会话 ID，用于执行链路追踪"),
+    auto_execute: bool = Form(default=False, description="是否把识别文本交给智能对话处理"),
+    session_id: str = Form(default="", description="会话 ID，用于记忆与执行链路追踪"),
     language: str | None = Form(default=None, description="ISO 语言代码，留空走默认"),
 ):
-    """语音指令端到端：ASR → 意图识别 → 可选自动执行。
-
-    与 /transcribe 的差异：
-    - /transcribe 只返回文本，由用户手动点发送
-    - /command 额外做意图识别，并按 auto_execute + 置信度 + 风险等级决定是否直接执行工具
-
-    返回结构：
-    - success: True
-    - data.text: ASR 转写文本
-    - data.intent: 命中的 tool_key（未命中为 None）
-    - data.confidence: 意图置信度 0~1
-    - data.executed: 是否真的执行了工具
-    - data.result: 执行结果（executed=True 时非空）
-    - data.reason: 未执行的原因代码：
-        - ``asr_empty`` ASR 无文本
-        - ``no_intent`` 未识别到意图
-        - ``low_confidence`` 置信度低于阈值
-        - ``high_risk_needs_confirmation`` 高风险意图需二次确认
-        - ``negated`` 否定式意图
-        - ``auto_execute_disabled`` auto_execute=False
-        - ``execution_failed`` 执行抛异常
-        - ``executed`` 执行成功
-    """
+    """ASR 后复用智能对话：不做第二次意图判决，也不直接调用业务工具。"""
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="录音内容为空")
@@ -568,7 +388,7 @@ async def voice_command(
         )
 
     tmp_path = _save_upload_to_tempfile(file, raw)
-    t0 = time.monotonic()
+    started = time.monotonic()
     try:
         text = (
             (await _platform_transcribe(request, tmp_path, language))["text"]
@@ -580,82 +400,67 @@ async def voice_command(
             tmp_path.unlink(missing_ok=True)
         except RECOVERABLE_ERRORS as exc:
             logger.debug("删除 ASR 临时文件失败（可忽略）: %s", exc)
-    elapsed_asr_ms = int((time.monotonic() - t0) * 1000)
-
-    # ASR 空文本：直接返回，避免无意义跑意图识别
+    elapsed_ms = int((time.monotonic() - started) * 1000)
     if not text:
         return {
             "success": True,
             "data": {
                 "text": "",
-                "intent": None,
-                "primary_intent": None,
-                "confidence": 0.0,
                 "executed": False,
                 "result": None,
                 "reason": "asr_empty",
                 "session_id": session_id,
-                "elapsed_ms_asr": elapsed_asr_ms,
+                "elapsed_ms_asr": elapsed_ms,
             },
         }
 
-    # 意图识别（同步规则引擎，失败已兜底为 unclear）
-    intent_data = _recognize_intent(text)
-    tool_key = intent_data.get("tool_key")
-    confidence = float(intent_data.get("confidence", 0.0))
-    slots = intent_data.get("slots", {}) or {}
-    is_negated = bool(intent_data.get("is_negated", False))
-
-    # 决策是否自动执行
     executed = False
     result: dict[str, Any] | None = None
-    reason: str = ""
-
-    if not tool_key:
-        reason = "no_intent"
-    elif is_negated:
-        reason = "negated"
-    elif not auto_execute:
-        reason = "auto_execute_disabled"
-    elif tool_key in HIGH_RISK_INTENTS:
-        # 高风险意图即使 auto_execute=True 也必须二次确认
-        reason = "high_risk_needs_confirmation"
-    elif confidence <= INTENT_CONFIDENCE_THRESHOLD:
-        reason = "low_confidence"
-    else:
-        # 低风险 + 高置信度 + auto_execute=True → 真实执行
+    reason = "auto_execute_disabled"
+    if auto_execute:
         try:
+            from app.application.ai_chat_app_service import get_ai_chat_app_service
             from app.fastapi_routes.xcagi_compat_chat_helpers import (
                 _runtime_context_with_authenticated_actor,
             )
 
             runtime_context = _runtime_context_with_authenticated_actor(request, {})
-            exec_payload = _execute_intent_tool(
-                tool_key, text, slots, session_id, runtime_context=runtime_context
+            if session_id:
+                runtime_context["session_id"] = session_id
+                runtime_context["conversation_id"] = session_id
+            from app.application.ai_chat.chat_evidence import prepare_chat_evidence
+
+            runtime_context = prepare_chat_evidence(request, runtime_context, text)
+            runtime_context.pop("_chat_evidence_prepared_marker", None)
+            payload = get_ai_chat_app_service().process_chat(
+                user_id=str(runtime_context.get("actor_id") or runtime_context.get("user_id") or "default"),
+                message=text,
+                context=runtime_context,
+                source="voice",
+                file_context={},
             )
-            executed = bool(exec_payload.get("executed", False))
-            result = exec_payload.get("result")
-            reason = exec_payload.get("reason", "executed" if executed else "execution_failed")
+            result = payload if isinstance(payload, dict) else {"response": str(payload)}
+            details = result.get("data") if isinstance(result.get("data"), dict) else {}
+            inner = details.get("data") if isinstance(details.get("data"), dict) else {}
+            node_results = inner.get("node_results") if isinstance(inner, dict) else []
+            executed = any(
+                isinstance(node, dict) and node.get("success") is True
+                for node in (node_results if isinstance(node_results, list) else [])
+            )
+            reason = "executed" if executed else "workflow_pending_or_not_executed"
         except RECOVERABLE_ERRORS:
-            logger.exception("语音指令自动执行失败")
+            logger.exception("语音命令转智能对话主链失败")
             reason = "execution_failed"
-            result = {"error": "语音指令执行服务暂时不可用"}
+            result = {"success": False, "message": "智能对话处理暂时不可用"}
 
     return {
         "success": True,
         "data": {
             "text": text,
-            "intent": tool_key,
-            "primary_intent": intent_data.get("primary_intent"),
-            "confidence": confidence,
             "executed": executed,
             "result": result,
             "reason": reason,
             "session_id": session_id,
-            "slots": slots,
-            "intent_hints": intent_data.get("intent_hints", []),
-            "is_negated": is_negated,
-            "is_high_risk": tool_key in HIGH_RISK_INTENTS if tool_key else False,
-            "elapsed_ms_asr": elapsed_asr_ms,
+            "elapsed_ms_asr": elapsed_ms,
         },
     }

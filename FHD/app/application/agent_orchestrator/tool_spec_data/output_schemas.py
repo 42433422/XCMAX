@@ -391,6 +391,16 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "employee_id": {"type": "string"},
         },
     },
+    ("employee", "context"): {
+        "type": "object",
+        "required": ["success", "message", "data"],
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "data": {"type": "object"},
+            "employee_id": {"type": "string"},
+        },
+    },
     ("excel_import", "execute_import"): {
         "type": "object",
         "required": ["success"],

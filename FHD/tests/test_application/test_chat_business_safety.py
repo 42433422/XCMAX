@@ -494,7 +494,7 @@ def test_stream_path_preempts_legacy_planner_and_returns_same_receipt(
     def fail_if_called(*_args: Any, **_kwargs: Any):
         raise AssertionError("legacy planner must not run for protected business actions")
 
-    monkeypatch.setattr(chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called)
+    monkeypatch.setattr(chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called, raising=False)
     monkeypatch.setattr(
         "app.infrastructure.auth.dependencies.resolve_session_user",
         lambda _request: SimpleNamespace(id=77, username="1001", display_name="李四"),
@@ -594,7 +594,9 @@ async def test_batch_path_applies_receipt_policy_to_every_protected_message(
         user_id="u-1001",
     )
     result = await planner_compat.execute_compat_chat_batch(request, body)
-    assert result["success"] is True
+    assert result["success"] is False
+    assert result["execution_state"] == "blocked"
+    assert [row["success"] for row in result["results"]] == [True, False]
     assert result["count"] == 2
     assert [row["business_receipt"]["operation"] for row in result["results"]] == [
         "personnel_read",

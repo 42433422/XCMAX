@@ -15,8 +15,7 @@ from app.application.chat_turn_guard import (
     prepare_turn,
     reset_turn_ledger,
 )
-from app.legacy.chat import legacy_chat_adapter as adapter
-from app.legacy.chat.legacy_chat_runtime import chat, chat_stream_sse_events, chat_stream_text
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture(autouse=True)
@@ -24,16 +23,6 @@ def _isolated_turn_ledger():
     reset_turn_ledger()
     yield
     reset_turn_ledger()
-
-
-def chunk(content="", calls=None, finish="stop"):
-    return SimpleNamespace(
-        choices=[
-            SimpleNamespace(
-                delta=SimpleNamespace(content=content, tool_calls=calls or []), finish_reason=finish
-            )
-        ]
-    )
 
 
 def test_keeps_displayable_text_and_rejects_whitespace_or_reasoning():
@@ -50,22 +39,74 @@ def test_keeps_displayable_text_and_rejects_whitespace_or_reasoning():
     assert chunk_display_text(reasoning_only) == ""
 
 
+def test_unknown_agent_effect_survives_public_chat_sanitization():
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+    from app.application.workflow.workflow_types import PlanGraph
+    from app.fastapi_routes.ai_intent import _public_unified_chat_payload
+
+    step = AgentStep(
+        node_id="write",
+        tool_id="customers",
+        action="create",
+        status="failed",
+        error="private database detail",
+        output={"success": False, "outcome": "unknown", "reconciliation_required": True},
+    )
+    run = AgentRun(user_id="1", message="新增客户", status="blocked", steps=[step])
+    plan = PlanGraph(plan_id="test", intent="customer_write", nodes=[])
+    payload = AIChatWorkflowResponseMixin()._format_agent_run_response(plan, run)
+    public = _public_unified_chat_payload(payload)
+    assert payload["requires_reconciliation"] is True and payload["retryable"] is False
+    assert public["execution_state"] == "unknown" and public["retryable"] is False
+    assert public["run_id"] == run.run_id
+    assert "勿重复提交" in public["message"] and "private database detail" not in str(public)
+    for status in ("pending_approval", "running", "queued"):
+        pending = {"success": True, "data": {"status": status}}
+        assert _public_unified_chat_payload(pending) == pending
+
+
+def test_unknown_result_reaches_authenticated_unified_chat(trusted_actor, monkeypatch):
+    import json
+
+    from app.fastapi_routes import ai_intent
+
+    actor = trusted_actor(role="admin")
+    monkeypatch.setattr(
+        "app.domain.app_pure.ai_chat_helpers.unified_chat_single_payload",
+        lambda *args, **kwargs: {
+            "success": False,
+            "requires_reconciliation": True,
+            "error": "private database detail",
+        },
+    )
+    monkeypatch.setattr(ai_intent, "_attach_unified_chat_run", lambda payload, **kwargs: payload)
+    response = ai_intent.ai_chat_unified_alias(actor.request, {"message": "新增客户"})
+    public = json.loads(response.body)
+    assert response.status_code == 409
+    assert public["requires_reconciliation"] is True and public["retryable"] is False
+    assert "勿重复提交" in public["message"] and "private database detail" not in str(public)
+
+
 def test_bulk_preview_names_scope_and_does_not_call_the_model(monkeypatch):
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
     monkeypatch.setattr(
         "app.application.chat_turn_guard.scope_snapshot",
         lambda ctx: (4, 9, "customers-4", "products-9"),
     )
-    client = MagicMock()
-    result = chat(
+    service = object.__new__(AIChatApplicationService)
+    service._process_chat_impl = MagicMock()
+    result = service.process_chat(
+        "user-1",
         "清理全部客户和产品",
-        client=client,
-        runtime_context={
+        context={
             "tenant_id": "XCAGI-ENTERPRISE-DEMO",
             "turn_id": "turn-1",
             "scope_counts": {"customers": 4, "products": 9},
         },
     )
-    client.chat.completions.create.assert_not_called()
+    service._process_chat_impl.assert_not_called()
     assert result["execution"]["committed"] is False
     assert result["execution"]["effect"] == "preview"
     assert "XCAGI-ENTERPRISE-DEMO" in result["response"]
@@ -76,31 +117,45 @@ def test_bulk_preview_names_scope_and_does_not_call_the_model(monkeypatch):
     assert not is_bulk_destructive("删除这个客户")
 
 
-def test_stream_shows_message_body_when_delta_content_is_empty():
-    chunk = MagicMock()
-    chunk.choices = [MagicMock(finish_reason="stop")]
-    chunk.choices[0].delta = SimpleNamespace(content=None, tool_calls=None)
-    chunk.choices[0].message = SimpleNamespace(content="可见的模型正文")
-    client = MagicMock(is_modstore_openai_compatible=False)
-    client.chat.completions.create.return_value = iter([chunk])
-    parts = list(chat_stream_text("你好", client=client, model="test-model"))
-    assert "可见的模型正文" in parts
-    assert not any(
-        isinstance(part, dict) and part.get("error") == "planner_empty_response" for part in parts
+def test_model_reply_is_visible_after_langgraph():
+    import json
+    from unittest.mock import Mock
+
+    from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    response = {
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {"mode": "reply", "reply": "可见的模型正文"}, ensure_ascii=False
+                    )
+                }
+            }
+        ]
+    }
+    service = Mock()
+    service.get_context.return_value = None
+    completion = Mock(return_value=response)
+    plan = LLMWorkflowPlanner(ai_service=service, completion=completion).plan(
+        "user", "你好", get_workflow_tool_registry(), {}
     )
+    result = PlannedWorkflowDispatch._execute_reply_plan(plan, {})
+    assert result["success"] is True and result["response"] == "可见的模型正文"
+    completion.assert_called_once()
 
 
-def test_whitespace_stream_stays_an_explicit_empty_result():
-    chunk = MagicMock()
-    chunk.choices = [MagicMock(finish_reason="stop")]
-    chunk.choices[0].delta = SimpleNamespace(content="  \n", tool_calls=None)
-    chunk.choices[0].message = None
-    client = MagicMock(is_modstore_openai_compatible=False)
-    client.chat.completions.create.return_value = iter([chunk])
-    parts = list(chat_stream_text("你好", client=client, model="test-model"))
-    assert any(
-        isinstance(part, dict) and part.get("error") == "planner_empty_response" for part in parts
-    )
+def test_whitespace_model_reply_is_not_a_success():
+    import json
+
+    from app.application.workflow.llm_plan_generation import _decode_completion
+
+    response = {
+        "choices": [{"message": {"content": json.dumps({"mode": "reply", "reply": "  \n"})}}]
+    }
+    assert _decode_completion(response) is None
 
 
 def test_retry_and_second_confirm_do_not_write(monkeypatch):
@@ -137,79 +192,25 @@ def test_retry_and_second_confirm_do_not_write(monkeypatch):
     assert mutation_block("delete_customers", "{}", retry_ctx)["error"] == "outcome_unknown"
 
 
-def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monkeypatch):
-    executed: list[str] = []
+def test_preview_confirmation_and_retry_keep_unknown_effect(monkeypatch):
+    from app.application.chat_turn_guard import admit_chat_turn
 
-    def execute(name, _arguments, *_args, **_kwargs):
-        executed.append(name)
-        return '{"success": true}'
-
-    monkeypatch.setattr(adapter, "_get_workflow_tool_registry", lambda: [])
-    monkeypatch.setattr(adapter, "_resolve_chat_execute_tool", lambda: execute)
-    monkeypatch.setattr(
-        "app.application.chat_turn_guard._matches_previewed_batch", lambda *args: True
-    )
-    ctx = {
-        "tenant_id": "demo-tenant",
-        "idempotency_key": "turn-bulk",
-        "turn_id": "turn-bulk",
-        "scope_counts": {"customers": 2, "products": 3},
-    }
     monkeypatch.setattr(
         "app.application.chat_turn_guard.scope_snapshot",
         lambda ctx: (2, 3, "customers-2", "products-3"),
     )
-    preview = list(
-        chat_stream_sse_events("清理全部客户和产品", runtime_context=ctx, client=MagicMock())
-    )
-    assert preview[-1]["result"]["execution"]["effect"] == "preview"
-    assert preview[-1]["result"]["execution"]["committed"] is False
-    assert executed == []
-
-    call = SimpleNamespace(
-        index=0,
-        id="call-1",
-        function=SimpleNamespace(
-            name="execute_erp_capability",
-            arguments='{"tool_id":"customers","action":"batch_delete","params":{"ids":[1]}}',
-        ),
-    )
-    rounds = iter(
-        [
-            iter([chunk(calls=[call], finish="tool_calls")]),
-            iter([chunk("  \n")]),
-        ]
-    )
-    client = MagicMock(is_modstore_openai_compatible=False)
-    client.chat.completions.create.side_effect = lambda **_: next(rounds)
-    confirmed = {**ctx, "destructive_confirmed": True}
-    failed = list(
-        chat_stream_sse_events(
-            "清理全部客户和产品", runtime_context=confirmed, client=client, model="test"
-        )
-    )
-    assert executed == ["execute_erp_capability"]
-    assert failed[-1]["type"] == "error"
-    assert failed[-1]["execution"]["committed"] is False
-    assert failed[-1]["result"]["execution"]["effect"] == "unknown"
-
-    retry = list(
-        chat_stream_sse_events(
-            "清理全部客户和产品",
-            runtime_context={**ctx, "retry_of": "turn-bulk"},
-            client=MagicMock(
-                is_modstore_openai_compatible=False,
-                chat=MagicMock(
-                    completions=MagicMock(
-                        create=MagicMock(return_value=iter([chunk("只回答，不删除。")]))
-                    )
-                ),
-            ),
-            model="test",
-        )
-    )
-    assert executed == ["execute_erp_capability"]
-    assert retry[-1]["result"]["execution"]["effect"] == "unknown"
+    context = {"tenant_id": "demo-tenant", "idempotency_key": "turn-bulk", "turn_id": "turn-bulk"}
+    preview = admit_chat_turn("清理全部客户和产品", dict(context))
+    assert preview["execution"]["effect"] == "preview"
+    confirmed = {**context, "destructive_confirmed": True}
+    assert admit_chat_turn("清理全部客户和产品", confirmed) is None
+    assert confirmed["mutation_policy"] == "allow_once"
+    note_tool_result(confirmed, "delete_customers")
+    retry = {**context, "retry_of": "turn-bulk", "mutation_policy": "allow"}
+    assert admit_chat_turn("清理全部客户和产品", retry) is None
+    assert retry["mutation_policy"] == "model_only"
+    blocked = mutation_block("delete_customers", "{}", retry)
+    assert blocked["error"] == "outcome_unknown" and blocked["committed"] is False
 
 
 def test_uncommitted_confirm_is_not_repeated_by_another_confirm(monkeypatch):
@@ -232,34 +233,13 @@ def test_uncommitted_confirm_is_not_repeated_by_another_confirm(monkeypatch):
     assert "不会执行删除" in reply["response"]
 
 
-def test_retry_cannot_supply_its_own_mutation_policy(monkeypatch):
-    executed = []
-    monkeypatch.setattr(adapter, "_get_workflow_tool_registry", lambda: [])
-    monkeypatch.setattr(
-        adapter, "_resolve_chat_execute_tool", lambda: lambda *a, **k: executed.append(a)
-    )
-    call = SimpleNamespace(
-        index=0, id="call-1", function=SimpleNamespace(name="delete_products", arguments="{}")
-    )
+def test_retry_cannot_supply_its_own_mutation_policy():
+    from app.application.chat_turn_guard import admit_chat_turn
 
-    responses = iter(
-        [iter([chunk(calls=[call], finish="tool_calls")]), iter([chunk("未执行删除。")])]
-    )
-    client = MagicMock(is_modstore_openai_compatible=False)
-    client.chat.completions.create.side_effect = lambda **_: next(responses)
-    list(
-        chat_stream_sse_events(
-            "清空所有产品",
-            runtime_context={
-                "tenant_id": "demo",
-                "retry_of": "old-turn",
-                "mutation_policy": "allow",
-            },
-            client=client,
-            model="test",
-        )
-    )
-    assert executed == []
+    context = {"tenant_id": "demo", "retry_of": "old-turn", "mutation_policy": "allow"}
+    assert admit_chat_turn("清空所有产品", context) is None
+    assert context["mutation_policy"] == "model_only"
+    assert mutation_block("delete_products", "{}", context)["success"] is False
 
 
 def test_preview_uses_authorized_tenant_rows_not_caller_counts(monkeypatch):
@@ -435,31 +415,28 @@ def test_both_previewed_ranges_can_submit_one_approval_each(monkeypatch):
     assert execution_for_context(ctx)["effect"] == "pending_approval"
 
 
-def test_approval_refuses_previewed_scope_changed_while_waiting(monkeypatch):
-    import logging
+def test_client_cannot_replace_preview_scope():
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_orchestrator.runtime_context import (
+        RuntimeContextOwnershipError,
+        merge_runtime_context,
+    )
+    from app.fastapi_routes.domains.agent.route_support import without_runtime_identity
 
-    from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-
-    monkeypatch.setattr(
-        "app.infrastructure.auth.agent_mod_scope._bound_actor", lambda ctx: object()
+    forged = {"mutation_policy": "allow_once", "_bulk_preview_scopes": {"products": "forged"}}
+    assert without_runtime_identity(forged) == {}
+    run = AgentRun(
+        user_id="1",
+        message="test",
+        metadata={
+            "runtime_context": {
+                "mutation_policy": "allow_once",
+                "_bulk_preview_scopes": {"products": "original"},
+            }
+        },
     )
-    monkeypatch.setattr(
-        "app.application.chat_turn_guard.scope_snapshot", lambda ctx: (0, 1, "c", "changed")
-    )
-    backends = MagicMock()
-    plan = PlanGraph(
-        "p", "delete", nodes=[WorkflowNode("n", "products", "batch_delete", {"ids": [1]})]
-    )
-    context = {
-        "mutation_policy": "allow_once",
-        "_bulk_preview_scope": {"tool": "products", "digest": "original"},
-    }
-    result = WorkflowApprovalBridge(backends, (ValueError,), logging.getLogger())._run_legacy(
-        "request", {"plan": plan, "runtime_context": context}, True, MagicMock()
-    )
-    assert result["code"] == "outcome_unknown"
-    backends.engine.return_value.run.assert_not_called()
+    with pytest.raises(RuntimeContextOwnershipError):
+        merge_runtime_context(run, forged)
 
 
 def test_confirmation_rejects_missing_or_changed_preview(monkeypatch):

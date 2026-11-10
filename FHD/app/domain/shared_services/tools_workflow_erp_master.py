@@ -15,8 +15,6 @@ logger = logging.getLogger(__name__)
 def _registered_router_products(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    from app.application.normal_chat_dispatch import run_workflow_products_query_normal_profile
-
     if str(runtime_context.get("service_source") or "") == "fastapi_product_compat_route":
         import importlib
 
@@ -51,10 +49,6 @@ def _registered_router_products(
     product_name = str(params.get("product_name") or params.get("name") or "").strip()
     keyword = str(params.get("keyword") or product_name or model_number or "").strip()
     if action == "query":
-        if profile == "normal":
-            return run_workflow_products_query_normal_profile(
-                user_message, node_params=params, per_page=20
-            )
         result = svc.get_products(
             unit_name=measure_unit if explicit_measure_unit or legacy_measure_unit else None,
             model_number=model_number or None,

@@ -369,3 +369,26 @@ def test_legacy_task_without_runs_is_not_hidden_by_active_mod_header():
     other_tenant = AgentPrincipal(user_id="1", tenant_id="9")
     assert route_support.task_scope_matches(orchestrator, task, other_user) is False
     assert route_support.task_scope_matches(orchestrator, task, other_tenant) is False
+
+
+def test_desktop_actor_binding_key_survives_independent_processes(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    env = os.environ.copy()
+    env.pop("SECRET_KEY", None)
+    env.pop("XCAGI_AGENT_ACTOR_BINDING_KEY", None)
+    env.update(XCAGI_DESKTOP_MODE="1", XCAGI_DATA_DIR=str(tmp_path))
+    code = 'from app.infrastructure.auth.agent_mod_scope import _actor_proof; print(_actor_proof({"user_id": "41", "tenant_id": "7"}))'
+    first = subprocess.run(
+        [sys.executable, "-c", code], env=env, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    second = subprocess.run(
+        [sys.executable, "-c", code], env=env, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    assert first and first == second
+    key_file = tmp_path / "data" / ".agent-actor-binding-key"
+    assert key_file.is_file()
+    if os.name != "nt":
+        assert key_file.stat().st_mode & 0o077 == 0

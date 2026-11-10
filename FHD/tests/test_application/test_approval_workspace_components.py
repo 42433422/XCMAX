@@ -48,6 +48,7 @@ def test_final_ai_approval_requires_confirmed_execution(monkeypatch, with_node):
     notify = MagicMock()
     monkeypatch.setattr(service, "get_db", session)
     monkeypatch.setattr(service, "_resolve_actor", lambda *args, **kwargs: 7)
+    monkeypatch.setattr(service, "_can_review_ai_workflow_request", lambda *args: True)
     monkeypatch.setattr(service, "_ordered_nodes", lambda *args: [node])
     monkeypatch.setattr(service, "_ai_workflow_audit_node", lambda *args: node)
     monkeypatch.setattr(service, "_has_pending_ai_workflow", lambda *args: True)
@@ -185,10 +186,11 @@ def test_reused_query_component_resolves_current_mod_database_and_tenant(monkeyp
             engine.dispose()
 
 
-@pytest.mark.parametrize("agent_run", [False, True])
-def test_bridge_preserves_bound_context_and_resolves_backend_per_call(agent_run):
+def test_bridge_preserves_bound_context_and_resolves_backend_per_call(monkeypatch):
     from app.application.approval_workspace.protocols import WorkflowBackends
     from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 
     contexts = [
         {
@@ -199,35 +201,82 @@ def test_bridge_preserves_bound_context_and_resolves_backend_per_call(agent_run)
                 "user_id": "7",
                 "mod_id": f"mod-{index}",
             },
+            "_approval_agent_run_required": True,
         }
         for index in (1, 2)
     ]
     approvals = [MagicMock(), MagicMock()]
+    snapshots = {}
+    runs = {}
     for index, (backend, context) in enumerate(zip(approvals, contexts, strict=True), 1):
-        workflow = {"runtime_context": context}
-        if agent_run:
-            workflow.update(agent_run_id=f"run-{index}", approved_step_id=f"step-{index}")
-        else:
-            workflow["plan"] = SimpleNamespace(plan_id=f"plan-{index}", intent="write", nodes=[])
+        run_id = f"run-{index}"
+        plan = PlanGraph(
+            plan_id=f"plan-{index}",
+            intent="delete_customer",
+            metadata={"approval_required_node_ids": ["delete_customer"]},
+            nodes=[
+                WorkflowNode(
+                    node_id="delete_customer",
+                    tool_id="customers",
+                    action="delete",
+                    params={"id": index},
+                    risk="high",
+                    idempotent=False,
+                )
+            ],
+        )
+        step = AgentStep(
+            node_id="delete_customer",
+            tool_id="customers",
+            action="delete",
+            params={"id": index},
+            risk="high",
+            idempotent=False,
+            step_id=f"step-{index}",
+            status="waiting_user",
+        )
+        run = AgentRun(
+            user_id="7",
+            message="delete customer",
+            run_id=run_id,
+            status="waiting_user",
+            plan_id=plan.plan_id,
+            steps=[step],
+            metadata={"plan": plan_to_dict(plan)},
+        )
+        runs[run_id] = run
+        workflow = {
+            "runtime_context": context,
+            "agent_run_id": run_id,
+            "approved_step_id": step.step_id,
+            "plan": plan,
+        }
         backend.get_pending_workflow.return_value = workflow
+        snapshots[f"request-{index}"] = {
+            **workflow,
+            "plan": plan,
+            "tenant_id": context["tenant_id"],
+        }
     current = [approvals[0]]
     agent = MagicMock()
     agent.continue_run.side_effect = lambda run_id, **kwargs: SimpleNamespace(
-        run_id=run_id, status="completed", plan_id="plan", intent="write", steps=[], tool_calls=[]
+        run_id=run_id,
+        status="completed",
+        plan_id=runs[run_id].plan_id,
+        intent="delete_customer",
+        steps=[SimpleNamespace(status="completed")],
+        tool_calls=[],
     )
-    engine = MagicMock()
-    engine.run.return_value = SimpleNamespace(success=True, node_results=[])
-    trace = MagicMock(return_value="trace-run")
-    unexpected = MagicMock(side_effect=AssertionError("Unexpected alternate execution backend"))
+    monkeypatch.setattr(
+        "app.application.workflow.approval_persistence.claim_agent_approval", lambda **kwargs: True
+    )
     bridge = WorkflowApprovalBridge(
         WorkflowBackends(
             approvals=lambda: current[0],
-            pending_snapshot=unexpected,
-            execution_snapshot=unexpected,
-            engine=unexpected if agent_run else lambda: engine,
-            agent=(lambda: agent) if agent_run else unexpected,
-            load_run=unexpected,
-            legacy_trace=unexpected if agent_run else trace,
+            pending_snapshot=lambda _request_id: None,
+            execution_snapshot=lambda request_id: snapshots.get(request_id),
+            agent=lambda: agent,
+            load_run=lambda run_id: runs.get(run_id),
         ),
         (RuntimeError,),
         logging.getLogger(__name__),
@@ -236,28 +285,117 @@ def test_bridge_preserves_bound_context_and_resolves_backend_per_call(agent_run)
     for index, backend in enumerate(approvals, 1):
         current[0] = backend
         result = bridge.resume(request_no=f"request-{index}", opinion="approved", approved_by="7")
-        assert result["success"] is True
+        assert result["success"] is True, result
         backend.approve.assert_called_once_with(f"request-{index}", "approved")
         backend.remove_pending_workflow.assert_called_once_with(f"request-{index}")
-    executor_calls = agent.continue_run.call_args_list if agent_run else engine.run.call_args_list
+    executor_calls = agent.continue_run.call_args_list
     assert [item.kwargs["runtime_context"] for item in executor_calls] == contexts
     assert all(
         item.kwargs["runtime_context"] is context
         for item, context in zip(executor_calls, contexts, strict=True)
     )
-    if agent_run:
-        assert agent.continue_run.call_args_list == [
-            call(
-                f"run-{index}",
-                approved_by="7",
-                approved_step_id=f"step-{index}",
-                runtime_context=context,
-            )
-            for index, context in enumerate(contexts, 1)
-        ]
-    else:
-        assert all(
-            item.args[1] is context
-            for item, context in zip(trace.call_args_list, contexts, strict=True)
+    assert agent.continue_run.call_args_list == [
+        call(
+            f"run-{index}",
+            approved_by="7",
+            approved_step_id=f"step-{index}",
+            approval_request_id=f"request-{index}",
+            runtime_context=context,
         )
-    unexpected.assert_not_called()
+        for index, context in enumerate(contexts, 1)
+    ]
+
+
+def test_missing_agent_link_never_runs_legacy_plan():
+    from app.application.approval_workspace.protocols import WorkflowBackends
+    from app.application.approval_workspace.workflow_bridge import (
+        WorkflowApprovalBridge,
+    )
+
+    approvals = MagicMock()
+    approvals.get_pending_workflow.return_value = {
+        "plan": SimpleNamespace(plan_id="plan", intent="test", nodes=[]),
+        "runtime_context": {"_approval_agent_run_required": True},
+    }
+    bridge = WorkflowApprovalBridge(
+        WorkflowBackends(
+            approvals=lambda: approvals,
+            pending_snapshot=lambda _request_id: None,
+            execution_snapshot=lambda _request_id: None,
+            agent=MagicMock(),
+            load_run=MagicMock(),
+        ),
+        (RuntimeError,),
+        logging.getLogger(__name__),
+    )
+    result = bridge.resume(request_no="req", opinion="同意", approved_by="7")
+    assert result["success"] is False
+    assert result["code"] == "agent_run_unavailable"
+
+
+def test_invalid_approved_plan_does_not_resume_agent():
+    from app.application.approval_workspace.protocols import WorkflowBackends
+    from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    plan = PlanGraph(plan_id="p", intent="test", nodes=[
+        WorkflowNode(node_id="n", tool_id="products", action="query", depends_on=["missing"])
+    ])
+    approvals = MagicMock()
+    approvals.get_pending_workflow.return_value = {
+        "agent_run_id": "run", "approved_step_id": "n", "plan": plan,
+        "runtime_context": {"_approval_agent_run_required": True},
+    }
+    agent = MagicMock()
+    waiting = SimpleNamespace(status="waiting_user", node_id="n", step_id="n")
+    bridge = WorkflowApprovalBridge(WorkflowBackends(
+        approvals=lambda: approvals, pending_snapshot=lambda _request_id: None,
+        execution_snapshot=lambda _request_id: None, agent=lambda: agent,
+        load_run=lambda _: SimpleNamespace(status="waiting_user", steps=[waiting]),
+    ), (RuntimeError,), logging.getLogger(__name__))
+    result = bridge.resume(request_no="req", opinion="同意", approved_by="7")
+    assert result["success"] is False
+    agent.continue_run.assert_not_called()
+
+
+def test_removed_approved_tool_does_not_resume_agent():
+    from app.application.approval_workspace.protocols import WorkflowBackends
+    from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    plan = PlanGraph(plan_id="p", intent="test", nodes=[
+        WorkflowNode(node_id="n", tool_id="removed_tool", action="execute")
+    ])
+    approvals = MagicMock()
+    approvals.get_pending_workflow.return_value = {
+        "agent_run_id": "run", "approved_step_id": "n", "plan": plan,
+        "runtime_context": {"_approval_agent_run_required": True},
+    }
+    agent = MagicMock()
+    waiting = SimpleNamespace(status="waiting_user", node_id="n", step_id="n",
+                              tool_id="removed_tool", action="execute", params={})
+    bridge = WorkflowApprovalBridge(WorkflowBackends(
+        approvals=lambda: approvals, pending_snapshot=lambda _request_id: None,
+        execution_snapshot=lambda _request_id: None, agent=lambda: agent,
+        load_run=lambda _: SimpleNamespace(status="waiting_user", steps=[waiting]),
+    ), (RuntimeError,), logging.getLogger(__name__))
+    result = bridge.resume(request_no="req", opinion="同意", approved_by="7")
+    assert result["success"] is False
+    agent.continue_run.assert_not_called()
+
+
+def test_langgraph_runtime_dispatches_registered_tool(monkeypatch):
+    from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    calls = []
+    def dispatch(tool_id, action, params):
+        calls.append((tool_id, action))
+        return {"success": True}
+
+    plan = PlanGraph(plan_id="p", intent="test", nodes=[
+        WorkflowNode(node_id="n", tool_id="products", action="query")
+    ])
+    result = XCAGILangGraphRuntime(tool_dispatcher=dispatch).run(plan)
+    assert result.success
+    assert calls == [("products", "query")]

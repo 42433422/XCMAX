@@ -196,12 +196,16 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
     if explicit is not None:
         return explicit
     try:
-        response = client.chat.completions.create(
-            model=client.default_model,
-            temperature=0,
-            max_tokens=300,
-            response_format={"type": "json_object"},
-            messages=[
+        from app.infrastructure.llm.model_admission import admit_model_call, model_call_slot
+
+        with model_call_slot(None, profile="product_issue_intake"):
+            admit_model_call(None, profile="product_issue_intake")
+            response = client.chat.completions.create(
+                model=client.default_model,
+                temperature=0,
+                max_tokens=300,
+                response_format={"type": "json_object"},
+                messages=[
                 {
                     "role": "system",
                     "content": (
@@ -221,8 +225,8 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
                         ensure_ascii=False,
                     ),
                 },
-            ],
-        )
+                ],
+            )
         raw = response.choices[0].message.content
         triage = json.loads(raw) if isinstance(raw, str) else {}
         confidence = float(triage.get("confidence") or 0)

@@ -160,15 +160,30 @@ class ApprovalDecisions:
                         opinion=opinion,
                         approved_by=str(actor),
                     )
+                if (workflow_execution or {}).get("approval_claim_conflict"):
+                    db.rollback()
+                    return JSONResponse(
+                        {
+                            "success": False,
+                            "message": "该审批正在处理或结果待核对，请刷新任务状态。",
+                        },
+                        status_code=409,
+                    )
                 outcome = execution_outcome(workflow_execution)
                 handed_off = execution_handed_off(workflow_execution)
                 if handed_off:
+                    waiting_approval = bool((workflow_execution or {}).get("waiting_approval"))
+                    handoff_message = (
+                        "当前步骤已获批，后续步骤等待审批"
+                        if waiting_approval
+                        else "审批已通过，执行已交给调度器"
+                    )
                     persist_outcome(
                         req,
                         status=req.status,
                         success=False,
-                        code="queued",
-                        message="审批已通过，执行已交给调度器",
+                        code="waiting_approval" if waiting_approval else "queued",
+                        message=handoff_message,
                         workflow_executed=False,
                     )
                 else:
@@ -197,7 +212,7 @@ class ApprovalDecisions:
                         "success": False,
                         "accepted": True,
                         "data": data,
-                        "message": "审批已通过，执行已交给调度器",
+                        "message": handoff_message,
                     },
                     status_code=202,
                 )
@@ -370,9 +385,16 @@ class ApprovalDecisions:
         workflow_execution = self.workflows.resume(
             request_no=str(req.request_no or ""), opinion=opinion, approved_by=str(actor)
         )
+        if (workflow_execution or {}).get("approval_claim_conflict"):
+            db.rollback()
+            return JSONResponse(
+                {"success": False, "message": "该审批正在处理或结果待核对，请刷新任务状态。"},
+                status_code=409,
+            )
         if isinstance(business, dict) and (business.get("tool_id"), business.get("action")) in {
             ("customers", "batch_delete"),
             ("products", "batch_delete"),
+            ("data_docking", "auto_ingest"),
         }:
             db.refresh(req)
         bounded_outcome = execution_outcome(workflow_execution)
@@ -385,20 +407,27 @@ class ApprovalDecisions:
         status_before = req.status
         safe_code, safe_message = bounded_outcome["code"], bounded_outcome["message"]
         if handed_off:
+            waiting_approval = bool((workflow_execution or {}).get("waiting_approval"))
+            handoff_message = (
+                "当前步骤已获批，后续步骤等待审批"
+                if waiting_approval
+                else "审批已通过，执行已交给调度器"
+            )
+            handoff_code = "waiting_approval" if waiting_approval else "queued"
             persist_outcome(
                 req,
                 status=ApprovalStatus.APPROVED.value,
                 success=False,
-                code="queued",
-                message="审批已通过，执行已交给调度器",
+                code=handoff_code,
+                message=handoff_message,
                 workflow_executed=False,
             )
             req.status = ApprovalStatus.APPROVED.value
-            safe_code, safe_message = "queued", "审批已通过，执行已交给调度器"
+            safe_code, safe_message = handoff_code, handoff_message
             bounded_outcome = {
                 "status": ApprovalStatus.APPROVED.value,
                 "success": False,
-                "code": "queued",
+                "code": handoff_code,
                 "message": safe_message,
                 "workflow_executed": False,
                 "nodes_executed": 0,
@@ -473,12 +502,16 @@ class ApprovalDecisions:
         data["workflow_execution"] = bounded_outcome
         if handed_off:
             data["workflow_execution"]["execution_accepted"] = True
+            if (workflow_execution or {}).get("waiting_approval"):
+                data["workflow_execution"]["next_approval_request_id"] = (
+                    workflow_execution or {}
+                ).get("next_approval_request_id")
             return JSONResponse(
                 {
                     "success": False,
                     "accepted": True,
                     "data": data,
-                    "message": "审批已通过，执行已交给调度器",
+                    "message": handoff_message,
                 },
                 status_code=202,
             )

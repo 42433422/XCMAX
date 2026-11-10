@@ -53,14 +53,34 @@ def request_planner_completion(
         provider = get_active_provider(conversation_service=ai_service)
         if provider is None:
             return None
-        result = _run_async(
-            provider.chat_completion(
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
+        from app.infrastructure.llm.model_admission import model_rate_limit_scope
+
+        with model_rate_limit_scope(context):
+            result = _run_async(
+                provider.chat_completion(
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
             )
+    except RECOVERABLE_ERRORS as exc:
+        from app.infrastructure.llm.model_admission import (
+            ModelCircuitOpenError,
+            ModelConcurrencyLimitError,
+            ModelRateLimitError,
         )
-    except RECOVERABLE_ERRORS:
+        from app.utils.resilience.rate_limiter import RateLimitBackendError
+
+        if isinstance(
+            exc,
+            (
+                ModelCircuitOpenError,
+                ModelConcurrencyLimitError,
+                ModelRateLimitError,
+                RateLimitBackendError,
+            ),
+        ):
+            raise
         logger.warning("planner model request failed", exc_info=True)
         return None
     if not isinstance(result, dict):

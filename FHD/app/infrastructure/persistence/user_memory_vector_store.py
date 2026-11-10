@@ -150,28 +150,35 @@ class PgUserMemoryVectorStore(VectorStorePort):
         top_k: int = 5,
         filters: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        del filters  # 预留接口
+        query_filter = filters if isinstance(filters, dict) else {}
+        try:
+            created_after = float(query_filter.get("created_after"))
+        except (TypeError, ValueError):
+            created_after = None
+        created_clause = " AND created_at >= :created_after" if created_after is not None else ""
+        params = {
+            "index_id": index_id,
+            "query_vector": json.dumps(query_vector, ensure_ascii=False),
+            "top_k": max(int(top_k), 1),
+        }
+        if created_after is not None:
+            params["created_after"] = created_after
         with self._engine.begin() as conn:
             rows = (
                 conn.execute(
                     text(
-                        """
+                        f"""
                     SELECT
                         chunk_id,
                         content,
                         metadata,
                         1 - (embedding <=> CAST(:query_vector AS vector)) AS score
                     FROM user_memory_vector_chunks
-                    WHERE index_id = :index_id
+                    WHERE index_id = :index_id{created_clause}
                     ORDER BY embedding <=> CAST(:query_vector AS vector)
                     LIMIT :top_k
                     """
-                    ),
-                    {
-                        "index_id": index_id,
-                        "query_vector": json.dumps(query_vector, ensure_ascii=False),
-                        "top_k": max(int(top_k), 1),
-                    },
+                    ), params,
                 )
                 .mappings()
                 .all()
@@ -186,6 +193,49 @@ class PgUserMemoryVectorStore(VectorStorePort):
             }
             for row in rows
         ]
+
+    def prune_index(self, *, index_id: str, older_than: float, max_chunks: int) -> int:
+        """Physically expire old user memory and retain only the newest bounded set."""
+        bounded = max(1, min(10000, int(max_chunks)))
+        with self._engine.begin() as conn:
+            before = conn.execute(
+                text("SELECT COUNT(*) FROM user_memory_vector_chunks WHERE index_id = :index_id"),
+                {"index_id": index_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "DELETE FROM user_memory_vector_chunks WHERE index_id = :index_id AND created_at < :older_than"
+                ),
+                {"index_id": index_id, "older_than": float(older_than)},
+            )
+            conn.execute(
+                text(
+                    """
+                    DELETE FROM user_memory_vector_chunks
+                    WHERE index_id = :index_id
+                      AND chunk_id IN (
+                        SELECT chunk_id FROM user_memory_vector_chunks
+                        WHERE index_id = :index_id
+                        ORDER BY created_at DESC, chunk_id DESC
+                        OFFSET :max_chunks
+                      )
+                    """
+                ),
+                {"index_id": index_id, "max_chunks": bounded},
+            )
+            conn.execute(
+                text(
+                    "UPDATE user_memory_vector_indexes SET chunk_count = "
+                    "(SELECT COUNT(*) FROM user_memory_vector_chunks WHERE index_id = :index_id), "
+                    "updated_at = :updated_at WHERE index_id = :index_id"
+                ),
+                {"index_id": index_id, "updated_at": time.time()},
+            )
+            after = conn.execute(
+                text("SELECT COUNT(*) FROM user_memory_vector_chunks WHERE index_id = :index_id"),
+                {"index_id": index_id},
+            ).scalar_one()
+        return max(0, int(before or 0) - int(after or 0))
 
     def list_indexes(self) -> list[dict[str, Any]]:
         with self._engine.begin() as conn:
@@ -330,12 +380,21 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
         top_k: int = 5,
         filters: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        del filters
+        query_filter = filters if isinstance(filters, dict) else {}
+        try:
+            created_after = float(query_filter.get("created_after"))
+        except (TypeError, ValueError):
+            created_after = None
+        where = "index_id = ?"
+        parameters: list[Any] = [index_id]
+        if created_after is not None:
+            where += " AND created_at >= ?"
+            parameters.append(created_after)
         query_arr = np.array(query_vector, dtype=np.float32)
         with self._get_conn() as conn:
             rows = conn.execute(
-                "SELECT chunk_id, content, embedding, metadata FROM user_memory_vector_chunks WHERE index_id = ?",
-                (index_id,),
+                "SELECT chunk_id, content, embedding, metadata FROM user_memory_vector_chunks WHERE " + where,
+                parameters,
             ).fetchall()
 
         scored: list[dict[str, Any]] = []
@@ -356,6 +415,41 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
 
         scored.sort(key=lambda item: item["score"], reverse=True)
         return scored[: max(int(top_k), 1)]
+
+    def prune_index(self, *, index_id: str, older_than: float, max_chunks: int) -> int:
+        """Physically expire old user memory and retain only the newest bounded set."""
+        bounded = max(1, min(10000, int(max_chunks)))
+        with self._get_conn() as conn:
+            before = conn.execute(
+                "SELECT COUNT(*) FROM user_memory_vector_chunks WHERE index_id = ?",
+                (index_id,),
+            ).fetchone()[0]
+            conn.execute(
+                "DELETE FROM user_memory_vector_chunks WHERE index_id = ? AND created_at < ?",
+                (index_id, float(older_than)),
+            )
+            conn.execute(
+                """
+                DELETE FROM user_memory_vector_chunks
+                WHERE index_id = ? AND chunk_id IN (
+                    SELECT chunk_id FROM user_memory_vector_chunks
+                    WHERE index_id = ? ORDER BY created_at DESC, chunk_id DESC LIMIT -1 OFFSET ?
+                )
+                """,
+                (index_id, index_id, bounded),
+            )
+            conn.execute(
+                "UPDATE user_memory_vector_indexes SET chunk_count = "
+                "(SELECT COUNT(*) FROM user_memory_vector_chunks WHERE index_id = ?), updated_at = ? "
+                "WHERE index_id = ?",
+                (index_id, time.time(), index_id),
+            )
+            after = conn.execute(
+                "SELECT COUNT(*) FROM user_memory_vector_chunks WHERE index_id = ?",
+                (index_id,),
+            ).fetchone()[0]
+            conn.commit()
+        return max(0, int(before or 0) - int(after or 0))
 
     def list_indexes(self) -> list[dict[str, Any]]:
         with self._get_conn() as conn:

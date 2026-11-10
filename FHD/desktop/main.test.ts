@@ -339,12 +339,14 @@ describe('main — desktop splash & ping readiness', () => {
   })
 })
 
-describe('main — OTA proxy PAC', () => {
-  it('routes update hosts DIRECT and others via proxy with DIRECT fallback', async () => {
-    const { buildOtaPacScript } = await import('./main.js')
-    const pac = buildOtaPacScript('127.0.0.1:7890')
-    expect(pac).toContain("host === 'xiu-ci.com'")
-    expect(pac).toContain("return 'PROXY 127.0.0.1:7890; DIRECT'")
+describe('main — OTA proxy configuration', () => {
+  it('uses valid fixed-server settings and bypasses local/update hosts', async () => {
+    const { OTA_PROXY_BYPASS_RULES, buildOtaProxyConfig } = await import('./main.js')
+    expect(buildOtaProxyConfig('http://127.0.0.1:7890')).toEqual({
+      mode: 'fixed_servers',
+      proxyRules: 'http://127.0.0.1:7890',
+      proxyBypassRules: OTA_PROXY_BYPASS_RULES,
+    })
   })
 
   it('parses proxy endpoint host and port', async () => {
@@ -473,6 +475,7 @@ describe('main — backendEditionEnv', () => {
     expect(env.XCAGI_PLATFORM_SHELL).toBe('0')
     expect(env.XCAGI_DEFAULT_EDITION).toBe('full')
     expect(env.XCAGI_EDITION).toBe('full')
+    expect(env.XCAGI_MARKET_BASE_URL).toBe(process.env.XCAGI_MARKET_BASE_URL?.trim() || 'https://xiu-ci.com')
   })
 
   it('returns minimal edition env for personal SKU', async () => {

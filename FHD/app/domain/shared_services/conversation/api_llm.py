@@ -134,6 +134,23 @@ class ConversationLlmMixin:
         except ContextWindowExceeded as error:
             return {"error": {"code": "context_window_exceeded", "message": str(error)}}
         except RECOVERABLE_ERRORS as error:
+            from app.infrastructure.llm.model_admission import (
+                ModelCircuitOpenError,
+                ModelConcurrencyLimitError,
+                ModelRateLimitError,
+            )
+            from app.utils.resilience.rate_limiter import RateLimitBackendError
+
+            if isinstance(
+                error,
+                (
+                    ModelCircuitOpenError,
+                    ModelConcurrencyLimitError,
+                    ModelRateLimitError,
+                    RateLimitBackendError,
+                ),
+            ):
+                raise
             logger.error("❌ LLM API调用异常: %s", error, exc_info=True)
             return None
 

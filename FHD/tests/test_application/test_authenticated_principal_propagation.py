@@ -186,7 +186,7 @@ def test_unified_entrypoint_preserves_server_actor(sessions, monkeypatch, batch)
 
     captured = []
 
-    def reply(message, user_id, host, source, mode, context):
+    def reply(message, user_id, host, source, mode, context, request=None):
         captured.append((user_id, context))
         return {"success": True, "reply": "synthetic"}
 

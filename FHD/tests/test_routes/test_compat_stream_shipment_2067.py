@@ -40,7 +40,7 @@ def _no_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail_if_called(*_args: Any, **_kwargs: Any):
         raise AssertionError("开单不能交给 LLM 规划器")
 
-    monkeypatch.setattr(chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called)
+    monkeypatch.setattr(chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called, raising=False)
     monkeypatch.setattr(
         "app.domain.shared_services.conversation.modstore_adapter.create_modstore_openai_client_from_request",
         fail_if_called,
@@ -164,3 +164,31 @@ def test_stream_missing_spec_requests_clarification_without_document(monkeypatch
     assert "计量单位" in result["response"]
     assert "已生成" not in result["response"]
     generator.generate.assert_not_called()
+
+
+@pytest.mark.parametrize("message", ["当前客户端版本是多少？", "刚才说的客户总数是多少？"])
+def test_stream_fact_and_version_use_same_mainline(monkeypatch, message):
+    _no_llm(monkeypatch)
+    service = MagicMock(_pending_workflows={})
+    service.process_chat.return_value = {"success": True, "response": "同一套对话规则"}
+    monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
+    body = chat_helpers.XcagiCompatChatBody(message=message, user_id="u-fact", mode="online")
+    result = _events(
+        b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
+    )[-1]["result"]
+    service.process_chat.assert_called_once()
+    assert result["response"] == "同一套对话规则"
+
+
+@pytest.mark.parametrize("key", ["file_context", "file_analysis"])
+def test_stream_mainline_receives_the_same_file_context_as_json(monkeypatch, key):
+    _no_llm(monkeypatch)
+    service = MagicMock(_pending_workflows={})
+    service.process_chat.return_value = {"success": True, "response": "收到附件"}
+    monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
+    file_data = {"filename": "测试表.xlsx", "columns": ["客户", "产品"]}
+    body = chat_helpers.XcagiCompatChatBody(
+        message="刚才说的客户总数是多少？", user_id="u-file", context={key: file_data}
+    )
+    _ = list(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
+    assert service.process_chat.call_args.kwargs["file_context"] == file_data

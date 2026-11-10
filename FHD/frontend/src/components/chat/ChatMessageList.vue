@@ -151,7 +151,10 @@
             <i class="fa" :class="playingMsgIdx === idx ? 'fa-stop' : 'fa-volume-up'" aria-hidden="true"></i>
           </button>
         </div>
-        <div v-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg)" class="proactive-suggestions" data-testid="chat-error-recovery">
+        <div v-if="msg.role === 'ai' && !msg.streamingShell && msg.workflowAction === 'unknown'" class="proactive-suggestions" data-testid="chat-unknown-recovery">
+          <p>请先到任务工作区核对执行结果，避免重复提交。</p>
+        </div>
+        <div v-else-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg)" class="proactive-suggestions" data-testid="chat-error-recovery">
           <p>{{ recoveryText(msg) }}</p>
           <details v-if="originalRequest(idx)"><summary>查看本次原始输入</summary><p>{{ originalRequest(idx) }}</p></details>
           <button v-if="originalRequest(idx)" type="button" class="btn btn-secondary btn-sm" :disabled="isLoading" @click="retryModel(idx)">重试模型请求（不重复写入）</button>

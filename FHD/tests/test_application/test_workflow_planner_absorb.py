@@ -1,8 +1,7 @@
-"""Tests for planner absorbing conditional edges (branches) and clarify (反问) nodes.
+"""Tests for model plan admission, conditional edges (branches) and clarify nodes.
 
 Covers:
-  - planner produces a PlanGraph with ``branches`` for "查库存 → 按 low_stock 分支"（确定性规则）;
-  - planner inserts a ``clarify`` node for "删除客户（多同名）"（歧义反问）;
+  - deterministic preflight adds a clarify node to an incomplete model plan;
   - finalize_planned_graph validates graphs containing conditional edges / clarify nodes.
 """
 
@@ -72,59 +71,6 @@ def _ambiguous_delete_plan(plan_id: str = "p_delete") -> PlanGraph:
 # ===========================================================================
 
 
-class TestPlannerConditionalEdges:
-    def test_inventory_purchase_plan_has_low_stock_branch(self):
-        from unittest.mock import patch
-
-        from app.application.workflow.planner import get_tool_registry
-
-        planner = _make_planner()
-        with (
-            patch.object(planner, "_plan_with_react_multiagent", return_value=None),
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-                return_value="full",
-            ),
-            patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-            patch(
-                "app.domain.shared_services.user_memory_service.get_user_memory_service",
-                side_effect=ImportError,
-            ),
-        ):
-            plan = planner.plan("u1", "查一下库存，库存不足就安排采购", get_tool_registry())
-
-        assert plan.intent == "inventory_purchase"
-        check = next(n for n in plan.nodes if n.node_id == "check_stock")
-        assert check.tool_id == "inventory"
-        assert check.action == "check_stock"
-        assert check.branches == [
-            Branch(target="purchase_advice", condition={"key": "low_stock", "equals": True})
-        ]
-        assert any(n.node_id == "purchase_advice" for n in plan.nodes)
-        # 条件边必须通过图校验（目标存在、无环）。
-        assert validate_plan_graph(plan) is None
-
-    def test_non_inventory_message_has_no_branch(self):
-        from unittest.mock import patch
-
-        from app.application.workflow.planner import get_tool_registry
-
-        planner = _make_planner()
-        with (
-            patch.object(planner, "_plan_with_react_multiagent", return_value=None),
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-                return_value="full",
-            ),
-            patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-            patch(
-                "app.domain.shared_services.user_memory_service.get_user_memory_service",
-                side_effect=ImportError,
-            ),
-        ):
-            plan = planner.plan("u1", "查询一些产品信息", get_tool_registry())
-
-        assert all(not n.branches for n in plan.nodes)
 
 
 # ===========================================================================
@@ -139,10 +85,10 @@ class TestPlannerClarifyNode:
         planner = _make_planner()
         with (
             patch.object(
-                planner, "_plan_with_react_multiagent", return_value=_ambiguous_delete_plan()
+                planner, "_plan_with_llm", return_value=_ambiguous_delete_plan()
             ),
             patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                 return_value="full",
             ),
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
@@ -183,9 +129,9 @@ class TestPlannerClarifyNode:
         )
         planner = _make_planner()
         with (
-            patch.object(planner, "_plan_with_react_multiagent", return_value=plan_in),
+            patch.object(planner, "_plan_with_llm", return_value=plan_in),
             patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                 return_value="full",
             ),
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
@@ -250,7 +196,6 @@ class TestFinalizeValidateDecoratedGraph:
             plan_id="p_mixed",
             context={},
             validate=validate_plan_graph,
-            fallback_factory=lambda: (_ for _ in ()).throw(AssertionError("不应回退")),
             warn=self._noop_warn,
         )
         assert result is plan
@@ -263,13 +208,12 @@ class TestFinalizeValidateDecoratedGraph:
             intent="x",
             nodes=[bad_clarify],
         )
-        fallback = PlanGraph(plan_id="p_fallback", intent="generic", nodes=[])
         result = finalize_planned_graph(
             plan,
             plan_id="p_bad",
             context={},
             validate=validate_plan_graph,
-            fallback_factory=lambda: fallback,
             warn=self._noop_warn,
         )
-        assert result is fallback
+        assert result.metadata["planning_rejected"] is True
+        assert result.nodes[0].tool_id == "clarify"

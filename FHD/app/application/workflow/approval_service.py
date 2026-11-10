@@ -214,18 +214,17 @@ class ApprovalService:
         pending = self._pending_workflows.get(request_id)
         if pending is None:
             return False
+        from app.application.workflow.approval_persistence import persist_agent_run_link
+
+        if not persist_agent_run_link(
+            request_id, agent_run_id=agent_run_id, approved_step_id=approved_step_id
+        ):
+            return False
         pending["agent_run_id"] = str(agent_run_id or "").strip()
         pending["approved_step_id"] = str(approved_step_id or "").strip()
         metadata = self._request_metadata.get(request_id)
         if metadata is not None:
             metadata["agent_run_id"] = str(agent_run_id or "").strip()
-        from app.application.workflow.approval_persistence import persist_agent_run_link
-
-        persist_agent_run_link(
-            request_id,
-            agent_run_id=agent_run_id,
-            approved_step_id=approved_step_id,
-        )
         return True
 
     def note_observed_legacy_run(self, request_id: str, run_id: str) -> None:

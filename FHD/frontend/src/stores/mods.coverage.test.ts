@@ -1280,6 +1280,21 @@ describe('mods store – coverage 补齐', () => {
   // 6. ensureActiveModSelection 覆盖
   // ═══════════════════════════════════════════════════════════
   describe('ensureActiveModSelection', () => {
+    it('replaces an unentitled custom Mod with the entitled industry Mod', async () => {
+      const store = useModsStore()
+      store.mods = [{ id: 'sz-qsm-pro', primary: true }, { id: 'coating-industry' }] as never[]
+      store.setActiveModId('sz-qsm-pro')
+      await store.applyEntitledActiveMod(['coating-industry'], { force: true })
+      expect(store.activeModId).toBe('coating-industry')
+    })
+
+    it('clears an unentitled custom Mod when no entitled Mod is installed', async () => {
+      const store = useModsStore()
+      store.mods = [{ id: 'sz-qsm-pro', primary: true }] as never[]
+      store.setActiveModId('sz-qsm-pro')
+      await store.applyEntitledActiveMod(['coating-industry'], { force: true })
+      expect(store.activeModId).toBe('')
+    })
     it('admin 账户在选中 CLIENT_PRIMARY_ERP_MOD_ID 时清空', async () => {
       mockUseAccountProfileStore.mockReturnValue({
         accountUsername: '',
