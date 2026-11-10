@@ -809,11 +809,11 @@ describe('reviewed Excel template', () => {
     } finally { wrapper.unmount() }
   })
 
-  it('polls auto-ingest progress until terminal and surfaces poll errors', async () => {
+  it.each(['applied', 'failed'])('stops progress polling at %s and surfaces poll errors', async (status) => {
     vi.useFakeTimers()
     etl.autoIngestProgress
       .mockResolvedValueOnce({ status: 'running', kb_progress: { pct: 40, stage: 'write', message: '写入中' }, business_progress: { pct: 10, stage: 'queued', message: '排队' } })
-      .mockResolvedValueOnce({ status: 'applied', kb_progress: { pct: 100, stage: 'done', message: '完成' }, business_progress: { pct: 100, stage: 'done', message: '完成' } })
+      .mockResolvedValueOnce({ status, kb_progress: { pct: 100, stage: 'done', message: '完成' }, business_progress: { pct: status === 'failed' ? 0 : 100, stage: status === 'failed' ? 'outcome_unknown' : 'done', message: status === 'failed' ? '执行已中断，结果待核对；请勿重复入库' : '完成' } })
       .mockRejectedValueOnce(new Error('进度读取失败'))
     const wrapper = mount(ReviewedExcelTemplate)
     try {
@@ -827,6 +827,9 @@ describe('reviewed Excel template', () => {
       await vi.advanceTimersByTimeAsync(800)
       await flushPromises()
       expect(wrapper.text()).toContain('自动入库批次 batch-1')
+      if (status === 'failed') expect(wrapper.text()).toContain('执行已中断，结果待核对；请勿重复入库')
+      await vi.advanceTimersByTimeAsync(2400)
+      expect(etl.autoIngestProgress).toHaveBeenCalledTimes(2)
       ;(state.startIngestPoll as (id: string) => void)('batch-err')
       await flushPromises()
       expect(wrapper.text()).toContain('进度读取失败')

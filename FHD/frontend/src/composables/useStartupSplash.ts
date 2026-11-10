@@ -1,6 +1,8 @@
-import { getCurrentInstance, inject, onActivated, onBeforeUnmount, onDeactivated, ref, type InjectionKey } from 'vue'
+import { getCurrentInstance, inject, onActivated, onBeforeUnmount, onDeactivated, ref, type InjectionKey, type Ref } from 'vue'
 import { captureAuthSession } from '@/utils/authSessionCache'
 import { routeChunkErrorPath } from '@/utils/routeLoadState'
+
+export const startupReadyKey: InjectionKey<Readonly<Ref<boolean>>> = Symbol('startup-ready')
 
 type PreparePage = (signal: AbortSignal) => Promise<void>
 export const startupPageReadyKey: InjectionKey<(prepare: PreparePage) => () => void> = Symbol('startup-page-ready')
