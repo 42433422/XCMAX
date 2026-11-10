@@ -14,7 +14,7 @@ import pytest
 from fastapi import FastAPI
 
 from app.legacy.routes.legacy_compat import register_legacy_compat_routes
-from app.legacy.routes.openapi_route_compat import iter_effective_routes
+from tests.route_metadata import iter_route_metadata
 
 
 @pytest.fixture
@@ -32,9 +32,9 @@ def legacy_app() -> FastAPI:
 
 def _paths(app: FastAPI) -> set[str]:
     # FastAPI 0.138+ 用 _IncludedRouter 懒包装 include_router 的子路由，实际路径不再
-    # 直接挂在 app.routes 上；iter_effective_routes 会展开这些包装（与本测试上游 CI
+    # 直接挂在 app.routes 上；iter_route_metadata 会展开这些包装（与本测试上游 CI
     # 设置的 XCAGI_SKIP_LEGACY_COMPAT_ROUTES 无关——本测试直接调用 register 函数）。
-    return {r.path for r in iter_effective_routes(app.routes) if r.path}
+    return {r.path for r in iter_route_metadata(app.routes) if r.path}
 
 
 # (router_name, expected_path_prefix_or_substring)
@@ -106,7 +106,7 @@ def test_confirmed_label_workflow_is_mounted_once(legacy_app: FastAPI):
     }
     mounted = [
         (method, route.path)
-        for route in iter_effective_routes(legacy_app.routes)
+        for route in iter_route_metadata(legacy_app.routes)
         for method in route.methods or ()
         if route.path.startswith("/api/print/label-jobs")
     ]

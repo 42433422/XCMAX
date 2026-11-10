@@ -145,3 +145,27 @@ def test_route_ignores_only_hidden_refusal_and_hidden_coverage(monkeypatch):
     run.draft_json = json.dumps({"versions": [latest]})
     with pytest.raises(ReviewedExcelError, match="不能自动切片"):
         routes._auto_slices(None, "saved", "saved", 1, 7)
+
+
+@pytest.mark.parametrize("skip_hidden", [False, True])
+def test_completed_scope_restores_exact_saved_sheets_and_rejects_changes(skip_hidden):
+    from app.application.reviewed_excel_evidence import prepare_auto_slice_review
+    from app.application.reviewed_excel_plan import restore_completed_review
+
+    review = inspect_workbook(hidden_first_workbook("hidden"))
+    expected = prepare_auto_slice_review(review, skip_hidden_sheets=skip_hidden)
+    scope = {
+        "source_sha256": review["sha256"],
+        "skip_hidden_sheets": skip_hidden,
+        "sheets": expected["sheets"],
+    }
+    assert restore_completed_review(review, scope) == expected
+    assert restore_completed_review(review, None) is review
+    for change in (
+        {"source_sha256": "changed"},
+        {"sheets": []},
+        {"skip_hidden_sheets": "true"},
+        {"unknown": True},
+    ):
+        with pytest.raises(ReviewedExcelError, match="来源范围"):
+            restore_completed_review(review, {**scope, **change})

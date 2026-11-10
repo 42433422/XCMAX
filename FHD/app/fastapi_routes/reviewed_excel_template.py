@@ -847,6 +847,9 @@ def reviewed_excel_classification_confirm(
             if not versions or versions[-1].get("version") != version:
                 raise HTTPException(status_code=409, detail="分类版本已改变，请刷新")
             latest = json.loads(json.dumps(versions[-1], ensure_ascii=False))
+            from app.application.reviewed_excel_plan import restore_completed_review
+
+            review = restore_completed_review(review, latest.get("source_scope"))
             # Keep historical versions intact, but never copy legacy prompt bodies into a new version.
             latest.pop("input_messages", None)
             latest = apply_classification_corrections(review, latest, labels)
@@ -1651,6 +1654,11 @@ async def _reviewed_excel_classification_analyze_body(
                 "sheets": sheets,
                 "model_status": "returned",
                 "model_authorization": checkpoint.get("authorization"),
+                "source_scope": {
+                    "source_sha256": run.file_sha256,
+                    "skip_hidden_sheets": checkpoint.get("skip_hidden_sheets") is True,
+                    "sheets": review["sheets"],
+                },
                 "actual_model_providers": actual_providers,
                 "read_only_print_areas": review["read_only_print_areas"],
                 "suggested_documents": result["suggested_documents"],

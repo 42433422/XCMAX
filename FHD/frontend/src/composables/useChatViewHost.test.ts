@@ -4,7 +4,7 @@ import { mount, type VueWrapper } from '@vue/test-utils'
 import { useChatViewHost, type UseChatViewHostDeps } from './useChatViewHost'
 
 const startup = vi.hoisted(() => ({ register: vi.fn(), preparePage: vi.fn(), consumePrompt: vi.fn() }))
-vi.mock('@/composables/useStartupSplash', () => ({ useStartupPageReady: startup.register }))
+vi.mock('@/composables/useStartupSplash', () => ({ useStartupPageReady: startup.register, startupReadyKey: Symbol('startup-ready') }))
 vi.mock('@/constants/productFlow', () => ({ consumeFirstAiTaskPrompt: startup.consumePrompt }))
 
 function makeDeps(): UseChatViewHostDeps {
