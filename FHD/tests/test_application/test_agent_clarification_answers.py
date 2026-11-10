@@ -8,7 +8,10 @@ def test_named_quote_answer_stops_at_write_approval():
     params = {"items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}]}
     question = build_clarify_node(
         "请提供客户名称",
-        ambient={"target_node_id": "quote", "clarification": {"reason": "missing_required"}},
+        ambient={
+            "target_node_id": "quote",
+            "clarification": {"reason": "missing_required", "missing_fields": ["customer_name"]},
+        },
     )
     quote = WorkflowNode(node_id="quote", tool_id="sales", action="quote", params=params)
     orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
@@ -39,7 +42,7 @@ def test_answer_resolves_duplicate_missing_inputs_but_preserves_other_confirmati
             "请提供客户",
             ambient={
                 "target_node_id": "write",
-                "clarification": {"reason": reason},
+                "clarification": {"reason": reason, "missing_fields": ["unit_name"]},
             },
         )
         for reason in ("missing_required", "missing_required", "credit_limit_exceed")

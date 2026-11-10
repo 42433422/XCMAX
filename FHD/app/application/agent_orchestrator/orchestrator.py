@@ -1307,15 +1307,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     dict(business_outcome) if isinstance(business_outcome, dict) else output
                 )
                 if step.tool_id == "clarify" and output.get("requires_confirmation"):
-                    step.status = "waiting_user"
-                    step.output = dict(output)
-                    run.status = "waiting_user"
-                    run.final_output = {"clarification": {"step_id": step.step_id, **output}}
-                    run.add_event(
-                        "step.clarification_required",
-                        str(output.get("question") or "请补充执行所需的信息"),
-                        run.final_output,
-                    )
+                    pause_for_clarification(run, step, node_outputs)
+                    step.output = {**output, **step.output}
+                    run.final_output = {"clarification": {"step_id": step.step_id, **step.output}}
                     stopped_for_interaction = True
         if stopped_for_interaction or run.status in {"waiting_user", "blocked"}:
             self._repo.save(run)

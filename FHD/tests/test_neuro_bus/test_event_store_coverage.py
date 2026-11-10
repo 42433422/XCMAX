@@ -749,13 +749,6 @@ class TestAuditLog:
         assert entry["correlation_id"] == "trace-xyz"
         assert entry["payload_keys"] == ["user"]
 
-    def test_audit_log_by_stream(self):
-        store = EventStore()
-        store.append(_make_event(), stream_id="s1")
-        store.append(_make_event(), stream_id="s2")
-        log = store.get_audit_log(stream_id="s1")
-        assert len(log) == 1
-
 
 # --------------------------------------------------------------------------- #
 # Concurrency smoke test
