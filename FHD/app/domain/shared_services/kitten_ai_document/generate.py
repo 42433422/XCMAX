@@ -108,18 +108,22 @@ def draft_document_spec(user_prompt: str, output: Literal["docx", "xlsx"]) -> di
         )
     cli = get_openai_compatible_client()
     model = resolve_chat_model()
+    from app.infrastructure.llm.model_admission import admit_model_call, model_call_slot
+
     sys = _SYSTEM_DOCX if output == "docx" else _SYSTEM_XLSX
-    resp = cli.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": sys},
-            {"role": "user", "content": (user_prompt or "").strip()},
-        ],
-        temperature=0.35,
-        max_tokens=8192,
-        timeout=_document_spec_timeout_sec(),
-        response_format={"type": "json_object"},
-    )
+    with model_call_slot(None, profile="document_generation"):
+        admit_model_call(None, profile="document_generation")
+        resp = cli.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": sys},
+                {"role": "user", "content": (user_prompt or "").strip()},
+            ],
+            temperature=0.35,
+            max_tokens=8192,
+            timeout=_document_spec_timeout_sec(),
+            response_format={"type": "json_object"},
+        )
     raw = (resp.choices[0].message.content or "").strip()
     raw = _strip_json_fence(raw)
     try:

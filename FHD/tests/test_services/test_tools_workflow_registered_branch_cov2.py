@@ -2060,7 +2060,7 @@ class TestExecuteRegisteredWorkflowToolEmployee:
     def test_dispatches_employee_tool(self):
         with (
             patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                 return_value="admin",
             ),
             patch(
@@ -2083,7 +2083,7 @@ class TestExecuteRegisteredWorkflowToolEmployee:
     def test_employee_tool_returns_non_dict_json(self):
         with (
             patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                 return_value="admin",
             ),
             patch(
@@ -2101,7 +2101,7 @@ class TestExecuteRegisteredWorkflowToolEmployee:
     def test_employee_tool_dispatch_exception(self):
         with (
             patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                 return_value="admin",
             ),
             patch(
@@ -2119,7 +2119,7 @@ class TestExecuteRegisteredWorkflowToolEmployee:
     def test_unknown_tool_returns_failure(self):
         with (
             patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                 return_value="admin",
             ),
             patch(

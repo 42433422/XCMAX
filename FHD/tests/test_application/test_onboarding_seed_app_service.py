@@ -98,7 +98,7 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         )
         planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
         external_planner = Mock(side_effect=AssertionError("onboarding must not call a model"))
-        monkeypatch.setattr(planner, "_plan_with_react_multiagent", external_planner)
+        monkeypatch.setattr(planner, "_plan_with_llm", external_planner)
         monkeypatch.setattr(
             "app.application.get_user_memory_rag_app_service",
             lambda: SimpleNamespace(query=lambda **_kw: {"hits": []}),

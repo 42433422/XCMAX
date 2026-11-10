@@ -52,6 +52,7 @@ _UNTRUSTED_CONTROL = frozenset(
         "employee_tool_allowlist",
         "_actor_authorization",
         "_mod_authorization",
+        "_approval_agent_run_required",
     }
 )
 _FINGERPRINT_SKIP = frozenset(
@@ -185,7 +186,10 @@ def _tenant_tool_denial(
 
 
 def actor_tool_denial(
-    tool_id: str, action: str, context: dict[str, Any] | None
+    tool_id: str,
+    action: str,
+    context: dict[str, Any] | None,
+    params: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Deny when a sealed actor, tenant owner, or employee allowlist does not grant this tool."""
     ctx = dict(context or {})
@@ -223,7 +227,12 @@ def actor_tool_denial(
         actor = _bound_actor(ctx)
         if getattr(actor, "role", "") == "admin":
             return None
-        if spec.permission and not get_auth_service().has_permission(actor, spec.permission):
+        permission = spec.permission
+        if (tool_id, action) == ("business_db", "read") and (params or {}).get(
+            "entity"
+        ) == "products":
+            permission = "product.view"
+        if permission and not get_auth_service().has_permission(actor, permission):
             return _denial(
                 "tool_permission_denied",
                 "权限不足，已拒绝执行工具",

@@ -90,27 +90,15 @@ class TestMergeToolRuntimeContext:
 
     def test_none_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hi", None)
-        assert result == {"conversation_id": "u1", "message": "hi", "tenant_id": "1"}
+        assert result == {
+            "user_id": "u1",
+            "conversation_id": "u1",
+            "message": "hi",
+            "tenant_id": "1",
+        }
 
 
 # ========================= _build_fallback_response ======================
-
-
-class TestBuildFallbackResponse:
-    def test_greeting_keywords(self):
-        for kw in ("你好", "您好", "hi", "hello", "嗨"):
-            resp = AIChatApplicationService._build_fallback_response(kw, "test error")
-            assert "XCAGI" in resp["response"] or "智能助手" in resp["response"]
-
-    def test_default_fallback(self):
-        resp = AIChatApplicationService._build_fallback_response("查询产品", "timeout")
-        assert "timeout" in resp["response"]
-        assert resp["success"] is False
-        assert resp["data"]["action"] == "error_fallback"
-
-    def test_empty_message(self):
-        resp = AIChatApplicationService._build_fallback_response("", "err")
-        assert resp["success"] is False
 
 
 # ========================= _is_number_text ===============================
@@ -271,46 +259,7 @@ class TestExcelAnalysisPayloadPresent:
 # ========================= _looks_like_short_excel_import_command =========
 
 
-class TestLooksLikeShortExcelImportCommand:
-    def test_exact_match(self):
-        assert AIChatApplicationService._looks_like_short_excel_import_command("入库") is True
-
-    def test_containing_keyword(self):
-        assert (
-            AIChatApplicationService._looks_like_short_excel_import_command("请加入数据库") is True
-        )
-
-    def test_normal_message(self):
-        assert AIChatApplicationService._looks_like_short_excel_import_command("查询产品") is False
-
-    def test_empty(self):
-        assert AIChatApplicationService._looks_like_short_excel_import_command("") is False
-
-    def test_too_long(self):
-        assert AIChatApplicationService._looks_like_short_excel_import_command("a" * 50) is False
-
-
 # ========================= _resolve_excel_path_for_import ================
-
-
-class TestResolveExcelPathForImport:
-    def test_from_excel_analysis(self):
-        result = AIChatApplicationService._resolve_excel_path_for_import(
-            {"file_path": "/tmp/a.xlsx"}, {}
-        )
-        assert result == "/tmp/a.xlsx"
-
-    def test_from_preview_data(self):
-        result = AIChatApplicationService._resolve_excel_path_for_import(
-            {}, {"file_path": "/tmp/b.xlsx"}
-        )
-        assert result == "/tmp/b.xlsx"
-
-    def test_excel_analysis_priority(self):
-        result = AIChatApplicationService._resolve_excel_path_for_import(
-            {"file_path": "/tmp/a.xlsx"}, {"file_path": "/tmp/b.xlsx"}
-        )
-        assert result == "/tmp/a.xlsx"
 
 
 # ========================= _resolve_force_header_row_1based ===============
@@ -622,167 +571,19 @@ class TestInjectExcelVectorContext:
 # ========================= _handle_confirmation_flow =====================
 
 
-class TestHandleConfirmationFlow:
-    def test_no_file_context(self):
-        service = _make_service()
-        service.ai_service = Mock()
-        service._handle_confirmation_flow("u1", "是", None)
-        service.ai_service.set_pending_confirmation.assert_not_called()
-
-    def test_non_confirm_message(self):
-        service = _make_service()
-        service.ai_service = Mock()
-        service._handle_confirmation_flow("u1", "查询产品", {"saved_name": "f.xlsx"})
-        service.ai_service.set_pending_confirmation.assert_not_called()
-
-    def test_confirm_with_valid_context(self):
-        service = _make_service()
-        service.ai_service = Mock()
-        ctx = {
-            "saved_name": "test.xlsx",
-            "unit_name_guess": "测试公司",
-            "suggested_use": "unit_products_db",
-        }
-        service._handle_confirmation_flow("u1", "确认", ctx)
-        service.ai_service.set_pending_confirmation.assert_called_once()
-
-    def test_confirm_without_unit_name(self):
-        service = _make_service()
-        service.ai_service = Mock()
-        ctx = {
-            "saved_name": "test.xlsx",
-            "suggested_use": "unit_products_db",
-        }
-        service._handle_confirmation_flow("u1", "是", ctx)
-        service.ai_service.set_pending_confirmation.assert_not_called()
-
-
 # ========================= _build_response ===============================
-
-
-class TestBuildResponse:
-    def test_simple_followup(self):
-        service = _make_service()
-        result = service._build_response(
-            {"text": "hi", "action": "followup", "data": {"k": "v"}}, None
-        )
-        assert result["success"] is True
-        assert result["followup"] == {"k": "v"}
-
-    def test_auto_action(self):
-        service = _make_service()
-        result = service._build_response(
-            {"text": "doing", "action": "auto_action", "data": {"type": "x"}}, None
-        )
-        assert result["autoAction"] == {"type": "x"}
-
-    def test_tool_call_no_tool_key(self):
-        service = _make_service()
-        result = service._build_response(
-            {"text": "processing", "action": "tool_call", "data": {"params": {}}}, None
-        )
-        assert result["success"] is True
-
-    def test_tool_call_pro_mode(self):
-        service = _make_service()
-        ai_result = {
-            "text": "查询中",
-            "action": "tool_call",
-            "data": {"tool_key": "products", "slots": {"keyword": "test"}, "params": {}},
-        }
-        with patch("app.application.ai_chat_app_service.get_ai_conversation_service"):
-            with patch("app.bootstrap.get_products_service") as mock_ps:
-                mock_svc = Mock()
-                mock_svc.get_products.return_value = {"success": True, "data": []}
-                mock_ps.return_value = mock_svc
-                with patch(
-                    "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                    return_value=None,
-                ):
-                    result = service._build_response(ai_result, "pro", "查询产品")
-        assert result["success"] is True
 
 
 # ========================= _execute_customers_intent =====================
 
 
-class TestExecuteCustomersIntent:
-    def test_add_intent_no_unit_name(self):
-        service = _make_service()
-        resp = {"success": True, "data": {}}
-        result = service._execute_customers_intent(resp, {}, {}, "添加单位")
-        assert "哪个单位" in result["response"]
-
-    def test_query_intent(self):
-        service = _make_service()
-        resp = {"success": True, "data": {}}
-        with patch("app.bootstrap.get_customer_app_service") as mock_get:
-            mock_svc = Mock()
-            mock_svc.get_all.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = service._execute_customers_intent(resp, {}, {}, "查询客户列表")
-        assert result["success"] is True
-
-    def test_ambiguous_intent(self):
-        service = _make_service()
-        resp = {"success": True, "data": {}}
-        result = service._execute_customers_intent(resp, {}, {}, "客户")
-        assert "customers_followup" in str(result["data"]["data"])
-
-
 # ========================= _build_order_text_from_products ==============
-
-
-class TestBuildOrderTextFromProducts:
-    def test_basic(self):
-        service = _make_service()
-        products = [{"model": "5003", "quantity_tins": 10, "spec": 25}]
-        result = service._build_order_text_from_products("公司A", products)
-        assert "公司A" in result
-        assert "10桶5003规格25" in result
-
-    def test_empty_products(self):
-        service = _make_service()
-        assert service._build_order_text_from_products("公司A", []) == ""
-
-    def test_empty_unit(self):
-        service = _make_service()
-        assert service._build_order_text_from_products("", [{"model": "X"}]) == ""
 
 
 # ========================= _try_merge_split_model ========================
 
 
-class TestTryMergeSplitModel:
-    def test_merge_success(self):
-        service = _make_service()
-        result = service._try_merge_split_model("10桶5003A规格25", {"quantity_tins": 10})
-        assert "5003A" in result
-
-    def test_no_match(self):
-        service = _make_service()
-        result = service._try_merge_split_model("无型号信息", {"quantity_tins": 1})
-        assert result == ""
-
-
 # ========================= _normal_slot_dispatch_chat_overlay ============
-
-
-class TestNormalSlotDispatchChatOverlay:
-    def test_empty_result(self):
-        mock_result = Mock()
-        mock_result.node_results = []
-        assert AIChatApplicationService._normal_slot_dispatch_chat_overlay(mock_result) == {}
-
-    def test_with_normal_slot_dispatch(self):
-        mock_result = Mock()
-        mock_item = Mock()
-        mock_item.success = True
-        mock_item.tool_id = "normal_slot_dispatch"
-        mock_item.output = {"success": True, "response": "test", "autoAction": {"type": "x"}}
-        mock_result.node_results = [mock_item]
-        result = AIChatApplicationService._normal_slot_dispatch_chat_overlay(mock_result)
-        assert result["response"] == "test"
 
 
 # ========================= process_chat ==================================
@@ -795,109 +596,5 @@ class TestProcessChat:
         assert result["success"] is False
         assert "不能为空" in result["message"]
 
-    def test_connection_error(self):
-        async def raise_conn(*a, **kw):
-            raise ConnectionError("refused")
-
-        mock_ai = Mock()
-        mock_ai.chat = raise_conn
-        with patch(
-            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
-        ):
-            service = _make_service()
-            service.ai_service = mock_ai
-            result = service.process_chat("u1", "随便说点什么", source=None)
-        assert result["success"] is False
-        assert "连接失败" in result["message"]
-
-    def test_timeout_error(self):
-        async def raise_timeout(*a, **kw):
-            raise TimeoutError("timed out")
-
-        mock_ai = Mock()
-        mock_ai.chat = raise_timeout
-        with patch(
-            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
-        ):
-            service = _make_service()
-            service.ai_service = mock_ai
-            result = service.process_chat("u1", "随便说点什么", source=None)
-        assert result["success"] is False
-        assert "超时" in result["message"]
-
-    def test_api_key_error(self):
-        async def raise_key(*a, **kw):
-            raise RuntimeError("invalid api_key")
-
-        mock_ai = Mock()
-        mock_ai.chat = raise_key
-        with patch(
-            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
-        ):
-            service = _make_service()
-            service.ai_service = mock_ai
-            result = service.process_chat("u1", "随便说点什么", source=None)
-        assert result["success"] is False
-        assert "AI 服务暂时不可用" in result["message"]
-
 
 # ========================= _try_handle_dynamic_workflow ==================
-
-
-class TestTryHandleDynamicWorkflow:
-    def test_non_pro_returns_none(self):
-        service = _make_service()
-        result = service._try_handle_dynamic_workflow("u1", "hello", None, {}, {})
-        assert result is None
-
-    def test_pro_empty_message_returns_none(self):
-        service = _make_service()
-        result = service._try_handle_dynamic_workflow("u1", "", "pro", {}, {})
-        assert result is None
-
-    def test_pro_short_import_no_context(self):
-        service = _make_service()
-        result = service._try_handle_dynamic_workflow("u1", "入库", "pro", {}, {})
-        assert result is not None
-        assert result["success"] is True
-        assert "Excel 分析上下文" in result["response"]
-
-    def test_pro_import_with_file_context_no_saved_name(self):
-        service = _make_service()
-        ctx = {
-            "file_analysis": {"suggested_use": "unit_products_db"},
-            "file_context": {},
-        }
-        result = service._try_handle_dynamic_workflow("u1", "导入", "pro", ctx, {})
-        assert result is not None
-        assert "缺少源文件" in result["response"]
-
-    def test_pro_import_with_file_context_no_unit_name(self):
-        service = _make_service()
-        ctx = {
-            "file_analysis": {"suggested_use": "unit_products_db", "saved_name": "test.db"},
-            "file_context": {},
-        }
-        result = service._try_handle_dynamic_workflow("u1", "导入", "pro", ctx, {})
-        assert result is not None
-        assert "客户名称" in result["response"]
-
-    def test_pro_excel_import_ambiguous_price(self):
-        service = _make_service()
-        ctx = {
-            "excel_analysis": {
-                "summary": "test",
-                "fields": [{"label": "调价前单价"}, {"label": "调价后单价"}],
-                "preview_data": {
-                    "sample_rows": [
-                        {"客户": "A", "产品名称": "X", "调价前单价": 100, "调价后单价": 90}
-                    ]
-                },
-            }
-        }
-        with patch.object(
-            service, "_extract_excel_import_records", return_value=([], "ambiguous_price_columns")
-        ):
-            result = service._try_handle_dynamic_workflow("u1", "导入数据库", "pro", ctx, {})
-        assert result is not None
-        assert "歧义" in result["response"] or "调价" in result["response"]

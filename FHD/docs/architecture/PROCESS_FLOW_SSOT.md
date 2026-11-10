@@ -2,7 +2,7 @@
 
 > **本文件为 XCMAX「工作流程 + 交付流程」的唯一真相源（SSOT）**，供 AGI 编排（Agent Orchestrator / Workflow Engine / NeuroBus 事件驱动）消费。
 > 与任何业务文档冲突时，以本文件为准。
-> 最后更新：2026-08-05 · 登记：`docs/SSOT_INDEX.md`（领域 `process-flow`）
+> 最后更新：2026-11-10 · 登记：`docs/SSOT_INDEX.md`（领域 `process-flow`）
 
 ---
 
@@ -28,20 +28,15 @@
 
 **结论**：编排引擎已就位，但尚无内置 WorkflowDefinition；发票→入库→审批→月报 由 NeuroBus 域处理器直接编排（`../../app/neuro_bus/domains/inventory_domain_handlers.py`、`finance_domain_handlers.py`，月报由 `../../app/application/monthly_report_scheduler.py` 触发）。
 
-### 2.1 执行入口与状态归属（核心审计整改候选，2026-10-20）
+### 2.1 智能对话与业务工作流的唯一执行链
 
-以下是源码责任边界，不代表候选已合入、部署或通过真实业务验收。路径以仓库根为准；MODstore 前缀为 `成都修茈科技有限公司/MODstore_deploy/modstore_server/`。
+在线聊天流式、非流式及语音命令入口共用 `AIChatApplicationService`；compat 端点只做鉴权、格式适配和调用该主服务。每条消息都交给账户配置的平台模型，由模型选择生成普通回复或完整业务计划；不再用本地对话分类分流，也不保留独立直回复路径。两种输出都进入同一个 `LangGraph StateGraph`：普通回复作为内部无副作用节点运行，业务计划则在图执行前经独立于模型的确定性审核，核对图结构、工具动作、参数引用、服务端风险/幂等属性、当前权限和计划节点绑定。模型输出缺失、无效或被拒绝时明确失败，不回退到规则计划或未核验的业务回答。会话历史、跨会话个人记忆及本轮授权知识随请求提供；个人记忆按当前用户、租户和 Mod 授权独立注入，不依赖企业知识库权限。审批快照绑定完整计划和当前工具契约摘要；恢复时复核请求归属、租户、参数、整张计划、步骤清单及当前工具契约。代码在副作用后读取工具回执及业务状态；模型回复和运行状态不能代替业务核验。语音命令不再本地分类后直接调用工具。旧 workflow engine、旧普通聊天意图执行器和 shadow/canary 执行分支已退役。
 
-| 入口 | 执行 owner / 事务台账 | 重试与结果合同 |
-|---|---|---|
-| FHD `agent_orchestrator/unified_task.py` | `task_background.py`；`run_sql_repository.py` 与 `task_execution_sql_repository.py`（均在 `FHD/app/application/agent_orchestrator/`） | Run/Step 与队列租约归属；unknown 不等于失败可重派；生产持久化初始化失败拒接 |
-| FHD `app/di/registry.py` 的 workflow runtime | `app/application/workflow/runtime/`；checkpoint bridge | legacy 默认，其他模式显式配置；Workflow 与 AgentStep 入口共享条件/依赖规则，审批续跑保留分支决策；未选分支不执行 |
-| FHD `xcmax_admin_part03_part01.py:local_employee_execute` | `employee_runtime/executor.py`；`run_ledger.py` 的租户日志（分别位于 routes 与 application） | 单次请求执行一次；工具授权在最终 dispatch；error/accepted/unknown 不得 verified；业务完成另需独立 readback |
-| MODstore `customer_issue_intake.py` → `incident_bus.py` | outbox、唯一 incident 与 dispatch claim；`incident_team_dispatch.py` | 保留 event/task/attempt 身份；已受理或结果未知只核对原任务；新 fix 使旧 verify 失效 |
-| MODstore `admin_duty_graph_api_part02.py` / `employee_orchestrator.py` | 持久 DutyRun/节点或动态图运行记录 | 下游仅接受成功依赖；失败、跳过、pending 分开；传统 workflow 必须到达 end 才能成功 |
-| MODstore Para handler / 可选 Mac Control | 外部 API task ID / `mac_control_store.py` attempt | HTTP 200 不等于完成；子任务集合与原 ID 必须匹配；默认关闭的 Mac Control 不能替默认 Para 通道验收 |
+LangGraph 处理 AND 依赖、条件分支、未选分支、澄清/审批暂停、失败终止与死端。工具错误、超时、权限拒绝、限流和熔断保留结构化结果及恢复提示；安全的短暂故障可自动重试，配额/并发拒绝标为未执行并等待后续重试，副作用结果未知则转人工核对，禁止自动重放。审批驳回会取消挂起计划。只有工具自带明确补偿契约的动作才可回滚，系统不猜测通用回滚。
 
-跨入口回归以 `test_plan_graph_execution_contract.py`、`test_employee_run_tenant_isolation.py`、`test_tool_execution_deadline.py` 及 MODstore `test_workflow_terminal_contract.py` 为入口。稳定 facade 保留，新增合同应复用已有结果判定，避免反向动态 import 扩散。尚未提供真实进程隔离的同步工具在未开启严格 deadline 模式时仍可能挂起；该 F08 缺口及真实容量、连续 SLO、同发布 SHA 业务/恢复验收不得由本表替代。
+模型入口按认证账户限 60 次/分钟、租户限 600 次/分钟（可用 `XCAGI_MODEL_CALLS_PER_MINUTE` 与 `XCAGI_TENANT_MODEL_CALLS_PER_MINUTE` 覆盖），进程并发上限默认 32，单账户/供应商连续 5 次瞬时失败后熔断 30 秒；工具入口按租户/动作限 120 次/分钟，单进程并发上限 32、单租户上限 16、单租户动作上限 8，连续 5 次瞬时故障后按租户动作熔断 30 秒。生产/预发布要求 Redis 分布式速率限流；Redis 不可用时限流门禁 fail-closed；并发闸门和熔断在每个应用进程内生效。平台余额与套餐仍由模型平台核算。
+
+短期会话历史按用户、租户、Mod 与会话隔离；可召回个人记忆跨会话共享，但仍按用户、租户和 Mod 隔离。向量记忆最多保留 90 天/400 个片段，并在写入或召回时物理清理过期/超额片段，单次模型上下文最多 120 条、48,000 字符。凭据在记忆存储与模型上下文中脱敏；附件记忆只保留名称、类型和大小。线上业务查询不再由旧 slot 路由或直达处理器短路，模型没有生成有效计划时不执行。离线模式只开放原有受限本地业务处理，不提供普通离线大模型问答。代码、模型回复或 checkpoint 状态都不是业务成功证据；验收须以原始场景核对业务读回。
 
 ## 3. 工作流程（企业内部业务）
 

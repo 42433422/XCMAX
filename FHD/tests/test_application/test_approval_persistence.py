@@ -30,61 +30,66 @@ from sqlalchemy.pool import StaticPool
 
 from app.application.workflow.approval_persistence import (
     SNAPSHOT_KEY,
+    SNAPSHOT_VERSION,
     WORKFLOW_EXECUTION_FAILED_CODE,
     WORKFLOW_EXECUTION_SUCCESS_CODE,
+    _contract_digest,
     load_durable_workflow_snapshot,
     mark_durable_outcome,
     mark_durable_request_approved_and_load,
 )
+from app.application.workflow.workflow_types import plan_from_dict, plan_fingerprint
 from app.db.db_base import Base
 from app.db.models.approval import ApprovalRequest, ApprovalStatus
 
-SNAPSHOT_VERSION = 1
-
-
 def _valid_business_data(tenant_id=1, plan_id="plan-1", params=None):
     params = dict(params or {"unit_name": "Acme"})
+    plan = {
+        "plan_id": plan_id,
+        "intent": "business_db_write",
+        "todo_steps": [],
+        "risk_level": "low",
+        "metadata": {},
+        "nodes": [
+            {
+                "node_id": "write_customer",
+                "tool_id": "business_db",
+                "action": "write",
+                "params": params,
+                "risk": "low",
+                "idempotent": False,
+                "description": "",
+                "depends_on": [],
+                "next": None,
+                "branches": [],
+            }
+        ],
+    }
+    restored_plan = plan_from_dict(plan)
+    snapshot = {
+        "version": SNAPSHOT_VERSION,
+        "plan_id": plan_id,
+        "tenant_id": tenant_id,
+        "node": {
+            "node_id": "write_customer",
+            "tool_id": "business_db",
+            "action": "write",
+            "params": params,
+        },
+        "plan": plan,
+        "plan_sha256": plan_fingerprint(restored_plan),
+        "contract_sha256": _contract_digest(restored_plan),
+        "runtime_context": {"message": "write customer"},
+        "agent_run_id": "",
+        "approved_step_id": "",
+    }
     return {
         "plan_id": plan_id,
         "node_id": "write_customer",
         "tool_id": "business_db",
         "action": "write",
         "params": params,
-        SNAPSHOT_KEY: {
-            "version": SNAPSHOT_VERSION,
-            "plan_id": plan_id,
-            "tenant_id": tenant_id,
-            "node": {
-                "node_id": "write_customer",
-                "tool_id": "business_db",
-                "action": "write",
-                "params": params,
-            },
-            "plan": {
-                "plan_id": plan_id,
-                "intent": "business_db_write",
-                "todo_steps": [],
-                "risk_level": "low",
-                "metadata": {},
-                "nodes": [
-                    {
-                        "node_id": "write_customer",
-                        "tool_id": "business_db",
-                        "action": "write",
-                        "params": params,
-                        "risk": "low",
-                        "idempotent": False,
-                        "description": "",
-                        "depends_on": [],
-                        "next": None,
-                        "branches": [],
-                    }
-                ],
-            },
-            "runtime_context": {"message": "write customer"},
-            "agent_run_id": "",
-            "approved_step_id": "",
-        },
+        SNAPSHOT_KEY: snapshot,
     }
 
 
@@ -202,6 +207,9 @@ class TestLoaderPlanIdAndParams:
     def test_legacy_single_node_derived_plan_id_remains_loadable(self, db):
         data = _valid_business_data(plan_id="plan-parent")
         data[SNAPSHOT_KEY]["plan"]["plan_id"] = "plan-parent:write_customer"
+        plan = plan_from_dict(data[SNAPSHOT_KEY]["plan"])
+        data[SNAPSHOT_KEY]["plan_sha256"] = plan_fingerprint(plan)
+        data[SNAPSHOT_KEY]["contract_sha256"] = _contract_digest(plan)
         _insert_request(db, request_no="req-legacy-derived", business_data=data)
 
         snapshot = load_durable_workflow_snapshot("req-legacy-derived", allow_terminal=False)
@@ -373,7 +381,7 @@ class TestResumePathNoRawLeakReal:
         engine.run.return_value = run_result
         with (
             patch("app.application.workflow.get_approval_service", return_value=svc),
-            patch("app.application.workflow.WorkflowEngine", return_value=engine),
+            patch("app.infrastructure.workflow.langgraph_runtime.XCAGILangGraphRuntime", return_value=engine),
             patch("app.fastapi_routes.domains.misc.helpers._dispatch_tool_for_approval"),
         ):
             out = _resume_pending_ai_workflow_after_approval(
@@ -383,7 +391,7 @@ class TestResumePathNoRawLeakReal:
         # 纯执行契约：恢复器不落库、不写终态；终态由调用方在自身事务统一写入。
         assert out is not None
         assert out["success"] is False
-        assert out["message"] == "AI 工作流执行失败"
+        assert out["message"] == "Agent Run 不可用"
         assert "boom-secret-raw-exception-xyz" not in str(out)
         row = _read_status(db, "req-resume-leak")
         assert row.status == ApprovalStatus.PENDING.value
@@ -503,3 +511,212 @@ class TestAtomicTerminalStateNotOverwrittenByStaleSession:
             assert load_durable_workflow_snapshot("req-atomic-ok", allow_terminal=False) is None
         finally:
             session_a.close()
+
+
+@pytest.mark.parametrize("reject_second", [False, True])
+def test_full_plan_survives_restart_between_two_approvals(db, monkeypatch, reject_second):
+    import logging
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.approval_workspace.protocols import WorkflowBackends
+    from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
+    from app.application.workflow.approval_persistence import load_workflow_snapshot_for_execution
+    from app.application.workflow.approval_service import ApprovalService
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
+    from app.db.models import User
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with db() as session:
+        session.add(User(id=41, username="synthetic-approval-user", password="test", tenant_id=1))
+        session.commit()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
+        lambda: SimpleNamespace(execute=AgentToolExecutor().execute),
+    )
+    # This test exercises durable plan resumption with a synthetic actor and a
+    # mocked dispatcher; real tool authorization has its own isolation tests.
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.tool_executor._reviewed_query_tenant",
+        lambda *_args: (None, None),
+    )
+    repo = SQLAlchemyAgentRunRepository(session_factory=db)
+    plan = PlanGraph(
+        plan_id=f"durable-two-approvals-{int(reject_second)}",
+        intent="test",
+        nodes=[
+            WorkflowNode(
+                "first",
+                "business_db",
+                "read",
+                params={"entity": "products"},
+                risk="low",
+                idempotent=True,
+            ),
+            WorkflowNode(
+                "second",
+                "business_db",
+                "read",
+                params={"entity": "customers"},
+                risk="low",
+                idempotent=True,
+                depends_on=["first"],
+            ),
+            WorkflowNode(
+                "third",
+                "business_db",
+                "read",
+                params={"entity": "products"},
+                risk="low",
+                idempotent=True,
+                depends_on=["second"],
+            ),
+        ],
+    )
+    approvals = ApprovalService()
+    service = object.__new__(AIChatApplicationService)
+    service._pending_workflows = {
+        "41": {
+            "plan": plan,
+            "runtime_context": {"local_user_id": 41, "tenant_id": 1, "message": "依次查询"},
+            "approval_required": True,
+            "approval_nodes": [{"node_id": "first"}, {"node_id": "second"}],
+        }
+    }
+    service.approval_service = approvals
+    calls = []
+
+    def execute(_tool, _action, params):
+        calls.append(params["_runtime_context"]["node_id"])
+        return {"success": True, "data": []}
+
+    def bridge_for(service):
+        return WorkflowApprovalBridge(
+            WorkflowBackends(
+                approvals=lambda: service,
+                pending_snapshot=load_durable_workflow_snapshot,
+                execution_snapshot=load_workflow_snapshot_for_execution,
+                agent=lambda: AgentOrchestrator(
+                    repository=SQLAlchemyAgentRunRepository(session_factory=db)
+                ),
+                load_run=repo.get,
+            ),
+            (RuntimeError,),
+            logging.getLogger(__name__),
+        )
+
+    with (
+        tenant_scope(1),
+        patch(
+            "app.application.agent_orchestrator.AgentOrchestrator",
+            return_value=AgentOrchestrator(repository=repo),
+        ),
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+            side_effect=execute,
+        ),
+    ):
+        handled, result = service._resume_pending_dynamic_workflow("41", "确认", "确认")
+        assert handled and result["success"] is True, result
+        first = result["data"]["data"]["approval_request_ids"][0]
+        durable = load_workflow_snapshot_for_execution(first)
+        waiting_run = repo.get(result["data"]["data"]["agent_run_id"])
+        assert durable is not None, (first, result)
+        assert waiting_run is not None and waiting_run.status == "waiting_user"
+        persisted_plan = plan_from_dict(waiting_run.metadata.get("plan"))
+        assert persisted_plan is not None
+        assert plan_fingerprint(durable["plan"]) == plan_fingerprint(persisted_plan), (
+            durable["plan"].to_dict() if hasattr(durable["plan"], "to_dict") else durable["plan"],
+            persisted_plan,
+        )
+        # Recreate the service and repository to model a backend restart.
+        bridge = bridge_for(ApprovalService())
+        first_result = bridge.resume(request_no=first, opinion="同意", approved_by="41")
+        assert first_result.get("waiting_approval") is True, first_result
+        resumed = repo.get(first_result.get("agent_run_id") or "")
+        assert calls == ["first"], (
+            first_result.get("message"),
+            first_result.get("nodes_executed"),
+            [(step.node_id, step.status, step.error) for step in (resumed.steps if resumed else [])],
+            [event.event_type for event in (resumed.events[-6:] if resumed else [])],
+            len(resumed.tool_calls) if resumed else None,
+        )
+        second = first_result["next_approval_request_id"]
+        replay = bridge_for(ApprovalService()).resume(
+            request_no=first, opinion="同意", approved_by="41"
+        )
+        assert replay["success"] is False
+        assert calls == ["first"]
+        bridge = bridge_for(ApprovalService())
+        if reject_second:
+            with db() as session:
+                row = session.query(ApprovalRequest).filter_by(request_no=second).one()
+                row.status = ApprovalStatus.REJECTED.value
+                session.commit()
+            final = bridge.reject(request_no=second, reason="不同意")
+            assert final["code"] == "approval_rejected"
+            assert repo.get(first_result["agent_run_id"]).status == "cancelled"
+            assert calls == ["first"]
+        else:
+            final = bridge.resume(request_no=second, opinion="同意", approved_by="41")
+            assert final["success"] is True, final
+            assert calls == ["first", "second", "third"]
+
+
+def test_only_one_concurrent_reviewer_can_claim_approval(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from app.application.workflow.approval_persistence import claim_agent_approval
+    from app.application.workflow.approval_service import ApprovalService
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.db.models import User
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'claim.db'}", connect_args={"check_same_thread": False}
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    with factory() as session:
+        session.add(User(id=41, username="claim-test", password="test", tenant_id=1))
+        session.commit()
+    node = WorkflowNode(
+        "first", "business_db", "read", params={"entity": "products"}, idempotent=True
+    )
+    plan = PlanGraph(plan_id="claim-test", intent="test", nodes=[node])
+    service = ApprovalService()
+    with tenant_scope(1):
+        request = service.create_approval_request(
+            plan_id=plan.plan_id,
+            node=node,
+            plan=plan,
+            require_persistence=True,
+            runtime_context={
+                "local_user_id": 41,
+                "tenant_id": 1,
+                "_approval_agent_run_required": True,
+            },
+        )
+        assert service.attach_pending_agent_run(
+            request.request_id, agent_run_id="run-test", approved_step_id="first"
+        )
+    barrier = Barrier(2)
+
+    def claim():
+        with tenant_scope(1):
+            barrier.wait()
+            return claim_agent_approval(
+                request.request_id, agent_run_id="run-test", approved_step_id="first"
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: claim(), range(2)))
+    assert sorted(results) == [False, True]
+    engine.dispose()

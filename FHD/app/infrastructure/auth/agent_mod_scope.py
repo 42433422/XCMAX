@@ -5,6 +5,8 @@ import hmac
 import json
 import os
 import secrets
+import stat
+import tempfile
 from contextlib import contextmanager
 from typing import Any
 
@@ -19,10 +21,59 @@ class AgentModAuthorizationError(ValueError):
     pass
 
 
+def _desktop_actor_key() -> str:
+    from app.desktop_runtime.desktop_runtime_paths import get_desktop_data_dir
+
+    root = get_desktop_data_dir() / "data"
+    root.mkdir(parents=True, exist_ok=True)
+    target = root / ".agent-actor-binding-key"
+    if not target.exists():
+        fd, temp_path = tempfile.mkstemp(prefix=".actor-key-", dir=root)
+        try:
+            if hasattr(os, "fchmod"):
+                os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="ascii") as stream:
+                stream.write(secrets.token_urlsafe(48))
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.link(temp_path, target)
+            except FileExistsError:
+                pass
+        finally:
+            os.unlink(temp_path)
+    fd = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    with os.fdopen(fd, "r", encoding="ascii") as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise AgentModAuthorizationError("任务身份密钥权限不安全")
+        if os.name != "nt":
+            if hasattr(os, "geteuid") and info.st_uid != os.geteuid():
+                raise AgentModAuthorizationError("任务身份密钥所有者不安全")
+            if info.st_mode & 0o077:
+                os.fchmod(stream.fileno(), 0o600)
+                info = os.fstat(stream.fileno())
+            if info.st_mode & 0o077:
+                raise AgentModAuthorizationError("任务身份密钥权限不安全")
+        key = stream.read(256).strip()
+    if len(key) < 48:
+        raise AgentModAuthorizationError("任务身份密钥不可用")
+    return key
+
+
 def _actor_proof(binding: dict[str, Any]) -> str:
-    secret = os.environ.get("SECRET_KEY", "").strip() or os.environ.setdefault(
-        "XCAGI_AGENT_ACTOR_BINDING_KEY", secrets.token_urlsafe(48)
+    secret = (
+        os.environ.get("SECRET_KEY", "").strip()
+        or os.environ.get("XCAGI_AGENT_ACTOR_BINDING_KEY", "").strip()
     )
+    if not secret:
+        from app.desktop_runtime.desktop_runtime_paths import is_desktop_mode
+
+        secret = (
+            _desktop_actor_key()
+            if is_desktop_mode()
+            else os.environ.setdefault("XCAGI_AGENT_ACTOR_BINDING_KEY", secrets.token_urlsafe(48))
+        )
     return hmac.new(
         secret.encode(),
         json.dumps(binding, sort_keys=True, separators=(",", ":")).encode(),

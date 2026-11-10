@@ -30,9 +30,12 @@ _PROVIDER_ID_ALIASES = {
 
 
 def _maybe_instrument(provider: LLMProvider | None) -> LLMProvider | None:
-    """返回前包 InstrumentedProvider（装饰层自身异常时原样返回，fail-open）。"""
+    """Apply admission to every provider, then optional telemetry/guardrails."""
     if provider is None:
         return None
+    from app.infrastructure.llm.model_admission import rate_limit_provider
+
+    provider = rate_limit_provider(provider)
     try:
         from app.infrastructure.llm.instrumented_provider import wrap_provider
 

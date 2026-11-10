@@ -773,39 +773,10 @@ class TestArtifactFromExcelAnalysisPayload:
 
 
 # ===========================================================================
-# _normalized_record_payload — lines 1236-1252
 # ===========================================================================
 
 
-class TestNormalizedRecordPayload:
-    def test_basic_extraction(self):
-        record = {
-            "tool_id": "customers",
-            "action": "query",
-            "params": {"filter": "all"},
-            "output": {"success": True, "rows": []},
-        }
-        tool_id, action, params, output = ct._normalized_record_payload(record)
-        assert tool_id == "customers"
-        assert action == "query"
-        assert params == {"filter": "all"}
-        assert output["success"] is True
 
-    def test_defaults_action_to_execute(self):
-        record = {"tool_id": "products", "output": {"success": True}}
-        _, action, _, _ = ct._normalized_record_payload(record)
-        assert action == "execute"
-
-    def test_non_dict_output_wrapped(self):
-        record = {"tool_id": "t", "output": "error string"}
-        _, _, _, output = ct._normalized_record_payload(record)
-        assert output["success"] is False
-        assert "error string" in output["message"]
-
-    def test_non_dict_params_returns_empty(self):
-        record = {"tool_id": "t", "params": "not a dict"}
-        _, _, params, _ = ct._normalized_record_payload(record)
-        assert params == {}
 
 
 # ===========================================================================
@@ -950,91 +921,17 @@ class TestCreateChatTraceRun:
 
 
 # ===========================================================================
-# finalize_legacy_chat_run — lines 1519-1594
 # ===========================================================================
 
 
-class TestFinalizeLegacyChatRun:
-    def test_non_dict_payload_returned_as_is(self, repo):
-        # When payload is not a dict, it is returned immediately (line 1530 branch)
-        payload = "this is not a dict"
-        with patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ):
-            result = ct.finalize_legacy_chat_run("any-run-id", payload, message="q")
-        assert result == payload
 
-    def test_run_not_found_calls_attach(self, repo):
-        payload = {"success": True, "response": "done"}
-        with patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ):
-            result = ct.finalize_legacy_chat_run("nonexistent-run-id", payload, message="q")
-        assert "run_id" in result
-
-    def test_with_existing_run(self, repo):
-        run = _make_run()
-        repo.save(run)
-        payload = {"success": True, "response": "done"}
-        with patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ):
-            result = ct.finalize_legacy_chat_run(run.run_id, payload, message="q")
-        assert result["run_id"] == run.run_id
-
-    def test_waiting_user_status(self, repo):
-        run = _make_run()
-        repo.save(run)
-        payload = {"requires_token": True, "message": "需要授权"}
-        with patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ):
-            result = ct.finalize_legacy_chat_run(run.run_id, payload, message="q")
-        updated = repo.get(run.run_id)
-        assert updated is not None
-        assert updated.status == "waiting_user"
-
-    def test_failed_status(self, repo):
-        run = _make_run()
-        repo.save(run)
-        payload = {"success": False, "message": "failed hard"}
-        with patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ):
-            result = ct.finalize_legacy_chat_run(run.run_id, payload, message="q")
-        updated = repo.get(run.run_id)
-        assert updated is not None
-        assert updated.status == "failed"
 
 
 # ===========================================================================
-# start_legacy_chat_run — lines 1484-1516
 # ===========================================================================
 
 
-class TestStartLegacyChatRun:
-    def test_creates_run_with_running_status(self, repo):
-        with patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ):
-            run = ct.start_legacy_chat_run(message="hello", user_id="u1", source="mobile")
-        assert run.status == "running"
-        assert run.metadata["source"] == "mobile"
-        assert any(e.event_type == "run.created" for e in run.events)
 
-    def test_creates_run_with_anonymous_user(self, repo):
-        with patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ):
-            run = ct.start_legacy_chat_run(message="test")
-        assert run.user_id == "anonymous"
 
 
 # ===========================================================================

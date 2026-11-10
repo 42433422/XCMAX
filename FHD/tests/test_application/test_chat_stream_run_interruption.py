@@ -15,16 +15,18 @@ from sqlalchemy.orm import sessionmaker
 from app.application.agent_orchestrator import run_sql_repository as installed_sql
 from app.application.agent_orchestrator.run_models import AgentRun
 from tests.test_application.test_chat_stream_lifetime import (
+    bind_entrypoint_modules,
     ROOT,
     bridge,
     extract,
-    guarded,
     life,
     wait,
 )
-from tests.test_application.test_chat_stream_lifetime import (
-    source_bindings as source_bindings,
-)
+
+
+@pytest.fixture(autouse=True)
+def source_bindings(monkeypatch):
+    bind_entrypoint_modules(monkeypatch)
 
 
 def load_source(name):
@@ -60,7 +62,7 @@ def repositories(monkeypatch):
 def observer(repo):
     return extract(
         "app/application/agent_orchestrator/chat_trace.py",
-        "mark_legacy_chat_stream_interrupted",
+        "mark_chat_stream_interrupted",
         {
             "get_agent_run_repository": lambda: repo,
         },
@@ -145,7 +147,9 @@ async def test_worker_accounting_keeps_inflight_business_visible_then_unknown(re
     writes = []
 
     def producer(*a, **k):
-        life.watch_stream_interruption(lambda **state: mark(expected, **state))
+        life.watch_stream_interruption(
+            lambda **state: mark(expected, **state), run_snapshot=expected
+        )
         try:
             yield b"run-id-already-delivered"
             writes.append("committed-once")
@@ -259,75 +263,6 @@ def test_sql_unknown_readback_and_cas_does_not_drop_concurrent_audit(repositorie
     finally:
         for engine in engines:
             engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_actual_planner_wrapper_disconnect_reads_back_unknown_not_permanent_running(
-    repositories, monkeypatch
-):
-    from tests.test_application import test_chat_stream_lifetime as source_tests
-
-    repo = repositories[0]()
-    expected = initial(repo)
-    mark = observer(repo)
-    actual_extract = source_tests.extract
-    actual_bridge = source_tests.bridge
-    captured = {}
-
-    class Captured(Exception):
-        pass
-
-    def capture_extract(path, name, namespace):
-        if name == "_xcagi_planner_stream_bytes":
-            facade = namespace["_facade"]()
-            facade.start_legacy_chat_run = lambda **k: expected
-            namespace["mark_legacy_chat_stream_interrupted"] = mark
-            captured["facade"] = facade
-        return actual_extract(path, name, namespace)
-
-    def capture_factory(factory):
-        captured["factory"] = factory
-        raise Captured()
-
-    monkeypatch.setattr(source_tests, "extract", capture_extract)
-    monkeypatch.setattr(source_tests, "bridge", capture_factory)
-    with pytest.raises(Captured):
-        await source_tests.test_real_sync_wrapper_catches_guard_timeout_and_delivers_error(
-            monkeypatch
-        )
-    monkeypatch.setattr(source_tests, "bridge", actual_bridge)
-    entered, release = threading.Event(), threading.Event()
-    effects = []
-
-    def events(*args, **kwargs):
-        effects.append("already-written-once")
-        entered.set()
-        assert release.wait(2)
-        yield {"type": "token", "text": "late"}
-
-    captured["facade"]._xcagi_guarded_planner_stream_events = lambda *a, **k: guarded(
-        events, monkeypatch, timeout=3
-    )
-    stream = actual_bridge(captured["factory"])
-    first = await anext(stream)
-    assert expected.run_id.encode() in first
-    await wait(entered)
-    await stream.aclose()
-    deadline = time.monotonic() + 1
-    while (
-        not repo.get(expected.run_id).metadata.get("stream_interruption")
-        and time.monotonic() < deadline
-    ):
-        await asyncio.sleep(0.01)
-    assert repo.get(expected.run_id).status == "running"
-    assert repo.get(expected.run_id).metadata["stream_interruption"]["worker_pending"] is True
-    release.set()
-    deadline = time.monotonic() + 1
-    while repo.get(expected.run_id).status != "blocked" and time.monotonic() < deadline:
-        await asyncio.sleep(0.01)
-    assert repo.get(expected.run_id).status == "blocked"
-    assert repo.get(expected.run_id).final_output["receipt"] == expected.final_output["receipt"]
-    assert effects == ["already-written-once"]
 
 
 @pytest.mark.parametrize("pending", [False, True])
@@ -457,165 +392,6 @@ def test_existing_recovery_evidence_is_retained_and_legacy_marker_is_gated(repos
     assert fresh.metadata["recovery"]["independent_audit"] == "keep"
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("notify_order", ["observer_first", "foreground_first"])
-@pytest.mark.parametrize("confirmed_status", [None, "completed", "failed"])
-async def test_actual_observation_timeout_is_not_business_failure_and_never_replays_unknown(
-    repositories, monkeypatch, notify_order, confirmed_status
-):
-    import json
-
-    from app.application.agent_orchestrator.run_lifecycle import (
-        RunLifecycleMixin,
-        requires_retry_reconciliation,
-    )
-    from app.application.agent_orchestrator.trace_runs import TraceRunService
-    from tests.test_application import test_chat_stream_lifetime as source_tests
-
-    repo = repositories[0]()
-    expected = repo.save(
-        AgentRun(
-            user_id="synthetic-owner",
-            message="synthetic read",
-            status="running",
-            metadata={"runtime_context": {}},
-        )
-    )
-    mark = observer(repo)
-    service = TraceRunService(
-        repo, NS(enrich=lambda *a, **k: None, finalize=lambda *a: None), lambda *a: None
-    )
-    source_extract, source_bridge = source_tests.extract, source_tests.bridge
-    captured, finalizations, effects, retries = {}, [], [], []
-    entered, release_business, finished = (threading.Event() for _ in range(3))
-    observed, release_observer = threading.Event(), threading.Event()
-    in_observer = threading.local()
-
-    class Captured(Exception):
-        pass
-
-    def mark_with_order(run, **state):
-        if not getattr(in_observer, "active", False) and notify_order == "observer_first":
-            assert observed.wait(2)
-        mark(run, **state)
-
-    def watch(callback, **identity):
-        def ordered(**state):
-            if notify_order == "foreground_first":
-                assert release_observer.wait(2)
-            in_observer.active = True
-            try:
-                callback(**state)
-                observed.set()
-            finally:
-                in_observer.active = False
-
-        life.watch_stream_interruption(ordered, **identity)
-
-    def capture_extract(path, name, namespace):
-        if name == "_xcagi_planner_stream_bytes":
-            namespace["watch_stream_interruption"] = watch
-            facade = namespace["_facade"]()
-            facade.start_legacy_chat_run = lambda **k: expected
-            namespace["mark_legacy_chat_stream_interrupted"] = mark_with_order
-
-            def finalize(run_id, payload, **kwargs):
-                finalizations.append(payload)
-                return service.finalize(repo.get(run_id), payload, **kwargs)
-
-            facade.finalize_legacy_chat_run = finalize
-            captured["facade"] = facade
-        return source_extract(path, name, namespace)
-
-    def capture_factory(factory):
-        captured["factory"] = factory
-        raise Captured()
-
-    monkeypatch.setattr(source_tests, "extract", capture_extract)
-    monkeypatch.setattr(source_tests, "bridge", capture_factory)
-    with pytest.raises(Captured):
-        await source_tests.test_real_sync_wrapper_catches_guard_timeout_and_delivers_error(
-            monkeypatch
-        )
-    monkeypatch.setattr(source_tests, "bridge", source_bridge)
-
-    def events(*a, **k):
-        try:
-            current = repo.get(expected.run_id)
-            if confirmed_status:
-                current.status = confirmed_status
-                current.final_output = {"verified_business_outcome": confirmed_status}
-            else:
-                effects.append("committed-once")
-                current.final_output = {"receipt": {"committed": True}, "cost_units_total": 17}
-            stored = repo.save(current)
-            if confirmed_status:
-                captured["confirmed_saved"] = stored.to_dict()
-            entered.set()
-            assert release_business.wait(2)
-            yield {"type": "token", "text": "late"}
-        finally:
-            finished.set()
-
-    captured["facade"]._xcagi_guarded_planner_stream_events = lambda *a, **k: guarded(
-        events, monkeypatch, timeout=0.1
-    )
-    try:
-        chunks = await asyncio.wait_for(
-            source_tests._collect(source_bridge(captured["factory"])), 1
-        )
-        assert entered.is_set() and not finished.is_set()
-        terminal = json.loads(chunks[-1])
-        assert terminal["type"] == "error" and terminal["status_code"] == 504
-        assert terminal["run_id"] == expected.run_id
-        assert finalizations == []  # Observation deadline never becomes business finalize(False).
-        run = repo.get(expected.run_id)
-
-        class RetryAttempt(Exception):
-            pass
-
-        class Runner(RunLifecycleMixin):
-            def start_run(self, **kwargs):
-                retries.append(kwargs)
-                raise RetryAttempt()
-
-        runner = Runner()
-        runner._repo = repo
-        if confirmed_status:
-            assert run.status == confirmed_status
-            assert run.to_dict() == captured["confirmed_saved"]
-            assert not requires_retry_reconciliation(run)
-            if confirmed_status == "failed":
-                with pytest.raises(RetryAttempt):
-                    runner.retry_run(run.run_id)
-                assert retries[0]["auto_execute"] is True
-        else:
-            assert run.status == "running"
-            assert run.metadata["stream_interruption"]["worker_pending"] is True
-            assert requires_retry_reconciliation(run)
-            assert run.final_output["receipt"]["committed"] is True
-            assert run.final_output["cost_units_total"] == 17
-            with pytest.raises(ValueError, match="人工核对"):
-                runner.retry_run(run.run_id)
-            assert retries == [] and effects == ["committed-once"]
-    finally:
-        release_observer.set()
-        release_business.set()
-        await wait(finished)
-    deadline = time.monotonic() + 1
-    while (
-        not confirmed_status
-        and repo.get(expected.run_id).status != "blocked"
-        and time.monotonic() < deadline
-    ):
-        await asyncio.sleep(0.01)
-    final = repo.get(expected.run_id)
-    assert final.status == (confirmed_status or "blocked")
-    if not confirmed_status:
-        assert requires_retry_reconciliation(final)
-        assert final.metadata["stream_interruption"]["worker_pending"] is False
-
-
 @pytest.mark.parametrize("storage", ["memory", "sqlite"])
 @pytest.mark.parametrize("action", ["cancel", "pause"])
 @pytest.mark.parametrize("order", ["observer_first", "control_first", "cas_conflict"])
@@ -730,169 +506,10 @@ def test_persistent_snapshot_contention_is_bounded_without_changing_execution(
         assert repo.latest_task_control(expected.run_id).status == "requested"
 
 
-def actual_append_tools(monkeypatch, execute, workers=1):
-    import json
-    import sys
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from contextvars import ContextVar, copy_context
-
-    monkeypatch.setitem(sys.modules, "app.infrastructure.chat_stream_lifetime", life)
-    state = set()
-    namespace = {
-        "copy": copy,
-        "json": json,
-        "_LAST_TOOL_TRACE": ContextVar("_LAST_TOOL_TRACE", default=None),
-        "_TOKEN_ORDER_SENSITIVE_TOOLS": set(),
-        "_TOOL_DEDUP_LOCK": threading.Lock(),
-        "_tool_dedup_state": lambda: state,
-        "_tool_key": lambda name, args: (name, args),
-        "_planner_tools_max_workers": lambda: workers,
-        "_resolve_chat_execute_tool": lambda: execute,
-        "ThreadPoolExecutor": ThreadPoolExecutor,
-        "as_completed": as_completed,
-        "copy_context": copy_context,
-    }
-    for name in ["_tool_action_from_payload", "_append_last_tool_record", "append_tool_messages"]:
-        extract("app/legacy/chat/legacy_chat_adapter.py", name, namespace)
-    return namespace["append_tool_messages"]
 
 
-@pytest.mark.parametrize("storage", ["memory", "sqlite"])
-def test_actual_late_tool_receipt_survives_cancel_before_done_without_double_billing(
-    repositories, monkeypatch, tmp_path, storage
-):
-    import json
-    from contextlib import closing, nullcontext
-
-    engine = None
-    if storage == "sqlite":
-        engine = create_engine(f"sqlite:///{tmp_path / 'tool-receipt.sqlite'}")
-        repo = repositories[1](session_factory=sessionmaker(bind=engine))
-    else:
-        repo = repositories[0]()
-    expected = repo.save(
-        AgentRun(
-            user_id="synthetic-owner",
-            message="synthetic write",
-            status="running",
-            metadata={"runtime_context": {}},
-        )
-    )
-    store = receipt_writer(repo)
-    lifetime = life.StreamLifetime()
-    committed, events = [], []
-    captured = []
-
-    def save_receipt(**receipt):
-        captured.append(receipt)
-        store(expected, **receipt)
-
-    def execute(*a, **k):
-        committed.append("one-realistic-effect")
-        lifetime.cancel()
-        return json.dumps(
-            {"success": True, "receipt": {"id": "newly-committed", "committed": True}}
-        )
-
-    append = actual_append_tools(monkeypatch, execute)
-    chunk = NS(
-        choices=[
-            NS(
-                finish_reason="tool_calls",
-                delta=NS(
-                    content=None,
-                    tool_calls=[
-                        NS(
-                            index=0,
-                            id="call-1",
-                            function=NS(name="synthetic_write", arguments="{}"),
-                        )
-                    ],
-                ),
-            )
-        ]
-    )
-    facade = NS(
-        reset_planner_tool_dedup_state=lambda: None,
-        _tool_stream_call_label=lambda *a: "write",
-        _slow_tool_wait_message=lambda *a: "",
-        append_tool_messages=append,
-        _attach_last_tool_records=lambda payload: payload,
-    )
-    namespace = {
-        "_facade": lambda: facade,
-        "check_stream_active": life.check_stream_active,
-        "owned_model_read": life.owned_model_read,
-        "SimpleNamespace": NS,
-        "closing": closing,
-        "_prepare_chat": lambda *a: (
-            [],
-            False,
-            NS(chat=NS(completions=NS(create=lambda **k: iter([chunk])))),
-            "fake",
-            [],
-            None,
-            False,
-        ),
-        "_format_tool_calls": lambda calls: [],
-        "llm_client_scope": lambda *a: nullcontext(),
-    }
-    runtime = extract("app/legacy/chat/legacy_chat_runtime.py", "chat_stream_text", namespace)
-    facade.chat_stream_text = runtime
-    sse = extract("app/legacy/chat/legacy_chat_runtime.py", "chat_stream_sse_events", namespace)
-    token = life.current_lifetime.set(lifetime)
-    try:
-        life.watch_stream_tool_records(save_receipt)
-        with pytest.raises(life.StreamStopped):
-            events.extend(sse("synthetic"))
-        stored = repo.get(expected.run_id)
-        assert committed == ["one-realistic-effect"]
-        assert not any(event.get("type") == "done" for event in events)
-        audit = stored.metadata["stream_tool_audit"]
-        assert len(audit) == 1
-        assert audit[0]["record"]["output"]["receipt"] == {
-            "id": "newly-committed",
-            "committed": True,
-        }
-        assert stored.status == "running"  # Receipt sink does not finalize the business task.
-        assert stored.tool_calls == [] and stored.llm_calls == [] and stored.final_output == {}
-        assert "cost_units_total" not in stored.metadata
-        before = stored.to_dict()
-        store(expected, **captured[0])  # Retrying receipt storage is idempotent, not a charge.
-        assert repo.get(expected.run_id).to_dict() == before
-    finally:
-        life.current_lifetime.reset(token)
-        if engine:
-            engine.dispose()
 
 
-def test_parallel_failure_preserves_other_completed_tool_receipt(repositories, monkeypatch):
-    import json
-
-    repo = repositories[0]()
-    expected = repo.save(AgentRun(user_id="synthetic", message="parallel test", status="running"))
-    store = receipt_writer(repo)
-
-    def execute(name, *args, **kwargs):
-        if name == "failed":
-            raise ValueError("original-tool-error")
-        return json.dumps({"success": True, "receipt": "parallel-committed"})
-
-    append = actual_append_tools(monkeypatch, execute, workers=2)
-    token = life.current_lifetime.set(life.StreamLifetime())
-    try:
-        life.watch_stream_tool_records(lambda **receipt: store(expected, **receipt))
-        calls = [
-            NS(id=name, function=NS(name=name, arguments="{}")) for name in ["failed", "succeeded"]
-        ]
-        with pytest.raises(ValueError, match="original-tool-error"):
-            append([], calls, workspace_root=None)
-        audit = repo.get(expected.run_id).metadata["stream_tool_audit"]
-        assert len(audit) == 1
-        assert audit[0]["record"]["tool_call_id"] == "succeeded"
-        assert audit[0]["record"]["output"]["receipt"] == "parallel-committed"
-    finally:
-        life.current_lifetime.reset(token)
 
 
 @pytest.fixture(params=["memory", "sqlite"])
@@ -923,12 +540,17 @@ def test_control_blocks_immediate_replay_before_observer_can_persist(
 ):
     from app.application.agent_orchestrator import chat_trace
     from app.application.agent_orchestrator.run_lifecycle import RunLifecycleMixin
-    from app.application.agent_orchestrator.trace_runs import TraceRunService
+    from app.application.agent_orchestrator.run_models import AgentRun
 
     repo, reader = independent_run_stores
     monkeypatch.setattr(chat_trace, "get_agent_run_repository", lambda: repo)
-    original = TraceRunService(repo, None, None).start(
-        user_id="owner", message="write still running", channel="compat_chat_stream"
+    original = repo.save(
+        AgentRun(
+            user_id="owner",
+            message="write still running",
+            status="running",
+            metadata={"channel": "compat_chat_stream"},
+        )
     )
     lifetime = life.StreamLifetime()
     entered, release = threading.Event(), threading.Event()
@@ -936,7 +558,7 @@ def test_control_blocks_immediate_replay_before_observer_can_persist(
     def delayed_observer(**state):
         entered.set()
         assert release.wait(2)
-        chat_trace.mark_legacy_chat_stream_interrupted(original, **state)
+        chat_trace.mark_chat_stream_interrupted(original, **state)
 
     lifetime.observe(delayed_observer)
     lifetime.worker_started()
@@ -967,7 +589,6 @@ def test_worker_control_and_finalization_cannot_erase_independent_evidence(
     from app.application.agent_orchestrator import chat_trace
     from app.application.agent_orchestrator.run_lifecycle import RunLifecycleMixin
     from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
-    from app.application.agent_orchestrator.trace_runs import TraceRunService
 
     repo, writer = independent_run_stores
     monkeypatch.setattr(chat_trace, "get_agent_run_repository", lambda: writer)
@@ -984,7 +605,7 @@ def test_worker_control_and_finalization_cannot_erase_independent_evidence(
     returned.steps[0].status = returned.tool_calls[0].status = "completed"
     returned.steps[0].output = returned.tool_calls[0].output = receipt
     writer.save(returned)
-    chat_trace.mark_legacy_chat_stream_interrupted(original, pending=True, reason="consumer_closed")
+    chat_trace.mark_chat_stream_interrupted(original, pending=True, reason="consumer_closed")
     chat_trace.record_legacy_stream_tool_receipt(original, sequence=1, record={"output": receipt})
     repo.request_task_control(original.run_id, "cancel")
     runner = RunLifecycleMixin()
@@ -995,15 +616,8 @@ def test_worker_control_and_finalization_cannot_erase_independent_evidence(
     assert current.steps[0].status == current.tool_calls[0].status == "completed"
     assert current.steps[0].output == current.tool_calls[0].output == receipt
     assert current.metadata["stream_tool_audit"][0]["record"]["output"] == receipt
-    # Finalization starts from another old copy, including the derived run IDs
-    # added by the real stream wrapper after start(). It must retain new facts.
-    service = TraceRunService(repo, NS(enrich=lambda *a, **k: None, finalize=lambda *a: None), None)
-    service.finalize(
-        original,
-        {"success": True},
-        message="write",
-        runtime_context={"run_id": original.run_id, "agent_run_id": original.run_id},
-    )
+    # A stale whole-run save must retain the receipt and control metadata too.
+    repo.save(original)
     final = writer.get(original.run_id)
     assert final.metadata["non_retryable"] is True
     assert final.metadata["recovery"]["state"] == "manual_reconciliation_required"
@@ -1026,7 +640,7 @@ def test_plain_save_does_not_copy_receipts_between_generations(
     repo, reader = independent_run_stores
     monkeypatch.setattr(chat_trace, "get_agent_run_repository", lambda: repo)
     expected = initial(repo)
-    chat_trace.mark_legacy_chat_stream_interrupted(
+    chat_trace.mark_chat_stream_interrupted(
         expected, pending=False, reason="consumer_closed"
     )
     chat_trace.record_legacy_stream_tool_receipt(

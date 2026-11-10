@@ -11,7 +11,6 @@ import hashlib
 import json
 import logging
 import os
-import queue
 import re
 import threading
 import time
@@ -23,17 +22,9 @@ from fastapi import HTTPException, Request
 from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run as attach_chat_trace_run,
 )
-from app.application.agent_orchestrator.chat_trace import (
-    finalize_legacy_chat_run as finalize_legacy_chat_run,
-)
-from app.application.agent_orchestrator.chat_trace import (
-    start_legacy_chat_run as start_legacy_chat_run,
-)
-from app.application.conversation import chat_stream_sse_events
 from app.application.modstore_conversation_app import (
     create_modstore_openai_client_from_request as create_modstore_openai_client_from_request,
 )
-from app.application.stream_status_events import MODEL_STREAM_ACCEPTED_EVENT
 from app.domain.ai.tier import runtime_context_with_tier as runtime_context_with_tier
 from app.domain.app_pure.chat_reply_safety import (
     sanitize_model_chat_reply as sanitize_model_chat_reply,
@@ -45,12 +36,7 @@ from app.domain.context.session_context import (
     runtime_context_after_workflow_interrupt as runtime_context_after_workflow_interrupt,
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
-from app.infrastructure.chat_stream_lifetime import (
-    StreamLifetime,
-    StreamObservationTimeout,
-    StreamWorker,
-    current_lifetime,
-)
+from app.infrastructure.chat_stream_lifetime import StreamLifetime, StreamWorker, current_lifetime
 from app.infrastructure.llm.client import set_mode as set_llm_mode  # noqa: F401
 from app.utils.operational_errors import BOUNDARY_ERRORS as BOUNDARY_ERRORS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -343,105 +329,6 @@ def _xcagi_chat_timeout_error_payload(timeout: float) -> dict:
     }
 
 
-def _xcagi_guarded_planner_stream_events(
-    body: XcagiCompatChatBody,
-    *,
-    runtime_context: dict[str, Any] | None,
-    workspace_root: str,
-    client: Any,
-):
-    lifetime = current_lifetime.get() or StreamLifetime()
-
-    def events():
-        from app.infrastructure.chat_stream_lifetime import owned_model_read
-        from app.infrastructure.tenant_scope import tenant_scope
-
-        with (
-            tenant_scope((runtime_context or {}).get("tenant_id")),
-            owned_model_read(
-                chat_stream_sse_events(
-                    body.message,
-                    runtime_context=runtime_context or None,
-                    system_prompt=body.system_prompt,
-                    workspace_root=workspace_root,
-                    db_write_token=body.db_write_token,
-                    client=client,
-                )
-            ) as stream,
-        ):
-            yield from stream
-
-    token = current_lifetime.set(lifetime)
-    try:
-        worker = StreamWorker(events)
-    finally:
-        current_lifetime.reset(token)
-    completed = False
-    total_timeout = _xcagi_chat_timeout_seconds()
-    idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
-    # Idle notices are not model text. A silent turn must end with a recoverable
-    # error instead of heartbeats until the much longer total budget. The floor
-    # stays above the 20s first-token default so a slow but live model is not cut off.
-    silence_limit = max(_xcagi_stream_first_token_timeout_seconds(), 45.0)
-    started_at = time.monotonic()
-    real_progress = False
-    try:
-        yield MODEL_STREAM_ACCEPTED_EVENT
-
-        next_notice = time.monotonic() + idle_notice_seconds
-        while True:
-            lifetime.check()
-            elapsed = time.monotonic() - started_at
-            if elapsed >= total_timeout:
-                lifetime.cancel("observation_timeout")
-                raise StreamObservationTimeout(
-                    f"对话观察超时（>{int(total_timeout)} 秒）。后台执行结果尚未确认，请到任务工作区核对，勿重复提交。"
-                )
-
-            try:
-                item = worker.queue.get(timeout=min(total_timeout - elapsed, 0.1))
-                # A read-close error after disconnect is not a business failure.
-                lifetime.check()
-            except queue.Empty:
-                if not real_progress and time.monotonic() - started_at >= silence_limit:
-                    yield {
-                        "type": "error",
-                        "status_code": 504,
-                        "message": (
-                            f"模型长时间没有返回正文（>{int(silence_limit)} 秒）。"
-                            "请重试；已执行的操作请到任务工作区核对，勿重复提交。"
-                        ),
-                    }
-                    return
-                if time.monotonic() < next_notice:
-                    continue
-                next_notice = time.monotonic() + idle_notice_seconds
-                elapsed_int = int(time.monotonic() - started_at)
-                yield {
-                    "type": "token",
-                    "text": f"\n（仍在处理中，已等待 {elapsed_int} 秒，请稍候…）\n",
-                    "ephemeral": True,
-                }
-                continue
-
-            if item is worker.END:
-                completed = True
-                return
-            if isinstance(item, Exception):
-                exc = _xcagi_chat_http_exc(item)
-                detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-                yield {"type": "error", "message": detail, "status_code": exc.status_code}
-                return
-
-            if not (isinstance(item, dict) and item.get("ephemeral")):
-                real_progress = True
-            yield item
-    finally:
-        worker.close()
-        if not completed:
-            lifetime.cancel("upstream_stream_stopped")
-
-
 def _sse_event_line(payload: dict) -> bytes:
     return ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
 
@@ -504,9 +391,37 @@ async def _xcagi_planner_stream_bytes_async(
             if item is worker.END:
                 break
             if isinstance(item, Exception):
-                yield _sse_event_line(
-                    {"type": "error", "message": str(item).strip() or item.__class__.__name__}
-                )
+                if lifetime.run_snapshot is not None:
+                    lifetime.cancel("producer_error")
+                    status_code = 500
+                    try:
+                        from app.application.agent_orchestrator.chat_trace import (
+                            mark_chat_stream_interrupted,
+                        )
+
+                        await asyncio.wait_for(
+                            asyncio.to_thread(
+                                mark_chat_stream_interrupted,
+                                lifetime.run_snapshot,
+                                pending=not worker.finished.is_set(),
+                                reason="producer_error",
+                            ),
+                            timeout=_STREAM_SAFETY_STORE_TIMEOUT,
+                        )
+                    except BOUNDARY_ERRORS:
+                        status_code = 503
+                        logger.warning("stream interruption persistence unavailable", exc_info=True)
+                    yield _sse_event_line(_sse_payload_with_run_id({
+                        "type": "error",
+                        "status_code": status_code,
+                        "message": "对话处理中断，业务结果尚未确认，请核对任务，勿重复提交。",
+                        "execution_outcome": "unknown",
+                        "requires_reconciliation": True,
+                    }, getattr(lifetime.run_snapshot, "run_id", None)))
+                else:
+                    yield _sse_event_line(
+                        {"type": "error", "message": str(item).strip() or item.__class__.__name__}
+                    )
                 break
             yield item
     except TimeoutError as error:
@@ -516,12 +431,12 @@ async def _xcagi_planner_stream_bytes_async(
         try:
             if lifetime.run_snapshot is not None:
                 from app.application.agent_orchestrator.chat_trace import (
-                    mark_legacy_chat_stream_interrupted,
+                    mark_chat_stream_interrupted,
                 )
 
                 await asyncio.wait_for(
                     asyncio.to_thread(
-                        mark_legacy_chat_stream_interrupted,
+                        mark_chat_stream_interrupted,
                         lifetime.run_snapshot,
                         pending=True,
                         reason=reason,
@@ -539,8 +454,7 @@ async def _xcagi_planner_stream_bytes_async(
                 {
                     "type": "error",
                     "status_code": status_code,
-                    "message": str(error)
-                    or "对话观察超时；后台执行结果尚未确认，请核对任务，勿重复提交。",
+                    "message": "对话观察超时；后台执行结果尚未确认，请核对任务，勿重复提交。",
                     "execution_outcome": "unknown",
                     "requires_reconciliation": True,
                 },

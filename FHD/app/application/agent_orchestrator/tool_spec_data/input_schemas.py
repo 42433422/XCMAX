@@ -445,6 +445,16 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "input": {"type": "object"},
         },
     },
+    ("employee", "context"): {
+        "type": "object",
+        "required": ["task"],
+        "properties": {
+            "employee_id": {"type": "string"},
+            "pack_id": {"type": "string"},
+            "task": {"type": "string"},
+            "input": {"type": "object"},
+        },
+    },
     ("business_event", "print_label"): {
         "type": "object",
         "required": ["document_name"],

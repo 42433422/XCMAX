@@ -114,11 +114,13 @@ def _schema_from_required(required_params: list[str]) -> dict[str, Any]:
 
 
 def _special_permission(tool_id: str, action: str) -> str:
-    if (tool_id, action) == ("products", "exists"):
+    if tool_id == "products" and action in {"exists", "query"}:
         return "product.view"
     if (tool_id, action) == ("customers", "ensure_exists"):
         return "customer.edit"
     if tool_id in PERMISSION_BARE_PREFIX_TOOLS:
+        if (tool_id, action) == ("employee", "context"):
+            return "employee.execute"
         return f"{tool_id}.{action}"
     if tool_id == "dataset_rag":
         if action in DATASET_RAG_READ_ACTIONS:
@@ -399,6 +401,9 @@ def _validate_schema_payload(
     payload: dict[str, Any],
     *,
     subject: str,
+    allow_references_from: set[str] | frozenset[str] | None = None,
+    allow_missing_fields: set[str] | frozenset[str] | None = None,
+    path_prefix: str = "",
 ) -> tuple[bool, str]:
     expected_root_type = str(schema.get("type") or "object").strip()
     if expected_root_type == "object" and not isinstance(payload, dict):
@@ -408,6 +413,13 @@ def _validate_schema_payload(
         required = [key for key in (required or []) if str(key) == "success"]
     for key in required or []:
         name = str(key)
+        full_name = f"{path_prefix}.{name}" if path_prefix else name
+        normalized_name = re.sub(r"\[(\d+)\]", r".\1", full_name)
+        if any(
+            candidate in (allow_missing_fields or ())
+            for candidate in (name, full_name, normalized_name)
+        ):
+            continue
         present = isinstance(payload, dict) and name in payload
         value = payload.get(name) if present else None
         # A present array or object is the field, including an empty list.
@@ -438,6 +450,19 @@ def _validate_schema_payload(
         if not isinstance(prop, dict):
             continue
         value = payload.get(key)
+        if allow_references_from is not None and isinstance(value, str) and (
+            "{{" in value or "}}" in value
+        ):
+            from app.application.agent_orchestrator.param_references import (
+                validate_plan_references,
+            )
+
+            reference_error = validate_plan_references(value, allow_references_from)
+            if reference_error:
+                return False, f"{subject} 字段 {key}：{reference_error}"
+            # The concrete value is checked again after its declared predecessor
+            # has completed and the reference has been resolved.
+            continue
         expected_type = str(prop.get("type") or "").strip()
         if expected_type and not _type_matches(value, expected_type):
             return False, f"{subject} 字段 {key} 类型错误，应为 {expected_type}"
@@ -449,7 +474,12 @@ def _validate_schema_payload(
             return False, f"{subject} {bound}"
         if expected_type == "object" and isinstance(value, dict) and prop.get("properties"):
             nested_ok, nested_message = _validate_schema_payload(
-                prop, value, subject=f"{subject}.{key}"
+                prop,
+                value,
+                subject=f"{subject}.{key}",
+                allow_references_from=allow_references_from,
+                allow_missing_fields=allow_missing_fields,
+                path_prefix=f"{path_prefix}.{key}" if path_prefix else str(key),
             )
             if not nested_ok:
                 return False, nested_message
@@ -462,11 +492,27 @@ def _validate_schema_payload(
             item_schema = raw_items if isinstance(raw_items, dict) else {}
             item_type = str(item_schema.get("type") or "")
             for index, item in enumerate(value):
+                if allow_references_from is not None and isinstance(item, str) and (
+                    "{{" in item or "}}" in item
+                ):
+                    from app.application.agent_orchestrator.param_references import (
+                        validate_plan_references,
+                    )
+
+                    reference_error = validate_plan_references(item, allow_references_from)
+                    if reference_error:
+                        return False, f"{subject} 字段 {key}[{index}]：{reference_error}"
+                    continue
                 if item_type and not _type_matches(item, item_type):
                     return False, f"{subject} 字段 {key}[{index}] 类型错误，应为 {item_type}"
                 if item_type == "object" and isinstance(item, dict):
                     nested_ok, nested_message = _validate_schema_payload(
-                        item_schema, item, subject=f"{subject}.{key}[{index}]"
+                        item_schema,
+                        item,
+                        subject=f"{subject}.{key}[{index}]",
+                        allow_references_from=allow_references_from,
+                        allow_missing_fields=allow_missing_fields,
+                        path_prefix=f"{path_prefix}.{key}[{index}]" if path_prefix else f"{key}[{index}]",
                     )
                     if not nested_ok:
                         return False, nested_message
@@ -477,7 +523,14 @@ def _validate_schema_payload(
         for option in options:
             if not isinstance(option, dict):
                 continue
-            ok, last = _validate_schema_payload(option, payload, subject=subject)
+            ok, last = _validate_schema_payload(
+                option,
+                payload,
+                subject=subject,
+                allow_references_from=allow_references_from,
+                allow_missing_fields=allow_missing_fields,
+                path_prefix=path_prefix,
+            )
             if ok:
                 matched = True
                 break
@@ -492,26 +545,56 @@ def validate_schema_object(schema: dict[str, Any], payload: dict[str, Any]) -> t
 
 
 def _validate_input_schema(spec: ToolActionSpecV2, params: dict[str, Any]) -> tuple[bool, str]:
+    return _validate_input_schema_with_references(
+        spec, params, allow_references_from=None, allow_missing_fields=None
+    )
+
+
+def _validate_input_schema_with_references(
+    spec: ToolActionSpecV2,
+    params: dict[str, Any],
+    *,
+    allow_references_from: set[str] | frozenset[str] | None,
+    allow_missing_fields: set[str] | frozenset[str] | None = None,
+) -> tuple[bool, str]:
+    from app.application.agent_orchestrator.param_references import unresolved_placeholders
+
+    has_references = bool(unresolved_placeholders(params))
+    if has_references and allow_references_from is None:
+        return False, "参数含有尚未解析的前序结果引用"
     from app.application.shipment_inputs import missing_shipment_call_fields
 
-    missing = missing_shipment_call_fields(spec.tool_id, spec.action, params)
+    # Domain-specific cross-field checks need concrete values. Defer only those
+    # checks that depend on a reference; the full JSON shape is still checked now.
+    defer_domain_checks = has_references or bool(allow_missing_fields)
+    missing = (
+        []
+        if defer_domain_checks
+        else missing_shipment_call_fields(spec.tool_id, spec.action, params)
+    )
     if missing:
         return False, "缺少有效出货参数：" + "、".join(missing)
-    if (spec.tool_id, spec.action) == ("inventory", "stock_in"):
+    if not defer_domain_checks and (spec.tool_id, spec.action) == ("inventory", "stock_in"):
         from app.domain.app_pure.inventory_inputs import validate_stock_in_request
 
         try:
             validate_stock_in_request(params)
         except ValueError as exc:
             return False, str(exc)
-    if spec.tool_id == "sales" and spec.action in {"quote", "create_order"}:
+    if not defer_domain_checks and spec.tool_id == "sales" and spec.action in {"quote", "create_order"}:
         from app.application.sales_quote_inputs import validated_quote_request
 
         try:
             validated_quote_request(params)
         except ValueError as exc:
             return False, str(exc)
-    return _validate_schema_payload(spec.input_schema or {}, params, subject="参数")
+    return _validate_schema_payload(
+        spec.input_schema or {},
+        params,
+        subject="参数",
+        allow_references_from=allow_references_from,
+        allow_missing_fields=allow_missing_fields,
+    )
 
 
 def validate_tool_result(
@@ -584,6 +667,9 @@ def validate_tool_call(
     tool_id: str,
     action: str,
     params: dict[str, Any] | None,
+    *,
+    allow_references_from: set[str] | frozenset[str] | None = None,
+    allow_missing_fields: set[str] | frozenset[str] | None = None,
 ) -> ToolValidationResult:
     normalized_tool_id = str(tool_id or "").strip()
     normalized_action = _normalize_tool_action(str(action or "view"), dict(params or {}))
@@ -608,7 +694,16 @@ def validate_tool_call(
             message="business_db 不接受任意 SQL，请使用 entity/operation/payload。",
         )
 
-    ok, message = _validate_input_schema(spec, payload)
+    ok, message = (
+        _validate_input_schema(spec, payload)
+        if allow_references_from is None and not allow_missing_fields
+        else _validate_input_schema_with_references(
+            spec,
+            payload,
+            allow_references_from=allow_references_from,
+            allow_missing_fields=allow_missing_fields,
+        )
+    )
     if not ok:
         return ToolValidationResult(
             ok=False,

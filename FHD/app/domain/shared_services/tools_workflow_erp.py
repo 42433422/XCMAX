@@ -14,23 +14,6 @@ from app.domain.shared_services.tools_workflow_common import (
 _DEFAULT_TARGET_CANDIDATES = _business_db_target_candidates
 
 
-def _registered_router_normal_slot_dispatch(
-    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
-) -> dict:
-    from app.application.normal_chat_dispatch import (
-        run_normal_slot_product_query_from_message,
-        run_normal_slot_shipment_preview,
-    )
-
-    if action == "product_query":
-        text = user_message or str(params.get("message") or "").strip()
-        return run_normal_slot_product_query_from_message(text)
-    if action == "shipment_preview":
-        order_text = str(params.get("order_text") or user_message or "").strip()
-        return run_normal_slot_shipment_preview(order_text)
-    return {"success": False, "message": f"未注册的 normal_slot_dispatch 动作: {action}"}
-
-
 def _resolve_target_candidates():
     """目标解析晚绑定：facade 属性 patch 与本模块全局 patch 两个接缝等价生效。"""
     from app.services import tools_workflow_registered as facade
@@ -68,6 +51,17 @@ def _registered_router_customers(
             svc.export_to_excel(keyword=keyword, template_id=params.get("template_id")) or {}
         )
     if action == "query":
+        if "id" in params or "customer_id" in params:
+            raw_id = params.get("id") if params.get("id") is not None else params.get("customer_id")
+            text_id = str(raw_id).strip()
+            if not text_id.isdecimal() or int(text_id) <= 0:
+                return {"success": False, "message": "客户 id 须为正整数", "error_code": "invalid_id"}
+            result = svc.get_by_id(int(text_id))
+            return {
+                "success": bool(result.get("success")),
+                "data": result.get("data"),
+                "raw": result,
+            }
         keyword = str(params.get("keyword") or unit_name or "").strip()
         result = svc.get_all(keyword=keyword, page=1, per_page=20)
         return {

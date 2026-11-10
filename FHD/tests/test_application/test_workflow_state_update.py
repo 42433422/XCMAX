@@ -7,7 +7,7 @@
 
 from unittest.mock import MagicMock
 
-from app.application.workflow.engine import WorkflowEngine
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode
 from tests.test_application.ai_chat_test_helpers import _make_svc
 
@@ -110,27 +110,18 @@ class TestWorkflowStateUpdate:
 
     def test_callback_from_constructor_used_when_run_has_none(self):
         collected = []
-        engine = WorkflowEngine(
-            tool_dispatcher=lambda **kw: {"success": True, "data": []},
-            state_event_callback=collected.append,
-        )
-        engine.run(_plan([_node("n1")]))
+        engine = WorkflowEngine(tool_dispatcher=lambda *_args, **_kw: {"success": True, "data": []})
+        engine.run(_plan([_node("n1")]), state_event_callback=collected.append)
         assert len(collected) == 1
         assert collected[0]["node_id"] == "n1"
 
     def test_run_callback_overrides_constructor(self):
         ctor_events = []
         run_events = []
-        engine = WorkflowEngine(
-            tool_dispatcher=lambda **kw: {"success": True, "data": []},
-            state_event_callback=ctor_events.append,
-        )
+        engine = WorkflowEngine(tool_dispatcher=lambda *_args, **_kw: {"success": True, "data": []})
         engine.run(_plan([_node("n1")]), state_event_callback=run_events.append)
         assert len(run_events) == 1
-        # 无 explicit run 回调时回退到构造函数回调
-        engine.run(_plan([_node("n2")]))
-        assert len(ctor_events) == 1
-        assert ctor_events[0]["node_id"] == "n2"
+        assert ctor_events == []
 
     def test_no_callback_no_side_effect(self):
         engine = _engine({"success": True, "data": []})

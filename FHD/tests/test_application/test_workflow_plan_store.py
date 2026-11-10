@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.application.workflow.checkpointer import DatabaseWorkflowCheckpointer
-from app.application.workflow.engine import WorkflowEngine
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from app.application.workflow.plan_store import WorkflowPlanStore
 from app.application.workflow.workflow_types import (
     Branch,
@@ -131,10 +131,10 @@ class TestWorkflowPlanStore:
     def test_returning_to_original_session_restores_same_run_after_slot_overwrite(
         self, session_factory
     ):
-        from types import SimpleNamespace
         from unittest.mock import Mock, patch
 
         from app.application.ai_chat_app_service import AIChatApplicationService
+        from app.application.agent_orchestrator.run_models import AgentRun
 
         store = WorkflowPlanStore(session_factory=session_factory)
         svc = object.__new__(AIChatApplicationService)
@@ -154,7 +154,35 @@ class TestWorkflowPlanStore:
                 )
             assert svc._pending_workflows["u1"]["agent_run_id"] == "run-B"
             orchestrator = Mock()
-            orchestrator.continue_run.return_value = SimpleNamespace(run_id="run-A")
+            plan_a = plan_from_dict({**plan_to_dict(_plan()), "plan_id": "plan-A"})
+            orchestrator.get_run.return_value = AgentRun(
+                user_id="u1",
+                message="long task",
+                run_id="run-A",
+                status="waiting_user",
+                plan_id="plan-A",
+                intent="long_task",
+                metadata={"plan": plan_to_dict(plan_a)},
+            )
+            plan_b = plan_from_dict({**plan_to_dict(_plan()), "plan_id": "plan-B"})
+            orchestrator.get_run.side_effect = lambda run_id: AgentRun(
+                user_id="u1",
+                message="long task",
+                run_id=run_id,
+                status="waiting_user",
+                plan_id="plan-B" if run_id == "run-B" else "plan-A",
+                intent="long_task",
+                metadata={"plan": plan_to_dict(plan_b if run_id == "run-B" else plan_a)},
+            )
+            orchestrator.continue_run.return_value = AgentRun(
+                user_id="u1",
+                message="long task",
+                run_id="run-A",
+                status="completed",
+                plan_id="plan-A",
+                intent="long_task",
+                metadata={"plan": plan_to_dict(plan_a)},
+            )
             svc._format_agent_run_response = Mock(return_value={"run_id": "run-A"})
             with patch(
                 "app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator
@@ -172,7 +200,10 @@ class TestWorkflowPlanStore:
                 == "run-B"
             )
 
-            assert svc._hydrate_pending_workflow("u1", "B")
+            with patch(
+                "app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator
+            ):
+                assert svc._hydrate_pending_workflow("u1", "B")
             assert svc._pending_workflows["u1"]["approval_required"] is True
             assert svc._pending_workflows["u1"]["approval_nodes"] == [{"node_id": "n2"}]
 

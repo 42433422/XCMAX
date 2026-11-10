@@ -57,7 +57,6 @@ from app.application.approval_workspace.protocols import (
     PendingApprovals,
     WorkflowActions,
     WorkflowBackends,
-    WorkflowRunner,
     WorkspaceResponse,
 )
 from app.application.approval_workspace.queries import ApprovalQueries
@@ -85,7 +84,6 @@ from app.utils.time import utc_now_naive
 
 if TYPE_CHECKING:
     from app.application.agent_orchestrator.run_models import AgentRun
-    from app.application.workflow.workflow_types import WorkflowRunResult
 
 logger = logging.getLogger(__name__)
 _FINAL_STATUSES = FINAL_STATUSES
@@ -170,13 +168,6 @@ def _execution_snapshot(request_id: str) -> JsonObject | None:
     return load_workflow_snapshot_for_execution(request_id)
 
 
-def _workflow_engine() -> WorkflowRunner:
-    from app.application.workflow import WorkflowEngine
-    from app.fastapi_routes.domains.misc.helpers import _dispatch_tool_for_approval
-
-    return WorkflowEngine(tool_dispatcher=_dispatch_tool_for_approval)
-
-
 def _agent_executor() -> AgentContinuation:
     from app.application.agent_orchestrator import AgentOrchestrator
 
@@ -189,32 +180,14 @@ def _load_agent_run(run_id: str) -> AgentRun | None:
     return get_agent_run_repository().get(run_id)
 
 
-def _legacy_approval_trace(
-    request_id: str,
-    context: JsonObject,
-    result: WorkflowRunResult | None = None,
-    *,
-    run_before_restore: AgentRun | None = None,
-) -> str:
-    from app.application.agent_orchestrator.chat_trace import resolve_legacy_approval
-
-    if result is None and run_before_restore is None:
-        return resolve_legacy_approval(request_id, context)
-    return resolve_legacy_approval(
-        request_id, context, result, run_before_restore=run_before_restore
-    )
-
-
 def _workflow_bridge() -> WorkflowApprovalBridge:
     return WorkflowApprovalBridge(
         WorkflowBackends(
             _approval_backend,
             _pending_snapshot,
             _execution_snapshot,
-            _workflow_engine,
             _agent_executor,
             _load_agent_run,
-            _legacy_approval_trace,
         ),
         RECOVERABLE_ERRORS,
         logger,

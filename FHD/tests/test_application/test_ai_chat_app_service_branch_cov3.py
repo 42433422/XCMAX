@@ -24,51 +24,6 @@ from tests.test_application.ai_chat_test_helpers import (
 )
 
 
-def test_approval_child_preserves_exact_parent_link_without_mutating_parent():
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-
-    node = WorkflowNode(
-        node_id="sales_create_order",
-        tool_id="sales",
-        action="create_order",
-        params={"quantity": 2},
-        risk="high",
-    )
-    parent = PlanGraph(
-        plan_id="wp-session:original", intent="sales", nodes=[node], metadata={"keep": "original"}
-    )
-    svc = object.__new__(AIChatApplicationService)
-    svc._pending_workflows = {
-        "web_normal_session": {
-            "plan": parent,
-            "runtime_context": {"local_user_id": 41},
-            "approval_required": True,
-            "approval_nodes": [{"node_id": node.node_id}],
-        }
-    }
-    svc.approval_service = Mock()
-    svc.approval_service.create_approval_request.return_value = SimpleNamespace(
-        request_id="APR-parent"
-    )
-    svc.approval_service.get_request_metadata.return_value = {"request_no": "APR-parent"}
-    orchestrator = Mock()
-    orchestrator.start_run_from_plan.return_value = SimpleNamespace(
-        status="waiting_user", run_id="run-child"
-    )
-    with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
-        handled, response = svc._resume_pending_dynamic_workflow(
-            "web_normal_session", "确认", "确认"
-        )
-    assert handled and response["success"]
-    child = orchestrator.start_run_from_plan.call_args.kwargs["plan"]
-    assert child.metadata["approval_parent_plan_id"] == parent.plan_id
-    assert child.metadata["approval_parent_node_id"] == node.node_id
-    assert child.plan_id == f"{parent.plan_id}:{node.node_id}"
-    assert svc.approval_service.create_approval_request.call_args.kwargs["plan"] is child
-    assert parent.metadata == {"keep": "original"}
-    assert "web_normal_session" not in svc._pending_workflows
-
-
 @pytest.mark.parametrize("word", ["确认", "好的", "是的", "执行", "OK", "确认执行！"])
 @pytest.mark.parametrize("source", ["pro", "normal"])
 def test_confirmation_without_context_never_plans_or_creates_approval(word, source):
@@ -332,255 +287,6 @@ class TestAttachDeterministicWorkflowTraceEdge:
         }
 
 
-class TestTryHandleDynamicWorkflowEdge:
-    """_try_handle_dynamic_workflow 异常分支补充。"""
-
-    def test_empty_text_returns_none(self):
-        svc = _make_svc()
-        result = svc._try_handle_dynamic_workflow(
-            user_id="u1", message="", source="pro", context={}, file_context={}
-        )
-        assert result is None
-
-    def test_non_pro_no_explicit_no_pending_returns_none(self):
-        svc = _make_svc()
-        result = svc._try_handle_dynamic_workflow(
-            user_id="u1", message="hello world", source=None, context={}, file_context={}
-        )
-        assert result is None
-
-    def test_import_intent_unit_products_db_no_saved_name(self):
-        svc = _make_svc()
-        ctx = {
-            "file_analysis": {"suggested_use": "unit_products_db"},
-            "file_context": {},
-        }
-        with patch(
-            "app.application.ai_chat_app_service.AIChatApplicationService._attach_deterministic_workflow_trace",
-            side_effect=lambda p, **kw: p,
-        ):
-            result = svc._try_handle_dynamic_workflow(
-                user_id="u1",
-                message="导入数据库",
-                source="pro",
-                context=ctx,
-                file_context={},
-            )
-        assert result is not None
-        assert "请先上传" in result["response"]
-
-    def test_import_intent_unit_products_db_no_unit_name(self):
-        svc = _make_svc()
-        ctx = {
-            "file_analysis": {
-                "suggested_use": "unit_products_db",
-                "saved_name": "data.db",
-            },
-            "file_context": {},
-        }
-        with patch(
-            "app.application.ai_chat_app_service.AIChatApplicationService._attach_deterministic_workflow_trace",
-            side_effect=lambda p, **kw: p,
-        ):
-            result = svc._try_handle_dynamic_workflow(
-                user_id="u1",
-                message="导入数据库",
-                source="pro",
-                context=ctx,
-                file_context={},
-            )
-        assert result is not None
-        assert "请补充客户名称" in result["response"]
-
-    def test_import_intent_unit_products_db_full_path_starts_agent_run(self):
-        svc = _make_svc()
-        ctx = {
-            "file_analysis": {
-                "suggested_use": "unit_products_db",
-                "saved_name": "data.db",
-                "unit_name": "ACME",
-            },
-        }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._build_workflow_thinking_steps",
-                return_value="thinking",
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._start_deterministic_import_agent_run",
-                return_value={"success": True, "response": "agent run started"},
-            ) as mock_start,
-        ):
-            result = svc._try_handle_dynamic_workflow(
-                user_id="u1",
-                message="导入数据库",
-                source="pro",
-                context=ctx,
-                file_context={},
-            )
-        assert result["response"] == "agent run started"
-        mock_start.assert_called_once()
-
-    def test_short_excel_import_no_context_returns_followup(self):
-        svc = _make_svc()
-        with patch(
-            "app.application.ai_chat_app_service.AIChatApplicationService._attach_deterministic_workflow_trace",
-            side_effect=lambda p, **kw: p,
-        ):
-            result = svc._try_handle_dynamic_workflow(
-                user_id="u1",
-                message="加入数据库",
-                source="pro",
-                context={},
-                file_context={},
-            )
-        assert result is not None
-        assert result["data"]["data"]["intent"] == "excel_import_missing_context"
-
-    def test_excel_analysis_with_ambiguous_price_columns(self):
-        svc = _make_svc()
-        ctx = {
-            "excel_analysis": {
-                "summary": "test",
-                "fields": [{"name": "调价前单价"}, {"name": "调价后单价"}],
-            }
-        }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._extract_excel_import_records",
-                return_value=([], "ambiguous_price_columns"),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._attach_deterministic_workflow_trace",
-                side_effect=lambda p, **kw: p,
-            ),
-        ):
-            result = svc._try_handle_dynamic_workflow(
-                user_id="u1",
-                message="导入数据库",
-                source="pro",
-                context=ctx,
-                file_context={},
-            )
-        assert result is not None
-        assert result["data"]["data"]["blocked_reason"] == "ambiguous_price_columns"
-
-    def test_excel_analysis_no_records_returns_followup(self):
-        svc = _make_svc()
-        ctx = {
-            "excel_analysis": {
-                "summary": "test summary",
-                "fields": [{"name": "产品"}],
-            }
-        }
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._extract_excel_import_records",
-                return_value=([], None),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._attach_deterministic_workflow_trace",
-                side_effect=lambda p, **kw: p,
-            ),
-        ):
-            result = svc._try_handle_dynamic_workflow(
-                user_id="u1",
-                message="导入数据库",
-                source="pro",
-                context=ctx,
-                file_context={},
-            )
-        assert result is not None
-        assert "未解析到" in result["response"]
-
-    def test_excel_analysis_with_records_starts_agent_run(self):
-        svc = _make_svc()
-        ctx = {
-            "excel_analysis": {
-                "summary": "test",
-                "fields": [{"name": "产品"}],
-                "file_name": "test.xlsx",
-            }
-        }
-        records = [
-            {"unit_name": "ACME", "product_name": "P1", "model_number": "M1", "unit_price": 10.0}
-        ]
-        with (
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._extract_excel_import_records",
-                return_value=(records, None),
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._build_workflow_thinking_steps",
-                return_value="thinking",
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._start_deterministic_import_agent_run",
-                return_value={"success": True, "response": "import started"},
-            ) as mock_start,
-        ):
-            result = svc._try_handle_dynamic_workflow(
-                user_id="u1",
-                message="导入数据库",
-                source="pro",
-                context=ctx,
-                file_context={},
-            )
-        assert result["response"] == "import started"
-        mock_start.assert_called_once()
-
-    def test_pending_workflow_confirm_with_approval_required(self):
-        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-
-        svc = _make_svc()
-        plan = PlanGraph(
-            "plan_test", "test_intent", nodes=[WorkflowNode("approval_node", "db", "write")]
-        )
-        svc._pending_workflows["u1"] = {
-            "plan": plan,
-            "runtime_context": {"message": "test"},
-            "agent_run_id": "",
-            "thinking_steps": "thinking",
-            "approval_required": True,
-            "approval_nodes": [{"node_id": "approval_node", "tool_id": "db", "action": "write"}],
-        }
-        waiting_run = SimpleNamespace(status="waiting_user", run_id="run-approval-1")
-        with (
-            patch.object(svc.approval_service, "create_approval_request") as mock_create,
-            patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_orchestrator,
-        ):
-            mock_orchestrator.return_value.start_run_from_plan.return_value = waiting_run
-            result = svc._try_handle_dynamic_workflow(
-                user_id="u1",
-                message="确认",
-                source="pro",
-                context={},
-                file_context={},
-            )
-        assert "已提交审批请求" in result["response"]
-        mock_create.assert_called_once()
-        assert "u1" not in svc._pending_workflows  # prevent duplicate approval creation
-
-    def test_normal_profile_returns_none_for_non_workflow(self):
-        svc = _make_svc()
-        with (
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-                return_value="normal",
-            ),
-            patch(
-                "app.application.normal_chat_dispatch.route_normal_mode_message",
-                return_value={"intent": "unknown"},
-            ),
-        ):
-            result = svc._try_handle_dynamic_workflow(
-                user_id="u1",
-                message="hello",
-                source=None,
-                context={},
-                file_context={},
-            )
-        assert result is None
 
 
 class TestExecuteCustomersIntentEdge:
@@ -1650,3 +1356,72 @@ class TestBuildResponseEdge:
         ) as mock_normal:
             result = svc._handle_tool_call(response_data, ai_result, result_data, None, "msg")
         mock_normal.assert_called_once()
+
+
+def test_approval_preserves_full_plan_and_dependencies():
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    first = WorkflowNode(node_id="shipment", tool_id="sales", action="create_order", risk="high")
+    second = WorkflowNode(
+        node_id="export",
+        tool_id="sales",
+        action="export",
+        risk="low",
+        idempotent=True,
+        depends_on=["shipment"],
+    )
+    parent = PlanGraph(plan_id="wp-session:original", intent="sales", nodes=[first, second])
+    svc = object.__new__(AIChatApplicationService)
+    svc._pending_workflows = {
+        "web_normal_session": {
+            "plan": parent,
+            "runtime_context": {"local_user_id": 41},
+            "approval_required": True,
+            "approval_nodes": [{"node_id": first.node_id}],
+        }
+    }
+    svc.approval_service = Mock()
+    svc.approval_service.create_approval_request.return_value = SimpleNamespace(
+        request_id="APR-parent"
+    )
+    svc.approval_service.get_request_metadata.return_value = {"request_no": "APR-parent"}
+    orchestrator = Mock()
+    orchestrator.start_run_from_plan.return_value = SimpleNamespace(
+        status="waiting_user",
+        run_id="run-child",
+        steps=[SimpleNamespace(status="waiting_user", node_id="shipment", params={})],
+    )
+    with patch(
+        "app.application.agent_orchestrator.AgentOrchestrator",
+        return_value=orchestrator,
+    ):
+        handled, response = svc._resume_pending_dynamic_workflow(
+            "web_normal_session", "确认", "确认"
+        )
+    assert handled and response["success"]
+    saved = orchestrator.start_run_from_plan.call_args.kwargs["plan"]
+    assert [node.node_id for node in saved.nodes] == ["shipment", "export"]
+    assert saved.nodes[1].depends_on == ["shipment"]
+    assert svc.approval_service.create_approval_request.call_args.kwargs["plan"] is saved
+    assert parent.nodes[1].depends_on == ["shipment"]
+
+
+def test_missing_required_approval_nodes_never_executes_plan():
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    plan = PlanGraph(
+        plan_id="missing-approval",
+        intent="test",
+        nodes=[WorkflowNode("write", "business_db", "write")],
+    )
+    svc = object.__new__(AIChatApplicationService)
+    svc._pending_workflows = {
+        "u1": {"plan": plan, "runtime_context": {}, "approval_required": True, "approval_nodes": []}
+    }
+    svc.approval_service = Mock()
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as agent:
+        handled, result = svc._resume_pending_dynamic_workflow("u1", "确认", "确认")
+    assert handled and result["success"] is False
+    assert "审批步骤信息缺失" in result["response"]
+    agent.assert_not_called()
+    svc.approval_service.create_approval_request.assert_not_called()

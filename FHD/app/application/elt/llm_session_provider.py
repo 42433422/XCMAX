@@ -129,17 +129,31 @@ class SessionMarketProvider:
             if hasattr(adapter, "_account_default"):
                 adapter._account_default = None
 
-        try:
-            try:
+        async def _chat(options: dict[str, Any]) -> dict[str, Any] | None:
+            from app.infrastructure.llm.model_admission import (
+                admit_model_call,
+                model_call_slot,
+                model_rate_limit_scope,
+            )
+
+            with (
+                model_rate_limit_scope({"local_user_id": self.owner_user_id}),
+                model_call_slot(self, profile="elt_session"),
+            ):
+                admit_model_call(self, profile="elt_session")
                 return cast(
                     "dict[str, Any] | None",
                     await adapter.chat_completion(
                         messages=messages,
                         temperature=temperature,
                         max_tokens=max_tokens,
-                        **kwargs,
+                        **options,
                     ),
                 )
+
+        try:
+            try:
+                return await _chat(kwargs)
             except (MarketModelError, ValueError) as exc:
                 status = provider_http_status(exc)
                 if status not in {404, 400, 403}:
@@ -160,15 +174,7 @@ class SessionMarketProvider:
                 if retry.get("client_request_id"):
                     # The refused first shot owns its key on an idempotent market.
                     retry["client_request_id"] = f"{retry['client_request_id']}-r"
-                return cast(
-                    "dict[str, Any] | None",
-                    await adapter.chat_completion(
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        **retry,
-                    ),
-                )
+                return await _chat(retry)
         finally:
             await adapter.close()
 

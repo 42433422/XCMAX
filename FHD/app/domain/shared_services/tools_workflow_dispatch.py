@@ -11,7 +11,6 @@ from app.domain.shared_services.tools_workflow_erp import (
     _registered_router_customers,
     _registered_router_finance,
     _registered_router_inventory,
-    _registered_router_normal_slot_dispatch,
     _registered_router_purchase,
     _registered_router_reports,
     _registered_router_sales,
@@ -68,7 +67,6 @@ class _WorkflowRouterMap(dict):
 
 _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMap(
     {
-        "normal_slot_dispatch": _registered_router_normal_slot_dispatch,
         "customers": _registered_router_customers,
         "products": _registered_router_products,
         "materials": _registered_router_materials,

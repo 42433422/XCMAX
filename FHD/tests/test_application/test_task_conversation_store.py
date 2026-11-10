@@ -133,6 +133,12 @@ def test_chat_evidence_reads_only_current_owner_and_tenant(store, monkeypatch, t
         assert service.ingest_document(
             dataset_id="office-docking", text=text, source=f"tenant-{tenant}", tenant_id=tenant
         )["success"]
+    assert service.ingest_document(
+        dataset_id="business-documents",
+        text="宗南账单包含订单 SO-91。",
+        source="宗南账单.xlsx",
+        tenant_id="2",
+    )["success"]
     access = DatasetAccessContext(
         actor_id="41", tenant_id="2", permissions=frozenset({"dataset.read"})
     )
@@ -162,7 +168,20 @@ def test_chat_evidence_reads_only_current_owner_and_tenant(store, monkeypatch, t
     result = prepare_chat_evidence(object(), context, "宗南产品有哪些")
     prompt = merge_system_prompt(None, result)
     assert "之前说的是宗南" in prompt and "蓝色油漆" in prompt and "客户偏好蓝色" in prompt
+    assert result.get("_chat_evidence_authorized") is True
     assert "其他租户秘密" not in prompt and "伪造" not in prompt
+    from app.application.ai_chat.dialogue_memory import enrich_model_messages
+
+    enriched = enrich_model_messages(
+        [
+            {"role": "system", "content": "请根据证据回答"},
+            {"role": "user", "content": "查宗南账单"},
+        ],
+        "根据业务文档，宗南账单是什么？",
+        result,
+    )
+    rendered = "\n".join(str(item.get("content") or "") for item in enriched)
+    assert "宗南账单.xlsx" in rendered and "SO-91" in rendered
     assert "宗南" in customer_name_question("帮我查一下中南那个账单", result)
     assert not customer_name_question("帮我查一下宗南的账单", result)
     assert use_contextual_reply({"data": {"intent": "clarify"}}, result)
@@ -185,6 +204,10 @@ def test_chat_evidence_reads_only_current_owner_and_tenant(store, monkeypatch, t
     assert not other.get("chat_knowledge_evidence")
 
     mixed = SimpleNamespace(
+        status=lambda **_: {
+            "success": True,
+            "datasets": {"business-documents": {"document_count": 1}},
+        },
         query=lambda **_: {
             "success": True,
             "chunks": [
@@ -202,6 +225,36 @@ def test_chat_evidence_reads_only_current_owner_and_tenant(store, monkeypatch, t
     filtered = prepare_chat_evidence(object(), context, "宗南产品有哪些")
     assert all("AG-091" not in item["text"] for item in filtered["chat_knowledge_evidence"])
     assert filtered["chat_independent_knowledge_query"] is True
+
+
+def test_chat_evidence_recovers_active_session_when_request_omits_session_id(store, monkeypatch):
+    from app.application.ai_chat import active_conversation
+    from app.application.ai_chat.chat_evidence import prepare_chat_evidence
+
+    store.save_message(
+        session_id="active-chat",
+        user_id=41,
+        role="user",
+        content="之前说的是宗南产品",
+    )
+    monkeypatch.setattr(
+        active_conversation,
+        "active_conversation_for",
+        lambda owner, *, tenant_id="", mod_id="": (
+            "active-chat" if (owner, tenant_id, mod_id) == (41, "", "") else ""
+        ),
+    )
+
+    result = prepare_chat_evidence(
+        object(),
+        {"local_user_id": 41, "actor_id": 41},
+        "查一下宗南那个订单",
+    )
+
+    assert result["conversation_id"] == "active-chat"
+    assert result["recent_messages"] == [
+        {"role": "user", "content": "之前说的是宗南产品"}
+    ]
 
 
 def test_delete_session_removes_messages_and_is_owner_scoped(store: TaskConversationStore) -> None:

@@ -15,7 +15,6 @@ def _make_svc() -> AIChatApplicationService:
         patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
         patch("app.application.ai_chat_app_service.get_approval_service"),
     ):
         return AIChatApplicationService()

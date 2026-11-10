@@ -21,20 +21,3 @@ __all__ = [
     "resolve_safe_excel_path",
     "run_natural_language_pandas",
 ]
-
-
-_LOST_LEGACY_SYMBOLS = frozenset(
-    {
-        "flatten_tool_result_dict_for_client",
-        "get_last_tool_result",
-    }
-)
-
-
-def __getattr__(name: str):
-    if name in _LOST_LEGACY_SYMBOLS:
-        raise ImportError(
-            f"{name!r} is not implemented in app.application.tools; "
-            "this function was lost in the backend → legacy-layer cleanup."
-        )
-    raise AttributeError(f"module 'app.application.tools' has no attribute {name!r}")

@@ -37,3 +37,29 @@ def scoped_conversation_user_id(user_id: str, context: dict[str, Any] | None) ->
         str(ctx.get("session_id") or ctx.get("conversation_id") or user_id),
     ]
     return "chat:" + hashlib.sha256(json.dumps(scope, default=str).encode()).hexdigest()
+
+
+def scoped_personal_memory_id(context: dict[str, Any] | None) -> str:
+    """Return an authenticated owner's cross-session memory namespace.
+
+    Conversation history and pending workflows stay session-scoped. Recallable
+    personal memory survives a new conversation, while tenant and Mod boundaries
+    keep one user's memory isolated across product scopes.
+    """
+    import hashlib
+    import json
+
+    from app.application.task_conversation_store import durable_user_id
+
+    ctx = context or {}
+    owner = durable_user_id(ctx.get("local_user_id") or ctx.get("actor_id"))
+    if owner is None:
+        return ""
+    scope = [
+        str(ctx.get("tenant_id") or ""),
+        str(owner),
+        str(ctx.get("mod_id") or ctx.get("active_mod_id") or ""),
+    ]
+    return "personal-memory:v1:" + hashlib.sha256(
+        json.dumps(scope, ensure_ascii=False).encode()
+    ).hexdigest()

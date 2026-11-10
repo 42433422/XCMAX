@@ -266,7 +266,6 @@ def test_slots_count_matches_expected():
         # LG-W1-T9-E workflow 运行时组合根槽位
         "_workflow_runtime",
         "_workflow_checkpointer",
-        "_workflow_shadow_checkpointer",
         "_workflow_resource_stack",
     }
     assert set(ServiceContainer.__slots__) == expected_slots
@@ -276,28 +275,25 @@ def test_slots_count_matches_expected():
 
 
 def test_workflow_slots_initialized_to_none():
-    """四个新增 workflow 槽位初始均为 None（fake-only，不触碰 LangGraph）。"""
+    """三个 workflow 槽位初始均为 None（fake-only，不触碰 LangGraph）。"""
     c = ServiceContainer()
     assert c._workflow_runtime is None
     assert c._workflow_checkpointer is None
-    assert c._workflow_shadow_checkpointer is None
     assert c._workflow_resource_stack is None
 
 
 def test_close_workflow_resources_closes_stack_once_and_clears_slots():
-    """close_workflow_resources 关闭注入的 fake stack 恰好一次并清空四个槽位。"""
+    """close_workflow_resources 关闭注入的 fake stack 恰好一次并清空三个槽位。"""
     c = ServiceContainer()
     stack = _FakeStack()
     c._workflow_resource_stack = stack
     c._workflow_runtime = object()
     c._workflow_checkpointer = object()
-    c._workflow_shadow_checkpointer = object()
     assert c.close_workflow_resources() is None
     assert stack.close_calls == 1
     assert c._workflow_resource_stack is None
     assert c._workflow_runtime is None
     assert c._workflow_checkpointer is None
-    assert c._workflow_shadow_checkpointer is None
 
 
 def test_close_workflow_resources_is_idempotent_on_second_call():

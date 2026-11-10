@@ -10,6 +10,31 @@ from typing import Any, Protocol
 
 from app.infrastructure.modstore_transport import safe_route_metadata
 
+_SECRET_TEXT = re.compile(
+    r"(?i)(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|密码|口令)\b\s*[:=]\s*)([^\s,;]+)|"
+    r"(\bBearer\s+)[A-Za-z0-9._~+/=-]+"
+)
+_SECRET_FIELD = re.compile(r"(?i)(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|credential|cookie|authorization|密码|口令)")
+
+
+def _storage_safe(value: Any, *, depth: int = 0) -> Any:
+    """Bound persisted transcript metadata and redact credential-like content."""
+    if depth >= 8:
+        return "[已截断]"
+    if isinstance(value, dict):
+        return {
+            str(key)[:120]: "[已隐藏]" if _SECRET_FIELD.search(str(key)) else _storage_safe(item, depth=depth + 1)
+            for key, item in list(value.items())[:100]
+        }
+    if isinstance(value, list):
+        return [_storage_safe(item, depth=depth + 1) for item in value[:100]]
+    if isinstance(value, str):
+        bounded = value[:8000]
+        return _SECRET_TEXT.sub(
+            lambda match: f"{match.group(1) or match.group(3)}[已隐藏]", bounded
+        )
+    return value
+
 
 class ConversationStore(Protocol):
     def save_message(
@@ -78,6 +103,8 @@ def persist_chat_turn(
     在请求携带 session_id / conversation_id 时，将会话与工具结果摘要写入 ai_conversations，
     便于审计与和出货/产品等业务联动检索。
     """
+    message = str(_storage_safe(str(message or "")))
+    response_data = _storage_safe(response_data)
     session_id = str(context.get("session_id") or context.get("conversation_id") or "").strip()
     if not session_id:
         return
@@ -226,12 +253,15 @@ def persist_chat_turn(
 def authorized_memory_context(
     user_id: str, context: dict[str, Any], *, write: bool = False
 ) -> tuple[str, dict[str, Any] | None] | None:
-    """Validate a live actor and preserve its existing personal memory namespace.
+    """Validate a live actor and return its stable cross-session memory namespace.
 
     Dataset/Persy capture additionally needs server-derived dataset permissions;
     ordinary personal memory requires actor ownership, not a dataset grant.
     """
-    from app.application.agent_task_context import scoped_conversation_user_id
+    from app.application.agent_task_context import (
+        scoped_conversation_user_id,
+        scoped_personal_memory_id,
+    )
     from app.application.task_conversation_store import durable_user_id
     from app.infrastructure.auth.agent_mod_scope import (
         AgentModAuthorizationError,
@@ -271,7 +301,10 @@ def authorized_memory_context(
         if not principal.is_admin and required not in principal.permissions:
             return None
         access = principal.to_dict()
-    return normalized, access
+    memory_namespace = scoped_personal_memory_id(context)
+    if not memory_namespace:
+        return None
+    return memory_namespace, access
 
 
 def persist_recallable_chat_turn(

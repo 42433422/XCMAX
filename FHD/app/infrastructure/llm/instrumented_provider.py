@@ -42,6 +42,10 @@ class InstrumentedProvider:
         self._profile = profile or "default"
 
     @property
+    def _xcagi_rate_limited(self) -> bool:
+        return bool(getattr(self._inner, "_xcagi_rate_limited", False))
+
+    @property
     def provider_id(self) -> str:
         return self._inner.provider_id
 

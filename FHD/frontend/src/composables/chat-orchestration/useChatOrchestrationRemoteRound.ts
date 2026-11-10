@@ -19,7 +19,7 @@ import { stripPlannerDisplayMarkers } from '@/utils/chatBubbleDisplay'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { extractLikelyProductQueryKeyword } from '../useChatPersistence'
 import { persistDetachedPlannerResult, recordProductFastPathTask } from '../useChatSessionActivity'
-import { asPlannerPayload, errorMessage } from './chatOrchestrationShared'
+import { asPlannerPayload, errorMessage, requiresTurnReconciliation } from './chatOrchestrationShared'
 import { classifyRawError } from '@/utils/networkStability'
 import { droppedRoundFromHistory, droppedRoundPresentation } from '@/utils/droppedRoundPresentation'
 import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDeliveryApi'
@@ -115,7 +115,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
   }
   function responseExtras(payload: ChatPlannerPayload, failed = false): UiChatMessageExtras | undefined {
     const routeMetadata = readChatModelRoute(payload.route_metadata)
-    const extras = { ...(routeMetadata ? { routeMetadata } : {}), ...(failed ? { workflowAction: 'failed' } : {}), ...(responseCameFromCache(payload) ? { sameAsPrevious: true } : {}) }
+    const extras = { ...(routeMetadata ? { routeMetadata } : {}), ...(requiresTurnReconciliation(payload) ? { workflowAction: 'unknown' } : failed ? { workflowAction: 'failed' } : {}), ...(responseCameFromCache(payload) ? { sameAsPrevious: true } : {}) }
     return Object.keys(extras).length ? extras : undefined
   }
 
@@ -356,6 +356,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       let doneResult: unknown = null
       let awaitingAuthorization = false
       let sseError: string | null = null
+      let sseOutcomeUnknown = false
       let streamRunId = ''
       const ttsShouldSpeakThisMessage = ttsEnabled.value
       let receivedDone = false
@@ -416,6 +417,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           } else if (ev.type === 'error') {
             consumeRoute(ev.route_metadata)
             streamRunId = ev.run_id || streamRunId
+            if (streamRunId) syncStreamRun({ run_id: streamRunId })
+            sseOutcomeUnknown = Boolean(ev.requires_reconciliation || ev.execution_outcome === 'unknown')
             sseError = String(ev.message || '流式接口错误')
           } else if (ev.type === 'requires_token') {
             awaitingAuthorization = true
@@ -450,6 +453,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           } else {
             applyPlainTextToMessageIndex(msgIndex, finalText)
           }
+          if (streamMessage && requiresTurnReconciliation(donePayload)) {
+            streamMessage.workflowAction = 'unknown'
+          }
         }
         if (round.isActive() && ttsShouldSpeakThisMessage && ttsEnabled.value && donePayload.success !== false) {
           const clean = stripPlannerDisplayMarkers(finalText.replace(/（正在(?:将 Excel 导入数据库|生成 Word 文档|生成 Excel 工作簿|生成可下载文件)(?:[^（）]|（[^（）]*）)*）/g, '\n')).trim()
@@ -465,6 +471,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         attachTodoStepsToLastAiMessage(wrap)
         attachWorkflowTraceToLastAiMessage(wrap)
         attachApprovalCardToLastAiMessage(wrap)
+        if (requiresTurnReconciliation(wrap)) return
         if (wrap.task) {
           showTaskConfirm(wrap.task)
           emitAssistantPush({
@@ -521,7 +528,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             : transport || (timedOut && streamRunId ? errText : `处理失败：${errText}`)
           applyPlainTextToMessageIndex(msgIndex, visibleError)
           if (streamMessage) {
-            streamMessage.workflowAction = 'failed'
+            streamMessage.workflowAction = sseOutcomeUnknown ? 'unknown' : 'failed'
             delete streamMessage.streamingShell
             delete streamMessage.waitingHint
           }
@@ -624,6 +631,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             attachAgentRunTraceToLastAiMessage(extractAgentRunId(part))
           } else {
             await addRoundMessage('处理失败: ' + (part.message || '未知错误'), responseExtras(part, true))
+            if (requiresTurnReconciliation(part)) {
+              await syncAgentRunFromPayload(part, primaryText, isOwnerCurrent)
+              if (!round.isActive()) return
+              attachAgentRunTraceToLastAiMessage(extractAgentRunId(part))
+            }
           }
         }
         attachContextSummaryToLastAiMessage()
@@ -635,6 +647,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           attachWorkflowTraceToLastAiMessage(lastOk)
           attachApprovalCardToLastAiMessage(lastOk)
         }
+        if (results.some(requiresTurnReconciliation)) return
         const lastTask = [...results].reverse().find((p) => p.task)
         if (lastTask?.task) {
           showTaskConfirm(lastTask.task)
@@ -679,6 +692,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       attachTodoStepsToLastAiMessage(data)
       attachWorkflowTraceToLastAiMessage(data)
       attachApprovalCardToLastAiMessage(data)
+      if (requiresTurnReconciliation(data)) return
 
       if (data.task) {
         showTaskConfirm(data.task)
@@ -700,6 +714,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       }
     } else {
       await addRoundMessage('处理失败: ' + (data.message || '未知错误'), responseExtras(data, true))
+      if (requiresTurnReconciliation(data)) {
+        await syncAgentRunFromPayload(data, primaryText, isOwnerCurrent)
+        if (!round.isActive()) return
+        attachAgentRunTraceToLastAiMessage(extractAgentRunId(data))
+      }
     }
   }
 

@@ -7,8 +7,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from collections import OrderedDict
+from contextlib import contextmanager
 from threading import Lock
 from typing import Any, cast
 
@@ -40,6 +42,18 @@ def _fail_closed_without_redis() -> bool:
     保持既有生产行为不变。
     """
     return env_flag("XCAGI_REQUIRE_REDIS_RATE_LIMIT")
+
+
+class ToolConcurrencyLimitError(RuntimeError):
+    """Per-process tool execution capacity is full; the call did not start."""
+
+
+class ToolCircuitOpenError(RuntimeError):
+    """A tool action has repeated transient faults and is temporarily blocked."""
+
+    def __init__(self, retry_after: int = 30) -> None:
+        super().__init__("Tool action circuit is open")
+        self.retry_after = max(1, int(retry_after))
 
 
 def _get_redis_client():
@@ -131,11 +145,17 @@ class _RedisRateLimiter:
             # 无 Redis：按 fail-closed/open 策略决定放行
             return not _fail_closed_without_redis()
         rk = self._window_key(key)
-        pipe = self._redis.pipeline()
-        pipe.incr(rk)
-        pipe.expire(rk, self._window_seconds + 1)
-        count, _ = pipe.execute()
-        return int(count) <= self._max_requests
+        try:
+            pipe = self._redis.pipeline()
+            pipe.incr(rk)
+            pipe.expire(rk, self._window_seconds + 1)
+            count, _ = pipe.execute()
+            return int(count) <= self._max_requests
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("Rate limiter Redis request failed: %s", type(exc).__name__)
+            if distributed_rate_limit_required():
+                raise RateLimitBackendError("分布式限流 Redis 请求失败，已拒绝调用") from exc
+            return True
 
     def get_remaining(self, key: str) -> int:
         if self._redis is None:
@@ -212,6 +232,152 @@ class _CircuitBreaker:
 _rate_limiters: dict[str, _InMemoryRateLimiter | _RedisRateLimiter] = {}
 _circuit_breakers: dict[str, _CircuitBreaker] = {}
 _limiter_lock = Lock()
+_tool_gate_lock = Lock()
+_tool_inflight = 0
+_tool_inflight_by_tenant: dict[str, int] = {}
+_tool_inflight_by_action: dict[str, int] = {}
+_tool_breakers: OrderedDict[str, tuple[int, float, bool]] = OrderedDict()
+
+
+def _tool_gate_limits() -> tuple[int, int, int, float]:
+    try:
+        concurrency = max(1, min(1000, int(os.environ.get("XCAGI_TOOL_MAX_INFLIGHT", "32"))))
+    except ValueError:
+        concurrency = 32
+    try:
+        per_tenant = max(
+            1, min(concurrency, int(os.environ.get("XCAGI_TOOL_MAX_INFLIGHT_PER_TENANT", "16")))
+        )
+    except ValueError:
+        per_tenant = min(concurrency, 16)
+    try:
+        threshold = max(1, min(100, int(os.environ.get("XCAGI_TOOL_BREAKER_THRESHOLD", "5"))))
+    except ValueError:
+        threshold = 5
+    try:
+        cooldown = max(1.0, min(600.0, float(os.environ.get("XCAGI_TOOL_BREAKER_COOLDOWN", "30"))))
+    except ValueError:
+        cooldown = 30.0
+    return concurrency, per_tenant, threshold, cooldown
+
+
+def _transient_tool_failure(result: Any = None, error: BaseException | None = None) -> bool:
+    if error is not None:
+        if isinstance(error, (TimeoutError, ConnectionError, OSError)):
+            return True
+        status = getattr(error, "status_code", None)
+        if isinstance(status, int):
+            return status in {408, 425, 429} or status >= 500
+        response_status = getattr(getattr(error, "response", None), "status_code", None)
+        return isinstance(response_status, int) and (
+            response_status in {408, 425, 429} or response_status >= 500
+        )
+    if not isinstance(result, dict) or result.get("success") is True:
+        return False
+    code = str(result.get("error_code") or "")
+    return code in {
+        "tool_timeout_unknown",
+        "tool_exception",
+        "tool_exception_after_unknown_io",
+        "tool_result_transport_failed",
+        "tool_worker_incomplete",
+        "tool_cleanup_failed",
+        "tool_unavailable",
+        "tool_upstream_failure",
+        "upstream_unavailable",
+        "service_unavailable",
+        "model_circuit_open",
+    }
+
+
+@contextmanager
+def tool_execution_slot(action_key: str, *, tenant_id: str = "shared"):
+    """Limit in-process tool concurrency and circuit-break repeated transient faults.
+
+    Distributed per-tenant/action rate quotas remain enforced by ``check_rate_limit``.
+    This short-lived slot covers the whole isolated worker lifetime in the API process.
+    """
+    global _tool_inflight
+    action = str(action_key or "unknown")[:160]
+    tenant = str(tenant_id or "shared")[:120]
+    key = f"{tenant}:{action}"[:240]
+    concurrency, tenant_limit, threshold, cooldown = _tool_gate_limits()
+    try:
+        per_action_limit = max(
+            1, min(concurrency, int(os.environ.get("XCAGI_TOOL_MAX_INFLIGHT_PER_ACTION", "8")))
+        )
+    except ValueError:
+        per_action_limit = min(concurrency, 8)
+    now = time.monotonic()
+    with _tool_gate_lock:
+        failures, opened_at, probing = _tool_breakers.get(key, (0, 0.0, False))
+        if failures >= threshold:
+            remaining = cooldown - (now - opened_at)
+            if remaining > 0 or probing:
+                raise ToolCircuitOpenError(max(1, int(remaining)))
+            _tool_breakers[key] = (failures, opened_at, True)
+        if (
+            _tool_inflight >= concurrency
+            or _tool_inflight_by_tenant.get(tenant, 0) >= tenant_limit
+            or _tool_inflight_by_action.get(key, 0) >= per_action_limit
+        ):
+            if failures >= threshold:
+                _tool_breakers[key] = (failures, opened_at, False)
+            raise ToolConcurrencyLimitError("Tool execution capacity is full")
+        _tool_inflight += 1
+        _tool_inflight_by_tenant[tenant] = _tool_inflight_by_tenant.get(tenant, 0) + 1
+        _tool_inflight_by_action[key] = _tool_inflight_by_action.get(key, 0) + 1
+        _tool_breakers.move_to_end(key) if key in _tool_breakers else None
+    result_seen = False
+    result_success = False
+    result_failure = False
+
+    def report_result(result: Any) -> None:
+        nonlocal result_seen, result_success, result_failure
+        result_seen = True
+        result_success = isinstance(result, dict) and result.get("success") is True
+        result_failure = _transient_tool_failure(result=result)
+
+    try:
+        yield report_result
+    except BaseException as exc:
+        result_failure = _transient_tool_failure(error=exc)
+        result_seen = True
+        raise
+    finally:
+        with _tool_gate_lock:
+            _tool_inflight = max(0, _tool_inflight - 1)
+            tenant_remaining = _tool_inflight_by_tenant.get(tenant, 0) - 1
+            if tenant_remaining <= 0:
+                _tool_inflight_by_tenant.pop(tenant, None)
+            else:
+                _tool_inflight_by_tenant[tenant] = tenant_remaining
+            remaining = _tool_inflight_by_action.get(key, 0) - 1
+            if remaining <= 0:
+                _tool_inflight_by_action.pop(key, None)
+            else:
+                _tool_inflight_by_action[key] = remaining
+            if result_success:
+                _tool_breakers.pop(key, None)
+            elif result_failure:
+                _record_tool_result_locked(key, True, threshold)
+            elif result_seen:
+                # A definitive upstream response proves the service is reachable;
+                # only consecutive transient faults should keep the circuit open.
+                _tool_breakers.pop(key, None)
+
+
+def _record_tool_result_locked(action_key: str, failure: bool, threshold: int) -> None:
+    if not failure:
+        return
+    failures, opened_at, _probing = _tool_breakers.get(action_key, (0, 0.0, False))
+    failures += 1
+    if failures >= threshold:
+        opened_at = time.monotonic()
+    _tool_breakers[action_key] = (failures, opened_at, False)
+    _tool_breakers.move_to_end(action_key)
+    while len(_tool_breakers) > 10_000:
+        _tool_breakers.popitem(last=False)
 
 
 def get_rate_limiter(

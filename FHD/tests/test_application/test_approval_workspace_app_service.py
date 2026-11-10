@@ -63,7 +63,7 @@ def _make_db_ctx(mock_db):
 
 
 @pytest.mark.parametrize("snapshot_has_request", [False, True])
-def test_restore_approval_survives_restoring_snapshot_before_request(
+def test_legacy_restore_approval_fails_closed_without_agent_run(
     tmp_path, snapshot_has_request
 ):
     import sqlite3
@@ -71,11 +71,8 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import sessionmaker
 
-    from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
-    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
     from app.db.db_base import Base
-    from app.db.models import AIConversation, User
-    from app.domain.shared_services.database_service import DatabaseService
+    from app.db.models import User
     from app.infrastructure.tenant_scope import tenant_scope
 
     live, backup = tmp_path / "live.db", tmp_path / "snapshot.bak"
@@ -127,8 +124,6 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
                     source.backup(target)
             db.execute(text("update restore_probe set price=13.50"))
             db.commit()
-            svc = DatabaseService()
-            repo = SQLAlchemyAgentRunRepository(session_factory=sessions)
             context = {
                 "local_user_id": 41,
                 "actor_id": 41,
@@ -137,28 +132,6 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
                 "session_id": "restore-chat",
                 "conversation_id": "restore-chat",
             }
-            with patch(
-                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-                return_value=repo,
-            ):
-                trace = attach_chat_trace_run(
-                    {
-                        "success": True,
-                        "legacy_tool_records": [
-                            {
-                                "tool_id": "system_maintenance",
-                                "action": "restore_database",
-                                "output": {
-                                    "pending_approval": True,
-                                    "approval": {"approval_request_ids": [req.request_no]},
-                                },
-                            }
-                        ],
-                    },
-                    message="restore database",
-                    runtime_context=context,
-                )
-            context["agent_run_id"] = trace["run_id"]
             plan = SimpleNamespace(
                 plan_id="restore-plan",
                 intent="restore",
@@ -167,84 +140,30 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
             approval = Mock()
             approval.get_pending_workflow.return_value = {"plan": plan, "runtime_context": context}
 
-            def resume(**kwargs):
-                original_receipt = repo.get(trace["run_id"]).to_dict()
-                with patch.object(svc, "_get_db_path", return_value=str(live)):
-                    restored = svc.restore_database(str(backup))
-                assert repo.get(trace["run_id"]).to_dict() == original_receipt
-                return SimpleNamespace(
-                    success=restored["success"],
-                    node_results=[
-                        SimpleNamespace(
-                            node_id="restore-node",
-                            tool_id="system_maintenance",
-                            action="restore_database",
-                            success=restored["success"],
-                            output=restored,
-                            error=None,
-                        )
-                    ],
-                )
-
             with (
                 patch(
                     "app.application.approval_workspace_app_service._has_pending_ai_workflow",
                     return_value=True,
                 ),
-                patch(
-                    "app.application.workflow.WorkflowEngine.run",
-                    side_effect=resume,
-                ),
                 patch("app.application.workflow.get_approval_service", return_value=approval),
-                patch(
-                    "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-                    return_value=repo,
-                ),
-                patch(
-                    "app.application.agent_orchestrator.get_agent_run_repository", return_value=repo
-                ),
-                patch(
-                    "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-                    return_value=repo,
-                ),
-                patch(
-                    "app.domain.shared_services.conversation_service.get_db",
-                    side_effect=lambda: sessions(),
-                ),
                 patch("app.application.approval_workspace_app_service.notify_mobile_user"),
                 tenant_scope(1),
             ):
                 response = _approve_ai_workflow_request_without_node(
                     db, req=req, actor=41, approver_name="probe", opinion="approve restore"
                 )
-            assert response["success"] is True
+            payload = json.loads(response.body) if hasattr(response, "body") else response
+            assert payload["success"] is False
         with sessions() as reopened:
             restored_req = reopened.get(ApprovalRequest, 4)
             assert restored_req.request_no == "APR-restore-probe"
-            assert restored_req.status == "approved"
+            assert restored_req.status == "cancelled"
             assert (
                 reopened.query(ApprovalRecord).filter_by(request_id=4, action="approve").count()
-                == 1
+                == 0
             )
-            assert reopened.execute(text("select price from restore_probe")).scalar_one() == 12.50
+            assert reopened.execute(text("select price from restore_probe")).scalar_one() == 13.50
             assert reopened.execute(text("pragma integrity_check")).scalar_one() == "ok"
-            assert (
-                reopened.execute(
-                    text(
-                        "select count(*) from ai_action_audit where action in ('approval.approve_ai_workflow', 'approval.execute_ai_workflow')"
-                    )
-                ).scalar_one()
-                == 2
-            )
-            run = repo.get(trace["run_id"])
-            assert run is not None and run.status == "completed"
-            assert (
-                repo.get_task(user_id="41", task_id="restore-task", tenant_id="1").status
-                == "completed"
-            )
-            messages = reopened.query(AIConversation).filter_by(session_id="restore-chat").all()
-            assert len(messages) == 1 and messages[0].user_id == "41"
-            assert "审批已完成" in messages[0].content
     finally:
         engine.dispose()
 
@@ -1056,71 +975,18 @@ class TestSubmitRequest:
 
 
 class TestApproveRequest:
-    @pytest.mark.parametrize("legacy", [False, True])
-    def test_resume_pending_ai_workflow_after_approval_executes_engine(self, legacy):
-        from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
-        from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-
-        repo = InMemoryAgentRunRepository()
-        context = {"local_user_id": "u1", "tenant_id": "t1", "message": "写入客户"}
-        if legacy:
-            with patch(
-                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-                return_value=repo,
-            ):
-                traced = attach_chat_trace_run(
-                    {
-                        "legacy_tool_records": [
-                            {
-                                "tool_id": "execute_erp_capability",
-                                "action": "write",
-                                "params": {"tool_id": "business_db", "action": "write"},
-                                "output": {
-                                    "success": False,
-                                    "pending_approval": True,
-                                    "approval": {"approval_request_ids": ["req-ai-1"]},
-                                },
-                            }
-                        ]
-                    },
-                    message="写入客户",
-                    runtime_context=context,
-                )
-                context["agent_run_id"] = traced["run_id"]
+    def test_legacy_plan_cannot_resume_through_retired_executor(self):
         plan = SimpleNamespace(plan_id="plan-ai", intent="business_db_write", nodes=[object()])
         svc = MagicMock()
         svc.approve.return_value = True
         svc.get_pending_workflow.return_value = {
             "plan": plan,
-            "runtime_context": context,
+            "runtime_context": {"local_user_id": "u1", "tenant_id": "t1"},
         }
-        node_result = SimpleNamespace(
-            node_id="write_customer",
-            tool_id="business_db",
-            action="write",
-            success=True,
-            error="",
-            retries=0,
-            retryable=True,
-            recovery_hint="",
-            output={"success": True, "data": {"id": 42}},
-        )
-        run_result = SimpleNamespace(
-            success=True,
-            message="工作流执行完成",
-            node_results=[node_result],
-        )
-        engine = MagicMock()
-        engine.run.return_value = run_result
 
         with (
-            patch(
-                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-                return_value=repo,
-            ),
             patch("app.application.workflow.get_approval_service", return_value=svc),
-            patch("app.application.workflow.WorkflowEngine", return_value=engine),
-            patch("app.fastapi_routes.domains.misc.helpers._dispatch_tool_for_approval"),
+            patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator_cls,
         ):
             out = _resume_pending_ai_workflow_after_approval(
                 request_no="req-ai-1",
@@ -1128,20 +994,11 @@ class TestApproveRequest:
             )
 
         assert out is not None
-        assert out["workflow_executed"] is True
-        assert out["success"] is True
-        assert out["plan_id"] == "plan-ai"
-        assert out["node_results"][0]["node_id"] == "write_customer"
+        assert out["workflow_executed"] is False
+        assert out["success"] is False
+        assert out["code"] == "agent_run_unavailable"
         svc.approve.assert_called_once_with("req-ai-1", "同意")
-        svc.remove_pending_workflow.assert_called_once_with("req-ai-1")
-        engine.run.assert_called_once()
-        if legacy:
-            assert out["agent_run_id"] == context["agent_run_id"]
-            run = repo.get(out["agent_run_id"])
-            task = repo.get_task(user_id="u1", tenant_id="t1", task_id=run.run_id)
-            assert run.status == task.status == "completed"
-            assert task.attention_state != "approval_required"
-            assert run.final_output["business_result"]["facts"]["id"] == 42
+        orchestrator_cls.assert_not_called()
 
     def test_resume_pending_ai_workflow_continues_exact_agent_run_step(self):
         svc = MagicMock()
@@ -1174,16 +1031,9 @@ class TestApproveRequest:
             )
 
         assert out is not None
-        assert out["success"] is True
-        assert out["agent_run_id"] == "run-ai-1"
-        assert out["tool_call_ids"] == ["call-1"]
-        orchestrator_cls.return_value.continue_run.assert_called_once_with(
-            "run-ai-1",
-            approved_by="7",
-            approved_step_id="write_product",
-            runtime_context={"message": "写入产品"},
-        )
-        svc.remove_pending_workflow.assert_called_once_with("req-ai-1")
+        assert out["success"] is False
+        assert out["code"] == "workflow_snapshot_unavailable"
+        orchestrator_cls.return_value.continue_run.assert_not_called()
 
     def test_no_actor_raises_401(self):
         request = Mock()
@@ -2795,8 +2645,8 @@ class TestResumePendingAiWorkflow:
     def test_empty_request_no_returns_none(self):
         assert _resume_pending_ai_workflow_after_approval(request_no="  ", opinion="") is None
 
-    def test_in_memory_fast_path_preserved(self):
-        """未重启时走内存 pending workflow，不触达持久化加载。"""
+    def test_legacy_in_memory_plan_fails_closed(self):
+        """只有 PlanGraph 的旧 pending 记录不能绕过 AgentRun 执行。"""
         plan = MagicMock()
         plan.plan_id = "plan-1"
         plan.intent = "test"
@@ -2809,28 +2659,22 @@ class TestResumePendingAiWorkflow:
             "agent_run_id": "",
             "approved_step_id": "",
         }
-        run_result = MagicMock()
-        run_result.success = True
-        run_result.message = "done"
-        run_result.node_results = []
-        engine_instance = MagicMock()
-        engine_instance.run.return_value = run_result
         with (
             patch("app.application.workflow.get_approval_service", return_value=svc),
-            patch("app.application.workflow.WorkflowEngine", return_value=engine_instance),
             patch(
                 "app.application.workflow.approval_persistence.load_durable_workflow_snapshot"
             ) as mock_load,
+            patch("app.infrastructure.workflow.langgraph_runtime.XCAGILangGraphRuntime") as engine,
         ):
             result = _resume_pending_ai_workflow_after_approval(request_no="req-1", opinion="ok")
-        assert result["workflow_executed"] is True
-        assert result["approved_in_memory"] is True
-        assert result["success"] is True
-        engine_instance.run.assert_called_once()
+        assert result["workflow_executed"] is False
+        assert result.get("approved_in_memory") is not True
+        assert result["code"] == "agent_run_unavailable"
+        engine.assert_not_called()
         mock_load.assert_not_called()
 
-    def test_durable_snapshot_plan_reaches_execution(self):
-        """进程重启后内存缺失：从可靠快照重建并执行计划，不依赖内存。"""
+    def test_durable_legacy_plan_is_not_resumed_by_retired_executor(self):
+        """持久化 PlanGraph 没有 AgentRun 绑定时仍拒绝旧执行路径。"""
         plan = MagicMock()
         plan.plan_id = "plan-1"
         plan.intent = "test"
@@ -2845,26 +2689,20 @@ class TestResumePendingAiWorkflow:
         svc = MagicMock()
         svc.approve.return_value = False
         svc.get_pending_workflow.return_value = None
-        run_result = MagicMock()
-        run_result.success = True
-        run_result.message = "done"
-        run_result.node_results = []
-        engine_instance = MagicMock()
-        engine_instance.run.return_value = run_result
         with (
             patch("app.application.workflow.get_approval_service", return_value=svc),
             patch(
                 "app.application.workflow.approval_persistence.load_workflow_snapshot_for_execution",
                 return_value=snapshot,
             ),
-            patch("app.application.workflow.WorkflowEngine", return_value=engine_instance),
+            patch("app.infrastructure.workflow.langgraph_runtime.XCAGILangGraphRuntime") as engine,
         ):
             result = _resume_pending_ai_workflow_after_approval(request_no="req-1", opinion="ok")
-        assert result["workflow_executed"] is True
-        assert result["success"] is True
-        assert result["approved_in_memory"] is False
-        engine_instance.run.assert_called_once()
-        svc.remove_pending_workflow.assert_called_once_with("req-1")
+        assert result["workflow_executed"] is False
+        assert result["success"] is False
+        assert result["code"] == "agent_run_unavailable"
+        assert result.get("approved_in_memory") is not True
+        engine.assert_not_called()
 
     def test_missing_snapshot_fail_closed_no_execution(self):
         """重启后无可靠快照 → fail-closed，不执行。"""
@@ -2877,7 +2715,7 @@ class TestResumePendingAiWorkflow:
                 "app.application.workflow.approval_persistence.load_workflow_snapshot_for_execution",
                 return_value=None,
             ),
-            patch("app.application.workflow.WorkflowEngine") as mock_engine_cls,
+            patch("app.infrastructure.workflow.langgraph_runtime.XCAGILangGraphRuntime") as mock_engine_cls,
         ):
             result = _resume_pending_ai_workflow_after_approval(request_no="req-1", opinion="ok")
         assert result["workflow_executed"] is False
@@ -2926,14 +2764,14 @@ class TestResumePendingAiWorkflow:
             )
 
         assert result["success"] is False
-        assert result["code"] == "workflow_execution_failed"
-        assert result["message"] == "AI 工作流执行失败"
+        assert result["code"] == "workflow_snapshot_unavailable"
+        assert result["message"] == "持久化工作流快照不可用"
         assert "raw-agent" not in str(result)
         # 纯执行契约：恢复器不落库；终态由调用方统一写入。
         mark_outcome.assert_not_called()
 
-    def test_engine_raw_message_error_and_hint_are_replaced_with_fixed_values(self):
-        """Engine/node 的 message/error/recovery_hint 只能输出固定安全值。"""
+    def test_legacy_engine_result_is_never_consumed(self):
+        """旧 Engine 结果对象不构成 AgentRun/审批凭据，不能直接续跑。"""
         plan = SimpleNamespace(plan_id="plan-1", intent="sales_write", nodes=[object()])
         svc = MagicMock()
         svc.approve.return_value = True
@@ -2943,26 +2781,9 @@ class TestResumePendingAiWorkflow:
             "agent_run_id": "",
             "approved_step_id": "",
         }
-        node_result = SimpleNamespace(
-            node_id="n1",
-            tool_id="sales",
-            action="execute_closed_loop",
-            success=False,
-            error="raw-node-error-secret",
-            retries=1,
-            retryable=True,
-            recovery_hint="raw-recovery-secret",
-        )
-        run_result = SimpleNamespace(
-            success=False,
-            message="raw-engine-message-secret",
-            node_results=[node_result],
-        )
-        engine = MagicMock()
-        engine.run.return_value = run_result
         with (
             patch("app.application.workflow.get_approval_service", return_value=svc),
-            patch("app.application.workflow.WorkflowEngine", return_value=engine),
+            patch("app.infrastructure.workflow.langgraph_runtime.XCAGILangGraphRuntime") as engine,
             patch(
                 "app.application.workflow.approval_persistence.mark_durable_outcome"
             ) as mark_outcome,
@@ -2970,10 +2791,90 @@ class TestResumePendingAiWorkflow:
             result = _resume_pending_ai_workflow_after_approval(request_no="req-1", opinion="ok")
 
         assert result["success"] is False
-        assert result["code"] == "workflow_execution_failed"
-        assert result["message"] == "AI 工作流执行失败"
-        assert result["node_results"][0]["error"] == "node_execution_failed"
-        assert result["node_results"][0]["recovery_hint"] == "retry_recommended"
+        assert result["code"] == "agent_run_unavailable"
         assert "raw-" not in str(result)
+        engine.assert_not_called()
         # 纯执行契约：恢复器不落库；终态由调用方统一写入。
         mark_outcome.assert_not_called()
+
+
+def test_approval_workspace_reports_next_approval_without_claiming_completion():
+    db = MagicMock()
+    req = Mock()
+    req.status = ApprovalStatus.PENDING.value
+    req.id = 1
+    req.request_no = "first"
+    req.business_data = "{}"
+    req.applicant_id = None
+    req.current_node_order = 0
+    with (
+        patch(
+            "app.application.approval_workspace_app_service._can_review_ai_workflow_request",
+            return_value=True,
+        ),
+        patch(
+            "app.application.approval_workspace_app_service._has_pending_ai_workflow",
+            return_value=True,
+        ),
+        patch(
+            "app.application.approval_workspace_app_service._ai_workflow_audit_node",
+            return_value=SimpleNamespace(id=9, node_name="审批", node_order=1),
+        ),
+        patch(
+            "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
+            return_value={
+                "success": False,
+                "workflow_executed": False,
+                "execution_accepted": True,
+                "waiting_approval": True,
+                "next_approval_request_id": "second",
+            },
+        ),
+        patch("app.application.approval_workspace_app_service._request_to_dict", return_value={}),
+        patch("app.application.approval_workspace_app_service._audit"),
+    ):
+        response = _approve_ai_workflow_request_without_node(
+            db, req=req, actor=1, approver_name="reviewer", opinion="同意"
+        )
+    body = json.loads(response.body)
+    assert response.status_code == 202
+    assert body["success"] is False and body["accepted"] is True
+    assert body["data"]["workflow_execution"]["code"] == "waiting_approval"
+    assert body["data"]["workflow_execution"]["next_approval_request_id"] == "second"
+    assert "后续步骤等待审批" in body["message"]
+
+
+def test_concurrent_approval_conflict_does_not_cancel_request():
+    db = MagicMock()
+    req = Mock(
+        status=ApprovalStatus.PENDING.value,
+        id=1,
+        request_no="same",
+        business_data="{}",
+        applicant_id=None,
+    )
+    with (
+        patch(
+            "app.application.approval_workspace_app_service._can_review_ai_workflow_request",
+            return_value=True,
+        ),
+        patch(
+            "app.application.approval_workspace_app_service._has_pending_ai_workflow",
+            return_value=True,
+        ),
+        patch(
+            "app.application.approval_workspace_app_service._ai_workflow_audit_node",
+            return_value=SimpleNamespace(id=9, node_name="审批", node_order=1),
+        ),
+        patch(
+            "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
+            return_value={"success": False, "approval_claim_conflict": True},
+        ),
+    ):
+        response = _approve_ai_workflow_request_without_node(
+            db, req=req, actor=1, approver_name="reviewer", opinion="同意"
+        )
+    assert response.status_code == 409
+    assert req.status == ApprovalStatus.PENDING.value
+    db.rollback.assert_called_once()
+    db.commit.assert_not_called()

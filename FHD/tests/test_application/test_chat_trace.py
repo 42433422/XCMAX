@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -41,7 +40,7 @@ def test_attach_chat_trace_run_persists_completed_run() -> None:
     assert run is not None
     assert run.user_id == "u1"
     assert run.status == "completed"
-    assert run.intent == "legacy_chat_adapter"
+    assert run.intent == "chat_reply"
     assert run.metadata["source"] == "desktop"
     assert run.metadata["channel"] == "compat_chat"
     assert run.final_output["chat_payload"]["response"] == "done"
@@ -599,28 +598,7 @@ def test_attach_chat_trace_run_records_generated_office_artifact() -> None:
     ]
 
 
-@pytest.mark.parametrize("approval_pending", [False, True])
-@pytest.mark.parametrize("restored", [False, True])
-@pytest.mark.parametrize("outcome", [None, False, True])
-@pytest.mark.parametrize(
-    "mismatch",
-    [
-        "",
-        "user",
-        "tenant",
-        "mod",
-        "approval",
-        "action",
-        "task_id",
-        "session_id",
-        "conversation_id",
-        "turn_id",
-        "run",
-    ],
-)
-def test_attach_chat_trace_run_marks_token_waiting(
-    approval_pending, outcome, mismatch, restored
-) -> None:
+def test_attach_chat_trace_run_preserves_authorization_wait() -> None:
     repo = InMemoryAgentRunRepository()
     payload = {
         "success": True,
@@ -629,95 +607,46 @@ def test_attach_chat_trace_run_marks_token_waiting(
         "message": "需要授权",
         "data": {"requires_token": True},
     }
-    if approval_pending:
-        payload = {
-            "success": True,
-            "legacy_tool_records": [
-                {"tool_id": "products", "output": {"success": False}},
-                {
-                    "tool_id": "sales",
-                    "action": "create_order",
-                    "output": {
-                        "pending_approval": True,
-                        "approval": {"approval_request_ids": ["approval-1"]},
-                    },
-                },
-            ],
-        }
-
     with patch(
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
         return_value=repo,
     ):
-        context = {
-            "local_user_id": "u1",
-            "tenant_id": "t1",
-            "task_id": "task-1",
-            "session_id": "session-1",
-            "conversation_id": "session-1",
-            "turn_id": "turn-1",
-        }
-        result = attach_chat_trace_run(payload, message="查看数据库", runtime_context=context)
+        result = attach_chat_trace_run(payload, message="读取业务数据", runtime_context={})
 
     run = repo.get(result["run_id"])
-    assert run is not None
-    assert run.status == "waiting_user"
+    assert run is not None and run.status == "waiting_user"
     assert run.events[-1].event_type == "step.waiting_user"
-    if approval_pending:
-        from app.application.agent_orchestrator.chat_trace import resolve_legacy_approval
 
-        context["agent_run_id"] = run.run_id
-        if restored:
-            repo = InMemoryAgentRunRepository()
-        if mismatch in {"user", "tenant"}:
-            context["local_user_id" if mismatch == "user" else "tenant_id"] = "foreign"
-        elif mismatch == "mod":
-            context["_mod_authorization"] = {"mod_id": "foreign"}
-        elif mismatch in {"task_id", "session_id", "conversation_id", "turn_id", "run"}:
-            context["agent_run_id" if mismatch == "run" else mismatch] = "foreign"
-        execution = (
-            None
-            if outcome is None
-            else SimpleNamespace(
-                success=outcome,
-                node_results=[
-                    SimpleNamespace(
-                        tool_id="sales",
-                        action="wrong" if mismatch == "action" else "create_order",
-                        success=outcome,
-                        output={"success": outcome, "data": {"order_id": 1}},
-                    )
-                ],
-            )
-        )
-        with patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ):
-            updated = resolve_legacy_approval(
-                "wrong" if mismatch == "approval" else "approval-1",
-                context,
-                execution,
-                run_before_restore=run if restored else None,
-            )
-            if mismatch == "action" and outcome is None:
-                mismatch = ""
-            assert bool(updated) is (not mismatch)
-            if not mismatch:
-                assert resolve_legacy_approval("approval-1", context, execution) == ""
-        current = repo.get(run.run_id)
-        if restored and mismatch:
-            assert current is None
-            return
-        assert current.status == (
-            "waiting_user"
-            if mismatch
-            else ("cancelled" if outcome is None else ("completed" if outcome else "failed"))
-        )
-        if not mismatch:
-            assert current.final_output["business_result"]["success"] is bool(outcome)
-            assert current.final_output["business_result"]["pending_approval"] is False
-            assert current.steps[0].status == "failed"
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"success": True, "data": {"action": "tool_call", "tool_key": "products"}},
+        {
+            "success": True,
+            "toolCall": {"tool_id": "products", "action": "query", "params": {"keyword": "5003"}},
+        },
+        {
+            "success": True,
+            "data": {"legacy_tool_records": [{"tool_id": "products", "output": {"success": True}}]},
+        },
+    ],
+)
+def test_attach_chat_trace_run_rejects_unplanned_tool_payloads(payload) -> None:
+    repo = InMemoryAgentRunRepository()
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+        return_value=repo,
+    ):
+        result = attach_chat_trace_run(payload, message="查产品", runtime_context={}, user_id="u1")
+
+    assert result["success"] is False
+    assert result["execution_state"] == "failed"
+    assert result["data"]["action"] == "unplanned_tool_call_rejected"
+    assert result["data"]["execution_started"] is False
+    run = repo.get(result["run_id"])
+    assert run is not None and run.status == "failed" and run.tool_calls == []
+    assert "未经计划校验" in result["response"]
 
 
 def test_attach_chat_trace_run_skips_existing_run_id() -> None:
@@ -732,153 +661,3 @@ def test_attach_chat_trace_run_skips_existing_run_id() -> None:
 
     assert result["run_id"] == "run_existing"
     assert repo.list_recent() == []
-
-
-def test_attach_chat_trace_run_orchestrates_low_risk_tool_call(
-    local_tools,
-) -> None:
-    repo = InMemoryAgentRunRepository()
-    payload = {
-        "success": True,
-        "response": "查询到 1 个产品",
-        "toolCall": {
-            "tool_id": "products",
-            "action": "执行",
-            "params": {"keyword": "5003"},
-        },
-        "data": {"text": "查询到 1 个产品"},
-    }
-
-    with (
-        patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ),
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "data": [{"model_number": "5003"}]},
-        ) as mock_execute,
-    ):
-        result = attach_chat_trace_run(
-            payload,
-            message="查产品 5003",
-            runtime_context={"workspace": "demo"},
-            user_id="u1",
-            source="desktop",
-            channel="compat_chat",
-        )
-
-    run = repo.get(result["run_id"])
-    assert run is not None
-    assert run.status == "completed"
-    assert run.intent == "products_query"
-    assert run.metadata["trace_mode"] == "orchestrated_tool_call"
-    assert run.metadata["channel"] == "compat_chat"
-    assert run.metadata["source"] == "desktop"
-    assert run.metadata["tool_call_count"] == 1
-    assert run.tool_calls[0].tool_id == "products"
-    assert run.tool_calls[0].action == "query"
-    assert run.tool_calls[0].cost_units == 1
-    assert "tool.started" in [event.event_type for event in run.events]
-    assert "tool.completed" in [event.event_type for event in run.events]
-    assert result["data"]["agent_run_id"] == run.run_id
-
-    mock_execute.assert_called_once()
-    tool_id, action, params = mock_execute.call_args.args
-    assert tool_id == "products"
-    assert action == "query"
-    assert params["keyword"] == "5003"
-    assert params["_runtime_context"]["trace_mode"] == "orchestrated_tool_call"
-
-
-def test_attach_chat_trace_run_does_not_orchestrate_medium_nested_action() -> None:
-    repo = InMemoryAgentRunRepository()
-    payload = {
-        "success": True,
-        "response": "准备创建产品",
-        "toolCall": {
-            "tool_id": "products",
-            "action": "执行",
-            "params": {"action": "create", "name_or_model": "A1", "unit_name": "客户A"},
-        },
-        "data": {"text": "准备创建产品"},
-    }
-
-    with (
-        patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ),
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool"
-        ) as mock_execute,
-    ):
-        result = attach_chat_trace_run(
-            payload,
-            message="新增产品 A1",
-            runtime_context={"workspace": "demo"},
-            user_id="u1",
-            source="desktop",
-        )
-
-    run = repo.get(result["run_id"])
-    assert run is not None
-    assert run.status == "completed"
-    assert run.intent == "legacy_chat_adapter"
-    assert run.metadata["trace_mode"] == "post_execution"
-    assert run.tool_calls == []
-    mock_execute.assert_not_called()
-
-
-def test_attach_chat_trace_run_observes_legacy_tool_records_without_reexecution() -> None:
-    repo = InMemoryAgentRunRepository()
-    payload = {
-        "success": True,
-        "response": "查询完成",
-        "data": {
-            "text": "查询完成",
-            "legacy_tool_records": [
-                {
-                    "tool_id": "products",
-                    "tool_name": "products",
-                    "action": "query",
-                    "params": {"keyword": "5003"},
-                    "output": {"success": True, "data": [{"model_number": "5003"}]},
-                    "tool_call_id": "tc1",
-                }
-            ],
-        },
-    }
-
-    with (
-        patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ),
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool"
-        ) as mock_execute,
-    ):
-        result = attach_chat_trace_run(
-            payload,
-            message="查产品 5003",
-            runtime_context={"workspace": "demo"},
-            user_id="u1",
-            source="desktop",
-            channel="compat_chat",
-        )
-
-    run = repo.get(result["run_id"])
-    assert run is not None
-    assert run.status == "completed"
-    assert run.intent == "legacy_tool_chain"
-    assert run.metadata["trace_mode"] == "legacy_tool_records"
-    assert run.metadata["tool_call_count"] == 1
-    assert run.metadata["cost_units_total"] == 1
-    assert run.tool_calls[0].metadata["observed"] is True
-    assert run.tool_calls[0].metadata["legacy_tool_call_id"] == "tc1"
-    assert run.tool_calls[0].tool_id == "products"
-    assert run.tool_calls[0].action == "query"
-    assert run.final_output["node_outputs"][run.steps[0].node_id]["success"] is True
-    assert "tool.completed" in [event.event_type for event in run.events]
-    mock_execute.assert_not_called()

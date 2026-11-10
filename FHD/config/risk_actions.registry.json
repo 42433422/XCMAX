@@ -1590,6 +1590,15 @@
             "task"
           ],
           "availability": "shared"
+        },
+        "context": {
+          "risk": "low",
+          "idempotent": true,
+          "read_only": true,
+          "required_params": [
+            "task"
+          ],
+          "availability": "shared"
         }
       }
     },
@@ -1738,24 +1747,6 @@
             "memory_id"
           ],
           "availability": "shared"
-        }
-      }
-    },
-    "normal_slot_dispatch": {
-      "description": "普通版槽位：产品查询浮窗、发货单编号预览（与 /api/ai/unified_chat 同源）",
-      "availability": "normal_only",
-      "actions": {
-        "product_query": {
-          "risk": "low",
-          "idempotent": true,
-          "required_params": [],
-          "availability": "normal_only"
-        },
-        "shipment_preview": {
-          "risk": "low",
-          "idempotent": true,
-          "required_params": [],
-          "availability": "normal_only"
         }
       }
     },

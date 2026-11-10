@@ -17,7 +17,7 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-from app.application.workflow.planner import get_tool_registry
+from app.services.tools_execution.registry import get_workflow_tool_registry
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 from app.fastapi_routes.domains.conversation.helpers import (
     XcagiCompatChatBody,
@@ -251,7 +251,7 @@ def test_validate_plan_graph_errors() -> None:
 
 
 def test_get_tool_registry_has_core_tools() -> None:
-    reg = get_tool_registry()
+    reg = get_workflow_tool_registry()
     assert "shipment_orders" in reg
     assert "products" in reg
     assert reg["customers"]["actions"]["query"]["risk"] == "low"

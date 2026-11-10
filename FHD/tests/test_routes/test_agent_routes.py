@@ -373,11 +373,11 @@ def _planner_fallback_patches():
     return (
         patch("app.application.workflow.planner.get_ai_conversation_service"),
         patch(
-            "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_react_multiagent",
+            "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm",
             return_value=None,
         ),
         patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
             return_value="pro_default",
         ),
         patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),

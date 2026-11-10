@@ -125,15 +125,7 @@ def _iter_payload_dicts(payload: dict[str, Any], *, max_depth: int = 3) -> Itera
                 stack.append((nested, depth + 1))
 
 
-def _extract_legacy_tool_records(
-    payload: dict[str, Any],
-) -> list[dict[str, Any]]:
-    for item in _iter_payload_dicts(payload):
-        for key in ("legacy_tool_records", "_tool_records", "tool_records"):
-            records = item.get(key)
-            if isinstance(records, list):
-                return [record for record in records if isinstance(record, dict)]
-    return []
+
 
 
 def _coerce_trace_int(value: Any) -> int:

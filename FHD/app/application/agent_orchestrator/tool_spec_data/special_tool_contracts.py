@@ -409,6 +409,22 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
             },
         }
     ],
+    ("employee", "context"): [
+        {
+            "name": "read_quote_employee_context",
+            "input": {
+                "employee_id": "quote-agent",
+                "task": "Summarize the customer account context",
+                "input": {},
+            },
+            "output": {
+                "success": True,
+                "message": "员工协作上下文已生成",
+                "employee_id": "quote-agent",
+                "data": {"result": {"summary": "当前客户账户上下文"}},
+            },
+        }
+    ],
     ("excel_import", "execute_import"): [
         {
             "name": "execute_pending_import",

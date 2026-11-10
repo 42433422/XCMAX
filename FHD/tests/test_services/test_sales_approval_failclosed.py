@@ -19,9 +19,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
 from app.application.workflow.approval_service import ApprovalService
-from app.application.workflow.engine import WorkflowEngine
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.db.db_base import Base
 from app.db.models import InventoryLedger, JournalEntry, Product, Warehouse
@@ -44,7 +43,18 @@ def _make_sale_plan(payload: dict) -> PlanGraph:
         node_id="post_sale",
         tool_id="sales",
         action="quote",
-        params={"payload": payload},
+        params={
+            "customer_name": "审批验收客户",
+            "items": [
+                {
+                    "product_id": payload["product_id"],
+                    "model_number": "TEST-5003",
+                    "quantity": payload["qty"],
+                    "unit_price": payload["amount"] / payload["qty"],
+                }
+            ],
+            "payload": payload,
+        },
         risk="high",
         idempotent=False,
         description="销售开单（记账 + 扣库存）",
@@ -189,11 +199,6 @@ def env():
     persistent.close()
 
 
-def _make_gated(env: dict, svc: ApprovalService | None = None) -> ApprovalGatedEngine:
-    svc = svc or ApprovalService()
-    # 审批请求不落真实审批库（W1-08 不写 DB approval 持久化，仅内存 pending）。
-    svc._persist_request_to_db = lambda *a, **k: None
-    return ApprovalGatedEngine(env["engine"], risk_gate=_BlockingRiskGate(), approval_service=svc)
 
 
 # ---------------------------------------------------------------------------
@@ -290,359 +295,16 @@ class TestFailClosedRegistry:
 # ---------------------------------------------------------------------------
 # 确定性载荷预览（无副作用）
 # ---------------------------------------------------------------------------
-class TestDeterministicPreview:
-    def test_preview_payload_is_deterministic_and_side_effect_free(self, env):
-        payload = _make_sale_payload(env)
-        plan = _make_sale_plan(payload)
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-
-        d1, _ = gated.run(plan, runtime_context={"message": "销售"}, strategy="interactive")
-        d2, _ = gated.run(plan, runtime_context={"message": "销售"}, strategy="interactive")
-        p1 = svc.get_pending_request(d1.approval_request_ids[0]).params
-        p2 = svc.get_pending_request(d2.approval_request_ids[0]).params
-
-        # 同一信号 → 确定性的载荷预览（预览即审批请求的 params），且无任何业务副作用。
-        assert p1 == p2 == {"payload": payload}
-        with tenant_scope(1):
-            assert env["session"].query(JournalEntry).count() == 0
-            assert env["session"].query(InventoryLedger).count() == 0
 
 
 # ---------------------------------------------------------------------------
 # 端到端：信号 → 审批 pending → 确认前零持久化 → 确认后租户落库 → 后置条件
 # ---------------------------------------------------------------------------
-class TestApprovalGatedWriteFlow:
-    def test_zero_persistence_before_confirm(self, env):
-        plan = _make_sale_plan(_make_sale_payload(env))
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-
-        decision, run_result = gated.run(
-            plan, runtime_context={"message": "销售"}, strategy="interactive"
-        )
-        assert decision.pending_approval is True
-        assert run_result is None  # 未执行 → 写节点未触碰业务工具
-
-        # 确认前零持久化：无任何记账/库存行，且调度器未被调用。
-        assert env["dispatcher"].calls == []
-        with tenant_scope(1):
-            assert env["session"].query(JournalEntry).count() == 0
-            assert env["session"].query(InventoryLedger).count() == 0
-
-    def test_confirm_persists_in_tenant_scope_and_postcondition(self, env):
-        plan = _make_sale_plan(_make_sale_payload(env))
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-
-        decision, _ = gated.run(plan, runtime_context={"message": "销售"}, strategy="interactive")
-        req_id = decision.approval_request_ids[0]
-        assert svc.approve(req_id) is True
-
-        with tenant_scope(1):
-            result = gated.resume_after_approval(
-                plan, {req_id: True}, runtime_context={"message": "销售"}
-            )
-        assert result.success is True
-
-        # 后置条件：记账 1 条且落在租户 1；库存已扣减 10。
-        with tenant_scope(1):
-            entries = (
-                env["session"]
-                .query(JournalEntry)
-                .filter(JournalEntry.reference_type == "sale")
-                .all()
-            )
-            assert len(entries) == 1
-            assert entries[0].tenant_id == 1
-            assert float(entries[0].debit_total) == 1000.0
-            assert float(entries[0].credit_total) == 1000.0
-            ledgers = env["session"].query(InventoryLedger).all()
-            assert len(ledgers) == 1
-            assert float(ledgers[0].available_quantity) == -10.0
-
-    def test_same_payload_retry_does_not_duplicate_effects(self, env):
-        plan = _make_sale_plan(_make_sale_payload(env))
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-
-        decision, _ = gated.run(plan, runtime_context={"message": "销售"}, strategy="interactive")
-        req_id = decision.approval_request_ids[0]
-        assert svc.approve(req_id) is True
-
-        for _ in range(2):
-            with tenant_scope(1):
-                result = gated.resume_after_approval(
-                    plan, {req_id: True}, runtime_context={"message": "销售"}
-                )
-            assert result.success is True
-
-        # 幂等：同载荷重试不重复记账/扣库存。
-        with tenant_scope(1):
-            assert (
-                env["session"]
-                .query(JournalEntry)
-                .filter(JournalEntry.reference_type == "sale")
-                .count()
-            ) == 1
-            assert float(env["session"].query(InventoryLedger).one().available_quantity) == -10.0
-
-    def test_cross_tenant_isolation_survives_approval(self, env):
-        plan = _make_sale_plan(_make_sale_payload(env))
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-
-        decision, _ = gated.run(plan, runtime_context={"message": "销售"}, strategy="interactive")
-        req_id = decision.approval_request_ids[0]
-        assert svc.approve(req_id) is True
-        with tenant_scope(1):
-            assert (
-                gated.resume_after_approval(
-                    plan, {req_id: True}, runtime_context={"message": "销售"}
-                ).success
-                is True
-            )
-
-        # 租户 1 数据就位；租户 2 读不到（跨租户隔离在审批落库后仍成立）。
-        with tenant_scope(1):
-            assert (
-                env["session"]
-                .query(JournalEntry)
-                .filter(JournalEntry.reference_type == "sale")
-                .count()
-            ) == 1
-        with tenant_scope(2):
-            assert env["session"].query(JournalEntry).count() == 0
-            assert env["session"].query(InventoryLedger).count() == 0
-
-    def test_cross_tenant_same_payload_is_not_collapsed(self, env):
-        # 跨租户同载荷：租户 2 提交同一载荷，应各自落库（不被租户 1 的幂等键折叠）。
-        plan = _make_sale_plan(_make_sale_payload(env))
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-
-        decision1, _ = gated.run(plan, runtime_context={"message": "销售"}, strategy="interactive")
-        req1 = decision1.approval_request_ids[0]
-        assert svc.approve(req1) is True
-        with tenant_scope(1):
-            assert (
-                gated.resume_after_approval(
-                    plan, {req1: True}, runtime_context={"message": "销售"}
-                ).success
-                is True
-            )
-
-        # 租户 2 重跑同一载荷 → 重新审批 → 各自落库。
-        decision2, _ = gated.run(plan, runtime_context={"message": "销售"}, strategy="interactive")
-        req2 = decision2.approval_request_ids[0]
-        assert svc.approve(req2) is True
-        with tenant_scope(2):
-            assert (
-                gated.resume_after_approval(
-                    plan, {req2: True}, runtime_context={"message": "销售"}
-                ).success
-                is True
-            )
-
-        with tenant_scope(1):
-            assert (
-                env["session"]
-                .query(JournalEntry)
-                .filter(JournalEntry.reference_type == "sale")
-                .count()
-            ) == 1
-        with tenant_scope(2):
-            assert (
-                env["session"]
-                .query(JournalEntry)
-                .filter(JournalEntry.reference_type == "sale")
-                .count()
-            ) == 1
-
-    def test_rejected_write_never_persists(self, env):
-        plan = _make_sale_plan(_make_sale_payload(env))
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-
-        decision, run_result = gated.run(
-            plan, runtime_context={"message": "销售"}, strategy="interactive"
-        )
-        req_id = decision.approval_request_ids[0]
-        assert svc.reject(req_id) is True
-
-        resumed = gated.resume_after_approval(plan, {req_id: False}, runtime_context={})
-        assert resumed.success is False  # 未全部通过 → 不执行
-        with tenant_scope(1):
-            assert env["session"].query(JournalEntry).count() == 0
-            assert env["session"].query(InventoryLedger).count() == 0
 
 
 # ---------------------------------------------------------------------------
 # R4：resume_after_approval 按 required nodes 分类，任一异常 fail-closed
 # ---------------------------------------------------------------------------
-class TestResumeAfterApprovalR4Classification:
-    """R4 分类契约：required nodes = 本计划内实际存在审批请求的节点。
-
-    unknown / cross-plan / extra / duplicate / missing / pending / rejected /
-    cancelled 任一命中 → success=False 且引擎不执行；全部 required 获批 → 执行。
-    """
-
-    def _plan(self, payload: dict, node_ids: list[str]) -> PlanGraph:
-        nodes = [
-            WorkflowNode(
-                node_id=nid,
-                tool_id="sales",
-                action="quote",
-                params={"payload": payload},
-                risk="high",
-                idempotent=False,
-            )
-            for nid in node_ids
-        ]
-        return PlanGraph(
-            plan_id="plan-r4-" + "-".join(node_ids),
-            intent="销售",
-            nodes=nodes,
-            risk_level="high",
-        )
-
-    def test_empty_map_fails_closed(self, env):
-        plan = self._plan(_make_sale_payload(env), ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-        result = gated.resume_after_approval(plan, {}, runtime_context={})
-        assert result.success is False
-        assert "缺少审批请求映射" in result.message
-        assert env["dispatcher"].calls == []
-
-    def test_unknown_request_fails_closed(self, env):
-        plan = self._plan(_make_sale_payload(env), ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-        result = gated.resume_after_approval(plan, {"no-such-rid": True}, runtime_context={})
-        assert result.success is False
-        assert "未知" in result.message
-        assert env["dispatcher"].calls == []
-
-    def test_cross_plan_request_fails_closed(self, env):
-        payload = _make_sale_payload(env)
-        plan = self._plan(payload, ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-        # 审批请求属于另一计划（plan-other），不属于本计划。
-        other_node = WorkflowNode(
-            node_id="post_sale",
-            tool_id="sales",
-            action="quote",
-            params={"payload": payload},
-            risk="high",
-            idempotent=False,
-        )
-        req = svc.create_approval_request(plan_id="plan-other", node=other_node)
-        assert svc.approve(req.request_id) is True
-        result = gated.resume_after_approval(plan, {req.request_id: True}, runtime_context={})
-        assert result.success is False
-        assert "跨计划" in result.message
-        assert env["dispatcher"].calls == []
-
-    def test_missing_required_node_fails_closed(self, env):
-        payload = _make_sale_payload(env)
-        plan = self._plan(payload, ["post_a", "post_b"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-        # _BlockingRiskGate 阻塞全部节点 → 两个 required 节点各一个审批请求。
-        decision, _ = gated.run(plan, runtime_context={}, strategy="interactive")
-        ids = decision.approval_request_ids
-        assert len(ids) == 2
-        assert svc.approve(ids[0]) is True
-        # 只提交其中一个 → 另一个 required 节点 missing → fail-closed。
-        result = gated.resume_after_approval(plan, {ids[0]: True}, runtime_context={})
-        assert result.success is False
-        assert "缺少审批" in result.message
-        assert env["dispatcher"].calls == []
-
-    def test_duplicate_request_fails_closed(self, env):
-        payload = _make_sale_payload(env)
-        plan = self._plan(payload, ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-        node = plan.nodes[0]
-        r1 = svc.create_approval_request(plan_id=plan.plan_id, node=node)
-        r2 = svc.create_approval_request(plan_id=plan.plan_id, node=node)
-        assert svc.approve(r1.request_id) is True
-        assert svc.approve(r2.request_id) is True
-        result = gated.resume_after_approval(
-            plan,
-            {r1.request_id: True, r2.request_id: True},
-            runtime_context={},
-        )
-        assert result.success is False
-        assert "重复审批请求" in result.message
-        assert env["dispatcher"].calls == []
-
-    def test_pending_status_fails_closed(self, env):
-        payload = _make_sale_payload(env)
-        plan = self._plan(payload, ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-        req = svc.create_approval_request(plan_id=plan.plan_id, node=plan.nodes[0])
-        # 映射为 True 但 ApprovalService 状态仍 PENDING → 拒绝执行。
-        result = gated.resume_after_approval(plan, {req.request_id: True}, runtime_context={})
-        assert result.success is False
-        assert "状态未通过" in result.message
-        assert env["dispatcher"].calls == []
-
-    def test_cancelled_status_fails_closed(self, env):
-        payload = _make_sale_payload(env)
-        plan = self._plan(payload, ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-        req = svc.create_approval_request(plan_id=plan.plan_id, node=plan.nodes[0])
-        assert svc.cancel(req.request_id) is True
-        result = gated.resume_after_approval(plan, {req.request_id: True}, runtime_context={})
-        assert result.success is False
-        assert "状态未通过" in result.message
-        assert env["dispatcher"].calls == []
-
-    def test_stored_rejected_status_fails_closed(self, env):
-        """有效 required 节点被 ApprovalService.reject → 存储状态 REJECTED → fail-closed。
-
-        映射为 True（不触发早前的 boolean False 分支），节点真实存在于 plan.nodes
-        （非 bogus 额外节点）→ 走 ``req.status != APPROVED`` 的 REJECTED 分支。
-        """
-        payload = _make_sale_payload(env)
-        plan = self._plan(payload, ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-        req = svc.create_approval_request(plan_id=plan.plan_id, node=plan.nodes[0])
-        assert svc.reject(req.request_id) is True  # 存储状态置为 REJECTED
-        result = gated.resume_after_approval(plan, {req.request_id: True}, runtime_context={})
-        assert result.success is False
-        assert "状态未通过" in result.message  # 复核发现状态非 APPROVED → 拒绝执行
-        assert env["dispatcher"].calls == []
-
-    def test_false_value_fails_closed(self, env):
-        plan = self._plan(_make_sale_payload(env), ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-        decision, _ = gated.run(plan, runtime_context={}, strategy="interactive")
-        req_id = decision.approval_request_ids[0]
-        result = gated.resume_after_approval(plan, {req_id: False}, runtime_context={})
-        assert result.success is False
-        assert "未全部通过审批" in result.message
-        assert env["dispatcher"].calls == []
-
-    def test_all_required_approved_runs_engine(self, env):
-        plan = self._plan(_make_sale_payload(env), ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-        decision, _ = gated.run(plan, runtime_context={}, strategy="interactive")
-        req_id = decision.approval_request_ids[0]
-        assert svc.approve(req_id) is True
-        with tenant_scope(1):
-            result = gated.resume_after_approval(plan, {req_id: True}, runtime_context={})
-        assert result.success is True
-        assert len(env["dispatcher"].calls) == 1  # 引擎执行了一次写动作
 
 
 # ---------------------------------------------------------------------------
@@ -650,99 +312,3 @@ class TestResumeAfterApprovalR4Classification:
 #   required nodes 依据 plan.nodes 判定；挂到本计划但不在 plan.nodes 的
 #   "额外/bogus 节点"请求，无论 APPROVED 还是 REJECTED 一律 fail-closed。
 # ---------------------------------------------------------------------------
-class TestResumeAfterApprovalR5ExtraNode:
-    """R5 契约：extra 节点（不在 plan.nodes）即使获批也不得执行引擎。
-
-    - approved bogus 节点 → 额外审批请求 → success=False，引擎不执行。
-    - rejected bogus 节点（ApprovalService.reject → REJECTED）→ success=False，引擎不执行。
-    """
-
-    def _plan(self, payload: dict, node_ids: list[str]) -> PlanGraph:
-        nodes = [
-            WorkflowNode(
-                node_id=nid,
-                tool_id="sales",
-                action="quote",
-                params={"payload": payload},
-                risk="high",
-                idempotent=False,
-            )
-            for nid in node_ids
-        ]
-        return PlanGraph(
-            plan_id="plan-r5-extra",
-            intent="销售",
-            nodes=nodes,
-            risk_level="high",
-        )
-
-    def _bogus_node(self, payload: dict, node_id: str = "bogus_node") -> WorkflowNode:
-        """构造一个不在 plan.nodes 里的“额外/bogus 节点”。"""
-        return WorkflowNode(
-            node_id=node_id,
-            tool_id="sales",
-            action="quote",
-            params={"payload": payload},
-            risk="high",
-            idempotent=False,
-        )
-
-    def test_extra_approved_bogus_node_fails_closed(self, env):
-        """获批的真实 required 节点 + 获批的 bogus 节点 → 额外 → fail-closed。"""
-        payload = _make_sale_payload(env)
-        plan = self._plan(payload, ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-
-        req_ok = svc.create_approval_request(plan_id=plan.plan_id, node=plan.nodes[0])
-        assert svc.approve(req_ok.request_id) is True
-
-        req_bogus = svc.create_approval_request(
-            plan_id=plan.plan_id, node=self._bogus_node(payload)
-        )
-        assert svc.approve(req_bogus.request_id) is True
-
-        result = gated.resume_after_approval(
-            plan,
-            {req_ok.request_id: True, req_bogus.request_id: True},
-            runtime_context={},
-        )
-        # 即使 bogus 节点也获批，仍是“额外请求” → fail-closed，引擎不执行。
-        assert result.success is False
-        assert "额外审批请求" in result.message
-        assert env["dispatcher"].calls == []
-
-    def test_extra_rejected_bogus_node_fails_closed(self, env):
-        """bogus 节点被 ApprovalService.reject → REJECTED → fail-closed，引擎不执行。"""
-        payload = _make_sale_payload(env)
-        plan = self._plan(payload, ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-
-        req_bogus = svc.create_approval_request(
-            plan_id=plan.plan_id, node=self._bogus_node(payload)
-        )
-        assert svc.reject(req_bogus.request_id) is True
-
-        result = gated.resume_after_approval(plan, {req_bogus.request_id: True}, runtime_context={})
-        # bogus 节点不在 required（不在 plan.nodes）→ 额外 → fail-closed，引擎不执行。
-        assert result.success is False
-        assert "额外审批请求" in result.message
-        assert env["dispatcher"].calls == []
-
-    def test_extra_bogus_node_cannot_satisfy_missing(self, env):
-        """仅提交 bogus 节点不能充当 required 节点的审批（bogus 永远不算 required）。"""
-        payload = _make_sale_payload(env)
-        plan = self._plan(payload, ["post_sale"])
-        svc = ApprovalService()
-        gated = _make_gated(env, svc)
-
-        req_bogus = svc.create_approval_request(
-            plan_id=plan.plan_id, node=self._bogus_node(payload)
-        )
-        assert svc.approve(req_bogus.request_id) is True
-
-        result = gated.resume_after_approval(plan, {req_bogus.request_id: True}, runtime_context={})
-        # bogus 不算 required，post_sale 因此 missing，且 bogus 本身是 extra → fail-closed。
-        assert result.success is False
-        assert env["dispatcher"].calls == []

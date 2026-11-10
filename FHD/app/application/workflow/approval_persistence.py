@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import hashlib
 from datetime import datetime
 from typing import Any
 
@@ -18,6 +19,7 @@ from app.application.workflow.workflow_types import (
     ApprovalRequest,
     PlanGraph,
     plan_from_dict,
+    plan_fingerprint,
     plan_to_dict,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -29,7 +31,52 @@ _APPROVAL_STORAGE_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (SQ
 # 可靠工作流快照在 ``business_data`` 中的键：用于在进程重启后重建/续跑获批计划。
 # 仅凭 DB 的 request/status/text 不足以证明存在可执行工作流，必须依赖本快照。
 SNAPSHOT_KEY = "durable_workflow_snapshot"
-SNAPSHOT_VERSION = 1
+SNAPSHOT_VERSION = 2
+
+
+def _plan_digest(plan: PlanGraph | None) -> str:
+    """Bind an approval to the exact reviewed plan, including every step and edge."""
+    if plan is None:
+        return ""
+    return plan_fingerprint(plan)
+
+
+def _contract_digest(plan: PlanGraph | None) -> str:
+    """Fingerprint the current server-owned contracts for every graph action."""
+    if plan is None:
+        return ""
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+    contracts: list[dict[str, Any]] = []
+    for node in plan.nodes:
+        if node.tool_id == "clarify":
+            continue
+        spec = get_tool_action_spec(node.tool_id, node.action)
+        if spec is None:
+            return ""
+        contracts.append(
+            {
+                "node_id": node.node_id,
+                "tool_id": node.tool_id,
+                "action": node.action,
+                "contract": {
+                    "version": str(spec.version or ""),
+                    "risk": str(spec.risk or "high"),
+                    "permission": str(spec.permission or ""),
+                    "input_schema": spec.input_schema,
+                    "required_params": sorted(str(key) for key in spec.required_params or []),
+                    "idempotent": spec.idempotent is True,
+                    "read_only": spec.read_only is True,
+                    "cost_units": int(spec.cost_units or 0),
+                    "timeout_seconds": int(spec.timeout_seconds or 0),
+                    "retry": spec.retry,
+                    "availability": str(spec.availability or ""),
+                    "owner_mod_id": str(spec.owner_mod_id or ""),
+                },
+            }
+        )
+    encoded = json.dumps(contracts, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 # 可靠 AI 工作流执行结束后的终态（原子真值，杜绝重放且失败如实）。
 # 复用既有 ApprovalStatus，绝不新增状态字符串：
@@ -127,7 +174,23 @@ def _build_workflow_snapshot(
     """
     from app.infrastructure.tenant_scope import current_tenant_id
 
-    persisted_plan_id = str(getattr(plan, "plan_id", "") or request.plan_id)
+    # Approval itself is a server policy elevation. Keep that elevation in the
+    # reviewed graph before hashing it; otherwise the durable approval snapshot
+    # can retain a low-risk node while the AgentRun persists the same node as
+    # high-risk, making a legitimate restart/resume fail its plan fingerprint.
+    snapshot_plan = plan_from_dict(plan) if plan is not None else None
+    if snapshot_plan is not None:
+        metadata = snapshot_plan.metadata if isinstance(snapshot_plan.metadata, dict) else {}
+        required = {
+            str(value)
+            for value in metadata.get("approval_required_node_ids", [])
+            if str(value)
+        }
+        required.add(str(request.node_id or ""))
+        for item in snapshot_plan.nodes:
+            if item.node_id in required:
+                item.risk = "high"
+    persisted_plan_id = str(getattr(snapshot_plan, "plan_id", "") or request.plan_id)
     return {
         "version": SNAPSHOT_VERSION,
         "plan_id": persisted_plan_id,
@@ -138,7 +201,9 @@ def _build_workflow_snapshot(
             "action": request.action,
             "params": dict(request.params or {}),
         },
-        "plan": plan_to_dict(plan) if plan is not None else None,
+        "plan": plan_to_dict(snapshot_plan) if snapshot_plan is not None else None,
+        "plan_sha256": _plan_digest(snapshot_plan),
+        "contract_sha256": _contract_digest(snapshot_plan),
         "runtime_context": dict(runtime_context or {}),
         "agent_run_id": "",
         "approved_step_id": "",
@@ -198,7 +263,7 @@ def persist_agent_run_link(
     *,
     agent_run_id: str,
     approved_step_id: str,
-) -> None:
+) -> bool:
     try:
         from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
         from app.db.session import get_db
@@ -210,19 +275,23 @@ def persist_agent_run_link(
                 .first()
             )
             if persisted is None:
-                return
+                return False
             business_data = json.loads(persisted.business_data) if persisted.business_data else {}
             business_data["agent_run_id"] = str(agent_run_id or "").strip()
             business_data["approved_step_id"] = str(approved_step_id or "").strip()
             snapshot = business_data.get(SNAPSHOT_KEY)
+            if not isinstance(snapshot, dict):
+                return False
             if isinstance(snapshot, dict):
                 snapshot["agent_run_id"] = str(agent_run_id or "").strip()
                 snapshot["approved_step_id"] = str(approved_step_id or "").strip()
             business_data[SNAPSHOT_KEY] = snapshot
             persisted.business_data = json.dumps(business_data, ensure_ascii=False, default=str)
             db.commit()
+            return True
     except _APPROVAL_STORAGE_ERRORS as exc:
         logger.warning("AI 审批关联 Agent Run 持久化失败 type=%s", type(exc).__name__)
+        return False
 
 
 def _safe_plan_from_snapshot(plan_data: Any) -> PlanGraph | None:
@@ -296,6 +365,13 @@ def _validated_snapshot(persisted) -> dict[str, Any] | None:
         return None
     plan = _safe_plan_from_snapshot(snapshot.get("plan"))
     if plan is None:
+        return None
+    # Approval is valid only for the complete graph that was presented for review.
+    # This covers downstream nodes/edges as well as the individually approved node.
+    if snapshot.get("plan_sha256") != _plan_digest(plan):
+        return None
+    contract_digest = _contract_digest(plan)
+    if not contract_digest or snapshot.get("contract_sha256") != contract_digest:
         return None
     restored_plan_id = str(getattr(plan, "plan_id", "") or "")
     # 新快照必须精确一致。兼容早期 AgentRun 已持久化的单节点恢复计划：它会把
@@ -481,4 +557,75 @@ def mark_durable_request_approved_and_load(request_id: str) -> dict[str, Any] | 
             request_id,
             type(exc).__name__,
         )
+        return None
+
+
+def claim_agent_approval(request_id: str, *, agent_run_id: str, approved_step_id: str) -> bool:
+    """Atomically consume the exact durable approval before any business effect.
+
+    A crashed claimant remains claimed and requires reconciliation instead of replay.
+    """
+    from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
+    from app.db.session import get_db
+
+    try:
+        with get_db() as db:
+            row = db.query(ApprovalRequestModel).filter_by(request_no=request_id).first()
+            if row is None or str(row.status) not in {"pending", "in_progress"}:
+                return False
+            saved = row.business_data or "{}"
+            data = json.loads(saved)
+            if (
+                not isinstance(data, dict)
+                or "agent_execution_claim" in data
+                or "workflow_execution" in data
+            ):
+                return False
+            snapshot = _validated_snapshot(row)
+            if (
+                not snapshot
+                or snapshot.get("agent_run_id") != agent_run_id
+                or snapshot.get("approved_step_id") != approved_step_id
+            ):
+                return False
+            data["agent_execution_claim"] = {
+                "agent_run_id": agent_run_id,
+                "approved_step_id": approved_step_id,
+            }
+            changed = (
+                db.query(ApprovalRequestModel)
+                .filter(
+                    ApprovalRequestModel.id == row.id,
+                    ApprovalRequestModel.status.in_(["pending", "in_progress"]),
+                    ApprovalRequestModel.business_data == saved,
+                )
+                .update(
+                    {
+                        ApprovalRequestModel.business_data: json.dumps(
+                            data, ensure_ascii=False, default=str
+                        )
+                    },
+                    synchronize_session=False,
+                )
+            )
+            db.commit()
+            return int(changed) == 1
+    except _APPROVAL_STORAGE_ERRORS:
+        logger.warning("claim durable agent approval failed", exc_info=True)
+        return False
+
+
+def load_rejected_workflow_snapshot(request_id: str) -> dict[str, Any] | None:
+    """Recover only the tenant-bound identity needed to cancel a rejected run."""
+    from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
+    from app.db.session import get_db
+
+    try:
+        with get_db() as db:
+            row = db.query(ApprovalRequestModel).filter_by(request_no=request_id).first()
+            if row is None or str(row.status) != "rejected":
+                return None
+            return _validated_snapshot(row)
+    except _APPROVAL_STORAGE_ERRORS:
+        logger.warning("load rejected approval snapshot failed", exc_info=True)
         return None
