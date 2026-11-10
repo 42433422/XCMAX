@@ -190,10 +190,12 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         )
         provided_plan = previous.metadata.get("provided_plan")
         if isinstance(provided_plan, dict) and provided_plan.get("nodes"):
+            retry_plan = self.plan_from_snapshot(provided_plan)
+            retry_plan.plan_id = f"{retry_plan.plan_id}:retry:{previous.run_id}"
             retried = self.start_task_from_plan(
                 user_id=previous.user_id,
                 message=previous.message,
-                plan=self.plan_from_snapshot(provided_plan),
+                plan=retry_plan,
                 runtime_context=context,
             )
         else:

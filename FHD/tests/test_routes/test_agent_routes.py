@@ -13,9 +13,6 @@ from app.application.agent_orchestrator import (
     get_agent_run_repository,
     set_agent_run_repository_for_tests,
 )
-from app.application.agent_orchestrator.approval_grant import (
-    clear_consumed_approval_grants_for_tests,
-)
 from app.application.agent_orchestrator.run_control import clear_run_controls_for_tests
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.application.agent_orchestrator.task_dispatcher import (
@@ -386,7 +383,6 @@ def _planner_fallback_patches():
 
 def test_create_get_and_list_agent_run(local_tools) -> None:
     get_agent_run_repository().clear()
-    clear_consumed_approval_grants_for_tests()
     client = _client()
     patches = _planner_fallback_patches()
 
@@ -527,7 +523,6 @@ def test_failed_observation_cannot_be_retried_as_an_execution_plan() -> None:
 
 def test_continue_waiting_agent_run(local_tools) -> None:
     get_agent_run_repository().clear()
-    clear_consumed_approval_grants_for_tests()
     client = _client()
     patches = _planner_fallback_patches()
 
@@ -606,7 +601,6 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
     local_tools,
 ) -> None:
     get_agent_run_repository().clear()
-    clear_consumed_approval_grants_for_tests()
     owner = _client("owner")
     patches = _planner_fallback_patches()
     with (
@@ -1160,7 +1154,6 @@ def test_unified_task_requires_approval_and_deduplicates_execution(
 ) -> None:
     repository = get_agent_run_repository()
     repository.clear()
-    clear_consumed_approval_grants_for_tests()
     client = _client("task-owner")
     body = {
         "task_id": "chat-shipment-001",
@@ -1254,6 +1247,9 @@ def test_unified_low_risk_task_cancel_and_retry_preserve_exact_approval() -> Non
         retried = client.post(f"/api/agent/runs/{created['run_id']}/retry", json={})
 
     assert retried.status_code == 200
+    replay = client.post(f"/api/agent/runs/{created['run_id']}/retry", json={})
+    assert replay.json()["data"]["run_id"] == retried.json()["data"]["run_id"]
+    assert retried.json()["data"]["run_id"] != created["run_id"]
     retried_run = repository.get(retried.json()["data"]["run_id"])
     assert retried_run is not None
     assert retried_run.status == "waiting_user"
@@ -1268,7 +1264,6 @@ def test_unified_low_risk_task_cancel_and_retry_preserve_exact_approval() -> Non
 def test_task_ssot_lists_details_and_archives_per_tenant() -> None:
     repository = get_agent_run_repository()
     repository.clear()
-    clear_consumed_approval_grants_for_tests()
     client = _client("task-owner", tenant_id="tenant-a")
     body = {
         "task_id": "task-monthly-report",
@@ -1469,7 +1464,16 @@ def test_clarification_answer_is_bound_validated_and_does_not_approve_write():
         plan_id="input",
         intent="create",
         nodes=[
-            build_clarify_node("请提供客户", ambient={"target_node_id": "create"}),
+            build_clarify_node(
+                "请提供客户",
+                ambient={
+                    "target_node_id": "create",
+                    "clarification": {
+                        "reason": "missing_required",
+                        "missing_fields": ["unit_name"],
+                    },
+                },
+            ),
             WorkflowNode(
                 node_id="create",
                 tool_id="customers",
