@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import threading
 from pathlib import Path
 
 from app.utils.process_lock import _try_lock, _unlock
@@ -42,3 +43,33 @@ def orphaned(ledger: Path, batch: dict) -> bool:
         return False
     release(handle)
     return True
+
+
+class WorkerHandoff:
+    """Exactly one owner releases the guard, even if Thread.start is interrupted."""
+
+    def __init__(self, handle):
+        self.handle = handle
+        self.lock = threading.Lock()
+        self.state = "pending"
+
+    def claim(self):
+        with self.lock:
+            if self.state != "pending":
+                return False
+            self.state = "claimed"
+            return True
+
+    def cancel_pending(self):
+        with self.lock:
+            if self.state != "pending":
+                return False
+            self.state = "cancelled"
+            release(self.handle)
+            return True
+
+    def finish(self):
+        with self.lock:
+            if self.state == "claimed":
+                self.state = "finished"
+                release(self.handle)

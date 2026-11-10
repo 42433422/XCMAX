@@ -220,12 +220,12 @@
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
       "base_blob": "06700aa2bfb064381136dc9b16b97b4653f4eb62",
-      "head_blob": "d8ff9978e6029e3e292ac3db06602312292b40af",
+      "head_blob": "d6fa1b295a042d8e9cfbf9cc5693ca55302bbd72",
       "before_lines": 1272,
-      "after_lines": 1332,
-      "reason": "Review request only: Detect interrupted approved batch workers without replaying uncertain knowledge or business writes.",
-      "boundary": "Approved batch claim, worker liveness and read-only receipt reconciliation; a small cross-process liveness helper owns only lock lifetime. No new business-write authority or public endpoint.",
-      "validation": "141 backend tests passed, 3 PostgreSQL tests skipped for missing independent database; 81 frontend tests passed. Includes process kill, thread-start failure, owner/tenant/mod isolation, no replay and UI polling termination. Windows execution and full new-head CI remain unverified. Follow-up after CI: 113 focused tests passed including six resource-interruption cases; broad-except gate reports zero owned broad handlers. Prior full-suite result is not substituted for new-head CI.",
+      "after_lines": 1374,
+      "reason": "Review request only: Detect interrupted background ingest workers without replaying uncertain writes. Re-read state and authorized identity after acquiring the batch guard; explicitly transfer worker ownership across start interruption.",
+      "boundary": "Batch claim, worker liveness and read-only receipt reconciliation cover both approval release and existing start_background. The liveness helper owns lock lifetime and thread handoff only. No new business-write authority or public endpoint.",
+      "validation": "Latest focused backend: 158 passed / 3 PostgreSQL environment skipped; 23 recovery regressions independently rerun. Includes real multi-process stale-reader interleavings, before/after-start interruption, late-worker cancellation, owner/tenant/mod isolation, old records and both background entry paths. Original two race reproductions now yield no re-execution and no stranded guard. Ruff and owned broad-except gate passed. Previous UI 81 tests passed; Windows runtime and final new-head CI remain unverified.",
       "follow_up": "@42433422: review legacy running batches individually; old records without worker-protocol proof are not automatically declared dead. Review the existing whole-ledger multi-process persistence boundary separately.",
       "review_owner": "@42433422"
     },

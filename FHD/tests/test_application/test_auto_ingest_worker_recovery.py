@@ -183,3 +183,175 @@ def test_persist_interruption_releases_guard_without_launch(batch, monkeypatch, 
     ais.liveness.release(handle)
     launch.assert_not_called()
     assert ais._load_ledger(1)["batches"]["batch"]["status"] == "awaiting_approval"
+
+
+def _stale_dispatch_process(root, ready, proceed, result):
+    """Real process B pauses after reading pending, before obtaining the OS lock."""
+    from pathlib import Path
+
+    ais.get_app_data_dir = lambda: root
+    ais.get_request_active_mod_id = lambda: "test-mod"
+    acquire = ais.liveness.acquire
+
+    def delayed_acquire(path, batch_id):
+        ready.set()
+        if not proceed.wait(10):
+            raise TimeoutError("test interleave timed out")
+        return acquire(path, batch_id)
+
+    ais.liveness.acquire = delayed_acquire
+    service = ais.AutoIngestService()
+
+    def replay(_batch):
+        with (Path(root) / "effects").open("a") as stream:
+            stream.write("replayed\n")
+
+    service._launch_worker = replay
+    try:
+        result.put(service.release_approved_batch(batch_id="batch", tenant_id=1))
+    except EltError as exc:
+        result.put({"error": exc.code})
+
+
+@pytest.mark.parametrize("settled", ["applied", "failed"])
+def test_cross_process_stale_pending_never_replays_completed_dispatch(batch, monkeypatch, settled):
+    import multiprocessing
+    from pathlib import Path
+
+    root = str(ais.get_app_data_dir())
+    context = multiprocessing.get_context("spawn")
+    ready, proceed, result = context.Event(), context.Event(), context.Queue()
+    process = context.Process(target=_stale_dispatch_process, args=(root, ready, proceed, result))
+    process.start()
+    try:
+        assert ready.wait(10)
+        service = ais.AutoIngestService()
+
+        def finish(_batch):
+            with (Path(root) / "effects").open("a") as stream:
+                stream.write("first\n")
+            ais._patch_batch(1, "batch", status=settled)
+
+        monkeypatch.setattr(service, "_launch_worker", finish)
+        service.release_approved_batch(batch_id="batch", tenant_id=1)
+        proceed.set()
+        receipt = result.get(timeout=10)
+        process.join(10)
+        assert process.exitcode == 0
+        assert (Path(root) / "effects").read_text() == "first\n"
+        assert ais._load_ledger(1)["batches"]["batch"]["status"] == settled
+        if settled == "applied":
+            assert receipt["already_released"] is True
+        else:
+            assert receipt["error"] == "ETL_AUTO_INGEST_NOT_PENDING"
+        handle = ais.liveness.acquire(ais._ledger_path(1), "batch")
+        ais.liveness.release(handle)
+    finally:
+        proceed.set()
+        if process.is_alive():
+            process.kill()
+            process.join(10)
+        result.close()
+        result.join_thread()
+
+
+@pytest.mark.parametrize("field", ["tenant_id", "owner_user_id", "mod_id", "prepared_plan"])
+def test_dispatch_rechecks_identity_and_plan_after_guard(batch, monkeypatch, field):
+    acquire = ais.liveness.acquire
+
+    def changed(path, batch_id):
+        handle = acquire(path, batch_id)
+        ledger = ais._load_ledger(1)
+        ledger["batches"][batch_id][field] = "changed"
+        ais._save_ledger(1, ledger)
+        return handle
+
+    monkeypatch.setattr(ais.liveness, "acquire", changed)
+    service = ais.AutoIngestService()
+    launch = Mock()
+    monkeypatch.setattr(service, "_launch_worker", launch)
+    with pytest.raises(EltError):
+        service.release_approved_batch(batch_id="batch", tenant_id=1)
+    launch.assert_not_called()
+    handle = acquire(ais._ledger_path(1), "batch")
+    ais.liveness.release(handle)
+
+
+@pytest.mark.parametrize("failure", [KeyboardInterrupt, SystemExit])
+def test_interrupted_start_cancels_late_worker_without_leaking_guard(batch, monkeypatch, failure):
+    service = ais.AutoIngestService()
+    run = Mock()
+    monkeypatch.setattr(service, "run", run)
+    pending = []
+
+    def interrupted(thread):
+        pending.append(thread)
+        raise failure("before worker claim")
+
+    monkeypatch.setattr(ais.threading.Thread, "start", interrupted)
+    with pytest.raises(failure):
+        service.release_approved_batch(batch_id="batch", tenant_id=1)
+    pending[0].run()  # A late worker must notice the cancelled handoff and do nothing.
+    run.assert_not_called()
+    assert ais._load_ledger(1)["batches"]["batch"]["error"] == "ELT_WORKER_NOT_STARTED"
+    handle = ais.liveness.acquire(ais._ledger_path(1), "batch")
+    ais.liveness.release(handle)
+
+
+@pytest.mark.parametrize("failure", [KeyboardInterrupt, SystemExit])
+def test_start_interrupted_after_worker_claim_preserves_worker_ownership(
+    batch, monkeypatch, failure
+):
+    from unittest.mock import MagicMock
+
+    from app.db import session
+
+    service = ais.AutoIngestService()
+    entered, finish = ais.threading.Event(), ais.threading.Event()
+    original_start = ais.threading.Thread.start
+    workers = []
+
+    def run(*_args, **_kwargs):
+        entered.set()
+        assert finish.wait(10)
+        ais._patch_batch(1, "batch", status="applied")
+
+    def interrupted(thread):
+        workers.append(thread)
+        original_start(thread)
+        assert entered.wait(10)
+        raise failure("after worker claim")
+
+    monkeypatch.setattr(service, "run", run)
+    monkeypatch.setattr(session, "get_db", MagicMock())
+    monkeypatch.setattr(ais.threading.Thread, "start", interrupted)
+    try:
+        with pytest.raises(failure):
+            service.release_approved_batch(batch_id="batch", tenant_id=1)
+        assert ais._load_ledger(1)["batches"]["batch"]["status"] == "running"
+        with pytest.raises(OSError):
+            ais.liveness.acquire(ais._ledger_path(1), "batch")
+    finally:
+        finish.set()
+        for thread in workers:
+            thread.join(10)
+    assert ais._load_ledger(1)["batches"]["batch"]["status"] == "applied"
+    handle = ais.liveness.acquire(ais._ledger_path(1), "batch")
+    ais.liveness.release(handle)
+
+
+def test_background_entry_uses_worker_guard_and_reports_failed_start(batch, monkeypatch, tmp_path):
+    source = tmp_path / "source.xlsx"
+    source.write_bytes(b"source")
+    monkeypatch.setattr(ais, "_resolve_auto_ingest_source", lambda *_args, **_kwargs: source)
+    monkeypatch.setattr(
+        ais.threading.Thread, "start", Mock(side_effect=RuntimeError("not started"))
+    )
+    service = ais.AutoIngestService()
+    with pytest.raises(RuntimeError, match="not started"):
+        service.start_background(owner_user_id=7, tenant_id=1, source_path=source)
+    rows = [row for row in ais._load_ledger(1)["batches"].values() if row["batch_id"] != "batch"]
+    assert len(rows) == 1 and rows[0]["worker_protocol"] == 1
+    assert rows[0]["error"] == "ELT_WORKER_NOT_STARTED"
+    handle = ais.liveness.acquire(ais._ledger_path(1), rows[0]["batch_id"])
+    ais.liveness.release(handle)

@@ -675,6 +675,7 @@ class AutoIngestService:
 
     def _launch_worker(self, batch: dict[str, Any]) -> None:
         guard = batch.pop("_worker_guard", None)
+        handoff = liveness.WorkerHandoff(guard) if guard is not None else None
         batch_id = str(batch.get("batch_id") or "")
         tenant_id = int(batch["tenant_id"])
         owner_user_id = int(batch["owner_user_id"])
@@ -683,6 +684,8 @@ class AutoIngestService:
         labels = batch.get("labels") if isinstance(batch.get("labels"), list) else None
 
         def _worker() -> None:
+            if handoff is not None and not handoff.claim():
+                return
             try:
                 from app.db.session import get_db
                 from app.infrastructure.tenant_scope import tenant_scope
@@ -707,17 +710,18 @@ class AutoIngestService:
             except BOUNDARY_ERRORS:
                 logger.exception("background auto-ingest failed batch_id=%s", batch_id)
             finally:
-                if guard is not None:
-                    liveness.release(guard)
+                if handoff is not None:
+                    handoff.finish()
 
-        context = copy_context()
+        started = False
         try:
+            context = copy_context()
             threading.Thread(
                 target=lambda: context.run(_worker), name=f"auto-ingest-{batch_id}", daemon=True
             ).start()
-        except BOUNDARY_ERRORS:
-            if guard is not None:
-                liveness.release(guard)
+            started = True
+        finally:
+            if not started and handoff is not None and handoff.cancel_pending():
                 _patch_batch(
                     tenant_id,
                     batch_id,
@@ -727,7 +731,6 @@ class AutoIngestService:
                         "not_started", 0, message="执行线程未启动，未自动重试"
                     ),
                 )
-            raise
 
     def queue_for_approval(
         self,
@@ -805,6 +808,30 @@ class AutoIngestService:
             guard = liveness.acquire(_ledger_path(tenant_id), batch_id)
             transferred = False
             try:
+                # A different process may have completed this batch since our first read.
+                # The worker lock protects dispatch only after it has been acquired.
+                expected = batch
+                ledger = _load_ledger(tenant_id)
+                batch = (ledger.get("batches") or {}).get(batch_id)
+                identity = ("batch_id", "tenant_id", "owner_user_id", "mod_id")
+                if not isinstance(batch, dict) or any(
+                    batch.get(key) != expected.get(key) for key in identity
+                ):
+                    raise EltError(
+                        "ETL_AUTO_INGEST_FORBIDDEN", "批次身份已变化，未执行", status_code=403
+                    )
+                status = str(batch.get("status") or "")
+                if status in {"running", "applied", "partial", "awaiting_confirmation"}:
+                    return {
+                        "success": True,
+                        "batch_id": batch_id,
+                        "status": status,
+                        "already_released": True,
+                    }
+                if status != "awaiting_approval" or batch != expected:
+                    raise EltError(
+                        "ETL_AUTO_INGEST_NOT_PENDING", "批次已变化，未重复提交", status_code=409
+                    )
                 batch.update(status="running", worker_protocol=1, updated_at=_utcnow())
                 ledger["batches"][batch_id] = batch
                 _save_ledger(tenant_id, ledger)
@@ -885,10 +912,25 @@ class AutoIngestService:
             "labels": list(labels or []),
         }
         with _LOCK:
-            ledger = _load_ledger(tenant_id)
-            ledger.setdefault("batches", {})[batch_id] = batch
-            _save_ledger(tenant_id, ledger)
-        self._launch_worker(dict(batch))
+            guard = liveness.acquire(_ledger_path(tenant_id), batch_id)
+            transferred = False
+            try:
+                ledger = _load_ledger(tenant_id)
+                batch["worker_protocol"] = 1
+                ledger.setdefault("batches", {})[batch_id] = batch
+                _save_ledger(tenant_id, ledger)
+                stored = dict(batch)
+                stored["_worker_guard"] = guard
+                transferred = True
+            finally:
+                if not transferred:
+                    liveness.release(guard)
+        try:
+            self._launch_worker(stored)
+        finally:
+            unused = stored.pop("_worker_guard", None)
+            if unused is not None:
+                liveness.release(unused)
         return _public_batch(batch)
 
     def _refresh_business(self, batch: dict[str, Any]) -> dict[str, Any]:
