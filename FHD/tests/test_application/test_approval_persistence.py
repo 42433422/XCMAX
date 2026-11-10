@@ -42,12 +42,13 @@ from app.db.models.approval import ApprovalRequest, ApprovalStatus
 SNAPSHOT_VERSION = 1
 
 
-def test_batch_readback_uses_fresh_tenant_scoped_business_data(db):
+def test_batch_readback_uses_fresh_tenant_scoped_business_data(db, monkeypatch):
     from app.application.approval_workspace.workflow_bridge import _batch_absent
+    from app.application.chat_turn_guard import scope_snapshot
+    from app.application.workflow.guarded_batch_delete import execute_guarded_batch_delete
     from app.application.workflow.workflow_types import WorkflowNode
     from app.db.models import Product
     from app.db.models.purchase_unit import PurchaseUnit
-    from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
     from app.infrastructure.tenant_scope import tenant_scope
 
     with tenant_scope(1):
@@ -62,7 +63,29 @@ def test_batch_readback_uses_fresh_tenant_scoped_business_data(db):
         product = WorkflowNode("p", "products", "batch_delete", {"ids": [1]})
         customer = WorkflowNode("c", "customers", "batch_delete", {"ids": [2]})
         assert not _batch_absent(product, 1) and not _batch_absent(customer, 1)
-        assert SQLAlchemyProductRepository().batch_delete([1])["deleted_count"] == 1
+        monkeypatch.setattr(
+            "app.infrastructure.auth.agent_mod_scope._bound_actor", lambda ctx: object()
+        )
+        monkeypatch.setattr(
+            "app.application.agent_orchestrator.tool_permission.actor_tool_denial",
+            lambda *args: None,
+        )
+        context = {"tenant_id": 1}
+        context["_bulk_preview_scope"] = {"tool": "products", "digest": scope_snapshot(context)[3]}
+        with db.begin() as session:
+            session.get(Product, 1).name = "changed"
+
+        def delete():
+            return execute_guarded_batch_delete(
+                tool_id="products",
+                action="batch_delete",
+                params={"ids": [1], "_runtime_context": context},
+            )
+
+        assert not delete()["success"]
+        assert not _batch_absent(product, 1)
+        context["_bulk_preview_scope"]["digest"] = scope_snapshot(context)[3]
+        assert delete()["deleted_count"] == 1
         assert _batch_absent(product, 1) and not _batch_absent(customer, 1)
         assert not _batch_absent(product, 2)
     with tenant_scope(2), db() as session:

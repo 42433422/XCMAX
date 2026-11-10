@@ -560,7 +560,6 @@ class TestMatchPurchaseUnitExtended:
 
 
 class TestCheckShipmentAssociationsExtended:
-
     def test_with_associations(self):
         svc = CustomerApplicationService()
         mock_db = MagicMock()
@@ -585,7 +584,6 @@ class TestCheckShipmentAssociationsExtended:
         assert result["has_associations"] is True
         assert result["shipment_count"] == 5
         assert len(result["sample_records"]) == 1
-
 
 
 # ---------------------------------------------------------------------------

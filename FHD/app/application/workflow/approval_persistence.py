@@ -121,10 +121,7 @@ def _build_workflow_snapshot(
     runtime_context: dict[str, Any] | None,
     plan: PlanGraph | None,
 ) -> dict[str, Any]:
-    """构造绑定 ``request_no`` 的精确工作流快照（含完整计划与安全运行上下文）。
-
-    ``tenant_id`` 记录创建时的当前租户，供加载时做租户绑定校验（租户错配即 fail-closed）。
-    """
+    """构造绑定当前租户的完整工作流快照。"""
     from app.infrastructure.tenant_scope import current_tenant_id
 
     persisted_plan_id = str(getattr(plan, "plan_id", "") or request.plan_id)
@@ -147,11 +144,7 @@ def _build_workflow_snapshot(
 
 
 def _is_valid_plan_for_snapshot(plan: PlanGraph | None) -> bool:
-    """仅对可恢复的合法计划持久化可靠快照。
-
-    合法 = 有 plan_id、至少一个节点，且每个节点都有 node_id/tool_id/action。
-    计划不完整/缺失时视为无快照（加载侧会 fail-closed），绝不把坏计划写为可执行证明。
-    """
+    """仅对节点完整的计划持久化可恢复快照。"""
     if plan is None:
         return False
     if not str(plan.plan_id or "").strip() or not plan.nodes:

@@ -234,6 +234,13 @@ class WorkflowApprovalBridge:
                 nodes[0].tool_id, nodes[0].action, context
             ) is not None or not claim_batch_dispatch(request_id, plan, context):
                 return unknown
+            if context.get("mutation_policy") == "allow_once":
+                from app.application.workflow.engine import WorkflowEngine
+                from app.application.workflow.guarded_batch_delete import (
+                    execute_guarded_batch_delete,
+                )
+
+                engine = WorkflowEngine(tool_dispatcher=execute_guarded_batch_delete)
         restore_run = (
             self.backends.load_run(str(context.get("agent_run_id") or ""))
             if len(nodes) == 1
