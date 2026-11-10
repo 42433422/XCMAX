@@ -875,6 +875,7 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
       analysisProgress.value = `模型分析 ${index + 1}/${pending.length}：${item.name}`
       try {
         if (!item.classification_id || !item.version) throw new Error('分类来源或版本缺失，请重新分类')
+        let lastPausedCompleted = -1
         while (!cancelAnalysis.value) {
           const form = new FormData(); form.append('version', item.version)
           form.append('auto_group', 'true')
@@ -888,7 +889,13 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
           if (result.phase === 'pending' || result.phase === 'paused') {
             item.checkpoint = result.checkpoint
             analysisProgress.value = `${item.name}：已完成 ${result.checkpoint?.completed}/${result.checkpoint?.total} 批`
-            if (result.phase === 'paused' || retryItem) break
+            if (pipeline) archiveProgress.value = `${analysisProgress.value}，正在继续处理…`
+            if (result.phase === 'paused') {
+              const completed = result.checkpoint?.completed
+              if (!pipeline || typeof completed !== 'number' || completed <= lastPausedCompleted) break
+              lastPausedCompleted = completed
+              analysisProgress.value = `${item.name}：已完成 ${completed}/${result.checkpoint?.total} 批，正在继续处理`
+            } else if (retryItem && !pipeline) break
             continue
           }
           const previousSheets = item.sheets

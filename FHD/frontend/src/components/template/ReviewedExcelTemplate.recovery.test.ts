@@ -92,14 +92,20 @@ describe('archive round recovery and stopping', () => {
     expect((api.analyzeClassification.mock.calls.at(-1)![1] as FormData).get('continue_authorized')).toBeNull()
   })
 
-  it('continues a paused round on the ordinary continue action', async () => {
-    api.analyzeClassification.mockResolvedValueOnce({ ...modelResult(), phase: 'paused', checkpoint: checkpoint('paused'), version: 'v1', model_status: 'not_called' })
+  it('continues saved batches automatically after a round budget pause', async () => {
+    api.analyzeClassification.mockResolvedValueOnce({ ...modelResult(), phase: 'paused', checkpoint: { ...checkpoint('paused'), completed: 1 }, version: 'v1', model_status: 'not_called' })
     await stage(); await start()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
+    expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('version')).toBe('v1')
+    expect(api.reviewExcel).toHaveBeenCalled()
+  })
+
+  it('stops automatic continuation if paused batches make no progress', async () => {
+    api.analyzeClassification.mockResolvedValue({ ...modelResult(), phase: 'paused', checkpoint: checkpoint('paused'), version: 'v1', model_status: 'not_called' })
+    await stage(); await start()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
     expect(startButton().text()).toBe('继续处理')
-    await (state().classify as () => Promise<void>)(); expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
-    await start()
-    expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('continue_authorized')).toBeNull()
-    expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('retry_authorized')).toBeNull()
+    expect(api.reviewExcel).not.toHaveBeenCalled()
   })
 
   it('stops after an in-flight classification without starting the next file or model slices, and resumes only on Start', async () => {

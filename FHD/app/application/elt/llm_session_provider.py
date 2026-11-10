@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from contextvars import ContextVar, Token
 from typing import Any, cast
@@ -77,18 +78,24 @@ class SessionMarketProvider:
         platform_url = _platform_url()
         timeout = self._timeout_seconds
         headers = {"Authorization": f"Bearer {self._token}"}
-        try:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(timeout, connect=min(10.0, timeout)),
-                headers=headers,
-                trust_env=not bool((os.environ.get("XCAGI_MARKET_PROXY") or "").strip()),
-                proxy=(os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None,
-            ) as client:
-                response = await client.get(f"{platform_url}/api/llm/resolve-chat-default")
-                response.raise_for_status()
-                route = response.json()
-        except (httpx.HTTPError, ValueError) as exc:
-            raise ModelRequestNotSent("账户模型路由不可用，未调用模型") from exc
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(timeout, connect=min(10.0, timeout)),
+                    headers=headers,
+                    trust_env=not bool((os.environ.get("XCAGI_MARKET_PROXY") or "").strip()),
+                    proxy=(os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None,
+                ) as client:
+                    response = await client.get(f"{platform_url}/api/llm/resolve-chat-default")
+                    response.raise_for_status()
+                    route = response.json()
+                break
+            except httpx.TransportError as exc:
+                if attempt == 2:
+                    raise ModelRequestNotSent("账户模型路由连接失败，未调用模型") from exc
+                await asyncio.sleep(0.25 * (attempt + 1))
+            except (httpx.HTTPError, ValueError) as exc:
+                raise ModelRequestNotSent("账户模型路由不可用，未调用模型") from exc
         if not isinstance(route, dict):
             raise ModelRequestNotSent("账户模型路由无效，未调用模型")
         provider_name, model_name = route.get("provider"), route.get("model")

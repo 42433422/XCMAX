@@ -415,3 +415,26 @@ async def test_elt_recovery_uses_explicit_market_proxy(monkeypatch):
     assert result == {"supported": True, "state": "completed"}
     assert options[0]["proxy"] == "http://127.0.0.1:7890"
     assert options[0]["trust_env"] is False
+
+@pytest.mark.asyncio
+async def test_transient_route_connection_failure_retries_only_route_get(monkeypatch):
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.domain.shared_services.conversation import modstore_adapter
+
+    monkeypatch.delenv("XCAGI_MARKET_PROXY", raising=False)
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic.invalid")
+    real_client = httpx.AsyncClient
+    seen = []
+
+    def respond(request):
+        seen.append(request.method)
+        if len(seen) == 1:
+            raise httpx.ConnectError("synthetic connection reset")
+        return httpx.Response(200, json={"ok": True, "provider": "synthetic", "model": "model"})
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs))
+    adapter = SimpleNamespace(chat_completion=AsyncMock(return_value={"choices": []}), close=AsyncMock())
+    monkeypatch.setattr(modstore_adapter, "ModstorePlatformAdapter", lambda **kwargs: adapter)
+    await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).chat_completion([])
+    assert seen == ["GET", "GET"]
+    assert adapter.chat_completion.await_count == 1
