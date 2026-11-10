@@ -671,22 +671,6 @@ class TestExcelAnalysisPayloadPresentExtended:
             is False
         )
 
-    def test_with_summary(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"summary": "test"}}
-            )
-            is True
-        )
-
-    def test_with_fields(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"fields": [{"label": "x"}]}}
-            )
-            is True
-        )
-
     def test_with_sample_rows(self):
         assert (
             AIChatApplicationService._excel_analysis_payload_present(

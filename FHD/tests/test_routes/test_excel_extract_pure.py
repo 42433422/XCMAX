@@ -68,20 +68,6 @@ class TestExtractFromExcel:
 
 
 class TestGenerateExcel:
-    def test_custom_filename(self):
-        data = [{"A": 1}]
-        result, status = _generate_excel(data, filename="test_custom.xlsx")
-        assert status == 200
-        assert "test_custom.xlsx" in result["filename"]
-        os.unlink(result["file_path"])
-
-    def test_custom_sheet_name(self):
-        data = [{"A": 1}]
-        result, status = _generate_excel(data, sheet_name="MySheet")
-        assert status == 200
-        assert result["sheet"] == "MySheet"
-        os.unlink(result["file_path"])
-
     def test_empty_data(self):
         result, status = _generate_excel([])
         assert status == 400

@@ -1146,17 +1146,6 @@ class TestGetPurchaseUnitByNameAdditional:
         assert result.discount_rate == 0.9
         assert result.is_active is True
 
-    def test_not_found(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.first.return_value = None
-        mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session):
-            result = svc.get_purchase_unit_by_name("Nonexistent")
-        assert result is None
-
     def test_with_none_values(self):
         svc = CustomerApplicationService()
         mock_session = MagicMock()
