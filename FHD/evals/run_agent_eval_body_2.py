@@ -239,6 +239,9 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
                 )
 
     payload, run, checks = _route_agent_checks(response, expected, repo)
+    if action in {"delete_database_backup", "restore_database", "reinitialize_performance"}:
+        _check_equal(checks, "approval_required", payload.get("error_code"), "approval_required")
+        _check_equal(checks, "no_effect_before_approval", database_service.mock_calls == [] and optimizer.mock_calls == [], True)
     return _result(
         task,
         checks,

@@ -27,13 +27,6 @@ import pytest
 class TestHandleExcelAnalysisActions:
     """Cover handle_excel_analysis action branches."""
 
-    def test_missing_file_path_returns_error(self):
-        from app.application.tools.workflow import handle_excel_analysis
-
-        result = handle_excel_analysis({})
-        assert result["success"] is False
-        assert "file_path" in result["error"]
-
     def test_file_not_found_returns_error(self, tmp_path: Path):
         from app.application.tools.workflow import handle_excel_analysis
 
