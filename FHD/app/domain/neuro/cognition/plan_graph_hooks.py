@@ -131,7 +131,11 @@ def finalize_planned_graph(
             )
         ],
         risk_level="low",
-        metadata={"planning_rejected": True, "rejection_reason": rejection[:240]},
+        metadata={
+            "planning_rejected": True,
+            "planning_unavailable": planned is None,
+            "rejection_reason": rejection[:240],
+        },
     )
     observe_plan_graph(
         rejected,

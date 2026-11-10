@@ -154,7 +154,6 @@ class PlannedWorkflowDispatch:
         context: dict[str, Any],
         text: str,
     ) -> dict[str, Any] | None:
-        pending = self.pending.get(user_id) or {}
         pending_handled, pending_result = self.callbacks._resume_pending_dynamic_workflow(
             user_id, message, text, context
         )
@@ -222,7 +221,12 @@ class PlannedWorkflowDispatch:
             }
         if (plan.metadata or {}).get("planning_rejected") is True:
             reason = str((plan.metadata or {}).get("rejection_reason") or "").strip()
-            message_text = "平台模型计划未通过系统校验，本次没有执行任何业务操作。请补充条件后重试。"
+            unavailable = (plan.metadata or {}).get("planning_unavailable") is True
+            message_text = (
+                "平台模型暂时没有返回可用结果，请检查模型连接后重试。本次没有执行任何业务操作。"
+                if unavailable
+                else "平台模型计划未通过系统校验，本次没有执行任何业务操作。请补充条件后重试。"
+            )
             return {
                 "success": False,
                 "execution_state": "failed",
@@ -231,7 +235,7 @@ class PlannedWorkflowDispatch:
                 "data": {
                     "text": message_text,
                     "action": "workflow_planning_failed",
-                    "error_code": "workflow_plan_rejected",
+                    "error_code": "workflow_plan_unavailable" if unavailable else "workflow_plan_rejected",
                     "execution_started": False,
                     **({"reason": reason[:240]} if reason else {}),
                 },

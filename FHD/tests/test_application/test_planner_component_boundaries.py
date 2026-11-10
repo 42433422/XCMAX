@@ -148,6 +148,29 @@ def test_rejected_model_plan_never_enters_agent_run(monkeypatch):
     risk_gate.evaluate.assert_not_called()
 
 
+
+def test_missing_model_result_is_not_reported_as_invalid_business_plan(monkeypatch):
+    from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+
+    plan = finalize_planned_graph(
+        None, plan_id="missing", context={}, validate=lambda _: None, warn=lambda _: None
+    )
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    planner = Mock()
+    planner.plan.return_value = plan
+    risk_gate = Mock()
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.get_workflow_tool_registry", lambda: {}
+    )
+    result = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, Mock()).handle(
+        "owner", "你好", "pro", {}, "你好"
+    )
+    assert result["data"]["error_code"] == "workflow_plan_unavailable"
+    assert "模型连接" in result["response"]
+    assert result["data"]["execution_started"] is False
+    risk_gate.evaluate.assert_not_called()
+
 def test_autonomy_guard_denial_stops_before_agent_run():
     from app.domain.autonomy.risk_types import RiskDecision, RiskLevel
 
