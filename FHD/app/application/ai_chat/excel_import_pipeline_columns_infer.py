@@ -7,8 +7,6 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
-import httpx
-
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -18,7 +16,7 @@ class ExcelImportColumnInferMixin:
     if TYPE_CHECKING:
         _is_number_text: Any
         _model_like_score: Any
-        ai_service: Any
+        workflow_planner: Any
 
     def _infer_excel_column_roles(
         self, records: list[dict[str, Any]]
@@ -93,20 +91,9 @@ class ExcelImportColumnInferMixin:
         if not records:
             return {}
         try:
-            from app.infrastructure.llm.providers.credentials import (
-                default_chat_completions_url,
-                resolve_default_chat_model,
-                resolve_openai_env_credentials,
-            )
-
-            env_api_key, env_base_url = resolve_openai_env_credentials()
-            api_key = str(getattr(self.ai_service, "api_key", "") or env_api_key or "").strip()
-            api_url = str(getattr(self.ai_service, "api_url", "") or "").strip()
-            if not api_url and env_base_url:
-                api_url = f"{env_base_url.rstrip('/')}/chat/completions"
-            api_url = api_url or default_chat_completions_url()
-            model = str(getattr(self.ai_service, "model", "") or resolve_default_chat_model())
-            if not api_key:
+            planner = getattr(self, "workflow_planner", None)
+            complete = getattr(planner, "complete_messages", None)
+            if not callable(complete):
                 return {}
             keys = [str(k).strip() for k in records[0].keys() if str(k).strip()]
             columns = []
@@ -136,28 +123,19 @@ class ExcelImportColumnInferMixin:
                     "unit_price": "column_name_or_empty",
                 },
             }
-            resp = httpx.post(
-                api_url,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": "你是表格列语义识别器，只输出 JSON。"},
-                        {
-                            "role": "user",
-                            "content": json.dumps(prompt, ensure_ascii=False),
-                        },
-                    ],
-                    "temperature": 0.0,
-                    "max_tokens": 300,
-                },
-                timeout=10.0,
+            response_data = complete(
+                messages=[
+                    {"role": "system", "content": "你是表格列语义识别器，只输出 JSON。"},
+                    {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+                ],
+                context={},
+                temperature=0.0,
+                max_tokens=300,
             )
-            if resp.status_code >= 400:
-                return {}
-            content = (
-                ((resp.json().get("choices") or [{}])[0].get("message") or {}).get("content") or ""
-            ).strip()
+            content = (((response_data or {}).get("choices") or [{}])[0].get("message") or {}).get(
+                "content"
+            ) or ""
+            content = str(content).strip()
             if not content:
                 return {}
             content = (

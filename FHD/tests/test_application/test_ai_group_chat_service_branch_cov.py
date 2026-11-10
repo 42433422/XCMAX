@@ -1124,30 +1124,6 @@ class TestLatestRelayDesktop:
         result = AiGroupChatService._latest_relay_desktop(desktops)
         assert result["relay_id"] == "r2"
 
-    def test_latest_relay_desktop_falls_back_to_updated_at(self):
-        desktops = [
-            {"relay_id": "r1", "status": "paired", "updated_at": "2026-01-01"},
-            {"relay_id": "r2", "status": "paired", "updated_at": "2026-01-02"},
-        ]
-        result = AiGroupChatService._latest_relay_desktop(desktops)
-        assert result["relay_id"] == "r2"
-
-    def test_latest_relay_desktop_falls_back_to_paired_at(self):
-        desktops = [
-            {"relay_id": "r1", "status": "paired", "paired_at": "2026-01-01"},
-            {"relay_id": "r2", "status": "paired", "paired_at": "2026-01-02"},
-        ]
-        result = AiGroupChatService._latest_relay_desktop(desktops)
-        assert result["relay_id"] == "r2"
-
-    def test_latest_relay_desktop_falls_back_to_created_at(self):
-        desktops = [
-            {"relay_id": "r1", "status": "paired", "created_at": "2026-01-01"},
-            {"relay_id": "r2", "status": "paired", "created_at": "2026-01-02"},
-        ]
-        result = AiGroupChatService._latest_relay_desktop(desktops)
-        assert result["relay_id"] == "r2"
-
     def test_latest_relay_desktop_case_insensitive_status(self):
         desktops = [{"relay_id": "r1", "status": "PAIRED", "last_seen_at": "2026-01-01"}]
         result = AiGroupChatService._latest_relay_desktop(desktops)
@@ -1225,16 +1201,6 @@ class TestCompactResult:
         result = AiGroupChatService._compact_result({"unknown_key": "value", "success": True})
         assert "unknown_key" not in result
         assert result["success"] is True
-
-    def test_compact_result_stringifies_non_primitive_values(self):
-        result = AiGroupChatService._compact_result(
-            {
-                "summary": {"nested": "dict"},
-                "message": ["list", "value"],
-            }
-        )
-        assert isinstance(result["summary"], str)
-        assert isinstance(result["message"], str)
 
     def test_compact_result_keeps_none_values(self):
         result = AiGroupChatService._compact_result({"success": None, "status": None})

@@ -8,6 +8,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
+from app.db.models.inventory import InventoryLedger, InventoryTransaction
+from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.domain.shared_services.inventory_service")
@@ -187,6 +189,87 @@ class InventoryOrdersMixin:
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
                 _facade().logger.error("按单扣减失败: %s", e)
+                return {"success": False, "message": str(e)}
+
+    def release_for_order(
+        self,
+        product_id: int,
+        warehouse_id: int,
+        quantity: float,
+        *,
+        sales_order_id: int,
+        sales_order_item_id: int,
+        batch_no: str | None = None,
+        location_id: int | None = None,
+        operator: str | None = None,
+        remark: str | None = None,
+        db: Any = None,
+    ) -> dict[str, Any]:
+        """取消未履约预留：把 reserved 退回 available，库存数量不变。"""
+        qty = Decimal(str(quantity))
+        if qty <= 0:
+            return {"success": False, "message": "释放数量必须大于 0"}
+
+        def _run(db):
+            ledger = (
+                db.query(InventoryLedger)
+                .filter(
+                    InventoryLedger.product_id == product_id,
+                    InventoryLedger.warehouse_id == warehouse_id,
+                    InventoryLedger.batch_no == batch_no,
+                )
+                .first()
+            )
+            if not ledger:
+                return {"success": False, "message": "库存台账记录不存在"}
+            reserved = Decimal(str(ledger.reserved_quantity or 0))
+            if reserved < qty:
+                return {"success": False, "message": "预留数量不足，无法释放"}
+            now = datetime.now()
+            ledger.reserved_quantity = reserved - qty
+            ledger.available_quantity = Decimal(str(ledger.available_quantity or 0)) + qty
+            ledger.updated_at = now
+            db.flush()
+            txn = InventoryTransaction(
+                ledger_id=ledger.id,
+                transaction_type="release",
+                product_id=product_id,
+                warehouse_id=warehouse_id,
+                location_id=location_id,
+                batch_no=batch_no,
+                quantity=Decimal("0"),
+                before_quantity=Decimal(str(ledger.quantity or 0)),
+                after_quantity=Decimal(str(ledger.quantity or 0)),
+                ordered_quantity=Decimal("0"),
+                delivered_quantity=Decimal("0"),
+                sales_order_id=sales_order_id,
+                sales_order_item_id=sales_order_item_id,
+                reference_type="sale_release",
+                reference_id=sales_order_id,
+                transaction_date=now,
+                operator=operator,
+                remark=remark,
+                created_at=now,
+            )
+            db.add(txn)
+            return {
+                "success": True,
+                "ledger_id": ledger.id,
+                "reserved_quantity": float(ledger.reserved_quantity),
+                "available_quantity": float(ledger.available_quantity),
+            }
+
+        if db is not None:
+            return cast("dict[str, Any]", _run(db))
+        with get_db() as db:
+            try:
+                result = _run(db)
+                if result["success"]:
+                    db.commit()
+                return cast("dict[str, Any]", result)
+            except RECOVERABLE_ERRORS as e:
+                db.rollback()
+                logger.error("释放预留失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def restock_for_order(

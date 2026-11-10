@@ -272,6 +272,17 @@ def test_ordinary_create_without_lifecycle_still_writes(customers_db) -> None:
 
 def test_approved_customer_is_read_back_from_caller_database(customers_db) -> None:
     engine, _audit = customers_db
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+
+    node = WorkflowNode(
+        node_id="create-customer",
+        tool_id="customers",
+        action="create",
+        params={"unit_name": NAME},
+        risk="medium",
+        idempotent=False,
+    )
+    plan = PlanGraph(plan_id="approved-customer-readback", intent="customer_create", nodes=[node])
     run = AgentRun(
         user_id="11",
         message="create customer needs approval",
@@ -287,6 +298,8 @@ def test_approved_customer_is_read_back_from_caller_database(customers_db) -> No
             )
         ],
     )
+    run.plan_id = plan.plan_id
+    run.metadata["plan"] = plan_to_dict(plan)
     run.metadata["runtime_context"] = _context(run.run_id)
     gate = AgentOrchestrator(
         repository=InMemoryAgentRunRepository(), dependencies=_runtime_dependencies()

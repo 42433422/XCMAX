@@ -140,7 +140,9 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
         assert client.patch(path, json={"id": record_id, "status": "cancelled"}).status_code == 404
         assert client.request("DELETE", path, json={"id": record_id}).status_code == 404
         missing = client.post(path, json={"unit_name": "同名客户", "products": []})
-        assert missing.status_code == 400 and "缺少" in missing.json()["message"]
+        assert missing.status_code == 400
+        assert missing.json()["message"] == "出货单操作失败"
+        assert "缺少" not in missing.json()["message"]
         step = AgentStep(
             node_id="create", tool_id="shipment_records", action="create", params=params
         )
@@ -198,3 +200,164 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
             assert len(service.get_shipment_records()) == 1
     finally:
         engine.dispose()
+
+
+def test_approved_shipment_then_export_uses_full_persisted_plan(
+    tmp_path, monkeypatch, trusted_actor
+):
+    import logging
+    from pathlib import Path
+    from unittest.mock import Mock, patch
+
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.approval_workspace.protocols import WorkflowBackends
+    from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
+    from app.application.inventory_app_service import InventoryAppService
+    from app.application.workflow.approval_persistence import load_workflow_snapshot_for_execution
+    from app.application.workflow.approval_service import ApprovalService
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.db.models import InventoryLedger, Product, User, Warehouse
+
+    actor = trusted_actor(user_id=11, tenant_id=7, role="admin")
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    engine = create_engine(f"sqlite:///{tmp_path / 'approved-shipment.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.setattr("app.infrastructure.mods.hooks.trigger", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
+        lambda: SimpleNamespace(execute=AgentToolExecutor().execute),
+    )
+    with factory() as db:
+        db.add(
+            User(
+                id=11,
+                username="synthetic-shipment-user",
+                password="test",
+                tenant_id=7,
+                role="admin",
+            )
+        )
+        db.add(Product(id=1, tenant_id=7, name="隔离测试产品", model_number="TEST"))
+        db.add(Warehouse(id=1, tenant_id=7, code="TEST", name="隔离测试仓", status="active"))
+        db.commit()
+    with tenant_scope(7):
+        seeded = InventoryAppService().inventory_in(product_id=1, warehouse_id=1, quantity=10)
+        assert seeded["success"], seeded
+    shipment = ShipmentApplicationService(
+        SQLAlchemyShipmentRepository(),
+        record_query=SQLAlchemyShipmentRecordQuery(),
+        record_command=SQLAlchemyShipmentRecordCommand(),
+    )
+    monkeypatch.setattr(shipment_orders, "_svc", lambda: shipment)
+    params = {
+        "unit_name": "隔离测试客户",
+        "products": [
+            {
+                "product_name": "隔离测试产品",
+                "quantity_tins": 2,
+                "tin_spec": 10,
+                "unit_price": 25,
+                "amount": 500,
+            }
+        ],
+    }
+    plan = PlanGraph(
+        plan_id="shipment-export-approval",
+        intent="shipment",
+        nodes=[
+            WorkflowNode(
+                "stock",
+                "inventory",
+                "stock_out",
+                params={"product_id": 1, "warehouse_id": 1, "quantity": 2},
+                risk="high",
+            ),
+            WorkflowNode(
+                "shipment",
+                "shipment_records",
+                "create",
+                params=params,
+                risk="high",
+                depends_on=["stock"],
+            ),
+            WorkflowNode(
+                "export",
+                "shipment_records",
+                "export",
+                params={"unit_name": "隔离测试客户"},
+                risk="low",
+                idempotent=True,
+                depends_on=["shipment"],
+            ),
+        ],
+    )
+    repo = SQLAlchemyAgentRunRepository(session_factory=factory)
+    agent = AgentOrchestrator(repository=repo)
+    approvals = ApprovalService()
+    service = object.__new__(AIChatApplicationService)
+    context = {
+        **actor.context,
+        "local_user_id": 11,
+        "tenant_id": 7,
+        "message": "生成出货记录并导出",
+        "service_source": "fastapi_shipment_records_route",
+    }
+    service._pending_workflows = {
+        "11": {
+            "plan": plan,
+            "runtime_context": context,
+            "approval_required": True,
+            "approval_nodes": [{"node_id": "stock"}, {"node_id": "shipment"}],
+        }
+    }
+    service.approval_service = approvals
+    unexpected = Mock(side_effect=AssertionError("alternate path"))
+    bridge = WorkflowApprovalBridge(
+        WorkflowBackends(
+            approvals=lambda: ApprovalService(),
+            pending_snapshot=unexpected,
+            execution_snapshot=load_workflow_snapshot_for_execution,
+            agent=lambda: AgentOrchestrator(
+                repository=SQLAlchemyAgentRunRepository(session_factory=factory)
+            ),
+            load_run=repo.get,
+        ),
+        (RuntimeError,),
+        logging.getLogger(__name__),
+    )
+    with (
+        tenant_scope(7),
+        patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=agent),
+    ):
+        handled, reply = service._resume_pending_dynamic_workflow("11", "确认", "确认")
+        assert handled and reply["success"], reply
+        assert shipment.get_shipment_records() == []
+        request_no = reply["data"]["data"]["approval_request_ids"][0]
+        outcome = bridge.resume(request_no=request_no, opinion="同意", approved_by="11")
+        assert outcome.get("waiting_approval") is True, outcome
+        with factory() as db:
+            assert float(db.query(InventoryLedger).filter_by(tenant_id=7).one().quantity) == 8
+        assert shipment.get_shipment_records() == []
+        replay = bridge.resume(request_no=request_no, opinion="同意", approved_by="11")
+        assert replay["success"] is False
+        with factory() as db:
+            assert float(db.query(InventoryLedger).filter_by(tenant_id=7).one().quantity) == 8
+        outcome = bridge.resume(
+            request_no=outcome["next_approval_request_id"], opinion="同意", approved_by="11"
+        )
+        assert outcome["success"], outcome
+        stored = repo.get(outcome["agent_run_id"])
+        assert [step.status for step in stored.steps] == ["completed", "completed", "completed"]
+        output = stored.steps[2].output
+        path = output.get("file_path") or (output.get("data") or {}).get("file_path")
+        assert path and Path(path).is_file(), output
+        book = load_workbook(path, read_only=True)
+        assert "隔离测试产品" in str(list(book.active.values))
+        book.close()
+    engine.dispose()

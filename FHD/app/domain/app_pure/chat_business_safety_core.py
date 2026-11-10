@@ -341,8 +341,19 @@ def _new_receipt(
 
 def _payload(text: str, intent: BusinessChatIntent, receipt: dict[str, Any]) -> dict[str, Any]:
     action = "business_tool_result" if receipt.get("executed") else "business_action_not_executed"
+    status = str(receipt.get("status") or "")
+    completed = (
+        receipt.get("executed") is True
+        and receipt.get("verified") is True
+        and status
+        in {"completed", "verified", "verified_empty", "created", "updated", "already_exists"}
+    )
+    execution_state = (
+        "completed" if completed else "accepted" if status == "submitted" else "blocked"
+    )
     return {
-        "success": True,
+        "success": completed,
+        "execution_state": execution_state,
         "message": text,
         "response": text,
         "execution_receipt": receipt,

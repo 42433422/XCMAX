@@ -4,10 +4,10 @@ import json
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
 from app.application.workflow.llm_plan_generation import LlmPlanGeneration
 from app.application.workflow.planning_graph_policy import validate_required_params
-from app.application.workflow.planning_loop import PlanningLoop
-from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 
 def test_generation_uses_injected_transport_and_retains_request_evidence():
@@ -52,85 +52,192 @@ def test_generation_uses_injected_transport_and_retains_request_evidence():
     direct_client.assert_not_called()
 
 
-def test_refinement_never_probes_writes_or_nodes_with_missing_required_input():
+def test_missing_model_plan_fails_closed_without_second_chat_executor(monkeypatch):
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    planner = Mock()
+    planner.plan.return_value = None
+    risk_gate = Mock()
+    approval = Mock()
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.get_workflow_tool_registry",
+        lambda: {},
+    )
+
+    dispatch = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, approval)
+    result = dispatch.handle(
+        "owner",
+        "查询当前库存",
+        "pro",
+        {"session_id": "session-1"},
+        "查询当前库存",
+    )
+
+    assert result["success"] is False
+    assert result["data"]["action"] == "workflow_planning_failed"
+    assert result["data"]["execution_started"] is False
+    risk_gate.evaluate.assert_not_called()
+
+
+def test_plan_check_rejects_unregistered_tool_before_execution():
+    plan = PlanGraph(
+        plan_id="untrusted-plan",
+        intent="query",
+        nodes=[WorkflowNode("n1", "model_invented_tool", "delete", params={})],
+    )
+
+    error = validate_required_params(plan, {})
+
+    assert error and "未授权工具" in error
+
+
+def test_plan_check_owns_required_parameter_validation(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.application.agent_orchestrator import tool_spec
+
+    monkeypatch.setattr(
+        tool_spec,
+        "validate_tool_call",
+        lambda *_args, **_kwargs: SimpleNamespace(ok=True, message=""),
+    )
     registry = {
-        "inventory": {
+        "catalog": {
             "actions": {
-                "read": {"risk": "low", "idempotent": True, "required_params": ["id"]},
-                "write": {"risk": "high", "idempotent": True},
+                "lookup": {
+                    "required_params": ["sku"],
+                    "risk": "low",
+                    "idempotent": True,
+                }
             }
         }
     }
-    candidate = PlanGraph(
-        plan_id="plan-1",
-        intent="inventory",
-        nodes=[
-            WorkflowNode(node_id="write", tool_id="inventory", action="write"),
-            WorkflowNode(node_id="missing", tool_id="inventory", action="read"),
-            WorkflowNode(node_id="first", tool_id="inventory", action="read", params={"id": 1}),
-            WorkflowNode(node_id="second", tool_id="inventory", action="read", params={"id": 2}),
-            WorkflowNode(
-                node_id="over_limit", tool_id="inventory", action="read", params={"id": 3}
-            ),
-        ],
+    plan = PlanGraph(
+        plan_id="checked-plan",
+        intent="query",
+        nodes=[WorkflowNode("n1", "catalog", "lookup", params={})],
     )
-    final = PlanGraph(plan_id="plan-1", intent="inventory", nodes=[candidate.nodes[2]])
-    generate = Mock(side_effect=[candidate, final])
-    repair = Mock()
-    probe = Mock(return_value={"success": True, "data": [{"stock": 20}]})
-    loop = PlanningLoop(generate, repair, probe, validate_plan_graph, validate_required_params)
 
-    with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=None):
-        result = loop.plan("plan-1", "owner", "查询库存", registry, {"session_id": "same"})
+    error = validate_required_params(plan, registry)
 
-    assert result is final
-    assert [call.kwargs["params"]["id"] for call in probe.call_args_list] == [1, 2]
-    assert all(call.kwargs["action"] == "read" for call in probe.call_args_list)
-    assert all(
-        call.kwargs["params"]["_runtime_context"]["session_id"] == "same"
-        for call in probe.call_args_list
+    assert error and "sku" in error
+
+
+def test_rejected_model_plan_never_enters_agent_run(monkeypatch):
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    planner = Mock()
+    planner.plan.return_value = PlanGraph(
+        plan_id="rejected-plan",
+        intent="plan_rejected",
+        metadata={"planning_rejected": True, "rejection_reason": "unsupported action"},
     )
-    assert len(generate.call_args.kwargs["context"]["tool_probe_outputs"]) == 2
-    repair.assert_not_called()
-
-
-def test_failed_second_generation_keeps_the_first_model_plan():
-    candidate = PlanGraph(
-        plan_id="plan-1",
-        intent="sales_query",
-        nodes=[
-            WorkflowNode(
-                node_id="query_orders",
-                tool_id="sales",
-                action="query",
-                params={"payment_state": "unpaid"},
-                idempotent=True,
-            )
-        ],
+    risk_gate = Mock()
+    approval = Mock()
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.get_workflow_tool_registry",
+        lambda: {},
     )
-    generate = Mock(side_effect=[candidate, None])
-    repair = Mock()
-    loop = PlanningLoop(generate, repair, Mock(), validate_plan_graph, validate_required_params)
+    dispatch = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, approval)
 
-    with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=None):
-        result = loop.plan("plan-1", "owner", "查询未付款订单", {}, {})
+    result = dispatch.handle("owner", "删除全部客户", "pro", {}, "删除全部客户")
 
-    assert result is candidate
-    repair.assert_not_called()
+    assert result["success"] is False
+    assert result["data"]["execution_started"] is False
+    assert result["data"]["error_code"] == "workflow_plan_rejected"
+    risk_gate.evaluate.assert_not_called()
 
 
-def test_invalid_critic_output_is_rejected_after_one_repair_attempt():
-    candidate = PlanGraph(plan_id="plan-1", intent="candidate")
-    invalid = PlanGraph(plan_id="plan-1", intent="invalid")
-    generate = Mock(side_effect=[candidate, invalid])
-    repair = Mock(return_value=invalid)
-    probe = Mock()
-    loop = PlanningLoop(generate, repair, probe, validate_plan_graph, validate_required_params)
+def test_missing_model_result_is_not_reported_as_invalid_business_plan(monkeypatch):
+    from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
-    with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=None):
-        result = loop.plan("plan-1", "owner", "查询库存", {}, {})
+    plan = finalize_planned_graph(
+        None,
+        plan_id="missing",
+        context={},
+        validate=lambda _: None,
+        warn=lambda _: None,
+        plan_type=PlanGraph,
+        node_type=WorkflowNode,
+    )
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    planner = Mock()
+    planner.plan.return_value = plan
+    risk_gate = Mock()
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.get_workflow_tool_registry", lambda: {}
+    )
+    result = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, Mock()).handle(
+        "owner", "你好", "pro", {}, "你好"
+    )
+    assert result["data"]["error_code"] == "workflow_plan_unavailable"
+    assert "模型连接" in result["response"]
+    assert result["data"]["execution_started"] is False
+    risk_gate.evaluate.assert_not_called()
 
-    assert result is None
-    assert repair.call_count == 1
-    assert repair.call_args.kwargs["invalid_plan"] is invalid
-    probe.assert_not_called()
+
+def test_autonomy_guard_denial_stops_before_agent_run():
+    from app.domain.autonomy.risk_types import RiskDecision, RiskLevel
+
+    node = WorkflowNode("n1", "catalog", "write", params={})
+    plan = PlanGraph(plan_id="denied-plan", intent="write", nodes=[node])
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    planner = Mock()
+    planner.plan.return_value = plan
+    risk_gate = Mock()
+    risk_gate.evaluate.return_value = RiskDecision(
+        requires_confirmation=False,
+        reason="action denied by policy",
+        blocking_nodes=[],
+        allowed=False,
+        risk_level=RiskLevel.BLOCKED,
+        decision="blocked",
+        denied_nodes=["n1"],
+    )
+    approval = Mock()
+    dispatch = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, approval)
+
+    result = dispatch.handle("owner", "删除全部客户", "pro", {}, "删除全部客户")
+
+    assert result["success"] is False
+    assert result["data"]["action"] == "workflow_risk_rejected"
+    assert result["data"]["execution_started"] is False
+    callbacks._merge_tool_runtime_context.assert_not_called()
+
+
+def test_autonomy_guard_approval_is_attached_even_when_approval_registry_disagrees():
+    from app.domain.autonomy.risk_types import RiskDecision, RiskLevel
+
+    plan = PlanGraph(
+        plan_id="approval-plan",
+        intent="write",
+        todo_steps=["create record"],
+        nodes=[WorkflowNode("n1", "catalog", "write", params={})],
+    )
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    callbacks._merge_tool_runtime_context.return_value = {"tenant_id": "1"}
+    callbacks._build_workflow_thinking_steps.return_value = "checked plan"
+    callbacks._persist_plan_state.return_value = True
+    planner = Mock()
+    planner.plan.return_value = plan
+    risk_gate = Mock()
+    risk_gate.evaluate.return_value = RiskDecision(
+        requires_confirmation=True,
+        reason="repeat action requires human review",
+        blocking_nodes=["n1"],
+        allowed=False,
+        risk_level=RiskLevel.MEDIUM,
+        decision="require_human",
+    )
+    approval = Mock()
+    approval.get_approval_required_nodes.return_value = []
+    dispatch = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, approval)
+
+    result = dispatch.handle("owner", "创建记录", "pro", {}, "创建记录")
+
+    assert result["data"]["action"] == "workflow_confirmation_required"
+    assert dispatch.pending["owner"]["approval_required"] is True
+    assert [item["node_id"] for item in dispatch.pending["owner"]["approval_nodes"]] == ["n1"]

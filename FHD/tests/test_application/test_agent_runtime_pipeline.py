@@ -458,7 +458,7 @@ class TestOrchestratorMainLinkWiring:
                     node_id="read_db",
                     tool_id="business_db",
                     action="read",
-                    params={"entity": "products", "keyword": "XG"},
+                    params={"entity": "customers", "keyword": "XG"},
                     risk="low",
                     idempotent=True,
                 )

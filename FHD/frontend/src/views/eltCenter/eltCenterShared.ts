@@ -7,7 +7,7 @@ export function targetLabel(type: string) {
 }
 
 export function autoIngestStatusLabel(status?: string) {
-  return ({ running: '入库处理中', awaiting_confirmation: '知识已处理，业务待确认', applied: '批次处理结束，请核对分项结果', partial: '部分入库，请核对未覆盖的行', failed: '入库失败，请核对已写入部分', withdrawn: '已撤回' } as Record<string, string>)[status || ''] || '状态待核对'
+  return ({ running: '入库处理中', awaiting_approval: '等待审批中心通过后写入', awaiting_confirmation: '知识已处理，业务待确认', applied: '批次处理结束，请核对分项结果', partial: '部分入库，请核对未覆盖的行', failed: '入库失败，请核对已写入部分', rejected: '审批未通过，未写入', withdrawn: '已撤回' } as Record<string, string>)[status || ''] || '状态待核对'
 }
 
 export function actionLabel(action: string) {

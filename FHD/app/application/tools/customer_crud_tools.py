@@ -111,7 +111,7 @@ def delete_customer(args: dict[str, Any]) -> dict[str, Any]:
 
     Optional args:
         confirm: 高危操作二次确认（默认 False）
-        force: 是否强制删除（忽略关联检查，传给 service 层）。默认 False
+        force: 级联删除产品和发货；此旧入口无可信会话上下文，会拒绝级联。默认 False
     """
     try:
         customer_id = int(args.get("customer_id") or 0)

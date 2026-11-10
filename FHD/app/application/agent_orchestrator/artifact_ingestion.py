@@ -86,6 +86,8 @@ def ingest_artifact_to_dataset(run: AgentRun, artifact: AgentArtifact) -> dict[s
 
 def _should_skip_artifact(artifact: AgentArtifact) -> bool:
     metadata = dict(artifact.metadata or {})
+    if artifact.source == "plan.metadata":
+        return True
     if metadata.get("dataset_ingest_pending_step_ids"):
         return True
     if metadata.get("skip_dataset_ingest") is True:
@@ -139,13 +141,9 @@ def _build_ingest_request(run: AgentRun, artifact: AgentArtifact) -> dict[str, A
 
 
 def _resolve_dataset_id(run: AgentRun, artifact: AgentArtifact) -> str:
-    metadata = dict(artifact.metadata or {})
     runtime_context = run.metadata.get("runtime_context")
     context = runtime_context if isinstance(runtime_context, dict) else {}
     candidates = (
-        metadata.get("dataset_id"),
-        metadata.get("rag_dataset_id"),
-        metadata.get("knowledge_dataset_id"),
         run.metadata.get("dataset_id"),
         context.get("dataset_id"),
         context.get("rag_dataset_id"),
@@ -174,12 +172,9 @@ def _resolve_dataset_id(run: AgentRun, artifact: AgentArtifact) -> str:
 
 
 def _resolve_tenant_id(run: AgentRun, artifact: AgentArtifact) -> str:
-    metadata = dict(artifact.metadata or {})
     runtime_context = run.metadata.get("runtime_context")
     context = runtime_context if isinstance(runtime_context, dict) else {}
     candidates = (
-        metadata.get("tenant_id"),
-        metadata.get("workspace_id"),
         context.get("tenant_id"),
         context.get("tenantId"),
         context.get("workspace_id"),

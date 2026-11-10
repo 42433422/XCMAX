@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from fastapi import Request
 
 from app.application.workflow.workflow_types import PlanGraph, RiskLevel, WorkflowNode
+from app.middleware.request_id import ensure_request_id
 
 from .port_contracts import AgentRunView, Payload, ProductAgentRuntime
 
@@ -65,7 +66,7 @@ class ProductAgentExecution:
         node_id = f"products_{action}_compat"
         user_id = self.identify_user(request, params)
         plan = PlanGraph(
-            plan_id=node_id,
+            plan_id=f"{node_id}:{ensure_request_id(request)}",
             intent=node_id,
             todo_steps=[f"通过 AgentOrchestrator 执行 legacy products.{action}"],
             nodes=[

@@ -119,7 +119,10 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         "properties": {
             "id": {"type": "integer"},
             "customer_id": {"type": "integer"},
-            "force": {"type": "boolean"},
+            "force": {
+                "type": "boolean",
+                "description": "级联删除关联产品和发货记录，须有效登录及跨域编辑权限；不是仅忽略关联检查",
+            },
         },
     },
     ("customers", "batch_delete"): {
@@ -128,7 +131,10 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         "properties": {
             "ids": {"type": "array"},
             "customer_ids": {"type": "array"},
-            "force": {"type": "boolean"},
+            "force": {
+                "type": "boolean",
+                "description": "级联删除关联产品和发货记录，须有效登录及跨域编辑权限；不是仅忽略关联检查",
+            },
         },
     },
     ("products", "create"): {
@@ -436,6 +442,16 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         "properties": {"transaction_id": {"type": "integer"}},
     },
     ("employee", "execute"): {
+        "type": "object",
+        "required": ["task"],
+        "properties": {
+            "employee_id": {"type": "string"},
+            "pack_id": {"type": "string"},
+            "task": {"type": "string"},
+            "input": {"type": "object"},
+        },
+    },
+    ("employee", "context"): {
         "type": "object",
         "required": ["task"],
         "properties": {

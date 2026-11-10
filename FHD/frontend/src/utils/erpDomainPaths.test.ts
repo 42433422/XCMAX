@@ -77,6 +77,14 @@ describe('erpDomainPaths', () => {
     expect(resolveErpApiPath('/api/customers/list', ids)).toBe('/api/mod/xcagi-erp-domain-bridge/customers/list')
   })
 
+  it('routes QSM customer and product requests through the shared ERP bridge', () => {
+    writeActiveExtensionModIdToStorage('sz-qsm-pro', TEST_SCOPE)
+    const ids = ['sz-qsm-pro', 'taiyangniao-pro', 'xcagi-erp-domain-bridge']
+    expect(resolveErpApiBase(ids)).toBe('/api/mod/xcagi-erp-domain-bridge')
+    expect(resolveErpApiPath('/api/customers/list', ids)).toBe('/api/mod/xcagi-erp-domain-bridge/customers/list')
+    expect(resolveErpApiPath('/api/products/list', ids)).toBe('/api/mod/xcagi-erp-domain-bridge/products/list')
+  })
+
   it.each(['attendance-industry', ''])('routes industry shell %s via bridge', (active) => {
     writeActiveExtensionModIdToStorage(active, TEST_SCOPE)
     localStorage.removeItem(LS)

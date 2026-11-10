@@ -61,9 +61,10 @@ except ImportError:
 _redis_extra: tuple[type[Exception], ...] = ()
 try:
     from redis.exceptions import ConnectionError as _RedisConnectionError
+    from redis.exceptions import RedisError as _RedisError
     from redis.exceptions import TimeoutError as _RedisTimeoutError
 
-    _redis_extra = (_RedisConnectionError, _RedisTimeoutError)
+    _redis_extra = (_RedisConnectionError, _RedisTimeoutError, _RedisError)
 except ImportError:
     pass
 

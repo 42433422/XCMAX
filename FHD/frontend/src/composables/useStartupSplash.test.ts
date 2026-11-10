@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { STARTUP_READY_TIMEOUT_MS, useStartupSplash } from './useStartupSplash'
+import { useStartupSplash } from './useStartupSplash'
 
 function deferred() {
   let resolve!: () => void
@@ -56,23 +56,6 @@ describe('startup readiness lifecycle', () => {
     expect(splash.appReady.value).toBe(true)
   })
 
-  it('reports a timeout and retires the late successful result', async () => {
-    const task = deferred()
-    let isCurrent!: () => boolean
-    let signal!: AbortSignal
-    const run = splash.runStartup(async (current, _stage, attempt) => { isCurrent = current; signal = attempt; await task.promise })
-    await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
-    expect(splash.startupError.value).toBeTruthy()
-    expect(splash.appReady.value).toBe(false)
-    expect(splash.startupVisible.value).toBe(true)
-    expect(isCurrent()).toBe(false)
-    expect(signal.aborted).toBe(true)
-    task.resolve()
-    await run
-    expect(splash.appReady.value).toBe(false)
-    expect(splash.startupError.value).toBeTruthy()
-  })
-
   it('does not let either an old success or error finish a newer retry', async () => {
     const first = deferred(), second = deferred(), third = deferred()
     let firstCurrent!: () => boolean
@@ -103,7 +86,6 @@ describe('startup readiness lifecycle', () => {
     expect(signal.aborted).toBe(true)
     task.resolve()
     await run
-    await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
     expect(splash.appReady.value).toBe(false)
   })
 
@@ -115,7 +97,6 @@ describe('startup readiness lifecycle', () => {
     expect(splash.startupVisible.value).toBe(false)
     task.resolve()
     await run
-    await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
     expect(splash.startupError.value).toBe('')
     expect(splash.appReady.value).toBe(true)
   })

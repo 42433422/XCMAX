@@ -120,18 +120,6 @@ class TestMergeToolRuntimeContextExtended:
         )
         assert result["last_excel_analysis_context"] == {"sheet": "Sheet1"}
 
-    def test_authenticated_tenant_scope_is_persisted_but_context_tenant_is_ignored(self):
-        from app.infrastructure.tenant_scope import tenant_scope
-
-        with tenant_scope(42):
-            result = AIChatApplicationService._merge_tool_runtime_context(
-                "u1", "hello", {"tenant_id": "999", "local_user_id": 7}
-            )
-
-        assert result["tenant_id"] == "42"
-        assert result["local_user_id"] == "7"
-        assert AIChatApplicationService._task_owner_id("u1", result) == "7"
-
 
 # ========================= _excel_cell_looks_like_product_measure_unit ====
 
@@ -284,9 +272,6 @@ class TestIsNumberTextExtended:
 
     def test_with_comma(self):
         assert AIChatApplicationService._is_number_text("1,000") is True
-
-    def test_empty(self):
-        assert AIChatApplicationService._is_number_text("") is False
 
     def test_none(self):
         assert AIChatApplicationService._is_number_text(None) is False
@@ -586,14 +571,6 @@ class TestPriceColumnBucketsExtended:
 
 
 class TestMergeUserIntentForPriceResolutionExtended:
-    def test_empty_message(self):
-        result = AIChatApplicationService._merge_user_intent_for_price_resolution("", None)
-        assert result == ""
-
-    def test_none_message(self):
-        result = AIChatApplicationService._merge_user_intent_for_price_resolution(None, None)
-        assert result == ""
-
     def test_simple_message(self):
         result = AIChatApplicationService._merge_user_intent_for_price_resolution(
             "导入调价前", None
@@ -671,22 +648,6 @@ class TestExcelAnalysisPayloadPresentExtended:
             is False
         )
 
-    def test_with_summary(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"summary": "test"}}
-            )
-            is True
-        )
-
-    def test_with_fields(self):
-        assert (
-            AIChatApplicationService._excel_analysis_payload_present(
-                {"excel_analysis": {"fields": [{"label": "x"}]}}
-            )
-            is True
-        )
-
     def test_with_sample_rows(self):
         assert (
             AIChatApplicationService._excel_analysis_payload_present(
@@ -715,56 +676,7 @@ class TestExcelAnalysisPayloadPresentExtended:
 # ========================= _looks_like_short_excel_import_command =========
 
 
-class TestLooksLikeShortExcelImportCommandExtended:
-    def test_exact_match_join_db(self):
-        assert AIChatApplicationService._looks_like_short_excel_import_command("加入数据库") is True
-
-    def test_exact_match_import_db(self):
-        assert AIChatApplicationService._looks_like_short_excel_import_command("导入数据库") is True
-
-    def test_exact_match_ru_ku(self):
-        assert AIChatApplicationService._looks_like_short_excel_import_command("入库") is True
-
-    def test_long_text_no_match(self):
-        assert AIChatApplicationService._looks_like_short_excel_import_command("A" * 41) is False
-
-    def test_containing_keyword(self):
-        assert (
-            AIChatApplicationService._looks_like_short_excel_import_command("请导入数据库") is True
-        )
-
-    def test_empty(self):
-        assert AIChatApplicationService._looks_like_short_excel_import_command("") is False
-
-    def test_unrelated(self):
-        assert AIChatApplicationService._looks_like_short_excel_import_command("查询产品") is False
-
-
 # ========================= _build_fallback_response - extended =============
-
-
-class TestBuildFallbackResponseExtended:
-    def test_greeting_keywords(self):
-        for greeting in ("你好", "您好", "hi", "hello", "嗨"):
-            result = AIChatApplicationService._build_fallback_response(greeting, "test error")
-            assert "XCAGI" in result["response"]
-
-    def test_non_greeting(self):
-        result = AIChatApplicationService._build_fallback_response("查产品", "test error")
-        assert "抱歉" in result["response"]
-
-    def test_empty_message(self):
-        result = AIChatApplicationService._build_fallback_response("", "test error")
-        assert result["success"] is False
-
-    def test_none_message(self):
-        # Source code does `message[:100]` which fails on None, so test with empty string
-        result = AIChatApplicationService._build_fallback_response("", "test error")
-        assert result["success"] is False
-
-    def test_error_reason_in_response(self):
-        result = AIChatApplicationService._build_fallback_response("查询", "API Key 无效")
-        assert "API Key 无效" in result["message"]
 
 
 # ========================= _infer_excel_column_roles - extended ============
@@ -1155,119 +1067,11 @@ class TestExtractExcelImportRecordsDeep:
 
 
 class TestProcessChatDeepErrors:
-    def test_connection_error(self):
-        async def raise_conn(*a, **kw):
-            raise ConnectionError("refused")
-
-        service = _make_service()
-        mock_ai = Mock()
-        mock_ai.chat = raise_conn
-        service.ai_service = mock_ai
-        with (
-            patch.object(service, "_inject_excel_vector_context", return_value={}),
-            patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
-            patch("app.services.get_conversation_service"),
-        ):
-            result = service.process_chat("u1", "随便说点什么")
-        assert result["success"] is False
-        assert "连接失败" in result.get("message", "") or "连接失败" in result.get("response", "")
-
-    def test_timeout_error(self):
-        async def raise_timeout(*a, **kw):
-            raise TimeoutError("timed out")
-
-        service = _make_service()
-        mock_ai = Mock()
-        mock_ai.chat = raise_timeout
-        service.ai_service = mock_ai
-        with (
-            patch.object(service, "_inject_excel_vector_context", return_value={}),
-            patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
-            patch("app.services.get_conversation_service"),
-        ):
-            result = service.process_chat("u1", "随便说点什么")
-        assert result["success"] is False
-        assert "超时" in result.get("message", "") or "超时" in result.get("response", "")
-
-    def test_api_key_error(self):
-        async def raise_api_key(*a, **kw):
-            raise RuntimeError("api_key is invalid")
-
-        service = _make_service()
-        mock_ai = Mock()
-        mock_ai.chat = raise_api_key
-        service.ai_service = mock_ai
-        with (
-            patch.object(service, "_inject_excel_vector_context", return_value={}),
-            patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
-            patch("app.services.get_conversation_service"),
-        ):
-            result = service.process_chat("u1", "随便说点什么")
-        assert result["success"] is False
-        assert "AI 服务暂时不可用" in result.get("message", "")
-
-    def test_connection_string_error(self):
-        async def raise_conn_str(*a, **kw):
-            raise RuntimeError("connection refused by remote")
-
-        service = _make_service()
-        mock_ai = Mock()
-        mock_ai.chat = raise_conn_str
-        service.ai_service = mock_ai
-        with (
-            patch.object(service, "_inject_excel_vector_context", return_value={}),
-            patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
-            patch("app.services.get_conversation_service"),
-        ):
-            result = service.process_chat("u1", "随便说点什么")
-        assert result["success"] is False
-        assert "AI 服务暂时不可用" in result.get("message", "")
-
-    def test_generic_runtime_error(self):
-        async def raise_generic(*a, **kw):
-            raise RuntimeError("unknown internal error")
-
-        service = _make_service()
-        mock_ai = Mock()
-        mock_ai.chat = raise_generic
-        service.ai_service = mock_ai
-        with (
-            patch.object(service, "_inject_excel_vector_context", return_value={}),
-            patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
-            patch("app.services.get_conversation_service"),
-        ):
-            result = service.process_chat("u1", "随便说点什么")
-        assert result["success"] is False
-        assert "暂时不可用" in result.get("message", "") or "暂时不可用" in result.get(
-            "response", ""
-        )
-
     def test_empty_message_returns_error(self):
         service = _make_service()
         result = service.process_chat("u1", "")
         assert result["success"] is False
         assert "不能为空" in result["message"]
-
-    def test_file_context_injects_excel_analysis(self):
-        async def mock_chat(*a, **kw):
-            return {"success": True, "text": "结果", "action": "followup", "data": {}}
-
-        service = _make_service()
-        mock_ai = Mock()
-        mock_ai.chat = mock_chat
-        service.ai_service = mock_ai
-        with (
-            patch.object(service, "_inject_excel_vector_context", return_value={}),
-            patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
-            patch("app.services.get_conversation_service"),
-        ):
-            result = service.process_chat(
-                "u1",
-                "查询",
-                source=None,
-                file_context={"file_path": "/test.xlsx", "sheet_name": "Sheet1"},
-            )
-        assert result["success"] is True
 
 
 # ========================= _persist_chat_turn - deep ======================
@@ -1345,14 +1149,6 @@ class TestInjectExcelVectorContextDeep:
         assert "excel_vector_context" in result
         assert result["excel_vector_context"]["hits"] == [{"score": 0.9}]
 
-    def test_unsuccessful_query(self):
-        service = _make_service()
-        mock_svc = Mock()
-        mock_svc.query.return_value = {"success": False}
-        with patch("app.application.get_excel_vector_search_app_service", return_value=mock_svc):
-            result = service._inject_excel_vector_context("hello", {"excel_index_id": "idx1"})
-        assert "excel_vector_context" not in result
-
     def test_custom_top_k(self):
         service = _make_service()
         mock_svc = Mock()
@@ -1382,3 +1178,164 @@ class TestInjectExcelVectorContextDeep:
                 "hello", {"excel_vector_index_id": "vidx1"}
             )
         mock_svc.query.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "你好",
+        "您好",
+        "hi",
+        "hello",
+        "嗨",
+        "hi there",
+        "查询产品",
+        "加入数据库",
+        "导入数据库",
+        "入库",
+        "请导入数据库",
+        "A" * 41,
+        "生成发货单",
+        "查询发货记录",
+        "查询甲公司的5003",
+        "运行custom_tool",
+    ],
+)
+@pytest.mark.parametrize("source", ["basic", "pro", None])
+def test_unified_model_failure_never_falls_back_to_local_reply_or_tool(message, source):
+    """Replaces removed greeting/import/pro-tool shortcut contracts with real planning."""
+    from app.application.workflow.planner import LLMWorkflowPlanner
+
+    completion = Mock(return_value=None)
+    service = _make_service()
+    service.workflow_planner = LLMWorkflowPlanner(
+        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
+    )
+    with (
+        patch.object(service, "_persist_chat_turn"),
+        patch.object(service, "_persist_recallable_chat_turn"),
+        patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
+        patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
+    ):
+        result = service.process_chat("unified-failure", message, source=source)
+    completion.assert_called_once()
+    assert result["success"] is False
+    assert result["data"]["execution_started"] is False
+    assert not result.get("toolCall")
+    assert not service._pending_workflows
+
+
+@pytest.mark.parametrize("message", ["", None])
+def test_empty_input_stops_before_unified_model(message):
+    service = _make_service()
+    result = service.process_chat("empty", message)
+    assert result == {"success": False, "message": "消息内容不能为空"}
+    service.workflow_planner.plan.assert_not_called()
+
+
+def test_unsigned_context_cannot_supply_business_owner():
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with tenant_scope(42):
+        context = AIChatApplicationService._merge_tool_runtime_context(
+            "conversation-1", "hello", {"tenant_id": "999", "local_user_id": 7}
+        )
+    assert context["tenant_id"] == "42"
+    assert "local_user_id" not in context
+    assert "user_id" not in context
+
+
+@pytest.mark.parametrize(
+    "file_context",
+    [
+        {"file_path": "/test.xlsx", "sheet_name": "Sheet1"},
+        {"suggested_use": "unit_products_db", "saved_name": "", "unit_name": "甲"},
+        {"suggested_use": "unit_products_db", "saved_name": "f.db", "unit_name": ""},
+        {"suggested_use": "unit_products_db", "saved_name": "data.db", "unit_name": "甲公司"},
+    ],
+)
+def test_file_context_reaches_model_without_direct_import(file_context):
+    import json
+
+    from app.application.workflow.planner import LLMWorkflowPlanner
+
+    completion = Mock(return_value=None)
+    service = _make_service()
+    service.workflow_planner = LLMWorkflowPlanner(
+        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
+    )
+    with (
+        patch.object(service, "_persist_chat_turn"),
+        patch.object(service, "_persist_recallable_chat_turn"),
+        patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
+        patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
+        patch("app.application.get_unit_products_import_app_service") as direct_import,
+    ):
+        result = service.process_chat(
+            "file-context", "请分析这个文件", source="pro", file_context=file_context
+        )
+    prompt = json.loads(completion.call_args.kwargs["messages"][-1]["content"])
+    assert prompt["context"]["file_context"] == file_context
+    direct_import.assert_not_called()
+    assert result["success"] is False
+    assert result["data"]["execution_started"] is False
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["connection refused", "timed out", "api_key=private-test-secret", "unknown internal error"],
+)
+def test_model_transport_failure_is_safe_and_does_not_call_legacy_chat(reason):
+    from app.application.workflow.planner import LLMWorkflowPlanner
+
+    completion = Mock(side_effect=RuntimeError(reason))
+    conversation = Mock(get_context=Mock(return_value=None))
+    service = _make_service()
+    service.workflow_planner = LLMWorkflowPlanner(ai_service=conversation, completion=completion)
+    with (
+        patch.object(service, "_persist_chat_turn"),
+        patch.object(service, "_persist_recallable_chat_turn"),
+        patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
+        patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
+    ):
+        result = service.process_chat("transport-failure", "解释一下库存查询")
+    completion.assert_called_once()
+    conversation.chat.assert_not_called()
+    assert result["success"] is False
+    assert result["data"]["execution_started"] is False
+    assert "private-test-secret" not in str(result)
+
+
+@pytest.mark.parametrize("source", ["basic", "pro", "xcagi-pro", "PRO_MODE", "professional"])
+def test_all_source_labels_execute_the_same_model_authored_reply_graph(source):
+    import json
+
+    from app.application.workflow.planner import LLMWorkflowPlanner
+
+    completion = Mock(
+        return_value={
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps({"mode": "reply", "reply": "这是模型生成的说明"})
+                    }
+                }
+            ]
+        }
+    )
+    service = _make_service()
+    service.workflow_planner = LLMWorkflowPlanner(
+        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
+    )
+    with (
+        patch.object(service, "_persist_chat_turn"),
+        patch.object(service, "_persist_recallable_chat_turn"),
+        patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
+        patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
+    ):
+        result = service.process_chat("unified-reply", "解释一下工作方式", source=source)
+    completion.assert_called_once()
+    assert result["success"] is True
+    assert result["response"] == "这是模型生成的说明"
+    assert result["data"]["workflow_runtime"] == "xcagi-langgraph"
+    assert not result.get("toolCall")

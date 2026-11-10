@@ -377,7 +377,7 @@ class TestProductsUpdate:
             ),
         ):
             r = client_compat.post("/products/update", json={"id": 1})
-            assert r.status_code == 500
+            assert r.status_code == 500, r.text
 
 
 # ========================= POST /products/add ============================
@@ -426,6 +426,42 @@ class TestProductsAdd:
             assert r.status_code == 200
             assert r.json()["data"]["id"] == 10
 
+    def test_add_request_identity_does_not_replay_an_independent_submission(
+        self, client_compat, local_tools
+    ):
+        with (
+            patch(
+                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
+                return_value=False,
+            ),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
+            patch(
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
+                return_value=None,
+            ),
+            patch(
+                "app.legacy.routes.product.compat_routes.products_pg_insert_row",
+                side_effect=[10, RuntimeError("db down"), RuntimeError("db down")],
+            ) as insert,
+        ):
+            body = {"name": "request-scoped-product"}
+            first = client_compat.post(
+                "/products/add", json=body, headers={"X-Request-ID": "product-request-1"}
+            )
+            retry = client_compat.post(
+                "/products/add", json=body, headers={"X-Request-ID": "product-request-1"}
+            )
+            separate = client_compat.post(
+                "/products/add", json=body, headers={"X-Request-ID": "product-request-2"}
+            )
+            anonymous = client_compat.post("/products/add", json=body)
+        assert first.status_code == retry.status_code == 200
+        assert first.json()["run_id"] == retry.json()["run_id"]
+        assert separate.status_code == anonymous.status_code == 500
+        assert separate.json()["success"] is anonymous.json()["success"] is False
+        assert separate.json()["run_id"] != first.json()["run_id"]
+        assert insert.call_count == 3
+
     def test_add_pg_failure(self, client_compat, local_tools):
         with (
             patch(
@@ -443,7 +479,7 @@ class TestProductsAdd:
             ),
         ):
             r = client_compat.post("/products/add", json={"name": "New"})
-            assert r.status_code == 500
+            assert r.status_code == 500, r.text
 
 
 # ========================= POST /products/delete =========================
@@ -523,7 +559,7 @@ class TestProductsDelete:
             ),
         ):
             r = client_compat.post("/products/delete", json={"id": 1})
-            assert r.status_code == 500
+            assert r.status_code == 500, r.text
 
 
 # ========================= POST /products/batch-delete ===================
@@ -581,7 +617,7 @@ class TestProductsBatchDelete:
             assert r.status_code == 200
             body = r.json()
             assert body["success"] is True
-            assert body["deleted"] == 2
+            assert body.get("deleted") == 2, body
 
     def test_batch_delete_pg_failure(self, client_compat, local_tools):
         with (
@@ -600,7 +636,7 @@ class TestProductsBatchDelete:
             ),
         ):
             r = client_compat.post("/products/batch-delete", json={"ids": [1]})
-            assert r.status_code == 500
+            assert r.status_code == 500, r.text
 
 
 # ========================= GET /products/price-list-export ===============

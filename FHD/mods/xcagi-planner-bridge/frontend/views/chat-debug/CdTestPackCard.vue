@@ -1,5 +1,4 @@
 <script setup>
-import { defineProps } from 'vue'
 
 // 拆分自 ChatDebugView.vue 模板（原第 62–93 行）；模板逐字迁移，行为不变。
 const props = defineProps({ tm: { type: Object, required: true } })

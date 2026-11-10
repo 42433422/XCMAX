@@ -67,7 +67,15 @@ def _worker(
     try:
         data = json.loads(payload)
         business_db_url = str(data.get("business_db_url") or "")
-        if business_db_url and not _bind_worker_business_db(business_db_url):
+        office_stage = (data["step"].get("tool_id"), data["step"].get("action")) == (
+            "excel_import",
+            "office_stage",
+        )
+        if office_stage and not business_db_url:
+            raise RuntimeError("office approval database is unavailable")
+        if business_db_url and not _bind_worker_business_db(
+            business_db_url, bind_workflow_db=office_stage
+        ):
             Path(folder, "result").write_text(
                 json.dumps(
                     {
@@ -229,7 +237,7 @@ def _caller_business_db_url() -> str:
             close()
 
 
-def _bind_worker_business_db(url: str) -> bool:
+def _bind_worker_business_db(url: str, *, bind_workflow_db: bool = False) -> bool:
     """Restore customer, sales and reporting sessions against the caller's database."""
     from sqlalchemy import create_engine
     from sqlalchemy.exc import SQLAlchemyError
@@ -261,6 +269,10 @@ def _bind_worker_business_db(url: str) -> bool:
         customers.get_customers_session = open_session
         sales.get_db = sessions
         reports.get_db = sessions
+        if bind_workflow_db:
+            import app.db.session as db_session
+
+            db_session.SessionLocal = factory
     except RECOVERABLE_ERRORS + (SQLAlchemyError,):
         return False
     return True

@@ -46,8 +46,8 @@ async def neuro_migration_smoke() -> dict[str, Any]:
             "ConversationApplicationService.save_message → neuro_notify_conversation_message_saved",
         ],
         "services_layer_hooks": [
-            "AIConversationService._recognize_intent → intent_integration + neuro_notify_intent_resolved",
-            "Optional: neuro_notify_ai_model_roundtrip（主模型推理完成后在 Services 内手动调用）",
+            "AIConversationService.chat → AIChatApplicationService.process_chat",
+            "AIChatApplicationService.process_chat → configured platform model / LangGraph",
         ],
         "related_http_routes": [
             "/api/neuro/migration-smoke",

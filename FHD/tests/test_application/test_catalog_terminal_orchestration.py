@@ -74,7 +74,7 @@ def test_verified_current_save_completes_without_clearing_replay_fence(
         result = store.verify_catalog_action(run.steps[0].params, action_context(run))
     before = authority_images(c)
     completed, orchestrator, adapter = consume(c, run, result, monkeypatch, tmp_path)
-    assert completed.status == "completed"
+    assert completed.status == "completed", completed.error
     assert completed.steps[0].status == "completed"
     assert completed.steps[0].output["fresh_save"] is fresh
     assert completed.metadata["non_retryable"] is True
@@ -338,3 +338,34 @@ def test_invalid_terminal_shapes_fail_closed_without_readback(field):
         step.output[field] = {}
     assert _verified_catalog_terminal(run, step) is None
     assert requires_retry_reconciliation(run)
+
+
+def test_reviewed_catalog_plan_is_frozen_and_matches_approved_step(catalog):
+    run, _ = prepare(catalog)
+    node = run.metadata["plan"]["nodes"][0]
+    step = run.steps[0]
+    assert run.plan_id == run.metadata["plan"]["plan_id"]
+    assert (node["node_id"], node["tool_id"], node["action"]) == (
+        step.node_id,
+        step.tool_id,
+        step.action,
+    )
+    assert node["params"] == step.params
+    assert node["risk"] == step.risk == "medium"
+    assert node["idempotent"] is step.idempotent is False
+    assert node["params"] is not step.params
+    step.params["price"] = "999.00"
+    assert node["params"]["price"] != step.params["price"]
+
+
+def test_approved_catalog_param_tampering_is_rejected_before_execution(
+    catalog, monkeypatch, tmp_path
+):
+    run, _ = prepare(catalog)
+    before = authority_images(catalog)
+    run.steps[0].params["price"] = "999.00"
+    rejected, _, adapter = consume(catalog, run, {}, monkeypatch, tmp_path)
+    assert rejected.status == "blocked"
+    assert "计划节点与已持久化执行步骤不一致" in rejected.error
+    assert adapter.calls == 0
+    assert authority_images(catalog) == before

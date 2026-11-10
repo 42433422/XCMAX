@@ -222,12 +222,12 @@ export const authApi = {
     }, 10_000, options.signal)
   },
 
-  async getCurrentUser(options: Pick<RequestOptions, 'signal' | 'timeoutMs'> = {}): Promise<ApiResponse<{ user: User; permissions: string[] }>> {
-    return api.get<ApiResponse<{ user: User; permissions: string[] }>>('/api/auth/me', {}, { timeoutMs: 8_000, ...options })
+  async getCurrentUser(options: Pick<RequestOptions, 'signal' | 'timeoutMs' | 'quiet'> = {}): Promise<ApiResponse<{ user: User; permissions: string[] }>> {
+    return api.get<ApiResponse<{ user: User; permissions: string[] }>>('/api/auth/me', {}, { timeoutMs: 30_000, quiet: true, ...options })
   },
 
   async getProfile(): Promise<ApiResponse<{ user: User }>> {
-    return api.get<ApiResponse<{ user: User }>>('/api/auth/profile', {}, { timeoutMs: 8_000 })
+    return api.get<ApiResponse<{ user: User }>>('/api/auth/profile', {}, { timeoutMs: 30_000, quiet: true })
   },
 
   async updateProfile(payload: UserProfilePayload): Promise<ApiResponse<{ user: User }>> {
@@ -242,8 +242,8 @@ export const authApi = {
     return api.post<ApiResponse<{ avatar_url: string }>>('/api/auth/profile/avatar', form)
   },
 
-  async validateSession(options: Pick<RequestOptions, 'signal' | 'timeoutMs'> = {}): Promise<ApiResponse<unknown>> {
-    return api.get<ApiResponse<unknown>>('/api/auth/session/validate', {}, { timeoutMs: 8_000, ...options })
+  async validateSession(options: Pick<RequestOptions, 'signal' | 'timeoutMs' | 'quiet'> = {}): Promise<ApiResponse<unknown>> {
+    return api.get<ApiResponse<unknown>>('/api/auth/session/validate', {}, { timeoutMs: 30_000, quiet: true, ...options })
   },
 
   async forgotAccount(email: string): Promise<ApiResponse<{ usernames: string[]; found: boolean }>> {

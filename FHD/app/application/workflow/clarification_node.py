@@ -42,9 +42,10 @@ def _missing_fields(params: dict[str, Any], required: list[str]) -> list[str]:
 
 
 def _build_missing_question(node: WorkflowNode, missing: list[str]) -> str:
+    labels = ["计量单位和每件/每桶规格" if key.endswith(".tin_spec") else key for key in missing]
     return (
         f"执行 {node.tool_id}.{node.action} 前需要补充必填参数："
-        f"{'、'.join(missing)}。请提供后再执行，避免误操作。"
+        f"{'、'.join(labels)}。请提供后再执行，避免误操作。"
     )
 
 
@@ -343,11 +344,8 @@ def _has_multi_unit_text(value: Any) -> bool:
     text = str(value or "")
     if not text:
         return False
-    # 数量+单位：数字（含小数）后紧跟单位字面量
-    quantity_unit = re.compile(rf"\d+(\.\d+)?\s*({_ERP_UNIT_RE})")
-    if quantity_unit.search(text):
-        return True
-    # 多个不同单位字面量同时出现
+    # A single stated unit is concrete input, not ambiguity. Require at least two
+    # distinct unit tokens before asking the user to choose a conversion basis.
     raw_units = re.findall(rf"({_ERP_UNIT_RE})", text)
     return len({u.lower() for u in raw_units}) >= 2
 

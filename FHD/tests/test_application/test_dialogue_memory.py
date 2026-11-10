@@ -1,22 +1,19 @@
-"""连续对话把本会话原话交给模型完成函数，不在进程里拼答案。"""
+"""The unified model receives bounded, owner-scoped chat history."""
 
 from __future__ import annotations
 
 import json
 import subprocess
 import sys
-from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 from app.application.ai_chat.dialogue_memory import (
     conversation_key,
-    dialogue_reply,
     prepare_chat_turn,
-    set_dialogue_complete,
+    recent_conversation_messages,
     settle_chat_turn,
-    should_answer_as_dialogue,
     turn_status,
 )
 
@@ -27,257 +24,148 @@ def memory_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     return tmp_path
 
 
-@pytest.fixture
-def model_calls(memory_dir: Path) -> list[list[dict[str, str]]]:
-    seen: list[list[dict[str, str]]] = []
-
-    async def complete(messages: Sequence[dict[str, str]]) -> str:
-        seen.append([dict(item) for item in messages])
-        return "模型完成:" + messages[-1]["content"]
-
-    set_dialogue_complete(complete)
-    yield seen
-    set_dialogue_complete(None)
+def _context(session: str, turn: str, **extra: object) -> dict[str, object]:
+    return {
+        "local_user_id": 1,
+        "tenant_id": 1,
+        "conversation_id": session,
+        "turn_id": turn,
+        **extra,
+    }
 
 
-def test_operational_commands_stay_on_the_business_path(memory_dir: Path) -> None:
-    assert (
-        should_answer_as_dialogue(
-            "发货单 太阳鸟 5桶 20L规格", {"local_user_id": 1, "conversation_id": "c11"}
-        )
-        is False
-    )
-    assert (
-        should_answer_as_dialogue("查一下客户", {"local_user_id": 1, "conversation_id": "c11"})
-        is False
-    )
-    assert (
-        should_answer_as_dialogue(
-            "请提交一个缺陷工单", {"local_user_id": 1, "conversation_id": "c11"}
-        )
-        is False
-    )
-    assert (
-        should_answer_as_dialogue(
-            "如果按这个表统计有多少行",
-            {
-                "local_user_id": 1,
-                "conversation_id": "sheet",
-                "excel_analysis": {"file_path": "/tmp/a.xlsx"},
-            },
-        )
-        is False
-    )
-    assert (
-        should_answer_as_dialogue(
-            "我们发现一个问题，在聊天过程中切换到客户管理页面，首次加载可能需要1.7秒。",
-            {"local_user_id": 1, "conversation_id": "c11"},
-        )
-        is True
+def test_business_and_smalltalk_turns_share_the_same_transcript(memory_dir: Path) -> None:
+    first = _context("unified", "1")
+    assert prepare_chat_turn("查一下客户", first) is None
+    settle_chat_turn(
+        "查一下客户", first, {"success": True, "response": "找到客户记录。"}, "completed"
     )
 
+    second = _context("unified", "2")
+    assert prepare_chat_turn("你好", second) is None
+    history = recent_conversation_messages(second)
 
-async def test_reply_comes_from_the_complete_callback(
-    model_calls: list[list[dict[str, str]]],
-) -> None:
-    first = {"local_user_id": 1, "conversation_id": "memo", "turn_id": "1"}
-    assert prepare_chat_turn("先记下客户 120 家。", first) is None
-    opened = await dialogue_reply("先记下客户 120 家。", first)
-    assert opened is not None
-    settle_chat_turn("先记下客户 120 家。", first, opened, "completed")
-    second = {"local_user_id": 1, "conversation_id": "memo", "turn_id": "2"}
-    assert prepare_chat_turn("刚才的客户是多少？", second) is None
-    answered = await dialogue_reply("刚才的客户是多少？", second)
-    assert answered is not None
-    assert answered["response"] == "模型完成:刚才的客户是多少？"
-    assert answered["data"]["action"] == "dialogue_memory"
-    assert len(model_calls) == 2
-    instruction = model_calls[1][0]["content"]
-    assert "无法计算" in instruction
-    assert "已确认数字" in instruction
-    assert "旧总数" in instruction
-    sent = "\n".join(item["content"] for item in model_calls[1] if item["role"] == "user")
-    assert "客户 120 家" in sent
-    assert "刚才的客户是多少" in sent
+    assert history == [
+        {"role": "user", "content": "查一下客户"},
+        {"role": "assistant", "content": "找到客户记录。"},
+    ]
 
 
-async def test_same_turn_does_not_call_the_model_again(
-    model_calls: list[list[dict[str, str]]],
-) -> None:
-    context = {"local_user_id": 1, "conversation_id": "retry", "turn_id": "same"}
-    text = "星河科技目前有120家客户。"
+def test_same_turn_replays_receipt_and_rejects_changed_message(memory_dir: Path) -> None:
+    context = _context("retry", "same")
+    text = "查询产品"
     assert prepare_chat_turn(text, context) is None
-    payload = await dialogue_reply(text, context)
+    payload = {"success": True, "run_id": "run-1", "response": "已查询"}
     settle_chat_turn(text, context, payload, "completed")
-    again = prepare_chat_turn(text, context)
-    assert again is not None
-    assert again["response"] == payload["response"]
-    assert len(model_calls) == 1
-    other = prepare_chat_turn("星河科技目前有1家客户。", context)
-    assert other is not None and other["success"] is False
-    assert len(model_calls) == 1
+
+    replay = prepare_chat_turn(text, context)
+    assert replay["run_id"] == "run-1"
+    assert replay["data"]["replay"] is True
+    assert prepare_chat_turn("查询其他产品", context)["success"] is False
+    assert turn_status(conversation_key(context), "same") == "completed"
 
 
-def test_abandoned_turn_is_not_a_successful_analysis(memory_dir: Path) -> None:
-    context = {"local_user_id": 1, "conversation_id": "half", "turn_id": "open"}
-    assert prepare_chat_turn("企业目前有120家客户。", context) is None
+def test_abandoned_turn_is_not_treated_as_completed(memory_dir: Path) -> None:
+    context = _context("half", "open")
+    assert prepare_chat_turn("查询客户", context) is None
     assert turn_status(conversation_key(context), "open") == "processing"
+
     from app.application.ai_chat import dialogue_memory as memory
 
     memory._INFLIGHT.clear()
-    prepare_chat_turn(
-        "后来新增10家客户。", {"local_user_id": 1, "conversation_id": "half", "turn_id": "next"}
-    )
+    prepare_chat_turn("下一条消息", _context("half", "next"))
     assert turn_status(conversation_key(context), "open") == "interrupted"
 
 
-@pytest.mark.parametrize("message", ["请分析这段文字", "查一下客户"])
 @pytest.mark.parametrize("status", ["waiting_approval", "unknown"])
-def test_unfinished_turn_survives_restart_and_settles_only_the_original_run(
-    memory_dir: Path, message: str, status: str
-) -> None:
-    context = {"local_user_id": 7, "tenant_id": 2, "session_id": "kitten", "turn_id": "original"}
-    assert prepare_chat_turn(message, context) is None
+def test_unfinished_turn_replays_only_the_original_run(memory_dir: Path, status: str) -> None:
+    context = _context("pending", "original")
+    assert prepare_chat_turn("删除旧记录", context) is None
     waiting = {
         "run_id": "run-original",
         "response": "等待授权" if status == "waiting_approval" else "等待核对",
     }
-    settle_chat_turn(message, context, waiting, status)
+    settle_chat_turn("删除旧记录", context, waiting, status)
 
-    # A fresh interpreter has no process-local inflight flags or cached result.
     process = subprocess.run(
         [
             sys.executable,
             "-c",
-            """
-import json, sys
-from app.application.ai_chat.dialogue_memory import prepare_chat_turn
-data = json.load(sys.stdin)
-print(json.dumps(prepare_chat_turn(data['message'], data['context'])))
-""",
+            "import json,sys; from app.application.ai_chat.dialogue_memory import prepare_chat_turn; "
+            "d=json.load(sys.stdin); print(json.dumps(prepare_chat_turn(d['message'],d['context'])))",
         ],
-        input=json.dumps({"message": message, "context": context}),
+        input=json.dumps({"message": "删除旧记录", "context": context}),
         text=True,
         capture_output=True,
         check=True,
         timeout=30,
     )
-    restored = json.loads(process.stdout)
-    assert restored["run_id"] == "run-original"
-    assert restored["execution_state"] == status
-    assert restored["data"]["replay"] is True
-
+    replay = json.loads(process.stdout)
+    assert replay["run_id"] == "run-original"
+    assert replay["execution_state"] == status
     with pytest.raises(ValueError, match="另一项执行"):
-        settle_chat_turn(message, context, {"run_id": "run-other", "response": "完成"}, "completed")
-    with pytest.raises(ValueError, match="另一项执行"):
-        settle_chat_turn(message, context, {"response": "没有原任务回执"}, "completed")
-    assert turn_status(conversation_key(context), "original") == status
-    completed = {"success": True, "run_id": "run-original", "response": "已核对原结果"}
-    settle_chat_turn(message, context, completed, "completed")
-    settle_chat_turn(message, context, waiting, "unknown")
-    final = prepare_chat_turn(message, context)
-    assert final["response"] == "已核对原结果"
-    assert final["execution_state"] == "completed"
-    stored = json.loads((memory_dir / f"{conversation_key(context)}.json").read_text())
-    assert sum(item.get("role") == "assistant" for item in stored["turns"]) <= 1
+        settle_chat_turn("删除旧记录", context, {"run_id": "other"}, "completed")
 
 
-@pytest.mark.parametrize("message", ["第一份请求", "长请求" * 3000])
-def test_active_turn_rejects_changed_message_before_inflight_replay(
-    memory_dir: Path, message: str
+@pytest.mark.parametrize("changed", [{"local_user_id": 2}, {"tenant_id": 2}, {"mod_id": "other"}])
+def test_transcript_is_scoped_to_owner_tenant_and_mod(
+    memory_dir: Path, changed: dict[str, object]
 ) -> None:
-    context = {"local_user_id": 8, "session_id": "active", "turn_id": "fixed"}
-    assert prepare_chat_turn(message, context) is None
-    denied = prepare_chat_turn(message + "变更", context)
-    assert denied["success"] is False and denied["data"]["status"] == "failed"
-    with pytest.raises(ValueError, match="另一条消息"):
-        settle_chat_turn(message + "变更", context, {"response": "完成"}, "completed")
-    assert turn_status(conversation_key(context), "fixed") == "processing"
-    settle_chat_turn(message, context, {"response": "原请求完成"}, "completed")
-    assert turn_status(conversation_key(context), "fixed") == "completed"
+    original = _context("scope", "1", mod_id="erp")
+    assert prepare_chat_turn("只属于当前会话的文字", original) is None
+    settle_chat_turn("只属于当前会话的文字", original, {"response": "收到"}, "completed")
+    other = {**original, **changed, "turn_id": "2"}
+
+    assert recent_conversation_messages(other) == []
+    assert conversation_key(original) != conversation_key(other)
 
 
-async def test_what_if_prompt_still_uses_the_complete_callback(
-    model_calls: list[list[dict[str, str]]],
-) -> None:
-    context = {"local_user_id": 1, "conversation_id": "whatif", "turn_id": "q"}
-    text = "如果再增加，结果是多少？"
-    assert prepare_chat_turn(text, context) is None
-    answered = await dialogue_reply(text, context)
-    assert answered is not None
-    assert len(model_calls) == 2
-    assert answered["response"] == "模型完成:" + model_calls[-1][-1]["content"]
-    assert text in "\n".join(item["content"] for item in model_calls[-1] if item["role"] == "user")
-    assert "已确认未改" in model_calls[0][0]["content"]
-    assert "无法计算" in model_calls[-1][-1]["content"]
+def test_transcript_enrichment_preserves_existing_multimodal_turn(memory_dir: Path) -> None:
+    from app.application.ai_chat.dialogue_memory import enrich_model_messages
+
+    first = _context("enrich", "1")
+    prepare_chat_turn("查一下客户", first)
+    settle_chat_turn("查一下客户", first, {"response": "客户已查到"}, "completed")
+    second = _context("enrich", "2")
+    prepare_chat_turn("分析这个图片", second)
+    current = {"role": "user", "content": [{"type": "text", "text": "分析这个图片"}]}
+    original = [{"role": "system", "content": "Existing tool safety rules"}, current]
+
+    enriched = enrich_model_messages(original, "分析这个图片", second)
+
+    assert enriched[0] == original[0]
+    assert enriched[-1] is current
+    assert {"role": "user", "content": "查一下客户"} in enriched
+    assert {"role": "assistant", "content": "客户已查到"} in enriched
+    assert original == [{"role": "system", "content": "Existing tool safety rules"}, current]
 
 
-async def test_sessions_do_not_share_transcripts(model_calls: list[list[dict[str, str]]]) -> None:
-    whale = {"local_user_id": 1, "conversation_id": "whale", "turn_id": "w"}
-    pine = {"local_user_id": 1, "conversation_id": "pine", "turn_id": "p"}
-    assert prepare_chat_turn("识别标记为蓝鲸-731。", whale) is None
-    await dialogue_reply("识别标记为蓝鲸-731。", whale)
-    assert prepare_chat_turn("识别标记为松塔-284。", pine) is None
-    await dialogue_reply("识别标记为松塔-284。", pine)
-    pine_text = "\n".join(item["content"] for item in model_calls[-1])
-    assert "松塔-284" in pine_text
-    assert "蓝鲸-731" not in pine_text
-
-
-@pytest.mark.parametrize(
-    "changed",
-    [
-        {"local_user_id": 2},
-        {"tenant_id": 2},
-        {"mod_id": "other"},
-        {"conversation_id": "samesession"},
-    ],
-)
-async def test_memory_and_turn_receipts_are_owner_scoped(model_calls, changed) -> None:
-    context = {
-        "local_user_id": 1,
-        "tenant_id": 1,
-        "mod_id": "erp",
-        "conversation_id": "same.session",
-        "turn_id": "shared-turn",
-    }
-    secret = "只有本用户知道的标记：蓝鲸-731。"
-    assert prepare_chat_turn(secret, context) is None
-    reply = await dialogue_reply(secret, context)
-    settle_chat_turn(secret, context, reply, "completed")
-    other = {**context, **changed}
-    assert prepare_chat_turn("我之前说了什么？", other) is None
-    await dialogue_reply("我之前说了什么？", other)
-    assert "蓝鲸-731" not in "\n".join(item["content"] for item in model_calls[-1])
-
-
-async def test_anonymous_turns_have_no_shared_durable_memory(model_calls, memory_dir) -> None:
-    context = {"conversation_id": "same", "turn_id": "shared-turn"}
-    for text in ("我的秘密是蓝鲸-731。", "我之前说了什么？"):
-        assert prepare_chat_turn(text, context) is None
-        reply = await dialogue_reply(text, context)
-        settle_chat_turn(text, context, reply, "completed")
-    assert "蓝鲸-731" not in "\n".join(item["content"] for item in model_calls[-1])
-    assert model_calls[-1][-1]["content"] == "我之前说了什么？"
+def test_anonymous_conversations_do_not_share_persisted_transcripts(memory_dir: Path) -> None:
+    context = {"conversation_id": "anonymous", "turn_id": "1"}
+    assert prepare_chat_turn("私有内容", context) is None
+    assert recent_conversation_messages(context) == []
     assert list(memory_dir.iterdir()) == []
 
 
-def test_memory_enriches_existing_model_turn_without_replacing_multimodal_or_tool_fields(
-    memory_dir,
-):
-    from app.application.ai_chat.dialogue_memory import enrich_model_messages
+def test_transcript_is_encrypted_and_legacy_plaintext_is_migrated(memory_dir: Path) -> None:
+    context = _context("encrypted", "first")
+    key = conversation_key(context)
+    path = memory_dir / f"{key}.json"
+    path.write_text(json.dumps({"active": True, "turns": [], "receipts": {}}))
+    assert prepare_chat_turn("private message", context) is None
+    assert b"private message" not in path.read_bytes()
+    assert path.read_bytes().startswith(b"fernet:")
+    assert turn_status(key, "first") == "processing"
 
-    first = {"local_user_id": 1, "conversation_id": "memo", "turn_id": "1"}
-    prepare_chat_turn("先记下客户 120 家。", first)
-    settle_chat_turn("先记下客户 120 家。", first, {"response": "收到"}, "completed")
-    second = {**first, "turn_id": "2"}
-    prepare_chat_turn("刚才的客户是多少？", second)
-    current = {"role": "user", "content": [{"type": "text", "text": "刚才的客户是多少？"}]}
-    original = [{"role": "system", "content": "Existing tool safety rules"}, current]
-    enriched = enrich_model_messages(original, "刚才的客户是多少？", second)
-    assert enriched[0] == original[0]
-    assert enriched[-1] is current
-    assert {"role": "user", "content": "先记下客户 120 家。"} in enriched
-    assert original == [{"role": "system", "content": "Existing tool safety rules"}, current]
-    foreign = {**second, "local_user_id": 2}
-    assert enrich_model_messages(original, "刚才的客户是多少？", foreign) == original
+
+def test_failed_transcript_write_does_not_leave_turn_in_flight(memory_dir, monkeypatch):
+    from app.application.ai_chat import dialogue_memory as memory
+
+    context = _context("write-failure", "first")
+    key = conversation_key(context)
+    with monkeypatch.context() as patch:
+        patch.setattr(memory, "_write", lambda *_: (_ for _ in ()).throw(OSError("disk")))
+        with pytest.raises(OSError):
+            prepare_chat_turn("private message", context)
+    assert (key, "first") not in memory._INFLIGHT
+    assert prepare_chat_turn("private message", context) is None

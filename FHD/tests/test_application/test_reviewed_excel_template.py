@@ -19,6 +19,26 @@ from tests.test_application.test_reviewed_excel_boundaries import synthetic_docu
 
 
 @pytest.fixture(autouse=True)
+def _no_external_network(monkeypatch):
+    """All workbook/provider fixtures are synthetic; never contact the live market."""
+    import socket
+
+    def refused(*_args, **_kwargs):
+        raise AssertionError("Excel unit test attempted external network access")
+
+    original_connect = socket.socket.connect
+
+    def connect(sock, address):
+        if sock.family in {socket.AF_INET, socket.AF_INET6}:
+            refused()
+        return original_connect(sock, address)
+
+    monkeypatch.setattr(socket, "getaddrinfo", refused)
+    monkeypatch.setattr(socket, "create_connection", refused)
+    monkeypatch.setattr(socket.socket, "connect", connect)
+
+
+@pytest.fixture(autouse=True)
 def _legacy_transport_budget(monkeypatch):
     """Pin this suite's historical 2000-cell/384KB multi-batch scenarios.
 
@@ -275,16 +295,17 @@ def test_template_platform_uses_account_provider_once_and_never_retries(monkeypa
 
     async def fake(self, messages, **kwargs):
         calls.append(kwargs)
+        response = (
+            {"clear": [], "reason": "synthetic audit"}
+            if messages[0]["content"].startswith("Independently audit")
+            else {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
+        )
         return {
             "model": "account-default",
             "choices": [
                 {
                     "finish_reason": "stop",
-                    "message": {
-                        "content": json.dumps(
-                            {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
-                        )
-                    },
+                    "message": {"content": json.dumps(response)},
                 }
             ],
         }
@@ -295,7 +316,7 @@ def test_template_platform_uses_account_provider_once_and_never_retries(monkeypa
         review, make_proposals(review)["version"], "synthetic feedback", owner_id=7, initial=True
     )
     assert proposal["model"]["status"] == "returned" and len(proposal["candidates"]) == 3
-    assert len(calls) == 1 and calls[0]["temperature"] == 0.0
+    assert len(calls) == 2 and calls[0]["temperature"] == 0.0
     assert proposal["model"]["input_summary"]["provider"] == "platform"
 
     async def fail(*args, **kwargs):
@@ -394,20 +415,17 @@ def test_template_platform_keeps_the_same_call_while_status_arrives(monkeypatch)
             calls.append("once")
             kwargs["_processing_status"]()
             await asyncio.sleep(0.08)
+            response = (
+                {"clear": [], "reason": "synthetic audit"}
+                if args[0][0]["content"].startswith("Independently audit")
+                else {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
+            )
             return {
                 "model": "account-default",
                 "choices": [
                     {
                         "finish_reason": "stop",
-                        "message": {
-                            "content": json.dumps(
-                                {
-                                    "candidates": [
-                                        {"clear": [], "reason": "synthetic"} for _ in range(3)
-                                    ]
-                                }
-                            )
-                        },
+                        "message": {"content": json.dumps(response)},
                     }
                 ],
             }
@@ -425,7 +443,7 @@ def test_template_platform_keeps_the_same_call_while_status_arrives(monkeypatch)
     proposal = refine_proposal(
         review, make_proposals(review)["version"], "synthetic feedback", owner_id=7, initial=True
     )
-    assert calls == ["once"]
+    assert calls == ["once", "once"]
     assert proposal["model"]["status"] == "returned"
 
 
@@ -444,7 +462,7 @@ def test_template_preview_requires_permission_without_extra_consent(monkeypatch,
     review_store.actor["manage"] = True
     response = client.post(url, files=files, data=data)
     assert response.status_code == 200, response.text
-    send.assert_called_once()
+    assert send.call_count == 2
     assert response.json()["proposal"]["model"]["status"] == "returned"
 
 
@@ -467,6 +485,15 @@ def test_platform_fenced_three_plans_and_strict_nested_contract(monkeypatch):
 
     async def fake(self, messages, **kwargs):
         seen.append(messages)
+        if messages[0]["content"].startswith("Independently audit"):
+            return {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"content": '{"clear": [], "reason": "synthetic audit"}'},
+                    }
+                ]
+            }
         return {"choices": [{"finish_reason": "stop", "message": {"content": responses.pop(0)}}]}
 
     monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
@@ -528,7 +555,7 @@ def test_platform_fenced_three_plans_and_strict_nested_contract(monkeypatch):
         seen.clear()
         repaired = refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
         assert [p["clear"] for p in repaired["candidates"]] == [p["clear"] for p in plans]
-        assert len(seen) == 2 and seen[1][-2]["role"] == "assistant"
+        assert len(seen) == 3 and seen[1][-2]["role"] == "assistant"
         assert "未通过校验" in seen[1][-1]["content"] and not responses
     responses.extend(json.dumps(invalid[0], ensure_ascii=False) for _ in range(REPAIR_ROUNDS + 1))
     with pytest.raises(ModelAnswerRejected):
@@ -580,6 +607,7 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(template_scope, "ensure_templates_tenant_column", lambda: None)
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(routes, "get_app_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(archive_routes, "get_app_data_dir", lambda: str(tmp_path))
 
     from app.application import reviewed_excel_review_store
 
@@ -608,7 +636,9 @@ def review_store(tmp_path, monkeypatch):
 
     def model_answer(messages, schema, *_args, **_kwargs):
         payload = json.loads(messages[1]["content"])
-        if "candidates" in schema["properties"]:
+        if messages[0]["content"].startswith("Independently audit"):
+            data = {"clear": [], "reason": "synthetic audit"}
+        elif "candidates" in schema["properties"]:
             data = {"candidates": [{"clear": [], "reason": "synthetic model"} for _ in range(3)]}
         else:
             data = synthetic_document_answer(payload)
@@ -632,11 +662,19 @@ def review_store(tmp_path, monkeypatch):
         complete = (
             model_answer
             if "candidates" in schema["properties"]
+            or messages[0]["content"].startswith("Independently audit")
             else model_service._template_platform_complete
         )
         return complete(messages, schema, *args, **kwargs)
 
     monkeypatch.setattr(model_service, "_template_llm_complete", synthetic_models)
+
+    async def unsupported_market_lookup(*_args, **_kwargs):
+        # Synthetic provider has no remote idempotency store. Unknown results stay
+        # locked; recovery-specific tests explicitly supply a supported lookup.
+        return None
+
+    monkeypatch.setattr(routes, "_lookup_market_call", unsupported_market_lookup)
 
     def authorize(permission):
         if not actor[permission]:
@@ -2319,6 +2357,8 @@ def test_feedback_endpoint_uses_session_without_extra_consent(monkeypatch, revie
 
     def stub(messages, schema=None, max_tokens=None, **_kwargs):
         calls.append(messages)
+        if messages[0]["content"].startswith("Independently audit"):
+            return LlmAssistResult(used_llm=True, data={"clear": [], "reason": "synthetic audit"})
         return LlmAssistResult(
             used_llm=True,
             data={
@@ -2343,7 +2383,7 @@ def test_feedback_endpoint_uses_session_without_extra_consent(monkeypatch, revie
     preview = client.post(
         "/api/templates/reviewed-excel/preview", files=upload, data={"expected_actor": "1:7"}
     ).json()
-    assert preview["proposal"]["model"]["status"] == "returned" and len(calls) == 1
+    assert preview["proposal"]["model"]["status"] == "returned" and len(calls) == 2
     form = {
         "review_id": preview["review_id"],
         "parent_version": preview["proposal"]["version"],
@@ -2351,17 +2391,17 @@ def test_feedback_endpoint_uses_session_without_extra_consent(monkeypatch, revie
     }
     response = client.post("/api/templates/reviewed-excel/refine", files=upload, data=form)
     assert response.status_code == 200
-    assert response.json()["proposal"]["model"]["status"] == "returned" and len(calls) == 2
+    assert response.json()["proposal"]["model"]["status"] == "returned" and len(calls) == 4
     assert len(response.json()["proposal"]["result_previews"]) == 3
     summary = response.json()["proposal"]["model"]["input_summary"]
-    assert summary["input_sha256"] == input_digest(calls[-1])
+    assert summary["input_sha256"] == input_digest(calls[-2])
     assert "input_messages" not in response.json()["proposal"]["model"]
     assert response.json()["proposal"]["parent_version"] == preview["proposal"]["version"]
     history = client.get(f"/api/templates/reviewed-excel/reviews/{preview['review_id']}").json()
     assert (
         len(history["versions"]) == len(preview["versions"]) + 1
         and history["versions"][-1]["model"]["input_summary"]["input_sha256"]
-        == input_digest(calls[-1])
+        == input_digest(calls[-2])
         and "input_messages" not in history["versions"][-1]["model"]
     )
     assert client.post("/api/templates/reviewed-excel/refine", data=form).status_code == 409
@@ -2392,6 +2432,8 @@ def test_initial_model_uses_current_account_without_file_consent_and_reports_cov
 
     def stub(messages, schema=None, max_tokens=None, **kwargs):
         calls.append(messages)
+        if messages[0]["content"].startswith("Independently audit"):
+            return LlmAssistResult(used_llm=True, data={"clear": [], "reason": "synthetic audit"})
         assert "candidates" in schema["properties"]
         return LlmAssistResult(
             used_llm=True,
@@ -2484,7 +2526,7 @@ def test_account_template_processing_uses_platform_and_ignores_old_consent_flags
         and auth["owner_user_id"] == 7
     )
     assert auth["source_sha256"] == hashlib.sha256(source).hexdigest()
-    assert send.call_count == 1
+    assert send.call_count == 2
     refined = client.post(
         "/api/templates/reviewed-excel/refine",
         data={
@@ -2501,7 +2543,7 @@ def test_account_template_processing_uses_platform_and_ignores_old_consent_flags
         refined.json()["proposal"]["model"]["authorization"]["scope"]
         == "this_document_bounded_cells_and_feedback"
     )
-    assert send.call_count == 2
+    assert send.call_count == 4
 
 
 @pytest.mark.parametrize("legacy_receipt", ["", "synthetic-incomplete-scopes"])
@@ -2586,7 +2628,7 @@ def test_existing_session_ignores_incomplete_notice_scope_and_publication_marker
     )
     assert response.status_code == 200, response.text
     assert response.json()["proposal"]["model"]["status"] == "returned"
-    send.assert_called_once()
+    assert send.call_count == 2
 
 
 @pytest.mark.parametrize("field", ["classification_id", "classification_version"])
@@ -2626,11 +2668,12 @@ def test_account_session_calls_classification_candidates_and_feedback_without_ex
         assert notice.current_model_session_id(8) == ""
         calls.append(kwargs["owner_id"])
         payload = json.loads(args[0][1]["content"])
-        data = (
-            {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
-            if "candidates" in args[1]["properties"]
-            else synthetic_document_answer(payload)
-        )
+        if args[0][0]["content"].startswith("Independently audit"):
+            data = {"clear": [], "reason": "synthetic audit"}
+        elif "candidates" in args[1]["properties"]:
+            data = {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
+        else:
+            data = synthetic_document_answer(payload)
         if "ranges" in payload:
             data["documents"] = [
                 {"ranges": [part], "reason": "synthetic separate document"}
@@ -2691,6 +2734,15 @@ def test_account_session_calls_classification_candidates_and_feedback_without_ex
     )
     slices = client.get(path + f"/auto-slices/{analyzed['version']}")
     assert slices.status_code == 200, slices.text
+    manifest = client.get(path + f"/auto-slices/{analyzed['version']}?manifest=true")
+    assert manifest.status_code == 200, manifest.text
+    assert [item["fragments"] for item in manifest.json()["slices"]] == [
+        item["fragments"] for item in slices.json()["slices"]
+    ]
+    assert all(
+        len(item["selection_id"]) == 64 and "sha256" not in item
+        for item in manifest.json()["slices"]
+    )
     assert slices.json()["slices"][0]["basis"] == "model_group"
     assert (
         slices.json()["slices"][0]["display_name"]
@@ -2717,7 +2769,7 @@ def test_account_session_calls_classification_candidates_and_feedback_without_ex
     assert result["selected_region"]["auto_slice_index"] == 0
     assert result["selected_region"]["fragments"]
     assert "notice_version" not in auth and "login_authorization" not in result["proposal"]["model"]
-    assert calls == [7] * (classification_calls + 1)
+    assert calls == [7] * (classification_calls + 2)
     derived_original = client.get(path + f"/auto-slices/{analyzed['version']}/0")
     assert derived_original.status_code == 200
     assert hashlib.sha256(derived_original.content).hexdigest() == result["sha256"]
@@ -2736,7 +2788,7 @@ def test_account_session_calls_classification_candidates_and_feedback_without_ex
         revised.json()["proposal"]["model"]["authorization"]["source_sha256"]
         == hashlib.sha256(source).hexdigest()
     )
-    assert calls == [7] * (classification_calls + 2)
+    assert calls == [7] * (classification_calls + 4)
 
 
 def test_model_input_spreads_across_sheets_and_reports_uncovered(monkeypatch):
@@ -2900,7 +2952,10 @@ def test_revocation_during_model_or_before_write_never_commits(review_store, mon
         "/api/templates/reviewed-excel/preview", files=upload, data={"expected_actor": "1:7"}
     ).json()
 
+    sent = []
+
     def revoke_model(*_args, **_kwargs):
+        sent.append(1)
         store.actor["manage"] = False
         return LlmAssistResult(
             used_llm=True, data={"candidates": [{"clear": [], "reason": "保留"} for _ in range(3)]}
@@ -2917,6 +2972,7 @@ def test_revocation_during_model_or_before_write_never_commits(review_store, mon
         "sample_authorized": "true",
     }
     assert client.post("/api/templates/reviewed-excel/refine", data=form).status_code == 403
+    assert len(sent) == 1  # No audit call after permission was revoked.
     history_url = f"/api/templates/reviewed-excel/reviews/{preview['review_id']}"
     assert len(client.get(history_url).json()["versions"]) == len(preview["versions"])
     store.actor["manage"] = True
@@ -4598,6 +4654,23 @@ def test_document_print_area_requires_explicit_mapping(area):
     assert inspect_workbook(body)["read_only_print_areas"][0]["value"] == area
 
 
+def test_concurrent_workbook_warnings_stay_with_their_source():
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.application.reviewed_excel_template import derive_document_workbook
+
+    original = _workbook_with_print_area("报价!$1:$19")
+    derived = derive_document_workbook(
+        original, [{"sheet": "报价", "range": "A1:A1"}], print_area_mode="selected"
+    )
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(inspect_workbook, [original, derived] * 8))
+    assert all(
+        bool(result["read_only_print_areas"]) == (index % 2 == 0)
+        for index, result in enumerate(results)
+    )
+
+
 def test_multi_area_maps_each_selected_fragment_without_expansion():
     from openpyxl.utils.cell import range_boundaries
 
@@ -4782,6 +4855,15 @@ def test_nine_batch_plan_is_fair_across_sheets_and_preserves_each_sheet_order():
             if cell["sheet"] == name and not cell.get("context_only")
         ]
         assert rows == sorted(rows)
+
+
+def test_classification_default_budget_handles_four_batches_without_repeated_pause(monkeypatch):
+    from app.application.reviewed_excel_classification import plan_semantic_batches
+
+    monkeypatch.delenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", raising=False)
+    batches, budget = plan_semantic_batches(inspect_workbook(_nine_batch_workbook()), neutral=True)
+    assert len(batches) >= 4
+    assert budget == 4
 
 
 @pytest.mark.parametrize("per_round", [3, 4])
@@ -6533,7 +6615,11 @@ def synthetic_candidate_result(*_args, **_kwargs):
         used_llm=True,
         provider="platform",
         model="mimo-v2.6-flash",
-        data={"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]},
+        data=(
+            {"clear": [], "reason": "synthetic audit"}
+            if _args and _args[0][0]["content"].startswith("Independently audit")
+            else {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
+        ),
     )
 
 
@@ -6585,7 +6671,7 @@ def test_refine_claim_releases_only_unsent_and_blocks_unknown_direct_replay(
     assert model.call_count == (2 if not_sent else 1)
 
 
-def test_preview_post_model_failure_keeps_claim_and_success_is_replayed(
+def test_preview_render_failure_records_answered_call_and_allows_regeneration(
     account_session_client, monkeypatch
 ):
     from unittest.mock import Mock
@@ -6615,7 +6701,7 @@ def test_preview_post_model_failure_keeps_claim_and_success_is_replayed(
     second = client.post(
         "/api/templates/reviewed-excel/preview", files={"file": ("synthetic.xlsx", body)}, data=form
     )
-    assert second.status_code == 409 and model.call_count == 1
+    assert second.status_code == 200 and model.call_count == 4
     # A separate document remains processable; a lost successful response reuses its stored result.
     other = {**form, "region_sheet": "第二"}
     saved = client.post(
@@ -6630,7 +6716,7 @@ def test_preview_post_model_failure_keeps_claim_and_success_is_replayed(
         data=other,
     )
     assert replay.status_code == 200, replay.text
-    assert replay.json()["review_id"] == saved.json()["review_id"] and model.call_count == 2
+    assert replay.json()["review_id"] == saved.json()["review_id"] and model.call_count == 6
 
 
 def test_document_review_has_three_model_candidates_and_unchanged_scoped_original(
@@ -6656,7 +6742,7 @@ def test_document_review_has_three_model_candidates_and_unchanged_scoped_origina
         files={"file": ("synthetic.xlsx", body)},
         data={**form, "region_sheet": "第二"},
     ).json()
-    assert first["review_id"] != second["review_id"] and model.call_count == 2
+    assert first["review_id"] != second["review_id"] and model.call_count == 4
     for response, sheet in [(first, form["region_sheet"]), (second, "第二")]:
         proposal = response["proposal"]
         assert proposal["model"]["status"] == "returned"
@@ -6796,14 +6882,14 @@ def test_saved_review_refinement_forks_immutable_version_and_replays_canonical_c
     child = response.json()
     assert child["review_id"] != parent_id and child["parent_review_id"] == parent_id
     assert child["parent_version"] == parent["proposal"]["version"]
-    assert concurrent[0].status_code == 409 and model.call_count == 1
+    assert all(item.status_code == 409 for item in concurrent) and model.call_count == 2
     replay = client.post("/api/templates/reviewed-excel/refine", data=payload)
     assert replay.status_code == 200, replay.text
     assert (
         replay.json()["review_id"] == child["review_id"]
         and replay.json()["proposal"] == child["proposal"]
     )
-    assert replay.json()["replayed"] and model.call_count == 1
+    assert replay.json()["replayed"] and model.call_count == 2
     child_history = client.get(f"/api/templates/reviewed-excel/reviews/{child['review_id']}").json()
     assert child_history["status"] == "template_review_ready" and not child_history["receipt"]
     assert child_history["selected_region"] == parent["selected_region"]
@@ -6848,7 +6934,7 @@ def test_saved_review_refinement_forks_immutable_version_and_replays_canonical_c
         403,
         404,
     }
-    assert model.call_count == 1
+    assert model.call_count == 2
 
 
 @pytest.mark.parametrize("not_sent", [False, True])
@@ -6946,7 +7032,7 @@ def test_saved_refinement_concurrent_initial_insert_elects_one_child_and_model_c
     ]
     successful = [reply.json() for reply in replies if reply.status_code == 200]
     assert successful and len({reply["review_id"] for reply in successful}) == 1
-    assert model.call_count == 1
+    assert model.call_count == 2
     with review_store.engine.connect() as db:
         assert (
             db.execute(
@@ -6954,6 +7040,34 @@ def test_saved_refinement_concurrent_initial_insert_elects_one_child_and_model_c
             ).scalar_one()
             == 2
         )
+
+
+def test_initial_model_can_clear_business_notes_without_clearing_formulas(monkeypatch):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_template import make_proposals, refine_proposal
+
+    cells = [
+        {"sheet": "出货", "cell": "A1", "value": "备注", "kind": "review"},
+        {"sheet": "出货", "cell": "B1", "value": "客户本次特殊要求", "kind": "review"},
+        {"sheet": "出货", "cell": "C1", "value": "=1+1", "kind": "formula"},
+    ]
+    review = {"sha256": "a" * 64, "sheets": ["出货"], "cells": cells, "sheet_overview": []}
+    plan = {
+        "clear": [{"sheet": "出货", "cell": "B1"}, {"sheet": "出货", "cell": "C1"}],
+        "reason": "清理实例",
+    }
+
+    def model(messages, *_args, **_kwargs):
+        if messages[0]["content"].startswith("Independently audit"):
+            return LlmAssistResult(used_llm=True, data={"clear": [], "reason": "复核"})
+        return LlmAssistResult(used_llm=True, data={"candidates": [plan, plan, plan]})
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
+    result = refine_proposal(
+        review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
+    )
+    assert result["candidates"][0]["clear"] == [{"sheet": "出货", "cell": "B1"}]
+    assert result["protected"] == [{"sheet": "出货", "cell": "C1"}]
 
 
 def test_sparse_model_plan_asks_the_model_once_about_instance_cells(monkeypatch):
@@ -6973,6 +7087,8 @@ def test_sparse_model_plan_asks_the_model_once_about_instance_cells(monkeypatch)
 
     def fake(messages, *_args, **_kwargs):
         sent.append(messages)
+        if messages[0]["content"].startswith("Independently audit"):
+            return LlmAssistResult(used_llm=True, data={"clear": [], "reason": "synthetic audit"})
         plan = sparse if len(sent) == 1 else full
         return LlmAssistResult(used_llm=True, data={"candidates": [plan, plan, plan]})
 
@@ -6987,7 +7103,7 @@ def test_sparse_model_plan_asks_the_model_once_about_instance_cells(monkeypatch)
     sent.clear()
     full = sparse
     kept = refine_proposal(review, version, "生成候选", owner_id=7, initial=True)
-    assert kept["candidates"][0]["clear"] == sparse["clear"] and len(sent) == 2
+    assert kept["candidates"][0]["clear"] == sparse["clear"] and len(sent) == 3
 
 
 def _unknown_outcome_run(review_store, monkeypatch):
@@ -7135,3 +7251,159 @@ def test_unknown_preview_claim_locks_until_the_user_abandons_it(review_store, mo
     )
     assert abandoned.status_code == 200, abandoned.text
     assert send().status_code == 503 and len(keys) == 2 and keys[0] != keys[1]
+
+
+@pytest.mark.parametrize(
+    "second_status, expected",
+    [("not_sent", "retryable"), ("unknown", "unknown"), ("sent", "unknown")],
+)
+def test_candidate_batch_claim_preserves_completed_work(review_store, second_status, expected):
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.elt.service_support import dump_json, load_json
+    from app.application.reviewed_excel_classification_store import _classification_run
+    from app.application.reviewed_excel_review_store import _update_candidate_claim
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    item = review_store.client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("synthetic.xlsx", sample())},
+    ).json()["files"][0]
+    with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
+        run = _classification_run(db, item["classification_id"], 1, 7)
+        state = load_json(run.draft_json, {})
+        state["template_candidate_requests"] = {
+            "key": {
+                "state": "sent",
+                "call_id": "call",
+                "batches": {
+                    "0": {"status": "complete", "result": {"synthetic": True}},
+                    "1": {"status": second_status},
+                },
+            }
+        }
+        run.draft_json = dump_json(state)
+        db.commit()
+        _update_candidate_claim(db, item["classification_id"], "key", 1, 7, unknown=False)
+        db.expire_all()
+        saved = load_json(_classification_run(db, item["classification_id"], 1, 7).draft_json, {})[
+            "template_candidate_requests"
+        ]["key"]
+        assert saved["state"] == expected and saved["batches"]["0"]["result"] == {"synthetic": True}
+
+
+@pytest.mark.parametrize("recover_immediately", [True, False])
+def test_preview_retries_only_unsent_batches_after_checkpoint(
+    account_session_client, review_store, monkeypatch, recover_immediately
+):
+    import time
+
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_audit import ModelRequestNotSent, current_call_id
+
+    client, _, _ = account_session_client
+    workbook = Workbook()
+    for row in range(1, 182):
+        workbook.active.cell(row, 1, f"合成商品{row}")
+    output = BytesIO()
+    workbook.save(output)
+    workbook.close()
+    body = output.getvalue()
+    form = candidate_form(client, body)
+    keys = []
+    failures_remaining = [1 if recover_immediately else 3]
+
+    def model(messages, *_args, **_kwargs):
+        key = current_call_id()
+        keys.append(key)
+        if "-b2-" in key and failures_remaining[0]:
+            failures_remaining[0] -= 1
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                with review_store.engine.connect() as db:
+                    raw = db.execute(
+                        text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                        {"id": form["classification_id"]},
+                    ).scalar_one()
+                claims = json.loads(raw).get("template_candidate_requests", {})
+                if any(
+                    claim.get("batches", {}).get("0", {}).get("status") == "complete"
+                    for claim in claims.values()
+                ):
+                    break
+                time.sleep(0.02)
+            else:
+                raise AssertionError("first batch was not checkpointed")
+            raise ModelRequestNotSent("连接未建立")
+        cells = json.loads(messages[1]["content"])["cells"]
+        clear = [{"sheet": c["sheet"], "cell": c["cell"]} for c in cells]
+        return LlmAssistResult(
+            used_llm=True,
+            data={"candidates": [{"clear": clear, "reason": "实例"} for _ in range(3)]},
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
+
+    def send():
+        return client.post(
+            "/api/templates/reviewed-excel/preview",
+            data=form,
+            files={"file": ("synthetic.xlsx", body)},
+        )
+
+    first = send()
+    if recover_immediately:
+        assert first.status_code == 200, first.text
+        assert len(keys) == 3 and sum("-b1-" in key for key in keys) == 1
+        assert any("-r2-b2-" in key for key in keys)
+        return
+    assert first.status_code == 503, first.text
+    with review_store.engine.connect() as db:
+        state = json.loads(
+            db.execute(
+                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                {"id": form["classification_id"]},
+            ).scalar_one()
+        )
+    claim = next(iter(state["template_candidate_requests"].values()))
+    assert claim["state"] == "retryable" and claim["batches"]["0"]["status"] == "complete"
+    keys.clear()
+    second = send()
+    assert second.status_code == 200, second.text
+    assert len(keys) == 1 and "-r4-b2-" in keys[0]
+
+
+def test_preview_retries_when_all_first_batches_were_not_sent(account_session_client, monkeypatch):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_audit import ModelRequestNotSent, current_call_id
+
+    client, _, _ = account_session_client
+    workbook = Workbook()
+    for row in range(1, 182):
+        workbook.active.cell(row, 1, f"合成商品{row}")
+    output = BytesIO()
+    workbook.save(output)
+    workbook.close()
+    body = output.getvalue()
+    form = candidate_form(client, body)
+    keys = []
+
+    def model(messages, *_args, **_kwargs):
+        key = current_call_id()
+        keys.append(key)
+        if "-r1-" in key:
+            raise ModelRequestNotSent("连接未建立")
+        cells = json.loads(messages[1]["content"])["cells"]
+        clear = [{"sheet": c["sheet"], "cell": c["cell"]} for c in cells]
+        return LlmAssistResult(
+            used_llm=True,
+            data={"candidates": [{"clear": clear, "reason": "实例"} for _ in range(3)]},
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
+    result = client.post(
+        "/api/templates/reviewed-excel/preview", data=form, files={"file": ("synthetic.xlsx", body)}
+    )
+    assert result.status_code == 200, result.text
+    assert any("-r1-" in key for key in keys) and any("-r2-" in key for key in keys)

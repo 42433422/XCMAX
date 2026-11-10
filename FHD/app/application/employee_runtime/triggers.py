@@ -68,6 +68,7 @@ def _make_handler(employee_id: str, binding: TriggerBinding):
         try:
             from app.application.employee_runtime.agent import EmployeeAgent
             from app.application.employee_runtime.metrics import record_employee_trigger
+            from app.infrastructure.workspace import workspace_root
 
             record_employee_trigger(employee_id, getattr(event, "event_type", ""))
             result = await asyncio.to_thread(
@@ -75,7 +76,7 @@ def _make_handler(employee_id: str, binding: TriggerBinding):
                 task,
                 payload,
                 user_id=int(payload.get("user_id") or 0),
-                workspace_root=payload.get("workspace_root"),
+                workspace_root=str(workspace_root()),
                 session_id=payload.get("session_id"),
             )
             logger.info(

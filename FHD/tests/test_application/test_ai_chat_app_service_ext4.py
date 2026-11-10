@@ -1,11 +1,7 @@
-"""Tests for app.application.ai_chat_app_service — uncovered branches (ext4).
+"""Active Excel helpers and unified model-plan contracts; no retired dispatch brain.
 
-Focus: _customer_hint_from_preview_grid, _default_purchase_unit_for_import,
-_try_structured_reload_records, _resolve_unit_price_column, _dispatch_workflow_tool,
-_handle_confirmation_flow, _build_response, _handle_tool_call, _execute_pro_mode_tools,
-_execute_normal_mode_tools, _execute_products_query, _execute_customers_query,
-_execute_customers_intent, _build_order_text_from_products, _try_merge_split_model,
-_execute_shipment_generate, _execute_shipments_query, _normal_slot_dispatch_chat_overlay.
+Removed internal source classifiers are covered through process_chat, model admission,
+registered authenticated tools and the durable approval/session regression suites.
 """
 
 from __future__ import annotations
@@ -18,8 +14,6 @@ from app.application.ai_chat_app_service import AIChatApplicationService
 from tests.test_application.ai_chat_test_helpers import (
     _make_svc as _make_service,
 )
-
-# ========================= _customer_hint_from_preview_grid =================
 
 
 class TestCustomerHintFromPreviewGrid:
@@ -61,9 +55,6 @@ class TestCustomerHintFromPreviewGrid:
         assert result == ""
 
 
-# ========================= _default_purchase_unit_for_import ================
-
-
 class TestDefaultPurchaseUnitForImport:
     def test_with_unit_name_in_context(self):
         service = _make_service()
@@ -88,9 +79,6 @@ class TestDefaultPurchaseUnitForImport:
         assert result == ""
 
 
-# ========================= _try_structured_reload_records ===================
-
-
 class TestTryStructuredReloadRecords:
     def test_no_excel_analysis(self):
         service = _make_service()
@@ -107,9 +95,6 @@ class TestTryStructuredReloadRecords:
         excel_analysis = {"file_path": "/nonexistent.xlsx"}
         result = service._try_structured_reload_records(excel_analysis, {})
         assert result is None
-
-
-# ========================= _resolve_unit_price_column ======================
 
 
 class TestResolveUnitPriceColumn:
@@ -172,454 +157,140 @@ class TestResolveUnitPriceColumn:
         assert col == "单价"
 
 
-# ========================= _dispatch_workflow_tool ==========================
+# Migration map: old normal/pro dispatch and response overlays now use one
+# model-authored graph. Real reads below cover products/customers/shipment_records;
+# signed write/readback isolation is in test_owned_business_tool_isolation;
+# persisted approval consumption/cancel/resume is in test_approval_session_renewal.
+# Regex order assembly/model splitting is not a second planner: the complete
+# structured shipment parameters must survive model admission unchanged.
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-class TestDispatchWorkflowTool:
-    def test_dispatch_products_tool(self):
-        service = _make_service()
-        mock_result = {"success": True, "data": []}
-        with patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value=mock_result,
-        ):
-            result = service._dispatch_workflow_tool("products", "query", {"keyword": "涂料"})
-        assert result["success"] is True
+def _model_plan(payload, message="查询产品", source="normal"):
+    import json
 
-    def test_dispatch_runtime_error(self):
-        service = _make_service()
-        with patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            side_effect=RuntimeError("fail"),
-        ):
-            result = service._dispatch_workflow_tool("products", "query", {})
-        assert result["success"] is False
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.application.workflow_registry_app import get_workflow_tool_registry
+
+    completion = Mock(return_value={"choices": [{"message": {"content": json.dumps(payload)}}]})
+    planner = LLMWorkflowPlanner(
+        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
+    )
+    plan = planner.plan("test", message, get_workflow_tool_registry(), {"source": source})
+    completion.assert_called_once()
+    return plan
 
 
-# ========================= _handle_confirmation_flow ========================
-
-
-class TestHandleConfirmationFlow:
-    def test_confirmation_with_approved(self):
-        service = _make_service()
-        service.ai_service = Mock()
-        service.ai_service.set_pending_confirmation = Mock()
-        context = {
-            "saved_name": "test.xlsx",
-            "unit_name_guess": "公司A",
-            "suggested_use": "unit_products_db",
-        }
-        service._handle_confirmation_flow("u1", "确认", context)
-        service.ai_service.set_pending_confirmation.assert_called_once()
-
-    def test_confirmation_rejected(self):
-        service = _make_service()
-        service.ai_service = Mock()
-        service.ai_service.set_pending_confirmation = Mock()
-        context = {"saved_name": "test.xlsx"}
-        service._handle_confirmation_flow("u1", "取消", context)
-        service.ai_service.set_pending_confirmation.assert_not_called()
-
-    def test_no_file_context(self):
-        service = _make_service()
-        service.ai_service = Mock()
-        service._handle_confirmation_flow("u1", "确认", None)
-        service.ai_service.set_pending_confirmation.assert_not_called()
-
-
-# ========================= _build_response =================================
-
-
-class TestBuildResponse:
-    def test_build_with_text_response(self):
-        service = _make_service()
-        ai_result = {"text": "你好", "action": "reply", "data": {}}
-        result = service._build_response(ai_result, "normal")
-        assert result["success"] is True
-        assert "response" in result
-
-    def test_build_with_tool_call(self):
-        service = _make_service()
-        ai_result = {
-            "text": "查询产品",
-            "action": "tool_call",
-            "data": {"tool_key": "products", "params": {}},
-        }
-        with patch.object(
-            service,
-            "_handle_tool_call",
-            return_value={"success": True, "response": "ok", "data": {}},
-        ) as mock:
-            result = service._build_response(ai_result, "pro_default")
-        mock.assert_called_once()
-
-    def test_build_with_followup(self):
-        service = _make_service()
-        ai_result = {
-            "text": "需要更多信息",
-            "action": "followup",
-            "data": {"question": "哪个单位？"},
-        }
-        result = service._build_response(ai_result, "normal")
-        assert result["success"] is True
-        assert "followup" in result
-
-
-# ========================= _execute_products_query ==========================
-
-
-class TestExecuteProductsQuery:
-    def test_with_keyword(self):
-        service = _make_service()
-        mock_svc = Mock()
-        mock_svc.get_products.return_value = {"success": True, "data": [{"name": "涂料A"}]}
-        with patch("app.bootstrap.get_products_service", return_value=mock_svc):
-            result = service._execute_products_query(
-                {"success": True, "message": "", "data": {}},
-                {"keyword": "涂料"},
-                {},
-            )
-        assert result["success"] is True
-
-    def test_with_model_number(self):
-        service = _make_service()
-        mock_svc = Mock()
-        mock_svc.get_products.return_value = {"success": True, "data": []}
-        with patch("app.bootstrap.get_products_service", return_value=mock_svc):
-            result = service._execute_products_query(
-                {"success": True, "message": "", "data": {}},
-                {"model_number": "5003A"},
-                {},
-            )
-        assert result["success"] is True
-
-
-# ========================= _execute_customers_query =========================
-
-
-class TestExecuteCustomersQuery:
-    def test_with_customers(self):
-        service = _make_service()
-        mock_svc = Mock()
-        mock_svc.get_all.return_value = {"success": True, "data": [{"unit_name": "公司A"}]}
-        with patch("app.bootstrap.get_customer_app_service", return_value=mock_svc):
-            result = service._execute_customers_query(
-                {"success": True, "message": "", "data": {}},
-            )
-        assert result["success"] is True
-
-    def test_no_customers(self):
-        service = _make_service()
-        mock_svc = Mock()
-        mock_svc.get_all.return_value = {"success": True, "data": []}
-        with patch("app.bootstrap.get_customer_app_service", return_value=mock_svc):
-            result = service._execute_customers_query(
-                {"success": True, "message": "", "data": {}},
-            )
-        assert result["success"] is True
-
-
-# ========================= _execute_customers_intent ========================
-
-
-class TestExecuteCustomersIntent:
-    def test_search_intent(self):
-        service = _make_service()
-        mock_svc = Mock()
-        mock_svc.get_all.return_value = {"success": True, "data": []}
-        with patch("app.bootstrap.get_customer_app_service", return_value=mock_svc):
-            result = service._execute_customers_intent(
-                response_data={"success": True, "message": "", "data": {}},
-                slots={},
-                parsed_params={},
-                original_message="查询客户",
-            )
-        assert result["success"] is True
-
-    def test_add_intent_no_unit_name(self):
-        service = _make_service()
-        result = service._execute_customers_intent(
-            response_data={"success": True, "message": "", "data": {}},
-            slots={},
-            parsed_params={},
-            original_message="添加客户",
-        )
-        assert "哪个单位" in result["response"]
-
-    def test_add_intent_with_unit_name(self):
-        service = _make_service()
-        with patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "created": True},
-        ):
-            result = service._execute_customers_intent(
-                response_data={"success": True, "message": "", "data": {}},
-                slots={"unit_name": "公司A"},
-                parsed_params={},
-                original_message="添加单位 公司A",
-            )
-        assert result["success"] is True
-
-
-# ========================= _build_order_text_from_products =================
-
-
-class TestBuildOrderTextFromProducts:
-    def test_with_products(self):
-        service = _make_service()
-        products = [
-            {"model": "5003A", "quantity_tins": 10, "spec": 25},
-        ]
-        result = service._build_order_text_from_products("公司A", products)
-        assert "公司A" in result
-        assert "5003A" in result
-
-    def test_empty_products(self):
-        service = _make_service()
-        result = service._build_order_text_from_products("公司A", [])
-        assert result == ""
-
-    def test_no_unit_name(self):
-        service = _make_service()
-        products = [{"model": "5003A"}]
-        result = service._build_order_text_from_products("", products)
-        assert result == ""
-
-
-# ========================= _try_merge_split_model ==========================
-
-
-class TestTryMergeSplitModel:
-    def test_merge_with_spec_pattern(self):
-        service = _make_service()
-        result = service._try_merge_split_model("5003A 规格 25", {"quantity_tins": 10})
-        assert "5003A" in result
-        assert "25" in result
-
-    def test_merge_with_qty_spec_pattern(self):
-        service = _make_service()
-        result = service._try_merge_split_model("10桶 5003A 规格 25", {"quantity_tins": 10})
-        assert "5003A" in result
-
-    def test_no_match(self):
-        service = _make_service()
-        result = service._try_merge_split_model("just some text", {"quantity_tins": 10})
-        assert result == ""
-
-
-# ========================= _execute_shipment_generate ======================
-
-
-class TestExecuteShipmentGenerate:
-    def test_with_order_text(self):
-        service = _make_service()
-        mock_svc = Mock()
-        mock_svc.generate_shipment_document.return_value = {"success": True, "doc_name": "test.pdf"}
-        with (
-            patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc),
-            patch(
-                "app.application.facades.tools_facade._parse_order_text",
-                return_value={"success": True, "unit_name": "公司A", "products": []},
-            ),
-        ):
-            result = service._execute_shipment_generate(
-                {"success": True, "message": "", "data": {}},
-                {"order_text": "给公司A发10桶涂料"},
-                {"text": "给公司A发10桶涂料"},
-            )
-        assert result["success"] is True
-
-    def test_parse_failure(self):
-        service = _make_service()
-        with patch(
-            "app.application.facades.tools_facade._parse_order_text",
-            return_value={"success": False, "message": "解析失败"},
-        ):
-            result = service._execute_shipment_generate(
-                {"success": True, "message": "", "data": {}},
-                {"order_text": "无效文本"},
-                {"text": "无效文本"},
-            )
-        assert "解析失败" in result.get("response", "") or result["success"] is True
-
-
-# ========================= _execute_shipments_query ========================
-
-
-class TestExecuteShipmentsQuery:
-    def test_with_orders(self):
-        service = _make_service()
-        mock_svc = Mock()
-        mock_svc.get_orders.return_value = [
+@pytest.mark.parametrize("source", ["normal", "pro", None])
+@pytest.mark.parametrize(
+    "tool,action,params",
+    [
+        ("products", "query", {"keyword": "涂料"}),
+        ("products", "query", {"model_number": "5003A"}),
+        ("customers", "query", {"keyword": "公司A"}),
+        ("shipment_records", "query", {"unit_name": "公司A"}),
+        ("customers", "create", {"unit_name": "公司A"}),
+        (
+            "shipment_orders",
+            "generate",
             {
-                "order_number": "ORD001",
                 "unit_name": "公司A",
-                "date": "2024-01-01",
-                "total_amount": 1000,
-                "status": "已完成",
-            }
-        ]
-        with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
-            result = service._execute_shipments_query(
-                {"success": True, "message": "", "data": {}},
+                "products": [{"model_number": "5003A", "quantity": 10, "specification": "20kg"}],
+            },
+        ),
+    ],
+)
+def test_model_structured_tools_use_same_registered_plan_for_every_source(
+    source, tool, action, params
+):
+    from app.application.workflow.workflow_types import plan_fingerprint
+
+    payload = {
+        "intent": "用户指定业务",
+        "nodes": [{"node_id": "business", "tool_id": tool, "action": action, "params": params}],
+    }
+    plan = _model_plan(payload, source=source)
+    assert not plan.metadata.get("planning_rejected"), plan.metadata
+    assert [(n.tool_id, n.action, n.params) for n in plan.nodes] == [(tool, action, params)]
+    before = plan_fingerprint(plan)
+    # Changing caller-owned model data cannot mutate the admitted/frozen plan.
+    payload["nodes"][0]["params"] = {"unexpected": True}
+    assert plan_fingerprint(plan) == before
+    if action in {"create", "generate"}:
+        from app.application.workflow.risk_gate import HybridRiskGate
+
+        decision = HybridRiskGate().evaluate(plan, {})
+        assert decision.requires_confirmation or not decision.allowed
+
+
+@pytest.mark.parametrize(
+    "tool,action,params",
+    [
+        ("unknown_tool", "execute", {}),
+        ("products", "unknown_action", {}),
+        ("customers", "create", {}),
+        ("shipment_orders", "generate", {"unit_name": "公司A"}),
+    ],
+)
+def test_unknown_or_incomplete_business_plan_cannot_dispatch(tool, action, params):
+    plan = _model_plan(
+        {"intent": "业务", "nodes": [{"tool_id": tool, "action": action, "params": params}]}
+    )
+    if tool == "unknown_tool" or action == "unknown_action":
+        assert plan.metadata.get("planning_rejected") is True
+        assert all(node.tool_id == "clarify" for node in plan.nodes)
+    else:
+        assert plan.nodes[0].tool_id == "clarify"
+        assert plan.nodes[0].action == "ask"
+        assert plan.nodes[1].params == params
+        assert plan.nodes[1].tool_id == tool
+
+
+@pytest.mark.parametrize(
+    "tool,permission",
+    [
+        ("products", "product.view"),
+        ("customers", "customer.view"),
+        ("shipment_records", "shipment.view"),
+    ],
+)
+@pytest.mark.parametrize("has_rows", [True, False])
+def test_current_business_queries_read_real_rows_and_require_permission(
+    trusted_actor, monkeypatch, tool, permission, has_rows
+):
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.db.models import Product, PurchaseUnit
+    from app.db.models.shipment import ShipmentRecord
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(permissions=[permission])
+    denied = trusted_actor(role="restricted", permissions=[])
+    if has_rows:
+        with tenant_scope(7), actor.factory.begin() as db:
+            db.add(Product(tenant_id=7, name="涂料", model_number="5003A"))
+            db.add(PurchaseUnit(tenant_id=7, unit_name="公司A"))
+            db.add(
+                ShipmentRecord(
+                    tenant_id=7,
+                    purchase_unit="公司A",
+                    product_name="涂料",
+                    quantity_tins=1,
+                    quantity_kg=0,
+                )
             )
-        assert result["success"] is True
-        assert "ORD001" in result["response"]
-
-    def test_no_orders(self):
-        service = _make_service()
-        mock_svc = Mock()
-        mock_svc.get_orders.return_value = []
-        with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
-            result = service._execute_shipments_query(
-                {"success": True, "message": "", "data": {}},
-            )
-        assert result["success"] is True
-        assert "暂无" in result["response"]
-
-
-# ========================= _normal_slot_dispatch_chat_overlay ===============
-
-
-class TestNormalSlotDispatchChatOverlay:
-    def test_with_tool_call(self):
-        # _normal_slot_dispatch_chat_overlay is a @staticmethod taking run_result
-        mock_result = Mock()
-        item = Mock()
-        item.success = True
-        item.tool_id = "normal_slot_dispatch"
-        item.output = {"success": True, "autoAction": {"type": "navigate"}, "task": "do_something"}
-        mock_result.node_results = [item]
-
-        result = AIChatApplicationService._normal_slot_dispatch_chat_overlay(mock_result)
-        assert isinstance(result, dict)
-        assert "task" in result or "autoAction" in result
-
-    def test_with_no_matching_node(self):
-        mock_result = Mock()
-        item = Mock()
-        item.success = True
-        item.tool_id = "other_tool"
-        item.output = {"success": True}
-        mock_result.node_results = [item]
-
-        result = AIChatApplicationService._normal_slot_dispatch_chat_overlay(mock_result)
-        assert result == {}
-
-    def test_with_reply_action(self):
-        mock_result = Mock()
-        item = Mock()
-        item.success = True
-        item.tool_id = "normal_slot_dispatch"
-        item.output = {"success": True, "response": "你好"}
-        mock_result.node_results = [item]
-
-        result = AIChatApplicationService._normal_slot_dispatch_chat_overlay(mock_result)
-        assert isinstance(result, dict)
-
-
-# ========================= _execute_pro_mode_tools ==========================
-
-
-class TestExecuteProModeTools:
-    def test_products_tool(self):
-        service = _make_service()
-        mock_svc = Mock()
-        mock_svc.get_products.return_value = {"success": True, "data": []}
-        with patch("app.bootstrap.get_products_service", return_value=mock_svc):
-            result = service._execute_pro_mode_tools(
-                {"success": True, "message": "", "data": {}},
-                "products",
-                {"keyword": "涂料"},
-                {},
-                {"text": "查询涂料"},
-            )
-        assert result["success"] is True
-
-    def test_unknown_tool(self):
-        service = _make_service()
-        result = service._execute_pro_mode_tools(
-            {"success": True, "message": "", "data": {}},
-            "unknown_tool",
-            {},
-            {},
-            {"text": "test"},
-        )
-        assert "toolCall" in result
-
-
-# ========================= _execute_normal_mode_tools =======================
-
-
-class TestExecuteNormalModeTools:
-    def test_shipment_generate(self):
-        service = _make_service()
-        with patch.object(
-            service,
-            "_execute_shipment_generate",
-            return_value={"success": True, "response": "ok", "data": {}},
-        ):
-            result = service._execute_normal_mode_tools(
-                {"success": True, "message": "", "data": {}},
-                "shipment_generate",
-                {},
-                {"text": "发货"},
-                {},
-            )
-        assert result["success"] is True
-
-    def test_unknown_tool(self):
-        service = _make_service()
-        result = service._execute_normal_mode_tools(
-            {"success": True, "message": "", "data": {}},
-            "other_tool",
-            {},
-            {"text": "test"},
-            {},
-        )
-        assert "toolCall" in result
-
-
-# ========================= _handle_tool_call ================================
-
-
-class TestHandleToolCall:
-    def test_pro_mode_dispatch(self):
-        service = _make_service()
-        with patch.object(
-            service,
-            "_execute_pro_mode_tools",
-            return_value={"success": True, "response": "ok", "data": {}},
-        ) as mock:
-            result = service._handle_tool_call(
-                {"success": True, "message": "", "data": {}},
-                {"text": "查询"},
-                {"tool_key": "products", "params": {}},
-                "pro",
-            )
-        mock.assert_called_once()
-
-    def test_normal_mode_dispatch(self):
-        service = _make_service()
-        with patch.object(
-            service,
-            "_execute_normal_mode_tools",
-            return_value={"success": True, "response": "ok", "data": {}},
-        ) as mock:
-            result = service._handle_tool_call(
-                {"success": True, "message": "", "data": {}},
-                {"text": "查询"},
-                {"tool_key": "products", "params": {}},
-                "normal",
-            )
-        mock.assert_called_once()
-
-    def test_no_tool_key(self):
-        service = _make_service()
-        result = service._handle_tool_call(
-            {"success": True, "message": "", "data": {}},
-            {"text": "查询"},
-            {"data": {}},
-            "normal",
-        )
-        assert result["success"] is True
+    params = (
+        {"keyword": "涂料"}
+        if tool == "products"
+        else {"unit_name": "公司A"}
+        if tool == "shipment_records"
+        else {}
+    )
+    step = AgentStep(node_id="read", tool_id=tool, action="query", params=params)
+    result = AgentToolExecutor().execute(step, runtime_context=actor.context)
+    assert result["success"] is True, result
+    assert bool(result["data"]) is has_rows
+    rejected = AgentToolExecutor().execute(step, runtime_context=denied.context)
+    assert rejected["success"] is False
+    assert rejected["error_code"] == "tool_permission_denied"

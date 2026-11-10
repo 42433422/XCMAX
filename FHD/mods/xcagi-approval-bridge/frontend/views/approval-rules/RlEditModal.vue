@@ -1,6 +1,5 @@
 <script setup>
 import Modal from '@/components/Modal.vue'
-import { defineProps } from 'vue'
 
 // 拆分自 ApprovalRulesView.vue 模板（原第 108–130 行）；模板逐字迁移，行为不变。
 const props = defineProps({ tm: { type: Object, required: true } })

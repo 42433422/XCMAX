@@ -99,6 +99,68 @@ def test_dataset_query_route_executes_dataset_rag_tool_through_agent(
     assert "tool.completed" in {event.event_type for event in run.events}
 
 
+def test_identical_dataset_queries_read_fresh_results(tmp_path, monkeypatch, local_tools):
+    repo = InMemoryAgentRunRepository()
+    _configure_billing(monkeypatch, tmp_path)
+    service = MagicMock()
+    service.answer.side_effect = [
+        {"success": True, "answer": "first", "chunks": [], "citations": []},
+        {"success": True, "answer": "updated", "chunks": [], "citations": []},
+    ]
+    with (
+        _patch_agent_repo(repo),
+        patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+            return_value=service,
+        ),
+    ):
+        client = _client()
+        args = {
+            "json": {"query": "same question", "tenant_id": "tenant-a"},
+            "headers": _dataset_headers(),
+        }
+        first = client.post("/api/knowledge/v1/datasets/platform-docs/query", **args).json()
+        second = client.post("/api/knowledge/v1/datasets/platform-docs/query", **args).json()
+    assert (first["answer"], second["answer"]) == ("first", "updated")
+    assert first["run_id"] != second["run_id"]
+    assert service.answer.call_count == 2
+
+
+def test_rebuild_explicit_idempotency_key_replays_and_rejects_changed_input(
+    tmp_path, monkeypatch, local_tools
+):
+    from app.application.agent_orchestrator.tool_permission import (
+        clear_idempotent_replay_for_tests,
+        drop_process_idempotency_memory,
+    )
+
+    repo = InMemoryAgentRunRepository()
+    _configure_billing(monkeypatch, tmp_path)
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "claims.sqlite"))
+    clear_idempotent_replay_for_tests()
+    service = MagicMock()
+    _configure_service_for_action(service, "rebuild_index")
+    headers = {**_dataset_headers(), "Idempotency-Key": "same-attempt"}
+    with (
+        _patch_agent_repo(repo),
+        patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+            return_value=service,
+        ),
+    ):
+        client = _client()
+        path = "/api/knowledge/v1/datasets/platform-docs/index/rebuild"
+        first = client.post(path, json={"background": True}, headers=headers)
+        drop_process_idempotency_memory()
+        repeat = client.post(path, json={"background": True}, headers=headers)
+        conflict = client.post(path, json={"background": True, "max_attempts": 2}, headers=headers)
+    assert first.status_code == repeat.status_code == 200
+    assert first.json()["job"]["job_id"] == repeat.json()["job"]["job_id"]
+    assert conflict.status_code == 409
+    assert conflict.json()["error_code"] == "idempotency_conflict"
+    assert service.start_rebuild_index.call_count == 1
+
+
 def _configure_service_for_action(service: MagicMock, action: str) -> None:
     if action == "ingest_document":
         service.ingest_document.return_value = {

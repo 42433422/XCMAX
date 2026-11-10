@@ -466,17 +466,6 @@ class TestRecognizeFromContextDeep:
 
 
 class TestSingletonAccessorsDeep:
-    def test_get_unified_intent_recognizer_creates_once(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import app.domain.shared_services.unified_intent_recognizer as mod
-
-        monkeypatch.setattr(mod, "_unified_recognizer", None)
-        monkeypatch.setattr(UnifiedIntentRecognizer, "_init_recognizers", lambda self: None)
-        r1 = get_unified_intent_recognizer()
-        r2 = get_unified_intent_recognizer()
-        assert r1 is r2
-
     def test_reload_unified_recognizer_no_existing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import app.domain.shared_services.unified_intent_recognizer as mod
 

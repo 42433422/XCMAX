@@ -4,87 +4,14 @@ from app.application.workflow.clarification_node import build_clarify_node
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 
-def test_stock_in_asks_warehouse_name_then_requires_approval():
-    from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.services.tools_execution.registry import get_workflow_tool_registry
-
-    planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
-    plan = planner._fallback_plan("inbound", "产品 A100 入库 50 件", get_workflow_tool_registry())
-    orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
-    run = orchestrator.start_run_from_plan(user_id="owner", message="入库", plan=plan)
-    assert run.status == "waiting_user"
-    assert run.final_output["clarification"]["fields"] == [
-        {"key": "warehouse_name", "label": "入库仓库名称", "type": "string"}
-    ]
-    assert run.tool_calls == []
-    orchestrator.stage_clarification_answer(
-        run.run_id,
-        step_id=run.steps[0].step_id,
-        parameters={"warehouse_name": "主仓库"},
-        requested_by="owner",
-    )
-    continued = orchestrator.execute_dispatched_run(run.run_id)
-    assert continued.status == "waiting_user"
-    assert continued.steps[-1].status == "waiting_user"
-    assert continued.steps[-1].params == {
-        "model_number": "A100",
-        "quantity": 50,
-        "warehouse_name": "主仓库",
-    }
-    assert continued.tool_calls == []
-
-
-def test_quote_missing_price_preserves_quantity_and_requires_approval():
-    from copy import deepcopy
-
-    import pytest
-
-    from app.application.agent_orchestrator.clarification import ClarificationAnswerError
-    from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.services.tools_execution.registry import get_workflow_tool_registry
-
-    planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
-    plan = planner._fallback_plan(
-        "quote-input", "给客户甲的产品A100报个价，数量2", get_workflow_tool_registry()
-    )
-    orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
-    run = orchestrator.start_run_from_plan(user_id="owner", message="报价", plan=plan)
-    assert run.status == "waiting_user"
-    assert run.final_output["clarification"]["fields"] == [
-        {"key": "items.0.unit_price", "label": "A100 · 单价", "type": "number"}
-    ]
-    before = deepcopy(run.to_dict())
-    with pytest.raises(ClarificationAnswerError):
-        apply_clarification_answer(
-            run,
-            step_id=run.steps[0].step_id,
-            parameters={"items.0.quantity": 99, "items.0.unit_price": 50},
-        )
-    assert run.to_dict() == before
-    with pytest.raises(ClarificationAnswerError):
-        apply_clarification_answer(
-            run, step_id=run.steps[0].step_id, parameters={"items.0.unit_price": -1}
-        )
-    assert run.to_dict() == before
-    orchestrator.stage_clarification_answer(
-        run.run_id,
-        step_id=run.steps[0].step_id,
-        parameters={"items.0.unit_price": 50},
-        requested_by="owner",
-    )
-    continued = orchestrator.execute_dispatched_run(run.run_id)
-    assert continued.status == "waiting_user"
-    assert continued.tool_calls == []
-    assert continued.steps[-1].params["items"] == [
-        {"model_number": "A100", "quantity": 2, "unit_price": 50}
-    ]
-
-
 def test_named_quote_answer_stops_at_write_approval():
     params = {"items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}]}
     question = build_clarify_node(
         "请提供客户名称",
-        ambient={"target_node_id": "quote", "clarification": {"reason": "missing_required"}},
+        ambient={
+            "target_node_id": "quote",
+            "clarification": {"reason": "missing_required", "missing_fields": ["customer_name"]},
+        },
     )
     quote = WorkflowNode(node_id="quote", tool_id="sales", action="quote", params=params)
     orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
@@ -115,7 +42,7 @@ def test_answer_resolves_duplicate_missing_inputs_but_preserves_other_confirmati
             "请提供客户",
             ambient={
                 "target_node_id": "write",
-                "clarification": {"reason": reason},
+                "clarification": {"reason": reason, "missing_fields": ["unit_name"]},
             },
         )
         for reason in ("missing_required", "missing_required", "credit_limit_exceed")
@@ -138,3 +65,51 @@ def test_clarification_metadata_does_not_share_mutable_candidates():
     node = build_clarify_node("请选择客户", ambient={"clarification": detail})
     detail["candidates"][0]["id"] = 99
     assert node.params["clarification"]["candidates"][0]["id"] == 1
+
+
+def test_shipment_nested_answer_requires_approval_and_rejects_other_fields():
+    import pytest
+
+    from app.application.agent_orchestrator.clarification import ClarificationAnswerError
+
+    params = {
+        "unit_name": "客户甲",
+        "products": [{"product_name": "产品甲", "quantity_tins": 2, "unit_price": 50}],
+    }
+    question = build_clarify_node(
+        "请提供规格",
+        ambient={
+            "target_node_id": "shipment",
+            "clarification": {
+                "reason": "missing_required",
+                "missing_fields": ["products.0.tin_spec"],
+            },
+        },
+    )
+    shipment = WorkflowNode(
+        node_id="shipment", tool_id="shipment_records", action="create", params=params
+    )
+    orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+    run = orchestrator.start_run_from_plan(
+        user_id="owner",
+        message="发货",
+        plan=PlanGraph(plan_id="shipment-clarify", intent="shipment", nodes=[question, shipment]),
+    )
+    with pytest.raises(ClarificationAnswerError):
+        orchestrator.stage_clarification_answer(
+            run.run_id,
+            step_id=run.steps[0].step_id,
+            parameters={"products.1.tin_spec": 20},
+            requested_by="owner",
+        )
+    orchestrator.stage_clarification_answer(
+        run.run_id,
+        step_id=run.steps[0].step_id,
+        parameters={"products.0.tin_spec": 20},
+        requested_by="owner",
+    )
+    continued = orchestrator.execute_dispatched_run(run.run_id)
+    assert continued.status == "waiting_user"
+    assert continued.steps[1].status == "waiting_user"
+    assert continued.steps[1].params["products"][0]["tin_spec"] == 20
+    assert continued.tool_calls == []

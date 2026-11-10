@@ -50,6 +50,10 @@ def looks_like_issue_report(message: str) -> bool:
 
 
 def _manufacturing_intake(message: str) -> bool:
+    # A negated production-query clause must not suppress an explicit request
+    # for the product-issue feature. Any remaining production intent still wins.
+    if re.search(r"请使用产品问题上报(?:功能)?", message or ""):
+        message = re.sub(r"(?:我)?不是(?:要|在)?(?:查询|查看)生产任务", "", message)
     return bool(re.search(r"生产|制造|车间|排产|加工|装配", message or "")) and not bool(
         re.search(r"软件|页面|界面|后台|客户端|菜单|侧栏|样式|显示|图谱|看板|列表", message or "")
     )
@@ -196,33 +200,37 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
     if explicit is not None:
         return explicit
     try:
-        response = client.chat.completions.create(
-            model=client.default_model,
-            temperature=0,
-            max_tokens=300,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "依据客户原话及答复（无答复时只看原话）分类，只输出 JSON："
-                        '{"type":"usage_question|product_defect|uncertain","confidence":0到1,'
-                        '"expected":"...","actual":"...","missing_evidence":["..."]}。'
-                        "咨询归 usage_question；明确软件行为错误才归 product_defect；缺失信息列入 missing_evidence。不要补造事实。"
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "customer": str(message)[:8000],
-                            "assistant": str(assistant_reply)[:8000],
-                        },
-                        ensure_ascii=False,
-                    ),
-                },
-            ],
-        )
+        from app.infrastructure.llm.model_admission import admit_model_call, model_call_slot
+
+        with model_call_slot(None, profile="product_issue_intake"):
+            admit_model_call(None, profile="product_issue_intake")
+            response = client.chat.completions.create(
+                model=client.default_model,
+                temperature=0,
+                max_tokens=300,
+                response_format={"type": "json_object"},
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "依据客户原话及答复（无答复时只看原话）分类，只输出 JSON："
+                            '{"type":"usage_question|product_defect|uncertain","confidence":0到1,'
+                            '"expected":"...","actual":"...","missing_evidence":["..."]}。'
+                            "咨询归 usage_question；明确软件行为错误才归 product_defect；缺失信息列入 missing_evidence。不要补造事实。"
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {
+                                "customer": str(message)[:8000],
+                                "assistant": str(assistant_reply)[:8000],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    },
+                ],
+            )
         raw = response.choices[0].message.content
         triage = json.loads(raw) if isinstance(raw, str) else {}
         confidence = float(triage.get("confidence") or 0)

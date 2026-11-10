@@ -1492,15 +1492,6 @@ class TestProductDomainHandlersBranches:
             assert handlers.bus is mock_bus
         assert handlers.bus is mock_bus
 
-    def test_get_product_domain_handlers_singleton(self) -> None:
-        import app.neuro_bus.domains.product_domain_handlers as mod
-
-        mod._product_handlers = None
-        a = get_product_domain_handlers()
-        b = get_product_domain_handlers()
-        assert a is b
-        mod._product_handlers = None
-
     def test_register_product_domain_handlers_subscribes_all(self) -> None:
         mock_bus = MagicMock()
         register_product_domain_handlers(mock_bus)

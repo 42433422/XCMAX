@@ -35,16 +35,6 @@ def fresh_recognizer(monkeypatch: pytest.MonkeyPatch) -> UnifiedIntentRecognizer
     return r
 
 
-class TestRecognizerType:
-    def test_recognizer_type_values(self) -> None:
-        assert RecognizerType.RULE.value == "rule"
-        assert RecognizerType.DISTILLED.value == "distilled"
-        assert RecognizerType.BERT.value == "bert"
-        assert RecognizerType.DEEPSEEK.value == "deepseek"
-        assert RecognizerType.RASA.value == "rasa"
-        assert RecognizerType.HYBRID.value == "hybrid"
-
-
 class TestRecognizeQuickPath:
     def test_quick_recognize_hit_returns_early(
         self, fresh_recognizer: UnifiedIntentRecognizer

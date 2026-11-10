@@ -13,8 +13,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_FULL = re.compile(r"^\s*\{\{\s*([^{}]+?)\s*\}\}\s*$")
-_EMBEDDED = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
+_FULL = re.compile(r"^\s*\{\{([^{}]+)\}\}\s*$")
+_EMBEDDED = re.compile(r"\{\{([^{}]+)\}\}")
 _TOKEN = re.compile(r"\[(\d+)\]|\.?([A-Za-z_\u4e00-\u9fff][\w\-\u4e00-\u9fff]*)")
 _ALIASES = {"data_preview": "data", "rows": "data", "items": "data", "result": "data"}
 _PREFIXES = ("node_outputs", "outputs", "steps", "nodes")
@@ -22,6 +22,41 @@ _PREFIXES = ("node_outputs", "outputs", "steps", "nodes")
 
 class UnresolvedReference(ValueError):
     pass
+
+
+def validate_plan_references(value: Any, allowed_sources: set[str] | frozenset[str]) -> str | None:
+    """Reject malformed or undeclared plan references before any tool can run."""
+    allowed = {str(item) for item in allowed_sources}
+    if isinstance(value, dict):
+        for item in value.values():
+            error = validate_plan_references(item, allowed)
+            if error:
+                return error
+        return None
+    if isinstance(value, list):
+        for item in value:
+            error = validate_plan_references(item, allowed)
+            if error:
+                return error
+        return None
+    if not isinstance(value, str) or ("{{" not in value and "}}" not in value):
+        return None
+    matches = list(_EMBEDDED.finditer(value))
+    residue = _EMBEDDED.sub("", value)
+    if not matches or "{{" in residue or "}}" in residue:
+        return "参数引用格式无效"
+    for match in matches:
+        path = match.group(1).strip()
+        try:
+            tokens = _tokens(path)
+        except UnresolvedReference:
+            return "参数引用路径无效"
+        source = tokens[0] if tokens else ""
+        if len(tokens) < 2 or not isinstance(source, str):
+            return "参数引用必须包含前序节点和结果字段"
+        if source not in allowed:
+            return f"参数引用的前序节点 {source} 未声明为直接依赖"
+    return None
 
 
 def _tokens(path: str) -> list[str | int]:

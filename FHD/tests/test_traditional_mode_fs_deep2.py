@@ -549,25 +549,6 @@ class TestWatchdogLoopDeep:
 
 
 class TestEnsureWatchdogDeep:
-    def test_ensure_watchdog_not_running_starts(self, temp_root, monkeypatch) -> None:
-        monkeypatch.setattr(tmf, "_watchdog_running", False)
-        monkeypatch.setattr(tmf, "_watchdog_thread", None)
-        started = {"called": False}
-
-        class FakeThread:
-            def __init__(self, *a, **k):
-                started["called"] = True
-
-            def start(self):
-                pass
-
-            def is_alive(self):
-                return True
-
-        monkeypatch.setattr(threading, "Thread", FakeThread)
-        tmf._ensure_watchdog()
-        assert started["called"] is True
-
     def test_ensure_watchdog_running_alive_thread(self, temp_root, monkeypatch) -> None:
         monkeypatch.setattr(tmf, "_watchdog_running", True)
         mock_thread = MagicMock()

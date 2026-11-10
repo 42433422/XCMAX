@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -12,13 +13,14 @@ from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgen
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_permission import drop_process_idempotency_memory
 from app.application.employee_runtime.handoff_commit import commit_registered_handoff
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 from .test_employee_handoff_e25 import _card, _start
 from .test_employee_handoff_e25 import customers_db as customers_db
 
 
 @pytest.fixture
-def handoff_env(customers_db, tmp_path, monkeypatch):
+def handoff_env(customers_db, tmp_path, monkeypatch, trusted_actor):
     # Keep the real registered read and SQL repositories; isolate the tool deadline
     # boundary so these tests cannot stand in for the separate E25 process checks.
     monkeypatch.setattr(
@@ -28,6 +30,8 @@ def handoff_env(customers_db, tmp_path, monkeypatch):
             step, runtime_context=runtime_context
         ),
     )
+    actor = trusted_actor(user_id=11, tenant_id=11, role="admin")
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     workspace = tmp_path / "durable-handoff"
     workspace.mkdir()
     for employee in ("employee-a", "employee-b", "employee-c"):
@@ -47,6 +51,7 @@ def handoff_env(customers_db, tmp_path, monkeypatch):
             "idempotency_key": "handoff-1",
         },
         context={
+            **actor.context,
             "tenant_id": "11",
             "user_id": "11",
             "employee_id": "employee-a",
@@ -166,13 +171,28 @@ def test_explicit_parent_run_is_reused_and_credentials_are_not_persisted(handoff
 def test_completed_handoff_becomes_the_next_employees_real_parent(handoff_env):
     from app.application.employee_runtime.executor import execute_employee_task_local
 
-    from .test_employee_handoff_e25 import _handoff
-
-    first = _handoff(
-        handoff_env.workspace, handoff_env.context["task_id"], permissions=["customers.query"]
+    first = execute_employee_task_local(
+        "employee-a",
+        "交给员工乙",
+        {
+            "continuity_action": "handoff",
+            "tenant_id": "999",
+            "user_id": "999",
+            "_actor_authorization": {"proof": "forged"},
+            "task_id": handoff_env.context["task_id"],
+            "target_employee": "employee-b",
+            "permissions": ["customers.query"],
+            "delegated_tool": "customers",
+            "delegated_action": "query",
+            "delegated_params": {"keyword": "交接客户甲"},
+        },
+        user_id=11,
+        workspace_root=str(handoff_env.workspace),
+        runtime_context=handoff_env.context,
     )
+    assert "handoff" in first, first
     first_receipt = first["handoff"]["result_payload"]
-    assert first_receipt["success"], first
+    assert first_receipt.get("success"), json.dumps(first["handoff"], ensure_ascii=False)
     second = execute_employee_task_local(
         "employee-b",
         "继续交接",
@@ -187,7 +207,9 @@ def test_completed_handoff_becomes_the_next_employees_real_parent(handoff_env):
             "delegated_action": "query",
             "delegated_params": {"keyword": "交接客户甲"},
         },
+        user_id=11,
         workspace_root=str(handoff_env.workspace),
+        runtime_context={**handoff_env.context, "employee_id": "employee-b"},
     )
     receipt = second["handoff"]["result_payload"]
     assert receipt["success"], second
@@ -264,15 +286,19 @@ def test_sealed_actor_mod_scope_is_preserved_and_revocation_rechecked(
 ):
     from datetime import timedelta
 
+    from app.db.db_base import Base
+    from app.db.models.permission import Permission, Role
     from app.db.models.user import Session as UserSession
     from app.db.models.user import User
     from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope, bind_agent_mod_scope
     from app.utils.time import utc_now_naive
 
-    User.__table__.create(customers_db, checkfirst=True)
-    UserSession.__table__.create(customers_db, checkfirst=True)
+    Base.metadata.create_all(customers_db)
     monkeypatch.setattr("app.db.HostSessionLocal", handoff_env.factory)
     with handoff_env.factory.begin() as db:
+        role = Role(name="admin")
+        role.permissions.append(Permission(code="customer.view", name="查看客户"))
+        db.add(role)
         db.add(
             User(
                 id=11,
@@ -395,7 +421,7 @@ def test_process_exit_recovers_only_persisted_receipts_without_reexecution(
     before = fresh.list_task_runs(user_id="11", task_id=handoff_env.context["task_id"])
     assert len(before) == 2
     child = next(run for run in before if run.metadata.get("plan"))
-    assert child.status == "completed"
+    assert child.status == "completed", (child.error, crashed.stderr[-2500:])
 
     def forbidden(*args, **kwargs):
         raise AssertionError("replayed an interrupted handoff")

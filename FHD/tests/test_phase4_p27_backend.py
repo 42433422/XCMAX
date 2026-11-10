@@ -1,9 +1,7 @@
-"""COVERAGE_RAMP Phase 4 round 27: im_routes HTTP,
-ai_chat pro excel branches, legacy_chat_adapter post-tool hints."""
+"""Coverage for IM routes and AI chat Excel workflow branches."""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,11 +10,6 @@ from fastapi.testclient import TestClient
 
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.infrastructure.auth.dependencies import CurrentUser, require_identified_user
-from app.legacy.chat.legacy_chat_adapter import (
-    _post_tool_round_hint,
-    _slow_tool_wait_message,
-    reset_planner_tool_dedup_state,
-)
 
 
 def _chat_svc() -> AIChatApplicationService:
@@ -32,7 +25,6 @@ def _chat_svc() -> AIChatApplicationService:
         ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
         patch("app.application.ai_chat_app_service.get_approval_service"),
     ):
         svc = AIChatApplicationService()
@@ -216,11 +208,14 @@ async def test_notify_offline_im_members_skips_when_all_online() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_is_pro_source_normalizes_variants() -> None:
-    assert AIChatApplicationService._is_pro_source("xcagi-pro") is True
-    assert AIChatApplicationService._is_pro_source("PRO_MODE") is True
-    assert AIChatApplicationService._is_pro_source("professional") is True
-    assert AIChatApplicationService._is_pro_source("") is False
+@pytest.mark.parametrize("source", ["xcagi-pro", "PRO_MODE", "professional", "basic", ""])
+def test_source_labels_do_not_bypass_model_selection(source):
+    svc = _chat_svc()
+    svc.workflow_planner.plan.return_value = None
+    result = svc._try_handle_dynamic_workflow("u", "解释库存", source, {}, {})
+    svc.workflow_planner.plan.assert_called_once()
+    assert result["success"] is False
+    assert result["data"]["execution_started"] is False
 
 
 def test_excel_cell_looks_like_product_measure_unit() -> None:
@@ -244,8 +239,14 @@ def test_dynamic_workflow_ambiguous_price_columns(
     }
     out = svc._try_handle_dynamic_workflow("u", "导入数据库", "pro", ctx, {})
     assert out is not None
-    assert out["success"] is True
-    assert "调价" in out["response"]
+    assert out["success"] is False
+    assert out["data"]["execution_started"] is False
+    mock_extract.assert_not_called()
+    svc.workflow_planner.plan.assert_called_once()
+    assert (
+        svc.workflow_planner.plan.call_args.kwargs["context"]["excel_analysis"]
+        == ctx["excel_analysis"]
+    )
 
 
 @patch("app.application.get_unit_products_import_app_service")
@@ -267,65 +268,6 @@ def test_dynamic_workflow_unit_import_failure(mock_get: MagicMock) -> None:
         },
     )
     assert out is not None
-    # 源码已重构为启动 agent run（_start_deterministic_import_agent_run），
-    # 不再直接调用 import_unit_products；agent run 启动成功即返回 success=True，
-    # 实际导入失败由 agent 执行阶段处理（异步），此处验证降级不阻断主流程。
-    assert out["success"] is True
-
-
-# ---------------------------------------------------------------------------
-# legacy_chat_adapter — post-tool hints
-# ---------------------------------------------------------------------------
-
-
-def _tool_call(name: str, args: str = "{}") -> SimpleNamespace:
-    return SimpleNamespace(function=SimpleNamespace(name=name, arguments=args))
-
-
-def test_slow_tool_wait_message_office_formats() -> None:
-    assert "Word" in (
-        _slow_tool_wait_message("generate_office_document", '{"output_format":"docx"}') or ""
-    )
-    assert "Excel" in (
-        _slow_tool_wait_message("generate_office_document", '{"output_format":"xlsx"}') or ""
-    )
-    assert _slow_tool_wait_message("unknown_tool", "{}") is None
-
-
-def test_post_tool_round_hint_xlsx_success() -> None:
-    reset_planner_tool_dedup_state()
-    hint = _post_tool_round_hint(
-        [_tool_call("generate_office_document", '{"output_format":"xlsx"}')],
-        [{"success": True, "download_url": "http://x/file.xlsx"}],
-    )
-    assert "Excel" in hint
-
-
-def test_post_tool_round_hint_import_success() -> None:
-    hint = _post_tool_round_hint(
-        [_tool_call("import_excel_to_database")],
-        [{"success": True}],
-    )
-    assert "导入" in hint or "数据库" in hint or "回复" in hint
-
-
-def test_post_tool_round_hint_duplicate_tool_call() -> None:
-    hint = _post_tool_round_hint(
-        [_tool_call("generate_office_document")],
-        [{"success": False, "error": "duplicate_tool_call"}],
-    )
-    assert "重复" in hint or "未成功" in hint
-
-
-def test_post_tool_round_hint_both_office_formats() -> None:
-    hint = _post_tool_round_hint(
-        [
-            _tool_call("generate_office_document", '{"output_format":"docx"}'),
-            _tool_call("generate_office_document", '{"output_format":"xlsx"}'),
-        ],
-        [
-            {"success": True, "download_url": "http://x/a.docx"},
-            {"success": True, "download_url": "http://x/b.xlsx"},
-        ],
-    )
-    assert "Word" in hint and "Excel" in hint
+    assert out["success"] is False
+    assert out["data"]["action"] == "workflow_planning_failed"
+    mock_get.return_value.import_unit_products.assert_not_called()

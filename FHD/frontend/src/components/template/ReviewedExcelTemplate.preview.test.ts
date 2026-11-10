@@ -4,7 +4,7 @@ import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 import type { useReviewedDocuments } from '@/composables/useReviewedDocuments'
 
-const api = vi.hoisted(() => ({ archiveClassifyExcel: vi.fn(), reviewedExcelIdentity: vi.fn(), analyzeClassification: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), previewReviewedIntake: vi.fn(), saveReviewedExcel: vi.fn() }))
+const api = vi.hoisted(() => ({ archiveClassifyExcel: vi.fn(), reviewedExcelIdentity: vi.fn(), analyzeClassification: vi.fn(), autoSlices: vi.fn(), templateFamilies: vi.fn(), reviewExcel: vi.fn(), reviewedCandidateResult: vi.fn(), refineReviewedExcel: vi.fn(), previewReviewedIntake: vi.fn(), saveReviewedExcel: vi.fn() }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 vi.mock('@/api/xcmaxMarketProxy', () => ({ default: { llmResolveChatDefault: vi.fn() } }))
 const titles: Record<string, string[]> = { 'class-first.xlsx': ['报价单', '采购合同'], 'class-second.xlsx': ['送货单'] }
@@ -30,6 +30,7 @@ beforeEach(() => {
   api.archiveClassifyExcel.mockImplementation(async (form: FormData) => ({ name: (form.get('file') as File).name, status: 'classified', classification_id: `class-${(form.get('file') as File).name}`, version: 'archive-v1', sheets: [sheet] }))
   api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   api.analyzeClassification.mockResolvedValue({ version: 'model-v2', model_status: 'returned', sheets: [sheet] })
+  api.templateFamilies.mockImplementation(async (id: string) => ({ families: titles[id].map((_, index) => ({ members: [index], reason: '独立' })) }))
   api.autoSlices.mockImplementation(async (id: string) => ({ slices: titles[id].map((title, index) => ({ index, basis: 'model_group', confirmed: false, sha256: `${id}-${index}`, filename: `${title}.xlsx`, display_name: title, fragments: [{ sheet: 'Sheet1', range: 'A1:B2' }] })) }))
   api.reviewExcel.mockImplementation(async (form: FormData) => reviewed(titles[String(form.get('classification_id'))][Number(form.get('auto_slice_index'))]))
   api.previewReviewedIntake.mockImplementation(async (form: FormData) => ({ intake: { run_id: `run-${form.get('review_id')}`, mod_id: '', candidate_sha256: 'candidate', knowledge: { action: 'new', documents: 1 }, business: { id: `run-${form.get('review_id')}`, target_type: 'knowledge', status: 'preview_ready', preview_revision: 'revision', summary: { new: 1, update: 0, skip: 0, error: 0 } } } }))
@@ -40,6 +41,17 @@ beforeEach(() => {
 afterEach(() => { wrapper.unmount(); host.remove(); vi.restoreAllMocks() })
 
 describe('document capsule interaction boundaries', () => {
+  it('groups suggested template reuse without losing source documents', async () => {
+    api.templateFamilies.mockResolvedValue({ families: [{ members: [0, 1], reason: '版式相同' }] })
+    await stage(['first.xlsx']); await start()
+    expect(capsules()).toHaveLength(1)
+    expect(wrapper.get('summary').text()).toContain('2 份原单据')
+    const originals = wrapper.find('details').findAll('button')
+    expect(originals).toHaveLength(2)
+    expect(api.reviewExcel).toHaveBeenCalledTimes(1)
+    await originals[1].trigger('click'); await flushPromises()
+    expect(api.reviewExcel).toHaveBeenCalledTimes(2)
+  })
   it('rejects a non-Excel drop while keeping drag feedback stable across composer children', async () => {
     const composer = wrapper.get('.elt-composer')
     await composer.trigger('dragenter')
@@ -140,7 +152,7 @@ describe('document capsule interaction boundaries', () => {
     ;(enlarged.querySelector('footer button') as HTMLButtonElement).click(); await flushPromises()
     expect(document.querySelector('.template-preview-dialog')).toBeNull()
     expect(wrapper.findAll('.reviewed-template__select-candidate')[0].attributes('aria-pressed')).toBe('true')
-    expect((api.previewReviewedIntake.mock.calls[0][0] as FormData).get('candidate_id')).toBe(`${first}-0`)
+    expect(api.previewReviewedIntake).not.toHaveBeenCalled()
     expect(api.reviewExcel).toHaveBeenCalledTimes(3)
     await wrapper.get('.reviewed-document-picker').trigger('click'); await flushPromises()
     expect(wrapper.find('.reviewed-document-picker').exists()).toBe(false)
@@ -153,8 +165,8 @@ describe('document capsule interaction boundaries', () => {
     await stage(); await start(); await capsule(first).trigger('click'); await flushPromises()
     await wrapper.findAll('.reviewed-template__select-candidate')[0].trigger('click'); await flushPromises()
     await button('\u4fdd\u5b58\u6a21\u677f').trigger('click'); await flushPromises()
-    expect(wrapper.get('.reviewed-document-picker [role=status]').text()).toContain('\u4fdd\u5b58\u4e2d')
-    await wrapper.get('[aria-label="\u5173\u95ed\u53ef\u9009\u6a21\u677f"]').trigger('click')
+    expect(wrapper.find('.reviewed-document-picker').exists()).toBe(false)
+    expect(capsule(first).text()).toContain('保存中')
     await capsule(second).trigger('click'); await flushPromises()
     pending.resolve({ template_id: 'receipt-first-only' }); await flushPromises()
     expect(wrapper.get('.reviewed-document-picker [role=dialog]').attributes('aria-label')).toBe(second)
@@ -266,6 +278,18 @@ describe('AI document capsule workspace', () => {
     await capsule('报价单').trigger('click'); await flushPromises()
     expect(wrapper.get('.reviewed-document-picker [role=alert]').text()).toContain('模型连接异常')
     expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
+  })
+  it('continues later documents after recovering a timed-out candidate', async () => {
+    api.reviewExcel.mockRejectedValueOnce(Object.assign(new Error('超时'), { data: { outcome_unknown: true } }))
+    api.reviewedCandidateResult.mockResolvedValue({ status: 'complete', review: reviewed('报价单') })
+    await stage(['first.xlsx']); await start()
+    expect(api.reviewExcel).toHaveBeenCalledTimes(1)
+    const workspace = state().documentWorkspace as ReturnType<typeof useReviewedDocuments>
+    const first = workspace.documents.value.find(doc => doc.displayName === '报价单')!
+    await workspace.recoverCandidate(first); await flushPromises()
+    expect(first.review?.review_id).toBe('review-报价单')
+    expect(api.reviewExcel).toHaveBeenCalledTimes(2)
+    expect(workspace.documents.value.find(doc => doc.displayName === '采购合同')?.review).toBeTruthy()
   })
   it('drops retired-account refinement replies before touching the new account warning or draft', async () => {
     const pending = deferred<unknown>(); api.refineReviewedExcel.mockReturnValueOnce(pending.promise)

@@ -71,7 +71,11 @@ def test_benchmark_never_infers_approval_from_expected_success(execute_plan, mon
                 node_id="write",
                 tool_id="business_db",
                 action="write",
-                params={"entity": "customers", "payload": {"unit_name": "fixture"}},
+                params={
+                    "entity": "customers",
+                    "operation": "create",
+                    "payload": {"unit_name": "fixture"},
+                },
             ),
         ],
     )
@@ -96,7 +100,11 @@ def test_scripted_approval_requires_exact_pending_parameters(execute_plan, monke
                 node_id="write",
                 tool_id="business_db",
                 action="write",
-                params={"entity": "customers", "payload": {"unit_name": "actual"}},
+                params={
+                    "entity": "customers",
+                    "operation": "create",
+                    "payload": {"unit_name": "actual"},
+                },
             ),
         ],
     )
@@ -108,7 +116,11 @@ def test_scripted_approval_requires_exact_pending_parameters(execute_plan, monke
                 {
                     "tool_id": "business_db",
                     "action": "write",
-                    "params": {"entity": "customers", "payload": {"unit_name": "different"}},
+                    "params": {
+                        "entity": "customers",
+                        "operation": "create",
+                        "payload": {"unit_name": "different"},
+                    },
                 },
             ],
         },
@@ -125,7 +137,16 @@ def test_scripted_answer_resumes_but_does_not_approve_business_write(execute_pla
         plan_id="answer",
         intent="create",
         nodes=[
-            build_clarify_node("请提供客户", ambient={"target_node_id": "create"}),
+            build_clarify_node(
+                "请提供客户",
+                ambient={
+                    "target_node_id": "create",
+                    "clarification": {
+                        "reason": "missing_required",
+                        "missing_fields": ["unit_name"],
+                    },
+                },
+            ),
             WorkflowNode(
                 node_id="create",
                 tool_id="customers",

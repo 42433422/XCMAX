@@ -16,9 +16,16 @@ from app.fastapi_routes.domains.template import routes as template_routes
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(monkeypatch) -> TestClient:
     app = FastAPI()
     app.include_router(template_routes.router)
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+
+    app.dependency_overrides[get_logged_in_user] = lambda: SimpleNamespace(id=7, tenant_id=1)
+    monkeypatch.setattr(
+        "app.application.elt.service_uploads.register_chat_upload",
+        lambda *args: {"upload_id": "owned-upload"},
+    )
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -278,6 +285,15 @@ class TestBundleToSheetEntry:
 
 
 class TestTemplatesExtractGrid:
+    def test_requires_session_before_storing_upload(self):
+        app = FastAPI()
+        app.include_router(template_routes.router)
+        with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None):
+            response = TestClient(app).post(
+                "/templates/extract-grid", files={"file": ("test.xlsx", b"invalid")}
+            )
+        assert response.status_code == 401
+
     def test_rejects_non_excel(self, client: TestClient):
         r = client.post(
             "/templates/extract-grid",
@@ -320,6 +336,7 @@ class TestTemplatesExtractGrid:
             },
         )
         assert r.status_code == 200
+        assert r.json()["upload_id"] == "owned-upload"
         data = r.json()
         assert data["success"] is True
         assert len(data["fields"]) > 0
@@ -350,6 +367,7 @@ class TestTemplatesExtractGrid:
             data={"analyze_all_sheets": "true"},
         )
         assert r.status_code == 200
+        assert r.json()["upload_id"] == "owned-upload"
         data = r.json()
         assert len(data["sheets"]) >= 2
 
@@ -373,6 +391,7 @@ class TestTemplatesExtractGrid:
             files={"file": ("empty.xlsx", buf.getvalue(), "application/octet-stream")},
         )
         assert r.status_code == 200
+        assert r.json()["upload_id"] == "owned-upload"
         assert r.json()["success"] is True
 
     def test_specific_sheet_name(self, client: TestClient):
@@ -399,4 +418,5 @@ class TestTemplatesExtractGrid:
             data={"sheet_name": "Second"},
         )
         assert r.status_code == 200
+        assert r.json()["upload_id"] == "owned-upload"
         assert r.json()["preview_data"]["selected_sheet_name"] == "Second"

@@ -196,6 +196,46 @@
     }
   },
   "tools": {
+    "catalog_products_v1": {
+      "description": "Reviewed protected mixed-source price edit with independent receipt verification",
+      "availability": "shared",
+      "actions": {
+        "append_price": {
+          "risk": "medium",
+          "idempotent": false,
+          "permission": "product.edit",
+          "read_only": false,
+          "required_params": [
+            "operation_id",
+            "product_id",
+            "revision",
+            "reason",
+            "price",
+            "action",
+            "confirmed"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "correct_price": {
+          "risk": "medium",
+          "idempotent": false,
+          "permission": "product.edit",
+          "read_only": false,
+          "required_params": [
+            "operation_id",
+            "product_id",
+            "revision",
+            "reason",
+            "price",
+            "action",
+            "confirmed"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        }
+      }
+    },
     "customers": {
       "description": "购买单位管理",
       "availability": "shared",
@@ -429,12 +469,14 @@
         "list": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
         "query": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
@@ -753,6 +795,15 @@
           "availability": "shared",
           "action_class": "business_db.write",
           "approval": "always"
+        },
+        "verify_closed_loop": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "payload"
+          ],
+          "availability": "shared",
+          "approval": "never"
         }
       }
     },
@@ -1590,6 +1641,15 @@
             "task"
           ],
           "availability": "shared"
+        },
+        "context": {
+          "risk": "low",
+          "idempotent": true,
+          "read_only": true,
+          "required_params": [
+            "task"
+          ],
+          "availability": "shared"
         }
       }
     },
@@ -1741,24 +1801,6 @@
         }
       }
     },
-    "normal_slot_dispatch": {
-      "description": "普通版槽位：产品查询浮窗、发货单编号预览（与 /api/ai/unified_chat 同源）",
-      "availability": "normal_only",
-      "actions": {
-        "product_query": {
-          "risk": "low",
-          "idempotent": true,
-          "required_params": [],
-          "availability": "normal_only"
-        },
-        "shipment_preview": {
-          "risk": "low",
-          "idempotent": true,
-          "required_params": [],
-          "availability": "normal_only"
-        }
-      }
-    },
     "excel_analysis": {
       "description": "Excel文件智能分析：读取内容、分析结构、统计汇总、自然语言查询",
       "availability": "shared",
@@ -1807,10 +1849,29 @@
         }
       }
     },
-    "excel_import": {
-      "description": "Excel 解析记录入库工具。只接受结构化 records 或待确认 pending_import_id，不接受任意 SQL。",
+    "client_product_issue": {
+      "description": "客户明确要求反馈或上报软件故障时，使用原始请求提交产品问题；缺少证据时请求补充，受理结果不明时不得重复提交。",
       "availability": "shared",
       "actions": {
+        "submit": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        }
+      }
+    },
+    "excel_import": {
+      "description": "Excel 解析记录入库工具。办公文件导入使用 office_stage，按原始请求解析文件并提交入库审批；不接受任意 SQL。",
+      "availability": "shared",
+      "actions": {
+        "office_stage": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared",
+          "action_class": "bulk_import"
+        },
         "execute_import": {
           "risk": "medium",
           "idempotent": false,

@@ -123,8 +123,24 @@ class TestBatchDeleteErrorPath:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc.batch_delete([1, 2])
         assert result["success"] is False
-        assert result["message"] == "批量删除失败"
+        assert result["message"] == "删除客户失败"
         assert result["deleted_count"] == 0
+
+    def test_recoverable_query_error_rolls_back_and_closes(self):
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        svc = CustomerApplicationService()
+        session = MagicMock()
+        session.query.side_effect = RuntimeError("db read error")
+        with tenant_scope(1), patch.object(svc, "_get_session", return_value=session):
+            result = svc.batch_delete([1, 2])
+        assert result["success"] is False
+        assert result["message"] == "删除客户失败"
+        assert result["deleted_count"] == 0
+        session.rollback.assert_called_once()
+        session.close.assert_called_once()
+        session.delete.assert_not_called()
+        session.commit.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -560,25 +576,6 @@ class TestMatchPurchaseUnitExtended:
 
 
 class TestCheckShipmentAssociationsExtended:
-    def test_no_associations(self):
-        svc = CustomerApplicationService()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value.limit.return_value.all.return_value = []
-        mock_query.count.return_value = 0
-        mock_db.query.return_value = mock_query
-
-        with patch("app.db.session.get_db") as mock_get_db:
-            mock_ctx = MagicMock()
-            mock_ctx.__enter__ = MagicMock(return_value=mock_db)
-            mock_ctx.__exit__ = MagicMock(return_value=False)
-            mock_get_db.return_value = mock_ctx
-            result = svc._check_shipment_associations("TestCo")
-
-        assert result["has_associations"] is False
-        assert result["shipment_count"] == 0
-
     def test_with_associations(self):
         svc = CustomerApplicationService()
         mock_db = MagicMock()
@@ -603,14 +600,6 @@ class TestCheckShipmentAssociationsExtended:
         assert result["has_associations"] is True
         assert result["shipment_count"] == 5
         assert len(result["sample_records"]) == 1
-
-    def test_error(self):
-        svc = CustomerApplicationService()
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db error")):
-            result = svc._check_shipment_associations("TestCo")
-        assert result["has_associations"] is False
-        assert result["shipment_count"] == 0
-        assert result["message"] == "关联发货记录检查失败"
 
 
 # ---------------------------------------------------------------------------

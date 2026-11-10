@@ -73,7 +73,7 @@ async function configuration(industry = '软件信息') {
       { path: '/onboarding', name: 'product-onboarding', component: ProductOnboardingView },
     ],
   })
-  await router.push({ path: '/onboarding', query: { step: 'host-pack', industry, company: '测试公司' } })
+  await router.push({ path: '/onboarding', query: { step: 'host-pack', industry, company: '测试公司', from: 'tutorial', redirect: '/' } })
   await router.isReady()
   wrapper = mount(ProductOnboardingView, { global: { plugins: [router] } })
   await flushPromises()

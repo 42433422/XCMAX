@@ -42,7 +42,7 @@ def test_system_printer_post_executes_system_maintenance_tool_through_agent(
         _patch_agent_repo(repo),
         patch("app.application.facades.session_facade.get_system_service", return_value=service),
     ):
-        response = _client(trusted_actor(user_id=17)).post(
+        response = _client(trusted_actor(user_id=17, role="admin")).post(
             "/api/system/printer",
             json={"printer_name": "HP"},
             headers={"X-User-Id": "tenant-a"},
@@ -69,7 +69,7 @@ def test_system_printer_post_executes_system_maintenance_tool_through_agent(
     }
 
 
-def test_database_restore_executes_system_maintenance_tool_through_agent(
+def test_database_restore_waits_for_approval_through_agent(
     tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
@@ -81,25 +81,20 @@ def test_database_restore_executes_system_maintenance_tool_through_agent(
         _patch_agent_repo(repo),
         patch("app.application.facades.session_facade.get_database_service", return_value=service),
     ):
-        response = _client(trusted_actor(user_id=17)).post(
+        response = _client(trusted_actor(user_id=17, role="admin")).post(
             "/api/database/restore",
             json={"backup_file": "backup.sql"},
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is True
-    service.restore_database.assert_called_once_with("backup.sql")
-
+    assert payload["error_code"] == "approval_required"
+    service.restore_database.assert_not_called()
     run = repo.get(payload["run_id"])
-    assert run is not None
+    assert run is not None and run.status == "waiting_user"
     assert run.intent == "system_maintenance_restore_database"
-    assert run.steps[0].risk == "high"
-    assert run.tool_calls[0].tool_id == "system_maintenance"
-    assert run.tool_calls[0].action == "restore_database"
-    assert run.tool_calls[0].permission == "tool.system_maintenance.restore_database"
-    assert run.tool_calls[0].cost_units == 2
+    assert run.steps[0].risk == "high" and not run.tool_calls
 
 
 def test_performance_cache_invalidate_executes_system_maintenance_tool_through_agent(
@@ -117,7 +112,7 @@ def test_performance_cache_invalidate_executes_system_maintenance_tool_through_a
             return_value=optimizer,
         ),
     ):
-        response = _client(trusted_actor(user_id=17)).post(
+        response = _client(trusted_actor(user_id=17, role="admin")).post(
             "/api/performance/cache/invalidate",
             json={"keys": ["k1"]},
             headers={"X-User-Id": "tenant-a"},
@@ -137,7 +132,7 @@ def test_performance_cache_invalidate_executes_system_maintenance_tool_through_a
     assert run.tool_calls[0].action == "invalidate_performance_cache"
 
 
-def test_performance_reinitialize_executes_system_maintenance_tool_through_agent(
+def test_performance_reinitialize_waits_for_approval_through_agent(
     tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
@@ -152,19 +147,16 @@ def test_performance_reinitialize_executes_system_maintenance_tool_through_agent
             return_value=optimizer,
         ),
     ):
-        response = _client(trusted_actor(user_id=17)).post(
+        response = _client(trusted_actor(user_id=17, role="admin")).post(
             "/api/performance/optimize/reinitialize",
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is True
-    assert payload["data"]["status"] == "ok"
-
+    assert payload["error_code"] == "approval_required"
+    optimizer.get_status.assert_not_called()
     run = repo.get(payload["run_id"])
-    assert run is not None
+    assert run is not None and run.status == "waiting_user"
     assert run.intent == "system_maintenance_reinitialize_performance"
-    assert run.steps[0].risk == "high"
-    assert run.tool_calls[0].tool_id == "system_maintenance"
-    assert run.tool_calls[0].action == "reinitialize_performance"
+    assert run.steps[0].risk == "high" and not run.tool_calls

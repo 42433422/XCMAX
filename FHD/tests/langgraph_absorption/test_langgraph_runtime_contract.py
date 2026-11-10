@@ -13,7 +13,7 @@
 - 低风险幂等只读节点可并行、高风险/非幂等写节点独占、parallel=False 全串行
   （用 threading Events/Barrier，不用 timing 猜测）。
 - 状态 callback 与 publisher 事件形态/顺序。
-- agentic_loop / tool_registry 不支持 fail-closed。
+- 普通计划允许传入服务端工具清单并在执行前校验。
 - checkpoint 运行期保存稳定形态；resume 跳过已执行节点并使用传入 checkpoint；
   replay 只读、绝不 dispatch；缺失/非法 checkpoint 路径确定性失败。
 - state_schema 参数行为；调用方输入不被意外修改。
@@ -808,12 +808,90 @@ class TestStateSchemaParameterAndMutation:
 
 
 class TestRetry:
+    def test_empty_registry_rejects_tools(self):
+        with pytest.raises(ValueError, match="未注册"):
+            _make_runtime().run(_sequential_plan(1), tool_registry={})
+
+    def test_registry_overrides_model_retry_claims(self):
+        calls = []
+        plan = PlanGraph(
+            plan_id="p_registry_retry",
+            intent="contract",
+            nodes=[
+                WorkflowNode(
+                    node_id="n1",
+                    tool_id="business_db",
+                    action="read",
+                    params={"entity": "products"},
+                    risk="low",
+                    idempotent=True,
+                )
+            ],
+        )
+        plan.nodes[0].risk = "low"
+        plan.nodes[0].idempotent = True
+        from app.application.workflow_registry_app import get_workflow_tool_registry
+
+        registry = copy.deepcopy(get_workflow_tool_registry())
+        registry["business_db"]["actions"]["read"].update(risk="high", idempotent=False)
+
+        def dispatch(*args):
+            calls.append(args)
+            return {"success": False, "error_code": "timeout"}
+
+        result = _make_runtime(dispatch).run(plan, tool_registry=registry, max_retries=2)
+        assert not result.success
+        assert len(calls) == 1
+        assert plan.nodes[0].idempotent is True
+
+    def test_unknown_tool_action_never_dispatches(self):
+        calls = []
+        registry = {"t1": {"actions": {"other": {}}}}
+        with pytest.raises(ValueError, match="未注册"):
+            _make_runtime(lambda *args: calls.append(args)).run(
+                _sequential_plan(1), tool_registry=registry
+            )
+        assert calls == []
+
+    def test_missing_required_parameter_never_dispatches(self):
+        calls = []
+        registry = {"t1": {"actions": {"a1": {"required_params": ["customer_id"]}}}}
+        with pytest.raises(ValueError, match="customer_id"):
+            _make_runtime(lambda *args: calls.append(args)).run(
+                _sequential_plan(1), tool_registry=registry
+            )
+        assert calls == []
+
+    def test_invalid_plan_never_dispatches(self):
+        calls = []
+        plan = _sequential_plan(1)
+        plan.nodes[0].depends_on = ["missing"]
+        with pytest.raises(ValueError, match="依赖不存在"):
+            _make_runtime(lambda *args: calls.append(args)).run(plan)
+        assert calls == []
+
+    def test_invalid_input_exception_does_not_repeat_tool_call(self):
+        calls = []
+
+        def dispatch(tool_id, action, params):
+            calls.append((tool_id, action))
+            raise ValueError("invalid input")
+
+        result = _make_runtime(dispatch).run(_sequential_plan(1), max_retries=2)
+        assert not result.success
+        assert len(calls) == 1
+        assert not result.node_results[0].retryable
+
     def test_retry_then_success(self):
         calls = {"n": 0}
 
         def d(tool_id, action, params):
             calls["n"] += 1
-            return {"success": False, "message": "temp"} if calls["n"] <= 1 else {"success": True}
+            return (
+                {"success": False, "message": "temp", "error_code": "upstream_unavailable"}
+                if calls["n"] <= 1
+                else {"success": True}
+            )
 
         result = _make_runtime(d).run(_sequential_plan(1), max_retries=2)
         assert result.success is True
@@ -827,7 +905,7 @@ class TestRetry:
         node = result.node_results[0]
         assert result.success is False
         assert node.error == "permanent"
-        assert node.recovery_hint == "节点具备幂等性，可在修复后重试"
+        assert "未自动重试" in node.recovery_hint
         assert result.final_context["workflow_status"]["state"] == "failed"
 
     def test_high_risk_non_idempotent_no_retry(self):
@@ -856,7 +934,10 @@ class TestRetry:
         assert result.success is False
         assert calls["n"] == 1
         assert node.retries == 0
-        assert node.recovery_hint == "高风险/非幂等节点，请人工介入确认后再重试"
+        assert (
+            node.recovery_hint
+            == "高风险/非幂等节点未自动重试；请先核对业务状态，再由人工决定是否重试。"
+        )
 
     def test_recoverable_exception_is_retried(self):
         calls = {"n": 0}
@@ -864,7 +945,7 @@ class TestRetry:
         def d(tool_id, action, params):
             calls["n"] += 1
             if calls["n"] <= 1:
-                raise ValueError("transient")
+                raise ConnectionError("transient")
             return {"success": True}
 
         result = _make_runtime(d).run(_sequential_plan(1), max_retries=2)
@@ -971,7 +1052,9 @@ class TestConcurrency:
 
     def test_parallel_batch_metadata_recorded(self):
         result = _make_runtime().run(_parallel_read_plan())
-        assert result.final_context["parallel_batches"] == [["p1", "p2", "p3"]]
+        assert result.final_context["parallel_batches"] == [
+            {"node_ids": ["p1", "p2", "p3"], "mode": "parallel_read"}
+        ]
 
     def test_high_risk_writer_exclusive_no_overlap(self, monkeypatch):
         plan = PlanGraph(
@@ -1024,9 +1107,13 @@ class TestConcurrency:
         _assert_gate_serializes(monkeypatch, plan, parallel=True)
 
     def test_parallel_false_serializes_all_nodes(self, monkeypatch):
-        _assert_gate_serializes(monkeypatch, _parallel_read_plan(), parallel=False)
-        result = _make_runtime().run(_parallel_read_plan(), parallel=False)
+        plan = _parallel_read_plan()
+        calls = []
+        result = _make_runtime(
+            lambda tool_id, action, params: calls.append(tool_id) or {"success": True}
+        ).run(plan, parallel=False)
         assert result.success is True
+        assert calls == [node.tool_id for node in plan.nodes]
         assert result.final_context.get("parallel_batches") is None
 
 
@@ -1069,18 +1156,34 @@ class TestEvents:
 
 
 # ===========================================================================
-# J. 不支持能力 fail-closed
+# J. 工具清单校验
 # ===========================================================================
 
 
-class TestUnsupportedFailClosed:
-    def test_agentic_loop_fails_closed(self):
-        with pytest.raises(NotImplementedError):
-            _make_runtime().run(_sequential_plan(), agentic_loop=True)
+class TestPlanRegistryValidation:
+    def test_non_agentic_plan_accepts_tool_registry(self):
+        from app.application.workflow_registry_app import get_workflow_tool_registry
 
-    def test_tool_registry_fails_closed(self):
-        with pytest.raises(NotImplementedError):
-            _make_runtime().run(_sequential_plan(), tool_registry={"tools": []})
+        registry = get_workflow_tool_registry()
+        plan = PlanGraph(
+            plan_id="p_registry",
+            intent="contract",
+            nodes=[
+                WorkflowNode(
+                    node_id=f"n{i}",
+                    tool_id="business_db",
+                    action="read",
+                    params={"entity": "products"},
+                    risk="low",
+                    idempotent=True,
+                    depends_on=[] if i == 1 else [f"n{i - 1}"],
+                )
+                for i in range(1, 4)
+            ],
+        )
+        result = _make_runtime().run(plan, tool_registry=registry)
+        assert result.success
+        assert _executed_nodes(result) == ["n1", "n2", "n3"]
 
 
 # ===========================================================================

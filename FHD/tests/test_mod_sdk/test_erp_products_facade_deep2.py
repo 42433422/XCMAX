@@ -504,8 +504,7 @@ class TestProductsDeleteDeep:
 
 
 class TestProductsBatchDeleteDeep:
-    def test_deleted_count_zero_falls_back_to_len(self, fake_service) -> None:
-        # When deleted_count is 0, it's falsy so falls through to len(int_ids)
+    def test_deleted_count_zero_is_preserved(self, fake_service) -> None:
         fake_service.batch_delete_products.return_value = {
             "success": True,
             "deleted_count": 0,
@@ -516,13 +515,12 @@ class TestProductsBatchDeleteDeep:
             side_effect=lambda x: int(x) if str(x).isdigit() else None,
         ):
             result = pf.products_batch_delete(req, {"ids": [1, 2]})
-        # 0 is falsy, so falls back to len(int_ids) = 2
-        assert result["deleted"] == 2
+        assert result["deleted"] == 0
 
     def test_deleted_count_missing_fallback_to_data(self, fake_service) -> None:
         fake_service.batch_delete_products.return_value = {
             "success": True,
-            "data": {"deleted_count": 7},
+            "data": {"deleted_count": 2},
         }
         req = MagicMock(spec=Request)
         with patch(
@@ -530,9 +528,9 @@ class TestProductsBatchDeleteDeep:
             side_effect=lambda x: int(x) if str(x).isdigit() else None,
         ):
             result = pf.products_batch_delete(req, {"ids": [1, 2]})
-        assert result["deleted"] == 7
+        assert result["deleted"] == 2
 
-    def test_deleted_count_both_missing_fallback_to_len(self, fake_service) -> None:
+    def test_deleted_count_both_missing_is_unknown(self, fake_service) -> None:
         fake_service.batch_delete_products.return_value = {
             "success": True,
             "data": {},
@@ -543,7 +541,7 @@ class TestProductsBatchDeleteDeep:
             side_effect=lambda x: int(x) if str(x).isdigit() else None,
         ):
             result = pf.products_batch_delete(req, {"ids": [1, 2, 3]})
-        assert result["deleted"] == 3
+        assert result["error_code"] == "outcome_unknown"
 
     def test_service_failure_no_message(self, fake_service) -> None:
         fake_service.batch_delete_products.return_value = {

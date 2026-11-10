@@ -225,6 +225,7 @@ class ModstorePlatformAdapter:
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
                 headers={"Content-Type": "application/json", "Accept": "application/json"},
                 trust_env=False,
+                proxy=(os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None,
             )
             self._client = client
             self._client_loop_id = loop_id

@@ -38,6 +38,16 @@ def execution_outcome(execution: JsonObject | None) -> WorkflowOutcome:
     receipt = execution or {}
     executed = bool(receipt.get("workflow_executed"))
     success = executed and bool(receipt.get("success"))
+    if receipt.get("code") == "outcome_unknown":
+        return {
+            "status": ApprovalStatus.APPROVED.value,
+            "success": False,
+            "code": "outcome_unknown",
+            "message": "执行状态未确认，请核对业务数据，勿重复提交",
+            "workflow_executed": False,
+            "nodes_executed": 0,
+            "nodes_total": 1,
+        }
     code, message = canonical_workflow_outcome(success=success, code=str(receipt.get("code") or ""))
     return {
         "status": ApprovalStatus.APPROVED.value if success else ApprovalStatus.CANCELLED.value,

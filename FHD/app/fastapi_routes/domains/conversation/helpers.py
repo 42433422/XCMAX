@@ -19,13 +19,9 @@ from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run as attach_chat_trace_run,
-)
-from app.application.conversation import (
-    chat_stream_sse_events as chat_stream_sse_events,
 )
 from app.application.modstore_conversation_app import (
     create_modstore_openai_client_from_request as create_modstore_openai_client_from_request,
@@ -44,6 +40,10 @@ from app.domain.context.session_context import (
 from app.domain.context.session_context import (
     runtime_context_after_workflow_interrupt as runtime_context_after_workflow_interrupt,
 )
+from app.fastapi_routes.xcagi_compat_chat_models import (
+    XcagiCompatChatBatchBody as XcagiCompatChatBatchBody,
+)
+from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody as XcagiCompatChatBody
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode  # noqa: F401
 from app.infrastructure.modstore_transport import MarketModelError
@@ -148,74 +148,6 @@ def _ensure_chat_db_read_authorized(
     return False, _chat_read_token_required_payload(message)
 
 
-class XcagiCompatChatBody(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    message: str = Field(
-        ...,
-        min_length=1,
-        validation_alias=AliasChoices("message", "user_message", "content", "text", "query"),
-    )
-    context: dict | None = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "context",
-            "runtime_context",
-            "session_context",
-            "ddd_context",
-            "neuro_context",
-            "neuro_ddd_context",
-        ),
-    )
-    system_prompt: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("system_prompt", "system", "instructions"),
-    )
-    mode: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("mode", "llm_mode"),
-    )
-    db_read_token: str | None = Field(
-        default=None,
-        description="兼容旧客户端字段；当前版本不需要数据库查看授权。",
-    )
-    db_write_token: str | None = Field(
-        default=None,
-        description="兼容旧客户端字段；当前版本不需要数据库写入授权。",
-    )
-    user_id: str | None = None
-    source: str | None = None
-
-
-class XcagiCompatChatBatchBody(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    messages: list[str] = Field(default_factory=list)
-    context: dict | None = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "context",
-            "runtime_context",
-            "session_context",
-            "ddd_context",
-            "neuro_context",
-            "neuro_ddd_context",
-        ),
-    )
-    system_prompt: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("system_prompt", "system", "instructions"),
-    )
-    mode: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("mode", "llm_mode"),
-    )
-    db_read_token: str | None = Field(default=None)
-    db_write_token: str | None = Field(default=None)
-    user_id: str | None = None
-    source: str | None = None
-
-
 def _market_connection_label() -> str:
     raw = os.environ.get("XCAGI_MARKET_BASE_URL") or os.environ.get("MODSTORE_PLATFORM_URL") or ""
     try:
@@ -260,6 +192,37 @@ def _model_upstream_http_exc(status_code: int) -> HTTPException | None:
 
 
 def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
+    from app.infrastructure.llm.model_admission import (
+        ModelCircuitOpenError,
+        ModelConcurrencyLimitError,
+        ModelRateLimitError,
+    )
+    from app.utils.resilience.rate_limiter import RateLimitBackendError
+
+    if isinstance(exc, ModelRateLimitError):
+        return HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+    if isinstance(exc, ModelConcurrencyLimitError):
+        return HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+    if isinstance(exc, ModelCircuitOpenError):
+        return HTTPException(
+            status_code=503,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+    if isinstance(exc, RateLimitBackendError):
+        return HTTPException(
+            status_code=503,
+            detail="模型限流服务暂不可用，本次模型请求已拒绝，请稍后重试。",
+            headers={"Retry-After": "5"},
+        )
     if isinstance(exc, MarketModelError):
         if exc.status_code == 402 or "余额不足" in str(exc):
             return HTTPException(
@@ -469,9 +432,6 @@ from app.fastapi_routes.domains.conversation.stream_helpers import (
 )
 from app.fastapi_routes.domains.conversation.stream_helpers import (
     _thinking_steps_from_planner_stream_text as _thinking_steps_from_planner_stream_text,
-)
-from app.fastapi_routes.domains.conversation.stream_helpers import (
-    _xcagi_guarded_planner_stream_events as _xcagi_guarded_planner_stream_events,
 )
 from app.fastapi_routes.domains.conversation.stream_helpers import (
     _xcagi_planner_stream_bytes as _xcagi_planner_stream_bytes,

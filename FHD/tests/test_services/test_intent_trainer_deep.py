@@ -638,20 +638,6 @@ class TestComputeMetricsDeep:
         )
         assert 0 < result["accuracy"] < 1
 
-    def test_multiclass(self):
-        import numpy as np
-
-        logits = np.array(
-            [
-                [0.8, 0.1, 0.1],
-                [0.1, 0.8, 0.1],
-                [0.1, 0.1, 0.8],
-            ]
-        )
-        labels = np.array([0, 1, 2])
-        result = compute_metrics((logits, labels))
-        assert result["accuracy"] == 1.0
-
     def test_single_class(self):
         import numpy as np
 

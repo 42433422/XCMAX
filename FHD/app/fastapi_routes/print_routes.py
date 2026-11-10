@@ -284,7 +284,8 @@ def print_label(request: Request, data: dict[str, Any] = Body(default_factory=di
             route_path="/api/print/label",
         )
         if isinstance(result, dict):
-            result.setdefault("status", "printed")
+            if result.get("success"):
+                result.setdefault("status", "printed")
             result.setdefault("require_confirm", False)
         return JSONResponse(result, status_code=_print_agent_status_code(result))
     except RECOVERABLE_ERRORS:

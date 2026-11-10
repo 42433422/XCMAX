@@ -31,6 +31,11 @@ from app.application.customer_app_service import (
     get_customers_session,
     reset_customers_engine,
 )
+from app.db.models.product import Product
+from app.db.models.purchase_unit import PurchaseUnit
+from app.db.models.shipment import ShipmentRecord
+from app.infrastructure.tenant_scope import tenant_scope
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # get_customers_session — additional
@@ -402,7 +407,8 @@ class TestUpdateAdditional:
 
         mock_session.query.return_value = mock_query0
         # After first call, return mock_query1 for conflict check
-        mock_session.query.side_effect = [mock_query0, mock_query1]
+        product_query, shipment_query = MagicMock(), MagicMock()
+        mock_session.query.side_effect = [mock_query0, mock_query1, product_query, shipment_query]
         with patch.object(svc, "_get_session", return_value=mock_session):
             result = svc.update(
                 1,
@@ -417,6 +423,8 @@ class TestUpdateAdditional:
         assert result["message"] == "客户更新成功"
         # Verify unit attributes were updated
         assert unit.unit_name == "NewName"
+        product_query.filter.return_value.update.assert_called_once()
+        shipment_query.filter.return_value.update.assert_called_once()
         assert unit.contact_person == "New"
         assert unit.contact_phone == "222"
         assert unit.address == "NewAddr"
@@ -489,21 +497,6 @@ class TestCheckShipmentAssociationsAdditional:
         assert result["has_associations"] is True
         assert result["shipment_count"] == 5
 
-    def test_no_records(self):
-        svc = CustomerApplicationService()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value.limit.return_value.all.return_value = []
-        mock_query.count.return_value = 0
-        mock_db.query.return_value = mock_query
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_db):
-            result = svc._check_shipment_associations("TestCo")
-        assert result["has_associations"] is False
-        assert result["shipment_count"] == 0
-
     def test_with_sample_records(self):
         svc = CustomerApplicationService()
         mock_db = MagicMock()
@@ -553,7 +546,7 @@ class TestCheckShipmentAssociationsAdditional:
         svc = CustomerApplicationService()
         with patch("app.db.session.get_db", side_effect=RuntimeError("db error")):
             result = svc._check_shipment_associations("TestCo")
-        assert result["has_associations"] is False
+        assert result["has_associations"] is None
         assert result["shipment_count"] == 0
         assert result["sample_records"] == []
         assert result["message"] == "关联发货记录检查失败"
@@ -564,189 +557,117 @@ class TestCheckShipmentAssociationsAdditional:
 # ---------------------------------------------------------------------------
 
 
-class TestDeleteAdditional:
-    def test_not_found(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.first.return_value = None
-        mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session):
-            result = svc.delete(999)
-        assert result["success"] is False
-        assert result["message"] == "客户不存在"
-        assert result["deleted_count"] == 0
+@pytest.fixture
+def customer_rows(trusted_actor, monkeypatch):
+    actor = trusted_actor(tenant_id=7, role="admin")
+    service = CustomerApplicationService()
+    monkeypatch.setattr(service, "_get_session", actor.factory)
+    with tenant_scope(7), actor.factory.begin() as db:
+        db.add_all(
+            [
+                PurchaseUnit(id=1, unit_name="Linked", tenant_id=7),
+                PurchaseUnit(id=2, unit_name="Empty", tenant_id=7),
+            ]
+        )
+        db.add(Product(name="Linked product", unit="Linked", tenant_id=7))
+        db.add_all(
+            [
+                ShipmentRecord(
+                    unit_id=1,
+                    purchase_unit="Linked",
+                    product_name="Linked product",
+                    quantity_kg=1,
+                    quantity_tins=1,
+                    tenant_id=7,
+                )
+                for _ in range(3)
+            ]
+        )
+    with tenant_scope(7):
+        yield service, actor
 
-    def test_delete_with_associations_no_force(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        unit = Mock()
-        unit.id = 1
-        unit.unit_name = "TestCo"
-        mock_query.first.return_value = unit
-        mock_session.query.return_value = mock_query
-        with (
-            patch.object(svc, "_get_session", return_value=mock_session),
-            patch.object(
-                svc,
-                "_check_shipment_associations",
-                return_value={
-                    "has_associations": True,
-                    "shipment_count": 3,
-                    "sample_records": [{"id": 1}],
-                },
-            ),
-        ):
-            result = svc.delete(1, force=False)
+
+def _customer_counts(actor):
+    with actor.factory() as db:
+        return tuple(db.query(model).count() for model in (PurchaseUnit, Product, ShipmentRecord))
+
+
+class TestDeleteAdditional:
+    def test_not_found(self, customer_rows):
+        service, actor = customer_rows
+        result = service.delete(999)
+        assert result["success"] is False
+        assert result["deleted_count"] == 0
+        assert _customer_counts(actor) == (2, 1, 3)
+
+    def test_delete_with_associations_no_force(self, customer_rows):
+        service, actor = customer_rows
+        result = service.delete(1)
         assert result["success"] is False
         assert result["has_associations"] is True
         assert result["association_details"]["shipment_count"] == 3
-        assert "force=True" in result["suggestion"]
+        assert result["association_details"]["product_count"] == 1
+        assert _customer_counts(actor) == (2, 1, 3)
 
-    def test_delete_with_associations_force(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        unit = Mock()
-        unit.id = 1
-        unit.unit_name = "TestCo"
-        mock_query.first.return_value = unit
-        mock_session.query.return_value = mock_query
-        with (
-            patch.object(svc, "_get_session", return_value=mock_session),
-            patch.object(
-                svc,
-                "_check_shipment_associations",
-                return_value={
-                    "has_associations": True,
-                    "shipment_count": 3,
-                    "sample_records": [],
-                },
-            ),
-        ):
-            result = svc.delete(1, force=True)
+    def test_delete_with_associations_force_requires_actor(self, customer_rows):
+        service, actor = customer_rows
+        result = service.delete(1, force=True)
+        assert result["success"] is False
+        assert result["deleted_count"] == 0
+        assert _customer_counts(actor) == (2, 1, 3)
+        result = service.delete(1, force=True, runtime_context=actor.context)
         assert result["success"] is True
         assert result["deleted_count"] == 1
-        mock_session.delete.assert_called_once_with(unit)
-        mock_session.commit.assert_called_once()
+        assert _customer_counts(actor) == (1, 0, 0)
 
-    def test_delete_no_associations(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        unit = Mock()
-        unit.id = 1
-        unit.unit_name = "TestCo"
-        mock_query.first.return_value = unit
-        mock_session.query.return_value = mock_query
-        with (
-            patch.object(svc, "_get_session", return_value=mock_session),
-            patch.object(
-                svc,
-                "_check_shipment_associations",
-                return_value={"has_associations": False, "shipment_count": 0, "sample_records": []},
-            ),
-        ):
-            result = svc.delete(1)
+    def test_delete_no_associations(self, customer_rows):
+        service, actor = customer_rows
+        result = service.delete(2)
         assert result["success"] is True
         assert result["deleted_count"] == 1
-        assert result["has_associations"] is False
-
-
-# ---------------------------------------------------------------------------
-# batch_delete — additional branches
-# ---------------------------------------------------------------------------
+        assert _customer_counts(actor) == (1, 1, 3)
 
 
 class TestBatchDeleteAdditional:
-    def test_not_found(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.all.return_value = []
-        mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session):
-            result = svc.batch_delete([999])
+    @pytest.mark.parametrize("ids", [[999], [2, 999]])
+    def test_not_found_is_atomic(self, customer_rows, ids):
+        service, actor = customer_rows
+        result = service.batch_delete(ids)
         assert result["success"] is False
-        assert result["message"] == "未找到要删除的客户"
         assert result["deleted_count"] == 0
+        assert _customer_counts(actor) == (2, 1, 3)
 
-    def test_with_associations_no_force(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        unit1 = Mock()
-        unit1.id = 1
-        unit1.unit_name = "Co1"
-        unit2 = Mock()
-        unit2.id = 2
-        unit2.unit_name = "Co2"
-        mock_query.all.return_value = [unit1, unit2]
-        mock_session.query.return_value = mock_query
-        with (
-            patch.object(svc, "_get_session", return_value=mock_session),
-            patch.object(
-                svc,
-                "_check_shipment_associations",
-                side_effect=[
-                    {"has_associations": True, "shipment_count": 2, "sample_records": []},
-                    {"has_associations": False, "shipment_count": 0, "sample_records": []},
-                ],
-            ),
-        ):
-            result = svc.batch_delete([1, 2], force=False)
+    def test_with_associations_no_force(self, customer_rows):
+        service, actor = customer_rows
+        result = service.batch_delete([1, 2])
         assert result["success"] is False
         assert result["has_associations"] is True
-        assert len(result["affected_units"]) == 1
-        assert result["affected_units"][0]["id"] == 1
+        assert [item["id"] for item in result["affected_units"]] == [1]
+        assert _customer_counts(actor) == (2, 1, 3)
 
-    def test_with_associations_force(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        unit1 = Mock()
-        unit1.id = 1
-        unit1.unit_name = "Co1"
-        unit2 = Mock()
-        unit2.id = 2
-        unit2.unit_name = "Co2"
-        mock_query.all.return_value = [unit1, unit2]
-        mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session):
-            result = svc.batch_delete([1, 2], force=True)
+    def test_with_associations_force(self, customer_rows):
+        service, actor = customer_rows
+        result = service.batch_delete([1, 2], force=True, runtime_context=actor.context)
         assert result["success"] is True
         assert result["deleted_count"] == 2
-        assert mock_session.delete.call_count == 2
+        assert _customer_counts(actor) == (0, 0, 0)
 
-    def test_no_associations(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        unit = Mock()
-        unit.id = 1
-        unit.unit_name = "Co1"
-        mock_query.all.return_value = [unit]
-        mock_session.query.return_value = mock_query
-        with (
-            patch.object(svc, "_get_session", return_value=mock_session),
-            patch.object(
-                svc,
-                "_check_shipment_associations",
-                return_value={"has_associations": False, "shipment_count": 0, "sample_records": []},
-            ),
-        ):
-            result = svc.batch_delete([1], force=False)
+    def test_no_associations(self, customer_rows):
+        service, actor = customer_rows
+        result = service.batch_delete([2])
         assert result["success"] is True
         assert result["deleted_count"] == 1
+        assert _customer_counts(actor) == (1, 1, 3)
+
+    def test_commit_failure_rolls_back_all_cascade_rows(self, customer_rows, monkeypatch):
+        service, actor = customer_rows
+        session = actor.factory()
+        monkeypatch.setattr(service, "_get_session", lambda: session)
+        monkeypatch.setattr(session, "commit", Mock(side_effect=RuntimeError("storage failed")))
+        result = service.batch_delete([1, 2], force=True, runtime_context=actor.context)
+        assert result["success"] is False
+        assert result["deleted_count"] == 0
+        assert _customer_counts(actor) == (2, 1, 3)
 
 
 # ---------------------------------------------------------------------------
@@ -1160,17 +1081,6 @@ class TestGetPurchaseUnitByNameAdditional:
         assert result.unit_name == "TestCo"
         assert result.discount_rate == 0.9
         assert result.is_active is True
-
-    def test_not_found(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.first.return_value = None
-        mock_session.query.return_value = mock_query
-        with patch.object(svc, "_get_session", return_value=mock_session):
-            result = svc.get_purchase_unit_by_name("Nonexistent")
-        assert result is None
 
     def test_with_none_values(self):
         svc = CustomerApplicationService()

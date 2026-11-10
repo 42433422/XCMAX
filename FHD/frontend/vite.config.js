@@ -2,7 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import { materializeMediaAssets } from '../../scripts/dev/materialize_media_assets.mjs'
 import path from 'path'
 import { buildDevProxy } from './vite/devProxy.js'
-import { createBuildOptions } from './vite/build.js'
+import { createBuildOptions, resolveViteGitSha } from './vite/build.js'
 import { createVitePlugins } from './vite/plugins.js'
 import { resolveApiBase } from './vite/resolveApiBase.js'
 
@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
   materializeMediaAssets('frontend')
   // 加载环境变量
   const env = loadEnv(mode, process.cwd(), 'VITE_')
+  process.env.VITE_XCAGI_GIT_SHA = resolveViteGitSha(env.VITE_XCAGI_GIT_SHA)
   const apiBase = env.VITE_API_BASE || API_BASE
   const publicBase = env.VITE_PUBLIC_BASE || '/'
   const isDev = mode === 'development'
@@ -94,12 +95,10 @@ export default defineConfig(({ mode }) => {
       dedupe: ['vue', 'vue-router', 'pinia', 'element-plus', 'xlsx'],
     },
     server: {
-      // 0.0.0.0：明确监听 IPv4 全接口，避免个别环境下 host:true 局域网设备连不上 :5001
-      host: isDev ? '0.0.0.0' : true,
+      // 本地开发仅绑定回环地址，不向局域网或公网开放监听。
+      host: isDev ? '127.0.0.1' : true,
       // 与 XCAGI/run.py（默认 5000）配合：/api 走下方代理。第二套本地实例见仓库根 .env.example「个人实例」。
       port: devPort,
-      // 避免部分环境下以「主机名 / IP」访问时被 Vite 拒绝（局域网联调）
-      ...(isDev ? { allowedHosts: true } : {}),
       hmr,
       proxy: buildDevProxy(apiBase),
       fs: {
@@ -108,7 +107,7 @@ export default defineConfig(({ mode }) => {
     },
 
     preview: {
-      host: '0.0.0.0',
+      host: '127.0.0.1',
       port: devPort,
       strictPort: false,
       proxy: buildDevProxy(apiBase),

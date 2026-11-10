@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import os
 import time
@@ -42,7 +43,11 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
 )
 
 
-_REVIEWED_QUERY_ACTIONS = frozenset({("finance", "ledger_query"), ("products", "exists")})
+_PRODUCT_READ_ACTIONS = frozenset({("products", "exists"), ("products", "query")})
+_CUSTOMER_READ_ACTIONS = frozenset({("customers", "query")})
+_SHIPMENT_READ_ACTIONS = frozenset({("shipment_records", "query"), ("shipment_records", "list")})
+_OWNED_READ_ACTIONS = _PRODUCT_READ_ACTIONS | _CUSTOMER_READ_ACTIONS | _SHIPMENT_READ_ACTIONS
+_REVIEWED_QUERY_ACTIONS = frozenset({("finance", "ledger_query")}) | _OWNED_READ_ACTIONS
 _QUERY_IDENTITY_FIELDS = frozenset(
     {
         "tenant_id",
@@ -72,7 +77,7 @@ def _query_failure(code: str) -> dict[str, Any]:
 def _reviewed_query_tenant(
     spec: ToolActionSpecV2 | None, params: dict[str, Any], context: dict[str, Any]
 ) -> tuple[int | None, dict[str, Any] | None]:
-    """Two audited action policies, not a generic read-only authorization lane."""
+    """Explicit audited action policies, not a generic read-only authorization lane."""
     from fastapi import HTTPException
 
     from app.domain.shared_services.auth_service import get_auth_service
@@ -87,9 +92,19 @@ def _reviewed_query_tenant(
         return None, _query_failure("tool_identity_override")
     if spec is None:
         return None, _query_failure("tool_contract_unavailable")
-    if (spec.tool_id, spec.action) == ("products", "exists"):
+    if (spec.tool_id, spec.action) in _OWNED_READ_ACTIONS or (
+        (spec.tool_id, spec.action) == ("business_db", "read")
+        and params.get("entity") == "products"
+    ):
         try:
-            tenant = check_owned_business_permission(actor, spec.permission)
+            permission = (
+                "customer.view"
+                if (spec.tool_id, spec.action) in _CUSTOMER_READ_ACTIONS
+                else "shipment.view"
+                if (spec.tool_id, spec.action) in _SHIPMENT_READ_ACTIONS
+                else "product.view"
+            )
+            tenant = check_owned_business_permission(actor, permission)
             if str(context.get("tenant_id")) != str(tenant):
                 return None, _query_failure("tool_scope_unavailable")
         except HTTPException:
@@ -226,6 +241,35 @@ class AgentToolExecutor:
         *,
         runtime_context: dict[str, Any],
     ) -> dict[str, Any]:
+        from app.utils.resilience.rate_limiter import (
+            RateLimitBackendError,
+            check_rate_limit,
+            ensure_rate_limit_backend,
+        )
+
+        context_for_limit = runtime_context if isinstance(runtime_context, dict) else {}
+        tenant = context_for_limit.get("tenant_id") or context_for_limit.get("user_id") or "shared"
+        endpoint = f"agent-tool:{step.tool_id}.{step.action}"
+        try:
+            ensure_rate_limit_backend()
+            admission = check_rate_limit(str(tenant), endpoint, max_requests=120, window_seconds=60)
+        except RateLimitBackendError:
+            return {
+                "success": False,
+                "error_code": "tool_rate_limit_backend_unavailable",
+                "retryable": True,
+                "execution_status": "not_started",
+                "message": "工具限流服务暂不可用，本次操作未执行。",
+            }
+        if not admission.get("allowed", True):
+            return {
+                "success": False,
+                "error_code": "tool_rate_limited",
+                "retryable": True,
+                "execution_status": "not_started",
+                "retry_after": max(1, int(admission.get("retry_after") or 60)),
+                "message": "该工具调用过于频繁，请稍后再试。",
+            }
         from app.application.facades.tools_facade import execute_registered_workflow_tool
 
         raw_params = dict(step.params or {})
@@ -280,6 +324,15 @@ class AgentToolExecutor:
             params["user_id"] = str(context["user_id"])
         if "tenant_id" in required and context.get("tenant_id") not in (None, ""):
             params["tenant_id"] = context["tenant_id"]
+        leftover = unresolved_placeholders(params)
+        if leftover:
+            return {
+                "success": False,
+                "error_code": UNRESOLVED_CODE,
+                "message": "参数包含未解析的占位符，已拒绝执行：" + "、".join(leftover)[:200],
+                "tool_id": step.tool_id,
+                "action": step.action,
+            }
         validation = validate_tool_call(step.tool_id, step.action, params)
         if not validation.ok:
             return {
@@ -289,22 +342,31 @@ class AgentToolExecutor:
                 "tool_id": validation.tool_id,
                 "action": validation.action,
             }
-        leftover = unresolved_placeholders(params)
-        if leftover:
-            return {
-                "success": False,
-                "error_code": UNRESOLVED_CODE,
-                "message": "参数包含未解析的占位符，已拒绝执行：" + "、".join(leftover)[:200],
-                "tool_id": validation.tool_id,
-                "action": validation.action or step.action,
-            }
+        from app.application.chat_turn_guard import _is_mutation
+
+        guard_policy = str((runtime_context or {}).get("mutation_policy") or "")
+        guard_action = validation.action or step.action
+        if _is_mutation(f"{validation.tool_id} {guard_action}", json.dumps(params, default=str)):
+            if guard_policy in {"block", "model_only"} or (
+                guard_policy == "allow_once"
+                and (validation.tool_id, guard_action)
+                not in {("customers", "batch_delete"), ("products", "batch_delete")}
+            ):
+                return {
+                    "success": False,
+                    "error_code": "mutation_blocked",
+                    "message": "当前轮次未授权该写入。",
+                }
         from app.application.agent_orchestrator.tool_permission import (
             actor_tool_denial,
             approval_execution_denial,
         )
 
         denied = actor_tool_denial(
-            validation.tool_id, validation.action or step.action, dict(runtime_context or {})
+            validation.tool_id,
+            validation.action or step.action,
+            dict(runtime_context or {}),
+            params,
         )
         if denied is not None:
             return denied
@@ -315,7 +377,14 @@ class AgentToolExecutor:
             return approval_denied
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
-        reviewed_query = (validation.tool_id, validation.action) in _REVIEWED_QUERY_ACTIONS
+        product_db_read = (validation.tool_id, validation.action) == (
+            "business_db",
+            "read",
+        ) and params.get("entity") == "products"
+        reviewed_query = (
+            validation.tool_id,
+            validation.action,
+        ) in _REVIEWED_QUERY_ACTIONS or product_db_read
         if reviewed_query and client_identity:
             return _query_failure("tool_identity_override")
         query_tenant = None
@@ -326,7 +395,10 @@ class AgentToolExecutor:
             if denied is not None:
                 return denied
         params["_runtime_context"] = dict(runtime_context or {})
-        if (validation.tool_id, validation.action) == ("products", "exists"):
+        if (
+            validation.tool_id,
+            validation.action,
+        ) in _OWNED_READ_ACTIONS or product_db_read:
             for hint in ("service_source", "route_module"):
                 params["_runtime_context"].pop(hint, None)
         action = validation.action or step.action
@@ -365,7 +437,7 @@ class AgentToolExecutor:
             # string tenant keys and must not be coerced here.
             scope = (
                 owned_tenant_scope(runtime_tenant_id)
-                if (validation.tool_id, action) == ("products", "exists")
+                if ((validation.tool_id, action) in _OWNED_READ_ACTIONS or product_db_read)
                 and isinstance(runtime_tenant_id, int)
                 else tenant_scope(runtime_tenant_id)
             )
@@ -402,12 +474,41 @@ class AgentToolExecutor:
                     else nullcontext()
                 )
                 try:
-                    with receipt_scope:
-                        result = (
-                            _dispatch_reviewed_query(step.tool_id, action, params)
-                            if reviewed_query
-                            else execute_registered_workflow_tool(step.tool_id, action, params)
-                        )
+                    from app.infrastructure.llm.model_admission import model_rate_limit_scope
+
+                    with receipt_scope, model_rate_limit_scope(params["_runtime_context"]):
+                        guarded_batch = (validation.tool_id, action) in {
+                            ("customers", "batch_delete"),
+                            ("products", "batch_delete"),
+                        } and params["_runtime_context"].get("mutation_policy") == "allow_once"
+                        if guarded_batch:
+                            from app.application.workflow.guarded_batch_delete import (
+                                execute_guarded_batch_delete,
+                            )
+
+                            scopes = params["_runtime_context"].get("_bulk_preview_scopes")
+                            digest = (
+                                scopes.get(validation.tool_id) if isinstance(scopes, dict) else None
+                            )
+                            if not isinstance(digest, str) or not digest:
+                                return {
+                                    "success": False,
+                                    "error_code": "preview_required",
+                                    "message": "删除范围未确认，请重新预览。",
+                                }
+                            params["_runtime_context"]["_bulk_preview_scope"] = {
+                                "tool": validation.tool_id,
+                                "digest": digest,
+                            }
+                            result = execute_guarded_batch_delete(
+                                tool_id=validation.tool_id, action=action, params=params
+                            )
+                        else:
+                            result = (
+                                _dispatch_reviewed_query(step.tool_id, action, params)
+                                if reviewed_query
+                                else execute_registered_workflow_tool(step.tool_id, action, params)
+                            )
                 except (WorkerLeaseLost, TimeoutError, PermissionError, RuntimeError):
                     raise
                 except RECOVERABLE_ERRORS as exc:
@@ -533,15 +634,48 @@ def execute_with_tool_deadline(
             "message": "工具缺少可取消/隔离的有界执行适配器，已拒绝执行",
         }
     result: Any = None
+    from app.utils.resilience.rate_limiter import (
+        ToolCircuitOpenError,
+        ToolConcurrencyLimitError,
+        tool_execution_slot,
+    )
+
     try:
-        with invocation_deadline(deadline) as invocation:
-            result = (
-                bounded(step, runtime_context=context, deadline_monotonic=deadline)
-                if callable(bounded)
-                else executor.execute(step, runtime_context=context)
-            )
+        tenant_id = (
+            runtime_context.get("tenant_id")
+            or runtime_context.get("local_user_id")
+            or runtime_context.get("actor_id")
+            or "shared"
+        )
+        with tool_execution_slot(
+            f"{step.tool_id}.{step.action}", tenant_id=str(tenant_id)
+        ) as record_result:
+            with invocation_deadline(deadline) as invocation:
+                result = (
+                    bounded(step, runtime_context=context, deadline_monotonic=deadline)
+                    if callable(bounded)
+                    else executor.execute(step, runtime_context=context)
+                )
+            record_result(result)
     except TimeoutError:
         pass
+    except ToolConcurrencyLimitError:
+        return {
+            "success": False,
+            "error_code": "tool_concurrency_limited",
+            "retryable": True,
+            "execution_status": "not_started",
+            "message": "工具并发已达上限，本次操作尚未开始，请稍后重试。",
+        }
+    except ToolCircuitOpenError as exc:
+        return {
+            "success": False,
+            "error_code": "tool_circuit_open",
+            "retryable": True,
+            "retry_after": exc.retry_after,
+            "execution_status": "not_started",
+            "message": "该工具暂时不可用，本次操作尚未开始，请稍后重试。",
+        }
     except RECOVERABLE_ERRORS as exc:
         if not invocation.uncertain:
             raise
@@ -554,7 +688,18 @@ def execute_with_tool_deadline(
             time.monotonic() <= deadline
             and isinstance(result, dict)
             and not invocation.uncertain
-            and result.get("outcome") != "unknown"
+            and (
+                result.get("outcome") != "unknown"
+                or result.get("error_code")
+                in {
+                    "tool_identity_required",
+                    "tool_identity_override",
+                    "tool_permission_denied",
+                    "tool_contract_unavailable",
+                    "tool_scope_unavailable",
+                    "catalog_identity_override",
+                }
+            )
             and not result.get("reconciliation_required")
         ):
             if (

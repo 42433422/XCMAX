@@ -25,6 +25,7 @@ _TENANT_TOOLS: dict[str, set[str]] = {}
 _SECRET_PARTS = ("password", "secret", "token", "api_key", "authorization")
 _SERVER_FIELDS = frozenset(
     {
+        "workspace_root",
         "tenant_id",
         "user_id",
         "employee_id",
@@ -52,6 +53,10 @@ _UNTRUSTED_CONTROL = frozenset(
         "employee_tool_allowlist",
         "_actor_authorization",
         "_mod_authorization",
+        "_approval_agent_run_required",
+        "_bulk_preview_scope",
+        "_bulk_preview_scopes",
+        "mutation_policy",
     }
 )
 _FINGERPRINT_SKIP = frozenset(
@@ -185,7 +190,10 @@ def _tenant_tool_denial(
 
 
 def actor_tool_denial(
-    tool_id: str, action: str, context: dict[str, Any] | None
+    tool_id: str,
+    action: str,
+    context: dict[str, Any] | None,
+    params: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Deny when a sealed actor, tenant owner, or employee allowlist does not grant this tool."""
     ctx = dict(context or {})
@@ -223,7 +231,12 @@ def actor_tool_denial(
         actor = _bound_actor(ctx)
         if getattr(actor, "role", "") == "admin":
             return None
-        if spec.permission and not get_auth_service().has_permission(actor, spec.permission):
+        permission = spec.permission
+        if (tool_id, action) == ("business_db", "read") and (params or {}).get(
+            "entity"
+        ) == "products":
+            permission = "product.view"
+        if permission and not get_auth_service().has_permission(actor, permission):
             return _denial(
                 "tool_permission_denied",
                 "权限不足，已拒绝执行工具",
@@ -933,7 +946,11 @@ def reject_empty_business_result(result: dict[str, Any], *, action: str) -> dict
 
 def seal_server_context(context: dict[str, Any] | None) -> dict[str, Any]:
     """Drop client control fields. Server identity and tenant stay as already bound."""
+    from app.infrastructure.workspace import workspace_root
+
     sealed = dict(context or {})
+    # Rebind legacy persisted runs as well as new HTTP requests at execution.
+    sealed["workspace_root"] = str(workspace_root())
     for key in _UNTRUSTED_CONTROL:
         if key not in _SERVER_FIELDS:
             sealed.pop(key, None)

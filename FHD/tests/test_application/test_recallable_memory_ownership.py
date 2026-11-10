@@ -5,7 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.application.agent_task_context import scoped_conversation_user_id
+from app.application.agent_task_context import (
+    scoped_conversation_user_id,
+    scoped_personal_memory_id,
+)
 from app.application.ai_chat.conversation_history import (
     authorized_memory_context,
     persist_recallable_chat_turn,
@@ -102,14 +105,26 @@ def test_rejects_unauthorized_real_sqlite_write(memory, bad, monkeypatch):
 
 def test_authenticated_existing_namespace_persists_and_recalls(memory):
     _, ctx, namespace, store, rag = memory
-    assert authorized_memory_context(namespace, ctx) == (namespace, None)
+    memory_namespace = scoped_personal_memory_id(ctx)
+    assert authorized_memory_context(namespace, ctx) == (memory_namespace, None)
     capture(namespace, ctx)
     assert count(store) == 1
-    assert rag.query(namespace, "synthetic question")["hits"]
+    assert rag.query(memory_namespace, "synthetic question")["hits"]
     with store._get_conn() as conn:
         assert conn.execute(
             "SELECT index_id,user_id FROM user_memory_vector_indexes"
-        ).fetchall() == [(namespace, namespace)]
+        ).fetchall() == [(memory_namespace, memory_namespace)]
+
+
+def test_authenticated_memory_is_available_in_a_new_session(memory):
+    _, ctx, namespace, _store, rag = memory
+    capture(namespace, ctx)
+    next_session = {**ctx, "session_id": "next-session", "conversation_id": "next-session"}
+    next_namespace = scoped_conversation_user_id("7", next_session)
+    memory_namespace = scoped_personal_memory_id(next_session)
+    assert next_namespace != namespace
+    assert authorized_memory_context(next_namespace, next_session) == (memory_namespace, None)
+    assert rag.query(memory_namespace, "synthetic question")["hits"]
 
 
 def test_live_session_revocation_blocks_memory(memory):
@@ -125,6 +140,7 @@ def test_live_session_revocation_blocks_memory(memory):
 @pytest.mark.parametrize("authenticated", [False, True])
 def test_planner_cannot_recall_existing_namespace_anonymously(memory, monkeypatch, authenticated):
     _, ctx, namespace, _, rag = memory
+    memory_namespace = scoped_personal_memory_id(ctx)
     capture(namespace, ctx)
     from app.application.workflow.planner import LLMWorkflowPlanner
 
@@ -149,17 +165,19 @@ def test_planner_cannot_recall_existing_namespace_anonymously(memory, monkeypatc
     def stop(*args, **kwargs):
         raise AfterMemory
 
-    monkeypatch.setattr("app.application.workflow.sales_quote_plan.sales_quote_node", stop)
     planner = LLMWorkflowPlanner(ai_service=MagicMock())
+    monkeypatch.setattr(planner, "_plan_with_llm", stop)
     with pytest.raises(AfterMemory):
         planner.plan(
             namespace, "hello synthetic question", {}, context=ctx if authenticated else {}
         )
-    assert len(calls) == int(authenticated)
+    assert len(calls) == int(authenticated) * 2
     assert v2.format_memory_v2_for_prompt.call_count == int(authenticated)
     if authenticated:
-        assert calls[0][0]["user_id"] == namespace
+        assert calls[0][0]["user_id"] == memory_namespace
+        assert calls[1][0]["user_id"] == namespace
         assert calls[0][1]["hits"]
+        assert v2.format_memory_v2_for_prompt.call_args.kwargs["user_id"] == "7"
 
 
 def test_dataset_permissions_rederived_not_body_claims(memory, monkeypatch):
@@ -200,22 +218,13 @@ def test_authenticated_dataset_writer_keeps_namespace_and_derived_access(memory,
     assert "dataset.write" in kwargs["access_context"]["permissions"]
 
 
-def test_anonymous_real_process_chat_reply_survives_without_memory(memory, monkeypatch):
+def test_anonymous_app_service_reply_does_not_persist_memory(memory, monkeypatch):
     _, _, namespace, store, _ = memory
     from app.application.ai_chat_app_service import AIChatApplicationService
 
     service = AIChatApplicationService.__new__(AIChatApplicationService)
     reply = {"success": True, "response": "synthetic completed response"}
-    monkeypatch.setattr(service, "_inject_excel_vector_context", lambda **kw: kw["context"])
-    monkeypatch.setattr(service, "_inject_wechat_contact_context", lambda **kw: kw["context"])
-    monkeypatch.setattr(service, "_handle_confirmation_flow", lambda *a: None)
-    monkeypatch.setattr(service, "_try_handle_dynamic_workflow", lambda *a: reply)
-    monkeypatch.setattr(
-        "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received", lambda *a: None
-    )
-    monkeypatch.setattr(
-        "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed", lambda *a: None
-    )
+    monkeypatch.setattr(service, "_process_chat_impl", lambda *args: reply)
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
     result = service.process_chat(namespace, "确认", context={"session_id": "anonymous"})
     assert result == reply

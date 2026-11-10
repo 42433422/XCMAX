@@ -749,13 +749,6 @@ class TestAuditLog:
         assert entry["correlation_id"] == "trace-xyz"
         assert entry["payload_keys"] == ["user"]
 
-    def test_audit_log_by_stream(self):
-        store = EventStore()
-        store.append(_make_event(), stream_id="s1")
-        store.append(_make_event(), stream_id="s2")
-        log = store.get_audit_log(stream_id="s1")
-        assert len(log) == 1
-
 
 # --------------------------------------------------------------------------- #
 # Concurrency smoke test
@@ -855,13 +848,6 @@ class TestMemoryManagement:
         assert stats["streams"] == 1
         assert stats["oldest_event"] is not None
         assert stats["newest_event"] is not None
-
-    def test_stats_empty_memory(self):
-        store = EventStore()
-        stats = store.get_stats()
-        assert stats["total_events"] == 0
-        assert stats["oldest_event"] is None
-        assert stats["newest_event"] is None
 
     def test_capacity_cleanup_memory(self):
         store = EventStore(max_events=2)

@@ -536,31 +536,6 @@ class TestProductsBatchDelete:
         result = pf.products_batch_delete(req, {"ids": [1]})
         assert result == gate_response
 
-    def test_deleted_count_from_data(self, fake_service) -> None:
-        fake_service.batch_delete_products.return_value = {
-            "success": True,
-            "data": {"deleted_count": 5},
-        }
-        req = MagicMock(spec=Request)
-        with patch(
-            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
-            side_effect=lambda x: int(x) if str(x).isdigit() else None,
-        ):
-            result = pf.products_batch_delete(req, {"ids": [1, 2]})
-        assert result["deleted"] == 5
-
-    def test_deleted_count_fallback_to_len(self, fake_service) -> None:
-        fake_service.batch_delete_products.return_value = {
-            "success": True,
-        }
-        req = MagicMock(spec=Request)
-        with patch(
-            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
-            side_effect=lambda x: int(x) if str(x).isdigit() else None,
-        ):
-            result = pf.products_batch_delete(req, {"ids": [1, 2]})
-        assert result["deleted"] == 2
-
 
 class TestProductsProductNames:
     def test_success(self, fake_service) -> None:

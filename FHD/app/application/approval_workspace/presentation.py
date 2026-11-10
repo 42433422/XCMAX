@@ -20,10 +20,15 @@ def request_to_dict(
     """统一序列化（含 ``records`` 时间线，便于详情视图渲染）。"""
     base = req.to_dict()
     business_data = base.get("business_data")
-    if isinstance(business_data, dict) and isinstance(
-        business_data.get("workflow_execution"), dict
-    ):
-        base["workflow_execution"] = business_data["workflow_execution"]
+    if isinstance(business_data, dict):
+        if isinstance(business_data.get("workflow_execution"), dict):
+            base["workflow_execution"] = business_data["workflow_execution"]
+        base["business_data"] = {
+            key: value
+            for key, value in business_data.items()
+            if key
+            not in {"durable_workflow_snapshot", "agent_execution_claim", "workflow_dispatch_claim"}
+        }
     if is_workflow(req) and (not getattr(req, "current_node", None)):
         base["is_ai_workflow_approval"] = True
         base["current_node_name"] = base.get("current_node_name") or AI_WORKFLOW_NODE_NAME

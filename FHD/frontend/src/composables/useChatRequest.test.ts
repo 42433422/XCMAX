@@ -86,6 +86,23 @@ describe('useChatRequest', () => {
     expect(body.user_id).toBe('web_normal_session-1')
   })
 
+  it('sends a model retry and a confirmed delete as separate decisions', () => {
+    const retry = request.buildPlannerChatRequestPayload('清理全部客户和产品', {
+      retryOf: 'turn-a',
+      idempotencyKey: 'turn-a',
+    }).body.context as Record<string, unknown>
+    expect(retry.retry_of).toBe('turn-a')
+    expect(retry.idempotency_key).toBe('turn-a')
+    expect(retry.destructive_confirmed).toBeUndefined()
+    const confirm = request.buildPlannerChatRequestPayload('清理全部客户和产品', {
+      destructiveConfirmed: true,
+      idempotencyKey: 'turn-a',
+    }, { turnId: 'turn-new' }).body.context as Record<string, unknown>
+    expect(confirm.destructive_confirmed).toBe(true)
+    expect(confirm.idempotency_key).toBe('turn-a')
+    expect(confirm.retry_of).toBeUndefined()
+  })
+
   it('buildPlannerChatRequestPayload includes context with recent messages', () => {
     const { body } = request.buildPlannerChatRequestPayload('hello')
     const ctx = body.context as Record<string, unknown>
@@ -293,6 +310,27 @@ describe('useChatRequest', () => {
     const req = useChatRequest(deps)
     req.buildPlannerChatRequestPayload('hello')
     expect(deps.consumeMultimodalIntoPlannerContext).toHaveBeenCalled()
+  })
+
+  it('does not abort an office ELT import at 8s or when the chat disconnects', async () => {
+    vi.useFakeTimers()
+    const chatApi = (await import('@/api/chat')).default
+    let release: (value: unknown) => void = () => {}
+    vi.mocked(chatApi.sendUnifiedChat).mockImplementation(() => new Promise((resolve) => { release = resolve }))
+    const controller = new AbortController()
+    const pending = request.requestChatByModeWithTimeout(
+      '@uploads/宗南.xlsx导入数据库',
+      8_000,
+      undefined,
+      { sessionId: 's', messages: [], signal: controller.signal },
+    )
+    controller.abort()
+    await vi.advanceTimersByTimeAsync(9_000)
+    const signal = vi.mocked(chatApi.sendUnifiedChat).mock.calls.at(-1)?.[1]?.signal
+    expect(signal?.aborted).not.toBe(true)
+    release({ success: true, response: '已提交审批' })
+    await expect(pending).resolves.toMatchObject({ success: true })
+    vi.useRealTimers()
   })
 
   it('resolveChatDbTokensForPayload is called in buildPlannerChatRequestPayload', () => {

@@ -9,13 +9,64 @@ from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 
+def _make_step(
+    *,
+    node_id="n1",
+    tool_id="products",
+    action="query",
+    status="completed",
+    output=None,
+    error="",
+    step_id="step_1",
+    duration_ms=10,
+    params=None,
+):
+    return SimpleNamespace(
+        node_id=node_id,
+        tool_id=tool_id,
+        action=action,
+        status=status,
+        output=output or {},
+        error=error,
+        step_id=step_id,
+        duration_ms=duration_ms,
+        params=params or {},
+    )
+
+
+def _make_agent_run(
+    *,
+    run_id="run_1",
+    status="completed",
+    steps=None,
+    tool_calls=None,
+    artifacts=None,
+    metadata=None,
+    plan_id="plan_test",
+    intent="test_intent",
+    message="",
+    user_id="u1",
+):
+    return SimpleNamespace(
+        run_id=run_id,
+        status=status,
+        steps=steps or [],
+        tool_calls=tool_calls or [],
+        artifacts=artifacts or [],
+        metadata=metadata or {},
+        plan_id=plan_id,
+        intent=intent,
+        message=message,
+        user_id=user_id,
+    )
+
+
 def _make_svc() -> AIChatApplicationService:
     """构造能正常实例化的服务（模拟所有构造依赖）。"""
     with (
         patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
         patch("app.application.ai_chat_app_service.get_approval_service"),
     ):
         return AIChatApplicationService()

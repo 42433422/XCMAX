@@ -64,6 +64,8 @@ async function uploadOfficeFile(file: File, endpoint: string): Promise<OfficeFil
   }
   return {
     file_path,
+    ...(asString(data.upload_id).trim() ? { upload_id: asString(data.upload_id).trim() } : {}),
+    ...(asString(data.attachment_warning).trim() ? { attachment_warning: asString(data.attachment_warning).trim() } : {}),
     workspace_root,
     filename: asString(data.filename || file.name).trim() || file.name,
   }
@@ -93,6 +95,8 @@ async function uploadViaExtractGrid(file: File): Promise<OfficeFileUploadResult>
   }
   return {
     file_path,
+    ...(asString(data.upload_id).trim() ? { upload_id: asString(data.upload_id).trim() } : {}),
+    ...(asString(data.attachment_warning).trim() ? { attachment_warning: asString(data.attachment_warning).trim() } : {}),
     workspace_root,
     filename: asString(data.template_name || file.name).trim() || file.name,
   }
@@ -182,6 +186,8 @@ export async function readOfficeEmployeeOutputs(workspaceRoot: string, paths: st
 }
 
 export type OfficeFileUploadResult = {
+  upload_id?: string
+  attachment_warning?: string
   file_path: string
   workspace_root: string
   filename: string

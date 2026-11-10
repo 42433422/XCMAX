@@ -89,7 +89,7 @@ DEFAULT_TOOLS = [
 
 
 def _planner_tools_from_registry() -> list[dict]:
-    """OpenAI function 规格，与 legacy_chat_adapter / execute_workflow_tool 一致。"""
+    """Expose LangGraph tool contracts to the compatibility tools catalog."""
     try:
         from app.mod_sdk.planner_tools import (
             get_planner_chat_tool_registry,

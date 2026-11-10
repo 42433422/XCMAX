@@ -1,4 +1,4 @@
-"""COVERAGE_RAMP Phase 1 (p1-p0-core): workflow tools + planner execute_tool (mocked)."""
+"""COVERAGE_RAMP Phase 1 (p1-p0-core): workflow helpers and registered dispatch."""
 
 from __future__ import annotations
 
@@ -18,7 +18,6 @@ from app.application.tools.workflow import (
     get_workflow_tool_registry,
     invalidate_workflow_tool_registry,
 )
-from app.application.workflow.planner import execute_tool, get_tool_registry
 
 # ---------------------------------------------------------------------------
 # workflow.py pure helpers
@@ -68,120 +67,6 @@ def test_workflow_tool_registry_roundtrip() -> None:
 def test_parse_excel_header_row_edge_cases() -> None:
     assert _parse_excel_header_row_1based({"header_row": -1}) is None
     assert _parse_excel_header_row_1based({"header_row": "2"}) == 2
-
-
-# ---------------------------------------------------------------------------
-# planner execute_tool (mocked services)
-# ---------------------------------------------------------------------------
-
-
-def test_get_tool_registry_keys() -> None:
-    reg = get_tool_registry()
-    assert isinstance(reg, dict)
-    assert "products" in reg or "price_list" in reg
-
-
-def test_execute_tool_unknown() -> None:
-    out = execute_tool("nonexistent_tool_xyz", {})
-    assert out["success"] is False
-
-
-@patch.dict(
-    "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
-    {("products", "query"): lambda p: {"success": True, "data": []}},
-    clear=False,
-)
-def test_execute_tool_products() -> None:
-    out = execute_tool("products", {"keyword": "x"})
-    assert out["success"] is True
-
-
-@patch.dict(
-    "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
-    {("price_list", "export"): lambda p: {"success": False, "message": "no customer"}},
-    clear=False,
-)
-def test_execute_tool_price_list() -> None:
-    out = execute_tool("price_list", {})
-    assert out["success"] is False
-
-
-@patch.dict(
-    "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
-    {("customers", "query"): lambda p: {"success": True}},
-    clear=False,
-)
-def test_execute_tool_customers() -> None:
-    out = execute_tool("customers", {"keyword": "甲"})
-    assert out["success"] is True
-
-
-@patch.dict(
-    "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
-    {("shipment_generate", "generate"): lambda p: {"success": True}},
-    clear=False,
-)
-def test_execute_tool_shipment_generate() -> None:
-    out = execute_tool("shipment_generate", {"unit_name": "甲"})
-    assert out["success"] is True
-
-
-@patch.dict(
-    "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
-    {("materials", "query"): lambda p: {"success": True, "data": []}},
-    clear=False,
-)
-def test_execute_tool_materials() -> None:
-    out = execute_tool("materials", {})
-    assert out["success"] is True
-
-
-@patch.dict(
-    "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
-    {("print_label", "generate"): lambda p: {"success": True}},
-    clear=False,
-)
-def test_execute_tool_print_label() -> None:
-    out = execute_tool("print_label", {"template_id": "t1"})
-    assert out["success"] is True
-
-
-@patch.dict(
-    "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
-    {("import_excel", "import"): lambda p: {"success": True}},
-    clear=False,
-)
-def test_execute_tool_import_excel() -> None:
-    out = execute_tool("import_excel", {"file_path": "/tmp/a.xlsx"})
-    assert out["success"] is True
-
-
-def test_execute_price_list_missing_customer() -> None:
-    from app.application.workflow.planner import _execute_price_list_tool
-
-    out = _execute_price_list_tool({})
-    assert out["success"] is False
-    assert out["error_code"] == "missing_customer_name"
-
-
-@patch("app.application.tools.handle_price_list_export")
-@patch("app.application.workflow.planner.ensure_fhd_repo_on_syspath")
-def test_execute_price_list_ok(mock_root: MagicMock, mock_export: MagicMock) -> None:
-    from app.application.workflow.planner import _execute_price_list_tool
-
-    mock_root.return_value = None
-    mock_export.return_value = {"success": True, "file_path": "/tmp/p.xlsx"}
-    out = _execute_price_list_tool({"customer_name": "甲公司"})
-    assert out["success"] is True
-
-
-@patch("app.bootstrap.get_products_service")
-def test_execute_products_tool_query(mock_get: MagicMock) -> None:
-    from app.application.workflow.planner import _execute_products_tool
-
-    mock_get.return_value.get_products.return_value = {"success": True, "data": []}
-    out = _execute_products_tool({"keyword": "x"})
-    assert out["success"] is True
 
 
 # ---------------------------------------------------------------------------

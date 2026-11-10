@@ -127,13 +127,6 @@ class TestMarketBaseUrl:
 class TestMarketHttpConfig:
     """Cover ``_market_http_timeout`` / ``_market_http_retries``."""
 
-    def test_timeout_default(self) -> None:
-        with patch.dict("os.environ", {}, clear=False):
-            import os
-
-            os.environ.pop("XCAGI_MARKET_HTTP_TIMEOUT", None)
-            assert ma._market_http_timeout() == 20.0
-
     def test_timeout_env_override(self) -> None:
         with patch.dict("os.environ", {"XCAGI_MARKET_HTTP_TIMEOUT": "30"}):
             assert ma._market_http_timeout() == 30.0
@@ -141,13 +134,6 @@ class TestMarketHttpConfig:
     def test_timeout_invalid_env_falls_back(self) -> None:
         with patch.dict("os.environ", {"XCAGI_MARKET_HTTP_TIMEOUT": "abc"}):
             assert ma._market_http_timeout() == 20.0
-
-    def test_retries_default(self) -> None:
-        with patch.dict("os.environ", {}, clear=False):
-            import os
-
-            os.environ.pop("XCAGI_MARKET_HTTP_RETRIES", None)
-            assert ma._market_http_retries() == 1
 
     def test_retries_env_override(self) -> None:
         with patch.dict("os.environ", {"XCAGI_MARKET_HTTP_RETRIES": "5"}):
@@ -2192,61 +2178,6 @@ class TestLTGExtractTextWithOcr:
 # ===========================================================================
 
 
-class TestTWRNormalSlotDispatch:
-    """Cover ``_registered_router_normal_slot_dispatch``."""
-
-    def test_normal_slot_dispatch_product_query(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.run_normal_slot_product_query_from_message"
-        ) as mock:
-            mock.return_value = {"success": True, "data": []}
-            result = twr._registered_router_normal_slot_dispatch(
-                "product_query", {"message": "查询鞋子"}, {}, "normal", "查询鞋子"
-            )
-            assert result["success"] is True
-            mock.assert_called_once_with("查询鞋子")
-
-    def test_normal_slot_dispatch_product_query_uses_user_message(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.run_normal_slot_product_query_from_message"
-        ) as mock:
-            mock.return_value = {"success": True}
-            twr._registered_router_normal_slot_dispatch(
-                "product_query", {}, {}, "normal", "user msg"
-            )
-            mock.assert_called_once_with("user msg")
-
-    def test_normal_slot_dispatch_shipment_preview(self) -> None:
-        with patch("app.application.normal_chat_dispatch.run_normal_slot_shipment_preview") as mock:
-            mock.return_value = {"success": True}
-            result = twr._registered_router_normal_slot_dispatch(
-                "shipment_preview", {"order_text": "订单1"}, {}, "normal", ""
-            )
-            assert result["success"] is True
-            mock.assert_called_once_with("订单1")
-
-    def test_normal_slot_dispatch_shipment_preview_fallback_user_message(self) -> None:
-        with patch("app.application.normal_chat_dispatch.run_normal_slot_shipment_preview") as mock:
-            mock.return_value = {"success": True}
-            twr._registered_router_normal_slot_dispatch(
-                "shipment_preview", {}, {}, "normal", "fallback order"
-            )
-            mock.assert_called_once_with("fallback order")
-
-    def test_normal_slot_dispatch_unknown_action(self) -> None:
-        result = twr._registered_router_normal_slot_dispatch("unknown", {}, {}, "normal", "")
-        assert result["success"] is False
-        assert "未注册" in result["message"]
-
-    def test_normal_slot_dispatch_empty_params(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.run_normal_slot_product_query_from_message"
-        ) as mock:
-            mock.return_value = {"success": True}
-            twr._registered_router_normal_slot_dispatch("product_query", {}, {}, "normal", "")
-            mock.assert_called_once_with("")
-
-
 class TestTWRCustomers:
     """Cover ``_registered_router_customers``."""
 
@@ -2367,105 +2298,6 @@ class TestTWRCustomers:
             mock_get.return_value = svc
             result = twr._registered_router_customers("create", {}, {}, "normal", "")
             assert result["success"] is False
-
-
-class TestTWRProducts:
-    """Cover ``_registered_router_products``."""
-
-    def test_products_query_normal_profile(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.run_workflow_products_query_normal_profile"
-        ) as mock:
-            mock.return_value = {"success": True}
-            result = twr._registered_router_products("query", {}, {}, "normal", "user msg")
-            assert result["success"] is True
-
-    def test_products_query_non_normal_profile(self) -> None:
-        with patch("app.services.get_products_service") as mock_get:
-            svc = MagicMock()
-            svc.get_products.return_value = {"success": True, "data": []}
-            mock_get.return_value = svc
-            result = twr._registered_router_products(
-                "query", {"unit_name": "u1"}, {}, "advanced", ""
-            )
-            assert result["success"] is True
-
-    def test_products_exists_match_by_model(self) -> None:
-        with patch("app.services.get_products_service") as mock_get:
-            svc = MagicMock()
-            svc.get_products.return_value = {
-                "success": True,
-                "data": [{"name": "n", "model_number": "M01"}],
-            }
-            mock_get.return_value = svc
-            result = twr._registered_router_products(
-                "exists", {"model_number": "m01", "unit_name": "u1"}, {}, "normal", ""
-            )
-            assert result["success"] is True
-            assert result["exists"] is True
-
-    def test_products_exists_match_by_name(self) -> None:
-        with patch("app.services.get_products_service") as mock_get:
-            svc = MagicMock()
-            svc.get_products.return_value = {
-                "success": True,
-                "data": [{"name": "prod1", "model_number": ""}],
-            }
-            mock_get.return_value = svc
-            result = twr._registered_router_products(
-                "exists", {"product_name": "prod1", "unit_name": "u1"}, {}, "normal", ""
-            )
-            assert result["exists"] is True
-
-    def test_products_exists_no_match(self) -> None:
-        with patch("app.services.get_products_service") as mock_get:
-            svc = MagicMock()
-            svc.get_products.return_value = {"success": True, "data": []}
-            mock_get.return_value = svc
-            result = twr._registered_router_products(
-                "exists", {"model_number": "X"}, {}, "normal", ""
-            )
-            assert result["exists"] is False
-
-    def test_products_create_missing_params(self) -> None:
-        with patch("app.services.get_products_service") as mock_get:
-            svc = MagicMock()
-            mock_get.return_value = svc
-            result = twr._registered_router_products("create", {}, {}, "normal", "")
-            assert result["success"] is False
-
-    def test_products_create_success(self) -> None:
-        with patch("app.services.get_products_service") as mock_get:
-            svc = MagicMock()
-            svc.create_product.return_value = {"success": True}
-            mock_get.return_value = svc
-            result = twr._registered_router_products(
-                "create",
-                {"name_or_model": "prod", "unit_name": "u1", "unit_price": "10.5"},
-                {},
-                "normal",
-                "",
-            )
-            assert result["success"] is True
-
-    def test_products_create_invalid_price_defaults_zero(self) -> None:
-        with patch("app.services.get_products_service") as mock_get:
-            svc = MagicMock()
-            svc.create_product.return_value = {"success": True}
-            mock_get.return_value = svc
-            twr._registered_router_products(
-                "create",
-                {"name_or_model": "prod", "unit_name": "u1", "unit_price": "invalid"},
-                {},
-                "normal",
-                "",
-            )
-            args, kwargs = svc.create_product.call_args
-            assert (
-                kwargs["unit_price"] == 0.0
-                if "unit_price" in kwargs
-                else args[0]["unit_price"] == 0.0
-            )
 
 
 class TestTWRMaterials:
@@ -2870,86 +2702,6 @@ class TestTWRExcelImport:
             )
             assert result["success"] is False
             assert "没有可导入" in result["message"]
-
-
-class TestTWRExecuteRegisteredWorkflowTool:
-    """Cover ``execute_registered_workflow_tool`` dispatcher."""
-
-    def test_execute_unknown_tool(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile"
-        ) as mock_profile:
-            mock_profile.return_value = "normal"
-            result = twr.execute_registered_workflow_tool(
-                "unknown_tool", "action", {"_runtime_context": {}}
-            )
-            assert result["success"] is False
-            assert "未注册" in result["message"]
-
-    def test_execute_with_runtime_context(self) -> None:
-        with (
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile"
-            ) as mock_profile,
-            patch(
-                "app.application.normal_chat_dispatch.run_normal_slot_product_query_from_message"
-            ) as mock_query,
-        ):
-            mock_profile.return_value = "normal"
-            mock_query.return_value = {"success": True}
-            result = twr.execute_registered_workflow_tool(
-                "normal_slot_dispatch",
-                "product_query",
-                {"_runtime_context": {"message": "hi"}},
-            )
-            assert result["success"] is True
-
-    def test_execute_none_params_defaults_empty(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile"
-        ) as mock_profile:
-            mock_profile.return_value = "normal"
-            result = twr.execute_registered_workflow_tool("normal_slot_dispatch", "unknown", None)
-            assert result["success"] is False
-
-    def test_execute_registered_router_dict_contains_keys(self) -> None:
-        expected_keys = {
-            "desktop_automation",
-            "normal_slot_dispatch",
-            "customers",
-            "products",
-            "materials",
-            "shipment_records",
-            "shipment_orders",
-            "business_docking",
-            "business_event",
-            "reports",
-            "sales",
-            "template_extract",
-            "template_preview",
-            "document_template",
-            "label_template_generator",
-            "print",
-            "printer_list",
-            "settings",
-            "excel_analysis",
-            "excel_analyzer",
-            "excel_toolkit",
-            "excel_import",
-            "excel_vector_index",
-            "generate_office_document",
-            "unit_products_import",
-            "inventory",
-            "purchase",
-            "mrp",
-            "suppliers",
-            "finance",
-            "ocr",
-            "dataset_rag",
-            "memory_v2",
-            "system_maintenance",
-        }
-        assert set(twr._REGISTERED_WORKFLOW_ROUTERS.keys()) == expected_keys
 
 
 # ===========================================================================

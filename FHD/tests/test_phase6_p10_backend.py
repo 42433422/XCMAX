@@ -829,14 +829,16 @@ def test_run_upstream_collaboration_skip_flag_returns_none() -> None:
     assert out is None
 
 
-def test_run_upstream_collaboration_import_error_returns_none() -> None:
+def test_run_upstream_collaboration_import_error_fails_closed() -> None:
     agent = EmployeeAgent("emp-1")
     with patch.dict(
         "sys.modules",
         {"app.application.employee_runtime.orchestrator": None},
     ):
         out = agent._run_upstream_collaboration("task", {}, {}, {})
-    assert out is None
+    assert out["success"] is False
+    assert out["error_code"] == "employee_collaboration_unavailable"
+    assert out["skipped"] is False
 
 
 def test_run_upstream_collaboration_no_deps_returns_none() -> None:
@@ -873,12 +875,12 @@ def test_run_upstream_collaboration_with_deps_runs_upstream() -> None:
     mock_record.assert_called_once_with("emp-1")
     # 验证 runtime_context 传递
     call_kwargs = mock_orch.run_upstream.call_args.kwargs
-    assert call_kwargs["runtime_context"]["user_id"] == 1
+    assert call_kwargs["runtime_context"]["user_id"] == 0  # payload cannot authenticate actor
     assert call_kwargs["runtime_context"]["workspace_root"] == "/ws"
     assert call_kwargs["runtime_context"]["session_id"] == "s1"
 
 
-def test_run_upstream_collaboration_recoverable_error_returns_none() -> None:
+def test_run_upstream_collaboration_recoverable_error_fails_closed() -> None:
     agent = EmployeeAgent("emp-1")
     mock_orch = MagicMock()
     mock_orch.depends_on.return_value = ["dep-1"]
@@ -891,7 +893,9 @@ def test_run_upstream_collaboration_recoverable_error_returns_none() -> None:
         patch("app.application.employee_runtime.metrics.record_orchestration"),
     ):
         out = agent._run_upstream_collaboration("task", {}, {}, {})
-    assert out is None
+    assert out["success"] is False
+    assert out["error_code"] == "employee_collaboration_failed"
+    assert out["skipped"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -1167,7 +1171,7 @@ def test_run_cognition_failed_returns_cognition_failed_result() -> None:
     assert out["result"]["cognition_error"] == "llm timeout"
 
 
-def test_run_interactive_chat_cognition_failed_returns_degraded_reply() -> None:
+def test_run_interactive_chat_spoof_cannot_bypass_failed_collaboration() -> None:
     agent = EmployeeAgent("emp-1")
     pack = {
         "pack_id": "emp-1",
@@ -1201,7 +1205,11 @@ def test_run_interactive_chat_cognition_failed_returns_degraded_reply() -> None:
         patch("app.application.employee_runtime.agent.MemoryScope.from_config") as mock_scope_cls,
         patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
         patch("app.application.employee_runtime.agent.build_employee_context"),
-        patch.object(EmployeeAgent, "_run_upstream_collaboration") as mock_upstream,
+        patch.object(
+            EmployeeAgent,
+            "_run_upstream_collaboration",
+            return_value={"success": False, "error_code": "employee_collaboration_failed"},
+        ) as mock_upstream,
         patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
         patch(
             "app.application.employee_runtime.agent._ex._memory_light",
@@ -1224,18 +1232,15 @@ def test_run_interactive_chat_cognition_failed_returns_degraded_reply() -> None:
             "你好",
             input_data={"source": "admin_im", "invoke_mode": "interactive_chat"},
         )
-    assert out["success"] is True
-    assert out["degraded"] is True
-    assert out["result"]["summary"] == "interactive chat fallback"
-    assert out["result"]["cognition_error"] == "llm timeout"
-    assert out["result"]["outputs"][0]["handler"] == "interactive_chat_fallback"
-    assert "变更评审员" in out["result"]["outputs"][0]["output"]
+    assert out["success"] is False
+    assert out["error_code"] == "employee_collaboration_failed"
+    mock_upstream.assert_called_once()
     mock_actions.assert_not_called()
-    # interactive_chat fallback 分支仅传 task（无 summary）。
-    mock_record.assert_called_once_with("emp-1", success=True, task="你好")
+    mock_record.assert_called_once()
+    assert mock_record.call_args.kwargs["success"] is False
 
 
-def test_run_interactive_chat_returns_reasoning_without_action_handlers() -> None:
+def test_run_interactive_chat_spoof_cannot_return_unexecuted_reasoning() -> None:
     agent = EmployeeAgent("emp-1")
     pack = {
         "pack_id": "emp-1",
@@ -1272,7 +1277,11 @@ def test_run_interactive_chat_returns_reasoning_without_action_handlers() -> Non
         patch("app.application.employee_runtime.agent.MemoryScope.from_config") as mock_scope_cls,
         patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
         patch("app.application.employee_runtime.agent.build_employee_context"),
-        patch.object(EmployeeAgent, "_run_upstream_collaboration") as mock_upstream,
+        patch.object(
+            EmployeeAgent,
+            "_run_upstream_collaboration",
+            return_value={"success": False, "error_code": "employee_collaboration_failed"},
+        ) as mock_upstream,
         patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
         patch(
             "app.application.employee_runtime.agent._ex._memory_light",
@@ -1295,17 +1304,12 @@ def test_run_interactive_chat_returns_reasoning_without_action_handlers() -> Non
             input_data={"source": "mobile_app", "invoke_mode": "interactive_chat"},
         )
 
-    assert out["success"] is True
-    assert out["result"]["summary"] == "interactive chat reply"
-    assert out["result"]["outputs"][0]["handler"] == "interactive_chat"
-    assert out["result"]["outputs"][0]["output"] == "我是静态站内容编辑员，可以帮你检查页面文案。"
-    mock_upstream.assert_not_called()
+    assert out["success"] is False
+    assert out["error_code"] == "employee_collaboration_failed"
+    mock_upstream.assert_called_once()
     mock_actions.assert_not_called()
     mock_record.assert_called_once()
-    _, kwargs = mock_record.call_args
-    assert kwargs["success"] is True
-    assert kwargs["task"] == "你好"
-    mock_mm.remember.assert_called_once()
+    assert mock_record.call_args.kwargs["success"] is False
 
 
 def test_run_collaboration_context_returns_reasoning_without_action_handlers() -> None:
@@ -1366,6 +1370,7 @@ def test_run_collaboration_context_returns_reasoning_without_action_handlers() -
                 "source": "employee_collaboration",
                 "invoke_mode": "collaboration_context",
             },
+            runtime_context={"employee_collaboration_run": True},
         )
 
     assert out["success"] is True
@@ -1435,6 +1440,7 @@ def test_run_collaboration_context_cognition_error_degrades_to_context() -> None
                 "source": "employee_collaboration",
                 "invoke_mode": "collaboration_context",
             },
+            runtime_context={"employee_collaboration_run": True},
         )
 
     assert out["success"] is True

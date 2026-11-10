@@ -22,7 +22,9 @@ def system_client(trusted_actor, local_tools) -> TestClient:
     app = FastAPI()
     app.include_router(system_routes.router)
     app.include_router(tools_execute_router)
-    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
+    return TestClient(
+        app, raise_server_exceptions=False, headers=trusted_actor(role="admin").headers
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -134,9 +136,9 @@ def test_performance_reinitialize(mock_init: MagicMock, system_client: TestClien
     optimizer = _optimizer_mock()
     mock_init.return_value = optimizer
     r = system_client.post("/api/performance/optimize/reinitialize")
-    assert r.status_code == 200
-    mock_init.assert_called_once_with()
-    optimizer.get_status.assert_called_once_with()
+    assert r.status_code == 202
+    mock_init.assert_not_called()
+    optimizer.get_status.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -151,13 +153,19 @@ def test_templates_progress(mock_prog: MagicMock, system_client: TestClient) -> 
     assert r.status_code == 200
 
 
-def test_templates_delete_validation(system_client: TestClient) -> None:
-    with patch("app.legacy.routes.document_templates_compat.run_archive_template_delete") as delete:
-        r = system_client.delete("/api/templates/delete")
+@pytest.mark.parametrize("method", ["DELETE", "POST"])
+@pytest.mark.parametrize("body", [{}, {"id": "   "}])
+def test_templates_delete_validation(system_client: TestClient, method: str, body: dict) -> None:
+    with (
+        patch("app.legacy.routes.document_templates_compat.run_archive_template_delete") as delete,
+        patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator,
+    ):
+        r = system_client.request(method, "/api/templates/delete", json=body)
     assert r.status_code == 400, r.text
     assert r.json()["success"] is False
     assert r.json()["error_code"] == "schema_validation_failed"
     delete.assert_not_called()
+    orchestrator.assert_not_called()
 
 
 @patch("app.infrastructure.skills.get_skill_registry")

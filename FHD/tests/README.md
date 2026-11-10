@@ -29,7 +29,7 @@
 
 ## collect_ignore
 
-遗留/未落地用例暂从采集排除；收尾见 [`docs/reports/COVERAGE_RAMP.md`](docs/reports/COVERAGE_RAMP.md) ④-B。
+遗留/未落地用例暂从采集排除；覆盖率门槛见 [`docs/reports/COVERAGE_RAMP.md`](docs/reports/COVERAGE_RAMP.md)。
 
 ## ELT intake sample pack
 

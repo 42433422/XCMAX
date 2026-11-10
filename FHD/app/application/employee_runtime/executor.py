@@ -464,6 +464,7 @@ def execute_employee_task_local(
     *,
     workspace_root: str | None = None,
     session_id: str | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """委托给 EmployeeAgent 执行本地 employee_pack，保持原返回契约。"""
     from app.application.employee_runtime.agent import EmployeeAgent
@@ -474,6 +475,7 @@ def execute_employee_task_local(
         user_id=user_id,
         workspace_root=workspace_root,
         session_id=session_id,
+        runtime_context=runtime_context,
     )
     return result
 

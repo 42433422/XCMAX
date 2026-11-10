@@ -1,7 +1,5 @@
 """
 与归档 ``ai_chat`` 路由共用的纯 Python 辅助函数。
-
-供 ``normal_chat_dispatch``、``/api/ai/chat-unified`` 等原生 FastAPI 路由复用。
 """
 
 from __future__ import annotations
@@ -192,7 +190,7 @@ def build_shipment_preview_response_dict(
             "switch_view": "orders",
         },
         "data": {
-            "routing": "normal_slot_dispatch",
+            "routing": "langgraph_plan",
             "intent": "shipment_preview",
         },
     }
@@ -247,6 +245,7 @@ def unified_chat_single_payload(
     source: str,
     mode: Any,
     context: dict[str, Any] | None = None,
+    request: Any | None = None,
 ) -> dict[str, Any]:
     from app.utils.ai_helpers import is_pro_source, is_professional_mode, is_qclaw_source
 
@@ -258,114 +257,21 @@ def unified_chat_single_payload(
             "_http_status": 400,
         }
 
-    text = str(message or "").strip()
-    excel_analysis = (context or {}).get("excel_analysis") if isinstance(context, dict) else None
-    if isinstance(excel_analysis, dict) and any(
-        k in text for k in ("数据库", "入库", "导入", "添加到库", "加入")
-    ):
-        from app.application import get_ai_chat_app_service
-
-        ai_chat_service = get_ai_chat_app_service()
-        result = ai_chat_service.process_chat(
-            user_id=_resolve_mode_scoped_user_id(requested_user_id, remote_addr, "normal"),
-            message=message,
-            context=context,
-            source="normal",
-            file_context={},
-        )
-        return result
-
-    from app.application.normal_chat_dispatch import (
-        build_product_query_response_dict,
-        build_replenishment_suggest_response_dict,
-        build_reports_query_response_dict,
-        build_sales_query_response_dict,
-        route_normal_mode_message,
-    )
-
-    route_result = route_normal_mode_message(message)
-    route_intent = route_result.get("intent")
-
-    if route_intent == "shipment":
-        try:
-            from app.application.facades.tools_facade import _parse_order_text
-
-            parsed_retry = _parse_order_text(message)
-            if parsed_retry.get("success"):
-                body = build_shipment_preview_response_dict(
-                    parsed_retry.get("unit_name", ""),
-                    parsed_retry.get("products") or [],
-                    message,
-                )
-                return body
-
-            local_msg = parsed_retry.get("message", "订单信息不完整，请补充单位/桶数/型号/规格。")
-            return {
-                "success": True,
-                "message": "处理完成",
-                "response": local_msg,
-                "data": {
-                    "text": local_msg,
-                    "action": "followup",
-                    "data": {"parsed_data": parsed_retry},
-                },
-            }
-        except RECOVERABLE_ERRORS:
-            logger.exception("普通版本地编号解析异常")
-            return {
-                "success": False,
-                "message": "编号模式处理失败，请稍后重试",
-                "_http_status": 500,
-            }
-
-    if route_intent == "product_query":
-        product_body = build_product_query_response_dict(route_result)
-        if product_body:
-            return product_body
-
-    # ERP 业务意图（吸收 Odoo 18）：销售/报表/补货预警走确定性工具，不落入 workflow 计划器
-    if route_intent in ("sales_query", "reports_query", "replenishment_suggest"):
-        if route_intent == "sales_query":
-            erp_body = build_sales_query_response_dict(route_result)
-        elif route_intent == "reports_query":
-            erp_body = build_reports_query_response_dict(route_result, message=text)
-        else:
-            erp_body = build_replenishment_suggest_response_dict(route_result)
-        if erp_body:
-            return erp_body
-
-    if route_intent == "delete_entity":
-        slots = route_result.get("slots") or {}
-        keyword = str(slots.get("keyword") or "").strip()
-        if not keyword:
-            return {
-                "success": True,
-                "message": "处理完成",
-                "response": "你想删除哪条记录？请告诉我名称，比如「删除侯雪梅」「删除七彩乐园」。",
-                "data": {
-                    "text": "请告诉我要删除的记录名称。",
-                    "action": "followup",
-                    "data": {"mode": "delete_await_name"},
-                },
-            }
-        from app.application import get_ai_chat_app_service
-
-        ai_chat_service = get_ai_chat_app_service()
-        return ai_chat_service.process_chat(
-            user_id=_resolve_mode_scoped_user_id(requested_user_id, remote_addr, "normal"),
-            message=message,
-            context=context,
-            source="pro",
-            file_context={},
-        )
-
     from app.application import get_ai_chat_app_service
 
-    ai_chat_service = get_ai_chat_app_service()
-    return ai_chat_service.process_chat(
+    runtime_context = dict(context or {})
+    if request is not None:
+        from app.application.ai_chat.chat_evidence import prepare_chat_evidence
+
+        runtime_context = prepare_chat_evidence(request, runtime_context, str(message or ""))
+        runtime_context.pop("_chat_evidence_prepared_marker", None)
+    file_context = runtime_context.get("file_context")
+    if not isinstance(file_context, dict):
+        file_context = runtime_context.get("file_analysis")
+    return get_ai_chat_app_service().process_chat(
         user_id=_resolve_mode_scoped_user_id(requested_user_id, remote_addr, "normal"),
-        message=message,
-        context=context,
-        source="pro",
-        file_context={},
+        message=str(message or "").strip(),
+        context=runtime_context,
+        source=str(source or "normal"),
+        file_context=file_context if isinstance(file_context, dict) else {},
     )

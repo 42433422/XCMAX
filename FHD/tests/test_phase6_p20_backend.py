@@ -1211,7 +1211,8 @@ class TestShipmentApprovalApproveRoute:
             ),
         ):
             svc = MagicMock()
-            svc.get_pending_request.return_value.tenant_id = None
+            svc.get_pending_request.return_value = SimpleNamespace(request_id="r1", tenant_id=None)
+            svc.get_pending_workflow.return_value = None
             svc.approve.return_value = True
             svc.get_pending_workflow.return_value = None
             mock_get.return_value = svc
@@ -1224,6 +1225,7 @@ class TestShipmentApprovalApproveRoute:
         assert body["success"] is True
         run = repo.get(body["run_id"])
         assert run is not None
+        svc.approve.assert_called_once_with("r1", "ok")
         assert run.intent == "approval_decision_approve"
         assert run.metadata["runtime_context"]["request_id"] == "r1"
 
@@ -1241,7 +1243,8 @@ class TestShipmentApprovalApproveRoute:
     def test_approve_fail_returns_400(self, shipment_client: TestClient):
         with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
-            svc.get_pending_request.return_value.tenant_id = None
+            svc.get_pending_request.return_value = SimpleNamespace(request_id="r1", tenant_id=None)
+            svc.get_pending_workflow.return_value = None
             svc.approve.return_value = False
             mock_get.return_value = svc
             r = shipment_client.post(
@@ -1249,39 +1252,40 @@ class TestShipmentApprovalApproveRoute:
                 json={"request_id": "r1"},
             )
         assert r.status_code == 400
+        assert r.json()["success"] is False
+        svc.approve.assert_called_once_with("r1", "")
 
     def test_approve_with_workflow_executed(self, shipment_client: TestClient):
         with (
             patch("app.application.workflow.get_approval_service") as mock_get,
-            patch("app.application.workflow.WorkflowEngine") as mock_engine_cls,
             patch(
-                "app.fastapi_routes.domains.shipment.shipment_routes._dispatch_tool_for_approval"
+                "app.application.approval_workspace_app_service._pending_snapshot",
+                return_value=None,
             ),
+            patch(
+                "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
+                return_value={
+                    "success": True,
+                    "workflow_executed": True,
+                    "agent_run_id": "run-1",
+                    "message": "AI 工作流执行完成",
+                },
+            ) as resume,
         ):
             svc = MagicMock()
-            svc.get_pending_request.return_value.tenant_id = None
-            svc.approve.return_value = True
-            plan_obj = MagicMock()
-            plan_obj.plan_id = "p1"
-            plan_obj.intent = "i"
-            plan_obj.nodes = []
-            svc.get_pending_workflow.return_value = {
-                "plan": plan_obj,
-                "runtime_context": {},
-            }
+            svc.get_pending_request.return_value = SimpleNamespace(request_id="r1", tenant_id=None)
+            svc.get_pending_workflow.return_value = None
+            svc.get_pending_workflow.return_value = {"agent_run_id": "run-1"}
             mock_get.return_value = svc
-            engine = MagicMock()
-            run_result = MagicMock()
-            run_result.node_results = []
-            engine.run.return_value = run_result
-            mock_engine_cls.return_value = engine
             r = shipment_client.post(
                 "/api/ai/approval/approve",
                 json={"request_id": "r1"},
             )
         assert r.status_code == 200
         assert r.json()["data"]["workflow_executed"] is True
-        svc.remove_pending_workflow.assert_called_once()
+        assert r.json()["data"]["agent_run_id"] == "run-1"
+        svc.approve.assert_not_called()
+        resume.assert_called_once_with(request_no="r1", opinion="", approved_by="1")
 
     def test_approve_recoverable_error(self, shipment_client: TestClient):
         with patch("app.application.workflow.get_approval_service") as mock_get:
@@ -1310,7 +1314,8 @@ class TestShipmentApprovalRejectRoute:
             ),
         ):
             svc = MagicMock()
-            svc.get_pending_request.return_value.tenant_id = None
+            svc.get_pending_request.return_value = SimpleNamespace(request_id="r1", tenant_id=None)
+            svc.get_pending_workflow.return_value = None
             svc.reject.return_value = True
             mock_get.return_value = svc
             r = shipment_client.post(
@@ -1322,6 +1327,7 @@ class TestShipmentApprovalRejectRoute:
         assert body["data"]["status"] == "rejected"
         run = repo.get(body["run_id"])
         assert run is not None
+        svc.reject.assert_called_once_with("r1", "no")
         assert run.intent == "approval_decision_reject"
         assert run.metadata["runtime_context"]["request_id"] == "r1"
 
@@ -1339,7 +1345,8 @@ class TestShipmentApprovalRejectRoute:
     def test_reject_fail_returns_400(self, shipment_client: TestClient):
         with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
-            svc.get_pending_request.return_value.tenant_id = None
+            svc.get_pending_request.return_value = SimpleNamespace(request_id="r1", tenant_id=None)
+            svc.get_pending_workflow.return_value = None
             svc.reject.return_value = False
             mock_get.return_value = svc
             r = shipment_client.post(
@@ -1347,6 +1354,8 @@ class TestShipmentApprovalRejectRoute:
                 json={"request_id": "r1"},
             )
         assert r.status_code == 400
+        assert r.json()["success"] is False
+        svc.reject.assert_called_once_with("r1", "")
 
     def test_reject_recoverable_error(self, shipment_client: TestClient):
         with patch("app.application.workflow.get_approval_service") as mock_get:

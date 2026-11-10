@@ -11,7 +11,8 @@ from app.application.agent_orchestrator.run_models import (
     LLMCall,
     ToolCall,
 )
-from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -211,29 +212,36 @@ def test_find_waiting_step_wanted_matches_node_id():
 # ---------------------------------------------------------------------------
 
 
-def test_execute_ready_steps_skips_completed_step():
-    """Completed steps are skipped in _execute_ready_steps (lines 273-274)."""
-    orch, repo, _ = _make_orchestrator()
-    run = _make_run()
-    step = _make_step(status="completed")
+def test_execute_ready_steps_skips_completed_step(trusted_actor):
+    """A completed real registered step is not executed again after recovery."""
+    actor = trusted_actor(permissions=["customer.view"])
+    orch, _, executor = _make_orchestrator()
+    run = _make_run(user_id=actor.user_id)
+    step = _make_step(tool_id="customers", action="query", status="completed")
+    step.output = {"success": True, "data": []}
     run.steps = [step]
-    run.metadata["cost_units_total"] = 0
-    run.metadata["ai_cost_units_total"] = 0
-
-    with (
-        patch(
-            "app.application.agent_orchestrator.orchestrator.budget_exceeded_payload",
-            return_value=None,
-        ),
-        patch("app.application.agent_orchestrator.orchestrator.refresh_ai_budget_metadata"),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.get_tool_action_spec",
-            return_value=None,
-        ),
-    ):
-        orch._execute_ready_steps(run, runtime_context={})
-
+    run.plan_id = "completed-read"
+    run.metadata["plan"] = plan_to_dict(
+        PlanGraph(
+            plan_id=run.plan_id,
+            intent="read customers",
+            nodes=[
+                WorkflowNode(
+                    node_id=step.node_id,
+                    tool_id=step.tool_id,
+                    action=step.action,
+                    params=step.params,
+                    risk=step.risk,
+                    idempotent=step.idempotent,
+                )
+            ],
+        )
+    )
+    orch._execute_ready_steps(run, runtime_context=actor.context)
     assert run.status == "completed"
+    assert step.status == "completed"
+    executor.execute.assert_not_called()
+    executor.execute_with_deadline.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -241,30 +249,70 @@ def test_execute_ready_steps_skips_completed_step():
 # ---------------------------------------------------------------------------
 
 
-def test_execute_ready_steps_blocks_on_unmet_dependency():
-    """Step with unmet dependency is skipped and run set to blocked (lines 275-276)."""
-    orch, repo, _ = _make_orchestrator()
-    run = _make_run()
-    step = _make_step(node_id="n2", depends_on=["n1"])
+def test_execute_ready_steps_blocks_on_unmet_dependency(trusted_actor):
+    """A persisted graph with a missing prerequisite fails closed before execution."""
+    actor = trusted_actor(permissions=["customer.view"])
+    orch, _, executor = _make_orchestrator()
+    run = _make_run(user_id=actor.user_id)
+    step = _make_step(node_id="n2", tool_id="customers", action="query", depends_on=["n1"])
     run.steps = [step]
-    run.metadata["cost_units_total"] = 0
-    run.metadata["ai_cost_units_total"] = 0
-
-    with (
-        patch(
-            "app.application.agent_orchestrator.orchestrator.budget_exceeded_payload",
-            return_value=None,
-        ),
-        patch("app.application.agent_orchestrator.orchestrator.refresh_ai_budget_metadata"),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.get_tool_action_spec",
-            return_value=None,
-        ),
-    ):
-        orch._execute_ready_steps(run, runtime_context={})
-
+    run.metadata["plan"] = plan_to_dict(
+        PlanGraph(
+            plan_id="missing-prerequisite",
+            intent="read customers",
+            nodes=[
+                WorkflowNode(
+                    node_id=step.node_id,
+                    tool_id=step.tool_id,
+                    action=step.action,
+                    params=step.params,
+                    risk=step.risk,
+                    idempotent=step.idempotent,
+                    depends_on=step.depends_on,
+                )
+            ],
+        )
+    )
+    orch._execute_ready_steps(run, runtime_context=actor.context)
     assert run.status == "blocked"
-    assert step.status == "skipped"
+    assert "依赖" in run.error
+    assert step.status == "pending"
+    executor.execute.assert_not_called()
+    executor.execute_with_deadline.assert_not_called()
+
+
+def test_valid_dependency_waits_for_predecessor_approval(trusted_actor):
+    actor = trusted_actor(permissions=["customer.view"])
+    orch, _, executor = _make_orchestrator()
+    run = _make_run(user_id=actor.user_id)
+    upstream = _make_step(node_id="n1", tool_id="customers", action="query", risk="high")
+    downstream = _make_step(node_id="n2", tool_id="customers", action="query", depends_on=["n1"])
+    run.steps = [upstream, downstream]
+    run.metadata["plan"] = plan_to_dict(
+        PlanGraph(
+            plan_id="approved-prerequisite",
+            intent="read customers",
+            nodes=[
+                WorkflowNode(
+                    node_id=step.node_id,
+                    tool_id=step.tool_id,
+                    action=step.action,
+                    params=step.params,
+                    risk=step.risk,
+                    idempotent=step.idempotent,
+                    depends_on=step.depends_on,
+                )
+                for step in run.steps
+            ],
+            metadata={"approval_required_node_ids": ["n1"]},
+        )
+    )
+    orch._execute_ready_steps(run, runtime_context=actor.context)
+    assert run.status == "waiting_user", run.error
+    assert upstream.status == "waiting_user"
+    assert downstream.status == "pending"
+    executor.execute.assert_not_called()
+    executor.execute_with_deadline.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -771,8 +819,8 @@ def test_attach_artifacts_from_payload_empty_artifact_type_skipped():
     assert run.artifacts[0].artifact_type == "document"
 
 
-def test_dataset_sqlite_failure_does_not_abort_artifact_attachment():
-    """Dataset indexing is best effort when its SQLite store is unavailable."""
+def test_artifact_attachment_does_not_call_unavailable_dataset_service():
+    """Recording evidence must not perform an implicit dataset operation."""
     orch, _, _ = _make_orchestrator()
     run = _make_run()
     payload = {
@@ -792,5 +840,6 @@ def test_dataset_sqlite_failure_does_not_abort_artifact_attachment():
         orch._attach_artifacts_from_payload(run, payload, source="test")
 
     assert len(run.artifacts) == 1
-    assert run.artifacts[0].metadata["dataset_ingest"]["success"] is False
-    assert run.events[-1].event_type == "dataset.ingest_failed"
+    assert run.artifacts[0].metadata["skip_dataset_ingest"] is True
+    service.ingest_document.assert_not_called()
+    assert run.events[-1].event_type == "artifact.attached"

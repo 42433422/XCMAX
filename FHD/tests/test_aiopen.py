@@ -110,15 +110,22 @@ def test_aiopen_invoke_attaches_agent_run_for_tool_call(client, monkeypatch):
     monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     repo = InMemoryAgentRunRepository()
 
-    with patch(
-        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-        return_value=repo,
+    from app.fastapi_routes import ai_open
+
+    with (
+        patch("app.fastapi_routes.ai_open.invoke_tool", wraps=ai_open.invoke_tool) as invoke,
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
     ):
         resp = client.post(
             "/api/aiopen/invoke",
             json={"tool": "api_catalog", "args": {}, "user_id": "aiopen-rest-user"},
         )
 
+    invoke.assert_awaited_once()
+    assert invoke.call_args.args[:2] == ("api_catalog", {})
     assert resp.status_code == 200
     body = resp.json()
     run_id = body["run_id"]
@@ -129,10 +136,25 @@ def test_aiopen_invoke_attaches_agent_run_for_tool_call(client, monkeypatch):
     assert run.intent == "aiopen_tool_call"
     assert run.metadata["channel"] == "aiopen_invoke"
     assert run.metadata["runtime_context"]["route"] == "/api/aiopen/invoke"
-    assert run.metadata["tool_call_count"] == 1
-    assert run.tool_calls[0].tool_id == "aiopen"
-    assert run.tool_calls[0].action == "api_catalog"
-    assert run.tool_calls[0].cost_units == 1
+    _assert_redacted_aiopen_receipt(run)
+
+
+def _assert_redacted_aiopen_receipt(run):
+    # A verified external call remains auditable without inventing an internal
+    # orchestrator execution or charging its cost a second time.
+    assert run.status == "completed"
+    assert not run.tool_calls
+    payload = run.final_output["chat_payload"]
+    assert payload["success"] is True
+    records = payload["data"]["legacy_tool_records"]
+    assert len(records) == 1
+    assert records[0]["tool_id"] == "aiopen"
+    assert records[0]["action"] == "api_catalog"
+    assert records[0]["params"] == str({"payload_redacted": True, "argument_count": 0})
+    assert records[0]["output"] == str({"payload_redacted": True, "success": True})
+    assert "fixture-aiopen-key" not in str(run.to_dict())
+    assert "run.completed" in [event.event_type for event in run.events]
+    assert "tool.request_rejected" not in [event.event_type for event in run.events]
 
 
 def test_invoke_api_call_blocked_outside_whitelist(client, monkeypatch):
@@ -296,9 +318,14 @@ def test_aiopen_mcp_tools_call_attaches_agent_run_meta(client, monkeypatch):
     monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     repo = InMemoryAgentRunRepository()
 
-    with patch(
-        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-        return_value=repo,
+    from app.fastapi_routes import ai_open
+
+    with (
+        patch("app.fastapi_routes.ai_open.invoke_tool", wraps=ai_open.invoke_tool) as invoke,
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
     ):
         resp = client.post(
             "/api/aiopen/mcp",
@@ -310,6 +337,8 @@ def test_aiopen_mcp_tools_call_attaches_agent_run_meta(client, monkeypatch):
             },
         )
 
+    invoke.assert_awaited_once()
+    assert invoke.call_args.args[:2] == ("api_catalog", {})
     assert resp.status_code == 200
     result = resp.json()["result"]
     assert result["isError"] is False
@@ -320,8 +349,7 @@ def test_aiopen_mcp_tools_call_attaches_agent_run_meta(client, monkeypatch):
     assert run.intent == "aiopen_tool_call"
     assert run.metadata["channel"] == "aiopen_mcp"
     assert run.metadata["runtime_context"]["route"] == "/api/aiopen/mcp"
-    assert run.tool_calls[0].tool_id == "aiopen"
-    assert run.tool_calls[0].action == "api_catalog"
+    _assert_redacted_aiopen_receipt(run)
 
 
 def test_mcp_get_probe(client, monkeypatch):

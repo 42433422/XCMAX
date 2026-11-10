@@ -8,7 +8,6 @@ import httpx
 import pytest
 
 from app.application.workflow import v1_builtin_nodes as vb
-from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 # ---------------------------------------------------------------------------
 # template resolution + runtime ctx
@@ -155,139 +154,11 @@ def test_eval_condition_ops() -> None:
     assert vb._eval_condition(5, "unknown_op", 1) is False
 
 
-# ---------------------------------------------------------------------------
-# loop node
-# ---------------------------------------------------------------------------
-
-
-def _body_plan() -> dict:
-    return {
-        "nodes": [
-            {
-                "tool_id": "data_transform",
-                "params": {"input": {"x": 1}, "mappings": [{"from": "x", "to": "y"}]},
-            }
-        ]
-    }
-
-
-def test_loop_missing_body_plan() -> None:
-    out = vb.execute_loop_node({"mode": "for_each"})
-    assert out["error_code"] == "missing_body_plan"
-
-
-def test_loop_for_each_invalid_items() -> None:
-    out = vb.execute_loop_node({"mode": "for_each", "items": "notalist", "body_plan": _body_plan()})
-    assert out["error_code"] == "invalid_items"
-
-
-def test_loop_for_each_success() -> None:
-    out = vb.execute_loop_node({"mode": "for_each", "items": [1, 2], "body_plan": _body_plan()})
-    assert out["success"] is True
-    assert out["iterations"] == 2
-
-
-def test_loop_while_runs_until_false() -> None:
-    out = vb.execute_loop_node(
-        {
-            "mode": "while",
-            "condition": {"op": "lt", "field": "counter", "value": 2},
-            "body_plan": _body_plan(),
-        }
-    )
-    assert out["iterations"] == 2
-
-
-def test_loop_while_immediately_false() -> None:
-    out = vb.execute_loop_node(
-        {
-            "mode": "while",
-            "condition": {"op": "lt", "field": "counter", "value": 0},
-            "body_plan": _body_plan(),
-        }
-    )
-    assert out["iterations"] == 0
-
-
-def test_loop_invalid_mode() -> None:
-    out = vb.execute_loop_node({"mode": "bogus", "body_plan": _body_plan()})
-    assert out["error_code"] == "invalid_mode"
-
-
-# ---------------------------------------------------------------------------
-# _execute_body_plan + _dispatch_builtin
-# ---------------------------------------------------------------------------
-
-
-def test_execute_body_plan_invalid() -> None:
-    out = vb._execute_body_plan("notaplan", {})
-    assert out["error_code"] == "invalid_body_plan"
-
-
-def test_execute_body_plan_empty() -> None:
-    out = vb._execute_body_plan({"nodes": []}, {})
-    assert out["error_code"] == "empty_body_plan"
-
-
-def test_dispatch_builtin_workflow_node_object() -> None:
-    node = WorkflowNode(
-        node_id="n1", tool_id="data_transform", action="x", params={"input": {"a": 1}}
-    )
-    out = vb._dispatch_builtin(node, {})
-    assert out["success"] is True
-
-
-def test_dispatch_builtin_unsupported() -> None:
-    out = vb._dispatch_builtin({"tool_id": "no_such"}, {})
-    assert out["error_code"] == "unsupported_builtin"
-
-
-def test_dispatch_builtin_error(monkeypatch) -> None:
-    def _boom(params, ctx):
-        raise ValueError("kaboom")
-
-    monkeypatch.setitem(vb._V1_BUILTIN_NODES, "boom", _boom)
-    out = vb._dispatch_builtin({"tool_id": "boom"}, {})
-    assert out["error_code"] == "builtin_error"
-
-
-# ---------------------------------------------------------------------------
-# sub_workflow node
-# ---------------------------------------------------------------------------
-
-
-def test_sub_workflow_missing_inline_plan() -> None:
-    out = vb.execute_sub_workflow_node({})
-    assert out["error_code"] == "missing_inline_plan"
-
-
-def test_sub_workflow_max_depth() -> None:
-    plan = PlanGraph(plan_id="p", intent="i")
-    out = vb.execute_sub_workflow_node(
-        {"inline_plan": plan, "max_depth": 3}, runtime_context={"sub_workflow_depth": 3}
-    )
-    assert out["error_code"] == "max_depth"
-
-
-def test_sub_workflow_invalid_plan() -> None:
-    out = vb.execute_sub_workflow_node({"inline_plan": {"not": "a plan"}})
-    assert out["error_code"] == "invalid_plan"
-
-
-def test_sub_workflow_missing_dispatcher() -> None:
-    plan = PlanGraph(plan_id="p", intent="i")
-    out = vb.execute_sub_workflow_node({"inline_plan": plan})
-    assert out["error_code"] == "missing_dispatcher"
-
-
-# ---------------------------------------------------------------------------
-# registry
-# ---------------------------------------------------------------------------
-
-
-def test_get_v1_builtin_node_types() -> None:
-    types = vb.get_v1_builtin_node_types()
-    assert set(types) == {"http_request", "data_transform", "loop", "sub_workflow"}
+def test_module_exposes_only_standalone_nodes() -> None:
+    assert callable(vb.execute_http_request_node)
+    assert callable(vb.execute_data_transform_node)
+    assert not hasattr(vb, "execute_loop_node")
+    assert not hasattr(vb, "execute_sub_workflow_node")
 
 
 if __name__ == "__main__":  # pragma: no cover

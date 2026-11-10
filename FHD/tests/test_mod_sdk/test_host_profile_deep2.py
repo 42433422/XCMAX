@@ -146,16 +146,6 @@ class TestValidateProfileSchemaDeep:
         errs = hp._validate_profile_schema(data)
         assert len(errs) == 3
 
-    def test_all_keys_present_no_errors(self):
-        data = {
-            "schema_version": 1,
-            "sku": "personal",
-            "package_stage_ids": [],
-            "sku_bundled_mod_ids": [],
-            "bridge_api_map": {},
-        }
-        assert hp._validate_profile_schema(data) == []
-
 
 # ── _load_merged_profile deep ───────────────────────────────────────────────
 

@@ -59,7 +59,6 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
     // A failed session probe is not a hydrated workspace. Retry the profile
     // read; if it stays unreachable, say so — never the workspace-not-ready text.
     const ready = () => account.workspaceReady && account.workspaceHydrationReady
-    const retryDelays = [0, 400, 1200]
     let retries = 0
     while (current() && !signal.aborted) {
       if (ready()) return true
@@ -68,8 +67,7 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
         if (!current() || signal.aborted) return false
         continue
       }
-      if (retries >= retryDelays.length) throw new Error('登录状态无法确认，请重试登录')
-      await pause(retryDelays[retries++], signal)
+      await pause(Math.min(400 * 2 ** retries++, 30_000), signal)
       if (!current() || signal.aborted) return false
       try { await account.refreshFromServer() } catch { /* the store records the outage */ }
     }
@@ -77,16 +75,14 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
   }
 
   async function authenticate(current: () => boolean, signal: AbortSignal) {
-    // A busy local backend can miss the session-check deadline right after launch.
-    // That is not a logout: retry within the startup budget, then say what failed.
-    const retryDelays = [500, 1500]
-    for (let attempt = 0; ; attempt++) {
+    let attempt = 0
+    while (current() && !signal.aborted) {
       const auth = await ensureStartupAuthenticated(current)
       if (!auth.unavailable || !current() || signal.aborted) return auth
-      if (attempt >= retryDelays.length) throw new Error('本地服务响应超时，登录状态暂时无法确认，请重试')
-      await pause(retryDelays[attempt], signal)
+      await pause(Math.min(500 * 2 ** attempt++, 30_000), signal)
       if (!current() || signal.aborted) return auth
     }
+    return { ok: false, entitledModIds: [], unavailable: true }
   }
 
   function retryStartup() {

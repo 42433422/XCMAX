@@ -239,7 +239,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
           return
         }
       }
-      const res = await authApi.getCurrentUser()
+      const res = await authApi.getCurrentUser({ quiet: true })
       if (!current()) return
       if (requestEpoch !== hydrationEpoch) {
         while (current() && requestEpoch !== hydrationEpoch) await followLatestHydration()

@@ -64,13 +64,6 @@ class TestParseExcelHeaderRow1BasedExtended:
 
 
 class TestHandleExcelAnalysisDeep:
-    def test_no_file_path(self):
-        from app.application.tools.workflow import handle_excel_analysis
-
-        result = handle_excel_analysis({"action": "read"})
-        assert result["success"] is False
-        assert "file_path" in result["error"]
-
     def test_resolve_error(self):
         from app.application.tools.workflow import handle_excel_analysis
 
@@ -498,13 +491,6 @@ class TestExecuteWorkflowToolExtended:
 
 
 class TestBaseRegistryToolDefinitions:
-    def test_excel_analysis_tool(self):
-        from app.application.tools.workflow import _base_registry
-
-        reg = _base_registry()
-        names = [t["function"]["name"] for t in reg]
-        assert "excel_analysis" in names
-
     def test_excel_schema_understand_tool(self):
         from app.application.tools.workflow import _base_registry
 
@@ -525,13 +511,6 @@ class TestBaseRegistryToolDefinitions:
         reg = _base_registry()
         names = [t["function"]["name"] for t in reg]
         assert "excel_chart_recommend" in names
-
-    def test_import_excel_to_database_tool(self):
-        from app.application.tools.workflow import _base_registry
-
-        reg = _base_registry()
-        names = [t["function"]["name"] for t in reg]
-        assert "import_excel_to_database" in names
 
     def test_generate_office_document_tool(self):
         from app.application.tools.workflow import _base_registry

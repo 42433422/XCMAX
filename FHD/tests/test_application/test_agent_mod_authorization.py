@@ -20,6 +20,7 @@ from app.db.models.user import User
 from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
 from app.infrastructure.auth.agent_mod_scope import (
     AgentModAuthorizationError,
+    bind_agent_actor_scope,
     bind_agent_mod_scope,
 )
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
@@ -49,10 +50,30 @@ def mod_session(tmp_path, monkeypatch):
 
 
 def test_background_mod_scope_revalidates_revocation_and_restores_thread(mod_session, monkeypatch):
+    from app.db.models.permission import Permission, Role
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    with mod_session.begin() as db:
+        user = db.get(User, 1)
+        user.tenant_id = 7
+        role = Role(name="user")
+        role.permissions = [Permission(code="product.view", name="Query products")]
+        db.add(role)
     binding = bind_agent_mod_scope(
         session_id="secret-session", user_id="1", mod_id="test-private-mod"
     )
     assert "secret-session" not in str(binding)
+    actor = bind_agent_actor_scope(
+        session_id="secret-session", user_id="1", mod_id="test-private-mod"
+    )
+    context = {
+        "_mod_authorization": binding,
+        "_actor_authorization": actor,
+        "user_id": "1",
+        "actor_id": "1",
+        "tenant_id": "7",
+        "mod_id": "test-private-mod",
+    }
     seen = []
 
     def execute(tool, action, params):
@@ -68,17 +89,20 @@ def test_background_mod_scope_revalidates_revocation_and_restores_thread(mod_ses
 
     def run():
         assert get_request_active_mod_id() == ""
-        result = AgentToolExecutor().execute(step, runtime_context={"_mod_authorization": binding})
+        result = AgentToolExecutor().execute(step, runtime_context=context)
         assert get_request_active_mod_id() == ""
         return result
 
     with ThreadPoolExecutor(max_workers=1) as pool:
-        assert pool.submit(run).result(timeout=10)["success"]
+        result = pool.submit(run).result(timeout=10)
+        assert result["success"], result
         with mod_session.begin() as db:
             db.query(UserSession).filter_by(
                 session_id="secret-session"
             ).one().entitled_mod_ids_json = "[]"
-        assert pool.submit(run).result(timeout=10)["error_code"] == "mod_authorization_invalid"
+        revoked = pool.submit(run).result(timeout=10)
+        assert revoked["success"] is False
+        assert revoked["error_code"] == "tool_identity_required"
     assert seen == ["test-private-mod"]
 
 
@@ -369,3 +393,26 @@ def test_legacy_task_without_runs_is_not_hidden_by_active_mod_header():
     other_tenant = AgentPrincipal(user_id="1", tenant_id="9")
     assert route_support.task_scope_matches(orchestrator, task, other_user) is False
     assert route_support.task_scope_matches(orchestrator, task, other_tenant) is False
+
+
+def test_desktop_actor_binding_key_survives_independent_processes(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    env = os.environ.copy()
+    env.pop("SECRET_KEY", None)
+    env.pop("XCAGI_AGENT_ACTOR_BINDING_KEY", None)
+    env.update(XCAGI_DESKTOP_MODE="1", XCAGI_DATA_DIR=str(tmp_path))
+    code = 'from app.infrastructure.auth.agent_mod_scope import _actor_proof; print(_actor_proof({"user_id": "41", "tenant_id": "7"}))'
+    first = subprocess.run(
+        [sys.executable, "-c", code], env=env, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    second = subprocess.run(
+        [sys.executable, "-c", code], env=env, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    assert first and first == second
+    key_file = tmp_path / "data" / ".agent-actor-binding-key"
+    assert key_file.is_file()
+    if os.name != "nt":
+        assert key_file.stat().st_mode & 0o077 == 0

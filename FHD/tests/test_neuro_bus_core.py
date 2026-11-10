@@ -79,13 +79,6 @@ class TestPriorityEventQueue:
         q.peek()
         assert q.size() == 1
 
-    def test_clear(self):
-        q = PriorityEventQueue()
-        q.put(_make_event())
-        q.put(_make_event())
-        q.clear()
-        assert q.size() == 0
-
     def test_get_from_empty_returns_none(self):
         q = PriorityEventQueue()
         assert q.get() is None

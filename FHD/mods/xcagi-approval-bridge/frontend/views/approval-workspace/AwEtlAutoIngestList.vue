@@ -4,7 +4,7 @@
       <h3>数据对接自动入库</h3>
       <button type="button" :disabled="loading" @click="reload">刷新</button>
     </div>
-    <p class="aw-etl-auto-ingest__hint">导入时先选择候选模板，再点「使用此模板并入库」保存并启动知识库与业务写入；此处撤回本批写入，原件与已保存模板保留。</p>
+    <p class="aw-etl-auto-ingest__hint">写入要等审批工作台通过。这里只撤回已经入库的批次，原件与已保存模板保留。</p>
     <p v-if="loading" role="status">正在读取入库批次…</p>
     <p v-if="error" role="alert">{{ error }} <button type="button" @click="reload">重试</button></p>
     <p v-else-if="!loading && !items.length">暂无自动入库批次。</p>
@@ -76,7 +76,7 @@ async function reload() {
 
 async function withdraw(batchId: string) {
   const batch = items.value.find(item => item.batch_id === batchId)
-  if (!batchId || busyId.value || !['applied', 'partial'].includes(String(batch?.status))) return
+  if (!batch || !batchId || busyId.value || !['applied', 'partial'].includes(String(batch.status))) return
   const sessionCurrent = captureAuthSession()
   const current = () => active && sessionCurrent()
   busyId.value = batchId

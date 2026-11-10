@@ -59,9 +59,18 @@ def _orchestrator():
 
 
 def _run(product_rows: list[dict]) -> AgentRun:
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+
     run = AgentRun(user_id="u1", message="卖给验收单位 1个，从库存出库发货")
     run.metadata.update(cost_units_total=0, ai_cost_units_total=0)
-    query = AgentStep(node_id="query_product", tool_id="products", action="query", risk="low")
+    query = AgentStep(
+        node_id="query_product",
+        tool_id="products",
+        action="query",
+        params={"keyword": "交付闭环升级标记产品"},
+        risk="low",
+        idempotent=True,
+    )
     query.status, query.output = "completed", {"success": True, "data": product_rows}
     stock_out = AgentStep(
         node_id="stock_out",
@@ -77,6 +86,26 @@ def _run(product_rows: list[dict]) -> AgentRun:
         },
     )
     run.steps = [query, stock_out]
+    plan = PlanGraph(
+        plan_id="reference-test",
+        intent="inventory_out",
+        nodes=[
+            WorkflowNode(
+                node_id=step.node_id,
+                tool_id=step.tool_id,
+                action=step.action,
+                params=dict(step.params),
+                risk=step.risk,
+                idempotent=step.idempotent,
+                description=step.description,
+                depends_on=list(step.depends_on),
+            )
+            for step in run.steps
+        ],
+    )
+    run.plan_id = plan.plan_id
+    run.intent = plan.intent
+    run.metadata["plan"] = plan_to_dict(plan)
     return run
 
 
@@ -85,7 +114,30 @@ def test_resolved_reference_is_frozen_before_the_confirmation_gate():
     run = _run([PRODUCT_ROW])
     orchestrator._execute_ready_steps(run, runtime_context={})
     step = run.steps[1]
-    assert step.status == "waiting_user"
+    audit = next(
+        (
+            event
+            for event in reversed(run.events)
+            if event.event_type == "workflow.plan_audit_rejected"
+        ),
+        None,
+    )
+    assert step.status == "waiting_user", (
+        run.error,
+        {
+            key: audit.data.get(key)
+            for key in (
+                "node_id",
+                "expected_risk",
+                "step_risk",
+                "plan_idempotent",
+                "step_idempotent",
+            )
+        }
+        if audit
+        else [(event.event_type, event.message) for event in run.events[-5:]],
+        run.status,
+    )
     assert step.params["product_id"] == 7
     executor.execute.assert_not_called()
 
@@ -95,7 +147,7 @@ def test_unresolvable_reference_fails_before_any_tool_call():
     run = _run([PRODUCT_ROW, {"id": 8, "name": "另一个"}])
     orchestrator._execute_ready_steps(run, runtime_context={}, approved_step_id="stock_out")
     step = run.steps[1]
-    assert run.status == "failed" and step.status == "failed"
+    assert run.status == "failed" and step.status == "failed", (run.status, run.error, step.output)
     assert step.output["error_code"] == UNRESOLVED_CODE
     assert "执行库存出库" in step.error and "本步骤未执行" in step.error
     assert "2 条" in step.error
@@ -210,18 +262,48 @@ def test_downstream_reference_refusal_blocks_replay_of_completed_stock_out(db, s
     run.steps.append(
         AgentStep(
             node_id="shipment",
-            tool_id="shipment",
-            action="generate",
-            risk="high",
+            tool_id="business_db",
+            action="read",
+            params={"entity": "customers", "keyword": "{{stock_out.data.missing_field}}"},
+            risk="low",
+            idempotent=True,
             depends_on=["stock_out"],
-            params={"product_id": "{{missing.id}}"},
         )
     )
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+
+    plan = PlanGraph(
+        plan_id=run.plan_id,
+        intent=run.intent,
+        nodes=[
+            WorkflowNode(
+                node_id=step.node_id,
+                tool_id=step.tool_id,
+                action=step.action,
+                params=dict(step.params),
+                risk=step.risk,
+                idempotent=step.idempotent,
+                description=step.description,
+                depends_on=list(step.depends_on),
+            )
+            for step in run.steps
+        ],
+    )
+    run.metadata["plan"] = plan_to_dict(plan)
     orchestrator._execute_ready_steps(run, runtime_context={})
-    assert run.status == "failed" and requires_retry_reconciliation(run)
+    assert run.status == (
+        "blocked" if stored_idempotent else "failed"
+    ) and requires_retry_reconciliation(run), (
+        run.error,
+        run.metadata.get("recovery"),
+        [(item.node_id, item.status, item.error) for item in run.steps],
+    )
     assert stock.status == "completed" and stock.output is result
     assert run.metadata["recovery"]["step_ids"] == [stock.step_id]
-    assert "本步骤未执行" in run.error and "未做任何修改" not in run.error
+    if stored_idempotent:
+        assert run.error == "计划风险/幂等策略与持久化执行步骤不一致，拒绝执行"
+    else:
+        assert "本步骤未执行" in run.error and "未做任何修改" not in run.error
     executor.execute.assert_not_called()
     orchestrator._repo.get.return_value = run
     with pytest.raises(ValueError, match="任务执行结果尚需人工核对"):
@@ -239,9 +321,12 @@ def test_reference_refusal_uses_canonical_idempotency_for_previous_steps(tool_id
     run = _run([])
     run.steps[0].tool_id = tool_id
     run.steps[0].idempotent = True
+    run.metadata["plan"]["nodes"][0]["tool_id"] = tool_id
+    run.metadata["plan"]["nodes"][0]["idempotent"] = True
     orchestrator._execute_ready_steps(run, runtime_context={})
-    assert run.status == "failed"
+    assert run.status == ("blocked" if blocked else "failed")
     assert requires_retry_reconciliation(run) is blocked
     assert run.steps[0].status == "completed"
-    assert run.final_output["node_outputs"]["query_product"] == run.steps[0].output
+    if not blocked:
+        assert run.final_output["node_outputs"]["query_product"] == run.steps[0].output
     executor.execute.assert_not_called()

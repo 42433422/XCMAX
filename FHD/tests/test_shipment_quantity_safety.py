@@ -340,19 +340,14 @@ def test_kg_label_never_invents_twenty_kg_package(tmp_path):
     assert not any("20±" in value for value in texts)
 
 
-@pytest.mark.parametrize("kind", ["agent", "workflow"])
-def test_chat_uses_fixed_quantity_hint_not_tool_message(kind):
+def test_chat_uses_fixed_quantity_hint_not_tool_message():
     import json
 
     from tests.test_application.ai_chat_test_helpers import (
-        _make_node_result,
-        _make_plan,
-        _make_run_result,
-        _make_svc,
-    )
-    from tests.test_application.test_ai_chat_app_service_branch_cov import (
         _make_agent_run,
+        _make_plan,
         _make_step,
+        _make_svc,
     )
 
     output = {
@@ -361,20 +356,10 @@ def test_chat_uses_fixed_quantity_hint_not_tool_message(kind):
         "message": "secret SQL /private/path",
     }
     service = _make_svc()
-    if kind == "agent":
-        step = _make_step(
-            status="failed", tool_id="shipment_orders", action="generate", output=output
-        )
-        result = service._format_agent_run_response(
-            _make_plan(), _make_agent_run(status="failed", steps=[step])
-        )
-    else:
-        step = _make_node_result(
-            success=False, tool_id="shipment_orders", action="generate", output=output
-        )
-        result = service._format_workflow_run_response(
-            _make_plan(), _make_run_result(success=False, node_results=[step])
-        )
+    step = _make_step(status="failed", tool_id="shipment_orders", action="generate", output=output)
+    result = service._format_agent_run_response(
+        _make_plan(), _make_agent_run(status="failed", steps=[step])
+    )
     assert "计量单位" in result["response"]
     assert "secret" not in json.dumps(result)
 

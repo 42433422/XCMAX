@@ -26,6 +26,7 @@ from openpyxl.utils.cell import get_column_letter
 
 from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
+from app.application.reviewed_excel_io_lock import serialize_workbook_io
 
 SCHEMA_VERSION = "workbook-structural-index-v1"
 # Reserved budget for the model-facing summary inside each classify/group request.
@@ -314,6 +315,7 @@ def _cross_sheet_refs(ws, sheet_name: str, cap: int = 40) -> list[dict]:
     return refs
 
 
+@serialize_workbook_io
 def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
     """Extract a general structural index from workbook bytes."""
     if not body:

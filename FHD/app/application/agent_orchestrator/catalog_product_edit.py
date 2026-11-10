@@ -27,6 +27,7 @@ from app.application.agent_orchestrator.run_repository import get_agent_run_repo
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.workflow.plan_store import CATALOG_HEAD_PREFIX as HEAD
 from app.application.workflow.plan_store import CATALOG_OPERATION_PREFIX as OPERATION
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 from app.db.models.agent import AgentRunRecord
 from app.db.models.agent_business_action import AgentBusinessActionRecord, validate_ledger_storage
 from app.db.models.workflow import WorkflowPlan
@@ -416,6 +417,24 @@ def create_edit(principal, product_id, body):
                     "runtime_context": authenticated_runtime_context({}, principal),
                     "catalog_price_binding": binding,
                 },
+            )
+            step = run.steps[0]
+            run.plan_id = key
+            run.metadata["plan"] = plan_to_dict(
+                PlanGraph(
+                    plan_id=key,
+                    intent=TOOL,
+                    nodes=[
+                        WorkflowNode(
+                            node_id=step.node_id,
+                            tool_id=step.tool_id,
+                            action=step.action,
+                            params=step.params,
+                            risk=step.risk,
+                            idempotent=step.idempotent,
+                        )
+                    ],
+                )
             )
             claim = {
                 "run_id": run.run_id,

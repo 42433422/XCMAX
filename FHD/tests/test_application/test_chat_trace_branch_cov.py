@@ -3,9 +3,6 @@
 Targets branches not covered by test_chat_trace_cov.py:
 - _trace_safe_value: long string truncation, non-dict fallthrough, dict truncation
 - _iter_payload_dicts: seen-id skip, max-depth skip
-- _iter_tool_call_payloads: autoAction, action==tool_call branches
-- _candidate_tool_actions: empty/duplicate action, fallback defaults
-- _extract_low_risk_tool_call: empty tool_id, non-dict params
 - _iter_llm_trace_payloads: usage dict with model/provider
 - _llm_call_from_trace: cost_units estimation, status normalization, empty trace
 - _extract_llm_calls: None call skip, duplicate skip
@@ -129,147 +126,15 @@ class TestIterPayloadDictsBranches:
 
 
 # ===========================================================================
-# _iter_tool_call_payloads — missing branches [135,136], [138,139]
 # ===========================================================================
 
 
-class TestIterToolCallPayloadsBranches:
-    def test_auto_action_dict_with_tool_call_type(self):
-        """autoAction dict with type=tool_call is yielded (branch 135->136)."""
-        payload = {"autoAction": {"type": "tool_call", "tool_id": "t1"}}
-        results = list(ct._iter_tool_call_payloads(payload))
-        assert len(results) >= 1
-
-    def test_auto_action_wrong_type_not_yielded(self):
-        """autoAction with wrong type is not yielded."""
-        payload = {"autoAction": {"type": "not_tool_call"}}
-        results = list(ct._iter_tool_call_payloads(payload))
-        assert len(results) == 0
-
-    def test_action_equals_tool_call_with_tool_key(self):
-        """action==tool_call with tool_key is yielded (branch 138->139)."""
-        payload = {"action": "tool_call", "tool_key": "products", "params": {}}
-        results = list(ct._iter_tool_call_payloads(payload))
-        assert len(results) >= 1
-
-    def test_action_equals_tool_call_without_tool_key_not_yielded(self):
-        """action==tool_call without tool_key/tool_id is not yielded."""
-        payload = {"action": "tool_call"}
-        results = list(ct._iter_tool_call_payloads(payload))
-        assert len(results) == 0
-
-    def test_tool_call_dict_key_yielded(self):
-        """toolCall dict key is yielded."""
-        payload = {"toolCall": {"tool_id": "t1", "action": "query"}}
-        results = list(ct._iter_tool_call_payloads(payload))
-        assert len(results) >= 1
-
-    def test_tool_call_underscore_key_yielded(self):
-        """tool_call dict key is yielded."""
-        payload = {"tool_call": {"tool_id": "t1"}}
-        results = list(ct._iter_tool_call_payloads(payload))
-        assert len(results) >= 1
-
-
 # ===========================================================================
-# _candidate_tool_actions — missing branches [151,-149], [161,164]
 # ===========================================================================
 
 
-class TestCandidateToolActionsBranches:
-    def test_empty_action_added_skipped(self):
-        """Empty/None action is not added (branch 151 false)."""
-        result = ct._candidate_tool_actions("t1", None, {})
-        assert result == []
-
-    def test_duplicate_action_not_added(self):
-        """Duplicate action is not added."""
-        result = ct._candidate_tool_actions("t1", "query", {"action": "query"})
-        assert result == ["query"]
-
-    def test_nested_action_added(self):
-        """Nested action from params is added."""
-        result = ct._candidate_tool_actions("t1", "exec", {"action": "custom_action"})
-        assert "exec" in result
-        assert "custom_action" in result
-
-    def test_fallback_defaults_for_business_db(self):
-        """Fallback defaults added for business_db with execute action (branch 161->162)."""
-        result = ct._candidate_tool_actions("business_db", "execute", {})
-        assert "read" in result
-
-    def test_fallback_defaults_for_customers(self):
-        """Fallback defaults added for customers."""
-        result = ct._candidate_tool_actions("customers", "exec", {})
-        assert "query" in result
-
-    def test_fallback_defaults_for_products(self):
-        """Fallback defaults added for products."""
-        result = ct._candidate_tool_actions("products", "run", {})
-        assert "query" in result
-
-    def test_fallback_defaults_for_materials(self):
-        """Fallback defaults added for materials."""
-        result = ct._candidate_tool_actions("materials", "view", {})
-        assert "query" in result
-
-    def test_fallback_defaults_for_shipment_records(self):
-        """Fallback defaults added for shipment_records."""
-        result = ct._candidate_tool_actions("shipment_records", "执行", {})
-        assert "query" in result
-
-    def test_no_fallback_for_unknown_tool(self):
-        """Unknown tool_id with execute action returns just the raw action."""
-        result = ct._candidate_tool_actions("unknown_tool", "execute", {})
-        assert result == ["execute"]
-
-    def test_specific_action_no_fallback(self):
-        """Specific action (not execute) doesn't trigger fallback."""
-        result = ct._candidate_tool_actions("business_db", "create", {})
-        assert result == ["create"]
-
-
 # ===========================================================================
-# _extract_low_risk_tool_call — missing branches [176,177], [179,180]
 # ===========================================================================
-
-
-class TestExtractLowRiskToolCallBranches:
-    def test_empty_tool_id_skipped(self):
-        """Empty tool_id is skipped (branch 176->177)."""
-        payload = {"toolCall": {"tool_id": "", "action": "query"}}
-        result = ct._extract_low_risk_tool_call(payload)
-        assert result is None
-
-    def test_none_tool_id_skipped(self):
-        """None tool_id is skipped."""
-        payload = {"toolCall": {"tool_id": None, "action": "query"}}
-        result = ct._extract_low_risk_tool_call(payload)
-        assert result is None
-
-    def test_non_dict_params_replaced_with_empty(self):
-        """Non-dict params replaced with empty dict (branch 179->180)."""
-        payload = {"toolCall": {"tool_id": "t1", "action": "query", "params": "not-a-dict"}}
-        # This will go through validate_tool_call which may reject, but params coercion is tested
-        with patch(
-            "app.application.agent_orchestrator.tool_spec.validate_tool_call"
-        ) as mock_validate:
-            mock_validate.return_value = MagicMock(ok=False, spec=None)
-            ct._extract_low_risk_tool_call(payload)
-            # Verify params was coerced to {}
-            call_args = mock_validate.call_args
-            assert call_args[0][2] == {}
-
-    def test_name_key_used_as_tool_id(self):
-        """name key is used as fallback for tool_id."""
-        payload = {"toolCall": {"name": "products", "action": "query"}}
-        with patch(
-            "app.application.agent_orchestrator.tool_spec.validate_tool_call"
-        ) as mock_validate:
-            mock_validate.return_value = MagicMock(ok=False, spec=None)
-            ct._extract_low_risk_tool_call(payload)
-            call_args = mock_validate.call_args
-            assert call_args[0][0] == "products"
 
 
 # ===========================================================================
@@ -989,37 +854,4 @@ class TestPayloadData:
 
 
 # ===========================================================================
-# _extract_legacy_tool_records
 # ===========================================================================
-
-
-class TestExtractLegacyToolRecords:
-    def test_legacy_tool_records_key(self):
-        payload = {"legacy_tool_records": [{"id": 1}, {"id": 2}]}
-        result = ct._extract_legacy_tool_records(payload)
-        assert len(result) == 2
-
-    def test_tool_records_key(self):
-        payload = {"tool_records": [{"id": 1}]}
-        result = ct._extract_legacy_tool_records(payload)
-        assert len(result) == 1
-
-    def test_underscore_tool_records_key(self):
-        payload = {"_tool_records": [{"id": 1}]}
-        result = ct._extract_legacy_tool_records(payload)
-        assert len(result) == 1
-
-    def test_non_list_records_returns_empty(self):
-        payload = {"legacy_tool_records": "not-a-list"}
-        result = ct._extract_legacy_tool_records(payload)
-        assert result == []
-
-    def test_filters_non_dict_records(self):
-        payload = {"legacy_tool_records": [{"id": 1}, "str", 42, {"id": 2}]}
-        result = ct._extract_legacy_tool_records(payload)
-        assert len(result) == 2
-
-    def test_no_records_returns_empty(self):
-        payload = {"other": "value"}
-        result = ct._extract_legacy_tool_records(payload)
-        assert result == []

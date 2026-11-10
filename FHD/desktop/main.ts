@@ -421,7 +421,7 @@ export const __test_only = {
 export {
   OTA_PROXY_BYPASS_RULES,
   readWindowsInternetProxy,
-  buildOtaPacScript,
+  buildOtaProxyConfig,
   parseProxyEndpoint,
   isProxyEndpointReachable,
   isProxyEndpointReachableSync,

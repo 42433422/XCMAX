@@ -37,31 +37,3 @@ class TestSessionIdPrefersCookieOverBearer:
     def test_cookie_only(self):
         req = _req(cookies={"session_id": "cookie-only"})
         assert session_id_from_request(req) == "cookie-only"
-
-
-class TestRequestTenantIdFallback:
-    def test_falls_back_to_resolve_tenant_id_when_state_empty(self, monkeypatch):
-        from app.application import normal_chat_dispatch as ncd
-
-        req = MagicMock()
-        req.state.tenant_id = None
-        monkeypatch.setattr(
-            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
-            lambda _r: 1,
-        )
-        assert ncd._request_tenant_id(req) == 1
-
-    def test_state_tenant_id_preferred(self, monkeypatch):
-        from app.application import normal_chat_dispatch as ncd
-
-        req = MagicMock()
-        req.state.tenant_id = 7
-
-        def _boom(_r):
-            raise AssertionError("should not resolve when state set")
-
-        monkeypatch.setattr(
-            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
-            _boom,
-        )
-        assert ncd._request_tenant_id(req) == 7

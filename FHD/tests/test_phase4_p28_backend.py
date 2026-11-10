@@ -24,7 +24,6 @@ def _chat_svc() -> tuple[AIChatApplicationService, MagicMock]:
         ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
         patch("app.application.ai_chat_app_service.get_approval_service"),
     ):
         svc = AIChatApplicationService()

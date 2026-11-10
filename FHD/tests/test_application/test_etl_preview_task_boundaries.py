@@ -216,14 +216,26 @@ def test_real_csv_preview_preserves_owner_and_deterministic_rows(
     assert mapping["degraded"] is degraded
     assert result["details"]["llm_degraded"] is degraded
     assert all(row["advisory"]["degraded"] is degraded for row in result["persisted_rows"])
-    assert len(store.calls) == (1 if degraded else 2), "ETL must not automatically retry failures"
+    # Invalid JSON is a definite answer, not a transport/unknown-outcome failure.
+    # It must not retry that task, but the independent row-advice task may run.
+    # Provider failures open the owner circuit and suppress that second task.
+    expected_tasks = ["suggest_etl_field_mappings"]
+    if outcome in {"success", "invalid_json"}:
+        expected_tasks.append("advise_etl_row_decisions")
+    assert [task for _, _, task in store.calls] == expected_tasks
     if degraded:
-        assert mapping["degradation_code"] == "ELT_LLM_UNAVAILABLE"
+        code = "ELT_LLM_OUTPUT_INVALID" if outcome == "invalid_json" else "ELT_LLM_UNAVAILABLE"
+        assert mapping["degradation_code"] == code
+        assert all(row["advisory"]["degradation_code"] == code for row in result["persisted_rows"])
     else:
         assert mapping["model"] == "isolated-owner-model"
         assert all(row["advisory"]["action"] == "skip" for row in result["persisted_rows"])
     with store.factory() as db:
         assert db.query(PurchaseUnit).count() == 0, "preview must not write business rows"
+    with store.factory() as db, pytest.raises(EltError) as denied:
+        store.service.get_run(db, run_id=run_id, owner_user_id=8)
+    assert denied.value.code == "ELT_NOT_FOUND"
+    assert snapshot(store, run_id)["persisted_rows"] == result["persisted_rows"]
 
 
 def test_no_account_or_app_configuration_still_finishes_preview(preview_store, monkeypatch):

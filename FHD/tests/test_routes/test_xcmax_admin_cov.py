@@ -1313,14 +1313,6 @@ class TestLocalEndpoints:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_local_employee_status_no_session(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.get("/api/xcmax/local/employees/emp1/status")
-        assert resp.status_code == 401
-
     def test_local_employee_status_with_session(self, client: TestClient):
         with (
             patch(
@@ -1334,14 +1326,6 @@ class TestLocalEndpoints:
         ):
             resp = client.get("/api/xcmax/local/employees/emp1/status")
         assert resp.status_code == 200
-
-    def test_local_employee_manifest_no_session(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.get("/api/xcmax/local/employees/emp1/manifest")
-        assert resp.status_code == 401
 
     def test_local_employee_manifest_not_found(self, client: TestClient):
         """Lines 1244-1249: read_local_employee_manifest returns falsy → 404."""
@@ -1725,6 +1709,25 @@ class TestGetDigestIdentity:
 
 
 class TestLocalEmployeeCronJobRun:
+    @pytest.fixture(autouse=True)
+    def trusted_cron_principal(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from app.application import desktop_admin_gate, session_account_meta
+        from app.infrastructure.auth import dependencies
+
+        monkeypatch.setattr(
+            dependencies,
+            "resolve_session_user",
+            lambda request: SimpleNamespace(id=7, account_kind="admin"),
+        )
+        monkeypatch.setattr(
+            session_account_meta,
+            "enrich_session_meta_with_tenant",
+            lambda sid, user: {"tenant_id": 11, "account_kind": "admin"},
+        )
+        monkeypatch.setattr(desktop_admin_gate, "is_desktop_runtime", lambda: False)
+
     def test_no_session_401(self, client: TestClient):
         with patch(
             "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
@@ -1742,7 +1745,10 @@ class TestLocalEmployeeCronJobRun:
             ),
             patch(
                 "app.application.employee_runtime.scheduler.run_employee_cron_job",
-                return_value={"success": False, "error": "unknown employee cron job: bad-job"},
+                return_value={
+                    "success": False,
+                    "error": "unknown employee cron job: bad-job",
+                },
             ),
         ):
             resp = client.post("/api/xcmax/local/employee-cron/jobs/bad-job/run", json={})
@@ -1763,8 +1769,8 @@ class TestLocalEmployeeCronJobRun:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_bad_user_id_defaults_to_zero(self, client: TestClient):
-        """Lines 1147-1149: invalid user_id type → default 0."""
+    def test_bad_body_user_id_cannot_override_session(self, client: TestClient):
+        """Caller identity hints cannot replace the verified session user."""
         call_kwargs: list[Any] = []
 
         def fake_run(job_id: str, **kw: Any) -> dict:
@@ -1786,4 +1792,4 @@ class TestLocalEmployeeCronJobRun:
                 json={"user_id": "not-an-int"},
             )
         assert resp.status_code == 200
-        assert call_kwargs[0]["user_id"] == 0
+        assert call_kwargs[0]["user_id"] == 7

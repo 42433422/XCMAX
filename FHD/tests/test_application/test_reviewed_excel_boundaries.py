@@ -70,7 +70,7 @@ def test_range_schema_names_only_sheets_with_primary_cells():
     assert area["items"]["properties"]["sheet_name"]["enum"] == [SHEET]
     assert {sheet["sheet"] for sheet in payload["sheets"]} == {SHEET, "第二"}
     assert "其他表或后续批次未提供单元格，不代表本批不能切片" in payload["batch_decision_scope"]
-    assert "若本批自身边界不确定或有未解决依赖，仍须返回 false" in payload["batch_decision_scope"]
+    assert "仅当已提供证据无法确定单据边界时返回 false" in payload["batch_decision_scope"]
 
 
 def test_provider_envelope_reason_is_ignored(monkeypatch):
@@ -220,12 +220,13 @@ def test_only_a_blank_range_is_still_rejected(monkeypatch):
 
 
 def test_overlapping_primary_ranges_are_rejected(monkeypatch):
-    with pytest.raises(ReviewedExcelError, match="主体为空或重复覆盖"):
+    with pytest.raises(ReviewedExcelError, match="不能同时返回整表父范围和其分段子范围") as failure:
         execute(
             monkeypatch,
             source(["A1", "B1"]),
             answer(region(1, 1, 1, 2), region(1, 1, 2, 2)),
         )
+    assert "B1" in str(failure.value)
 
 
 def test_partial_boundary_keeps_covered_cells_for_a_person(monkeypatch):
@@ -394,7 +395,7 @@ def test_range_schema_fingerprint_and_boolean_dimension_drift():
         "schema"
     ]
     hashes = verify_contract(IDENTIFY_PROMPT, schema, "identify")
-    assert hashes["version"] == "independent-excel-v11-document-ranges"
+    assert hashes["version"] == "independent-excel-v12-document-ranges"
     assert (
         hashes["schema_template_sha256"]
         == "b1455573350323b3d7d3317c5202954d06e01f6675597532586facc2bdbc2b85"

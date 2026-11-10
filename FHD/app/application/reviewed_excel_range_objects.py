@@ -92,6 +92,10 @@ def _intersects(a, b):
     return a[0] <= b[2] and b[0] <= a[2] and a[1] <= b[3] and b[1] <= a[3]
 
 
+from app.application.reviewed_excel_io_lock import serialize_workbook_io
+
+
+@serialize_workbook_io
 def _blank_snapshot(body, sheet_name, tail):
     """Bounded read-only proof: no missing business data, objects or effective style."""
     from openpyxl import load_workbook

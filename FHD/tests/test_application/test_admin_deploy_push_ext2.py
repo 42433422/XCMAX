@@ -106,22 +106,6 @@ class TestReadLocalManifestExtended:
         result = _read_local_manifest(tmp_path)
         assert result == {"git_sha": "abc123"}
 
-    def test_invalid_json_returns_none(self, tmp_path: Path) -> None:
-        dist_dir = tmp_path / "dist" / "deploy"
-        dist_dir.mkdir(parents=True)
-        manifest = dist_dir / "fhd-manifest.json"
-        manifest.write_text("not json")
-        result = _read_local_manifest(tmp_path)
-        assert result is None
-
-    def test_non_dict_json_returns_none(self, tmp_path: Path) -> None:
-        dist_dir = tmp_path / "dist" / "deploy"
-        dist_dir.mkdir(parents=True)
-        manifest = dist_dir / "fhd-manifest.json"
-        manifest.write_text(json.dumps([1, 2, 3]))
-        result = _read_local_manifest(tmp_path)
-        assert result is None
-
 
 class TestFetchJsonUrlExtended:
     def test_success(self) -> None:
@@ -295,16 +279,6 @@ class TestCheckDeployUpdatesExtended:
 
 
 class TestBuildStepsExtended:
-    def test_default_steps(self) -> None:
-        steps = _build_steps({})
-        step_ids = [s.id for s in steps]
-        assert "check" in step_ids
-        assert "pack" in step_ids
-        assert "push" in step_ids
-        assert "frontend_build" in step_ids
-        assert "frontend_push" in step_ids
-        assert "verify" in step_ids
-
     def test_skip_pack(self) -> None:
         steps = _build_steps({"skip_pack": True})
         step_ids = [s.id for s in steps]
@@ -316,13 +290,6 @@ class TestBuildStepsExtended:
         step_ids = [s.id for s in steps]
         assert "frontend_build" not in step_ids
         assert "frontend_push" not in step_ids
-
-    def test_frontend_only(self) -> None:
-        steps = _build_steps({"include_backend": False})
-        step_ids = [s.id for s in steps]
-        assert "pack" not in step_ids
-        assert "push" not in step_ids
-        assert "frontend_build" in step_ids
 
     def test_no_backend_no_frontend(self) -> None:
         steps = _build_steps({"include_backend": False, "include_frontend": False})

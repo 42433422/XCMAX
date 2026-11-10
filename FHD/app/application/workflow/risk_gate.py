@@ -16,12 +16,15 @@ class HybridRiskGate:
         node_decisions: list[tuple[str, RiskDecision]] = []
         runtime_context: dict[str, Any] = dict(context or {})
         for node in plan.nodes:
+            spec = get_autonomy_guard().get_action_spec(node.tool_id, node.action)
             decision = evaluate_risk(
                 {
                     "action": f"{node.tool_id}.{node.action}",
                     "tool_id": node.tool_id,
                     "operation": node.action,
-                    "risk_level": node.risk,
+                    "risk_level": node.risk
+                    if spec is not None or node.tool_id == "clarify"
+                    else "blocked",
                     "action_id": f"{plan.plan_id}:{node.node_id}",
                 },
                 runtime_context,

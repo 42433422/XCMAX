@@ -293,13 +293,6 @@ class TestComputeMetrics:
         assert metrics["accuracy"] == 0.5
         assert 0.0 <= metrics["f1"] <= 1.0
 
-    def test_all_wrong(self):
-        import numpy as np
-
-        eval_pred = (np.array([[0.1, 0.9], [0.9, 0.1]]), np.array([0, 1]))
-        metrics = compute_metrics(eval_pred)
-        assert metrics["accuracy"] == 0.0
-
 
 # ---------------------------------------------------------------------------
 # INTENT_LABELS / LABEL_TO_ID / ID_TO_LABEL

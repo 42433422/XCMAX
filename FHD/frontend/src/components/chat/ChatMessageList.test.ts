@@ -328,10 +328,35 @@ it('offers failure recovery with visible original text without sending a request
   ]
   const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages } })
   expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).toContain('仅回答测试')
+  expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).toContain('写入状态未确认')
+  expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).not.toContain('已执行的业务操作不会撤销')
   expect(wrapper.find('[data-testid="proactive-suggestions"]').exists()).toBe(false)
-  await wrapper.findAll('button').find(button => button.text().includes('填入原文'))!.trigger('click')
-  expect(wrapper.emitted('fill-example')).toEqual([['仅回答测试']])
+  await wrapper.findAll('button').find(button => button.text().includes('不重复写入'))!.trigger('click')
+  expect(wrapper.emitted('retry-model')).toEqual([[{ text: '仅回答测试', turnId: 'turn-a' }]])
+  expect(wrapper.emitted('fill-example')).toBeUndefined()
   expect(wrapper.text()).not.toContain('查看模型状态')
+})
+
+it('asks for an explicit delete confirmation and does not offer it after a commit', async () => {
+  const preview = mount(ChatMessageList, { props: { ...defaultProps, messages: [
+    { role: 'user', content: '清理全部客户和产品', time: '12:00', turnId: 'turn-a' },
+    { role: 'ai', content: '这是删除预览，尚未写入。', time: '12:00', turnId: 'turn-a', execution: {
+      idempotencyKey: 'turn-a', intent: 'bulk_destructive', committed: false, effect: 'preview', tenantId: 'demo', customerCount: 2, productCount: 3,
+    } },
+  ] } })
+  await preview.get('[data-testid="chat-destructive-preview"] button').trigger('click')
+  expect(preview.emitted('confirm-destructive')).toEqual([[{ text: '清理全部客户和产品', idempotencyKey: 'turn-a' }]])
+  preview.unmount()
+
+  const committed = mount(ChatMessageList, { props: { ...defaultProps, messages: [
+    { role: 'user', content: '清理全部客户和产品', time: '12:00', turnId: 'turn-a' },
+    { role: 'ai', content: '处理失败：模型未返回可显示的正文', time: '12:01', turnId: 'turn-a', execution: {
+      idempotencyKey: 'turn-a', intent: 'bulk_destructive', committed: true, effect: 'committed', tenantId: 'demo', customerCount: 2, productCount: 3,
+    } },
+  ] } })
+  expect(committed.get('[data-testid="chat-error-recovery"]').text()).toContain('已提交的业务操作不会再次执行')
+  expect(committed.find('[data-testid="chat-destructive-preview"]').exists()).toBe(false)
+  committed.unmount()
 })
 
 it('shows an empty conversation example that only fills the composer', async () => {
@@ -348,11 +373,11 @@ it('retries only the exact user turn and does not substitute a later unbound mes
     { role: 'user', content: '另一个未绑定输入', time: '12:01' },
     { role: 'ai', content: '处理失败：请重试', time: '12:02', turnId: 'turn-a' },
   ] } })
-  await wrapper.findAll('button').find(button => button.text().includes('填入原文'))!.trigger('click')
-  expect(wrapper.emitted('fill-example')).toEqual([['本轮原文']])
+  await wrapper.findAll('button').find(button => button.text().includes('不重复写入'))!.trigger('click')
+  expect(wrapper.emitted('retry-model')).toEqual([[{ text: '本轮原文', turnId: 'turn-a' }]])
   await wrapper.setProps({ messages: [
     { role: 'user', content: '未绑定输入', time: '12:00' },
     { role: 'ai', content: '处理失败：请重试', time: '12:02', turnId: 'turn-b' },
   ] })
-  expect(wrapper.findAll('button').some(button => button.text().includes('填入原文'))).toBe(false)
+  expect(wrapper.findAll('button').some(button => button.text().includes('不重复写入'))).toBe(false)
 })

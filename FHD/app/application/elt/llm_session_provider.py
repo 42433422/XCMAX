@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
 from contextvars import ContextVar, Token
 from typing import Any, cast
 
@@ -40,6 +42,8 @@ class SessionMarketProvider:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(15.0, connect=10.0),
                 headers={"Authorization": f"Bearer {self._token}"},
+                trust_env=not bool((os.environ.get("XCAGI_MARKET_PROXY") or "").strip()),
+                proxy=(os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None,
             ) as client:
                 response = await client.get(f"{_platform_url()}/api/llm/chat/requests/{call_id}")
         except httpx.HTTPError:
@@ -68,22 +72,33 @@ class SessionMarketProvider:
         import httpx
 
         from app.application.elt_login_authorization import _platform_url
-        from app.application.reviewed_excel_audit import ModelRequestNotSent
+        from app.application.reviewed_excel_audit import ModelRequestNotSent, current_call_id
         from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         platform_url = _platform_url()
+        call_id = current_call_id()
+        if call_id:
+            kwargs.setdefault("client_request_id", call_id)
         timeout = self._timeout_seconds
         headers = {"Authorization": f"Bearer {self._token}"}
-        try:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(timeout, connect=min(10.0, timeout)),
-                headers=headers,
-            ) as client:
-                response = await client.get(f"{platform_url}/api/llm/resolve-chat-default")
-                response.raise_for_status()
-                route = response.json()
-        except (httpx.HTTPError, ValueError) as exc:
-            raise ModelRequestNotSent("账户模型路由不可用，未调用模型") from exc
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(timeout, connect=min(10.0, timeout)),
+                    headers=headers,
+                    trust_env=not bool((os.environ.get("XCAGI_MARKET_PROXY") or "").strip()),
+                    proxy=(os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None,
+                ) as client:
+                    response = await client.get(f"{platform_url}/api/llm/resolve-chat-default")
+                    response.raise_for_status()
+                    route = response.json()
+                break
+            except httpx.TransportError as exc:
+                if attempt == 2:
+                    raise ModelRequestNotSent("账户模型路由连接失败，未调用模型") from exc
+                await asyncio.sleep(0.25 * (attempt + 1))
+            except (httpx.HTTPError, ValueError) as exc:
+                raise ModelRequestNotSent("账户模型路由不可用，未调用模型") from exc
         if not isinstance(route, dict):
             raise ModelRequestNotSent("账户模型路由无效，未调用模型")
         provider_name, model_name = route.get("provider"), route.get("model")
@@ -129,17 +144,47 @@ class SessionMarketProvider:
             if hasattr(adapter, "_account_default"):
                 adapter._account_default = None
 
+        async def _chat(options: dict[str, Any]) -> dict[str, Any] | None:
+            import asyncio
+
+            from app.application.elt.errors import never_connected
+            from app.infrastructure.llm.model_admission import (
+                admit_model_call,
+                model_call_slot,
+                model_rate_limit_scope,
+            )
+
+            for attempt in range(3):
+                try:
+                    with (
+                        model_rate_limit_scope({"local_user_id": self.owner_user_id}),
+                        model_call_slot(self, profile="elt_session"),
+                    ):
+                        admit_model_call(self, profile="elt_session")
+                        return cast(
+                            "dict[str, Any] | None",
+                            await adapter.chat_completion(
+                                messages=messages,
+                                temperature=temperature,
+                                max_tokens=max_tokens,
+                                **options,
+                            ),
+                        )
+                except httpx.TransportError as exc:
+                    # The pinned route has exactly one stream. Only connection
+                    # establishment failure proves no model request was sent.
+                    if (
+                        options.get("allow_failover") is not False
+                        or not never_connected(exc)
+                        or attempt == 2
+                    ):
+                        raise
+                    await asyncio.sleep(0.5 * (attempt + 1))
+            raise RuntimeError("unreachable model connection retry")
+
         try:
             try:
-                return cast(
-                    "dict[str, Any] | None",
-                    await adapter.chat_completion(
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        **kwargs,
-                    ),
-                )
+                return await _chat(kwargs)
             except (MarketModelError, ValueError) as exc:
                 status = provider_http_status(exc)
                 if status not in {404, 400, 403}:
@@ -160,15 +205,7 @@ class SessionMarketProvider:
                 if retry.get("client_request_id"):
                     # The refused first shot owns its key on an idempotent market.
                     retry["client_request_id"] = f"{retry['client_request_id']}-r"
-                return cast(
-                    "dict[str, Any] | None",
-                    await adapter.chat_completion(
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        **retry,
-                    ),
-                )
+                return await _chat(retry)
         finally:
             await adapter.close()
 

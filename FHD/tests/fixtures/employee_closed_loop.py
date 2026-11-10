@@ -147,12 +147,14 @@ class Acceptance:
         self.engine = engine
         self.tmp = tmp
         self.executor = AgentToolExecutor()
+        self.actor_context: dict = {}
         self.chain: list[dict] = []
         self.items: dict[str, dict] = {}
         self.evidence_path: Path | None = None
 
     def context(self, task_id: str, **extra) -> dict:
         body = {
+            **self.actor_context,
             "tenant_id": "11",
             "user_id": "11",
             "employee_id": "employee-a",
@@ -541,6 +543,7 @@ class ClosedLoopRun:
         self._setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(root / "idempotency.sqlite"))
         self._setenv("AUDIT_LOG_PATH", str(root / "audit.jsonl"))
         self._setenv("SECRET_KEY", "closed-loop-acceptance-secret-32bytes")
+        self._setenv("XCAGI_PRODUCT_SKU", "enterprise")
         permissions.clear_idempotent_replay_for_tests()
         engine = create_engine(
             f"sqlite:///{root / 'business.sqlite'}",
@@ -548,13 +551,18 @@ class ClosedLoopRun:
             poolclass=StaticPool,
         )
         self.engine = engine
-        PurchaseUnit.__table__.create(engine)
-        from app.db.models.task_lifecycle import TaskLifecycleRecord
+        import app.db as host_db
+        import app.db.session as db_session
+        from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope
+        from tests.fixtures.employee_test_identity import seed_employee_identity
 
-        TaskLifecycleRecord.__table__.create(engine)
-        Customer.__table__.create(engine)
-        SalesOrder.__table__.create(engine)
-        SalesOrderItem.__table__.create(engine)
+        factory = seed_employee_identity(
+            engine, session_id="employee-acceptance-session", username="employee-acceptance"
+        )
+        self._patch(host_db, "HostSessionLocal", factory)
+        self._patch(db_session, "SessionLocal", factory)
+        self._setenv("DATABASE_URL", str(engine.url))
+        binding = bind_agent_actor_scope(session_id="employee-acceptance-session", user_id="11")
         sessions, open_session = _session_factory(engine)
         import app.application.customer_app_service as customers
         import app.application.sales_app_service as sales
@@ -564,6 +572,7 @@ class ClosedLoopRun:
         self._patch(sales, "get_db", sessions)
         self._patch(path_utils, "get_data_dir", lambda: str(root / "data"))
         self.book = Acceptance(engine, root)
+        self.book.actor_context = {"actor_id": "11", "_actor_authorization": binding}
         return self.book
 
     def require(self) -> Acceptance:

@@ -14,6 +14,7 @@ def persist_workflow_approval(
     *,
     flow_key: str,
     plan: PlanGraph | None = None,
+    title: str | None = None,
 ) -> dict[str, Any] | None:
     """Persist an interactive approval and its resumable workflow snapshot."""
     from app.application.workflow import approval_persistence as facade
@@ -22,6 +23,7 @@ def persist_workflow_approval(
         from app.db.models.approval import ApprovalFlow, ApprovalFlowNode
         from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
         from app.db.session import get_db
+        from app.infrastructure.tenant_scope import current_tenant_id
 
         with get_db() as db:
             existing = (
@@ -30,6 +32,46 @@ def persist_workflow_approval(
                 .first()
             )
             if existing is not None:
+                applicant = facade._resolve_applicant(db, runtime_context)
+                tenant_id = current_tenant_id()
+                if (
+                    applicant is None
+                    or not tenant_id
+                    or existing.tenant_id != tenant_id
+                    or existing.applicant_id != applicant.id
+                    or existing.status != "pending"
+                    or existing.business_type != "workflow_tool"
+                    or not facade._is_valid_plan_for_snapshot(plan)
+                ):
+                    raise RuntimeError("已有审批申请与当前身份或状态不一致")
+                try:
+                    data = facade.json.loads(existing.business_data or "{}")
+                    snapshot = facade.json.loads(
+                        facade.json.dumps(
+                            facade._build_workflow_snapshot(request, runtime_context, plan),
+                            ensure_ascii=False,
+                            default=str,
+                        )
+                    )
+                except (TypeError, ValueError):
+                    raise RuntimeError("已有审批申请快照无效") from None
+                stored_snapshot = data.get(facade.SNAPSHOT_KEY) if isinstance(data, dict) else None
+                if isinstance(stored_snapshot, dict):
+                    stored_snapshot = dict(stored_snapshot)
+                    for key in ("agent_run_id", "approved_step_id", "observed_run_id"):
+                        stored_snapshot.pop(key, None)
+                        snapshot.pop(key, None)
+                if not isinstance(data, dict) or any(
+                    (
+                        stored_snapshot != snapshot,
+                        data.get("plan_id") != snapshot["plan_id"],
+                        data.get("node_id") != request.node_id,
+                        data.get("tool_id") != request.tool_id,
+                        data.get("action") != request.action,
+                        data.get("params") != snapshot["node"]["params"],
+                    )
+                ):
+                    raise RuntimeError("已有审批申请与当前操作不一致")
                 metadata = {
                     "id": int(existing.id),
                     "request_no": str(existing.request_no),
@@ -107,7 +149,10 @@ def persist_workflow_approval(
                     applicant_name=str(
                         applicant.display_name or applicant.username or applicant.id
                     ),
-                    title=f"智能对话写操作：{request.tool_id}.{request.action}",
+                    title=(
+                        str(title or "").strip()
+                        or f"智能对话写操作：{request.tool_id}.{request.action}"
+                    ),
                     description=facade.json.dumps(
                         request.params or {}, ensure_ascii=False, default=str
                     )[:500],
@@ -121,25 +166,26 @@ def persist_workflow_approval(
                 db.add(persisted)
                 db.flush()
                 try:
-                    db.execute(
-                        facade.text(
-                            "INSERT INTO ai_action_audit (actor, action, payload) "
-                            "VALUES (:actor, :action, :payload)"
-                        ),
-                        {
-                            "actor": str(applicant.id),
-                            "action": "approval.submit_ai_workflow",
-                            "payload": facade.json.dumps(
-                                {
-                                    "approval_request_id": persisted.id,
-                                    "request_no": persisted.request_no,
-                                    "plan_id": request.plan_id,
-                                    "node_id": request.node_id,
-                                },
-                                ensure_ascii=False,
+                    with db.begin_nested():
+                        db.execute(
+                            facade.text(
+                                "INSERT INTO ai_action_audit (actor, action, payload) "
+                                "VALUES (:actor, :action, :payload)"
                             ),
-                        },
-                    )
+                            {
+                                "actor": str(applicant.id),
+                                "action": "approval.submit_ai_workflow",
+                                "payload": facade.json.dumps(
+                                    {
+                                        "approval_request_id": persisted.id,
+                                        "request_no": persisted.request_no,
+                                        "plan_id": request.plan_id,
+                                        "node_id": request.node_id,
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        )
                 except facade._APPROVAL_STORAGE_ERRORS:
                     facade.logger.warning("AI 审批提交审计写入失败")
                 metadata = {

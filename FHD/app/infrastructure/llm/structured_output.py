@@ -154,6 +154,27 @@ async def complete_structured(
                 **routing,
             )
         except RECOVERABLE_ERRORS as exc:
+            from app.infrastructure.llm.model_admission import (
+                ModelCircuitOpenError,
+                ModelConcurrencyLimitError,
+                ModelRateLimitError,
+            )
+            from app.utils.resilience.rate_limiter import RateLimitBackendError
+
+            admission_failure = isinstance(
+                exc,
+                (
+                    ModelCircuitOpenError,
+                    ModelConcurrencyLimitError,
+                    ModelRateLimitError,
+                    RateLimitBackendError,
+                ),
+            )
+            if admission_failure:
+                # Quota/backend admission errors are control-plane outcomes.
+                # Preserve their type so the HTTP boundary can return 429/503
+                # with retry guidance instead of disguising them as model output.
+                raise
             last_errors = [f"LLM 调用异常: {type(exc).__name__}: {exc}"]
             logger.warning("complete_structured attempt %s failed: %s", attempts_used, exc)
             if _is_rate_limited(exc) and transport_retries_left > 0:

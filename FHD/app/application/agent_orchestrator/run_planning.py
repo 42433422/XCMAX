@@ -18,9 +18,6 @@ class RunPlanning:
         self.repository = repository
 
     def plan(self, run: AgentRun, *, runtime_context: dict[str, Any]) -> PlanGraph:
-        from app.application.agent_orchestrator.multimodal_planner import (
-            build_multimodal_autonomous_plan,
-        )
         from app.application.workflow.planner import LLMWorkflowPlanner
         from app.services.tools_execution.registry import get_workflow_tool_registry
 
@@ -28,26 +25,42 @@ class RunPlanning:
         run.add_event("planner.started", "开始生成 Agent 计划")
         self.repository.save(run)
         context = dict(runtime_context or {})
+        from app.application.agent_orchestrator.attachment_inputs import (
+            AttachmentInputError,
+            resolve_attachment_context,
+        )
+
+        try:
+            context, artifacts = resolve_attachment_context(context)
+        except AttachmentInputError as exc:
+            from app.application.workflow.workflow_types import WorkflowNode
+
+            return PlanGraph(
+                plan_id=f"attachment-rejected-{run.run_id}",
+                intent="attachment_reupload_required",
+                todo_steps=[str(exc)],
+                nodes=[
+                    WorkflowNode(
+                        node_id="attachment_reupload",
+                        tool_id="clarify",
+                        action="ask",
+                        params={"question": str(exc)},
+                        risk="low",
+                        idempotent=True,
+                        description=str(exc),
+                    )
+                ],
+                metadata={"attachment_rejected": True},
+            )
         context.setdefault("message", run.message)
         self.recall_knowledge_for_run(run, context=context)
-        multimodal_plan = build_multimodal_autonomous_plan(
-            user_id=run.user_id, message=run.message, runtime_context=context
-        )
-        if multimodal_plan is not None:
-            run.add_event(
-                "planner.completed",
-                "多模态 Artifact 自主计划生成完成",
-                {
-                    "plan_id": multimodal_plan.plan_id,
-                    "intent": multimodal_plan.intent,
-                    "nodes": len(multimodal_plan.nodes),
-                    "source": "multimodal_autonomous_planner",
-                    "artifact_count": multimodal_plan.metadata.get("artifact_count", 0),
-                },
-            )
-            return multimodal_plan
+        from app.infrastructure.llm.model_admission import model_rate_limit_scope
+
         planner = LLMWorkflowPlanner()
-        plan = planner.plan(run.user_id, run.message, get_workflow_tool_registry(), context)
+        with model_rate_limit_scope(context):
+            plan = planner.plan(run.user_id, run.message, get_workflow_tool_registry(), context)
+        if artifacts:
+            plan.metadata["artifacts"] = artifacts
         run.add_event(
             "planner.completed",
             "Agent 计划生成完成",

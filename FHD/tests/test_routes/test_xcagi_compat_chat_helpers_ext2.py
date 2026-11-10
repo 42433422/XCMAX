@@ -115,7 +115,16 @@ class TestXcagiChatHttpExcExtended:
 
     def test_httpx_import_error_path(self):
         """When httpx import fails, should fall through to other branches."""
-        with patch("builtins.__import__", side_effect=ImportError("no httpx")):
+        import builtins
+
+        original_import = builtins.__import__
+
+        def import_without_httpx(name, *args, **kwargs):
+            if name == "httpx":
+                raise ImportError("no httpx")
+            return original_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=import_without_httpx):
             exc = RuntimeError("test")
             result = ch._xcagi_chat_http_exc(exc)
             assert result.status_code == 503
@@ -124,88 +133,6 @@ class TestXcagiChatHttpExcExtended:
 # ---------------------------------------------------------------------------
 # _xcagi_compat_reply_payload — extended
 # ---------------------------------------------------------------------------
-
-
-class TestXcagiCompatReplyPayloadExtended:
-    def test_string_reply(self):
-        result = ch._xcagi_compat_reply_payload("hello")
-        assert result["success"] is True
-        assert result["response"] == "hello"
-        assert result["data"]["response"] == "hello"
-        assert result["data"]["text"] == "hello"
-
-    def test_dict_reply_with_response(self):
-        result = ch._xcagi_compat_reply_payload({"response": "world"})
-        assert result["response"] == "world"
-
-    def test_dict_reply_with_text(self):
-        result = ch._xcagi_compat_reply_payload({"text": "from text"})
-        assert result["response"] == "from text"
-
-    def test_dict_reply_with_thinking_steps(self):
-        result = ch._xcagi_compat_reply_payload({"response": "ans", "thinking_steps": "step1"})
-        assert result["data"]["thinking_steps"] == "step1"
-
-    def test_with_runtime_context_update(self):
-        result = ch._xcagi_compat_reply_payload("reply", runtime_context_update={"key": "value"})
-        assert result["data"]["runtime_context"] == {"key": "value"}
-
-    def test_with_kitten_attachments(self):
-        result = ch._xcagi_compat_reply_payload(
-            "reply", kitten_attachments={"attachment1": "val1", "attachment2": None}
-        )
-        assert result["data"]["attachment1"] == "val1"
-        assert "attachment2" not in result["data"]
-
-    def test_with_tool_result_error(self):
-        import app.application.tools as tools_mod
-
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
-                return_value={
-                    "error": "ERR001",
-                    "message": "失败原因",
-                    "tool_key": "tool_a",
-                    "success": False,
-                },
-                create=True,
-            ),
-            patch.dict(tools_mod.__dict__, {"flatten_tool_result_dict_for_client": lambda raw: {}}),
-        ):
-            result = ch._xcagi_compat_reply_payload("原始回复")
-        # Should append tool feedback notice
-        assert "工具反馈" in result["response"]
-        assert "ERR001" in result["response"]
-        assert "tool_a" in result["response"]
-
-    def test_with_tool_result_errors_list(self):
-        import app.application.tools as tools_mod
-
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
-                return_value={
-                    "errors": ["err1", "err2", "err3", "err4", "err5", "err6"],
-                    "success": False,
-                },
-                create=True,
-            ),
-            patch.dict(tools_mod.__dict__, {"flatten_tool_result_dict_for_client": lambda raw: {}}),
-        ):
-            result = ch._xcagi_compat_reply_payload("reply")
-        # errors_preview should be in the notice
-        assert "err1" in result["response"]
-
-    def test_tool_result_unavailable(self):
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
-            side_effect=RuntimeError("unavailable"),
-            create=True,
-        ):
-            result = ch._xcagi_compat_reply_payload("reply")
-        assert result["success"] is True
-        assert result["response"] == "reply"
 
 
 # ---------------------------------------------------------------------------

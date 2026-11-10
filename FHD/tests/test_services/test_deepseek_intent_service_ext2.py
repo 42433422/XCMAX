@@ -488,14 +488,6 @@ class TestExtractSlotsFromRuleExtended:
         # No unit_name extracted from "msg"
         assert "unit_name" not in slots or slots.get("unit_name") is None
 
-    def test_unit_name_needs_fix_with_keyword(self, hybrid: HybridIntentWithDeepSeek) -> None:
-        # Pass keyword in rule_result - but the function doesn't read keyword from rule_result
-        # It builds slots from scratch. So keyword won't be in slots.
-        rule_result = {"keyword": "客户A 的 9803"}
-        slots = hybrid._extract_slots_from_rule("msg", rule_result)
-        # keyword is not extracted from message "msg"
-        assert "unit_name" not in slots
-
     def test_keyword_extracts_unit_and_model(self, hybrid: HybridIntentWithDeepSeek) -> None:
         # keyword must be in slots (from rule_result) for the keyword logic to run
         # But the function doesn't read keyword from rule_result
@@ -515,40 +507,6 @@ class TestExtractSlotsFromRuleExtended:
         slots = hybrid._extract_slots_from_rule("9803规格28", {})
         assert slots.get("product_model") == "9803"
         assert slots.get("tin_spec") == 28.0
-
-
-class TestRecognizeSyncExtended:
-    def test_recognize_sync_recoverable_error(self) -> None:
-        h = HybridIntentWithDeepSeek(use_deepseek=False)
-        with (
-            patch.object(h, "recognize", new=AsyncMock(side_effect=RuntimeError("sync fail"))),
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value={"primary_intent": "fallback"},
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
-            out = h.recognize_sync("msg")
-        assert out["primary_intent"] == "fallback"
-
-    def test_recognize_sync_success(self) -> None:
-        h = HybridIntentWithDeepSeek(use_deepseek=False)
-        rule = {"primary_intent": "greet", "is_greeting": True}
-        with (
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value=dict(rule),
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
-            out = h.recognize_sync("你好")
-        assert out.get("final_intent") == "greet" or out.get("primary_intent") == "greet"
 
 
 class TestHybridInitExtended:

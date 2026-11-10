@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio as asyncio
 import json as json
 import logging
-import os
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
@@ -16,8 +14,6 @@ from fastapi import Request
 
 from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run,
-    finalize_legacy_chat_run,
-    start_legacy_chat_run,
 )
 from app.application.planner_compat.admission import ChatAdmission
 from app.application.planner_compat.application import CompatChatApplication, FastPaths
@@ -29,8 +25,12 @@ from app.application.planner_compat.persona import (
     request_session_candidates,
     summarize_context_for_log,
 )
-from app.application.planner_compat.persona import recent_history as _recent_history
-from app.application.planner_compat.persona import resolve_chat_user_id as _resolve_chat_user_id
+from app.application.planner_compat.persona import (
+    recent_history as _recent_history,
+)
+from app.application.planner_compat.persona import (
+    resolve_chat_user_id as _resolve_chat_user_id,
+)
 from app.application.planner_compat.protocols import (
     ChatBackends,
     ChatBody,
@@ -39,21 +39,10 @@ from app.application.planner_compat.protocols import (
     Context,
     Payload,
 )
-from app.application.planner_compat.runtime import (
-    allow_legacy_fallback,
-    execute_mainline,
-    use_mainline,
-)
 from app.application.planner_compat.runtime import await_with_timeout as _await_with_timeout
-from app.application.planner_compat.runtime import env_truthy as _env_truthy
-from app.application.planner_compat.runtime import (
-    legacy_requires_token_payload as _legacy_requires_token_payload,
-)
+from app.application.planner_compat.runtime import execute_mainline
 from app.application.planner_compat.runtime import (
     merge_kitten_attachments as _merge_kitten_attachments,
-)
-from app.application.planner_compat.runtime import (
-    reply_has_legacy_tool_records as _reply_has_legacy_tool_records,
 )
 from app.application.planner_compat.streaming import CompatStream
 from app.application.planner_compat_execute import ChatTurnExecutor
@@ -84,14 +73,12 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _xcagi_compat_reply_payload,
     _xcagi_planner_stream_bytes_async,
 )
-from app.infrastructure.llm.client import llm_client_factory_scope
+from app.infrastructure.llm.client import llm_client_factory_scope, request_llm_mode
 from app.infrastructure.llm.client import set_mode as set_llm_mode
-from app.legacy.chat.legacy_chat_adapter import chat as run_agent_chat
 from app.utils.operational_errors import BOUNDARY_ERRORS as BOUNDARY_ERRORS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_BINARY_CONTEXT_KEYS = BINARY_CONTEXT_KEYS
 
 
 def _compatibility_session(request: Request) -> str | None:
@@ -122,7 +109,7 @@ def _user_industry(user: Any) -> str | None:
 
     with get_db() as db:
         row = db.query(User.industry_id).filter(User.id == user).first()
-        return str(row[0]).strip() if row and row[0] else None
+    return str(row[0]).strip() if row and row[0] else None
 
 
 def _derive_industry_from_session(request: Request) -> str:
@@ -131,8 +118,14 @@ def _derive_industry_from_session(request: Request) -> str:
     ).resolve(request)
 
 
-def _summarize_context_for_log(value: Any, *, key: str = "", depth: int = 0) -> Any:
-    return summarize_context_for_log(value, key=key, depth=depth, binary_keys=_BINARY_CONTEXT_KEYS)
+def _summarize_context_for_log(value: Any) -> Any:
+    return summarize_context_for_log(value, binary_keys=BINARY_CONTEXT_KEYS)
+
+
+def _conversation_service() -> ConversationService:
+    from app.domain.shared_services.conversation.manager import get_ai_conversation_service
+
+    return get_ai_conversation_service()
 
 
 def _attach_compat_chat_trace(
@@ -151,25 +144,6 @@ def _attach_compat_chat_trace(
         source=body.source,
         channel=channel,
     )
-
-
-def _clear_legacy_tool_result_if_reply_has_no_records(reply: Any) -> None:
-    if _reply_has_legacy_tool_records(reply):
-        return
-    try:
-        from app.legacy.chat.legacy_chat_adapter import clear_last_tool_result
-
-        clear_last_tool_result()
-    except RECOVERABLE_ERRORS:
-        logger.debug("legacy planner local tool trace clear skipped", exc_info=True)
-
-
-def _use_ai_chat_mainline(runtime_context: Context | None) -> bool:
-    return use_mainline(runtime_context, _env_truthy)
-
-
-def _legacy_chat_fallback_allowed(runtime_context: Context | None) -> bool:
-    return allow_legacy_fallback(runtime_context, _env_truthy)
 
 
 async def _execute_ai_chat_mainline(
@@ -192,22 +166,6 @@ async def _execute_ai_chat_mainline(
     )
 
 
-async def _client_issue_payload(
-    request: Request, runtime_context: Context, message: str
-) -> tuple[str, Payload] | None:
-    from app.fastapi_routes.xcagi_compat_chat_stream import (
-        _apply_client_issue_outcome,
-        _classify_and_submit_client_issue_async,
-        _client_issue_reply,
-    )
-
-    receipt = await _classify_and_submit_client_issue_async(request, runtime_context, message, "")
-    reply = _client_issue_reply(receipt)
-    if not reply:
-        return None
-    return reply, _apply_client_issue_outcome(_xcagi_compat_reply_payload(reply), receipt)
-
-
 def _business_action(
     message: str, *, runtime_context: Context, user_id: str | None, request: Request
 ) -> Payload | None:
@@ -216,12 +174,6 @@ def _business_action(
     return try_handle_business_chat_action(
         message, runtime_context=runtime_context, user_id=user_id, request=request
     )
-
-
-async def _slot_read(message: str, *, request: Request, user_id: str) -> Payload | None:
-    from app.application.normal_chat_dispatch import try_normal_slot_read_payload_async
-
-    return await try_normal_slot_read_payload_async(message, request=request, user_id=user_id)
 
 
 async def _kitten_context(context: Context, message: str) -> tuple[Context, Payload]:
@@ -236,12 +188,6 @@ async def _kitten_context(context: Context, message: str) -> tuple[Context, Payl
     except RECOVERABLE_ERRORS:
         logger.debug("kitten planner context enrich skipped", exc_info=True)
         return context, {}
-
-
-def _conversation_service() -> ConversationService:
-    from app.domain.shared_services.conversation.manager import get_ai_conversation_service
-
-    return get_ai_conversation_service()
 
 
 def _sse_event(payload: Payload) -> bytes:
@@ -265,7 +211,27 @@ def _admission() -> ChatAdmission:
 
 
 def _fast_paths() -> FastPaths:
-    return FastPaths(_client_issue_payload, _business_action, _slot_read, _kitten_context)
+    return FastPaths(_business_action, _kitten_context)
+
+
+def _token_required_payload(parsed: Payload) -> Payload:
+    data = {
+        "requires_token": True,
+        "token_name": parsed.get("token_name"),
+        "token_description": parsed.get("token_description"),
+    }
+    records = parsed.get("legacy_tool_records")
+    if isinstance(records, list) and records:
+        data["legacy_tool_records"] = records
+    return {
+        "success": True,
+        "requires_token": True,
+        "token_name": parsed.get("token_name"),
+        "token_description": parsed.get("token_description"),
+        "message": parsed.get("message"),
+        "response": parsed.get("message"),
+        "data": data,
+    }
 
 
 def _application() -> CompatChatApplication:
@@ -274,22 +240,13 @@ def _application() -> CompatChatApplication:
     executor = ChatTurnExecutor(
         backends=ChatBackends(
             _execute_ai_chat_mainline,
-            run_agent_chat,
-            create_modstore_openai_client_from_request,
-            _use_ai_chat_mainline,
-            _legacy_chat_fallback_allowed,
         ),
         responses=ChatResponses(
-            _xcagi_compat_reply_payload,
-            _legacy_requires_token_payload,
             _xcagi_chat_timeout_error_payload,
             _xcagi_chat_http_exc,
         ),
-        trace=ChatTrace(_attach_compat_chat_trace, start_legacy_chat_run, finalize_legacy_chat_run),
+        trace=ChatTrace(_attach_compat_chat_trace),
         await_timeout=_await_with_timeout,
-        clear_legacy_tool_result=_clear_legacy_tool_result_if_reply_has_no_records,
-        workspace_root=lambda: os.environ.get("WORKSPACE_ROOT", os.getcwd()),
-        logger=logger,
     )
     return CompatChatApplication(
         _admission(),
@@ -391,16 +348,21 @@ def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:
     body = _prepare_compat_chat_body(request, body)
     try:
-        with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+        with (
+            request_llm_mode(body.mode),
+            llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)),
+        ):
             payload = await _execute_compat_chat_impl(request, body)
     except HTTPException as exc:
         metadata = request_route_metadata(request)
         message = (
             exc.detail
             if isinstance(exc.detail, str)
-            else str(exc.detail.get("message") or "对话执行失败")
-            if isinstance(exc.detail, dict)
-            else "对话执行失败"
+            else (
+                str(exc.detail.get("message") or "对话执行失败")
+                if isinstance(exc.detail, dict)
+                else "对话执行失败"
+            )
         )
         failure = {"success": False, "response": message}
         if metadata:
@@ -423,7 +385,10 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Pa
 
 
 async def execute_compat_chat_batch(request: Request, body: XcagiCompatChatBatchBody) -> Payload:
-    with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+    with (
+        request_llm_mode(body.mode),
+        llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)),
+    ):
         return await _execute_compat_chat_batch_impl(request, body)
 
 
@@ -431,6 +396,7 @@ async def compat_chat_stream_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
 ) -> AsyncGenerator[bytes, None]:
     body = _prepare_compat_chat_body(request, body)
+    assert_p2_elevated_claim_or_raise(request)
     stream = CompatStream(
         _admission(),
         _fast_paths(),
@@ -454,7 +420,10 @@ async def compat_chat_stream_async(
     last_run_id = ""
     settled = False
     try:
-        with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+        with (
+            request_llm_mode(body.mode),
+            llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)),
+        ):
             async with aclosing(stream.run(request, body, ai_tier=ai_tier)) as chunks:
                 async for chunk in chunks:
                     if not pending and not chunk.startswith((b"data", b"event:")):
@@ -487,7 +456,11 @@ async def compat_chat_stream_async(
                             )
                             if observed_run_id and not last_run_id:
                                 last_run_id = observed_run_id
-                                if item.get("type") not in {"done", "error", "requires_token"}:
+                                if item.get("type") not in {
+                                    "done",
+                                    "error",
+                                    "requires_token",
+                                }:
                                     _settle_dialogue_turn(
                                         body,
                                         {
@@ -501,11 +474,23 @@ async def compat_chat_stream_async(
                             metadata = request_route_metadata(request)
                             if metadata and metadata != last_metadata:
                                 yield _sse_event(
-                                    {"type": "route_metadata", "route_metadata": metadata}
+                                    {
+                                        "type": "route_metadata",
+                                        "route_metadata": metadata,
+                                    }
                                 )
                                 last_metadata = metadata
                             if item.get("type") == "done" and isinstance(item.get("result"), dict):
                                 result = item["result"]
+                                if (body.context or {}).get("kitten_analyzer"):
+                                    from app.application.kitten_planner_context import (
+                                        kitten_reply_attachments,
+                                    )
+
+                                    result = _merge_kitten_attachments(
+                                        result, kitten_reply_attachments(body.context)
+                                    )
+                                    item["result"] = result
                                 if last_run_id:
                                     result.setdefault("run_id", last_run_id)
                                 if metadata:
@@ -520,7 +505,8 @@ async def compat_chat_stream_async(
                                     status = "failed"
                                 else:
                                     result.update(
-                                        execution_outcome="unknown", requires_reconciliation=True
+                                        execution_outcome="unknown",
+                                        requires_reconciliation=True,
                                     )
                                     status = "unknown"
                                 _persist_compat_chat_turn(body, result)

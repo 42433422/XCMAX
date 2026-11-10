@@ -80,6 +80,16 @@ export interface UiChatMessage {
   businessResult?: Record<string, unknown>
   /** 后端命中语义缓存；对用户明确标注，避免把重复回答误解为新执行结果。 */
   sameAsPrevious?: boolean
+  /** Intent versus a committed business write for this turn. */
+  execution?: {
+    idempotencyKey: string
+    intent: string
+    committed: boolean
+    effect: 'none' | 'preview' | 'committed' | string
+    tenantId?: string
+    customerCount?: number | null
+    productCount?: number | null
+  }
 }
 
 export type UiChatMessageExtras = Partial<UiChatMessage>

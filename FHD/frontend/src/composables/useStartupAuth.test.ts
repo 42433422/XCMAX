@@ -6,7 +6,7 @@ import { useAccountProfileStore } from '@/stores/accountProfile'
 import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { fetchSessionMarketHandoff, persistMarketTokensFromHandoff } from '@/api/marketAccount'
-import { STARTUP_READY_TIMEOUT_MS, useStartupSplash } from '@/composables/useStartupSplash'
+import { useStartupSplash } from '@/composables/useStartupSplash'
 
 vi.mock('@/api/auth', () => ({
   authApi: {
@@ -198,7 +198,7 @@ describe('useStartupAuth', () => {
     expect(persistMarketTokensFromHandoff).not.toHaveBeenCalled()
   })
 
-  it.each(['timeout', 'cancel', 'retry'] as const)('ignores old invalid and rejected auth after %s and a successful retry', async action => {
+  it.each(['cancel', 'retry'] as const)('ignores old invalid and rejected auth after %s and a successful retry', async action => {
     vi.useFakeTimers()
     vi.spyOn(useAccountProfileStore(), 'refreshFromServer').mockResolvedValue(undefined)
     for (const outcome of ['invalid', 'rejected']) {
@@ -214,7 +214,6 @@ describe('useStartupAuth', () => {
         if (current() && !result.ok) throw new Error('unconfirmed session')
       }
       const old = splash.runStartup(task)
-      if (action === 'timeout') await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
       if (action === 'cancel') splash.cancelStartup()
       await splash.runStartup(task)
       expect(splash.appReady.value).toBe(true)
@@ -228,7 +227,7 @@ describe('useStartupAuth', () => {
     }
   })
 
-  it.each(['timeout', 'cancel', 'retry', 'session'] as const)('does not persist a retired background handoff after %s', async action => {
+  it.each(['cancel', 'retry', 'session'] as const)('does not persist a retired background handoff after %s', async action => {
     vi.useFakeTimers()
     vi.spyOn(useAccountProfileStore(), 'refreshFromServer').mockResolvedValue(undefined)
     vi.mocked(authApi.validateSession).mockResolvedValue({ valid: true })
@@ -244,7 +243,6 @@ describe('useStartupAuth', () => {
     })
     await flushPromises()
     expect(fetchSessionMarketHandoff).toHaveBeenCalledOnce()
-    if (action === 'timeout') await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
     if (action === 'cancel') splash.cancelStartup()
     if (action === 'retry') await splash.runStartup(async () => {})
     if (action === 'session') invalidateEnterpriseSessionCache()

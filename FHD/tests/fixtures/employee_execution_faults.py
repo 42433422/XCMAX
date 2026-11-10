@@ -26,6 +26,7 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 )
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.unified_task import create_unified_task
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 from app.db.models.purchase_unit import PurchaseUnit
 
 
@@ -71,7 +72,26 @@ def observe_tool_timeout(root: Path, context: dict) -> dict:
         ],
     )
     context = {**context, "task_id": run.run_id, "fault_receipt": str(receipt)}
-    run.metadata.update(runtime_context=context, task_context={"task_id": run.run_id})
+    run.metadata.update(
+        runtime_context=context,
+        task_context={"task_id": run.run_id},
+        plan=plan_to_dict(
+            PlanGraph(
+                plan_id=run.run_id,
+                intent="customer_query",
+                nodes=[
+                    WorkflowNode(
+                        node_id="query",
+                        tool_id="customers",
+                        action="query",
+                        params={"keyword": "闭环指定客户甲"},
+                        risk="low",
+                        idempotent=True,
+                    )
+                ],
+            )
+        ),
+    )
     runtime = _runtime_dependencies()
 
     def bounded_spec(tool, action):

@@ -715,7 +715,7 @@ def plan_semantic_batches(
         review = prepare_auto_slice_review(review, skip_hidden_sheets=True)
     try:
         max_calls = (
-            int(os.environ.get("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1"))
+            int(os.environ.get("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "4"))
             if max_calls is None
             else max_calls
         )

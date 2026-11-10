@@ -213,11 +213,15 @@ def products_batch_delete(request: Request | None, body: dict[str, Any]) -> dict
     result = _service().batch_delete_products(int_ids)
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("message") or "批量删除失败")
-    deleted = int(
-        result.get("deleted_count")
-        or (result.get("data") or {}).get("deleted_count")
-        or len(int_ids)
-    )
+    deleted = result.get("deleted_count")
+    if deleted is None and isinstance(result.get("data"), dict):
+        deleted = result["data"].get("deleted_count")
+    if type(deleted) is not int or not 0 <= deleted <= len(set(int_ids)):
+        return {
+            "success": False,
+            "error_code": "outcome_unknown",
+            "message": "删除结果未确认，请核对产品后再操作",
+        }
     return {
         "success": True,
         "message": f"已删除 {deleted} 条",

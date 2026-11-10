@@ -1,5 +1,23 @@
 # XCMAX 历史与大文件归档指针
 
+2026-11-10 旧余债 P2 快照外置：`FHD/docs/architecture/DEBT24_P2_CLOSEOUT.md` 原文及 SHA256 位于 `~/XCMAX-archives/debt24-p2-20261110/`，亦可从提交 `9c53fb4f00` 恢复；现行边界以各注册 SSOT 为准。
+
+2026-11-10 旧分支余债快照外置：`FHD/docs/architecture/DEBT19_STILL9_FOLLOWUP.md` 原文及 SHA256 位于 `~/XCMAX-archives/debt19-followup-20261110/`，亦可从提交 `532b1978d5` 恢复；历史数字不代表当前状态。
+
+2026-11-10 认知全栈历史快照外置：`FHD/docs/architecture/COGNITIVE_FULL_STACK_20260729.md` 原文及 SHA256 位于 `~/XCMAX-archives/cognitive-snapshot-20261110/`，亦可从提交 `58090c512c` 恢复；历史实现清单不代表当前运行或验收状态。
+
+2026-11-10 历史余债报告外置：`FHD/docs/reports/DEBT24_CLOSEOUT.md` 原文及 SHA256 保存在 `~/XCMAX-archives/debt24-closeout-20261110/`，亦可从提交 `58090c512c` 恢复；其旧分支数据不代表当前验收状态。
+
+2026-11-10 旧发布日志外置：`FHD/CHANGELOG.md` 中 1.0.0.0–1.0.0.4 历史条目的原文及 SHA256 保存在 `~/XCMAX-archives/release-changelog-20261110/`，也可从提交 `f5c4a2d164` 恢复；未发布变更仍保留在现行日志。
+
+2026-11-10 旧 LangGraph 基准记录外置：`FHD/docs/architecture/langgraph-absorption/09-baseline.md` 的原文和 SHA256 在 `~/XCMAX-archives/langgraph-baseline-20261110/`；亦可从提交 `d79eff902e` 恢复。该记录是历史测量，不代表当前性能；基准脚本仍可显式生成新的结果。
+
+2026-11-10 历史方案收敛：旧 XCAGI v6 架构副本 `docs/modstore/ddd.md` 与 2026-06 的 `FHD/docs/reports/TO_9_PROGRAM.md` 原样外置至 `~/XCMAX-archives/superseded-plans-20261110/`；原始路径及 SHA256 见 `MANIFEST.json`，亦可从提交 `8f9d6bdb39` 恢复。现行架构以 `FHD/docs/ARCHITECTURE.md` 为准，审计评分以 `FHD/config/audit_benchmark_ssot.json` 为准；历史评估不得当作当前审计结果。
+
+2026-11-10 支付文档整理：未登记的 Java 支付早期设计、SQLite 迁移和压测方案三份快照外置至 `~/XCMAX-archives/payment-plans-20261110/`；逐文件 SHA256 见该目录 `MANIFEST.json`，也可从提交 `8f9d6bdb39` 恢复。现行配置和迁移入口见 `成都修茈科技有限公司/MODstore_deploy/java_payment_service/README.md`，压测方案归档不代表压测已执行。
+
+2026-11-10 集成整理：`FHD/CHANGELOG.md` 中 2026-07-12 及更早的历史 Unreleased 记录外置至 `~/XCMAX-archives/changelog-20261110-pr-integration/CHANGELOG-full-before-pr-integration.md`（完整原文 SHA256 `3d1d80c9335c6965c3b7a65129ed0f378e90ee34d4b46e0aa0b047abb8dbaded`，亦可从集成分支提交 `af00026e09` 恢复）。当前发布记录保留在原文件。
+
 2026-10-24 工单交付整理：未登记且已被 v10 指南替代的 `成都修茈科技有限公司/docs/modstore/MOD_AUTHORING_GUIDE.md`（942 行）逐字节校验外置到 `~/XCMAX-archives/docs-20261024-ticket-mod-authoring/`，原文与 SHA256 见 `MANIFEST.json`；现行入口为 `FHD/docs/guides/MOD_AUTHORING_GUIDE.md`。
 
 同轮未登记的六月修复快照 `docs/reports/FIXES.md` 与旧评分路线图 `docs/roadmap/AI_PLATFORM_9_SCORE_ROADMAP.md`（共 1,076 行）校验外置到 `~/XCMAX-archives/docs-20261024-ticket-history/`；完整原文、SHA256 及来源提交见 `MANIFEST.json`。归档保留历史未完事项，不构成修复完成声明；现行合同与评分口径以 SSOT 目录和 `FHD/config/audit_benchmark_ssot.json` 为准。
@@ -108,3 +126,18 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 **同轮评估但保留（承重，不可作为残留清退）**：`FHD/sunbird-console` 是 `FHD/frontend/sunbirdConsole.vite.config.js` 的构建输入；`FHD/AMIN` 经 `@amin` 别名进入前端打包；`FHD/mobile-flutter-poc` 由 `.github/workflows/fhd-ci-mobile-flutter.yml`、`fhd-release-android.yml`、`fhd-release-ios.yml` 驱动，属移动端交付链路；`FHD/tests/odoo_absorption` 与 `FHD/tests/langgraph_absorption` 是运行中的契约/边界回归测试；`FHD/rasa` 与 `FHD/XCAGI/rasa` 是 `app/ai_engines/rasa/nlu_service.py` 模型发现与再训练的种子配置。目录名带 poc/absorption 属命名债，不是死代码。
 
 2026-11-09：过期迁移指南原文与未登记的 2026-06 产品打磨清单已归档至 `~/XCMAX-archives/docs-20261109-pr3110/`；迁移入口保留在 `FHD/docs/guides/ALEMBIC_MIGRATION_GUIDE.md`。
+
+2026-11-10：未登记、无仓库引用的 OCR 字体识别历史实现说明外置至 `~/XCMAX-archives/docs-20261110-ocr-history/`；原路径及 SHA256 见 `MANIFEST.json`。
+
+2026-11-10：未登记、无仓库引用的旧 Windows 验证报告及 mypy 状态快照外置至 `~/XCMAX-archives/docs-20261110-historical-reports/`；原路径及 SHA256 见 `MANIFEST.json`。
+
+同日，未登记的旧架构退役看板及审计收口说明外置至 `~/XCMAX-archives/docs-20261110-historical-architecture/`，原路径及 SHA256 见 `MANIFEST.json`。
+
+同日，未登记且含失效报告路径的 OpenAPI 旧指南外置至 `~/XCMAX-archives/docs-20261110-openapi-old-guide/`；校验入口为 `FHD/scripts/tools/check_openapi_consistency.py --help`。
+
+同日，覆盖率文档的旧测量快照外置至 `~/XCMAX-archives/docs-20261110-coverage-snapshot/`；现行文档指向可执行门槛与测量入口。
+
+同日，含过期 Node 要求和 API 示例的旧前端 README 外置至 `~/XCMAX-archives/docs-20261110-frontend-readme/`；现行入口以 `package.json` 与 Vite 配置为准。
+## LangGraph 单一执行器收敛（2026-11-10）
+
+未登记且与当前实现冲突的 LangGraph 迁移基线及运行时迁移设计已校验外置至 `~/XCMAX-archives/docs-20261110-langgraph-single-runtime/`；文件 SHA256 与字节数见该目录 `MANIFEST.json`。当前运行时由 `FHD/app/infrastructure/workflow/langgraph_runtime.py` 与 `FHD/app/application/agent_orchestrator/orchestrator.py` 实现。

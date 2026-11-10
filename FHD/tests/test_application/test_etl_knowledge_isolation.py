@@ -66,6 +66,64 @@ def test_stale_new_preview_cannot_claim_another_runs_document(service):
     assert documents(service, 1)[0]["document_id"] == first["match_ref"]
 
 
+def test_archive_dedup_rechecks_races_and_stays_tenant_scoped(service):
+    adapter = KnowledgeAdapter()
+    data = {
+        "content": "合成摘要甲\n合成原件",
+        "source_key": "模板甲",
+        "source_fingerprint": "archive-key",
+    }
+    other = {
+        "content": "合成摘要乙\n合成原件",
+        "source_key": "模板乙",
+        "source_fingerprint": "archive-key",
+    }
+    with tenant_scope(1):
+        first = adapter.execute_row(
+            None,
+            data,
+            action="new",
+            match_ref="",
+            allowed_update_fields={"content"},
+            context={"owner_user_id": 1, "run_id": "run-a"},
+        )
+        decision = adapter.preview(
+            None, other, allowed_update_fields={"content"}, context={"owner_user_id": 1}
+        )
+        assert decision.action == "skip" and decision.match_ref == first["match_ref"]
+        with pytest.raises(EltError) as error:
+            adapter.execute_row(
+                None,
+                other,
+                action="new",
+                match_ref="",
+                allowed_update_fields={"content"},
+                context={"owner_user_id": 1, "run_id": "run-b"},
+            )
+        assert error.value.code == "ELT_PREVIEW_STALE"
+        with pytest.raises(EltError) as same_run:
+            adapter.execute_row(
+                None,
+                other,
+                action="new",
+                match_ref="",
+                allowed_update_fields={"content"},
+                context={"owner_user_id": 1, "run_id": "run-a"},
+            )
+        assert same_run.value.code == "ELT_PREVIEW_STALE"
+    with tenant_scope(2):
+        second = adapter.execute_row(
+            None,
+            other,
+            action="new",
+            match_ref="",
+            allowed_update_fields={"content"},
+            context={"owner_user_id": 1, "run_id": "run-c"},
+        )
+        assert second["match_ref"] != first["match_ref"]
+    assert len(documents(service, 1)) == len(documents(service, 2)) == 1
+
+
 def test_rollback_rejects_later_replacement_at_same_document_id(service):
     with tenant_scope(1):
         imported = execute("old synthetic content", "run-a")

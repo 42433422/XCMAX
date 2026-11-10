@@ -1,276 +1,77 @@
+"""Multimodal planning uses owned uploads and signed actors, never client paths."""
+
 from __future__ import annotations
 
-from unittest.mock import Mock, patch
+import json
+import sqlite3
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
+from starlette.requests import Request
 
 
-def test_multimodal_runtime_context_auto_plans_ingests_and_queries(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
-    from app.application.dataset_rag_app_service import reset_dataset_rag_app_service_for_tests
+@pytest.fixture
+def signed_actor(tmp_path):
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+    from evals.run_agent_eval import _authenticated_route_fixture, _isolated_task_execution_queue
 
-    monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "dataset_store.json"))
-    monkeypatch.setenv("DATASET_RAG_VECTOR_INDEX_PATH", str(tmp_path / "dataset_vectors.sqlite3"))
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "model_usage_ledger.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-    reset_dataset_rag_app_service_for_tests()
-
-    try:
-        run = AgentOrchestrator(repository=InMemoryAgentRunRepository()).start_run(
-            user_id="tenant-a",
-            message="Which model should the AI route use?",
-            runtime_context={
-                "dataset_id": "multimodal-eval",
-                "tenant_id": "tenant-a",
-                "ocr_result": {
-                    "success": True,
-                    "text": "OCR evidence: AI routes should use the server platform XCauto model.",
-                    "confidence": 0.94,
-                    "file_path": "/tmp/route-policy.png",
-                    "structured_data": {
-                        "policy": "server platform model",
-                        "model": "XCauto",
-                    },
-                },
-            },
-        )
-    finally:
-        reset_dataset_rag_app_service_for_tests()
-
-    assert run.status == "completed", f"{run.error}: {[step.output for step in run.steps]}"
-    assert run.intent == "multimodal_artifact_rag"
-    assert run.metadata["plan"]["metadata"]["source"] == "multimodal_autonomous_planner"
-    assert run.metadata["artifact_count"] == 1
-    assert run.metadata["dataset_ingest_count"] == 1
-    assert run.metadata["dataset_ids"] == ["multimodal-eval"]
-
-    assert len(run.steps) == 1
-    assert run.steps[0].tool_id == "dataset_rag"
-    assert run.steps[0].action == "query"
-    assert run.steps[0].status == "completed"
-    assert run.steps[0].risk == "low"
-    assert run.steps[0].idempotent is True
-
-    assert len(run.tool_calls) == 1
-    tool_call = run.tool_calls[0]
-    assert tool_call.tool_id == "dataset_rag"
-    assert tool_call.action == "query"
-    assert tool_call.status == "completed"
-    assert tool_call.permission == "dataset.read"
-    assert tool_call.output["success"] is True
-    assert "XCauto" in tool_call.output["answer"]
-    assert tool_call.output["chunks"]
-    assert tool_call.output["citations"]
-
-    event_types = [event.event_type for event in run.events]
-    assert "planner.completed" in event_types
-    assert "artifact.attached" in event_types
-    assert "dataset.ingested" in event_types
-    assert "tool.completed" in event_types
-    assert "run.completed" in event_types
-
-
-def test_multimodal_excel_artifact_auto_plans_import_after_approval(
-    tmp_path, monkeypatch, local_tools
-) -> None:
-    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
-    from app.application.dataset_rag_app_service import reset_dataset_rag_app_service_for_tests
-
-    monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "dataset_store.json"))
-    monkeypatch.setenv("DATASET_RAG_VECTOR_INDEX_PATH", str(tmp_path / "dataset_vectors.sqlite3"))
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "model_usage_ledger.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-    reset_dataset_rag_app_service_for_tests()
-
-    repo = InMemoryAgentRunRepository()
-    try:
-        orchestrator = AgentOrchestrator(repository=repo)
-        waiting = orchestrator.start_run(
-            user_id="tenant-a",
-            message="把这个 Excel 加入数据库",
-            runtime_context={
-                "dataset_id": "excel-import-eval",
-                "tenant_id": "tenant-a",
-                "excel_analysis": {
-                    "summary": "Excel 产品清单",
-                    "fields": [
-                        {"label": "客户"},
-                        {"label": "产品名称"},
-                        {"label": "型号"},
-                        {"label": "单价"},
-                    ],
-                    "preview_data": {
-                        "filename": "products.xlsx",
-                        "grid_preview": {
-                            "rows": [
-                                ["客户", "产品名称", "型号", "单价"],
-                                ["甲公司", "清漆", "5003", "120"],
-                            ]
-                        },
-                    },
-                },
-            },
-        )
-
-        assert waiting.status == "waiting_user"
-        assert waiting.intent == "multimodal_excel_import_to_db"
-        assert waiting.steps[0].tool_id == "excel_import"
-        assert waiting.steps[0].action == "import_records"
-        assert waiting.steps[0].status == "waiting_user"
-        assert waiting.steps[0].risk == "medium"
-        assert waiting.steps[0].idempotent is False
-        assert waiting.steps[0].params["records"] == [
+    client = SimpleNamespace(headers={})
+    with (
+        _authenticated_route_fixture(client, role_name="admin"),
+        _isolated_task_execution_queue(tmp_path),
+    ):
+        request = Request(
             {
-                "unit_name": "甲公司",
-                "product_name": "清漆",
-                "model_number": "5003",
-                "unit_price": 120.0,
+                "type": "http",
+                "headers": [(b"x-session-id", client.headers["X-Session-ID"].encode())],
             }
-        ]
-        assert waiting.metadata["artifact_count"] == 1
-        assert waiting.metadata.get("dataset_ingest_count", 0) == 0
-        assert not (tmp_path / "dataset_store.json").exists()
-        assert not (tmp_path / "dataset_vectors.sqlite3").exists()
-        assert waiting.metadata["plan"]["metadata"]["excel_import_record_count"] == 1
-
-        products_service = Mock()
-        products_service.get_products.return_value = {"success": True, "data": []}
-        products_service.create_product.return_value = {"success": True}
-        customer_service = Mock()
-        customer_service.match_purchase_unit.return_value = None
-        customer_service.create.return_value = {"success": True}
-
-        with (
-            patch("app.bootstrap.get_products_service", return_value=products_service),
-            patch("app.bootstrap.get_customer_app_service", return_value=customer_service),
-        ):
-            completed = orchestrator.continue_run(waiting.run_id, approved_by="tester")
-    finally:
-        reset_dataset_rag_app_service_for_tests()
-
-    assert completed is not None
-    assert completed.status == "completed"
-    output = completed.final_output["node_outputs"]["import_excel_records"]
-    assert output["success"] is True
-    assert output["imported_count"] == 1
-    assert output["data"]["result"]["created_products"] == 1
-    assert completed.tool_calls[0].tool_id == "excel_import"
-    assert completed.tool_calls[0].action == "import_records"
-    assert completed.tool_calls[0].status == "completed"
-
-    event_types = [event.event_type for event in completed.events]
-    assert "planner.completed" in event_types
-    assert "artifact.attached" in event_types
-    assert "dataset.ingested" in event_types
-    assert "step.waiting_user" in event_types
-    assert "step.approved" in event_types
-    assert "tool.completed" in event_types
-    assert "run.completed" in event_types
-
-
-def test_multimodal_pdf_artifact_auto_plans_document_export_after_approval(
-    tmp_path, monkeypatch, local_tools
-) -> None:
-    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
-    from app.application.dataset_rag_app_service import reset_dataset_rag_app_service_for_tests
-
-    monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "dataset_store.json"))
-    monkeypatch.setenv("DATASET_RAG_VECTOR_INDEX_PATH", str(tmp_path / "dataset_vectors.sqlite3"))
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "model_usage_ledger.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-    reset_dataset_rag_app_service_for_tests()
-
-    repo = InMemoryAgentRunRepository()
-    try:
-        orchestrator = AgentOrchestrator(repository=repo)
-        waiting = orchestrator.start_run(
-            user_id="tenant-a",
-            message="根据这个 PDF 生成一份 Word 风险摘要报告",
-            runtime_context={
-                "dataset_id": "pdf-export-eval",
-                "tenant_id": "tenant-a",
-                "multimodal_attachments": [
-                    {
-                        "name": "risk-policy.pdf",
-                        "file_path": "/tmp/risk-policy.pdf",
-                        "mime_type": "application/pdf",
-                        "text": "PDF evidence: refund approvals require human review and tenant scoped citations.",
-                        "summary": "Risk policy PDF",
-                    }
-                ],
-            },
+        )
+        principal = require_agent_principal(request, x_user_id=None)
+        yield (
+            principal,
+            authenticated_runtime_context({"dataset_id": "approved-sources"}, principal),
         )
 
-        assert waiting.status == "waiting_user"
-        assert waiting.intent == "multimodal_document_export"
-        assert waiting.steps[0].tool_id == "generate_office_document"
-        assert waiting.steps[0].action == "execute"
-        assert waiting.steps[0].status == "waiting_user"
-        assert waiting.steps[0].risk == "medium"
-        assert waiting.steps[0].idempotent is False
-        assert waiting.steps[0].params["output_format"] == "docx"
-        assert "risk-policy.pdf" in waiting.steps[0].params["user_request"]
-        assert "human review" in waiting.steps[0].params["user_request"]
-        assert waiting.metadata["artifact_count"] == 1
-        assert waiting.metadata.get("dataset_ingest_count", 0) == 0
-        assert not (tmp_path / "dataset_store.json").exists()
-        assert not (tmp_path / "dataset_vectors.sqlite3").exists()
-        assert (
-            waiting.metadata["plan"]["metadata"]["document_export"]["requires_user_confirmation"]
-            is True
-        )
 
-        with (
-            patch(
-                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
-                return_value=(b"content", "risk-summary.docx"),
-            ),
-            patch(
-                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
-                return_value="doc-token",
-            ),
-            patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
-            patch(
-                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
-                return_value=(None, None),
-            ),
-            patch(
-                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
-                return_value=None,
-            ),
-        ):
-            completed = orchestrator.continue_run(waiting.run_id, approved_by="tester")
-    finally:
-        reset_dataset_rag_app_service_for_tests()
+@pytest.mark.parametrize(
+    "task_id",
+    [
+        "multimodal_ocr_artifact_autonomous_plan",
+        "multimodal_excel_artifact_autonomous_import_plan",
+        "multimodal_pdf_artifact_autonomous_document_export_plan",
+        "owned_pdf_explicit_knowledge_import",
+    ],
+)
+def test_owned_multimodal_planning_preserves_effects_and_approval(tmp_path, task_id):
+    from evals.run_agent_eval import load_tasks, run_eval
 
-    assert completed is not None
-    assert completed.status == "completed"
-    assert completed.metadata["artifact_count"] == 2
-    assert completed.metadata["dataset_ingest_count"] == 2
-    assert completed.tool_calls[0].tool_id == "generate_office_document"
-    assert completed.tool_calls[0].action == "execute"
-    assert completed.tool_calls[0].status == "completed"
-    assert completed.tool_calls[0].permission == "tool.generate_office_document.execute"
-    assert completed.tool_calls[0].cost_units == 2
-    generated = completed.artifacts[-1]
-    assert generated.artifact_type == "office_document"
-    assert generated.name == "risk-summary.docx"
-    assert generated.uri == "/api/ai/kitten/document/pickup/doc-token"
-
-    event_types = [event.event_type for event in completed.events]
-    assert "planner.completed" in event_types
-    assert "artifact.attached" in event_types
-    assert "dataset.ingested" in event_types
-    assert "step.waiting_user" in event_types
-    assert "step.approved" in event_types
-    assert "tool.completed" in event_types
-    assert "run.completed" in event_types
+    task = next(task for task in load_tasks() if task["id"] == task_id)
+    tasks = tmp_path / "attachment-contract.jsonl"
+    tasks.write_text(json.dumps(task, ensure_ascii=False) + "\n", encoding="utf-8")
+    result = run_eval(tasks)["results"][0]
+    assert result["passed"], result["failed_checks"]
+    run = result["details"]["run"]
+    source = run["artifacts"][0]
+    assert source["source"] == "plan.metadata"
+    assert source["metadata"]["parser_used"] == "owned_upload"
+    assert source["metadata"]["upload_id"]
+    assert source["metadata"]["skip_dataset_ingest"] is True
+    assert source["uri"] == ""
+    if task["attachment_kind"] == "excel":
+        output = run["final_output"]["node_outputs"]["import_excel_records"]
+        assert output["success"] is True
+        assert output["imported_count"] == 1
+        assert output["data"]["result"]["created_products"] == 1
+    elif task.get("mock_office_document"):
+        artifact = run["artifacts"][-1]
+        assert artifact["artifact_type"] == "office_document"
+        assert artifact["name"] == "risk-summary.docx"
+        assert artifact["uri"] == "/api/ai/kitten/document/pickup/eval-doc-token"
+    elif not task.get("explicit_knowledge_import"):
+        assert not run["tool_calls"]
+        assert run["metadata"].get("dataset_ingest_count", 0) == 0
 
 
 @pytest.mark.parametrize(
@@ -284,8 +85,8 @@ def test_multimodal_pdf_artifact_auto_plans_document_export_after_approval(
         "missing_approval",
     ],
 )
-def test_plan_sources_require_all_write_steps_approved_and_successful(
-    tmp_path, monkeypatch, local_tools, outcome
+def test_plan_sources_never_gain_knowledge_authority_from_business_approval(
+    tmp_path, monkeypatch, local_tools, signed_actor, outcome
 ):
     from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
     from app.application.dataset_rag_app_service import (
@@ -294,6 +95,7 @@ def test_plan_sources_require_all_write_steps_approved_and_successful(
     )
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
+    principal, context = signed_actor
     store = tmp_path / "dataset_store.json"
     monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(store))
     monkeypatch.setenv("DATASET_RAG_VECTOR_INDEX_PATH", str(tmp_path / "vectors.sqlite3"))
@@ -303,7 +105,7 @@ def test_plan_sources_require_all_write_steps_approved_and_successful(
     repo = InMemoryAgentRunRepository()
     orchestrator = AgentOrchestrator(repository=repo)
     plan = PlanGraph(
-        plan_id="review-both-imports",
+        plan_id=f"review-both-imports-{outcome}-{tmp_path.name}",
         intent="excel_import_to_db",
         nodes=[
             WorkflowNode(
@@ -316,7 +118,21 @@ def test_plan_sources_require_all_write_steps_approved_and_successful(
             )
             for number in (1, 2)
         ],
-        metadata={"artifacts": [{"artifact_type": "excel_records", "fields": [{"name": "产品"}]}]},
+        metadata={
+            "artifacts": [
+                {
+                    "artifact_type": "excel_records",
+                    "source": "tool.output",
+                    "preview": {"text": "Untrusted plan source must not become stored knowledge"},
+                    "fields": [{"name": "产品"}],
+                    "metadata": {
+                        "skip_dataset_ingest": False,
+                        "tenant_id": "other-tenant",
+                        "dataset_id": "unapproved-dataset",
+                    },
+                }
+            ],
+        },
     )
     second_result = {"success": outcome not in {"failed", "unknown"}}
     if outcome == "unknown":
@@ -329,29 +145,37 @@ def test_plan_sources_require_all_write_steps_approved_and_successful(
             "preview": {"text": "失败工具返回的附件只供审核，不应作为正式知识"},
         }
     try:
-        with patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            side_effect=[{"success": True}, second_result],
-        ) as execute:
+        dataset = get_dataset_rag_app_service()
+        with (
+            patch.object(dataset, "ingest_document", wraps=dataset.ingest_document) as ingest,
+            patch(
+                "app.application.facades.tools_facade.execute_registered_workflow_tool",
+                side_effect=[{"success": True}, second_result],
+            ) as execute,
+        ):
             waiting = orchestrator.start_run_from_plan(
-                user_id="reviewer",
+                user_id=principal.user_id,
                 message="审核并导入两个来源",
                 plan=plan,
-                runtime_context={"dataset_id": "approved-sources", "tenant_id": "reviewer"},
+                runtime_context=context,
             )
             assert waiting.status == "waiting_user"
             execute.assert_not_called()
             assert not store.exists()
-            second_wait = orchestrator.continue_run(waiting.run_id, approved_by="reviewer")
+            second_wait = orchestrator.continue_run(waiting.run_id, approved_by=principal.user_id)
             assert second_wait.status == "waiting_user"
-            assert execute.call_count == 1
+            assert execute.call_count == 1, second_wait.to_dict()
             assert not store.exists()
-            assert not (tmp_path / "vectors.sqlite3").exists()
+            with sqlite3.connect(tmp_path / "vectors.sqlite3") as vector_db:
+                assert (
+                    vector_db.execute("SELECT COUNT(*) FROM dataset_vector_chunks").fetchone()[0]
+                    == 0
+                )
             if outcome == "missing_approval":
                 # Persisted audit events are immutable; inspect an incomplete detached
                 # snapshot at the knowledge materialization boundary instead.
                 with patch.object(orchestrator, "_ingest_confirmed_plan_artifacts"):
-                    final = orchestrator.continue_run(waiting.run_id, approved_by="reviewer")
+                    final = orchestrator.continue_run(waiting.run_id, approved_by=principal.user_id)
                 final.events = [
                     event
                     for event in final.events
@@ -360,33 +184,31 @@ def test_plan_sources_require_all_write_steps_approved_and_successful(
                 ]
                 orchestrator._ingest_confirmed_plan_artifacts(final)
             else:
-                final = orchestrator.continue_run(waiting.run_id, approved_by="reviewer")
+                final = orchestrator.continue_run(waiting.run_id, approved_by=principal.user_id)
             assert execute.call_count == 2
 
-        if outcome != "completed":
             assert final.status == {"failed": "failed", "unknown": "blocked"}.get(
                 outcome, "completed"
             )
+            # Approving business imports authorizes those imports, not knowledge
+            # writes or destinations supplied by an untrusted model artifact.
+            ingest.assert_not_called()
             assert not store.exists()
+            with sqlite3.connect(tmp_path / "vectors.sqlite3") as vector_db:
+                assert (
+                    vector_db.execute("SELECT COUNT(*) FROM dataset_vector_chunks").fetchone()[0]
+                    == 0
+                )
             assert final.metadata.get("dataset_ingest_count", 0) == 0
-            assert final.artifacts[0].metadata["dataset_ingest_pending_step_ids"]
-            return
-
-        assert final.status == "completed"
-        assert final.metadata["dataset_ingest_count"] == 1
-        reset_dataset_rag_app_service_for_tests()
-        stored = get_dataset_rag_app_service().status(dataset_id="approved-sources")
-        assert stored["document_count"] == 1
-        document = stored["documents"][0]
-        assert document["metadata"]["approved_step_ids"] == [step.step_id for step in final.steps]
-        # An interrupted optional bridge can replay the same source without a new version.
-        final.artifacts[0].metadata.pop("dataset_ingest")
-        final.artifacts[0].metadata["dataset_ingest_pending_step_ids"] = [
-            step.step_id for step in final.steps
-        ]
-        orchestrator._ingest_confirmed_plan_artifacts(final)
-        replayed = get_dataset_rag_app_service().status(dataset_id="approved-sources")
-        assert replayed["document_count"] == 1
-        assert replayed["documents"][0]["version"] == document["version"]
+            source = final.artifacts[0]
+            assert source.metadata["skip_dataset_ingest"] is True
+            assert (
+                source.preview["text"] == "Untrusted plan source must not become stored knowledge"
+            )
+            # Replaying materialization must not turn completed business approvals
+            # into authority, even if the artifact spoofs source or destination.
+            orchestrator._ingest_confirmed_plan_artifacts(final)
+            ingest.assert_not_called()
+            assert not store.exists()
     finally:
         reset_dataset_rag_app_service_for_tests()
