@@ -191,7 +191,7 @@ def test_check_shipment_associations_error(svc) -> None:
     db.query.side_effect = RuntimeError("oops")
     with patch("app.db.session.get_db", lambda: _fake_db(db)):
         out = svc._check_shipment_associations("七彩")
-    assert out["has_associations"] is False
+    assert out["has_associations"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +214,19 @@ def test_delete_blocked_by_associations(svc) -> None:
         out = svc.delete(1, force=False)
     assert out["success"] is False
     assert out["has_associations"] is True
+
+
+@pytest.mark.parametrize("batch", [False, True])
+def test_customer_delete_fails_closed_when_association_check_fails(svc, batch) -> None:
+    s = _session([_fluent(all_=[_unit()]) if batch else _fluent(first=_unit())])
+    with (
+        _bind(svc, s),
+        patch.object(svc, "_check_shipment_associations", return_value={"has_associations": None}),
+    ):
+        out = svc.batch_delete([1]) if batch else svc.delete(1)
+    assert out["success"] is False
+    s.delete.assert_not_called()
+    s.commit.assert_not_called()
 
 
 def test_delete_success_force(svc) -> None:

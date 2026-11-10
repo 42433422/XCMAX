@@ -317,15 +317,7 @@ class CustomerCrudMixin:
             return {"success": False, "message": "更新客户失败"}
 
     def _check_shipment_associations(self, unit_name: str) -> dict[str, Any]:
-        """检查购买单位是否有关联的发货记录
-
-        Returns:
-            {
-                "has_associations": bool,
-                "shipment_count": int,
-                "sample_records": list - 最近3条发货记录示例
-            }
-        """
+        """查询发货关联；失败时返回未知状态。"""
         try:
             from app.db.models.shipment import ShipmentRecord
             from app.db.session import get_db
@@ -364,7 +356,7 @@ class CustomerCrudMixin:
         except RECOVERABLE_ERRORS:
             logger.warning("检查发货记录关联失败", exc_info=True)
             return {
-                "has_associations": False,
+                "has_associations": None,
                 "shipment_count": 0,
                 "sample_records": [],
                 "message": "关联发货记录检查失败",
@@ -397,6 +389,13 @@ class CustomerCrudMixin:
                 unit_name = unit.unit_name
 
                 association_check = self._check_shipment_associations(unit_name)
+
+                if association_check.get("has_associations") is None:
+                    return {
+                        "success": False,
+                        "message": "关联发货记录检查失败，未删除客户",
+                        "deleted_count": 0,
+                    }
 
                 if association_check.get("has_associations") and not force:
                     return {
@@ -466,6 +465,12 @@ class CustomerCrudMixin:
                     affected_units = []
                     for unit in units:
                         check = self._check_shipment_associations(unit.unit_name)
+                        if check.get("has_associations") is None:
+                            return {
+                                "success": False,
+                                "message": "关联发货记录检查失败，未删除客户",
+                                "deleted_count": 0,
+                            }
                         if check.get("has_associations"):
                             affected_units.append(
                                 {

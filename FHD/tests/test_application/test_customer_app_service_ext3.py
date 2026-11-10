@@ -553,7 +553,7 @@ class TestCheckShipmentAssociationsAdditional:
         svc = CustomerApplicationService()
         with patch("app.db.session.get_db", side_effect=RuntimeError("db error")):
             result = svc._check_shipment_associations("TestCo")
-        assert result["has_associations"] is False
+        assert result["has_associations"] is None
         assert result["shipment_count"] == 0
         assert result["sample_records"] == []
         assert result["message"] == "关联发货记录检查失败"

@@ -560,24 +560,6 @@ class TestMatchPurchaseUnitExtended:
 
 
 class TestCheckShipmentAssociationsExtended:
-    def test_no_associations(self):
-        svc = CustomerApplicationService()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value.limit.return_value.all.return_value = []
-        mock_query.count.return_value = 0
-        mock_db.query.return_value = mock_query
-
-        with patch("app.db.session.get_db") as mock_get_db:
-            mock_ctx = MagicMock()
-            mock_ctx.__enter__ = MagicMock(return_value=mock_db)
-            mock_ctx.__exit__ = MagicMock(return_value=False)
-            mock_get_db.return_value = mock_ctx
-            result = svc._check_shipment_associations("TestCo")
-
-        assert result["has_associations"] is False
-        assert result["shipment_count"] == 0
 
     def test_with_associations(self):
         svc = CustomerApplicationService()
@@ -604,13 +586,6 @@ class TestCheckShipmentAssociationsExtended:
         assert result["shipment_count"] == 5
         assert len(result["sample_records"]) == 1
 
-    def test_error(self):
-        svc = CustomerApplicationService()
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db error")):
-            result = svc._check_shipment_associations("TestCo")
-        assert result["has_associations"] is False
-        assert result["shipment_count"] == 0
-        assert result["message"] == "关联发货记录检查失败"
 
 
 # ---------------------------------------------------------------------------

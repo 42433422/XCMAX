@@ -591,7 +591,7 @@ class TestCheckShipmentAssociations:
         svc = CustomerApplicationService()
         with patch("app.db.session.get_db", side_effect=RuntimeError("fail")):
             result = svc._check_shipment_associations("TestCo")
-            assert result["has_associations"] is False
+            assert result["has_associations"] is None
 
 
 # ---------------------------------------------------------------------------
