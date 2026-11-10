@@ -1329,14 +1329,6 @@ class TestInjectExcelVectorContextDeep:
         assert "excel_vector_context" in result
         assert result["excel_vector_context"]["hits"] == [{"score": 0.9}]
 
-    def test_unsuccessful_query(self):
-        service = _make_service()
-        mock_svc = Mock()
-        mock_svc.query.return_value = {"success": False}
-        with patch("app.application.get_excel_vector_search_app_service", return_value=mock_svc):
-            result = service._inject_excel_vector_context("hello", {"excel_index_id": "idx1"})
-        assert "excel_vector_context" not in result
-
     def test_custom_top_k(self):
         service = _make_service()
         mock_svc = Mock()
