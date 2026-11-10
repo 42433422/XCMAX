@@ -929,3 +929,26 @@ def test_knowledge_plan_uses_archived_text_when_the_model_fails(
     assert plan["model_applied"] is False
     assert plan["action"] in {"new", "update", "skip"}
     assert "国圣" in plan["content"]
+
+
+def test_template_save_does_not_wait_for_intake_and_saved_selection_can_preview(intake_store):
+    store = intake_store
+    data = review(store)
+    response = store.client.post(
+        f"{BASE}/save", data={**data, "private_intake": "true", "template_only": "true"}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["template_id"]
+    assert store.starts == []
+    with store.factory() as db:
+        assert db.query(PurchaseUnit).count() == 0
+    result = store.client.post(f"{BASE}/intake-preview", data=data)
+    assert result.status_code == 200, result.text
+    stale = store.client.post(
+        f"{BASE}/intake-preview",
+        data={
+            **data,
+            "selections": "[]" if data["selections"] != "[]" else '[{"sheet":"客户","cell":"A1"}]',
+        },
+    )
+    assert stale.status_code == 409

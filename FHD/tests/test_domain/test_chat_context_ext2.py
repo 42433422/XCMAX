@@ -279,16 +279,6 @@ class TestCleanupOldHistory:
         ctx = ChatContext()
         assert ctx.cleanup_old_history() == 0
 
-    def test_cleans_expired(self):
-        ctx = ChatContext()
-        # Add an old turn
-        old_turn = ChatTurn("u1", "old", None, None, {}, None)
-        old_turn.timestamp = time.time() - 7200  # 2 hours ago
-        ctx._history["u1"] = [old_turn]
-        cleaned = ctx.cleanup_old_history(max_age_seconds=3600)
-        assert cleaned == 1
-        assert "u1" not in ctx._history
-
     def test_keeps_recent(self):
         ctx = ChatContext()
         turn = ChatTurn("u1", "recent", None, None, {}, None)

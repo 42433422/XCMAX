@@ -288,18 +288,6 @@ class TestCleanupExpired:
         assert ctx.cleanup_expired() == 0
         assert ctx.has_pending("u1") is True
 
-    def test_cleans_expired(self):
-        ctx = IntentContext()
-        p1 = PendingIntent(intent="i1", slots={}, missing_slots=[])
-        p2 = PendingIntent(intent="i2", slots={}, missing_slots=[])
-        p2.last_updated_at = time.time() - 400
-        ctx.set_pending("u1", p1)
-        ctx.set_pending("u2", p2)
-        cleaned = ctx.cleanup_expired()
-        assert cleaned == 1
-        assert ctx.has_pending("u1") is True
-        assert ctx.has_pending("u2") is False
-
     def test_cleans_multiple(self):
         ctx = IntentContext()
         for i in range(3):

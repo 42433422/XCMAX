@@ -458,7 +458,10 @@ def test_refused_extraction_keeps_values_and_rejects_rows_with_reason(monkeypatc
     assert all("打印区域" in r["reason"] for r in rows)
 
 
-def test_hidden_model_document_is_skipped_and_visible_document_exports(monkeypatch):
+@pytest.mark.parametrize("include_hidden_group", [True, False])
+def test_hidden_model_document_is_skipped_and_visible_document_exports(
+    monkeypatch, include_hidden_group
+):
     def fail_model(*_args, **_kwargs):
         raise AssertionError("hidden sheet must not call the model")
 
@@ -488,7 +491,7 @@ def test_hidden_model_document_is_skipped_and_visible_document_exports(monkeypat
             "regions": [{**note, "dependencies": []}, {**hidden, "dependencies": []}],
             "suggested_documents": [
                 {"fragments": [note], "reason": "送货单"},
-                {"fragments": [hidden], "reason": "隐藏台账"},
+                *([{"fragments": [hidden], "reason": "隐藏台账"}] if include_hidden_group else []),
             ],
         },
     )

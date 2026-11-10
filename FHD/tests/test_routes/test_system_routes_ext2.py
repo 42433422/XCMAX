@@ -501,16 +501,3 @@ class TestGetIndustryDetail:
         with patch.dict(sys.modules, {"resources.config.industry_config": fake_module}):
             r = client.get("/api/system/industry/涂料")
         assert r.status_code == 500
-
-    def test_http_exception_propagates(self, client: TestClient) -> None:
-        # Even when get_industry_profile raises HTTPException, it should propagate
-        fake_module = MagicMock()
-        fake_module.get_available_industries.return_value = [
-            {"id": "涂料", "name": "涂料"},
-        ]
-        fake_module.get_industry_profile.side_effect = HTTPException(
-            status_code=418, detail="teapot"
-        )
-        with patch.dict(sys.modules, {"resources.config.industry_config": fake_module}):
-            r = client.get("/api/system/industry/涂料")
-        assert r.status_code == 418

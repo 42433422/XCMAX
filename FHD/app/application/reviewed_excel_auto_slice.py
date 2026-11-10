@@ -454,8 +454,15 @@ def derive_classified_documents(
     regions = classification.get("regions")
     if not isinstance(regions, list) or not regions:
         raise ReviewedExcelError("没有可提取的模型区域")
+    hidden_sheets = {
+        item.get("sheet")
+        for item in source.get("sheet_overview") or []
+        if isinstance(item, dict) and item.get("sheet_state") in {"hidden", "veryHidden"}
+    }
     known = {}
     for region in regions:
+        if region.get("sheet") in hidden_sheets:
+            continue
         if region.get("open_fragment"):
             raise ReviewedExcelError("模型片段仍跨越未读边界，不能作为完整单据切片")
         key = (region["sheet"], region["range"])
@@ -468,6 +475,8 @@ def derive_classified_documents(
         fragments = document.get("fragments")
         if not isinstance(fragments, list) or not fragments:
             raise ReviewedExcelError("模型分组无片段")
+        if all(isinstance(part, dict) and part.get("sheet") in hidden_sheets for part in fragments):
+            continue
         group = []
         for fragment in fragments:
             if not isinstance(fragment, dict) or set(fragment) != {"sheet", "range"}:
@@ -501,11 +510,6 @@ def derive_classified_documents(
     ]
     results = []
     used_names: set[str] = set()
-    hidden_sheets = {
-        item.get("sheet")
-        for item in source.get("sheet_overview") or []
-        if isinstance(item, dict) and item.get("sheet_state") in {"hidden", "veryHidden"}
-    }
     for fragments, basis, reason in groups:
         if fragments and all(part.get("sheet") in hidden_sheets for part in fragments):
             logger.info("skip hidden sheet %s", fragments[0]["sheet"])

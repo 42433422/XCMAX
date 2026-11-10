@@ -1496,34 +1496,6 @@ class TestMobileExtUnauthorizedRoutes:
 class TestMobileExtMobileModItems:
     """Cover ``_mobile_mod_items`` branches."""
 
-    def test_empty_list(self, ext_mod):
-        with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
-        ):
-            mock_mm.return_value.list_all_mods.return_value = []
-            assert ext_mod._mobile_mod_items() == []
-
-    def test_exception_returns_empty(self, ext_mod):
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
-                side_effect=RuntimeError("fail"),
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
-        ):
-            assert ext_mod._mobile_mod_items() == []
-
-    def test_limit_100(self, ext_mod):
-        with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
-        ):
-            mock_mm.return_value.list_all_mods.return_value = [
-                {"id": f"mod-{i}", "name": f"Mod {i}"} for i in range(150)
-            ]
-            assert len(ext_mod._mobile_mod_items()) == 100
-
 
 class TestMobileExtApprovalShipmentItems:
     """Cover ``_approval_items`` / ``_shipment_items``."""

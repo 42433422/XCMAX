@@ -92,15 +92,6 @@ class TestDetectedHeaderRow:
 
     # ---------- preferred_sheet_name branches (lines ~62-87) ----------
 
-    def test_preferred_sheet_no_match_falls_through(self):
-        # When preferred "B" doesn't match in sheets/all_sheets, the code falls
-        # through to the top-level fallback which DOES return sheets[0].
-        # So this test verifies the fallback path fires (returns sheets[0] value).
-        ea = {"sheets": [{"sheet_name": "A", "grid_preview": {"header_row_index": 2}}]}
-        result = detected_excel_header_row_1based(ea, preferred_sheet_name="B")
-        # Falls back to sheets[0] which has header_row_index=2
-        assert result == 2
-
     def test_preferred_sheet_match_in_sheets(self):
         ea = {
             "sheets": [

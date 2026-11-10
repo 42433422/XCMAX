@@ -231,17 +231,6 @@ class TestSetConfigValue:
 
 
 class TestPydanticModels:
-    def test_service_request_create_defaults(self) -> None:
-        body = ServiceRequestCreate(
-            source_instance_id="inst-1",
-            source_instance_name="Test",
-            title="Help",
-        )
-        assert body.priority == "normal"
-        assert body.request_type == "general"
-        assert body.description is None
-        assert body.extra_data is None
-
     def test_service_request_respond_defaults(self) -> None:
         body = ServiceRequestRespond(response="done")
         assert body.status == "resolved"

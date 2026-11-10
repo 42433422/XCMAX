@@ -26,7 +26,7 @@ type FragmentLinks = { items: { sheet: string; first: string; second: string; sh
 type LogicalDocument = { logical_document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type SuggestedDocument = { document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; type_label?: string; fragments: { sheet: string; range: string }[] }
-type Checkpoint = { phase: 'ready' | 'paused' | 'inflight' | 'failed'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; remaining_in_round?: number; message: string }
+type Checkpoint = { phase: 'ready' | 'paused' | 'inflight' | 'failed'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; repair_rounds?: number; remaining_in_round?: number; message: string }
 type ConversionReceipt = { converter: string; source_sha256: string; derived_sha256: string; purpose?: string; print_layout_verified?: boolean; warnings?: string[] }
 type Classification = { usage_restrictions?: string[]; original_sha256?: string; conversion_receipt?: ConversionReceipt | null; template_write_state?: string; independent_confirmed?: boolean; confirmed_document_count?: number | null; document_count_status?: string; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; read_only_print_areas?: { sheet: string; value: string }[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; checkpoint?: Checkpoint | null; name: string; status: string; sha256?: string; message?: string; classification_id?: string; version?: string; confirmed?: boolean; model_status?: string; budget?: { calls: number; max_calls: number; unread: number }; input_messages?: unknown[]; input_summaries?: unknown[]; coverage?: { sheet: string; total: number; sent: number; unread: string[]; unassigned: string[]; model_unassigned?: string[]; value_truncated: string[]; deferred_large_values?: string[]; deferred_oversized_rows?: string[]; merged_sent: number; merged_omitted: number }[]; sheets: ClassificationSheet[] }
 type RecentClassification = { usage_restrictions?: string[]; conversion_receipt?: ConversionReceipt | null; archive_version_id?: string | null; template_write_state?: string; checkpoint?: Checkpoint | null; classification_id: string; name: string; sha256: string; latest: { usage_restrictions?: string[]; conversion_receipt?: ConversionReceipt | null; version: string; confirmed: boolean; model_status: string; sheets: ClassificationSheet[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; coverage?: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] } | null }
@@ -162,7 +162,7 @@ const activeDocument = computed(() => documentWorkspace.records.value[activeDocu
 const activeDocumentProposal = computed(() => activeDocument.value && documentWorkspace.proposal(activeDocument.value))
 const documentOriginalPreview = ref(false)
 const documentWorkPending = computed(() => documentWorkspace.documents.value.some(doc => !!doc.phase))
-const documentWorkLabel = computed(() => { const doc = documentWorkspace.documents.value.find(item => !!item.phase); return doc ? `${doc.displayName}：${documentPhase(doc)}` : '' })
+const documentWorkLabel = computed(() => { const doc = documentWorkspace.documents.value.find(item => !!item.phase && item.phase !== 'saving'); return doc ? `${doc.displayName}：${documentPhase(doc)}` : '' })
 function openDocument(doc: ReviewedDocument) {
   activeDocumentKey.value = doc.key; expandedCandidateIndex.value = null; documentOriginalPreview.value = false; templatePickerOpen.value = true
 }
@@ -199,12 +199,13 @@ function bindA4Scale(el: Element | { $el?: unknown } | null, index: number) {
 }
 async function saveActiveDocument() {
   const doc = activeDocument.value
-  if (!doc) return
-  await documentWorkspace.save(doc)
-  if (activeDocument.value === doc && documentWorkspace.saved(doc)) closeCandidatePicker()
+  if (!doc || !documentWorkspace.canSave(doc)) return
+  const saving = documentWorkspace.save(doc)
+  closeCandidatePicker()
+  await saving
 }
 function documentPhase(doc: ReviewedDocument) {
-  return doc.phase === 'generating' ? '生成中' : doc.phase === 'refining' ? '整理中' : doc.phase === 'saving' ? '保存中' : doc.unknown ? '待核对' : doc.error ? '未完成' : ''
+  return doc.phase === 'generating' ? '生成中' : doc.phase === 'refining' ? '整理中' : doc.phase === 'saving' ? '保存中' : doc.unknown ? '待核对' : doc.error ? '未完成' : doc.intakePending ? (documentWorkspace.saved(doc) ? '已保存·后台核对中' : '后台核对中') : doc.intakeError ? (documentWorkspace.saved(doc) ? '已保存·入库待核对' : '入库待核对') : documentWorkspace.saved(doc) ? '已保存' : ''
 }
 function selectExpandedDocumentCandidate() { if (expandedCandidateIndex.value !== null && expandedCandidateIndex.value >= 0) selectDocumentCandidate(expandedCandidateIndex.value) }
 async function submitDocumentRequirement(note: string) {
@@ -876,6 +877,7 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
       analysisProgress.value = `模型分析 ${index + 1}/${pending.length}：${item.name}`
       try {
         if (!item.classification_id || !item.version) throw new Error('分类来源或版本缺失，请重新分类')
+        const pausedProgress = new Set<string>()
         while (!cancelAnalysis.value) {
           const form = new FormData(); form.append('version', item.version)
           form.append('auto_group', 'true')
@@ -889,7 +891,14 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
           if (result.phase === 'pending' || result.phase === 'paused') {
             item.checkpoint = result.checkpoint
             analysisProgress.value = `${item.name}：已完成 ${result.checkpoint?.completed}/${result.checkpoint?.total} 批`
-            if (result.phase === 'paused' || retryItem) break
+            if (pipeline) archiveProgress.value = `${analysisProgress.value}，正在继续处理…`
+            if (result.phase === 'paused') {
+              const completed = result.checkpoint?.completed
+              const progress = JSON.stringify([completed, result.checkpoint?.repair_rounds ?? 0])
+              if (!pipeline || typeof completed !== 'number' || pausedProgress.has(progress)) break
+              pausedProgress.add(progress)
+              analysisProgress.value = `${item.name}：已完成 ${completed}/${result.checkpoint?.total} 批，正在继续处理`
+            } else if (retryItem && !pipeline) break
             continue
           }
           const previousSheets = item.sheets
@@ -1278,7 +1287,7 @@ async function downloadCandidate(index: number) {
       <div v-for="(note, noteIndex) in requirementNotes" :key="`req-${noteIndex}`" class="elt-bubble elt-bubble--user">
         整理要求：{{ note }}
       </div>
-      <div v-if="archiveProgress || documentWorkPending" class="elt-bubble elt-bubble--system elt-processing-feedback" :class="{ 'elt-processing-feedback--busy': busy || documentWorkPending }" role="status" :aria-busy="busy || documentWorkPending"><span v-if="busy || documentWorkPending" class="elt-processing-feedback__spinner" aria-hidden="true"></span><span>{{ documentWorkLabel || archiveProgress }}</span></div>
+      <div v-if="archiveProgress || documentWorkLabel" class="elt-bubble elt-bubble--system elt-processing-feedback" :class="{ 'elt-processing-feedback--busy': busy || !!documentWorkLabel }" role="status" :aria-busy="busy || !!documentWorkLabel"><span v-if="busy || documentWorkLabel" class="elt-processing-feedback__spinner" aria-hidden="true"></span><span>{{ documentWorkLabel || archiveProgress }}</span></div>
       <div v-if="archiveOnSelect" class="classification-results" data-table-structure>
         <template v-for="(item, i) in classifications" :key="`structure-${i}`">
           <section v-for="sheet in item.sheets" :key="`${i}-${sheet.sheet}`">
@@ -1317,9 +1326,9 @@ async function downloadCandidate(index: number) {
                   <button v-if="index >= 0" type="button" class="reviewed-template__select-candidate" :aria-pressed="activeDocument.candidateIndex === index" :disabled="!!activeDocument.phase || activeDocument.unknown || documentWorkspace.saved(activeDocument)" @click.stop="selectDocumentCandidate(index)">{{ activeDocument.candidateIndex === index ? '已选用' : '选用' }}</button>
                 </article>
               </div>
-              <p v-if="activeDocument.intakePending" role="status">正在核对入库范围…</p>
+              <p v-if="activeDocument.intakePending" role="status">模板已保存，后台正在核对入库范围…</p>
               <p v-if="activeDocument.intakeError" role="alert">{{ activeDocument.intakeError }}</p>
-              <p v-if="activeDocument.intake && !activeDocument.intakePending">知识库 {{ activeDocument.intake.knowledge.documents }} 份 · {{ targetLabel(activeDocument.intake.business.target_type) }}：新增 {{ activeDocument.intake.business.summary.new }}，更新 {{ activeDocument.intake.business.summary.update }}，跳过 {{ activeDocument.intake.business.summary.skip }}<span v-if="activeDocument.intake.business.summary.error">，{{ activeDocument.intake.business.summary.error }} 行错误，尚不能保存</span></p>
+              <p v-if="activeDocument.intake && !activeDocument.intakePending">知识库 {{ activeDocument.intake.knowledge.documents }} 份 · {{ targetLabel(activeDocument.intake.business.target_type) }}：新增 {{ activeDocument.intake.business.summary.new }}，更新 {{ activeDocument.intake.business.summary.update }}，跳过 {{ activeDocument.intake.business.summary.skip }}<span v-if="activeDocument.intake.business.summary.error">，{{ activeDocument.intake.business.summary.error }} 行错误，入库需核对</span></p>
               <button type="button" :disabled="!documentWorkspace.canSave(activeDocument)" @click="saveActiveDocument">{{ documentWorkspace.saved(activeDocument) ? '已保存' : '保存模板' }}</button>
             </template>
           </section>

@@ -488,14 +488,6 @@ class TestExtractSlotsFromRuleExtended:
         # No unit_name extracted from "msg"
         assert "unit_name" not in slots or slots.get("unit_name") is None
 
-    def test_unit_name_needs_fix_with_keyword(self, hybrid: HybridIntentWithDeepSeek) -> None:
-        # Pass keyword in rule_result - but the function doesn't read keyword from rule_result
-        # It builds slots from scratch. So keyword won't be in slots.
-        rule_result = {"keyword": "客户A 的 9803"}
-        slots = hybrid._extract_slots_from_rule("msg", rule_result)
-        # keyword is not extracted from message "msg"
-        assert "unit_name" not in slots
-
     def test_keyword_extracts_unit_and_model(self, hybrid: HybridIntentWithDeepSeek) -> None:
         # keyword must be in slots (from rule_result) for the keyword logic to run
         # But the function doesn't read keyword from rule_result

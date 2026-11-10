@@ -4,7 +4,7 @@ import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 import type { useReviewedDocuments } from '@/composables/useReviewedDocuments'
 
-const api = vi.hoisted(() => ({ archiveClassifyExcel: vi.fn(), reviewedExcelIdentity: vi.fn(), analyzeClassification: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), recentClassifications: vi.fn() }))
+const api = vi.hoisted(() => ({ archiveClassifyExcel: vi.fn(), reviewedExcelIdentity: vi.fn(), analyzeClassification: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), recentClassifications: vi.fn(), saveReviewedExcel: vi.fn(), previewReviewedIntake: vi.fn() }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 vi.mock('@/api/xcmaxMarketProxy', () => ({ default: { llmResolveChatDefault: vi.fn() } }))
 const sheet = { sheet: 'Sheet1', sheet_state: 'visible', processable: true, labels: ['template'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:B2', labels: ['template'], checked_cells: 1, evidence: [], parent_heading: '', dependency_status: 'ready', needs_confirmation: false, header_cells: [], merged_ranges: [], possible_shared_context: [] }] }
@@ -39,6 +39,25 @@ beforeEach(() => {
 afterEach(() => { wrapper.unmount(); vi.restoreAllMocks() })
 
 describe('archive round recovery and stopping', () => {
+  it('closes on save immediately and keeps late receipts in their own capsule', async () => {
+    const saving = deferred<{ template_id: string }>()
+    api.saveReviewedExcel.mockReturnValueOnce(saving.promise)
+    api.previewReviewedIntake.mockReturnValue(new Promise(() => {}))
+    api.autoSlices.mockResolvedValue({ slices: [slice(0), slice(1)] })
+    await stage(); await start()
+    await wrapper.findAll('.reviewed-template__candidate-capsule')[0].trigger('click')
+    await wrapper.findAll('.reviewed-template__select-candidate')[0].trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === '保存模板')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.reviewed-document-picker').exists()).toBe(false)
+    expect(wrapper.findAll('.reviewed-template__candidate-capsule')[0].text()).toContain('保存中')
+    await wrapper.findAll('.reviewed-template__candidate-capsule')[1].trigger('click')
+    saving.resolve({ template_id: 'saved-first' }); await flushPromises()
+    expect(wrapper.find('.reviewed-document-picker').exists()).toBe(true)
+    expect(wrapper.findAll('.reviewed-template__candidate-capsule')[0].text()).toContain('已保存·后台核对中')
+    expect(wrapper.findAll('.reviewed-template__candidate-capsule')[1].text()).not.toContain('已保存')
+  })
+
   it('continues an exhausted failure on the visible action once and ignores duplicate clicks', async () => {
     api.analyzeClassification.mockRejectedValueOnce(new Error('本轮调用失败'))
     await stage(); await start()
@@ -92,14 +111,27 @@ describe('archive round recovery and stopping', () => {
     expect((api.analyzeClassification.mock.calls.at(-1)![1] as FormData).get('continue_authorized')).toBeNull()
   })
 
-  it('continues a paused round on the ordinary continue action', async () => {
-    api.analyzeClassification.mockResolvedValueOnce({ ...modelResult(), phase: 'paused', checkpoint: checkpoint('paused'), version: 'v1', model_status: 'not_called' })
+  it('continues saved batches automatically after a round budget pause', async () => {
+    api.analyzeClassification.mockResolvedValueOnce({ ...modelResult(), phase: 'paused', checkpoint: { ...checkpoint('paused'), completed: 1 }, version: 'v1', model_status: 'not_called' })
     await stage(); await start()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
+    expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('version')).toBe('v1')
+    expect(api.reviewExcel).toHaveBeenCalled()
+  })
+
+  it('continues bounded format repairs even before a batch completes', async () => {
+    for (const rounds of [1, 2]) api.analyzeClassification.mockResolvedValueOnce({ ...modelResult(), phase: 'paused', checkpoint: { ...checkpoint('paused'), repair_rounds: rounds }, version: 'v1', model_status: 'not_called' })
+    await stage(); await start()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(3)
+    expect(api.reviewExcel).toHaveBeenCalled()
+  })
+
+  it('stops automatic continuation if paused batches make no progress', async () => {
+    api.analyzeClassification.mockResolvedValue({ ...modelResult(), phase: 'paused', checkpoint: checkpoint('paused'), version: 'v1', model_status: 'not_called' })
+    await stage(); await start()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
     expect(startButton().text()).toBe('继续处理')
-    await (state().classify as () => Promise<void>)(); expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
-    await start()
-    expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('continue_authorized')).toBeNull()
-    expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('retry_authorized')).toBeNull()
+    expect(api.reviewExcel).not.toHaveBeenCalled()
   })
 
   it('stops after an in-flight classification without starting the next file or model slices, and resumes only on Start', async () => {

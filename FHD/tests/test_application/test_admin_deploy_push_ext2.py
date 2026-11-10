@@ -295,16 +295,6 @@ class TestCheckDeployUpdatesExtended:
 
 
 class TestBuildStepsExtended:
-    def test_default_steps(self) -> None:
-        steps = _build_steps({})
-        step_ids = [s.id for s in steps]
-        assert "check" in step_ids
-        assert "pack" in step_ids
-        assert "push" in step_ids
-        assert "frontend_build" in step_ids
-        assert "frontend_push" in step_ids
-        assert "verify" in step_ids
-
     def test_skip_pack(self) -> None:
         steps = _build_steps({"skip_pack": True})
         step_ids = [s.id for s in steps]

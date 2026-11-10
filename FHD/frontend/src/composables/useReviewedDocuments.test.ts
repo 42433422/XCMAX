@@ -40,7 +40,7 @@ async function generated(id: string, name = '报价单') {
   return doc
 }
 async function selected(doc: ReviewedDocument, index = 0) {
-  controller.choose(doc, index); await flushPromises()
+  controller.choose(doc, index); void controller.prepare(doc); await flushPromises()
 }
 beforeEach(() => {
   vi.resetAllMocks(); runtime.modId = ''; scope = { live: true }; captureLive = true
@@ -101,7 +101,7 @@ describe('reviewed document ownership and receipts', () => {
     await controller.save(a)
     expect(controller.saved(a)).toBe(false); expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
     const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
-    expect([form.get('review_id'), form.get('candidate_id'), form.get('intake_run_id'), form.get('preview_revision')]).toEqual(['review-A', 'review-A-candidate-1', a.intake!.run_id, 'ready-revision'])
+    expect([form.get('review_id'), form.get('candidate_id'), form.get('intake_run_id'), form.get('preview_revision')]).toEqual(['review-A', 'review-A-candidate-1', null, null])
     response.resolve({ template_id: 'template-A' }); await task
     expect(controller.saved(a)).toBe(true); expect(controller.saved(b)).toBe(false)
     expect(a.receipts[0]).toMatchObject({ review_id: 'review-A', proposal_version: 'review-A-v1', candidate_id: 'review-A-candidate-1', template_id: 'template-A' })
@@ -210,7 +210,7 @@ describe('reviewed document ownership and receipts', () => {
   it('ignores old A preparation results after its candidate changes and keeps B intake independent', async () => {
     const a = await generated('A'), b = await generated('B', '采购合同'), response = deferred<ReturnType<typeof readyIntake>>()
     api.previewReviewedIntake.mockReturnValueOnce(response.promise)
-    controller.choose(a, 0)
+    controller.choose(a, 0); void controller.prepare(a)
     const oldForm = api.previewReviewedIntake.mock.calls[0][0] as FormData
     await selected(a, 1); await selected(b, 2)
     const currentA = a.intake!.run_id, currentB = b.intake!.run_id
@@ -250,7 +250,7 @@ describe('reviewed document ownership and receipts', () => {
     vi.useFakeTimers()
     const doc = await generated('A'), response = deferred<ReturnType<typeof readyIntake>>()
     api.previewReviewedIntake.mockReturnValueOnce(response.promise)
-    controller.choose(doc, 0); await flushPromises()
+    controller.choose(doc, 0); void controller.prepare(doc); await flushPromises()
     const stale = readyIntake(api.previewReviewedIntake.mock.calls[0][0] as FormData)
     stale.intake.business.status = 'previewing'; stale.intake.business.preview_revision = ''
     expect(doc.intakePending).toBe(true); expect(vi.getTimerCount()).toBe(0)
@@ -305,4 +305,21 @@ describe('reviewed document ownership and receipts', () => {
     register('C', '报价单', '甲客户.xlsx')
     expect(controller.resolve('整理甲客户的报价单')).toBeNull()
   })
+})
+
+
+it('saves the chosen template before starting background intake preparation', async () => {
+  const doc = await generated('save-first')
+  const pending = deferred<ReturnType<typeof readyIntake>>()
+  api.previewReviewedIntake.mockReturnValue(pending.promise)
+  controller.choose(doc, 0)
+  expect(api.previewReviewedIntake).not.toHaveBeenCalled()
+  expect(controller.canSave(doc)).toBe(true)
+  await controller.save(doc)
+  expect(controller.saved(doc)).toBe(true)
+  expect(doc.phase).toBe('')
+  expect(doc.intakePending).toBe(true)
+  const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
+  expect(form.get('template_only')).toBe('true')
+  expect(form.get('intake_run_id')).toBeNull()
 })
