@@ -263,6 +263,9 @@ def run_task(task: dict[str, Any]) -> dict[str, Any]:
 
 def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+    from starlette.requests import Request
 
     checks: list[dict[str, Any]] = []
     expected = dict(task.get("expected") or {})
@@ -288,8 +291,14 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
     repo = InMemoryAgentRunRepository()
     with tempfile.TemporaryDirectory() as tmp_dir:
         with ExitStack() as stack:
+            fixture_client = SimpleNamespace(headers={})
+            stack.enter_context(_authenticated_route_fixture(fixture_client, role_name="admin"))
+            request = Request({"type": "http", "method": "POST", "path": "/api/agent/run", "headers": [(b"x-session-id", fixture_client.headers["X-Session-ID"].encode())]})
+            principal = require_agent_principal(request, x_user_id=None)
+            actor_id = principal.user_id
             wallet_backend = str(task.get("wallet_backend") or "audit").strip().lower() or "audit"
             env_patch = {
+                "XCAGI_PRODUCT_SKU": "enterprise",
                 "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "model_usage.json"),
                 "MODEL_USAGE_WALLET_BACKEND": wallet_backend,
                 "MODEL_USAGE_WALLET_REQUIRED": "1" if task.get("wallet_required") else "",
@@ -320,7 +329,7 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
                 from app.infrastructure.billing.model_usage import set_model_wallet_balance
 
                 set_model_wallet_balance(
-                    "eval-user",
+                    actor_id,
                     int(task.get("wallet_balance_units") or 0),
                     reason="agent_eval",
                 )
@@ -350,10 +359,10 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
                 )
             orchestrator = AgentOrchestrator(repository=repo)
             run = orchestrator.start_run_from_plan(
-                user_id="eval-user",
+                user_id=actor_id,
                 message=str(task.get("message") or task.get("id") or ""),
                 plan=_build_plan(task),
-                runtime_context={"source": "agent_eval", "task_id": str(task.get("id") or "")},
+                runtime_context=authenticated_runtime_context({"source": "agent_eval", "task_id": str(task.get("id") or "")}, principal),
             )
             initial_status = run.status
             dispatch_before_approval = len(dispatches)
@@ -371,6 +380,8 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
         skip_when_expected_missing=True,
     )
     _check_equal(checks, "final_status", run.status, expected.get("final_status"))
+    if expected.get("run_error_contains"):
+        _check_equal(checks, "run_error_contains", str(expected["run_error_contains"]) in run.error, True)
     _check_equal(
         checks,
         "dispatch_before_approval",

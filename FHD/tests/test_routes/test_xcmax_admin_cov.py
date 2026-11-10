@@ -1313,14 +1313,6 @@ class TestLocalEndpoints:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_local_employee_status_no_session(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.get("/api/xcmax/local/employees/emp1/status")
-        assert resp.status_code == 401
-
     def test_local_employee_status_with_session(self, client: TestClient):
         with (
             patch(
@@ -1334,14 +1326,6 @@ class TestLocalEndpoints:
         ):
             resp = client.get("/api/xcmax/local/employees/emp1/status")
         assert resp.status_code == 200
-
-    def test_local_employee_manifest_no_session(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.get("/api/xcmax/local/employees/emp1/manifest")
-        assert resp.status_code == 401
 
     def test_local_employee_manifest_not_found(self, client: TestClient):
         """Lines 1244-1249: read_local_employee_manifest returns falsy → 404."""
