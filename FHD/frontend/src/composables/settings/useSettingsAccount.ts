@@ -154,7 +154,7 @@ export function useSettingsAccount() {
         let payload: unknown
         let user: User | null = null
         try {
-          payload = await Promise.race([authApi.getCurrentUser({ signal: controller.signal }), aborted])
+          payload = await Promise.race([authApi.getCurrentUser({ signal: controller.signal, quiet: true }), aborted])
           if (required && (payload as { success?: unknown } | null)?.success !== true) {
             throw new Error('设置页账号资料未就绪，请重试')
           }
@@ -165,7 +165,7 @@ export function useSettingsAccount() {
         }
         if (!isCurrent()) return
         if (!user) {
-          payload = await Promise.race([authApi.validateSession({ signal: controller.signal }), aborted])
+          payload = await Promise.race([authApi.validateSession({ signal: controller.signal, quiet: true }), aborted])
           if (!isCurrent()) return
           sessionValid.value = readValid(payload)
           user = sessionValid.value ? userFromSessionValidatePayload(payload) : null
@@ -175,6 +175,11 @@ export function useSettingsAccount() {
         if (required && (!sessionValid.value || (!user && !accountProfileStore.isAdminAccount))) {
           throw new Error('设置页账号身份未确认，请重试')
         }
+        const currentName = String(localUser.value?.display_name || localUser.value?.username || '').trim()
+        const edited = Boolean(localUser.value) && (
+          profileDisplayNameDraft.value.trim() !== currentName
+          || profileEmailDraft.value.trim() !== String(localUser.value?.email || '').trim()
+        )
         localUser.value = user
         if (sessionValid.value) {
           const hydration = applyAccountMetaFromAuthPayload(payload)
@@ -184,7 +189,7 @@ export function useSettingsAccount() {
           companyBrandDraft.value = accountProfileStore.companyBrand || ''
         }
         if (!sessionValid.value) { invalidateEnterpriseSessionCache(); accountProfileStore.clear() }
-        syncProfileDraftsFromUser(user)
+        if (!edited) syncProfileDraftsFromUser(user)
       } catch (error) {
         if (!isCurrent()) return
         const status = (error as { status?: number } | null)?.status

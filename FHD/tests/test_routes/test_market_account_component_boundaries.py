@@ -1,5 +1,7 @@
 """Public contracts across market transport, account and payment components."""
 
+import asyncio
+import logging
 from contextlib import contextmanager
 from datetime import timedelta
 from types import SimpleNamespace
@@ -7,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from fastapi import Request
+from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -16,6 +18,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.db_base import Base
 from app.db.models.user import Session, User
 from app.fastapi_routes import market_account as market
+from app.fastapi_routes.market_bridge.request_identity import RequestIdentity
 from app.utils.time import utc_now_naive
 
 
@@ -291,3 +294,37 @@ async def test_registration_verification_error_never_enters_diagnostic_registrat
         return_error_payload=True,
     )
     diagnostic.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_session_handoff_returns_before_market_entitlement_sync():
+    started = asyncio.Event()
+
+    async def sync(_session_id: str):
+        started.set()
+        await asyncio.Event().wait()
+
+    user = SimpleNamespace(id=7, is_active=True)
+    identity = RequestIdentity(
+        session_id=lambda _request: "sid",
+        access_token=lambda _sid: "tok",
+        refresh_token=lambda _sid: "",
+        latest_token=lambda *_args, **_kwargs: "",
+        user_id=lambda _sid: 7,
+        current_user=lambda _request: user,
+        normalize=lambda raw: raw,
+        auth_header=lambda raw: raw,
+        resolve_token=AsyncMock(return_value=""),
+        save=lambda *_args, **_kwargs: None,
+        fallback_auth=lambda *_args, **_kwargs: "",
+        base_url=lambda: "https://market.example",
+        sync_entitlements=sync,
+        proxy=AsyncMock(),
+        logger=logging.getLogger("handoff-test"),
+    )
+    background = BackgroundTasks()
+    response = await identity.handoff(SimpleNamespace(), background)
+    assert isinstance(response, JSONResponse)
+    assert response.status_code == 200
+    assert not started.is_set()
+    assert background.tasks

@@ -17,7 +17,7 @@ from hashlib import sha256
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Request
 from fastapi.responses import JSONResponse as JSONResponse
 
 from app.application import market_account_live as _market_account_live
@@ -302,13 +302,13 @@ def _user_id_from_session(session_id: str) -> int | None:
 
 
 @router.get("/session-handoff")
-async def market_session_handoff(request: Request):
+async def market_session_handoff(request: Request, background: BackgroundTasks):
     """Return credentials only to their verified local session, for API calls.
 
     Browser navigation uses POST /browser-handoff. Anonymous, mismatched and
     unavailable sessions must never borrow another session's credentials.
     """
-    return await _request_identity().handoff(request)
+    return await _request_identity().handoff(request, background)
 
 
 def _authorization_from_request(request: Request, body: dict[str, Any]) -> str:
