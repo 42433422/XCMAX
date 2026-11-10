@@ -136,3 +136,5 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 同日，未登记且含失效报告路径的 OpenAPI 旧指南外置至 `~/XCMAX-archives/docs-20261110-openapi-old-guide/`；校验入口为 `FHD/scripts/tools/check_openapi_consistency.py --help`。
 
 同日，覆盖率文档的旧测量快照外置至 `~/XCMAX-archives/docs-20261110-coverage-snapshot/`；现行文档指向可执行门槛与测量入口。
+
+同日，含过期 Node 要求和 API 示例的旧前端 README 外置至 `~/XCMAX-archives/docs-20261110-frontend-readme/`；现行入口以 `package.json` 与 Vite 配置为准。

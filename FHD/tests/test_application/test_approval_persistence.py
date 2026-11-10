@@ -42,6 +42,109 @@ from app.db.models.approval import ApprovalRequest, ApprovalStatus
 SNAPSHOT_VERSION = 1
 
 
+@pytest.fixture(params=["sqlite", "postgresql"])
+def locking_engine(request, tmp_path):
+    import os
+    import uuid
+
+    from sqlalchemy import text
+
+    if request.param == "sqlite":
+        engine = create_engine(
+            f"sqlite:///{tmp_path / 'locking.db'}", connect_args={"check_same_thread": False}
+        )
+        yield engine
+        engine.dispose()
+        return
+    url = os.environ.get("XCAGI_TEST_AGENT_POSTGRES_URL")
+    if not url:
+        pytest.skip("isolated PostgreSQL test database not configured")
+    schema = "bulk_test_" + uuid.uuid4().hex
+    admin = create_engine(url)
+    with admin.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+        with admin.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
+
+
+def test_guarded_delete_serializes_concurrent_writes(locking_engine, monkeypatch):
+    from threading import Event, Thread
+
+    from sqlalchemy import event, text
+
+    from app.application.chat_turn_guard import scope_snapshot
+    from app.application.workflow.guarded_batch_delete import execute_guarded_batch_delete
+    from app.db.models import Product
+    from app.db.models.product import UomCategory, UomUnit
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.db.models.shipment import ShipmentRecord
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    engine = locking_engine
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            UomCategory.__table__,
+            UomUnit.__table__,
+            Product.__table__,
+            PurchaseUnit.__table__,
+            ShipmentRecord.__table__,
+        ],
+    )
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_mod_scope._bound_actor", lambda ctx: object()
+    )
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.tool_permission.actor_tool_denial", lambda *args: None
+    )
+    started, finished = Event(), Event()
+    workers = []
+    with tenant_scope(1):
+        with factory.begin() as session:
+            session.add(Product(id=1, name="preview", tenant_id=1))
+        context = {"tenant_id": 1}
+        context["_bulk_preview_scope"] = {"tool": "products", "digest": scope_snapshot(context)[3]}
+
+        def writer():
+            started.set()
+            with engine.begin() as connection:
+                connection.execute(text("UPDATE products SET name='changed' WHERE id=1"))
+            finished.set()
+
+        def before_sql(_conn, _cursor, statement, _params, _context, _many):
+            if (
+                statement.lstrip().upper().startswith("SELECT")
+                and "FROM products" in statement
+                and not workers
+            ):
+                worker = Thread(target=writer)
+                workers.append(worker)
+                worker.start()
+                assert started.wait(2) and not finished.wait(0.2)
+
+        event.listen(engine, "before_cursor_execute", before_sql)
+        try:
+            result = execute_guarded_batch_delete(
+                tool_id="products",
+                action="batch_delete",
+                params={"ids": [1], "_runtime_context": context},
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", before_sql)
+        workers[0].join(5)
+        assert result["success"] and finished.is_set()
+        with factory() as session:
+            assert session.get(Product, 1) is None
+
+
 def test_batch_readback_uses_fresh_tenant_scoped_business_data(db, monkeypatch):
     from app.application.approval_workspace.workflow_bridge import _batch_absent
     from app.application.chat_turn_guard import scope_snapshot
