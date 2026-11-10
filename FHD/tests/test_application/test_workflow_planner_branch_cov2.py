@@ -25,17 +25,18 @@ def test_normal_profile_removes_pro_only_tools_and_actions():
     assert set(result["mixed"]["actions"]) == {"read"}
 
 
-
 def test_pro_default_profile_rejects_normal_only_entries():
     registry = {
         "shared": {"availability": "shared", "actions": {"read": {"availability": "shared"}}},
-        "normal": {"availability": "normal_only", "actions": {"slot": {"availability": "normal_only"}}},
+        "normal": {
+            "availability": "normal_only",
+            "actions": {"slot": {"availability": "normal_only"}},
+        },
     }
 
     result = filter_tool_registry_for_profile(registry, "pro_default")
 
     assert set(result) == {"shared"}
-
 
 
 def test_canonical_registry_has_plannable_business_capabilities():

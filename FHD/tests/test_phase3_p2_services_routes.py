@@ -141,8 +141,6 @@ def test_filter_tool_registry_pro_default() -> None:
     assert "shared" in filtered
 
 
-
-
 # ---------------------------------------------------------------------------
 # xcagi_compat_product routes (0% file)
 # ---------------------------------------------------------------------------

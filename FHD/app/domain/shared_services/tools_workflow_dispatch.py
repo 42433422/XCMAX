@@ -58,6 +58,14 @@ from app.domain.shared_services.tools_workflow_workspace import (
 )
 
 
+def _registered_router_client_product_issue(action, params, runtime_context, profile, user_message):
+    if action != "submit":
+        return {"success": False, "message": "不支持的产品问题上报操作"}
+    from app.application.registered_client_issue import submit_client_product_issue
+
+    return submit_client_product_issue(user_message, runtime_context)
+
+
 class _WorkflowRouterMap(dict):
     _hidden_keys = {"employee", "business_db"}
 
@@ -101,6 +109,7 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "excel_vector_index": _registered_router_excel_vector_index,
         "ocr": _registered_router_ocr,
         "excel_import": _registered_router_excel_import,
+        "client_product_issue": _registered_router_client_product_issue,
         "unit_products_import": _registered_router_unit_products_import,
     }
 )

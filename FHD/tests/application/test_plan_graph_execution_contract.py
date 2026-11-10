@@ -42,9 +42,7 @@ def node(name, deps=()):
 def run_plan(plan, *, tool_executor=None):
     return AgentOrchestrator(
         repository=InMemoryAgentRunRepository(), tool_executor=tool_executor
-    ).start_run_from_plan(
-        user_id="test", message="read products", plan=plan
-    )
+    ).start_run_from_plan(user_id="test", message="read products", plan=plan)
 
 
 class _PlanTestExecutor:
@@ -105,12 +103,15 @@ def test_conditional_plan_executes_only_selected_branch(available, chosen, rever
 
     run = AgentOrchestrator(
         repository=InMemoryAgentRunRepository(), tool_executor=_PlanTestExecutor(dispatch)
-    ).start_run_from_plan(
-        user_id="test", message="read products", plan=plan
+    ).start_run_from_plan(user_id="test", message="read products", plan=plan)
+    assert run.status == "completed", (
+        run.error,
+        [(s.node_id, s.status, s.error) for s in run.steps],
     )
-    assert run.status == "completed", (run.error, [(s.node_id, s.status, s.error) for s in run.steps])
     assert calls == (["first", "yes"] if chosen == "yes" else ["first", "no", "after_no"]), (
-        run.status, run.error, [(s.node_id, s.status, s.error, s.output) for s in run.steps]
+        run.status,
+        run.error,
+        [(s.node_id, s.status, s.error, s.output) for s in run.steps],
     )
     assert (
         next(s for s in run.steps if s.node_id == ("no" if chosen == "yes" else "yes")).status
@@ -162,7 +163,10 @@ def test_branch_decision_survives_approval_and_repository_round_trip(
         plan=plan,
     )
     runner._execute_ready_steps(run, runtime_context={})
-    assert run.status == "waiting_user", (run.error, [(s.node_id, s.status, s.error) for s in run.steps])
+    assert run.status == "waiting_user", (
+        run.error,
+        [(s.node_id, s.status, s.error) for s in run.steps],
+    )
     repo.save(agent_run_from_dict(json.loads(json.dumps(run.to_dict()))))
     resumed_runner = AgentOrchestrator(repository=repo, tool_executor=_PlanTestExecutor(dispatch))
     with patch(

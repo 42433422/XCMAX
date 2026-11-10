@@ -19,19 +19,24 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_unregistered_action_cannot_claim_low_risk():
-    plan = PlanGraph(plan_id="p", intent="test", nodes=[
-        WorkflowNode(node_id="n", tool_id="unknown_tool", action="execute", risk="low")
-    ])
+    plan = PlanGraph(
+        plan_id="p",
+        intent="test",
+        nodes=[WorkflowNode(node_id="n", tool_id="unknown_tool", action="execute", risk="low")],
+    )
     result = HybridRiskGate().evaluate(plan, {})
     assert "n" in result.denied_nodes
 
 
 def test_internal_clarification_is_not_blocked_as_unknown_tool():
-    plan = PlanGraph(plan_id="p", intent="test", nodes=[
-        WorkflowNode(node_id="n", tool_id="clarify", action="ask", risk="low")
-    ])
+    plan = PlanGraph(
+        plan_id="p",
+        intent="test",
+        nodes=[WorkflowNode(node_id="n", tool_id="clarify", action="ask", risk="low")],
+    )
     result = HybridRiskGate().evaluate(plan, {})
     assert "n" not in result.denied_nodes
+
 
 REQUIRED_CLASSES = {
     "business_db.write",

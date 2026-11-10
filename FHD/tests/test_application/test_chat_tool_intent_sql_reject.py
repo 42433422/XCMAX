@@ -8,8 +8,9 @@ from app.application.workflow.sql_execution_policy import rejected_sql_plan
 
 def test_explicit_sql_execution_is_rejected_before_model_planning():
     model = Mock(side_effect=AssertionError("SQL execution requests must stop before the model"))
-    with patch("app.application.workflow.planner.get_ai_conversation_service"), patch(
-        "app.application.workflow.planner.request_planner_completion", model
+    with (
+        patch("app.application.workflow.planner.get_ai_conversation_service"),
+        patch("app.application.workflow.planner.request_planner_completion", model),
     ):
         planner = LLMWorkflowPlanner(completion=model)
         plan = planner.plan("owner", "执行 DELETE FROM customers", {}, {})

@@ -10,7 +10,7 @@ from openpyxl import load_workbook
 from sqlalchemy import text
 
 from app.application.agent_orchestrator import AgentOrchestrator
-from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.payment_service import payment
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
@@ -21,6 +21,9 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 def test_approved_sales_plan_writes_once_and_does_not_invent_receipt(trusted_actor, monkeypatch):
     actor = trusted_actor(role="admin")
+    monkeypatch.setattr(
+        "app.infrastructure.auth.business_scope_gate.resolve_product_sku", lambda: "enterprise"
+    )
     factory = actor.factory
     monkeypatch.setattr("app.db.session.SessionLocal", factory)
     monkeypatch.setattr("app.application.customer_app_service.get_customers_session", factory)
@@ -105,12 +108,21 @@ def test_approved_sales_plan_writes_once_and_does_not_invent_receipt(trusted_act
         intent="sales_write",
         nodes=[
             WorkflowNode(
+                node_id="lookup",
+                tool_id="customers",
+                action="query",
+                params={"keyword": "测试客户 A"},
+                risk="low",
+                idempotent=True,
+            ),
+            WorkflowNode(
                 node_id="sale",
                 tool_id="sales",
                 action="execute_closed_loop",
                 params={"payload": payload},
                 risk="high",
                 idempotent=True,
+                depends_on=["lookup"],
             ),
             WorkflowNode(
                 node_id="verify",
@@ -135,7 +147,7 @@ def test_approved_sales_plan_writes_once_and_does_not_invent_receipt(trusted_act
     executor = SimpleNamespace(execute=AgentToolExecutor().execute)
     with tenant_scope(actor.tenant_id):
         orchestrator = AgentOrchestrator(
-            repository=InMemoryAgentRunRepository(), tool_executor=executor
+            repository=SQLAlchemyAgentRunRepository(session_factory=factory), tool_executor=executor
         )
         rejected_plan = deepcopy(plan)
         rejected_plan.plan_id = "sales-agent-rejected"
@@ -145,7 +157,10 @@ def test_approved_sales_plan_writes_once_and_does_not_invent_receipt(trusted_act
             plan=rejected_plan,
             runtime_context=actor.context,
         )
-        assert rejected.status == "waiting_user"
+        assert rejected.status == "waiting_user", (
+            rejected.error,
+            [s.output for s in rejected.steps],
+        )
         stopped = orchestrator.cancel_run(rejected.run_id, requested_by=str(actor.user_id))
         assert stopped is not None and stopped.status == "cancelled"
         waiting = orchestrator.start_run_from_plan(
@@ -154,17 +169,31 @@ def test_approved_sales_plan_writes_once_and_does_not_invent_receipt(trusted_act
             plan=plan,
             runtime_context=actor.context,
         )
-        assert waiting.status == "waiting_user" and not waiting.tool_calls
+        assert waiting.status == "waiting_user"
+        assert [step.status for step in waiting.steps] == [
+            "completed",
+            "waiting_user",
+            "pending",
+            "pending",
+        ]
+        assert len(waiting.tool_calls) == 1
         with factory() as db:
             assert db.execute(text("SELECT count(*) FROM sales_orders")).scalar_one() == 0
+        # Recreate the orchestrator and repository to prove the pending plan survives a restart.
+        orchestrator = AgentOrchestrator(
+            repository=SQLAlchemyAgentRunRepository(session_factory=factory), tool_executor=executor
+        )
+        reloaded = orchestrator.get_run(waiting.run_id)
+        assert reloaded is not None and reloaded.status == "waiting_user"
         completed = orchestrator.continue_run(
             waiting.run_id, approved_by=str(actor.user_id), approved_step_id="sale"
         )
         assert completed is not None and completed.status == "completed", completed
-        assert [step.status for step in completed.steps] == ["completed"] * 3
+        assert [step.status for step in completed.steps] == ["completed"] * 4
+        assert sum(call.node_id == "lookup" for call in completed.tool_calls) == 1
         from app.application.agent_orchestrator.artifact_files import read_verified_spreadsheet
 
-        artifact = completed.steps[2].output["artifacts"][0]
+        artifact = completed.steps[3].output["artifacts"][0]
         workbook = load_workbook(BytesIO(read_verified_spreadsheet(completed.run_id, artifact)))
         rows = list(workbook["sales"].iter_rows(values_only=True))
         assert "产品 B" in str(rows) and "1000" in str(rows)

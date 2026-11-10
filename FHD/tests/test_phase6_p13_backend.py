@@ -140,7 +140,10 @@ class TestMergeToolRuntimeContext:
         with tenant_scope(1):
             result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
         assert result == {
-            "user_id": "u1", "conversation_id": "u1", "message": "hello", "tenant_id": "1"
+            "user_id": "u1",
+            "conversation_id": "u1",
+            "message": "hello",
+            "tenant_id": "1",
         }
 
     def test_non_dict_context(self) -> None:
@@ -151,7 +154,10 @@ class TestMergeToolRuntimeContext:
                 "u1", "hello", "not a dict"
             )
         assert result == {
-            "user_id": "u1", "conversation_id": "u1", "message": "hello", "tenant_id": "1"
+            "user_id": "u1",
+            "conversation_id": "u1",
+            "message": "hello",
+            "tenant_id": "1",
         }
 
     def test_skips_none_values(self) -> None:
@@ -832,10 +838,6 @@ class TestGetToolRegistryPlanner:
 class TestFilterToolRegistryForProfile:
     """Cover _filter_tool_registry_for_profile."""
 
-
-
-
-
     def test_non_dict_spec_skipped(self) -> None:
         reg = {"bad": "not a dict"}
         result = _filter_tool_registry_for_profile(reg, "normal")
@@ -870,8 +872,6 @@ class TestFilterToolRegistryForProfile:
         }
         result = _filter_tool_registry_for_profile(reg, "normal")
         assert "tool_a" not in result
-
-
 
 
 class TestLLMWorkflowPlannerPlanWithLLM:
@@ -988,11 +988,6 @@ class TestLLMWorkflowPlannerPlanWithLLM:
                 assert result is not None
                 assert result.intent == "product_query"
                 assert len(result.nodes) == 1
-
-
-
-
-
 
 
 class TestLLMWorkflowPlannerPlan:

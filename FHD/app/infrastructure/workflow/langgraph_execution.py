@@ -422,7 +422,9 @@ class LangGraphExecutionMixin:
                     if newly_completed:
                         partial = copy.deepcopy(chunk)
                         partial["executed"] = sorted(successful_ids)
-                        partial["results"] = [dict(result) for result in (chunk.get("results") or [])]
+                        partial["results"] = [
+                            dict(result) for result in (chunk.get("results") or [])
+                        ]
                         partial["workflow_trace"] = [
                             dict(entry) for entry in (chunk.get("workflow_trace") or [])
                         ]

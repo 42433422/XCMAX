@@ -397,6 +397,22 @@ def get_openai_compatible_client() -> Any:
     return cli
 
 
+def create_document_completion(*, messages: list[dict[str, str]], timeout: float) -> Any:
+    """Keep document model admission at the provider boundary."""
+    from app.infrastructure.llm.model_admission import admit_model_call, model_call_slot
+
+    with model_call_slot(None, profile="document_generation"):
+        admit_model_call(None, profile="document_generation")
+        return get_openai_compatible_client().chat.completions.create(
+            model=resolve_chat_model(),
+            messages=messages,
+            temperature=0.35,
+            max_tokens=8192,
+            timeout=timeout,
+            response_format={"type": "json_object"},
+        )
+
+
 def resolve_chat_model() -> str:
     if resolve_mode() == "offline":
         return str(_offline_model or "")

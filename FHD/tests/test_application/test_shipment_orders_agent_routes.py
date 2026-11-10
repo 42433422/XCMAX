@@ -21,13 +21,17 @@ def test_approval_route_does_not_report_failed_execution_as_success(monkeypatch)
     approvals.get_pending_workflow.return_value = {"plan": plan, "runtime_context": {}}
     resume = {"success": False, "workflow_executed": False, "code": "workflow_plan_unavailable"}
     monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approvals)
-    monkeypatch.setattr("app.application.approval_workspace_app_service._pending_snapshot", lambda _: None)
+    monkeypatch.setattr(
+        "app.application.approval_workspace_app_service._pending_snapshot", lambda _: None
+    )
     monkeypatch.setattr(
         "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
         lambda **_: resume,
     )
     monkeypatch.setattr(shipment_routes, "_owned_request_id", lambda *_args: "req")
-    monkeypatch.setattr(shipment_routes, "_trace_approval_route", lambda payload, **_kwargs: payload)
+    monkeypatch.setattr(
+        shipment_routes, "_trace_approval_route", lambda payload, **_kwargs: payload
+    )
     result = shipment_routes.ai_approval_approve({"request_id": "req"}, user=object())
     assert result["success"] is False
     assert result["data"]["workflow_executed"] is False
@@ -40,7 +44,9 @@ def test_approval_route_missing_plan_does_not_claim_execution(monkeypatch):
     approvals = MagicMock()
     approvals.get_pending_workflow.return_value = {"plan": None}
     monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approvals)
-    monkeypatch.setattr("app.application.approval_workspace_app_service._pending_snapshot", lambda _: None)
+    monkeypatch.setattr(
+        "app.application.approval_workspace_app_service._pending_snapshot", lambda _: None
+    )
     monkeypatch.setattr(
         "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
         lambda **_: {
@@ -50,7 +56,9 @@ def test_approval_route_missing_plan_does_not_claim_execution(monkeypatch):
         },
     )
     monkeypatch.setattr(shipment_routes, "_owned_request_id", lambda *_args: "req")
-    monkeypatch.setattr(shipment_routes, "_trace_approval_route", lambda payload, **_kwargs: payload)
+    monkeypatch.setattr(
+        shipment_routes, "_trace_approval_route", lambda payload, **_kwargs: payload
+    )
     result = shipment_routes.ai_approval_approve({"request_id": "req"}, user=object())
     assert result["success"] is False
     assert result["data"]["workflow_executed"] is False

@@ -411,13 +411,18 @@ async def _xcagi_planner_stream_bytes_async(
                     except BOUNDARY_ERRORS:
                         status_code = 503
                         logger.warning("stream interruption persistence unavailable", exc_info=True)
-                    yield _sse_event_line(_sse_payload_with_run_id({
-                        "type": "error",
-                        "status_code": status_code,
-                        "message": "对话处理中断，业务结果尚未确认，请核对任务，勿重复提交。",
-                        "execution_outcome": "unknown",
-                        "requires_reconciliation": True,
-                    }, getattr(lifetime.run_snapshot, "run_id", None)))
+                    yield _sse_event_line(
+                        _sse_payload_with_run_id(
+                            {
+                                "type": "error",
+                                "status_code": status_code,
+                                "message": "对话处理中断，业务结果尚未确认，请核对任务，勿重复提交。",
+                                "execution_outcome": "unknown",
+                                "requires_reconciliation": True,
+                            },
+                            getattr(lifetime.run_snapshot, "run_id", None),
+                        )
+                    )
                 else:
                     yield _sse_event_line(
                         {"type": "error", "message": str(item).strip() or item.__class__.__name__}

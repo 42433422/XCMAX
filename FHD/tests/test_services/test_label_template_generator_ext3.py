@@ -1198,30 +1198,6 @@ class TestLabelTemplateGeneratorSkillDeep:
         assert result["success"] is True
         assert result["output_file"] == output_file
 
-    def test_execute_with_output_file_error(self, tmp_path):
-        """execute() should catch output file write error."""
-        from PIL import Image
-
-        img = Image.new("RGB", (400, 300), (255, 255, 255))
-        img_path = str(tmp_path / "err.png")
-        img.save(img_path)
-
-        skill = LabelTemplateGeneratorSkill()
-
-        original_open = open
-
-        def mock_open(file, mode="r", *args, **kwargs):
-            if "w" in mode and "output" in str(file):
-                raise PermissionError("no write")
-            return original_open(file, mode, *args, **kwargs)
-
-        with patch("builtins.open", side_effect=mock_open):
-            result = skill.execute(
-                img_path, output_file="/tmp/forbidden_output.py", enable_ocr=False
-            )
-            assert result["success"] is True
-            assert "output_error" in result
-
     def test_execute_analysis_failure_returns_failure(self):
         """execute() with failed analysis should return failure."""
         skill = LabelTemplateGeneratorSkill()

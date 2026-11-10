@@ -80,7 +80,6 @@ async def test_offline_stream_and_json_match_without_calling_online_paths(
         assert response == business_result
 
 
-
 def test_stream_offline_never_creates_remote_client(monkeypatch):
     from app.fastapi_routes import xcagi_compat_chat_helpers as facade
 

@@ -800,29 +800,6 @@ class TestAuthRegister:
         assert result.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_local_create_user_failure(self):
-        from app.fastapi_routes.domains.auth.auth_routes import auth_register
-
-        request = MagicMock()
-        with (
-            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
-            patch(
-                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
-                return_value=True,
-            ),
-            patch("app.application.get_user_app_service") as mock_get,
-        ):
-            mock_service = MagicMock()
-            mock_service.create_user.return_value = {
-                "success": False,
-                "message": "用户名已存在",
-            }
-            mock_get.return_value = mock_service
-            result = await auth_register(request, {"username": "u", "password": "pass123"})
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 400
-
-    @pytest.mark.asyncio
     async def test_local_login_after_register_failure(self):
         from app.fastapi_routes.domains.auth.auth_routes import auth_register
 

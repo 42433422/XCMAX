@@ -83,8 +83,6 @@ def _ctx(**overrides) -> dict:
     return base
 
 
-
-
 class TestCustomersRouter:
     """_registered_router_customers 分支覆盖。"""
 
@@ -185,8 +183,6 @@ class TestCustomersRouter:
         with patch("app.application.get_customer_app_service"):
             result = _registered_router_customers("unknown", {}, _ctx(), "normal", "")
             assert result["success"] is False
-
-
 
 
 class TestMaterialsRouter:

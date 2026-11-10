@@ -80,9 +80,7 @@ def test_run_with_dependencies_uses_agent_run_and_returns_receipts():
     orchestrator = MagicMock()
     orchestrator.start_run_from_plan.return_value = run
 
-    with patch(
-        "app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator
-    ):
+    with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
         result = EmployeeOrchestrator(graph).run_with_dependencies(
             "root",
             "task",
@@ -112,9 +110,7 @@ def test_failed_agent_run_is_not_reported_as_success():
     )
     orchestrator = MagicMock()
     orchestrator.start_run_from_plan.return_value = run
-    with patch(
-        "app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator
-    ):
+    with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
         result = EmployeeOrchestrator(graph).run_with_dependencies(
             "root", "task", runtime_context={"user_id": 7}
         )

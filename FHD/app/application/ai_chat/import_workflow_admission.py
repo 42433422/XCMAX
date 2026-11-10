@@ -51,8 +51,13 @@ class ImportWorkflowAdmission:
         planning_context = dict(context)
         if merged_file_context:
             planning_context["file_context"] = merged_file_context
-        if user_id in self.pending and text.lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS:
-            return self.callbacks._resume_pending_dynamic_workflow(user_id, message, text, context)[1]
+        if (
+            user_id in self.pending
+            and text.lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS
+        ):
+            return self.callbacks._resume_pending_dynamic_workflow(user_id, message, text, context)[
+                1
+            ]
         # Every non-control turn goes to the configured model. It returns either
         # a normal reply node or a complete authorized business plan; no local
         # dialogue/business classifier chooses a separate model path.

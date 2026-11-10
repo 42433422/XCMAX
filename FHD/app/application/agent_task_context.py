@@ -60,6 +60,7 @@ def scoped_personal_memory_id(context: dict[str, Any] | None) -> str:
         str(owner),
         str(ctx.get("mod_id") or ctx.get("active_mod_id") or ""),
     ]
-    return "personal-memory:v1:" + hashlib.sha256(
-        json.dumps(scope, ensure_ascii=False).encode()
-    ).hexdigest()
+    return (
+        "personal-memory:v1:"
+        + hashlib.sha256(json.dumps(scope, ensure_ascii=False).encode()).hexdigest()
+    )

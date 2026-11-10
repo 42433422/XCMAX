@@ -188,18 +188,6 @@ def _append_artifacts_to_run(run: AgentRun, artifacts: list[AgentArtifact]) -> N
     _recording().append_artifacts(run, artifacts)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 def create_chat_trace_run(
     payload: dict[str, Any],
     *,
@@ -222,12 +210,6 @@ def create_chat_trace_run(
         channel=channel,
         intent=intent,
     )
-
-
-
-
-
-
 
 
 def attach_chat_trace_run(

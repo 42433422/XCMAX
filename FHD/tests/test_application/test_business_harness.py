@@ -158,8 +158,6 @@ def test_explicit_order_request_forces_the_registered_erp_tool() -> None:
     assert forced_order_tool_choice("请开一张测试订单", []) is None
 
 
-
-
 def test_conversation_message_envelope_restores_whitelisted_harness_ui() -> None:
     row = _message_to_dict(
         (

@@ -26,16 +26,6 @@ from app.di.registry import (
 )
 
 
-class _FakeStack:
-    """测试用 fake ExitStack：仅统计 close 调用次数，不触碰 LangGraph/SQLite。"""
-
-    def __init__(self) -> None:
-        self.close_calls = 0
-
-    def close(self) -> None:
-        self.close_calls += 1
-
-
 @pytest.fixture(autouse=True)
 def _isolate():
     reset_service_registry()
@@ -263,74 +253,8 @@ def test_slots_count_matches_expected():
         "_product_import_service",
         "_shipment_application_service_core",
         "_shipment_event_primary_facade",
-        # LG-W1-T9-E workflow 运行时组合根槽位
-        "_workflow_runtime",
-        "_workflow_checkpointer",
-        "_workflow_resource_stack",
     }
     assert set(ServiceContainer.__slots__) == expected_slots
-
-
-# ── LG-W1-T9-E workflow 运行时槽位 / 资源关闭 ────────────────
-
-
-def test_workflow_slots_initialized_to_none():
-    """三个 workflow 槽位初始均为 None（fake-only，不触碰 LangGraph）。"""
-    c = ServiceContainer()
-    assert c._workflow_runtime is None
-    assert c._workflow_checkpointer is None
-    assert c._workflow_resource_stack is None
-
-
-def test_close_workflow_resources_closes_stack_once_and_clears_slots():
-    """close_workflow_resources 关闭注入的 fake stack 恰好一次并清空三个槽位。"""
-    c = ServiceContainer()
-    stack = _FakeStack()
-    c._workflow_resource_stack = stack
-    c._workflow_runtime = object()
-    c._workflow_checkpointer = object()
-    assert c.close_workflow_resources() is None
-    assert stack.close_calls == 1
-    assert c._workflow_resource_stack is None
-    assert c._workflow_runtime is None
-    assert c._workflow_checkpointer is None
-
-
-def test_close_workflow_resources_is_idempotent_on_second_call():
-    """第二次调用不再触发 close，且槽位保持为 None。"""
-    c = ServiceContainer()
-    stack = _FakeStack()
-    c._workflow_resource_stack = stack
-    c._workflow_runtime = object()
-    c.close_workflow_resources()
-    c.close_workflow_resources()
-    assert stack.close_calls == 1
-    assert c._workflow_runtime is None
-    assert c._workflow_resource_stack is None
-
-
-def test_set_service_registry_replacement_closes_old_but_not_new():
-    """set_service_registry 替换时关闭旧容器 resources，不关闭新容器。"""
-    old = ServiceContainer()
-    new = ServiceContainer()
-    old_stack = _FakeStack()
-    new_stack = _FakeStack()
-    old._workflow_resource_stack = old_stack
-    new._workflow_resource_stack = new_stack
-    set_service_registry(old)
-    set_service_registry(new)
-    assert old_stack.close_calls == 1
-    assert new_stack.close_calls == 0
-
-
-def test_set_service_registry_identical_container_does_not_close():
-    """set_service_registry 设置同一容器时不关闭其 resources。"""
-    c = ServiceContainer()
-    stack = _FakeStack()
-    c._workflow_resource_stack = stack
-    set_service_registry(c)
-    set_service_registry(c)
-    assert stack.close_calls == 0
 
 
 # ── 初始化故障与并发（审计 R19）──────────────────────────────

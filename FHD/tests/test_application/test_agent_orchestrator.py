@@ -204,7 +204,9 @@ def test_agent_tool_executor_rejects_invalid_runtime_tenant_scope(tenant_id):
         params={"entity": "customers", "keyword": "XC 演示客户"},
     )
     with (
-        patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as mock_execute,
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool"
+        ) as mock_execute,
     ):
         result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": tenant_id})
 
@@ -508,8 +510,13 @@ def test_agent_orchestrator_blocks_approved_step_when_budget_exceeded():
     )
 
     with (
-        patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as mock_execute,
-        patch("app.application.agent_orchestrator.tool_permission.actor_tool_denial", return_value=None),
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool"
+        ) as mock_execute,
+        patch(
+            "app.application.agent_orchestrator.tool_permission.actor_tool_denial",
+            return_value=None,
+        ),
     ):
         orchestrator = AgentOrchestrator(repository=repo)
         waiting = orchestrator.start_run_from_plan(
@@ -1376,6 +1383,7 @@ def test_in_memory_approval_snapshot_cannot_resume_protected_plan():
         }
     }
     service.approval_service = approvals
+
     def execution_snapshot(request_id):
         return approvals.items.get(request_id)
 

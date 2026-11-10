@@ -29,12 +29,6 @@ def _without_block_comments(text: str) -> str:
     return "".join(parts)
 
 
-
-
-
-
-
-
 def rejected_sql_plan(message: str, plan_id: str) -> PlanGraph | None:
     text = _without_block_comments(message)
     statement = re.search(

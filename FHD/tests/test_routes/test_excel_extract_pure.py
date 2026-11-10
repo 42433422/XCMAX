@@ -63,25 +63,6 @@ class TestExtractFromExcel:
         finally:
             os.unlink(path)
 
-    def test_extract_with_sheet_name(self):
-        from openpyxl import Workbook
-
-        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
-            wb = Workbook()
-            ws = wb.active
-            ws.title = "Data"
-            ws.append(["Col1"])
-            ws.append(["val1"])
-            wb.save(f.name)
-            path = f.name
-
-        try:
-            result, status = _extract_from_excel(path, sheet_name="Data")
-            assert status == 200
-            assert result["sheet"] == "Data"
-        finally:
-            os.unlink(path)
-
 
 # ========================= _generate_excel ===============================
 

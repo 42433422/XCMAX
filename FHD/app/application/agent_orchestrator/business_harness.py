@@ -334,8 +334,11 @@ def mark_unexecuted_order_run(run: Any, message: str) -> bool:
         return action not in read_only
 
     if any(
-        is_potential_write(call) and str(getattr(call, "status", "") or "").lower() == "completed"
-        and not (isinstance(getattr(call, "output", None), dict) and call.output.get("success") is False)
+        is_potential_write(call)
+        and str(getattr(call, "status", "") or "").lower() == "completed"
+        and not (
+            isinstance(getattr(call, "output", None), dict) and call.output.get("success") is False
+        )
         for call in calls
     ):
         return False

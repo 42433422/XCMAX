@@ -282,14 +282,19 @@ def test_sub_workflow_missing_dispatcher() -> None:
 
 def test_sub_workflow_runs_through_langgraph() -> None:
     calls = []
+
     def dispatch(*, tool_id, action, params):
         calls.append((tool_id, action, params["_runtime_context"]["sub_workflow_depth"]))
         return {"success": True}
 
-    plan = PlanGraph(plan_id="p", intent="i", nodes=[
-        WorkflowNode(node_id="n", tool_id="products", action="query")
-    ])
-    out = vb.execute_sub_workflow_node({"inline_plan": plan}, runtime_context={"_dispatch": dispatch})
+    plan = PlanGraph(
+        plan_id="p",
+        intent="i",
+        nodes=[WorkflowNode(node_id="n", tool_id="products", action="query")],
+    )
+    out = vb.execute_sub_workflow_node(
+        {"inline_plan": plan}, runtime_context={"_dispatch": dispatch}
+    )
     assert out["success"] is True
     assert calls == [("products", "query", 1)]
 

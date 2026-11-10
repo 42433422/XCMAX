@@ -132,9 +132,9 @@ class ExcelImportColumnInferMixin:
                 temperature=0.0,
                 max_tokens=300,
             )
-            content = (
-                ((response_data or {}).get("choices") or [{}])[0].get("message") or {}
-            ).get("content") or ""
+            content = (((response_data or {}).get("choices") or [{}])[0].get("message") or {}).get(
+                "content"
+            ) or ""
             content = str(content).strip()
             if not content:
                 return {}

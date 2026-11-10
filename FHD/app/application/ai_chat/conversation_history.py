@@ -14,7 +14,9 @@ _SECRET_TEXT = re.compile(
     r"(?i)(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|密码|口令)\b\s*[:=]\s*)([^\s,;]+)|"
     r"(\bBearer\s+)[A-Za-z0-9._~+/=-]+"
 )
-_SECRET_FIELD = re.compile(r"(?i)(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|credential|cookie|authorization|密码|口令)")
+_SECRET_FIELD = re.compile(
+    r"(?i)(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|credential|cookie|authorization|密码|口令)"
+)
 
 
 def _storage_safe(value: Any, *, depth: int = 0) -> Any:
@@ -23,7 +25,9 @@ def _storage_safe(value: Any, *, depth: int = 0) -> Any:
         return "[已截断]"
     if isinstance(value, dict):
         return {
-            str(key)[:120]: "[已隐藏]" if _SECRET_FIELD.search(str(key)) else _storage_safe(item, depth=depth + 1)
+            str(key)[:120]: "[已隐藏]"
+            if _SECRET_FIELD.search(str(key))
+            else _storage_safe(item, depth=depth + 1)
             for key, item in list(value.items())[:100]
         }
     if isinstance(value, list):

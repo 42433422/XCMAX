@@ -22,7 +22,9 @@ class HybridRiskGate:
                     "action": f"{node.tool_id}.{node.action}",
                     "tool_id": node.tool_id,
                     "operation": node.action,
-                    "risk_level": node.risk if spec is not None or node.tool_id == "clarify" else "blocked",
+                    "risk_level": node.risk
+                    if spec is not None or node.tool_id == "clarify"
+                    else "blocked",
                     "action_id": f"{plan.plan_id}:{node.node_id}",
                 },
                 runtime_context,

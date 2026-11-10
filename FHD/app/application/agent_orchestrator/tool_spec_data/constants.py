@@ -33,6 +33,7 @@ DATASET_RAG_WRITE_PERMISSION = "dataset.write"
 # tool_id -> fixed permission string (action-independent).
 PERMISSION_OVERRIDES: dict[str, str] = {
     "memory_v2": "memory_v2.write",
+    "client_product_issue": "",
 }
 
 # --- aiopen risk ----------------------------------------------------------

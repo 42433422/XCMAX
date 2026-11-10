@@ -1807,6 +1807,18 @@
         }
       }
     },
+    "client_product_issue": {
+      "description": "客户明确要求反馈或上报软件故障时，使用原始请求提交产品问题；缺少证据时请求补充，受理结果不明时不得重复提交。",
+      "availability": "shared",
+      "actions": {
+        "submit": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        }
+      }
+    },
     "excel_import": {
       "description": "Excel 解析记录入库工具。办公文件导入使用 office_stage，按原始请求解析文件并提交入库审批；不接受任意 SQL。",
       "availability": "shared",

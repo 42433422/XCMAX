@@ -887,7 +887,11 @@ class TestRetry:
 
         def d(tool_id, action, params):
             calls["n"] += 1
-            return {"success": False, "message": "temp", "error_code": "upstream_unavailable"} if calls["n"] <= 1 else {"success": True}
+            return (
+                {"success": False, "message": "temp", "error_code": "upstream_unavailable"}
+                if calls["n"] <= 1
+                else {"success": True}
+            )
 
         result = _make_runtime(d).run(_sequential_plan(1), max_retries=2)
         assert result.success is True
@@ -930,7 +934,10 @@ class TestRetry:
         assert result.success is False
         assert calls["n"] == 1
         assert node.retries == 0
-        assert node.recovery_hint == "高风险/非幂等节点未自动重试；请先核对业务状态，再由人工决定是否重试。"
+        assert (
+            node.recovery_hint
+            == "高风险/非幂等节点未自动重试；请先核对业务状态，再由人工决定是否重试。"
+        )
 
     def test_recoverable_exception_is_retried(self):
         calls = {"n": 0}
@@ -1102,9 +1109,9 @@ class TestConcurrency:
     def test_parallel_false_serializes_all_nodes(self, monkeypatch):
         plan = _parallel_read_plan()
         calls = []
-        result = _make_runtime(lambda tool_id, action, params: calls.append(tool_id) or {"success": True}).run(
-            plan, parallel=False
-        )
+        result = _make_runtime(
+            lambda tool_id, action, params: calls.append(tool_id) or {"success": True}
+        ).run(plan, parallel=False)
         assert result.success is True
         assert calls == [node.tool_id for node in plan.nodes]
         assert result.final_context.get("parallel_batches") is None

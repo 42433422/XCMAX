@@ -84,7 +84,6 @@ class UserMemoryVectorIngestApplicationService:
             )
         return {"success": True, "index_id": user_id, "written": written, "chunk_count": written}
 
-
     def build_action_chunk(
         self, user_id: str, intent: str, slots: dict[str, Any], message: str
     ) -> UserMemoryVectorChunk:
@@ -213,7 +212,9 @@ def _memory_vector_limits() -> tuple[int, int]:
     except ValueError:
         ttl_days = 90
     try:
-        max_chunks = max(1, min(10000, int(os.environ.get("XCAGI_USER_MEMORY_VECTOR_MAX_CHUNKS", "400"))))
+        max_chunks = max(
+            1, min(10000, int(os.environ.get("XCAGI_USER_MEMORY_VECTOR_MAX_CHUNKS", "400")))
+        )
     except ValueError:
         max_chunks = 400
     return ttl_days, max_chunks

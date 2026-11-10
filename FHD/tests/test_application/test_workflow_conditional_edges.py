@@ -184,17 +184,18 @@ class TestEngineConditionalRouting:
         )
 
         checkpointer = WorkflowCheckpointer()
-        result = WorkflowEngine(dispatch).run(
-            plan, parallel=False, checkpointer=checkpointer
-        )
+        result = WorkflowEngine(dispatch).run(plan, parallel=False, checkpointer=checkpointer)
 
         assert result.success is False
         assert result.final_context["workflow_status"]["state"] == "waiting_approval"
         assert result.final_context["workflow_status"]["pending_nodes"] == ["write"]
         assert calls == ["write"]
-        assert checkpointer.latest_checkpoint("approval_pause")["runtime_context"][
-            "workflow_status"
-        ]["state"] == "waiting_approval"
+        assert (
+            checkpointer.latest_checkpoint("approval_pause")["runtime_context"]["workflow_status"][
+                "state"
+            ]
+            == "waiting_approval"
+        )
 
     def test_unreachable_nodes_cannot_be_reported_as_completed(self):
         plan = PlanGraph(
@@ -235,7 +236,9 @@ class TestEngineConditionalRouting:
                 gate,
                 WorkflowNode(node_id="chosen", tool_id="x", action="read", depends_on=["gate"]),
                 WorkflowNode(node_id="skipped", tool_id="x", action="read", depends_on=["gate"]),
-                WorkflowNode(node_id="skipped_child", tool_id="x", action="read", depends_on=["skipped"]),
+                WorkflowNode(
+                    node_id="skipped_child", tool_id="x", action="read", depends_on=["skipped"]
+                ),
             ],
         )
         result = WorkflowEngine(lambda *_args: {"success": True, "go": True}).run(

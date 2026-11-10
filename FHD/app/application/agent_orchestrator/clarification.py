@@ -162,11 +162,12 @@ def apply_clarification_answer(
         (node for node in persisted_plan.nodes if node.node_id == step.node_id),
         None,
     )
-    if (
-        plan_target is None
-        or (plan_target.tool_id, plan_target.action, plan_target.params, plan_target.depends_on)
-        != (target.tool_id, target.action, target.params, target.depends_on)
-    ):
+    if plan_target is None or (
+        plan_target.tool_id,
+        plan_target.action,
+        plan_target.params,
+        plan_target.depends_on,
+    ) != (target.tool_id, target.action, target.params, target.depends_on):
         raise ClarificationAnswerError("澄清目标与持久化计划不一致，请重新规划")
     candidate_plan = deepcopy(persisted_plan)
     candidate_target = next(node for node in candidate_plan.nodes if node.node_id == target.node_id)
@@ -232,11 +233,7 @@ def apply_clarification_answer(
 
                 unresolved = fields & set(missing_stock_in_fields(target.params))
             else:
-                unresolved = {
-                    key
-                    for key in fields
-                    if target.params.get(key) in (None, "", [], {})
-                }
+                unresolved = {key for key in fields if target.params.get(key) in (None, "", [], {})}
             if not unresolved:
                 other.status = "completed"
                 other.output = {"answer_confirmed": True, "resolved_by_step_id": step.step_id}

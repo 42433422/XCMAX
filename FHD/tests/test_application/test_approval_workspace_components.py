@@ -338,21 +338,33 @@ def test_invalid_approved_plan_does_not_resume_agent():
     from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
-    plan = PlanGraph(plan_id="p", intent="test", nodes=[
-        WorkflowNode(node_id="n", tool_id="products", action="query", depends_on=["missing"])
-    ])
+    plan = PlanGraph(
+        plan_id="p",
+        intent="test",
+        nodes=[
+            WorkflowNode(node_id="n", tool_id="products", action="query", depends_on=["missing"])
+        ],
+    )
     approvals = MagicMock()
     approvals.get_pending_workflow.return_value = {
-        "agent_run_id": "run", "approved_step_id": "n", "plan": plan,
+        "agent_run_id": "run",
+        "approved_step_id": "n",
+        "plan": plan,
         "runtime_context": {"_approval_agent_run_required": True},
     }
     agent = MagicMock()
     waiting = SimpleNamespace(status="waiting_user", node_id="n", step_id="n")
-    bridge = WorkflowApprovalBridge(WorkflowBackends(
-        approvals=lambda: approvals, pending_snapshot=lambda _request_id: None,
-        execution_snapshot=lambda _request_id: None, agent=lambda: agent,
-        load_run=lambda _: SimpleNamespace(status="waiting_user", steps=[waiting]),
-    ), (RuntimeError,), logging.getLogger(__name__))
+    bridge = WorkflowApprovalBridge(
+        WorkflowBackends(
+            approvals=lambda: approvals,
+            pending_snapshot=lambda _request_id: None,
+            execution_snapshot=lambda _request_id: None,
+            agent=lambda: agent,
+            load_run=lambda _: SimpleNamespace(status="waiting_user", steps=[waiting]),
+        ),
+        (RuntimeError,),
+        logging.getLogger(__name__),
+    )
     result = bridge.resume(request_no="req", opinion="同意", approved_by="7")
     assert result["success"] is False
     agent.continue_run.assert_not_called()
@@ -363,22 +375,38 @@ def test_removed_approved_tool_does_not_resume_agent():
     from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
-    plan = PlanGraph(plan_id="p", intent="test", nodes=[
-        WorkflowNode(node_id="n", tool_id="removed_tool", action="execute")
-    ])
+    plan = PlanGraph(
+        plan_id="p",
+        intent="test",
+        nodes=[WorkflowNode(node_id="n", tool_id="removed_tool", action="execute")],
+    )
     approvals = MagicMock()
     approvals.get_pending_workflow.return_value = {
-        "agent_run_id": "run", "approved_step_id": "n", "plan": plan,
+        "agent_run_id": "run",
+        "approved_step_id": "n",
+        "plan": plan,
         "runtime_context": {"_approval_agent_run_required": True},
     }
     agent = MagicMock()
-    waiting = SimpleNamespace(status="waiting_user", node_id="n", step_id="n",
-                              tool_id="removed_tool", action="execute", params={})
-    bridge = WorkflowApprovalBridge(WorkflowBackends(
-        approvals=lambda: approvals, pending_snapshot=lambda _request_id: None,
-        execution_snapshot=lambda _request_id: None, agent=lambda: agent,
-        load_run=lambda _: SimpleNamespace(status="waiting_user", steps=[waiting]),
-    ), (RuntimeError,), logging.getLogger(__name__))
+    waiting = SimpleNamespace(
+        status="waiting_user",
+        node_id="n",
+        step_id="n",
+        tool_id="removed_tool",
+        action="execute",
+        params={},
+    )
+    bridge = WorkflowApprovalBridge(
+        WorkflowBackends(
+            approvals=lambda: approvals,
+            pending_snapshot=lambda _request_id: None,
+            execution_snapshot=lambda _request_id: None,
+            agent=lambda: agent,
+            load_run=lambda _: SimpleNamespace(status="waiting_user", steps=[waiting]),
+        ),
+        (RuntimeError,),
+        logging.getLogger(__name__),
+    )
     result = bridge.resume(request_no="req", opinion="同意", approved_by="7")
     assert result["success"] is False
     agent.continue_run.assert_not_called()
@@ -389,13 +417,16 @@ def test_langgraph_runtime_dispatches_registered_tool(monkeypatch):
     from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
 
     calls = []
+
     def dispatch(tool_id, action, params):
         calls.append((tool_id, action))
         return {"success": True}
 
-    plan = PlanGraph(plan_id="p", intent="test", nodes=[
-        WorkflowNode(node_id="n", tool_id="products", action="query")
-    ])
+    plan = PlanGraph(
+        plan_id="p",
+        intent="test",
+        nodes=[WorkflowNode(node_id="n", tool_id="products", action="query")],
+    )
     result = XCAGILangGraphRuntime(tool_dispatcher=dispatch).run(plan)
     assert result.success
     assert calls == [("products", "query")]

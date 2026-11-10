@@ -125,9 +125,6 @@ def _iter_payload_dicts(payload: dict[str, Any], *, max_depth: int = 3) -> Itera
                 stack.append((nested, depth + 1))
 
 
-
-
-
 def _coerce_trace_int(value: Any) -> int:
     try:
         return int(value or 0)

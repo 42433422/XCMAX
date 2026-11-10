@@ -1253,7 +1253,10 @@ class TestShipmentApprovalApproveRoute:
     def test_approve_with_workflow_executed(self, shipment_client: TestClient):
         with (
             patch("app.application.workflow.get_approval_service") as mock_get,
-            patch("app.application.approval_workspace_app_service._pending_snapshot", return_value=None),
+            patch(
+                "app.application.approval_workspace_app_service._pending_snapshot",
+                return_value=None,
+            ),
             patch(
                 "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
                 return_value={

@@ -297,7 +297,8 @@ def ai_approval_reject(
                 return JSONResponse(
                     {
                         "success": False,
-                        "message": (workflow_result or {}).get("message") or "审批拒绝后工作流取消失败",
+                        "message": (workflow_result or {}).get("message")
+                        or "审批拒绝后工作流取消失败",
                         "data": workflow_result,
                     },
                     status_code=500,

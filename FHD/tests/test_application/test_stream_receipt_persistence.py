@@ -54,10 +54,6 @@ def tool(name):
     return SimpleNamespace(id=name, function=SimpleNamespace(name=name, arguments="{}"))
 
 
-
-
-
-
 @pytest.mark.parametrize("status", ["cancelled", "failed", "blocked", "paused"])
 def test_unknown_control_summary_keeps_reconciliation_visible(status):
     from app.application.agent_orchestrator.business_harness import _result_summary

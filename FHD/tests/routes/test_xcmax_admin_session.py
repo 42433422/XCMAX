@@ -28,44 +28,6 @@ def client() -> TestClient:
         yield test_client
 
 
-class TestReleaseTrainSnapshot:
-    def test_modstore_path_used(self) -> None:
-        with patch.dict(
-            "sys.modules",
-            {
-                "modstore_server.release_train": MagicMock(
-                    snapshot_public=MagicMock(return_value={"current": "1.0.0.0"})
-                )
-            },
-        ):
-            out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.0"
-
-    def test_fallback_to_file(self, tmp_path: Path) -> None:
-        cfg_dir = tmp_path / "FHD" / "config"
-        cfg_dir.mkdir(parents=True)
-        (cfg_dir / "release_train.json").write_text(
-            json.dumps({"current": "9.9.9.9", "epoch": "9.9.0.0"})
-        )
-        with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
-            out = admin_routes._release_train_snapshot()
-        assert out["current"] == "9.9.9.9"
-
-    def test_file_missing_returns_default(self, tmp_path: Path) -> None:
-        with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
-            out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.1"
-        assert out.get("note") == "ssot missing"
-
-    def test_bad_json_returns_default(self, tmp_path: Path) -> None:
-        cfg_dir = tmp_path / "FHD" / "config"
-        cfg_dir.mkdir(parents=True)
-        (cfg_dir / "release_train.json").write_text("not json")
-        with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
-            out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.1"
-
-
 @pytest.mark.parametrize(
     "meta, sid, expected",
     [

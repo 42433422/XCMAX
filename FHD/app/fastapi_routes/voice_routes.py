@@ -433,7 +433,9 @@ async def voice_command(
             runtime_context = prepare_chat_evidence(request, runtime_context, text)
             runtime_context.pop("_chat_evidence_prepared_marker", None)
             payload = get_ai_chat_app_service().process_chat(
-                user_id=str(runtime_context.get("actor_id") or runtime_context.get("user_id") or "default"),
+                user_id=str(
+                    runtime_context.get("actor_id") or runtime_context.get("user_id") or "default"
+                ),
                 message=text,
                 context=runtime_context,
                 source="voice",

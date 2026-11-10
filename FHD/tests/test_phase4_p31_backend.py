@@ -103,8 +103,6 @@ def test_load_mod_bundle_metadata_only(isolated_mods) -> None:
 
 
 @patch("app.application.print_app_service.get_print_application_service")
-
-
 # ---------------------------------------------------------------------------
 # session_account_meta — enrich admin short-circuit
 # ---------------------------------------------------------------------------

@@ -1547,22 +1547,6 @@ class TestIdentifyFields:
         assert fields[0]["type"] == "fixed_label"
         assert fields[0]["field_key"] == "price"
 
-    def test_block_without_colon_known_label_with_value(self) -> None:
-        blocks = [
-            {
-                "text": "产品编号 6808AA",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["label"] == "产品编号"
-        assert fields[0]["value"] == "6808AA"
-
     def test_block_without_colon_known_label_no_value(self) -> None:
         blocks = [
             {

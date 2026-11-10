@@ -737,8 +737,6 @@ def request_market(monkeypatch):
     return build
 
 
-
-
 @pytest.mark.parametrize("stream", [False, True])
 def test_explicit_model_resolves_its_own_snapshot_without_default_discovery(request_market, stream):
     requests = []
@@ -945,8 +943,6 @@ def desktop_model_status_client(session_database, monkeypatch):
     _register_xcagi_compat_routes(application)
     with TestClient(application) as client:
         yield client
-
-
 
 
 @pytest.mark.parametrize("session_id", [None, "synthetic-unknown", "synthetic-session-73"])

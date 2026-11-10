@@ -506,12 +506,6 @@ def test_persistent_snapshot_contention_is_bounded_without_changing_execution(
         assert repo.latest_task_control(expected.run_id).status == "requested"
 
 
-
-
-
-
-
-
 @pytest.fixture(params=["memory", "sqlite"])
 def independent_run_stores(request, tmp_path):
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
@@ -640,9 +634,7 @@ def test_plain_save_does_not_copy_receipts_between_generations(
     repo, reader = independent_run_stores
     monkeypatch.setattr(chat_trace, "get_agent_run_repository", lambda: repo)
     expected = initial(repo)
-    chat_trace.mark_chat_stream_interrupted(
-        expected, pending=False, reason="consumer_closed"
-    )
+    chat_trace.mark_chat_stream_interrupted(expected, pending=False, reason="consumer_closed")
     chat_trace.record_legacy_stream_tool_receipt(
         expected, sequence=1, record={"receipt": "old-scope"}
     )

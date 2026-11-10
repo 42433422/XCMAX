@@ -31,9 +31,7 @@ class TestAIConversationService:
             "response": "平台模型已回复",
             "data": {"action": "model_reply"},
         }
-        monkeypatch.setattr(
-            "app.application.get_ai_chat_app_service", lambda: mainline
-        )
+        monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: mainline)
 
         result = await service.chat("owner", "你好", {"conversation_id": "chat-1"})
 

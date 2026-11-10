@@ -10,8 +10,7 @@ from io import BytesIO
 from typing import Any, Literal, cast
 
 from app.infrastructure.llm.client import (
-    get_openai_compatible_client,
-    resolve_chat_model,
+    create_document_completion,
     resolve_mode,
 )
 
@@ -106,24 +105,14 @@ def draft_document_spec(user_prompt: str, output: Literal["docx", "xlsx"]) -> di
         raise RuntimeError(
             "当前为 offline 模式：生成文档需要 online 模式并配置 DEEPSEEK_API_KEY 或 OPENAI_API_KEY"
         )
-    cli = get_openai_compatible_client()
-    model = resolve_chat_model()
-    from app.infrastructure.llm.model_admission import admit_model_call, model_call_slot
-
     sys = _SYSTEM_DOCX if output == "docx" else _SYSTEM_XLSX
-    with model_call_slot(None, profile="document_generation"):
-        admit_model_call(None, profile="document_generation")
-        resp = cli.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": sys},
-                {"role": "user", "content": (user_prompt or "").strip()},
-            ],
-            temperature=0.35,
-            max_tokens=8192,
-            timeout=_document_spec_timeout_sec(),
-            response_format={"type": "json_object"},
-        )
+    resp = create_document_completion(
+        messages=[
+            {"role": "system", "content": sys},
+            {"role": "user", "content": (user_prompt or "").strip()},
+        ],
+        timeout=_document_spec_timeout_sec(),
+    )
     raw = (resp.choices[0].message.content or "").strip()
     raw = _strip_json_fence(raw)
     try:

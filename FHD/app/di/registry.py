@@ -268,6 +268,7 @@ class ServiceContainer:
         self._shipment_application_service_core = None
         self._shipment_event_primary_facade = None
 
+
 def get_service_registry() -> ServiceContainer:
     global _registry
     with _lock:

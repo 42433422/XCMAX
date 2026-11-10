@@ -2192,8 +2192,6 @@ class TestLTGExtractTextWithOcr:
 # ===========================================================================
 
 
-
-
 class TestTWRCustomers:
     """Cover ``_registered_router_customers``."""
 
@@ -2314,8 +2312,6 @@ class TestTWRCustomers:
             mock_get.return_value = svc
             result = twr._registered_router_customers("create", {}, {}, "normal", "")
             assert result["success"] is False
-
-
 
 
 class TestTWRMaterials:
@@ -2720,8 +2716,6 @@ class TestTWRExcelImport:
             )
             assert result["success"] is False
             assert "没有可导入" in result["message"]
-
-
 
 
 # ===========================================================================

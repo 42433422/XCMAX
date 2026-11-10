@@ -171,9 +171,7 @@ def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts(
         ("你好，帮我写首诗", False, "pro"),
     ],
 )
-def test_stream_controls_and_business_writes_always_use_stateful_mainline(
-    message, pending, source
-):
+def test_stream_controls_and_business_writes_always_use_stateful_mainline(message, pending, source):
     service = MagicMock()
     from app.application.agent_task_context import scoped_conversation_user_id
 

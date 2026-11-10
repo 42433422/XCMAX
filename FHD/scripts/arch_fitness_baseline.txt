@@ -13,9 +13,9 @@
 [domain->infrastructure] app/domain/shared_services/conversation/context.py:6
 [domain->infrastructure] app/domain/shared_services/conversation/llm_adapter.py:432
 [domain->infrastructure] app/domain/shared_services/conversation/manager.py:133
-[domain->infrastructure] app/domain/shared_services/conversation/manager.py:373
-[domain->infrastructure] app/domain/shared_services/conversation/manager.py:398
+[domain->infrastructure] app/domain/shared_services/conversation/manager.py:374
 [domain->infrastructure] app/domain/shared_services/conversation/manager.py:399
+[domain->infrastructure] app/domain/shared_services/conversation/manager.py:400
 [domain->infrastructure] app/domain/shared_services/conversation/manager.py:71
 [domain->infrastructure] app/domain/shared_services/conversation/modstore_adapter.py:46
 [domain->infrastructure] app/domain/shared_services/conversation/modstore_adapter.py:47

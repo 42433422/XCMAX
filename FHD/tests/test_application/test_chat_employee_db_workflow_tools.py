@@ -18,6 +18,7 @@ def test_workflow_registry_exposes_employee_and_business_db_tools():
     assert "read" in workflow_registry["business_db"]["actions"]
     assert "write" in workflow_registry["business_db"]["actions"]
 
+
 def test_employee_tool_dispatch_calls_local_employee_runtime():
     from app.domain.shared_services.tools_workflow_registered import (
         execute_registered_workflow_tool,
@@ -722,8 +723,6 @@ def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(local_tools, 
     assert action == "read"
 
 
-
-
 def test_workflow_engine_does_not_retry_non_idempotent_write():
     from app.infrastructure.workflow.langgraph_runtime import (
         XCAGILangGraphRuntime as WorkflowEngine,
@@ -1041,7 +1040,9 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_medium_risk_confirmation_stays_pending_until_user_confirms(local_tools, trusted_actor):
+def test_ai_chat_medium_risk_confirmation_stays_pending_until_user_confirms(
+    local_tools, trusted_actor
+):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 

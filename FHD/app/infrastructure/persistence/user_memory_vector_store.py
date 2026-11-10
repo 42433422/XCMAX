@@ -178,7 +178,8 @@ class PgUserMemoryVectorStore(VectorStorePort):
                     ORDER BY embedding <=> CAST(:query_vector AS vector)
                     LIMIT :top_k
                     """
-                    ), params,
+                    ),
+                    params,
                 )
                 .mappings()
                 .all()
@@ -393,7 +394,8 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
         query_arr = np.array(query_vector, dtype=np.float32)
         with self._get_conn() as conn:
             rows = conn.execute(
-                "SELECT chunk_id, content, embedding, metadata FROM user_memory_vector_chunks WHERE " + where,
+                "SELECT chunk_id, content, embedding, metadata FROM user_memory_vector_chunks WHERE "
+                + where,
                 parameters,
             ).fetchall()
 

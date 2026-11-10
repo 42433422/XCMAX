@@ -40,7 +40,9 @@ def _no_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail_if_called(*_args: Any, **_kwargs: Any):
         raise AssertionError("开单不能交给 LLM 规划器")
 
-    monkeypatch.setattr(chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called, raising=False)
+    monkeypatch.setattr(
+        chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called, raising=False
+    )
     monkeypatch.setattr(
         "app.domain.shared_services.conversation.modstore_adapter.create_modstore_openai_client_from_request",
         fail_if_called,

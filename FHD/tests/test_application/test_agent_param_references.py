@@ -115,15 +115,27 @@ def test_resolved_reference_is_frozen_before_the_confirmation_gate():
     orchestrator._execute_ready_steps(run, runtime_context={})
     step = run.steps[1]
     audit = next(
-        (event for event in reversed(run.events)
-         if event.event_type == "workflow.plan_audit_rejected"),
+        (
+            event
+            for event in reversed(run.events)
+            if event.event_type == "workflow.plan_audit_rejected"
+        ),
         None,
     )
     assert step.status == "waiting_user", (
         run.error,
-        {key: audit.data.get(key) for key in (
-            "node_id", "expected_risk", "step_risk", "plan_idempotent", "step_idempotent"
-        )} if audit else [(event.event_type, event.message) for event in run.events[-5:]],
+        {
+            key: audit.data.get(key)
+            for key in (
+                "node_id",
+                "expected_risk",
+                "step_risk",
+                "plan_idempotent",
+                "step_idempotent",
+            )
+        }
+        if audit
+        else [(event.event_type, event.message) for event in run.events[-5:]],
         run.status,
     )
     assert step.params["product_id"] == 7
@@ -279,7 +291,9 @@ def test_downstream_reference_refusal_blocks_replay_of_completed_stock_out(db, s
     )
     run.metadata["plan"] = plan_to_dict(plan)
     orchestrator._execute_ready_steps(run, runtime_context={})
-    assert run.status == ("blocked" if stored_idempotent else "failed") and requires_retry_reconciliation(run), (
+    assert run.status == (
+        "blocked" if stored_idempotent else "failed"
+    ) and requires_retry_reconciliation(run), (
         run.error,
         run.metadata.get("recovery"),
         [(item.node_id, item.status, item.error) for item in run.steps],

@@ -62,9 +62,7 @@ def apply_clarification(
     items = needs_clarification(plan, tool_registry)
     from .clarification_node import detect_erp_clarification
 
-    items = list(items) + detect_erp_clarification(
-        plan, user_message=user_message, context=context
-    )
+    items = list(items) + detect_erp_clarification(plan, user_message=user_message, context=context)
     existing_clarifications: dict[str, list[WorkflowNode]] = {}
     for node in plan.nodes:
         target_id = str((node.params or {}).get("target_node_id") or "")

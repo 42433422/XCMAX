@@ -1,5 +1,6 @@
 """Domain errors for model admission limits."""
 
+
 class ModelRateLimitError(RuntimeError):
     """A model request was refused before contacting the configured provider."""
 

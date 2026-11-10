@@ -264,12 +264,8 @@ class TestRiskIdempotencyMetadataReflectBehavior:
             assert sales[action]["risk"] in ("medium", "high")
 
 
-
-
 # 销售到收款闭环验收句（W1-09 R2）：实体名按句中原样保留
 EXACT_SALES_WRITE_SENTENCE = "把 A 产品卖给客户B，10 个，单价 100，开票收款"
-
-
 
 
 # ---------------------------------------------------------------------------

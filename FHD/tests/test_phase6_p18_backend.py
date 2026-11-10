@@ -574,9 +574,6 @@ class TestProductRepositoryFindProductUnits:
     def repo(self):
         return SQLAlchemyProductRepository()
 
-
-
-
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_recoverable_error_in_fallback(self, mock_get_db, repo):
         mock_db = MagicMock()
@@ -1507,8 +1504,6 @@ class TestMobileExtMobileModItems:
             mock_mm.return_value.list_all_mods.return_value = []
             assert ext_mod._mobile_mod_items() == []
 
-
-
     def test_exception_returns_empty(self, ext_mod):
         with (
             patch(
@@ -1530,11 +1525,8 @@ class TestMobileExtMobileModItems:
             assert len(ext_mod._mobile_mod_items()) == 100
 
 
-
 class TestMobileExtApprovalShipmentItems:
     """Cover ``_approval_items`` / ``_shipment_items``."""
-
-
 
 
 class TestMobileExtDeviceRegister:

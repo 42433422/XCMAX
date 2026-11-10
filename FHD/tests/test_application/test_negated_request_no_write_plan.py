@@ -42,15 +42,9 @@ NEGATED_REQUESTS = (
 )
 
 
-
-
 @pytest.mark.parametrize("message", NEGATED_REQUESTS)
 def test_negated_request_is_not_business_db_write(message: str) -> None:
     assert looks_like_business_db_write(message) is False
-
-
-
-
 
 
 @pytest.mark.parametrize(

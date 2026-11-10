@@ -176,7 +176,9 @@ class LangGraphConstructionMixin:
                 spec = tool_registry.get(node.tool_id)
                 actions = spec.get("actions") if isinstance(spec, dict) else None
                 if not isinstance(actions, dict) or node.action not in actions:
-                    raise ValueError(f"工作流计划包含未注册的工具动作：{node.tool_id}.{node.action}")
+                    raise ValueError(
+                        f"工作流计划包含未注册的工具动作：{node.tool_id}.{node.action}"
+                    )
                 action_spec = actions[node.action]
                 if not isinstance(action_spec, dict):
                     raise ValueError(f"工具动作配置无效：{node.tool_id}.{node.action}")
@@ -230,9 +232,11 @@ class LangGraphConstructionMixin:
             )
         initial = self._checkpoint_state(cp)
         prior_audit = initial.get("plan_audit")
-        if not isinstance(prior_audit, dict) or prior_audit.get("passed") is not True or prior_audit.get(
-            "submitted_plan_sha256"
-        ) != plan_fingerprint(plan):
+        if (
+            not isinstance(prior_audit, dict)
+            or prior_audit.get("passed") is not True
+            or prior_audit.get("submitted_plan_sha256") != plan_fingerprint(plan)
+        ):
             return WorkflowRunResult(
                 plan_id=plan.plan_id,
                 success=False,
@@ -452,7 +456,10 @@ class LangGraphConstructionMixin:
             outputs = state.get("node_outputs") or {}
             if any(
                 isinstance(outputs.get(nid), dict)
-                and (outputs[nid].get("requires_confirmation") or outputs[nid].get("requires_approval"))
+                and (
+                    outputs[nid].get("requires_confirmation")
+                    or outputs[nid].get("requires_approval")
+                )
                 for nid in executed
             ):
                 return {"next_node": "__end__"}
@@ -470,7 +477,10 @@ class LangGraphConstructionMixin:
                     if any(dep not in executed for dep in node.depends_on):
                         continue
                     routers = [source for source in nodes if nid in self._candidates(source)]
-                    if any(source.node_id not in executed | blocked | set(newly_blocked) for source in routers):
+                    if any(
+                        source.node_id not in executed | blocked | set(newly_blocked)
+                        for source in routers
+                    ):
                         continue
                     if any(
                         source.node_id in executed

@@ -494,7 +494,9 @@ def test_stream_path_preempts_legacy_planner_and_returns_same_receipt(
     def fail_if_called(*_args: Any, **_kwargs: Any):
         raise AssertionError("legacy planner must not run for protected business actions")
 
-    monkeypatch.setattr(chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called, raising=False)
+    monkeypatch.setattr(
+        chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called, raising=False
+    )
     monkeypatch.setattr(
         "app.infrastructure.auth.dependencies.resolve_session_user",
         lambda _request: SimpleNamespace(id=77, username="1001", display_name="李四"),

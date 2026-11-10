@@ -42,29 +42,27 @@ class FixtureExecutor(AgentToolExecutor):
                 **({"unserializable": object()} if step.params.get("invalid_result") else {}),
             }
         if step.action == "llm":
+            from app.application.agent_orchestrator.repair_advisor import request_llm_repair
+            from app.application.agent_orchestrator.run_models import AgentRun
             from app.application.employee_runtime.agent_loop import run_employee_agent_loop
             from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
-            from app.application.workflow.planner import LLMWorkflowPlanner
             from app.application.workflow.planner_llm_gateway import request_planner_completion
-            from app.application.workflow.workflow_types import PlanGraph
 
             planner = request_planner_completion(ai_service=None, context={}, messages=[])
             agent = run_employee_agent_loop(
                 employee_id="fixture", system_prompt="test", task="test", tools=[]
             )
             cognition = _run_async(_chat_completion([]))
-            repair = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
-            repair._ai_service = None
-            repair._completion = None
-            repair._http_client_factory = None
-            critic = repair._critic_repair_with_llm(
-                "fixture", "owner", "test", {}, {}, "invalid", PlanGraph("invalid", "test")
+            repair = request_llm_repair(
+                AgentRun(user_id="owner", message="test"),
+                AgentStep(node_id="repair", tool_id="customers", action="query", params={}),
+                {},
             )
             return {
                 "success": agent["ok"],
                 "planner_model": planner["model"],
                 "cognition_model": cognition["model"],
-                "critic_model": critic.intent,
+                "critic_model": repair["llm_call"].model,
             }
         if step.tool_id == "business_db":
             return {"success": True, "business_verification": {"verified": True, "record_id": 42}}
@@ -275,6 +273,7 @@ def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_creden
                             "content": json.dumps(
                                 {
                                     "intent": payload["model"],
+                                    "params_patch": {"keyword": "fixed"},
                                     "nodes": [
                                         {"node_id": "n", "tool_id": "clarify", "action": "ask"}
                                     ],

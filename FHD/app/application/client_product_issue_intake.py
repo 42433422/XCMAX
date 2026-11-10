@@ -206,25 +206,25 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
                 max_tokens=300,
                 response_format={"type": "json_object"},
                 messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "依据客户原话及答复（无答复时只看原话）分类，只输出 JSON："
-                        '{"type":"usage_question|product_defect|uncertain","confidence":0到1,'
-                        '"expected":"...","actual":"...","missing_evidence":["..."]}。'
-                        "咨询归 usage_question；明确软件行为错误才归 product_defect；缺失信息列入 missing_evidence。不要补造事实。"
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "customer": str(message)[:8000],
-                            "assistant": str(assistant_reply)[:8000],
-                        },
-                        ensure_ascii=False,
-                    ),
-                },
+                    {
+                        "role": "system",
+                        "content": (
+                            "依据客户原话及答复（无答复时只看原话）分类，只输出 JSON："
+                            '{"type":"usage_question|product_defect|uncertain","confidence":0到1,'
+                            '"expected":"...","actual":"...","missing_evidence":["..."]}。'
+                            "咨询归 usage_question；明确软件行为错误才归 product_defect；缺失信息列入 missing_evidence。不要补造事实。"
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {
+                                "customer": str(message)[:8000],
+                                "assistant": str(assistant_reply)[:8000],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    },
                 ],
             )
         raw = response.choices[0].message.content

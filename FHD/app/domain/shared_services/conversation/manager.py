@@ -143,6 +143,7 @@ class AIConversationService(ContextMixin, PromptsMixin):
         logger.info("🎯 LLM初始化完成，运行模式: %s", llm_init_mode)
 
         from app.domain.shared_services.user_memory_service import get_user_memory_service
+
         self.user_memory = get_user_memory_service()
         self.persona_service = None  # 默认 None，由外部注入
 

@@ -63,9 +63,7 @@ def _make_db_ctx(mock_db):
 
 
 @pytest.mark.parametrize("snapshot_has_request", [False, True])
-def test_legacy_restore_approval_fails_closed_without_agent_run(
-    tmp_path, snapshot_has_request
-):
+def test_legacy_restore_approval_fails_closed_without_agent_run(tmp_path, snapshot_has_request):
     import sqlite3
 
     from sqlalchemy import create_engine, text
@@ -2768,7 +2766,9 @@ class TestResumePendingAiWorkflow:
                 "app.application.workflow.approval_persistence.load_workflow_snapshot_for_execution",
                 return_value=None,
             ),
-            patch("app.infrastructure.workflow.langgraph_runtime.XCAGILangGraphRuntime") as mock_engine_cls,
+            patch(
+                "app.infrastructure.workflow.langgraph_runtime.XCAGILangGraphRuntime"
+            ) as mock_engine_cls,
         ):
             result = _resume_pending_ai_workflow_after_approval(request_no="req-1", opinion="ok")
         assert result["workflow_executed"] is False

@@ -39,7 +39,7 @@ def chat_svc() -> AIChatApplicationService:
         ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
-                patch("app.application.ai_chat_app_service.get_approval_service"),
+        patch("app.application.ai_chat_app_service.get_approval_service"),
     ):
         svc = AIChatApplicationService()
         svc.ai_service = mock_ai
