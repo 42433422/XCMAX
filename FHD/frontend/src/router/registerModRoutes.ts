@@ -45,7 +45,11 @@ function extractRoutesFromModule(m: Record<string, unknown>): RouteRecordRaw[] {
   for (const v of Object.values(m)) {
     if (!Array.isArray(v) || v.length === 0) continue
     const first = v[0] as Record<string, unknown>
-    if (first && typeof first.path === 'string' && (typeof first.component === 'function' || typeof first.components === 'object')) {
+    if (first && typeof first.path === 'string' && (
+      'component' in first ||
+      'components' in first ||
+      'redirect' in first
+    )) {
       candidates.push(v as RouteRecordRaw[])
     }
   }

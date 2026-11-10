@@ -1,5 +1,4 @@
 <script setup>
-import { defineProps } from 'vue'
 
 // 拆分自 ChatDebugView.vue 模板（原第 95–131 行：当前模式结果 / 流程阶段 / 流程追踪）；
 // 模板逐字迁移，行为不变。

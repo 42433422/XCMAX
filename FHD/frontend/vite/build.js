@@ -1,3 +1,18 @@
+import { execFileSync } from 'node:child_process'
+
+/** Preserve release identity while clearly marking uncommitted local builds. */
+export function resolveViteGitSha(explicitSha) {
+  const supplied = String(explicitSha || '').trim()
+  if (supplied) return supplied
+  try {
+    const sha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    const dirty = execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    return sha && !dirty ? sha : 'local'
+  } catch {
+    return 'local'
+  }
+}
+
 /** Rollup build options extracted from vite.config.js */
 
 /**

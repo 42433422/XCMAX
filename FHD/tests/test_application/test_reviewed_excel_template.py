@@ -4857,6 +4857,15 @@ def test_nine_batch_plan_is_fair_across_sheets_and_preserves_each_sheet_order():
         assert rows == sorted(rows)
 
 
+def test_classification_default_budget_handles_four_batches_without_repeated_pause(monkeypatch):
+    from app.application.reviewed_excel_classification import plan_semantic_batches
+
+    monkeypatch.delenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", raising=False)
+    batches, budget = plan_semantic_batches(inspect_workbook(_nine_batch_workbook()), neutral=True)
+    assert len(batches) >= 4
+    assert budget == 4
+
+
 @pytest.mark.parametrize("per_round", [3, 4])
 def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
     review_store, monkeypatch, per_round

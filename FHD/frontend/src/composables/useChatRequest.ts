@@ -1,5 +1,4 @@
-import { computed, getCurrentInstance, onActivated, onDeactivated, ref, type Ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { computed, getCurrentInstance, onActivated, onBeforeUnmount, onDeactivated, ref, type Ref } from 'vue'
 import type { ChatMessage } from './useChatMessages'
 import chatApi from '../api/chat'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
@@ -217,12 +216,12 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   }
   if (getCurrentInstance()) {
     onDeactivated(pauseWaitProgress)
-    onBeforeRouteLeave(() => { pauseWaitProgress() })
     onActivated(() => {
       const keys = pausedProgressKeys
       pausedProgressKeys = []
       for (const key of keys) startWaitProgressTimer(key)
     })
+    onBeforeUnmount(pauseWaitProgress)
   }
 
   async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {

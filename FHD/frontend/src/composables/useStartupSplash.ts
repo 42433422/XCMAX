@@ -1,8 +1,6 @@
-import { inject, onActivated, onBeforeUnmount, onDeactivated, ref, type InjectionKey } from 'vue'
+import { getCurrentInstance, inject, onActivated, onBeforeUnmount, onDeactivated, ref, type InjectionKey } from 'vue'
 import { captureAuthSession } from '@/utils/authSessionCache'
 import { routeChunkErrorPath } from '@/utils/routeLoadState'
-
-export const STARTUP_READY_TIMEOUT_MS = 20_000
 
 type PreparePage = (signal: AbortSignal) => Promise<void>
 export const startupPageReadyKey: InjectionKey<(prepare: PreparePage) => () => void> = Symbol('startup-page-ready')
@@ -25,7 +23,8 @@ export function useStartupPageReady(load: (current: () => boolean) => Promise<vo
     void pending.catch(() => {})
     return pending
   }
-  const register = inject(startupPageReadyKey, null)
+  const inSetup = !!getCurrentInstance()
+  const register = inSetup ? inject(startupPageReadyKey, null) : null
   const prepare: PreparePage = async signal => {
     if (!pending || claimed || !ownerCurrent()) begin()
     claimed = true
@@ -36,9 +35,11 @@ export function useStartupPageReady(load: (current: () => boolean) => Promise<vo
     try { await pending } finally { signal.removeEventListener('abort', retire) }
   }
   let unregister = register?.(prepare)
-  onActivated(() => { active = true; unregister ??= register?.(prepare) })
-  onDeactivated(() => { active = false; version++; unregister?.(); unregister = undefined })
-  onBeforeUnmount(() => { disposed = true; version++; unregister?.() })
+  if (inSetup) {
+    onActivated(() => { active = true; unregister ??= register?.(prepare) })
+    onDeactivated(() => { active = false; version++; unregister?.(); unregister = undefined })
+    onBeforeUnmount(() => { disposed = true; version++; unregister?.() })
+  }
   return () => { claimed = false; return begin() }
 }
 
@@ -58,15 +59,13 @@ export function useStartupSplash() {
   const startupError = ref('')
   const startupStage = ref('正在准备工作台…')
   let generation = 0
-  let deadline: ReturnType<typeof setTimeout> | undefined
   let disposed = false
   let attempt: AbortController | undefined
 
   function retire() {
     generation++
     attempt?.abort()
-    clearTimeout(deadline)
-    deadline = undefined
+    attempt = undefined
   }
 
   async function runStartup(task: (current: () => boolean, stage: (text: string) => void, signal: AbortSignal) => Promise<void>) {
@@ -83,17 +82,10 @@ export function useStartupSplash() {
     startupError.value = ''
     startupStage.value = '正在准备工作台…'
     try {
-      await Promise.race([
-        task(current, text => { if (current()) startupStage.value = text }, attempt.signal),
-        new Promise<never>((_, reject) => {
-          deadline = setTimeout(() => reject(new Error('准备工作台超时，请重试或重新加载')), STARTUP_READY_TIMEOUT_MS)
-        }),
-      ])
+      await task(current, text => { if (current()) startupStage.value = text }, attempt.signal)
       if (!current()) return
       // Keep this successful session current for optional background handoff.
       // The next attempt, account change, cancellation or teardown retires it.
-      clearTimeout(deadline)
-      deadline = undefined
       startupVisible.value = false
       appReady.value = true
     } catch (error) {
