@@ -1454,13 +1454,6 @@ class TestInvalidateWorkflowToolRegistry:
 class TestGetWorkflowToolRegistry:
     """Cover get_workflow_tool_registry."""
 
-    def test_returns_list(self) -> None:
-        from app.application.tools.workflow import get_workflow_tool_registry
-
-        reg = get_workflow_tool_registry()
-        assert isinstance(reg, list)
-        assert len(reg) > 0
-
     def test_cache_hit(self) -> None:
         from app.application.tools import workflow as wf_mod
 

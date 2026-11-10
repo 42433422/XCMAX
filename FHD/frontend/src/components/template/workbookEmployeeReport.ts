@@ -66,7 +66,7 @@ export function workbookEmployeeReports(intake: unknown): WorkbookEmployeeReport
       employee: 'database',
       name: '数据库导入员',
       role: '写入业务数据库',
-      outcome: `本次入库：客户 ${customers}，购买单位 ${units}，产品 ${products}，明细 ${records}。`,
+      outcome: `${business?.status === 'completed' && record(business.receipt) ? '本次入库' : '预演预计'}：客户 ${customers}，购买单位 ${units}，产品 ${products}，明细 ${records}。`,
       lines: [`客户 ${customers}`, `购买单位 ${units}`, `产品 ${products}`, `明细 ${records}`],
     })
   }
@@ -83,7 +83,7 @@ export function workbookEmployeeReports(intake: unknown): WorkbookEmployeeReport
           employee: 'knowledge',
           name: '知识整理员',
           role: '整理知识内容',
-          outcome: `本次整理 ${documents} 份文档。`,
+          outcome: `${knowledge.status === 'completed' ? '本次整理' : '预计整理'} ${documents} 份文档。`,
           lines: slice ? [`文档 ${documents} 份`, `内容：${slice}`] : [`文档 ${documents} 份`],
         })
       }
