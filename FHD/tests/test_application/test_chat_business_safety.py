@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -492,6 +493,14 @@ def test_print_reports_submitted_only_after_backend_accepts_job(
 def test_offline_stream_and_json_share_verified_receipt_without_model_or_writes(
     business_db: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, prefix: str
 ) -> None:
+    # Independent JSON/SSE requests own distinct receipt identities and clocks.
+    # Deliberately cross a second boundary rather than relying on machine timing.
+    receipt_times = iter([datetime(2026, 7, 13, 12, 0, 0), datetime(2026, 7, 13, 12, 0, 1)])
+    monkeypatch.setattr(
+        "app.domain.app_pure.chat_business_safety_core.datetime",
+        SimpleNamespace(now=lambda: next(receipt_times)),
+    )
+
     def fail_if_called(*_args: Any, **_kwargs: Any):
         raise AssertionError("legacy planner must not run for protected business actions")
 
@@ -529,9 +538,13 @@ def test_offline_stream_and_json_share_verified_receipt_without_model_or_writes(
     assert result["business_receipt"]["verified"] is True
     assert result.get("run_id")
     json_result = asyncio.run(planner_compat.execute_compat_chat(request, body))
-    assert {k: v for k, v in json_result["business_receipt"].items() if k != "receipt_id"} == {
-        k: v for k, v in result["business_receipt"].items() if k != "receipt_id"
-    }
+    assert result["business_receipt"]["created_at"] == "2026-07-13T12:00:00"
+    assert json_result["business_receipt"]["created_at"] == "2026-07-13T12:00:01"
+    assert json_result["business_receipt"]["receipt_id"] != result["business_receipt"]["receipt_id"]
+    request_metadata = {"receipt_id", "created_at"}
+    assert {
+        k: v for k, v in json_result["business_receipt"].items() if k not in request_metadata
+    } == {k: v for k, v in result["business_receipt"].items() if k not in request_metadata}
     assert json_result["response"] == result["response"]
     with sqlite3.connect(str(business_db[0])) as db:
         assert db.execute("SELECT count(*) FROM attendance_daily_records").fetchone()[0] == 2

@@ -255,7 +255,25 @@ def _contract_generation(tmp_path, monkeypatch):
         raise AssertionError("Contract rendering must not invoke an LLM")
 
     monkeypatch.setattr(document_renderer, "draft_document_spec", reject_llm)
-    monkeypatch.setattr(document_renderer, "get_openai_compatible_client", reject_llm)
+    monkeypatch.setattr(document_renderer, "create_document_completion", reject_llm)
+
+    # Rendering supplied contract fields is local. Guard the real transport as
+    # well, so a future import change cannot silently bypass the model sentinel.
+    import socket
+
+    def reject_network(*_args, **_kwargs):
+        raise AssertionError("Contract rendering must not access an external network")
+
+    original_connect = socket.socket.connect
+
+    def connect(sock, address):
+        if sock.family in {socket.AF_INET, socket.AF_INET6}:
+            reject_network()
+        return original_connect(sock, address)
+
+    monkeypatch.setattr(socket, "getaddrinfo", reject_network)
+    monkeypatch.setattr(socket, "create_connection", reject_network)
+    monkeypatch.setattr(socket.socket, "connect", connect)
     return contracts.generated_contracts_dir()
 
 
