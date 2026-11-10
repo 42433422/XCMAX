@@ -126,3 +126,5 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 **同轮评估但保留（承重，不可作为残留清退）**：`FHD/sunbird-console` 是 `FHD/frontend/sunbirdConsole.vite.config.js` 的构建输入；`FHD/AMIN` 经 `@amin` 别名进入前端打包；`FHD/mobile-flutter-poc` 由 `.github/workflows/fhd-ci-mobile-flutter.yml`、`fhd-release-android.yml`、`fhd-release-ios.yml` 驱动，属移动端交付链路；`FHD/tests/odoo_absorption` 与 `FHD/tests/langgraph_absorption` 是运行中的契约/边界回归测试；`FHD/rasa` 与 `FHD/XCAGI/rasa` 是 `app/ai_engines/rasa/nlu_service.py` 模型发现与再训练的种子配置。目录名带 poc/absorption 属命名债，不是死代码。
 
 2026-11-09：过期迁移指南原文与未登记的 2026-06 产品打磨清单已归档至 `~/XCMAX-archives/docs-20261109-pr3110/`；迁移入口保留在 `FHD/docs/guides/ALEMBIC_MIGRATION_GUIDE.md`。
+
+2026-11-10：未登记、无仓库引用的 OCR 字体识别历史实现说明外置至 `~/XCMAX-archives/docs-20261110-ocr-history/`；原路径及 SHA256 见 `MANIFEST.json`。

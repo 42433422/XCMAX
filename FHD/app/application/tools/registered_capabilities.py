@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from typing import Any
@@ -227,7 +228,33 @@ def execute_registered_capability(
     tool_id = str(resolved["tool_id"])
     action = str(resolved["action"])
     params = dict(resolved["params"])
+    context: dict[str, Any] = dict(runtime_context or {})
+    approval_request_id = None
+    if tool_id in {"customers", "products"} and action == "batch_delete":
+        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+        from app.infrastructure.auth.agent_mod_scope import _bound_actor
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        try:
+            actor = _bound_actor(context)
+            tenant = current_tenant_id()
+            key = str(context.get("idempotency_key") or context.get("turn_id") or "").strip()
+            if (
+                not tenant
+                or str(tenant) != str(context.get("tenant_id"))
+                or not key
+                or actor_tool_denial(tool_id, action, context) is not None
+            ):
+                raise ValueError("删除操作缺少有效身份、权限或请求标识")
+            identity = json.dumps([tenant, str(actor.id), key, tool_id, action], ensure_ascii=False)
+            approval_request_id = hashlib.sha256(identity.encode()).hexdigest()
+        except RECOVERABLE_ERRORS:
+            return json.dumps(
+                {"success": False, "error": "删除操作身份或请求标识无效"}, ensure_ascii=False
+            )
     plan_id = f"erp-capability-{tool_id}-{action}-{uuid.uuid4().hex[:12]}"
+    if approval_request_id:
+        plan_id = f"erp-capability-{approval_request_id}"
     plan = PlanGraph(
         plan_id=plan_id,
         intent=f"ERP Agent 请求执行 {tool_id}.{action}",
@@ -249,13 +276,14 @@ def execute_registered_capability(
     # 合并调用方（已认证会话）传入的上下文，而不是凭空重建，否则审批申请人无法解析。
     # 安全约束：申请人标识只能来自调用方会话；params 由模型产生，
     # 因此**不得**从 params 读取 local_user_id / actor_id / user_id。
-    context: dict[str, Any] = dict(runtime_context or {})
     context["source"] = "erp_agent_capability_tool"
     context["workspace_root"] = workspace_root
     context.setdefault("message", str(params.get("user_request") or params.get("message") or ""))
     try:
         decision, run_result = ApprovalGatedEngine(
-            WorkflowEngine(tool_dispatcher=_dispatch_registered_tool), require_persistence=True
+            WorkflowEngine(tool_dispatcher=_dispatch_registered_tool),
+            require_persistence=True,
+            approval_request_id=approval_request_id,
         ).run(plan, runtime_context=context, strategy="interactive")
     except RECOVERABLE_ERRORS:
         return json.dumps(

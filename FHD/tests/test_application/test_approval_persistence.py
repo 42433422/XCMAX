@@ -42,6 +42,117 @@ from app.db.models.approval import ApprovalRequest, ApprovalStatus
 SNAPSHOT_VERSION = 1
 
 
+def test_existing_approval_reuse_requires_same_pending_operation_and_applicant(db):
+    from datetime import datetime
+
+    from app.application.workflow.approval_persistence_writes import persist_workflow_approval
+    from app.application.workflow.workflow_types import (
+        ApprovalRequest as WorkflowRequest,
+    )
+    from app.application.workflow.workflow_types import (
+        ApprovalStatus as WorkflowStatus,
+    )
+    from app.application.workflow.workflow_types import (
+        PlanGraph,
+        WorkflowNode,
+    )
+    from app.db.models.user import User
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with tenant_scope(1):
+        with db.begin() as session:
+            session.add_all(
+                [
+                    User(id=1, username="first", password="x", tenant_id=1, is_active=True),
+                    User(id=2, username="second", password="x", tenant_id=1, is_active=True),
+                ]
+            )
+        node = WorkflowNode("n", "products", "batch_delete", {"ids": [1]}, risk="high")
+        plan = PlanGraph("plan", "delete", nodes=[node])
+        request = WorkflowRequest(
+            "same",
+            "plan",
+            "n",
+            "products",
+            "batch_delete",
+            {"ids": [1]},
+            WorkflowStatus.PENDING,
+            datetime.now(),
+            tenant_id=1,
+        )
+        context = {"local_user_id": 1, "tenant_id": 1}
+
+        def persist():
+            return persist_workflow_approval(request, context, flow_key="test", plan=plan)
+
+        assert persist() is not None
+        assert persist() is not None
+        context["local_user_id"] = 2
+        assert persist() is None
+        context["local_user_id"] = 1
+        request.params = {"ids": [2]}
+        assert persist() is None
+        request.params = {"ids": [1]}
+        with db.begin() as session:
+            session.query(ApprovalRequest).filter_by(request_no="same").one().status = "approved"
+        assert persist() is None
+        with db() as session:
+            assert session.query(ApprovalRequest).count() == 1
+
+
+def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch):
+    from datetime import timedelta
+
+    from app.application.tools.registered_capabilities import execute_registered_capability
+    from app.application.workflow.approval_service import ApprovalService
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+    from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.utils.time import utc_now_naive
+
+    monkeypatch.setattr("app.db.HostSessionLocal", db)
+    monkeypatch.setattr(
+        "app.application.workflow.approval_gated_engine.get_approval_service", ApprovalService
+    )
+    context = {"local_user_id": 1, "user_id": "1", "tenant_id": 1, "turn_id": "turn-1"}
+    with tenant_scope(1):
+        with db.begin() as session:
+            session.add(
+                User(
+                    id=1, username="first", password="x", role="admin", tenant_id=1, is_active=True
+                )
+            )
+            session.add(
+                UserSession(
+                    session_id="session", user_id=1, expires_at=utc_now_naive() + timedelta(hours=1)
+                )
+            )
+        context["_actor_authorization"] = bind_agent_actor_scope(session_id="session", user_id="1")
+
+        def call(ids):
+            return json.loads(
+                execute_registered_capability(
+                    {"tool_id": "products", "action": "batch_delete", "params": {"ids": ids}},
+                    runtime_context=context,
+                )
+            )
+
+        first, second, changed = call([1]), call([1]), call([2])
+        assert first.get("pending_approval") and second.get("pending_approval")
+        assert (
+            first["approval"]["approval_request_ids"] == second["approval"]["approval_request_ids"]
+        )
+        assert not changed.get("pending_approval") and not changed["success"]
+        with db.begin() as session:
+            session.query(UserSession).filter_by(session_id="session").one().expires_at = (
+                utc_now_naive() - timedelta(seconds=1)
+            )
+        assert not call([1]).get("pending_approval")
+        with db() as session:
+            assert session.query(ApprovalRequest).count() == 1
+
+
 def _valid_business_data(tenant_id=1, plan_id="plan-1", params=None):
     params = dict(params or {"unit_name": "Acme"})
     return {

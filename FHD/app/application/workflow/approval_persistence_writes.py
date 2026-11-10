@@ -23,6 +23,7 @@ def persist_workflow_approval(
         from app.db.models.approval import ApprovalFlow, ApprovalFlowNode
         from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
         from app.db.session import get_db
+        from app.infrastructure.tenant_scope import current_tenant_id
 
         with get_db() as db:
             existing = (
@@ -31,6 +32,40 @@ def persist_workflow_approval(
                 .first()
             )
             if existing is not None:
+                applicant = facade._resolve_applicant(db, runtime_context)
+                tenant_id = current_tenant_id()
+                if (
+                    applicant is None
+                    or not tenant_id
+                    or existing.tenant_id != tenant_id
+                    or existing.applicant_id != applicant.id
+                    or existing.status != "pending"
+                    or existing.business_type != "workflow_tool"
+                    or not facade._is_valid_plan_for_snapshot(plan)
+                ):
+                    raise RuntimeError("已有审批申请与当前身份或状态不一致")
+                try:
+                    data = facade.json.loads(existing.business_data or "{}")
+                    snapshot = facade.json.loads(
+                        facade.json.dumps(
+                            facade._build_workflow_snapshot(request, runtime_context, plan),
+                            ensure_ascii=False,
+                            default=str,
+                        )
+                    )
+                except (TypeError, ValueError):
+                    raise RuntimeError("已有审批申请快照无效") from None
+                if not isinstance(data, dict) or any(
+                    (
+                        data.get(facade.SNAPSHOT_KEY) != snapshot,
+                        data.get("plan_id") != snapshot["plan_id"],
+                        data.get("node_id") != request.node_id,
+                        data.get("tool_id") != request.tool_id,
+                        data.get("action") != request.action,
+                        data.get("params") != snapshot["node"]["params"],
+                    )
+                ):
+                    raise RuntimeError("已有审批申请与当前操作不一致")
                 metadata = {
                     "id": int(existing.id),
                     "request_no": str(existing.request_no),

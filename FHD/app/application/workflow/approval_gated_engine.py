@@ -86,11 +86,13 @@ class ApprovalGatedEngine:
         approval_service: ApprovalService | None = None,
         *,
         require_persistence: bool = False,
+        approval_request_id: str | None = None,
     ) -> None:
         self._engine = engine
         self._risk_gate = risk_gate or HybridRiskGate()
         self._approval_service = approval_service or get_approval_service()
         self._require_persistence = require_persistence
+        self._approval_request_id = approval_request_id
 
     def evaluate_plan(
         self,
@@ -99,6 +101,8 @@ class ApprovalGatedEngine:
         strategy: str = APPROVAL_STRATEGY_INTERACTIVE,
     ) -> GatedPlanDecision:
         runtime_context = dict(runtime_context or {})
+        if self._approval_request_id and len(plan.nodes) != 1:
+            raise ValueError("固定审批标识仅适用于单节点计划")
         risk_decision = self._risk_gate.evaluate(plan=plan, context=runtime_context)
         decision = GatedPlanDecision(plan_id=plan.plan_id, risk_decision=risk_decision)
 
@@ -121,6 +125,7 @@ class ApprovalGatedEngine:
                     runtime_context=runtime_context,
                     plan=plan,
                     require_persistence=self._require_persistence,
+                    request_id=self._approval_request_id,
                 )
                 nd.approval_request_id = req.request_id
                 decision.approval_request_ids.append(req.request_id)

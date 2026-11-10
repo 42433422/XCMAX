@@ -129,8 +129,9 @@ class ApprovalService:
         plan: PlanGraph | None = None,
         require_persistence: bool = False,
         title: str | None = None,
+        request_id: str | None = None,
     ) -> ApprovalRequest:
-        request_id = uuid.uuid4().hex
+        request_id = request_id or uuid.uuid4().hex
         request = ApprovalRequest(
             request_id=request_id,
             plan_id=plan_id,
@@ -142,13 +143,6 @@ class ApprovalService:
             created_at=datetime.now(),
             tenant_id=_tenant_from_context(runtime_context),
         )
-        self._pending_requests[request_id] = request
-        if plan is not None:
-            self._pending_workflows[request_id] = {
-                "plan": plan,
-                "runtime_context": runtime_context or {},
-                "plan_id": plan_id,
-            }
         logger.info("创建审批请求: %s for %s.%s", request_id, node.tool_id, node.action)
 
         # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）。
@@ -157,9 +151,14 @@ class ApprovalService:
             request, runtime_context=runtime_context, plan=plan, title=title
         )
         if metadata is None and require_persistence:
-            self._pending_requests.pop(request_id, None)
-            self._pending_workflows.pop(request_id, None)
             raise RuntimeError("审批请求未能持久化，已阻止数据库写入")
+        self._pending_requests[request_id] = request
+        if plan is not None:
+            self._pending_workflows[request_id] = {
+                "plan": plan,
+                "runtime_context": runtime_context or {},
+                "plan_id": plan_id,
+            }
         if metadata is not None:
             self._request_metadata[request_id] = metadata
         return request
