@@ -60,10 +60,20 @@ beforeEach(async () => {
   audio = []; playback = 'end'
   vi.stubGlobal('Audio', AudioFixture)
   tts = await import('./tts')
+  tts.setEngineMode('system')
 })
 afterEach(() => { tts.stopSpeaking(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 describe('TTS speech dispatch and playback', () => {
+  it('does not silently fall back when MiMo fails in automatic mode', async () => {
+    tts.setEngineMode('auto')
+    mocks.apiFetch.mockRejectedValueOnce(new Error('platform unavailable'))
+    const onError = vi.fn()
+    await tts.speakText('测试', { onError })
+    expect(speech.speak).not.toHaveBeenCalled()
+    expect(mocks.offline.synthesizeOffline).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledOnce()
+  })
   it('finishes empty text without making a speech request', async () => {
     const onEnd = vi.fn()
     await tts.speakText('  ', { onEnd })
@@ -466,6 +476,7 @@ describe('TTS speech dispatch and playback', () => {
     expect(mocks.toast).not.toHaveBeenCalled()
   })
   it('chooses Yunxi, configures utterances and reports concrete availability', async () => {
+    tts.setEngineMode('online')
     expect(tts.pickBestChineseVoice([{ name: 'English', lang: 'en-US' } as SpeechSynthesisVoice, voice])).toBe(voice)
     expect(tts.createChineseUtterance('测试')).toMatchObject({ text: '测试', voice, lang: 'zh-CN', rate: 1.15, pitch: 1 })
     expect(tts.getTtsStatus()).toMatchObject({ engineMode: 'online', effectiveEngine: 'online', yunxiAvailable: true })

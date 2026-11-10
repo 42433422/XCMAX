@@ -42,6 +42,13 @@ class TestBM25:
 
 
 class TestHybridRetriever:
+    def test_no_match_does_not_return_arbitrary_documents(self) -> None:
+        from app.infrastructure.rag.hybrid_retriever import HybridRetriever
+
+        retriever = HybridRetriever(embedder=None)
+        retriever.index([RetrievedChunk(text="宗南产品蓝色油漆", score=0)])
+        assert retriever.retrieve("xyz123") == []
+
     def test_hybrid_retriever_importable(self) -> None:
         try:
             from app.infrastructure.rag.hybrid_retriever import HybridRetriever

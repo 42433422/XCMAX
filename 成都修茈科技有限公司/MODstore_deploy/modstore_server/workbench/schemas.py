@@ -174,6 +174,7 @@ class WorkbenchUnifiedTtsBody(BaseModel):
     voice: str = Field("", max_length=120, description="MiMo 音色（如 冰糖）；空则用默认")
     edge_voice: str = Field("zh-CN-XiaoxiaoNeural", max_length=120)
     rate: float = Field(1.0, ge=0.6, le=1.6)
+    require_mimo: bool = False
 
 
 class WorkbenchVibeCodeSkillBody(BaseModel):

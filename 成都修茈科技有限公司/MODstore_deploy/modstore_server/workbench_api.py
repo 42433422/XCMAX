@@ -583,6 +583,16 @@ def _publish_vibe_skill_via_local_modstore(
     )
 
 
+@router.post("/asr", summary="MiMo 语音识别")
+async def workbench_asr(
+    file: UploadFile = File(...),
+    language: str = Form("auto"),
+    user: User = Depends(_get_current_user),
+):
+    audio = await file.read(8 * 1024 * 1024 + 1)
+    return await speech_api.mimo_asr(audio, language, cast(int, user.id))
+
+
 @router.post("/tts", summary="统一 TTS（MiMo → Edge 神经音，返回完整音频）")
 async def workbench_unified_tts(
     body: WorkbenchUnifiedTtsBody, _user: User = Depends(_get_current_user)

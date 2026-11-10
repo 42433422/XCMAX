@@ -372,6 +372,20 @@ def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]
         get_ai_chat_app_service()._persist_chat_turn(str(owner), body.message, context, payload)
     except RECOVERABLE_ERRORS:
         logger.warning("compat chat history persistence failed", exc_info=True)
+    if payload.get("success") and context.get("memory_capture_enabled") is not False:
+        try:
+            from app.application.persy_memory_app_service import get_persy_memory_app_service
+            from app.infrastructure.auth.agent_mod_scope import agent_dataset_access_context
+
+            get_persy_memory_app_service().capture_conversation_turn(
+                access_context=agent_dataset_access_context(context),
+                user_message=body.message,
+                assistant_message=str(payload.get("response") or payload.get("message") or ""),
+                session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
+                source=str(body.source or "chat"),
+            )
+        except RECOVERABLE_ERRORS:
+            logger.warning("compat chat memory capture failed", exc_info=True)
 
 
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:

@@ -104,6 +104,7 @@ def product_window(
             "intent": "product_query",
             "slots": slots,
             "query_status": "succeeded",
+            "result_count": preview_count,
             "window_status": "requested",
         },
     }

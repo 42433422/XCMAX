@@ -425,8 +425,9 @@ class TestAiAssistantBranches:
         call_kwargs = mock_svc.print_single_label.call_args.kwargs
         assert call_kwargs["quantity"] == 1
 
-    def test_compat_tts_with_speaker_and_voice_params(self) -> None:
+    def test_compat_tts_with_speaker_and_voice_params(self, monkeypatch) -> None:
         """TTS 携带 speakerId / voice / rate / pitch 参数。"""
+        monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "0")
         client = _ai_assistant_client()
         with (
             patch("app.application.facades.tts_facade.trigger_common_tts_warmup") as mock_warmup,

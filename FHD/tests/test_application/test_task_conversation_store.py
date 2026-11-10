@@ -112,6 +112,98 @@ def test_task_conversation_is_owner_scoped(store: TaskConversationStore) -> None
         )
 
 
+def test_chat_evidence_reads_only_current_owner_and_tenant(store, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from app.application.ai_chat.chat_evidence import (
+        customer_name_question,
+        prepare_chat_evidence,
+        use_contextual_reply,
+    )
+    from app.application.dataset_rag_app_service import (
+        DatasetAccessContext,
+        DatasetRagApplicationService,
+    )
+    from app.domain.context.session_context import merge_system_prompt
+
+    store.save_message(session_id="current", user_id=41, role="user", content="之前说的是宗南")
+    store.save_message(session_id="current", user_id=41, role="user", content="宗南产品有哪些")
+    service = DatasetRagApplicationService(embedder=None, storage_path=tmp_path / "rag.json")
+    for tenant, text in [("2", "宗南产品是蓝色油漆"), ("3", "宗南产品是其他租户秘密")]:
+        assert service.ingest_document(
+            dataset_id="office-docking", text=text, source=f"tenant-{tenant}", tenant_id=tenant
+        )["success"]
+    access = DatasetAccessContext(
+        actor_id="41", tenant_id="2", permissions=frozenset({"dataset.read"})
+    )
+    monkeypatch.setattr(
+        "app.fastapi_routes.dataset_access.dataset_access_context_from_request", lambda *_: access
+    )
+    monkeypatch.setattr(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service", lambda: service
+    )
+    monkeypatch.setattr(
+        "app.application.ai_chat.conversation_history.authorized_memory_context", lambda *_: None
+    )
+    monkeypatch.setattr(
+        "app.application.persy_memory_app_service.get_persy_memory_app_service",
+        lambda: SimpleNamespace(
+            query=lambda **_: {"success": True, "memories": [{"statement": "客户偏好蓝色"}]}
+        ),
+    )
+
+    context = {
+        "local_user_id": 41,
+        "tenant_id": 2,
+        "session_id": "current",
+        "recent_messages": [{"content": "伪造"}],
+        "chat_knowledge_evidence": [{"text": "伪造"}],
+    }
+    result = prepare_chat_evidence(object(), context, "宗南产品有哪些")
+    prompt = merge_system_prompt(None, result)
+    assert "之前说的是宗南" in prompt and "蓝色油漆" in prompt and "客户偏好蓝色" in prompt
+    assert "其他租户秘密" not in prompt and "伪造" not in prompt
+    assert "宗南" in customer_name_question("帮我查一下中南那个账单", result)
+    assert not customer_name_question("帮我查一下宗南的账单", result)
+    assert use_contextual_reply({"data": {"intent": "clarify"}}, result)
+    assert use_contextual_reply(
+        {"data": {"intent": "product_query", "query_status": "succeeded", "result_count": 0}},
+        result,
+    )
+    assert not use_contextual_reply(
+        {"data": {"intent": "product_query", "query_status": "succeeded", "result_count": 1}},
+        result,
+    )
+    assert use_contextual_reply(
+        {"data": {"intent": "customers_query"}}, result, "我刚才问的是哪家客户？"
+    )
+    assert not use_contextual_reply(
+        {"data": {"intent": "customers_query"}}, result, "把刚才那个客户删除"
+    )
+    other = prepare_chat_evidence(object(), {**context, "local_user_id": 42}, "宗南产品")
+    assert not other.get("recent_messages")
+    assert not other.get("chat_knowledge_evidence")
+
+    mixed = SimpleNamespace(
+        query=lambda **_: {
+            "success": True,
+            "chunks": [
+                {
+                    "text": "# sheet:宗南\nPE白底漆",
+                    "metadata": {"sheet_context": "片段含工作表边界：宗南"},
+                },
+                {"text": "AG-091 银珠漆", "metadata": {"sheet_context": "2026年"}},
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service", lambda: mixed
+    )
+    filtered = prepare_chat_evidence(object(), context, "宗南产品有哪些")
+    assert all("AG-091" not in item["text"] for item in filtered["chat_knowledge_evidence"])
+    assert filtered["chat_independent_knowledge_query"] is True
+
+
 def test_delete_session_removes_messages_and_is_owner_scoped(store: TaskConversationStore) -> None:
     store.save_message(session_id="owner-a", user_id=41, role="user", content="A")
     store.save_message(session_id="owner-b", user_id=42, role="user", content="B")

@@ -12,15 +12,18 @@ Voice / ASR Routes - FastAPI Implementation
 
 from __future__ import annotations
 
+import io
 import logging
 import sys
 import tempfile
 import threading
 import time
+import wave
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from app.fastapi_routes.voice_model_source import (
     env as _env,
@@ -162,8 +165,84 @@ def _run_transcribe(path: Path, language: str | None) -> dict[str, Any]:
     }
 
 
+def _asr_wav(path: Path) -> tuple[bytes, float]:
+    import av
+
+    pcm = bytearray()
+    limit = 16000 * 120 * 2
+    resampler = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=16000)
+
+    def append_frames(frames):
+        for frame in frames:
+            pcm.extend(frame.to_ndarray().tobytes())
+            if len(pcm) > limit:
+                raise HTTPException(422, "录音超过 2 分钟")
+
+    try:
+        with av.open(str(path), mode="r", metadata_errors="ignore") as container:
+            for frame in container.decode(audio=0):
+                append_frames(resampler.resample(frame))
+            append_frames(resampler.resample(None))
+    except (av.error.FFmpegError, ValueError, IndexError):
+        raise HTTPException(422, "无法读取录音，请重新录制") from None
+    if not pcm:
+        raise HTTPException(422, "录音为空")
+    out = io.BytesIO()
+    with wave.open(out, "wb") as target:
+        target.setnchannels(1)
+        target.setsampwidth(2)
+        target.setframerate(16000)
+        target.writeframes(pcm)
+    return out.getvalue(), len(pcm) / 32000
+
+
+async def _platform_transcribe(
+    request: Request, path: Path, language: str | None
+) -> dict[str, Any]:
+    import httpx
+
+    from app.fastapi_routes.ai_assistant_tts import _session_market_token
+    from app.fastapi_routes.market_bridge.http_transport import _auth_header
+    from app.fastapi_routes.market_bridge.settings import _market_api_base_url
+
+    token = _session_market_token(request)
+    if not token:
+        raise HTTPException(401, "当前账户未连接平台")
+    try:
+        wav, duration = await run_in_threadpool(_asr_wav, path)
+        async with httpx.AsyncClient(timeout=75.0) as client:
+            response = await client.post(
+                f"{_market_api_base_url()}/api/workbench/asr",
+                headers={"Authorization": _auth_header(token)},
+                files={"file": ("speech.wav", wav, "audio/wav")},
+                data={"language": language if language in {"zh", "en"} else "auto"},
+            )
+        if response.status_code != 200:
+            raise HTTPException(response.status_code, "平台语音识别不可用，请核对额度及服务状态")
+        result = response.json()
+        if (
+            not isinstance(result, dict)
+            or result.get("provider") != "mimo"
+            or not isinstance(result.get("text"), str)
+        ):
+            raise ValueError("invalid platform response")
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError) as exc:
+        logger.warning("platform ASR failed: %s", type(exc).__name__)
+        raise HTTPException(502, "平台语音识别请求失败，请勿自动重试") from None
+    return {
+        "text": result["text"],
+        "language": result.get("language", ""),
+        "audio_seconds": duration,
+        "cold_start": False,
+        "model_loaded": True,
+    }
+
+
 @router.post("/transcribe")
 async def transcribe_audio(
+    request: Request,
     file: UploadFile = File(..., description="按住说话录制的音频（webm/ogg/wav/m4a）"),
     language: str | None = Form(default=None, description="ISO 语言代码，如 zh/en；留空走默认"),
 ):
@@ -180,7 +259,11 @@ async def transcribe_audio(
     tmp_path = _save_upload_to_tempfile(file, raw)
     t0 = time.monotonic()
     try:
-        result = _run_transcribe(tmp_path, language)
+        result = (
+            await _platform_transcribe(request, tmp_path, language)
+            if _env("XCAGI_CHAT_ASR_PROVIDER", "mimo").lower() == "mimo"
+            else _run_transcribe(tmp_path, language)
+        )
     finally:
         try:
             tmp_path.unlink(missing_ok=True)
@@ -201,6 +284,17 @@ async def transcribe_audio(
 @router.get("/health")
 async def voice_health():
     """轻量健康检查：只检查 faster-whisper 是否可导入，不触发模型加载（避免健康检查拖慢冷启动）。"""
+    if _env("XCAGI_CHAT_ASR_PROVIDER", "mimo").lower() == "mimo":
+        return {
+            "success": True,
+            "data": {
+                "ready": False,
+                "reason": "平台识别状态尚未验证",
+                "model": "mimo-v2.5-asr",
+                "device_hint": "platform",
+                "model_loaded": False,
+            },
+        }
     try:
         import faster_whisper  # noqa: F401 — 仅检查可导入性，不加载模型
 
@@ -228,6 +322,11 @@ def voice_warm():
     Safe: only loads into memory; does not delete data or change config.
     Disabled when XCAGI_CHAT_ASR_WARM=0.
     """
+    if _env("XCAGI_CHAT_ASR_PROVIDER", "mimo").lower() == "mimo":
+        return {
+            "success": True,
+            "data": {"warmed": False, "skipped": True, "model_loaded": False, "provider": "mimo"},
+        }
     if (_env("XCAGI_CHAT_ASR_WARM", "1") or "1").strip().lower() in {"0", "false", "off", "no"}:
         return {
             "success": True,
@@ -471,7 +570,11 @@ async def voice_command(
     tmp_path = _save_upload_to_tempfile(file, raw)
     t0 = time.monotonic()
     try:
-        text = _transcribe_audio(tmp_path, language)
+        text = (
+            (await _platform_transcribe(request, tmp_path, language))["text"]
+            if _env("XCAGI_CHAT_ASR_PROVIDER", "mimo").lower() == "mimo"
+            else _transcribe_audio(tmp_path, language)
+        )
     finally:
         try:
             tmp_path.unlink(missing_ok=True)

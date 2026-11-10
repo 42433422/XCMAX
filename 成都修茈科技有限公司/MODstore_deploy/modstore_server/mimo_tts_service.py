@@ -167,6 +167,7 @@ async def synthesize_mimo_tts_async(
     audio_format: str = DEFAULT_FORMAT,
     model: str = DEFAULT_MODEL,
     timeout_s: float = 45.0,
+    credentials: tuple[str | None, str | None] | None = None,
 ) -> Tuple[Optional[bytes], str, Dict[str, Any]]:
     """异步合成（供 FastAPI 路由使用）。"""
     t = (text or "").strip()
@@ -175,9 +176,12 @@ async def synthesize_mimo_tts_async(
     if len(t) > MAX_TEXT_LENGTH:
         return None, "mimo-tts text exceeds 4000 characters", {}
 
-    api_key, root = resolve_mimo_credentials()
+    api_key, root = credentials if credentials is not None else resolve_mimo_credentials()
     if not api_key:
         return None, "missing mimo api key", {}
+    root = (root or _DEFAULT_ROOT).rstrip("/")
+    if root.endswith("/v1"):
+        root = root[:-3]
 
     voice_id = (voice or "").strip() or DEFAULT_VOICE
     fmt = (audio_format or DEFAULT_FORMAT).strip().lower() or DEFAULT_FORMAT
