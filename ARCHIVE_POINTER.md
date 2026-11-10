@@ -1,5 +1,7 @@
 # XCMAX 历史与大文件归档指针
 
+2026-11-10 集成整理：`FHD/CHANGELOG.md` 中 2026-07-12 及更早的历史 Unreleased 记录外置至 `~/XCMAX-archives/changelog-20261110-pr-integration/CHANGELOG-full-before-pr-integration.md`（完整原文 SHA256 `3d1d80c9335c6965c3b7a65129ed0f378e90ee34d4b46e0aa0b047abb8dbaded`，亦可从集成分支提交 `af00026e09` 恢复）。当前发布记录保留在原文件。
+
 2026-10-24 工单交付整理：未登记且已被 v10 指南替代的 `成都修茈科技有限公司/docs/modstore/MOD_AUTHORING_GUIDE.md`（942 行）逐字节校验外置到 `~/XCMAX-archives/docs-20261024-ticket-mod-authoring/`，原文与 SHA256 见 `MANIFEST.json`；现行入口为 `FHD/docs/guides/MOD_AUTHORING_GUIDE.md`。
 
 同轮未登记的六月修复快照 `docs/reports/FIXES.md` 与旧评分路线图 `docs/roadmap/AI_PLATFORM_9_SCORE_ROADMAP.md`（共 1,076 行）校验外置到 `~/XCMAX-archives/docs-20261024-ticket-history/`；完整原文、SHA256 及来源提交见 `MANIFEST.json`。归档保留历史未完事项，不构成修复完成声明；现行合同与评分口径以 SSOT 目录和 `FHD/config/audit_benchmark_ssot.json` 为准。

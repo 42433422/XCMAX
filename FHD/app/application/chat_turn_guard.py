@@ -12,13 +12,17 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 _POLICY: ContextVar[str] = ContextVar("xcagi_chat_mutation_policy", default="allow")
 
 _BULK_ACTION = re.compile(r"(清理|删除|清空|清除).{0,16}(全部|所有|全量)")
 _BULK_TARGET = re.compile(r"客户|产品|订单|资料|数据")
 _MUTATION = re.compile(r"delete|clear|remove|drop|update|create|write|insert|upsert|清理|删除|清空|写入", re.IGNORECASE)
 _READ_ONLY = re.compile(r"(query|list|search|read|get|count|status|preview|schema)", re.IGNORECASE)
-_LEDGER: dict[str, "TurnRecord"] = {}
+_LEDGER: dict[str, TurnRecord] = {}
 
 
 @dataclass
@@ -125,7 +129,7 @@ def scope_counts(ctx: dict[str, Any]) -> tuple[int | None, int | None]:
             customers = db.query(func.count(Customer.id)).scalar()
             products = db.query(func.count(Product.id)).scalar()
         return int(customers or 0), int(products or 0)
-    except Exception:
+    except (SQLAlchemyError, *RECOVERABLE_ERRORS):
         return None, None
 
 

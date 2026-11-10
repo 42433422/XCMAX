@@ -570,6 +570,6 @@ def office_chat_elt_reply(
         )
     except EltError as exc:
         return _office_reply(f"处理失败：{exc.message}", success=False)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("office elt chat path failed")
         return _office_reply("处理失败：办公文件入库没有完成。", success=False)
