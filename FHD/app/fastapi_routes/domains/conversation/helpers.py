@@ -41,6 +41,7 @@ from app.domain.context.session_context import (
 from app.domain.context.session_context import (
     runtime_context_after_workflow_interrupt as runtime_context_after_workflow_interrupt,
 )
+from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody as XcagiCompatChatBody
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode  # noqa: F401
 from app.infrastructure.modstore_transport import MarketModelError
@@ -143,45 +144,6 @@ def _ensure_chat_db_read_authorized(
         _touch_chat_db_read_grace(request)
         return True, None
     return False, _chat_read_token_required_payload(message)
-
-
-class XcagiCompatChatBody(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    message: str = Field(
-        ...,
-        min_length=1,
-        validation_alias=AliasChoices("message", "user_message", "content", "text", "query"),
-    )
-    context: dict | None = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "context",
-            "runtime_context",
-            "session_context",
-            "ddd_context",
-            "neuro_context",
-            "neuro_ddd_context",
-        ),
-    )
-    system_prompt: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("system_prompt", "system", "instructions"),
-    )
-    mode: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("mode", "llm_mode"),
-    )
-    db_read_token: str | None = Field(
-        default=None,
-        description="兼容旧客户端字段；当前版本不需要数据库查看授权。",
-    )
-    db_write_token: str | None = Field(
-        default=None,
-        description="兼容旧客户端字段；当前版本不需要数据库写入授权。",
-    )
-    user_id: str | None = None
-    source: str | None = None
 
 
 class XcagiCompatChatBatchBody(BaseModel):
