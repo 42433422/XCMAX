@@ -218,22 +218,13 @@ def test_authenticated_dataset_writer_keeps_namespace_and_derived_access(memory,
     assert "dataset.write" in kwargs["access_context"]["permissions"]
 
 
-def test_anonymous_real_process_chat_reply_survives_without_memory(memory, monkeypatch):
+def test_anonymous_app_service_reply_does_not_persist_memory(memory, monkeypatch):
     _, _, namespace, store, _ = memory
     from app.application.ai_chat_app_service import AIChatApplicationService
 
     service = AIChatApplicationService.__new__(AIChatApplicationService)
     reply = {"success": True, "response": "synthetic completed response"}
-    monkeypatch.setattr(service, "_inject_excel_vector_context", lambda **kw: kw["context"])
-    monkeypatch.setattr(service, "_inject_wechat_contact_context", lambda **kw: kw["context"])
-    monkeypatch.setattr(service, "_handle_confirmation_flow", lambda *a: None)
-    monkeypatch.setattr(service, "_try_handle_dynamic_workflow", lambda *a: reply)
-    monkeypatch.setattr(
-        "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received", lambda *a: None
-    )
-    monkeypatch.setattr(
-        "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed", lambda *a: None
-    )
+    monkeypatch.setattr(service, "_process_chat_impl", lambda *args: reply)
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
     result = service.process_chat(namespace, "确认", context={"session_id": "anonymous"})
     assert result == reply
