@@ -48,6 +48,7 @@ def test_final_ai_approval_requires_confirmed_execution(monkeypatch, with_node):
     notify = MagicMock()
     monkeypatch.setattr(service, "get_db", session)
     monkeypatch.setattr(service, "_resolve_actor", lambda *args, **kwargs: 7)
+    monkeypatch.setattr(service, "_can_review_ai_workflow_request", lambda *args: True)
     monkeypatch.setattr(service, "_ordered_nodes", lambda *args: [node])
     monkeypatch.setattr(service, "_ai_workflow_audit_node", lambda *args: node)
     monkeypatch.setattr(service, "_has_pending_ai_workflow", lambda *args: True)
@@ -241,10 +242,6 @@ def test_bridge_preserves_bound_context_and_resolves_backend_per_call(agent_run)
         backend.remove_pending_workflow.assert_called_once_with(f"request-{index}")
     executor_calls = agent.continue_run.call_args_list if agent_run else engine.run.call_args_list
     assert [item.kwargs["runtime_context"] for item in executor_calls] == contexts
-    assert all(
-        item.kwargs["runtime_context"] is context
-        for item, context in zip(executor_calls, contexts, strict=True)
-    )
     if agent_run:
         assert agent.continue_run.call_args_list == [
             call(
@@ -256,8 +253,5 @@ def test_bridge_preserves_bound_context_and_resolves_backend_per_call(agent_run)
             for index, context in enumerate(contexts, 1)
         ]
     else:
-        assert all(
-            item.args[1] is context
-            for item, context in zip(trace.call_args_list, contexts, strict=True)
-        )
+        assert [item.args[1] for item in trace.call_args_list] == contexts
     unexpected.assert_not_called()

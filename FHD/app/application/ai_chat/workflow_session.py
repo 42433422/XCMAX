@@ -472,7 +472,6 @@ class WorkflowSession:
         if control and not pending and session_id:
             if self.callbacks._hydrate_pending_workflow(user_id, session_id):
                 pending = self.pending.get(user_id)
-        # Inline cards bind a control to the plan the user actually clicked.
         # Older clients omit this field and retain their existing session contract.
         if control and "expected_workflow_plan_id" in context:
             expected = context["expected_workflow_plan_id"]
@@ -526,7 +525,6 @@ class WorkflowSession:
                     try:
                         from app.application.agent_orchestrator import AgentOrchestrator
 
-                        # 审批只暂停当前节点。原计划、依赖和后续步骤留在同一次运行里。
                         agent_run = AgentOrchestrator().start_run_from_plan(
                             user_id=self.callbacks._task_owner_id(user_id, runtime_ctx),
                             message=str(runtime_ctx.get("message") or message),
@@ -578,11 +576,12 @@ class WorkflowSession:
                         request_id = str(request.request_id or "").strip()
                         if not request_id:
                             raise RuntimeError("审批请求缺少请求号")
-                        self.approval.attach_pending_agent_run(
+                        if not self.approval.attach_pending_agent_run(
                             request_id,
                             agent_run_id=agent_run.run_id,
                             approved_step_id=node.node_id,
-                        )
+                        ):
+                            raise RuntimeError("审批执行记录关联失败")
                         approval_request_ids.append(request_id)
                         metadata = self.approval.get_request_metadata(request_id) or {
                             "request_no": request_id

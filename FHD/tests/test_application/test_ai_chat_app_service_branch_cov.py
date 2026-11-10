@@ -3200,6 +3200,8 @@ class TestTryHandleDynamicWorkflow:
         assert "u1" not in svc._pending_workflows
 
     def test_pending_workflow_confirm_with_approval(self):
+        from app.application.workflow.workflow_types import plan_to_dict
+
         svc = _make_svc()
         plan = _make_plan(nodes=[_make_node()])
         svc._pending_workflows["u1"] = {
@@ -3211,6 +3213,7 @@ class TestTryHandleDynamicWorkflow:
         waiting_run = SimpleNamespace(
             status="waiting_user",
             run_id="run-approval-1",
+            metadata={"plan": plan_to_dict(plan)},
             steps=[SimpleNamespace(status="waiting_user", node_id="n1")],
         )
         with (

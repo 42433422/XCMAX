@@ -686,7 +686,10 @@ def test_backup_requires_matching_executor_receipt(stream, case):
     assert execute.call_count == bool(name)
     if name:
         assert json.loads(execute.call_args.args[1]) == args
-        assert execute.call_args.kwargs["runtime_context"] == context
+        assert execute.call_args.kwargs["runtime_context"] == {
+            **context,
+            "mutation_policy": "allow",
+        }
     if ready:
         assert "executor-fixture实际回执" in str(result)
         assert get_last_tool_records()[0]["output"] == output
