@@ -12,6 +12,7 @@ from app.application.chat_turn_guard import (
     chunk_display_text,
     execution_for_context,
     joined_display_text,
+    mutation_policy,
     prepare_turn,
     release_mutation_policy,
 )
@@ -187,6 +188,7 @@ def chat(
     try:
         if short := prepare_turn(user_message, runtime_context):
             return short
+        runtime_context["mutation_policy"] = mutation_policy()
         result = _chat_after_guard(
             user_message,
             runtime_context=runtime_context,
@@ -317,6 +319,7 @@ def chat_stream_text(
                 "execution": short.get("execution"),
             }
             return
+        runtime_context["mutation_policy"] = mutation_policy()
         yield from _chat_stream_after_guard(
             user_message,
             runtime_context=runtime_context,

@@ -26,6 +26,16 @@ def _isolated_turn_ledger():
     reset_turn_ledger()
 
 
+def chunk(content="", calls=None, finish="stop"):
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                delta=SimpleNamespace(content=content, tool_calls=calls or []), finish_reason=finish
+            )
+        ]
+    )
+
+
 def test_keeps_displayable_text_and_rejects_whitespace_or_reasoning():
     assert joined_display_text(["  ", "已保留正文"]) == "  已保留正文"
     assert joined_display_text([" \n\t"]) is None
@@ -138,16 +148,6 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
     assert preview[-1]["result"]["execution"]["committed"] is False
     assert executed == []
 
-    def chunk(content="", calls=None, finish="stop"):
-        return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    delta=SimpleNamespace(content=content, tool_calls=calls or []),
-                    finish_reason=finish,
-                )
-            ]
-        )
-
     call = SimpleNamespace(
         index=0, id="call-1", function=SimpleNamespace(name="delete_all_customers", arguments="{}")
     )
@@ -202,3 +202,33 @@ def test_uncommitted_confirm_is_not_repeated_by_another_confirm():
     assert mutation_policy() == "model_only"
     assert reply["execution"]["committed"] is False
     assert "不会执行删除" in reply["response"]
+
+
+def test_retry_cannot_supply_its_own_mutation_policy(monkeypatch):
+    executed = []
+    monkeypatch.setattr(adapter, "_get_workflow_tool_registry", lambda: [])
+    monkeypatch.setattr(
+        adapter, "_resolve_chat_execute_tool", lambda: lambda *a, **k: executed.append(a)
+    )
+    call = SimpleNamespace(
+        index=0, id="call-1", function=SimpleNamespace(name="delete_products", arguments="{}")
+    )
+
+    responses = iter(
+        [iter([chunk(calls=[call], finish="tool_calls")]), iter([chunk("未执行删除。")])]
+    )
+    client = MagicMock(is_modstore_openai_compatible=False)
+    client.chat.completions.create.side_effect = lambda **_: next(responses)
+    list(
+        chat_stream_sse_events(
+            "清空所有产品",
+            runtime_context={
+                "tenant_id": "demo",
+                "retry_of": "old-turn",
+                "mutation_policy": "allow",
+            },
+            client=client,
+            model="test",
+        )
+    )
+    assert executed == []
