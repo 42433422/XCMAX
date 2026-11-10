@@ -311,7 +311,6 @@ _OPTIONAL_MOUNTS = [
     ("essential", "app.legacy.routes.product.compat_routes", "router", "/api"),
     ("lan", "app.fastapi_routes.lan_routes", "router", ""),
     ("lan", "app.fastapi_routes.lan_admin_routes", "router", ""),
-    ("lan", "app.fastapi_routes.lan_settings_routes", "router", ""),
     ("approval", "app.fastapi_routes.service_bridge", "router", ""),
     (
         "neuro",
@@ -349,12 +348,28 @@ def optional_mounts(monkeypatch):
     }
 
 
-@pytest.mark.parametrize("phase,module,attribute,prefix", _OPTIONAL_MOUNTS)
+@pytest.mark.parametrize(
+    "phase,module,attribute,prefix,failure_stage",
+    [(*mount, "import") for mount in _OPTIONAL_MOUNTS]
+    # Settings now share the admin router; keep their fault/retry scenario
+    # by exercising registration failure of that live router as well as import.
+    + [("lan", "app.fastapi_routes.lan_admin_routes", "router", "", "register")],
+)
 def test_optional_phase_failure_is_reported_and_retry_recovers(
-    fresh_app, monkeypatch, optional_mounts, phase, module, attribute, prefix
+    fresh_app, monkeypatch, optional_mounts, phase, module, attribute, prefix, failure_stage
 ):
     modules, register = optional_mounts
-    monkeypatch.setitem(sys.modules, module, None)
+    include_router = fresh_app.include_router
+    if failure_stage == "import":
+        monkeypatch.setitem(sys.modules, module, None)
+    else:
+
+        def fail_selected_router(router, **kwargs):
+            if router is getattr(modules[module], attribute):
+                raise RuntimeError("settings router registration unavailable")
+            return include_router(router, **kwargs)
+
+        monkeypatch.setattr(fresh_app, "include_router", fail_selected_router)
     register[phase](fresh_app)
     report = _inventory_report(fresh_app)
     assert not report["complete"]
@@ -364,6 +379,7 @@ def test_optional_phase_failure_is_reported_and_retry_recovers(
             response = client.get("/api/auth/session/validate")
         assert response.status_code == 200 and response.json()["valid"] is False
     monkeypatch.setitem(sys.modules, module, modules[module])
+    monkeypatch.setattr(fresh_app, "include_router", include_router)
     register[phase](fresh_app)
     assert _inventory_report(fresh_app)["complete"]
 

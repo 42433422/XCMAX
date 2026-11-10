@@ -312,12 +312,9 @@ def _normalize_cidrs(values: list[str]) -> list[str]:
     return normalized
 
 
-# ``/api/lan/admin/settings`` 的规范实现位于 ``app/fastapi_routes/lan_settings_routes.py``
-# （使用 ``LanSettingsView`` 响应模型）；该路由在 ``register_all_routes`` 中于本
-# 模块之后注册，运行时会覆盖下面的实现。这里保留函数体是为了 ``update_settings``
-# 的回读依赖（``return await get_settings(actor)``），但从 OpenAPI 文档中隐藏以避免
-# Duplicate Operation ID 告警。
-@router.get("/settings", include_in_schema=False)
+# Production mounts this settings implementation once. Preserve its host-only
+# authorization and response/secret semantics when removing duplicate routes.
+@router.get("/settings")
 async def get_settings(actor: dict = Depends(require_admin_host)) -> dict:
     import os
 
@@ -381,8 +378,8 @@ async def get_settings(actor: dict = Depends(require_admin_host)) -> dict:
     }
 
 
-@router.post("/settings", include_in_schema=False)
-@router.put("/settings", include_in_schema=False)
+@router.post("/settings")
+@router.put("/settings")
 async def update_settings(
     payload: SettingsUpdate, actor: dict = Depends(require_admin_host)
 ) -> dict:

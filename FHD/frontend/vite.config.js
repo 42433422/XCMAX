@@ -67,11 +67,11 @@ export default defineConfig(({ mode }) => {
         },
         {
           find: '@/data/workflow-employee-docs.json',
-          replacement: path.resolve(__dirname, './public/workflow-employee-docs.json'),
+          replacement: path.resolve(__dirname, './src/data/workflow-employee-docs.json'),
         },
         {
           find: '@/data/workflow-employees.json',
-          replacement: path.resolve(__dirname, './public/workflow-employees.json'),
+          replacement: path.resolve(__dirname, './src/data/workflow-employees.json'),
         },
         {
           find: '@admin-console-inject/adminHostRoutes',
@@ -111,6 +111,9 @@ export default defineConfig(({ mode }) => {
       port: devPort,
       strictPort: false,
       proxy: buildDevProxy(apiBase),
+    },
+    define: {
+      'import.meta.env.VITE_XCAGI_GIT_SHA': JSON.stringify(process.env.VITE_XCAGI_GIT_SHA || ''),
     },
     publicDir: 'public',
     worker: {

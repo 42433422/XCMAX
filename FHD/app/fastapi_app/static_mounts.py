@@ -15,6 +15,12 @@ from app.utils.path_io.path_utils import get_base_dir, resolve_fhd_repo_root
 logger = logging.getLogger(__name__)
 
 
+def _note_missing_dist(message: str, directory: str) -> None:
+    """开发服由 Vite 提供页面，缺生产 dist 时不记警告。"""
+    dev = (os.environ.get("XCAGI_DEV_SERVER") or "").strip().lower() in {"1", "true", "yes", "on"}
+    (logger.info if dev else logger.warning)(message, directory)
+
+
 def resolve_xcmax_dashboard_dir() -> str | None:
     """XCMAX 仓根目录下的全景静态资源（XCAGI-Full-Pipeline.html 等）。"""
     env = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
@@ -101,7 +107,7 @@ def mount_admin_console_static(app: FastAPI) -> None:
 
     admin_dist = os.path.join(get_base_dir(), "templates", "admin-vue-dist")
     if not os.path.isdir(admin_dist):
-        logger.warning("Admin console dist 目录不存在，跳过 /admin 挂载: %s", admin_dist)
+        _note_missing_dist("Admin console dist 目录不存在，跳过 /admin 挂载: %s", admin_dist)
         return
 
     for sub in (
@@ -151,7 +157,7 @@ def mount_vue_dist_public_static(app: FastAPI) -> None:
     """挂载与 Vite ``public/`` 对齐的根路径静态目录（须在 SPA fallback 之前）。"""
     vue_dist = os.path.join(get_base_dir(), "templates", "vue-dist")
     if not os.path.isdir(vue_dist):
-        logger.warning("Vue dist 目录不存在，跳过 public 静态挂载: %s", vue_dist)
+        _note_missing_dist("Vue dist 目录不存在，跳过 public 静态挂载: %s", vue_dist)
         return
     for sub in ("font-awesome", "startup", "yuangong", "workflow", "platform"):
         directory = os.path.join(vue_dist, sub)
@@ -170,7 +176,7 @@ def mount_vue_dist_assets_dir(app: FastAPI) -> None:
     vue_dist = os.path.join(get_base_dir(), "templates", "vue-dist")
     assets_dir = os.path.join(vue_dist, "assets")
     if not os.path.isdir(assets_dir):
-        logger.warning("Vue dist assets 目录不存在，跳过 /assets 挂载: %s", assets_dir)
+        _note_missing_dist("Vue dist assets 目录不存在，跳过 /assets 挂载: %s", assets_dir)
         return
     try:
         app.mount("/assets", StaticFiles(directory=assets_dir), name="vue_dist_assets")

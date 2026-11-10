@@ -88,11 +88,22 @@ def test_llm_resolve_openai_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     assert llm_client._resolve_openai_timeout_seconds() == 30.0
 
 
-def test_llm_set_and_resolve_mode() -> None:
-    llm_client.set_mode("online")
-    assert llm_client.resolve_mode() == "online"
-    llm_client.set_mode("offline", model="llama3")
-    assert llm_client.resolve_mode() == "offline"
+def test_llm_set_and_resolve_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_mode = llm_client._mode
+    original_model = llm_client._offline_model
+    original_client = llm_client._openai_client
+    with monkeypatch.context() as isolated:
+        isolated.setattr(llm_client, "_mode", original_mode)
+        isolated.setattr(llm_client, "_offline_model", original_model)
+        # set_mode disposes its client: never close another test's live client.
+        isolated.setattr(llm_client, "_openai_client", None)
+        llm_client.set_mode("online")
+        assert llm_client.resolve_mode() == "online"
+        llm_client.set_mode("offline", model="llama3")
+        assert llm_client.resolve_mode() == "offline"
+    assert llm_client._mode == original_mode
+    assert llm_client._offline_model == original_model
+    assert llm_client._openai_client is original_client
 
 
 def test_llm_get_offline_status_shape() -> None:

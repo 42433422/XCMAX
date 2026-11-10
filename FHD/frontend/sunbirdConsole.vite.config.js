@@ -106,11 +106,11 @@ export default defineConfig(() => ({
       },
       {
         find: '@/data/workflow-employee-docs.json',
-        replacement: path.join(hostRoot, 'public/workflow-employee-docs.json'),
+        replacement: path.join(hostRoot, 'src/data/workflow-employee-docs.json'),
       },
       {
         find: '@/data/workflow-employees.json',
-        replacement: path.join(hostRoot, 'public/workflow-employees.json'),
+        replacement: path.join(hostRoot, 'src/data/workflow-employees.json'),
       },
       { find: '@host', replacement: hostSrc },
       { find: '@', replacement: hostSrc },

@@ -132,11 +132,8 @@ def _distinct_product_names(keyword: str | None = None) -> list[str]:
     return get_product_names(keyword=keyword)
 
 
-# ``/api/health`` 的文档化版本由 ``app.fastapi_routes.__init__._register_health_routes``
-# 提供（含 NeuroBus 状态）。此处保留 ``/health`` 与 ``/api/health`` 的 compat 实现
-# 以兼容旧前端探测路径，但都从 OpenAPI 文档中隐藏避免 Duplicate Operation ID。
+# ``/api/health`` 只由 ``register_health_routes`` 注册。这里只保留 ``/health``。
 @router.get("/health", include_in_schema=False)
-@router.get("/api/health", include_in_schema=False)
 def compat_health():
     identity = build_identity()
     return _ok(
