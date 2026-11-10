@@ -37,9 +37,16 @@ _ALREADY_REGISTERED_RE = re.compile(r"(?:工单.*已(?:受理|登记)|已(?:受�
 
 
 def looks_like_issue_report(message: str) -> bool:
-    return not _manufacturing_intake(message) and bool(
-        _REPORT_RE.search(str(message or "")) or _plain_intake_match(message)
-    )
+    text = str(message or "")
+    if _manufacturing_intake(text):
+        return False
+    # “我有个问题，帮我查账单” is a question, not a software defect report.
+    # Keep explicit ticket requests and concrete failure symptoms on the intake path.
+    if _plain_intake_match(text) or _EXPLICIT_INTAKE_RE.search(text):
+        return True
+    if not _REPORT_RE.search(text):
+        return False
+    return bool(_REPORT_RE.search(text.replace("问题", "")) or _SOFTWARE_CONTEXT_RE.search(text))
 
 
 def _manufacturing_intake(message: str) -> bool:

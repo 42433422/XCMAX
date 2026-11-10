@@ -6,7 +6,7 @@ import { speakText, stopSpeaking, cleanTextForSpeech } from '../utils/tts'
 import { useModsStore } from '@/stores/mods'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useIndustryStore } from '@/stores/industry'
-import { getIndustryWelcomeMarkdown } from '@/constants/industryPresets'
+import { getIndustryWelcomeMarkdown, isIndustryWelcomePlainText } from '@/constants/industryPresets'
 import { buildChatMessagesKey, buildChatSessionMetaKey, resolveChatIdentity, resolveChatStorageScope } from '@/utils/chatStorageKeys'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
 import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
@@ -314,7 +314,8 @@ export function useChatMessages(sessionId: Ref<string>) {
 
   function isWelcomeMessage(msg: Pick<ChatMessage, 'role' | 'content'>): boolean {
     if (msg.role !== 'ai') return false
-    return toPlainText(msg.content).startsWith(WELCOME_MESSAGE_PREFIX)
+    const text = toPlainText(msg.content)
+    return text.startsWith(WELCOME_MESSAGE_PREFIX) || isIndustryWelcomePlainText(text)
   }
 
   function deriveSessionTitle(list: ChatMessage[]): string {

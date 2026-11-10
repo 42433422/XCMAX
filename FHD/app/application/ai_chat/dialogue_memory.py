@@ -254,6 +254,22 @@ def enrich_model_messages(
     if not conversation_key(context) or not should_answer_as_dialogue(message, context):
         return messages
     memory = _request_messages(message, context)
+    if context and (context.get("chat_knowledge_evidence") or context.get("chat_memory_evidence")):
+        memory[0]["content"] = (
+            memory[0]["content"]
+            .replace(
+                "只根据本会话按时间排列的全部用户原话。",
+                "对话事实以本会话的原话为准；企业资料和已确认记忆可参考本次授权提供的片段。",
+            )
+            .replace(
+                "用户没有给出的数字、角色、流程和结论不要编造。",
+                "用户及授权资料未提供的数字、角色、流程和结论不要编造。",
+            )
+            .replace(
+                "不知道就说明本会话没有这条信息。",
+                "会话和授权资料都没有的信息要说明不知道。",
+            )
+        )
     # The current model message may contain images or tool protocol fields; preserve it.
     history = memory[1:]
     if history and history[-1].get("content") == message.strip():

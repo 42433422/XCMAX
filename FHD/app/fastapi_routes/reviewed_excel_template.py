@@ -323,6 +323,10 @@ def _checkpoint_view(checkpoint):
         if checkpoint.get("repair")
         else "可继续剩余批次",
     }[phase]
+    if phase == "paused" and checkpoint.get("repair"):
+        message = (
+            "模型上次返回的格式不符合要求，尚未完成当前批次；继续处理将请求模型修正，可能产生费用。"
+        )
     return {
         "phase": phase,
         "version": checkpoint["version"],
@@ -452,6 +456,11 @@ def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False)
         return slices, latest.get("coverage") or [], dispositions
     if latest.get("model_status") != "returned":
         raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
+    if any(
+        isinstance(item, dict) and (item.get("source_coverage") or {}).get("can_slice") is False
+        for item in (latest.get("input_summaries") or [])
+    ):
+        raise ReviewedExcelError("模型明确表示不能自动切片，请人工核对")
     coverage = latest.get("coverage")
     sheets = latest.get("sheets", [])
     source_names = (
@@ -835,6 +844,107 @@ async def reviewed_excel_classification_analyze(
         )
 
 
+@router.post("/api/templates/reviewed-excel/classifications/{classification_id}/recover-answer")
+def reviewed_excel_recover_answer(
+    classification_id: str,
+    request: Request,
+    version: str = Form(..., max_length=64),
+    user=Depends(_manage),
+):
+    """Revalidate the saved failed reply once; never dispatch another model request."""
+    from app.application.reviewed_excel_budget import validate_checkpoint_budget
+    from app.application.reviewed_excel_plan import restore_coordinate_plan
+    from app.application.reviewed_excel_saved_response import saved_classification_answer
+
+    tenant, owner = _identity(user)
+    try:
+        with tenant_scope(tenant), get_db() as db:
+            run = _classification_run(db, classification_id, tenant, owner)
+            old = run.draft_json
+            state = load_json(old, {})
+            versions = state.get("versions") or []
+            checkpoint = state.get("analysis_checkpoint") or {}
+            if (
+                not versions
+                or versions[-1].get("version") != version
+                or checkpoint.get("version") != version
+            ):
+                raise ReviewedExcelError("分类版本已改变，请刷新后核对")
+            history = state.get("saved_response_revalidations") or []
+            records = state.get("model_audit") or []
+            latest = records[-1] if records else {}
+            if (
+                latest.get("request_sha256")
+                and history
+                and history[-1].get("request_sha256") == latest.get("request_sha256")
+            ):
+                return {
+                    "phase": checkpoint.get("phase"),
+                    "checkpoint": _checkpoint_view(checkpoint),
+                    "replayed": True,
+                    "can_slice": history[-1].get("can_slice"),
+                }
+            if checkpoint.get("phase") != "failed" or not (checkpoint.get("repair") or {}).get(
+                "exhausted"
+            ):
+                raise ReviewedExcelError("当前分类没有可恢复的已失败回答")
+            if checkpoint.get("source_sha256") != run.file_sha256 or not checkpoint.get(
+                "auto_group"
+            ):
+                raise ReviewedExcelError("原件或分类模式已改变，不能恢复")
+            validate_checkpoint_budget(checkpoint)
+            body = _source(db, run, tenant, owner)
+            if hashlib.sha256(body).hexdigest() != run.file_sha256:
+                raise ReviewedExcelError("原件哈希不一致，不能恢复")
+            review = inspect_workbook(body)
+            batches = restore_coordinate_plan(review, checkpoint)
+            index = len(checkpoint.get("results") or [])
+            if index >= len(batches) or (checkpoint.get("repair") or {}).get("step") != index:
+                raise ReviewedExcelError("已保存回答与当前批次不一致")
+            answer, saved_request = saved_classification_answer(
+                latest, classification_id, version, run.file_sha256
+            )
+            messages = saved_request.get("messages")
+            if not isinstance(messages, list) or len(messages) < 2:
+                raise ReviewedExcelError("已保存请求不完整")
+            result = _classify_semantic_batch(
+                {**review, "cells": batches[index], "full_cells": review["cells"]},
+                reference_ids=True,
+                repair=messages[2:],
+                expected_request_sha256=latest["request_sha256"],
+                archived_answer=answer,
+            )
+            _recheck(request, (tenant, owner))
+            _source(db, run, tenant, owner)
+            checkpoint["results"].append(result)
+            checkpoint["phase"] = "paused"
+            checkpoint.pop("repair", None)
+            history.append(
+                {
+                    "request_sha256": latest["request_sha256"],
+                    "response_sha256": latest["response_sha256"],
+                    "step": index,
+                    "owner_user_id": owner,
+                    "can_slice": (result.get("input_summary", {}).get("source_coverage") or {}).get(
+                        "can_slice"
+                    ),
+                    "revalidated_at": utcnow().isoformat(),
+                }
+            )
+            state["saved_response_revalidations"] = history
+            _classification_cas(db, run, old, state)
+            return {
+                "phase": "paused",
+                "checkpoint": _checkpoint_view(checkpoint),
+                "replayed": False,
+                "can_slice": (result.get("input_summary", {}).get("source_coverage") or {}).get(
+                    "can_slice"
+                ),
+            }
+    except EltError as exc:
+        raise HTTPException(status_code=409, detail=public_excel_error(exc)) from exc
+
+
 @router.post("/api/templates/reviewed-excel/classifications/{classification_id}/analyze/abandon")
 def reviewed_excel_classification_abandon_call(
     classification_id: str,
@@ -1139,7 +1249,9 @@ async def _reviewed_excel_classification_analyze_body(
                         "checkpoint": _checkpoint_view(checkpoint),
                     }
             else:
-                if not auto_group or len(batches) <= 1:
+                if not auto_group or (
+                    len(batches) <= 1 and not state.get("saved_response_revalidations")
+                ):
                     raise HTTPException(status_code=409, detail="分析批次状态无效")
                 result = combine_semantic_batches(review, batches, checkpoint["results"], max_calls)
             from app.application.reviewed_excel_partition import boundary_left_for_confirmation

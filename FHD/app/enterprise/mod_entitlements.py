@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import time
+import weakref
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -33,6 +35,7 @@ _cached_account_kind: str = "enterprise"
 _cached_market_is_admin: bool = False
 _entitlement_sync_at_by_session: dict[str, float] = {}
 _reloaded_entitlement_ids_by_session: dict[str, frozenset[str]] = {}
+_session_sync_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
 
 
 @dataclass(frozen=True)
@@ -381,6 +384,17 @@ def _augment_entitled_for_username(username: str, current: set[str] | None) -> s
 
 async def sync_entitlements_for_session(session_id: str, *, force: bool = False) -> set[str]:
     """企业版：优先用修茈市场 token 刷新 user_mods 权益；失败则回退 session 行缓存。"""
+    sid = (session_id or "").strip()
+    if not sid or not enterprise_mod_filter_active():
+        return set()
+    lock = _session_sync_locks.get(sid)
+    if lock is None:
+        lock = _session_sync_locks[sid] = asyncio.Lock()
+    async with lock:
+        return await _sync_entitlements_for_session(sid, force=force)
+
+
+async def _sync_entitlements_for_session(session_id: str, *, force: bool = False) -> set[str]:
     if not enterprise_mod_filter_active():
         return set()
     sid = (session_id or "").strip()

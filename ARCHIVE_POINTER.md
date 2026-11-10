@@ -106,3 +106,5 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 **同轮保留待判（规则可命中但不宜直接删除）**：`FHD/app/security/SSOT.md`、`FHD/app/neuro_bus/BOUNDARY.md` 是安全/总线边界映射，属治理缺口（应登记 SSOT 而非归档）；`FHD/docs/guides/MOBILE_ANDROID_STORE_COMPLIANCE.md` 是 Android 商店提审清单，属移动端交付依赖；`docs/MUTATION_TESTING_SCOPE.md` 与 `docs/security/aiopen-*-20261028.md` 是近期口径与安全审计记录；两个 `MANIFEST_POINTER.md` 是归档资产恢复指针。以上 7 篇不作为本轮归档对象。
 
 **同轮评估但保留（承重，不可作为残留清退）**：`FHD/sunbird-console` 是 `FHD/frontend/sunbirdConsole.vite.config.js` 的构建输入；`FHD/AMIN` 经 `@amin` 别名进入前端打包；`FHD/mobile-flutter-poc` 由 `.github/workflows/fhd-ci-mobile-flutter.yml`、`fhd-release-android.yml`、`fhd-release-ios.yml` 驱动，属移动端交付链路；`FHD/tests/odoo_absorption` 与 `FHD/tests/langgraph_absorption` 是运行中的契约/边界回归测试；`FHD/rasa` 与 `FHD/XCAGI/rasa` 是 `app/ai_engines/rasa/nlu_service.py` 模型发现与再训练的种子配置。目录名带 poc/absorption 属命名债，不是死代码。
+
+2026-11-09：过期迁移指南原文与未登记的 2026-06 产品打磨清单已归档至 `~/XCMAX-archives/docs-20261109-pr3110/`；迁移入口保留在 `FHD/docs/guides/ALEMBIC_MIGRATION_GUIDE.md`。

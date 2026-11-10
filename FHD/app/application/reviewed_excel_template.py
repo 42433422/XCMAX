@@ -161,6 +161,27 @@ def template_llm_model_label() -> str:
     return "platform-default"
 
 
+def _recover_detached_slice_decision(raw_content: str, schema: dict):
+    """Recover only a detached boolean without changing the parsed documents."""
+    import json
+    import re
+
+    if set(schema.get("required", ())) != {"documents", "can_slice"}:
+        return None
+    text = str(raw_content or "").strip()
+    try:
+        prefix, end = json.JSONDecoder().raw_decode(text)
+    except ValueError:
+        return None
+    if not isinstance(prefix, dict) or "can_slice" in prefix:
+        return None
+    match = re.fullmatch(r'\s*\]\s*,\s*"can_slice"\s*:\s*(true|false)\s*}\s*', text[end:])
+    if not match:
+        return None
+    recovered = {**prefix, "can_slice": match.group(1) == "true"}
+    return recovered if not _template_schema_problem(schema, recovered) else None
+
+
 def _coerce_compatibility_payload(data, raw_content: str):
     """Accept a compatibility answer wrapped or padded by the model."""
     import json
@@ -398,6 +419,8 @@ def _template_platform_complete(
                 err.finish_reason = finish
                 raise err
             data = extract_json(raw_content)
+            if _template_schema_problem(schema, data):
+                data = _recover_detached_slice_decision(raw_content, schema) or data
             if schema.get("required") == ["sheets"]:
                 data = _coerce_sheet_name_payload(data, raw_content)
             elif schema.get("required") == ["can_slice", "ranges"]:

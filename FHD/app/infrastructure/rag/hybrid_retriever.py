@@ -161,7 +161,7 @@ class HybridRetriever:
         # 1) BM25
         bm25_scores = self._bm25.score(query)
         bm25_ranked = sorted(
-            range(len(self._chunks)),
+            (i for i in range(len(self._chunks)) if bm25_scores[i] > 0),
             key=lambda i: bm25_scores[i],
             reverse=True,
         )[: self._top_k_bm25]
@@ -173,7 +173,7 @@ class HybridRetriever:
                 q_vec = self._embedder(query)
                 sims = [self._cosine(q_vec, e) for e in self._embeddings]
                 vector_ranked = sorted(
-                    range(len(self._chunks)),
+                    (i for i in range(len(self._chunks)) if sims[i] > 0),
                     key=lambda i: sims[i],
                     reverse=True,
                 )[: self._top_k_vector]

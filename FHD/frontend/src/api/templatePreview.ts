@@ -3,9 +3,9 @@ import type { RequestOptions } from './core'
 import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
 import { captureAuthSession } from '@/utils/authSessionCache'
 
-// 预览和优化仍是短调用。入库预演要等数据库和知识两条整表导入，每条最多 180 秒。
+// 预览和优化需要等待平台模型；入库预演还要等待数据库和知识两条整表导入。
 // 整本分析单独等到 180 秒。卡住的调用仍会停。
-export const MODEL_BACKED_ELT_TIMEOUT_MS = 30_000
+export const MODEL_BACKED_ELT_TIMEOUT_MS = 180_000
 export const MODEL_INTAKE_TIMEOUT_MS = 360_000
 export const MODEL_ANALYZE_TIMEOUT_MS = 180_000
 
@@ -136,6 +136,10 @@ export const templatePreviewApi = {
 
   analyzeClassification(id: string, formData: FormData) {
     return reviewedExcelPost(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/analyze`, formData)
+  },
+
+  recoverClassificationAnswer(id: string, formData: FormData) {
+    return reviewedExcelPost(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/recover-answer`, formData)
   },
 
   autoSlices(id: string, version: string) {
