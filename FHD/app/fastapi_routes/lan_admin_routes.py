@@ -312,9 +312,10 @@ def _normalize_cidrs(values: list[str]) -> list[str]:
     return normalized
 
 
-# HTTP ``/api/lan/admin/settings`` 只由 ``lan_settings_routes`` 注册。
-# 这两个函数留给本模块的设置回读，不再挂到路由表。
-async def get_settings(_actor: dict) -> dict:
+# Production mounts this settings implementation once. Preserve its host-only
+# authorization and response/secret semantics when removing duplicate routes.
+@router.get("/settings")
+async def get_settings(actor: dict = Depends(require_admin_host)) -> dict:
     import os
 
     from app.security.lan_settings_store import load_overrides
@@ -377,7 +378,11 @@ async def get_settings(_actor: dict) -> dict:
     }
 
 
-async def update_settings(payload: SettingsUpdate, _actor: dict) -> dict:
+@router.post("/settings")
+@router.put("/settings")
+async def update_settings(
+    payload: SettingsUpdate, actor: dict = Depends(require_admin_host)
+) -> dict:
     from app.security.lan_config import reset_lan_config_cache
     from app.security.lan_settings_store import LanSettingsOverride, save_overrides
 
@@ -397,4 +402,4 @@ async def update_settings(payload: SettingsUpdate, _actor: dict) -> dict:
     save_overrides(override, merge=True)
     reset_lan_config_cache()
 
-    return await get_settings(_actor)
+    return await get_settings(actor)

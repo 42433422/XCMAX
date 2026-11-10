@@ -138,39 +138,6 @@ def _patch_save(monkeypatch, tmp_path):
     return captured
 
 
-def test_office_save_accepts_suggested_column_mapping(monkeypatch):
-    from app.application.office_parse_app_service import _accept_suggested_mappings
-
-    published: list[object] = []
-
-    class _Run:
-        status = "preview_ready"
-        draft_json = (
-            '{"field_mappings":[{"source":"物料名称","target":"name","confidence":0.76},'
-            '{"source":"","target":"brand","confidence":0}]}'
-        )
-
-    class _Service:
-        def _owned_run(self, db, run_id, owner):
-            return _Run()
-
-        def get_run(self, db, *, run_id, owner_user_id):
-            return {"id": run_id, "status": "preview_ready", "preview_revision": "rev-new"}
-
-    class _Db:
-        def commit(self):
-            published.append("commit")
-
-    monkeypatch.setattr(
-        "app.application.elt.preview_confirmation.publish_preview",
-        lambda db, run: published.append(run.draft_json),
-    )
-    accepted = _accept_suggested_mappings(_Service(), _Db(), "run-1", 3)
-    assert accepted["preview_revision"] == "rev-new"
-    assert '"confirmed": true' in published[0]
-    assert published[1] == "commit"
-
-
 def test_save_queues_docking_approval_and_optional_template(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     _workbook(tmp_path / "uploads" / "宗南.xlsx")

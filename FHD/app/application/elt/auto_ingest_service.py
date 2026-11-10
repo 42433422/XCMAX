@@ -24,6 +24,7 @@ from uuid import uuid4
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
+from app.application.elt import auto_ingest_liveness as liveness
 from app.application.elt.errors import EltError
 from app.application.elt.knowledge_index_meta import (
     business_completion_from_run,
@@ -98,12 +99,29 @@ def _progress(
     return out
 
 
-def _patch_batch(tenant_id: int | str, batch_id: str, **fields: Any) -> dict[str, Any] | None:
+def _patch_batch(
+    tenant_id: int | str,
+    batch_id: str,
+    *,
+    expected_running: dict[str, Any] | None = None,
+    **fields: Any,
+) -> dict[str, Any] | None:
     with _LOCK:
         ledger = _load_ledger(tenant_id)
         batch = (ledger.get("batches") or {}).get(batch_id)
         if not isinstance(batch, dict):
             return None
+        if expected_running is not None:
+            if any(
+                batch.get(key) != expected_running.get(key)
+                for key in ("batch_id", "tenant_id", "owner_user_id", "mod_id")
+            ):
+                raise EltError(
+                    "ETL_AUTO_INGEST_SCOPE_CHANGED", "批次身份已变化，停止归并回执", status_code=409
+                )
+            if batch.get("status") != "running":
+                # Late receipts must not revive withdrawn work.
+                return dict(batch)
         batch.update(fields)
         batch["updated_at"] = _utcnow()
         ledger.setdefault("batches", {})[batch_id] = batch
@@ -515,6 +533,9 @@ class AutoIngestService:
         }
         with _LOCK:
             ledger = _load_ledger(tenant_id)
+            previous = ledger.get("batches", {}).get(batch_id, {})
+            if previous.get("worker_protocol") == 1:
+                batch["worker_protocol"] = 1
             ledger.setdefault("batches", {})[batch_id] = batch
             _save_ledger(tenant_id, ledger)
 
@@ -616,12 +637,20 @@ class AutoIngestService:
                 )
             elif business.get("pending_execution"):
                 biz_prog = _progress("executing", 80, message="业务写入处理中，请等待实际回执")
+            elif business.get("status") == "completed":
+                _, biz_prog = business_completion_from_run(business, _progress)
             else:
                 biz_prog = _progress("done", 100, message="业务域已写入")
+            completion_status = (
+                business_completion_from_run(business, _progress)[0]
+                if business.get("status") == "completed"
+                else "applied"
+            )
             coverage = _batch_coverage(kb_receipt, business, detection)
             final = _patch_batch(
                 tenant_id,
                 batch_id,
+                expected_running=batch,
                 status=(
                     "running"
                     if business.get("pending_execution")
@@ -629,7 +658,7 @@ class AutoIngestService:
                     if business.get("pending_preview")
                     else "failed"
                     if business.get("failed")
-                    else "applied"
+                    else completion_status
                     if coverage["complete"]
                     else "partial"
                 ),
@@ -656,6 +685,7 @@ class AutoIngestService:
             _patch_batch(
                 tenant_id,
                 batch_id,
+                expected_running=batch,
                 status="failed",
                 kb_progress=kb_progress,
                 business_progress=_progress(
@@ -671,6 +701,8 @@ class AutoIngestService:
             raise EltError("ETL_AUTO_INGEST_FAILED", f"自动入库失败：{type(exc).__name__}") from exc
 
     def _launch_worker(self, batch: dict[str, Any]) -> None:
+        guard = batch.pop("_worker_guard", None)
+        handoff = liveness.WorkerHandoff(guard) if guard is not None else None
         batch_id = str(batch.get("batch_id") or "")
         tenant_id = int(batch["tenant_id"])
         owner_user_id = int(batch["owner_user_id"])
@@ -679,10 +711,12 @@ class AutoIngestService:
         labels = batch.get("labels") if isinstance(batch.get("labels"), list) else None
 
         def _worker() -> None:
-            from app.db.session import get_db
-            from app.infrastructure.tenant_scope import tenant_scope
-
+            if handoff is not None and not handoff.claim():
+                return
             try:
+                from app.db.session import get_db
+                from app.infrastructure.tenant_scope import tenant_scope
+
                 with tenant_scope(tenant_id), get_db() as db:
                     self.run(
                         db,
@@ -702,11 +736,28 @@ class AutoIngestService:
                     db.commit()
             except BOUNDARY_ERRORS:
                 logger.exception("background auto-ingest failed batch_id=%s", batch_id)
+            finally:
+                if handoff is not None:
+                    handoff.finish()
 
-        context = copy_context()
-        threading.Thread(
-            target=lambda: context.run(_worker), name=f"auto-ingest-{batch_id}", daemon=True
-        ).start()
+        started = False
+        try:
+            context = copy_context()
+            threading.Thread(
+                target=lambda: context.run(_worker), name=f"auto-ingest-{batch_id}", daemon=True
+            ).start()
+            started = True
+        finally:
+            if not started and handoff is not None and handoff.cancel_pending():
+                _patch_batch(
+                    tenant_id,
+                    batch_id,
+                    status="failed",
+                    error="ELT_WORKER_NOT_STARTED",
+                    business_progress=_progress(
+                        "not_started", 0, message="执行线程未启动，未自动重试"
+                    ),
+                )
 
     def queue_for_approval(
         self,
@@ -768,8 +819,15 @@ class AutoIngestService:
             batch = (ledger.get("batches") or {}).get(batch_id)
             if not isinstance(batch, dict) or int(batch.get("tenant_id") or 0) != int(tenant_id):
                 raise EltError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
+            batch = self._refresh_business(dict(batch))
             status = str(batch.get("status") or "")
-            if status in {"running", "applied", "partial", "awaiting_confirmation"}:
+            if status in {
+                "running",
+                "applied",
+                "partial",
+                "completed_empty",
+                "awaiting_confirmation",
+            }:
                 return {
                     "success": True,
                     "batch_id": batch_id,
@@ -780,11 +838,54 @@ class AutoIngestService:
                 raise EltError(
                     "ETL_AUTO_INGEST_NOT_PENDING", "该批次不在待审批写入", status_code=409
                 )
-            batch["status"] = "running"
-            batch["updated_at"] = _utcnow()
-            _save_ledger(tenant_id, ledger)
-            stored = dict(batch)
-        self._launch_worker(stored)
+            guard = liveness.acquire(_ledger_path(tenant_id), batch_id)
+            transferred = False
+            try:
+                # A different process may have completed this batch since our first read.
+                # The worker lock protects dispatch only after it has been acquired.
+                expected = batch
+                ledger = _load_ledger(tenant_id)
+                batch = (ledger.get("batches") or {}).get(batch_id)
+                identity = ("batch_id", "tenant_id", "owner_user_id", "mod_id")
+                if not isinstance(batch, dict) or any(
+                    batch.get(key) != expected.get(key) for key in identity
+                ):
+                    raise EltError(
+                        "ETL_AUTO_INGEST_FORBIDDEN", "批次身份已变化，未执行", status_code=403
+                    )
+                status = str(batch.get("status") or "")
+                if status in {
+                    "running",
+                    "applied",
+                    "partial",
+                    "completed_empty",
+                    "awaiting_confirmation",
+                }:
+                    return {
+                        "success": True,
+                        "batch_id": batch_id,
+                        "status": status,
+                        "already_released": True,
+                    }
+                if status != "awaiting_approval" or batch != expected:
+                    raise EltError(
+                        "ETL_AUTO_INGEST_NOT_PENDING", "批次已变化，未重复提交", status_code=409
+                    )
+                batch.update(status="running", worker_protocol=1, updated_at=_utcnow())
+                ledger["batches"][batch_id] = batch
+                _save_ledger(tenant_id, ledger)
+                stored = dict(batch)
+                stored["_worker_guard"] = guard
+                transferred = True
+            finally:
+                if not transferred:
+                    liveness.release(guard)
+        try:
+            self._launch_worker(stored)
+        finally:
+            unused = stored.pop("_worker_guard", None)
+            if unused is not None:
+                liveness.release(unused)
         public = _public_batch(stored)
         public["success"] = True
         public["status"] = "running"
@@ -850,15 +951,52 @@ class AutoIngestService:
             "labels": list(labels or []),
         }
         with _LOCK:
-            ledger = _load_ledger(tenant_id)
-            ledger.setdefault("batches", {})[batch_id] = batch
-            _save_ledger(tenant_id, ledger)
-        self._launch_worker(dict(batch))
+            guard = liveness.acquire(_ledger_path(tenant_id), batch_id)
+            transferred = False
+            try:
+                ledger = _load_ledger(tenant_id)
+                batch["worker_protocol"] = 1
+                ledger.setdefault("batches", {})[batch_id] = batch
+                _save_ledger(tenant_id, ledger)
+                stored = dict(batch)
+                stored["_worker_guard"] = guard
+                transferred = True
+            finally:
+                if not transferred:
+                    liveness.release(guard)
+        try:
+            self._launch_worker(stored)
+        finally:
+            unused = stored.pop("_worker_guard", None)
+            if unused is not None:
+                liveness.release(unused)
         return _public_batch(batch)
 
     def _refresh_business(self, batch: dict[str, Any]) -> dict[str, Any]:
         if batch.get("mod_id") != get_request_active_mod_id():
             return batch
+        if liveness.orphaned(_ledger_path(batch["tenant_id"]), batch):
+            with _LOCK:
+                ledger = _load_ledger(batch["tenant_id"])
+                latest = ledger.get("batches", {}).get(batch["batch_id"])
+                if latest != batch:
+                    return batch
+                batch.update(
+                    status="failed",
+                    updated_at=_utcnow(),
+                    error="ELT_WORKER_INTERRUPTED",
+                    business_progress=_progress(
+                        "outcome_unknown", 0, message="执行已中断，结果待核对；请勿重复入库"
+                    ),
+                )
+                if not batch.get("knowledge"):
+                    batch["kb_progress"] = _progress(
+                        "outcome_unknown", 0, message="知识写入结果待核对；请勿重复入库"
+                    )
+                ledger["batches"][batch["batch_id"]] = batch
+                _save_ledger(batch["tenant_id"], ledger)
+            if not (batch.get("business") or {}).get("run_id"):
+                return batch
         business = batch.get("business") or {}
         if batch.get("status") not in {
             "running",
@@ -887,7 +1025,9 @@ class AutoIngestService:
                         message="业务写入失败或结果待核对；请核对已写入部分，勿重复提交",
                     ),
                 )
-            elif status == "preview_ready" and batch.get("error"):
+            elif status == "preview_ready" and (
+                batch.get("error") or batch.get("status") == "failed"
+            ):
                 # A refused write rolls the run back to preview. Keep the failure
                 # closed so a later read does not invite a second submission.
                 batch_status, progress = (
@@ -906,7 +1046,7 @@ class AutoIngestService:
                         "pending", 70, message="业务预演待确认；请在当前导入里核对所选模板后再入库"
                     ),
                 )
-            else:
+            elif status in {"queued", "executing"}:
                 batch_status, progress = (
                     "running",
                     _progress(
@@ -915,12 +1055,22 @@ class AutoIngestService:
                         message="业务处理仍在进行，请等待实际回执",
                     ),
                 )
+            else:
+                batch_status, progress = (
+                    "failed",
+                    _progress("outcome_unknown", 0, message="业务回执状态异常，请核对，勿重复提交"),
+                )
             with _LOCK:
                 ledger = _load_ledger(batch["tenant_id"])
                 latest = (ledger.get("batches") or {}).get(batch["batch_id"])
+                if not isinstance(latest, dict) or any(
+                    latest.get(key) != batch.get(key)
+                    for key in ("batch_id", "tenant_id", "owner_user_id", "mod_id")
+                ):
+                    # Never return or mutate a row belonging to a changed scope.
+                    return batch
                 if (
-                    not isinstance(latest, dict)
-                    or latest.get("status") == "withdrawn"
+                    latest.get("status") == "withdrawn"
                     or latest.get("status") != batch.get("status")
                     or latest.get("business") != batch.get("business")
                 ):
@@ -944,6 +1094,8 @@ class AutoIngestService:
                     business_progress=progress,
                     updated_at=_utcnow(),
                 )
+                if batch_status == "applied":
+                    latest.pop("error", None)
                 _save_ledger(batch["tenant_id"], ledger)
                 return dict(latest)
         except BOUNDARY_ERRORS:
@@ -1031,7 +1183,7 @@ class AutoIngestService:
                 )
             if batch.get("status") == "withdrawn":
                 return batch
-            if batch.get("status") not in {"applied", "partial"}:
+            if batch.get("status") not in {"applied", "partial", "completed_empty"}:
                 raise EltError(
                     "ETL_AUTO_INGEST_BAD_STATE",
                     f"当前状态不可撤回：{batch.get('status')}",
@@ -1248,7 +1400,10 @@ class AutoIngestService:
             and str(executed.get("status") or "") in {"queued", "executing"}
             and time.monotonic() < deadline
         ):
-            time.sleep(min(0.25, deadline - time.monotonic()))
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(0.25, remaining))
             db.expire_all()
             try:
                 db.rollback()
@@ -1261,11 +1416,15 @@ class AutoIngestService:
             "run_id": run_id,
             "preview_revision": preview_revision,
             "summary": executed.get("summary") if isinstance(executed, dict) else None,
+            "executed_rows": executed.get("executed_rows") if isinstance(executed, dict) else None,
+            "new_rows": executed.get("new_rows") if isinstance(executed, dict) else None,
+            "update_rows": executed.get("update_rows") if isinstance(executed, dict) else None,
+            "receipt": executed.get("receipt") if isinstance(executed, dict) else None,
             "status": executed.get("status") if isinstance(executed, dict) else None,
             "pending_execution": isinstance(executed, dict)
             and executed.get("status") in {"queued", "executing"},
             "failed": not isinstance(executed, dict)
-            or executed.get("status") in {"failed", "interrupted", "outcome_unknown"},
+            or executed.get("status") not in {"completed", "queued", "executing"},
         }
 
     def _withdraw_business(

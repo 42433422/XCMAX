@@ -120,52 +120,8 @@ def _holds_approval_permission(user: User, req: ApprovalRequest) -> bool:
     return bool(held & approval_permission_codes(req))
 
 
-def _approver_id_list(raw: Any) -> list[int]:
-    if not raw:
-        return []
-    try:
-        parsed = json.loads(raw) if isinstance(raw, str) else raw
-    except (TypeError, ValueError):
-        return []
-    if not isinstance(parsed, list):
-        return []
-    ids: list[int] = []
-    for item in parsed:
-        if item is None or isinstance(item, bool):
-            continue
-        try:
-            ids.append(int(item))
-        except (TypeError, ValueError):
-            continue
-    return ids
-
-
-def _designated_reviewer_ids(db: Session, req: ApprovalRequest) -> list[int] | None:
-    """Explicit approver ids on the flow. None when this request has no flow to read."""
-    raw_flow = getattr(req, "flow_id", None)
-    if raw_flow is None or isinstance(raw_flow, bool):
-        return None
-    try:
-        flow_id = int(raw_flow)
-    except (TypeError, ValueError):
-        return None
-    if flow_id <= 0:
-        return None
-    rows = (
-        db.query(ApprovalFlowNode)
-        .filter(ApprovalFlowNode.flow_id == flow_id, ApprovalFlowNode.is_active == True)
-        .all()
-    )
-    if not isinstance(rows, list):
-        return None
-    designated: list[int] = []
-    for node in rows:
-        designated.extend(_approver_id_list(getattr(node, "approver_ids", None)))
-    return designated
-
-
 def can_review_workflow(db: Session, req: ApprovalRequest, actor: int) -> bool:
-    """没指定审批人时，同租户申请人可以直接批。指定了审批人后，申请人身份本身不能批。"""
+    """申请人身份本身不构成审批权。同租户的审批角色或业务授权才可以批，包括批自己的申请。"""
     user = db.query(User).filter(User.id == int(actor), User.is_active == True).first()
     if user is None:
         return False
@@ -173,11 +129,6 @@ def can_review_workflow(db: Session, req: ApprovalRequest, actor: int) -> bool:
     user_tenant = _user_tenant(user)
     if request_tenant is not None and user_tenant != request_tenant:
         return False
-    designated = _designated_reviewer_ids(db, req)
-    if designated == [] and int(getattr(req, "applicant_id", 0) or 0) == int(actor):
-        return True
-    if designated and int(actor) in designated:
-        return True
     role = str(getattr(user, "role", "") or "").strip().lower()
     if isinstance(getattr(user, "role", None), str) and role in _WORKFLOW_REVIEW_ROLES:
         return True

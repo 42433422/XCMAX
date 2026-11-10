@@ -354,6 +354,14 @@ def test_receipt_refresh_preserves_concurrent_withdrawal_and_mod_visibility(
     intake_store, monkeypatch
 ):
     store = intake_store
+    # Keep this case on the deferred read path; polling completion has its own
+    # concurrent-withdrawal regression in test_pr3124_safety_boundaries.
+    ingest_business = store.intake._ingest_business
+
+    def defer_receipt(*args, **kwargs):
+        return ingest_business(*args, **{**kwargs, "poll_seconds": 0})
+
+    monkeypatch.setattr(store.intake, "_ingest_business", defer_receipt)
     data, _, _ = prepare(store)
     response = store.client.post(f"{BASE}/save", data=data)
     assert response.status_code == 200, response.text

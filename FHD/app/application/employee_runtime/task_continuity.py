@@ -19,11 +19,19 @@ import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 from app.application.agent_orchestrator.context_window_manager import (
     ContextWindowManager,
     estimate_messages_tokens,
+)
+from app.application.employee_runtime.continuity_tool_wait import (
+    ContinuityClaimChanged,
+    ContinuityRequestContext,
+    ToolNotStarted,
+    has_running_claim,
+    run_process,
+    unlocked_claim,
 )
 from app.application.employee_runtime.handoff_identity import load_identity_card
 from app.application.employee_runtime.workspace_io import workspace_directory, workspace_file
@@ -90,7 +98,7 @@ class _SummaryCache:
 
 
 def named_tool_timeout_seconds(name: str) -> float | None:
-    """Office-file ELT and docking writes run to completion. Other named tools stay at 8s."""
+    """ELT skips the short 8s limit; a trusted invocation budget still applies."""
     key = str(name or "")
     if key in {"parse_office_file", "office_parse_elt", "data_docking"} or key.startswith("elt_"):
         return None
@@ -107,6 +115,7 @@ class TaskContinuityRuntime:
         workspace: str | Path | None = None,
         runtime_context: dict[str, Any] | None = None,
     ) -> None:
+        self._request_context = ContinuityRequestContext()
         self._trusted_context = dict(runtime_context or {})
         self.path = Path(path)
         self.workspace = Path(workspace) if workspace is not None else self.path.parent
@@ -115,6 +124,30 @@ class TaskContinuityRuntime:
         self.path.relative_to(self.workspace)
         self.state = _empty_state()
         self._ledger_fd: int | None = None
+
+    @property
+    def state(self) -> dict[str, Any]:
+        return self._request_context.state
+
+    @state.setter
+    def state(self, value: dict[str, Any]) -> None:
+        self._request_context.state = value
+
+    @property
+    def _ledger_fd(self) -> int | None:
+        return self._request_context.ledger_fd
+
+    @_ledger_fd.setter
+    def _ledger_fd(self, value: int | None) -> None:
+        self._request_context.ledger_fd = value
+
+    @property
+    def _ledger_lock_handle(self) -> IO[str] | None:
+        return self._request_context.ledger_lock_handle
+
+    @_ledger_lock_handle.setter
+    def _ledger_lock_handle(self, value: IO[str] | None) -> None:
+        self._request_context.ledger_lock_handle = value
 
     def dispatch(
         self,
@@ -130,7 +163,7 @@ class TaskContinuityRuntime:
         user = str(payload["user_id"] if payload.get("user_id") is not None else user_id)
         tenant = str(payload.get("tenant_id") or "")
         session = str(payload.get("session_id") or session_id or "")
-        with _path_lock(self.path), self._exclusive():
+        with self._request_context.scope(), _path_lock(self.path), self._exclusive():
             self._read()
             handler = {
                 "start": self._start,
@@ -158,7 +191,25 @@ class TaskContinuityRuntime:
             identity_error = self._stored_chain_identity_error(op, actor, payload, tenant, user)
             if identity_error:
                 return self._fail(None, identity_error, "员工链身份不可核验，未继续执行")
-            return handler(actor, text, payload, user=user, tenant=tenant, session=session)
+            if op not in {"read", "pause", "metrics", "restart"} and payload.get("task_id"):
+                checked = self._authorized(
+                    payload, actor, {"user": user, "tenant": tenant}, write=True
+                )
+                if not _is_task(checked):
+                    return checked
+                affected = {checked["task_id"]}
+                if op == "child_return":
+                    affected.add(checked.get("parent_task_id", ""))
+                if has_running_claim(self.state, affected, _pid_alive):
+                    return self._fail(
+                        None, "tool_in_progress", "工具执行中，可读取或暂停；未重复提交"
+                    )
+            try:
+                return handler(actor, text, payload, user=user, tenant=tenant, session=session)
+            except ContinuityClaimChanged:
+                return self._fail(
+                    None, "tool_outcome_unknown", "工具认领记录已变化，须对账；未重复提交"
+                )
 
     def pollution_findings(self) -> list[dict[str, str]]:
         tasks = list(self.state["tasks"].values())
@@ -563,11 +614,14 @@ class TaskContinuityRuntime:
         step = child["steps"][0] if child["steps"] else None
         ok = step is not None and step["status"] == "success"
         child["result_payload"] = {} if step is None else _clone(step.get("result_payload") or {})
-        child["status"] = _TERMINAL_OK if ok else "failed"
-        child["error_code"] = "" if ok else str((step or {}).get("error_code") or "child_failed")
-        child["error_message"] = (
-            "" if ok else str((step or {}).get("error_message") or "子任务失败")
-        )
+        if child["status"] not in {"paused", "recovering"}:
+            child["status"] = _TERMINAL_OK if ok else "failed"
+            child["error_code"] = (
+                "" if ok else str((step or {}).get("error_code") or "child_failed")
+            )
+            child["error_message"] = (
+                "" if ok else str((step or {}).get("error_message") or "子任务失败")
+            )
         self._touch(child)
         parent = self.state["tasks"].get(child["parent_task_id"])
         if parent is not None:
@@ -1203,6 +1257,8 @@ class TaskContinuityRuntime:
     ) -> None:
         ran = 0
         for step in task["steps"]:
+            if task["status"] in {"paused", "recovering"}:
+                break
             if only is not None and step["step_id"] not in only:
                 continue
             if step["status"] == "blocked" and _deps_ok(task, step):
@@ -1217,6 +1273,20 @@ class TaskContinuityRuntime:
         self._rollup_steps(task)
 
     def _invoke(self, task: dict[str, Any], step: dict[str, Any], actor: str) -> None:
+        if any(item["status"] == "recovering" for item in task["steps"]):
+            task["status"] = "recovering"
+            return
+        for claimed in self.state["tool_calls"].values():
+            if claimed["idempotency_key"] == step["idempotency_key"] and claimed["status"] in {
+                "running",
+                "recovering",
+            }:
+                foreign = claimed["task_id"] != task["task_id"]
+                step["status"] = "failed" if foreign else "recovering"
+                step["error_code"] = (
+                    "idempotency_scope_conflict" if foreign else "tool_outcome_unknown"
+                )
+                return
         grant = list(task["grants"].get(actor) or [])
         if "*" not in grant and step["tool"] not in grant:
             step["status"] = "failed"
@@ -1264,18 +1334,19 @@ class TaskContinuityRuntime:
         step["status"] = "running"
         self.state["tool_calls"][call_id] = call
         self._write()
-        result = self._execute_named_tool(
-            step["tool"],
-            _clone(step["params"]),
-            task["task_id"],
-            runtime_context={
-                **self._trusted_context,
-                "tenant_id": task["tenant_id"],
-                "user_id": task["user_id"],
-                "employee_id": actor,
-                "task_id": task["task_id"],
-            },
-        )
+        with unlocked_claim(self, task, step, call, _path_lock(self.path)):
+            result = self._execute_named_tool(
+                step["tool"],
+                _clone(step["params"]),
+                task["task_id"],
+                runtime_context={
+                    **self._trusted_context,
+                    "tenant_id": task["tenant_id"],
+                    "user_id": task["user_id"],
+                    "employee_id": actor,
+                    "task_id": task["task_id"],
+                },
+            )
         if not isinstance(result, dict) or result.get("ok") is False:
             call["status"] = "failed"
             call["error_code"] = str((result or {}).get("error_code") or "tool_failed")
@@ -1285,6 +1356,15 @@ class TaskContinuityRuntime:
             step["error_message"] = call["error_message"]
             step["result_payload"] = result if isinstance(result, dict) else {}
             call["result_payload"] = step["result_payload"]
+            if isinstance(result, dict) and result.get("execution_status") == "not_started":
+                call["submitted"] = False
+                call["execution_status"] = "not_started"
+            if result and result.get("outcome_unknown"):
+                call["status"] = step["status"] = "recovering"
+                if task["status"] != "paused":
+                    task["status"] = "recovering"
+                task["error_code"] = call["error_code"]
+                task["error_message"] = "工具结果未知，须对账后恢复；未自动重试"
             return
         self.state["side_effects"][step["idempotency_key"]] = {
             "invocations": 1,
@@ -1337,6 +1417,8 @@ class TaskContinuityRuntime:
             ),
         }
         parent["aggregate"] = aggregate
+        if parent["status"] == "paused":
+            return
         if parent["completion_condition"] != "all_children_success":
             return
         if aggregate["failure"]:
@@ -1370,6 +1452,8 @@ class TaskContinuityRuntime:
             ]
             return
         statuses = {step["status"] for step in task["steps"]}
+        if task["status"] == "paused":
+            return
         if statuses == {"success"}:
             task["status"] = _TERMINAL_OK
             task["error_code"] = ""
@@ -1486,6 +1570,7 @@ class TaskContinuityRuntime:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
                 try:
                     self._ledger_fd = parent_fd
+                    self._ledger_lock_handle = handle
                     yield
                 finally:
                     self._ledger_fd = None
@@ -1503,24 +1588,36 @@ class TaskContinuityRuntime:
         script = self.workspace / "tools" / f"{name}.py"
         if script.is_file():
             try:
-                proc = subprocess.run(
+                proc = run_process(
                     [sys.executable, str(script)],
                     input=json.dumps(
                         {"params": params, "task_id": task_id, "workspace": str(self.workspace)},
                         ensure_ascii=False,
                     ),
-                    capture_output=True,
-                    text=True,
                     timeout=named_tool_timeout_seconds(name),
                     cwd=str(self.workspace),
-                    check=False,
                 )
+            except ToolNotStarted:
+                return {
+                    "ok": False,
+                    "error_code": "tool_budget_expired_before_start",
+                    "execution_status": "not_started",
+                    "outcome_unknown": False,
+                    "retryable": True,
+                    "error_message": "工具启动前预算已耗尽，未启动工具进程",
+                }
             except subprocess.TimeoutExpired:
-                return {"ok": False, "error_code": "tool_timeout", "error_message": "工具超时"}
+                return {
+                    "ok": False,
+                    "error_code": "tool_timeout_unknown",
+                    "outcome_unknown": True,
+                    "error_message": "工具超时，副作用结果未知，禁止自动重试",
+                }
             if proc.returncode != 0:
                 return {
                     "ok": False,
                     "error_code": "tool_crashed",
+                    "outcome_unknown": True,
                     "error_message": (proc.stderr or proc.stdout or "工具进程失败")[-400:],
                 }
             try:
@@ -1529,12 +1626,14 @@ class TaskContinuityRuntime:
                 return {
                     "ok": False,
                     "error_code": "tool_output",
+                    "outcome_unknown": True,
                     "error_message": "工具没有返回 JSON",
                 }
             if not isinstance(data, dict):
                 return {
                     "ok": False,
                     "error_code": "tool_output",
+                    "outcome_unknown": True,
                     "error_message": "工具结果不是对象",
                 }
             return data
