@@ -111,14 +111,14 @@
     },
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
       "base_file": "FHD/app/fastapi_routes/reviewed_excel_template.py",
-      "base_blob": "2c84127c1e26f4faaf4c5300eb6ac3512b0fca04",
-      "head_blob": "5c2179e25ab8bcfabb8626015f6ef75262af47ca",
-      "before_lines": 2530,
-      "after_lines": 2976,
-      "reason": "Review request only: Add owner-scoped candidate recovery, template-family reuse, slice metadata caching and intake status/retry handling with version checks, CAS and approval-bound writes.",
-      "boundary": "Reviewed Excel HTTP orchestration; source/download routes move to separate modules, and model suggestions cannot authorize writes.",
-      "validation": "Validation scope: Reviewed Excel tenant/owner isolation, candidate recovery, CAS, intake approval and route-manifest gates. Full integration CI and human architecture review remain outstanding; this request is not approval.",
-      "follow_up": "Further split classification/family and intake endpoints after route/architecture review; do not raise route or source-size baselines.",
+      "base_blob": "5c2179e25ab8bcfabb8626015f6ef75262af47ca",
+      "head_blob": "f936e965fd5c6d06e1e0f02b27ef17f5fef22632",
+      "before_lines": 2976,
+      "after_lines": 3013,
+      "reason": "Review request only: preserve hidden-sheet scope during classification recovery and confirmation, and exclude only hidden-source refusal/coverage.",
+      "boundary": "Server-created source scope binds original hash, exact derived sheet list and strict boolean; old versions without scope retain full-source semantics. Original coordinate digest, source geometry and tenant/owner validation remain enforced.",
+      "validation": "Hidden/veryHidden scope restoration and tamper rejection; actual 5/9-batch pause/resume/namespaced documents and final confirmation count; full integration CI and human architecture approval pending.",
+      "follow_up": "Review extraction of visible-source coverage from this oversized route module.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/ai_chat_app_service.py": {
