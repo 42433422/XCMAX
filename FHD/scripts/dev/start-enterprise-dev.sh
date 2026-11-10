@@ -15,6 +15,7 @@ FRONTEND_DIR="${FHD_ROOT}/frontend"
 source "${SCRIPT_DIR}/ensure_dev_proxy_bypass.sh"
 
 export XCAGI_PRODUCT_SKU="${XCAGI_PRODUCT_SKU:-enterprise}"
+export XCAGI_DEV_SERVER=1
 export XCAGI_DATA_DIR="${XCAGI_DATA_DIR:-${XCAGI_DIR}/data/desktop-dev}"
 export XCAGI_MODS_ROOT="${XCAGI_MODS_ROOT:-${FHD_ROOT}/mods}"
 ADMIN_MODS_RUNTIME="${FHD_ROOT}/mods"

@@ -17,11 +17,11 @@ export default defineConfig({
       { find: '@/constants/personnelModApi', replacement: path.resolve(__dirname, '../admin-console/src/constants/personnelModApi.ts') },
       {
         find: '@/data/workflow-employee-docs.json',
-        replacement: path.resolve(__dirname, './public/workflow-employee-docs.json'),
+        replacement: path.resolve(__dirname, './src/data/workflow-employee-docs.json'),
       },
       {
         find: '@/data/workflow-employees.json',
-        replacement: path.resolve(__dirname, './public/workflow-employees.json'),
+        replacement: path.resolve(__dirname, './src/data/workflow-employees.json'),
       },
       {
         find: '@admin-console-inject/adminHostRoutes',

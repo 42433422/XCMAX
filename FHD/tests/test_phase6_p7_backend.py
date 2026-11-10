@@ -53,7 +53,7 @@ def _ai_assistant_client() -> TestClient:
 
 
 # ---------------------------------------------------------------------------
-# ai_assistant — /health & /api/health
+# ai_assistant — /health. /api/health 只在完整应用的 health 路由上。
 # ---------------------------------------------------------------------------
 
 
@@ -78,14 +78,9 @@ def test_compat_health_returns_ok_status() -> None:
     }
 
 
-def test_compat_health_api_alias_returns_ok_status() -> None:
+def test_compat_health_does_not_register_api_health() -> None:
     client = _ai_assistant_client()
-    resp = client.get("/api/health")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["success"] is True
-    assert body["data"]["status"] == "ok"
-    assert body["build"] == body["data"]["build"]
+    assert client.get("/api/health").status_code == 404
 
 
 # ---------------------------------------------------------------------------
