@@ -599,7 +599,9 @@ class WorkflowSession:
 
         spec = get_tool_action_spec(target.tool_id, target.action)
         schema = spec.input_schema if spec and isinstance(spec.input_schema, dict) else {}
-        properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+        properties = schema.get("properties") or {}
+        if not isinstance(properties, dict):
+            properties = {}
         allowed: set[str] = set()
         if reason == "missing_required":
             allowed = {
@@ -960,8 +962,10 @@ class WorkflowSession:
             )
         if pending:
             if pending.get("kind") in {"clarification", "clarification_unbound"}:
-                continued = self.callbacks._continue_after_clarification(user_id, pending, message)
-                return (True, continued)
+                clarification_reply = self.callbacks._continue_after_clarification(
+                    user_id, pending, message
+                )
+                return (True, clarification_reply)
             if text in CONFIRM_WORDS:
                 pending_plan = cast("PlanGraph", pending.get("plan"))
                 runtime_ctx = dict(pending.get("runtime_context") or {})

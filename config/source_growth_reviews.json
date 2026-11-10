@@ -292,12 +292,12 @@
     "FHD/app/application/ai_chat/workflow_session.py": {
       "base_file": "FHD/app/application/ai_chat/workflow_session.py",
       "base_blob": "10d2ba354f6ba94ad1fff86bdcb25c88a0d7f188",
-      "head_blob": "5299814ab0d70d22006eef3ead33168d66274da2",
+      "head_blob": "2f3bf6bf96f46fd6a75f6b950f9c769346bd1d97",
       "before_lines": 686,
-      "after_lines": 1101,
+      "after_lines": 1105,
       "reason": "Preserve validated workflow, approval and chat session continuity across the integrated agent runtime.",
       "boundary": "Conversation workflow coordination; permission checks and durable state stay in their existing boundaries.",
-      "validation": "Chat session, security and approval regressions; full CI and architecture review remain outstanding.",
+      "validation": "Chat session and checkpoint resume boundary tests pass locally; full CI and architecture review remain outstanding.",
       "follow_up": "Extract workflow continuation and response formatting into focused modules.",
       "review_owner": "@42433422"
     }

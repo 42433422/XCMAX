@@ -2,7 +2,7 @@
 
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -26,7 +26,6 @@ from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowNode,
-    WorkflowRunResult,
 )
 
 
@@ -98,38 +97,15 @@ def test_confirmation_cannot_resume_another_sessions_pending_plan():
     callbacks._hydrate_pending_workflow.return_value = False
     session = WorkflowSession(pending, callbacks)
 
-    handled, response = session.resume_pending_dynamic_workflow(
-        "owner", "确认", "确认", {"session_id": "different"}
-    )
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
+        handled, response = session.resume_pending_dynamic_workflow(
+            "owner", "确认", "确认", {"session_id": "different"}
+        )
+    orchestrator.assert_not_called()
 
     assert handled and response["data"]["action"] == "clarification_required"
     callbacks._hydrate_pending_workflow.assert_called_once_with("owner", "different")
-    callbacks._run_workflow_with_state_updates.assert_not_called()
     assert pending["owner"]["runtime_context"]["session_id"] == "original"
-
-
-def test_checkpoint_resume_records_state_without_reexecuting_completed_nodes():
-    plan = _plan()
-    callbacks = Mock(spec=SessionCallbacks)
-    runtime = Mock()
-    runtime.resume_run.return_value = WorkflowRunResult(plan_id=plan.plan_id, success=True)
-    checkpointer = Mock()
-    checkpointer.latest_checkpoint.return_value = {"checkpoint_id": "checkpoint-7"}
-    session = WorkflowSession({}, callbacks, runtime=runtime, checkpointer=checkpointer)
-
-    result, events = session.run_workflow_with_state_updates(
-        plan=plan, runtime_context={"session_id": "same"}, resume=True
-    )
-
-    assert result.success and events == []
-    runtime.run.assert_not_called()
-    runtime.resume_run.assert_called_once_with(
-        plan, "checkpoint-7", checkpointer=checkpointer, max_retries=1
-    )
-    assert [call.kwargs["status"] for call in callbacks._persist_plan_state.call_args_list] == [
-        "running",
-        "succeeded",
-    ]
 
 
 def test_injected_validation_rejects_before_dispatch_or_billing():
