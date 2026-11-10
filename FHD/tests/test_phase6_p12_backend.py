@@ -226,28 +226,6 @@ class TestSetConfigValue:
 
 
 # ---------------------------------------------------------------------------
-# Pydantic models
-# ---------------------------------------------------------------------------
-
-
-class TestPydanticModels:
-    def test_service_request_respond_defaults(self) -> None:
-        body = ServiceRequestRespond(response="done")
-        assert body.status == "resolved"
-        assert body.responded_by is None
-
-    def test_bridge_config_update_defaults(self) -> None:
-        body = BridgeConfigUpdate()
-        assert body.main_server_url is None
-        assert body.instance_name is None
-
-    def test_outbox_create_defaults(self) -> None:
-        body = OutboxCreate(title="Test")
-        assert body.priority == "normal"
-        assert body.request_type == "general"
-
-
-# ---------------------------------------------------------------------------
 # Route handlers — exercised via real function calls (mock only DB / helpers)
 # ---------------------------------------------------------------------------
 

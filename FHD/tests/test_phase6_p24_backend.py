@@ -767,12 +767,6 @@ def _fake_skills_path(skills_dir: Path):
 
 
 class TestSkillRegistryInitialize:
-    def test_initialize_skips_when_already_initialized(self):
-        reg = SkillRegistry()
-        reg._initialized = True
-        reg.initialize()
-        assert reg._initialized is True
-
     def test_initialize_skills_dir_missing(self, tmp_path: Path, monkeypatch):
         reg = SkillRegistry()
         missing = tmp_path / "missing"

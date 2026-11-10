@@ -317,7 +317,12 @@ def _drain_background_run(run_id: str) -> AgentRun:
 
 
 def _client(
-    user_id: str | None = "u1", *, tenant_id: str = "", mod_authorization=None, is_admin=False
+    user_id: str | None = "u1",
+    *,
+    tenant_id: str = "",
+    mod_authorization=None,
+    is_admin=False,
+    actor=None,
 ) -> TestClient:
     app = FastAPI()
     app.include_router(router)
@@ -328,11 +333,15 @@ def _client(
             return True
 
         app.dependency_overrides[require_stream_authorizer] = lambda: test_authorized
-        app.dependency_overrides[require_agent_principal] = lambda: AgentPrincipal(
-            user_id=user_id,
-            tenant_id=tenant_id,
-            mod_authorization=mod_authorization,
-            is_admin=is_admin,
+        app.dependency_overrides[require_agent_principal] = lambda: (
+            actor.principal
+            if actor
+            else AgentPrincipal(
+                user_id=user_id,
+                tenant_id=tenant_id,
+                mod_authorization=mod_authorization,
+                is_admin=is_admin,
+            )
         )
     return TestClient(app, raise_server_exceptions=False)
 
@@ -367,11 +376,40 @@ def test_resume_explains_unreconciled_result_without_state_changes():
 
 
 def _planner_fallback_patches():
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    def model_plan(plan_id, user_id, message, registry, context):
+        del user_id, registry, context
+        write = "发货单" in message
+        node = (
+            WorkflowNode(
+                node_id="generate_shipment",
+                tool_id="shipment_orders",
+                action="generate",
+                params={
+                    "unit_name": "星光贸易",
+                    "products": [{"model_number": "XG-5003", "quantity": 1}],
+                },
+            )
+            if write
+            else WorkflowNode(
+                node_id="read_products",
+                tool_id="business_db",
+                action="read",
+                params={"entity": "products", "keyword": "XG-5003"},
+            )
+        )
+        return PlanGraph(
+            plan_id=plan_id,
+            intent="shipment_generate" if write else "business_db_read",
+            nodes=[node],
+        )
+
     return (
         patch("app.application.workflow.planner.get_ai_conversation_service"),
         patch(
             "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm",
-            return_value=None,
+            side_effect=model_plan,
         ),
         patch(
             "app.application.workflow.tool_profile.resolve_tool_execution_profile",
@@ -381,9 +419,11 @@ def _planner_fallback_patches():
     )
 
 
-def test_create_get_and_list_agent_run(local_tools) -> None:
+def test_create_get_and_list_agent_run(local_tools, trusted_actor, monkeypatch) -> None:
     get_agent_run_repository().clear()
-    client = _client()
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(user_id=17, role="admin")
+    client = _client(actor=actor)
     patches = _planner_fallback_patches()
 
     with (
@@ -413,7 +453,7 @@ def test_create_get_and_list_agent_run(local_tools) -> None:
     assert payload["execution"]["state"] == "queued"
     run = completed_run.to_dict()
     assert run["status"] == "completed"
-    assert run["user_id"] == "u1"
+    assert run["user_id"] == str(actor.user_id)
     assert run["intent"] == "business_db_read"
     assert run["metadata"]["runtime_context"]["source"] == "route-test"
     assert "run.completed" in [event["event_type"] for event in run["events"]]
@@ -538,7 +578,7 @@ def test_continue_waiting_agent_run(local_tools) -> None:
         create_response = client.post(
             "/api/agent/runs",
             json={
-                "message": "请把客户 星光贸易 写入数据库",
+                "message": "请为星光贸易生成发货单",
                 "user_id": "u1",
                 "runtime_context": {"source": "route-continue-test"},
             },
@@ -564,7 +604,7 @@ def test_continue_waiting_agent_run(local_tools) -> None:
     payload = continue_response.json()
     assert payload["success"] is True
     completed = completed_run.to_dict()
-    assert completed["status"] == "completed"
+    assert completed["status"] == "completed", completed["error"]
     assert completed["steps"][0]["status"] == "completed"
     event_types = [event["event_type"] for event in completed["events"]]
     assert "step.approved" in event_types
@@ -613,7 +653,7 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
             return_value={"success": True},
         ) as execute,
     ):
-        response = owner.post("/api/agent/runs", json={"message": "请把客户 星光贸易 写入数据库"})
+        response = owner.post("/api/agent/runs", json={"message": "请为星光贸易生成发货单"})
         run_id = response.json()["data"]["run_id"]
         _drain_background_run(run_id)
         grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
@@ -684,9 +724,7 @@ def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(
                 return_value={"success": True},
             ) as execute,
         ):
-            response = owner.post(
-                "/api/agent/runs", json={"message": "请把客户 星光贸易 写入数据库"}
-            )
+            response = owner.post("/api/agent/runs", json={"message": "请为星光贸易生成发货单"})
             run_id = response.json()["data"]["run_id"]
             _drain_background_run(run_id)
             grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
@@ -1019,10 +1057,11 @@ def test_agent_route_internal_failure_returns_stable_public_message() -> None:
     }
 
 
-def test_pause_resume_and_cancel_agent_run(local_tools) -> None:
+def test_pause_resume_and_cancel_agent_run(local_tools, trusted_actor, monkeypatch) -> None:
     get_agent_run_repository().clear()
     clear_run_controls_for_tests()
-    client = _client("owner")
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    client = _client(actor=trusted_actor(user_id=17, role="admin"))
     patches = _planner_fallback_patches()
     with (
         patches[0],

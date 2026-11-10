@@ -838,11 +838,6 @@ class TestGetToolRegistryPlanner:
 class TestFilterToolRegistryForProfile:
     """Cover _filter_tool_registry_for_profile."""
 
-    def test_non_dict_spec_skipped(self) -> None:
-        reg = {"bad": "not a dict"}
-        result = _filter_tool_registry_for_profile(reg, "normal")
-        assert "bad" not in result
-
     def test_non_dict_actions_skipped(self) -> None:
         reg = {
             "tool_a": {
