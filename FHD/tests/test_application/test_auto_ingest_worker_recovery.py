@@ -156,3 +156,30 @@ def test_interrupted_worker_reconciles_existing_business_receipt(batch, monkeypa
     assert result["status"] == "applied"
     engine.execute.assert_not_called()
     assert engine.get_run.call_args.kwargs == {"run_id": "run", "owner_user_id": 7}
+
+
+@pytest.mark.parametrize("failure", [OSError, KeyboardInterrupt, SystemExit])
+def test_acquire_closes_handle_on_error_or_interruption(monkeypatch, tmp_path, failure):
+    from pathlib import Path
+    from unittest.mock import MagicMock
+
+    handle = MagicMock()
+    monkeypatch.setattr(Path, "open", lambda *_args, **_kwargs: handle)
+    monkeypatch.setattr(ais.liveness, "_try_lock", Mock(side_effect=failure("injected")))
+    with pytest.raises(failure):
+        ais.liveness.acquire(tmp_path / "batches.json", "batch")
+    handle.close.assert_called_once()
+
+
+@pytest.mark.parametrize("failure", [OSError, KeyboardInterrupt, SystemExit])
+def test_persist_interruption_releases_guard_without_launch(batch, monkeypatch, failure):
+    service = ais.AutoIngestService()
+    launch = Mock()
+    monkeypatch.setattr(service, "_launch_worker", launch)
+    monkeypatch.setattr(ais, "_save_ledger", Mock(side_effect=failure("injected")))
+    with pytest.raises(failure):
+        service.release_approved_batch(batch_id="batch", tenant_id=1)
+    handle = ais.liveness.acquire(ais._ledger_path(1), "batch")
+    ais.liveness.release(handle)
+    launch.assert_not_called()
+    assert ais._load_ledger(1)["batches"]["batch"]["status"] == "awaiting_approval"

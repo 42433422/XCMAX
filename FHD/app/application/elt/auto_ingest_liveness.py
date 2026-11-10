@@ -11,16 +11,18 @@ from app.utils.process_lock import _try_lock, _unlock
 def acquire(ledger: Path, batch_id: str):
     path = ledger.parent / (hashlib.sha256(batch_id.encode()).hexdigest() + ".worker.lock")
     handle = path.open("a+b")
+    transferred = False
     try:
         handle.seek(0)
         if not handle.read(1):
             handle.write(b"0")
             handle.flush()
         _try_lock(handle)
+        transferred = True
         return handle
-    except BaseException:
-        handle.close()
-        raise
+    finally:
+        if not transferred:
+            handle.close()
 
 
 def release(handle):

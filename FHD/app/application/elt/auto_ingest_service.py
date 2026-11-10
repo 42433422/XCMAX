@@ -803,15 +803,17 @@ class AutoIngestService:
                     "ETL_AUTO_INGEST_NOT_PENDING", "该批次不在待审批写入", status_code=409
                 )
             guard = liveness.acquire(_ledger_path(tenant_id), batch_id)
+            transferred = False
             try:
                 batch.update(status="running", worker_protocol=1, updated_at=_utcnow())
                 ledger["batches"][batch_id] = batch
                 _save_ledger(tenant_id, ledger)
-            except BaseException:
-                liveness.release(guard)
-                raise
-            stored = dict(batch)
-            stored["_worker_guard"] = guard
+                stored = dict(batch)
+                stored["_worker_guard"] = guard
+                transferred = True
+            finally:
+                if not transferred:
+                    liveness.release(guard)
         try:
             self._launch_worker(stored)
         finally:

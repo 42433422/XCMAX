@@ -8,7 +8,10 @@ import os
 import signal
 import subprocess
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass, field
+from typing import IO, Any
 
 from app.application.tool_execution_deadline import remaining_invocation_seconds
 
@@ -21,41 +24,63 @@ class ContinuityClaimChanged(RuntimeError):
     """Late results cannot overwrite a different durable claim."""
 
 
+@dataclass
+class _RequestFrame:
+    state: dict[str, Any] = field(default_factory=dict)
+    fd: int | None = None
+    handle: IO[str] | None = None
+
+
 class ContinuityRequestContext:
     """Keep request state and pinned descriptors separate on a shared runtime."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._requests = threading.local()
-        self._idle = {"state": {}, "fd": None, "handle": None}
+        self._idle = _RequestFrame()
 
-    def _request_values(self):
-        return getattr(self._requests, "frame", self._idle)
+    def _request_values(self) -> _RequestFrame:
+        frame = getattr(self._requests, "frame", self._idle)
+        if not isinstance(frame, _RequestFrame):
+            raise RuntimeError("invalid continuity request frame")
+        return frame
 
-    state = property(
-        lambda self: self._request_values()["state"],
-        lambda self, value: self._request_values().__setitem__("state", value),
-    )
-    ledger_fd = property(
-        lambda self: self._request_values()["fd"],
-        lambda self, value: self._request_values().__setitem__("fd", value),
-    )
-    ledger_lock_handle = property(
-        lambda self: self._request_values()["handle"],
-        lambda self, value: self._request_values().__setitem__("handle", value),
-    )
+    @property
+    def state(self) -> dict[str, Any]:
+        return self._request_values().state
+
+    @state.setter
+    def state(self, value: dict[str, Any]) -> None:
+        self._request_values().state = value
+
+    @property
+    def ledger_fd(self) -> int | None:
+        return self._request_values().fd
+
+    @ledger_fd.setter
+    def ledger_fd(self, value: int | None) -> None:
+        self._request_values().fd = value
+
+    @property
+    def ledger_lock_handle(self) -> IO[str] | None:
+        return self._request_values().handle
+
+    @ledger_lock_handle.setter
+    def ledger_lock_handle(self, value: IO[str] | None) -> None:
+        self._request_values().handle = value
 
     @contextmanager
-    def scope(self):
-        previous = getattr(self._requests, "frame", None)
-        self._requests.frame = {"state": self.state, "fd": None, "handle": None}
+    def scope(self) -> Iterator[None]:
+        nested = hasattr(self._requests, "frame")
+        previous = self._request_values()
+        self._requests.frame = _RequestFrame(state=self.state)
         try:
             yield
         finally:
-            self._idle["state"] = self.state
-            if previous is None:
-                del self._requests.frame
-            else:
+            self._idle.state = self.state
+            if nested:
                 self._requests.frame = previous
+            else:
+                del self._requests.frame
 
 
 def run_process(command, *, input, cwd, timeout):

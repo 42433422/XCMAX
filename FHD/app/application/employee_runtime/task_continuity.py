@@ -19,7 +19,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 from app.application.agent_orchestrator.context_window_manager import (
     ContextWindowManager,
@@ -126,27 +126,27 @@ class TaskContinuityRuntime:
         self._ledger_fd: int | None = None
 
     @property
-    def state(self):
+    def state(self) -> dict[str, Any]:
         return self._request_context.state
 
     @state.setter
-    def state(self, value):
+    def state(self, value: dict[str, Any]) -> None:
         self._request_context.state = value
 
     @property
-    def _ledger_fd(self):
+    def _ledger_fd(self) -> int | None:
         return self._request_context.ledger_fd
 
     @_ledger_fd.setter
-    def _ledger_fd(self, value):
+    def _ledger_fd(self, value: int | None) -> None:
         self._request_context.ledger_fd = value
 
     @property
-    def _ledger_lock_handle(self):
+    def _ledger_lock_handle(self) -> IO[str] | None:
         return self._request_context.ledger_lock_handle
 
     @_ledger_lock_handle.setter
-    def _ledger_lock_handle(self, value):
+    def _ledger_lock_handle(self, value: IO[str] | None) -> None:
         self._request_context.ledger_lock_handle = value
 
     def dispatch(

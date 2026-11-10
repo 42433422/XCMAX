@@ -52,12 +52,12 @@
     "FHD/app/application/employee_runtime/task_continuity.py": {
       "base_file": "FHD/app/application/employee_runtime/task_continuity.py",
       "base_blob": "7c11dafd0ef8d1806723693dc6a08d856a987efa",
-      "head_blob": "2b3a13d4a47e08891c6d51763762ce68fd4f8d88",
+      "head_blob": "826d38d74f6f2184a49b85628f75426aa33f6e34",
       "before_lines": 2015,
       "after_lines": 2114,
       "reason": "Review request only: Release ledger locks while tools execute, preserve durable execution ownership, and prevent late results overwriting pause or replaying unknown effects.",
       "boundary": "Continuity lifecycle retains tool dispatch; the composed request context/helper handles unlocked-wait snapshot isolation, claim reconciliation and subprocess supervision. No mixin split, new cancel protocol or arbitrary short ELT timeout.",
-      "validation": "52 focused backend tests passed with full conftest, covering same-instance/cross-process read-pause, independent tenants, claim tamper, duplicate effects, process-group termination and expired-budget not-started recovery. 17 additional handoff tests passed; 2 subprocess tests blocked by missing langgraph in their overridden environment. Full new-head CI remains outstanding.",
+      "validation": "52 focused backend tests passed with full conftest, covering same-instance/cross-process read-pause, independent tenants, claim tamper, duplicate effects, process-group termination and expired-budget not-started recovery. 17 additional handoff tests passed; 2 subprocess tests blocked by missing langgraph in their overridden environment. Full new-head CI remains outstanding. Follow-up after CI: typed request frames pass mypy for both files; all 52 focused tests pass with full conftest. No type-ignore or cast was added.",
       "follow_up": "@42433422: review the +99-line lifecycle change and confirm pause stops subsequent steps rather than withdrawing started effects. Unbudgeted ELT remains a long task; unknown effects require reconciliation, not automatic retry.",
       "review_owner": "@42433422"
     },
@@ -220,12 +220,12 @@
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
       "base_blob": "06700aa2bfb064381136dc9b16b97b4653f4eb62",
-      "head_blob": "7dd60c04f04f6b4c844f9bb98f85d96134d3f935",
+      "head_blob": "d8ff9978e6029e3e292ac3db06602312292b40af",
       "before_lines": 1272,
-      "after_lines": 1330,
+      "after_lines": 1332,
       "reason": "Review request only: Detect interrupted approved batch workers without replaying uncertain knowledge or business writes.",
       "boundary": "Approved batch claim, worker liveness and read-only receipt reconciliation; a small cross-process liveness helper owns only lock lifetime. No new business-write authority or public endpoint.",
-      "validation": "141 backend tests passed, 3 PostgreSQL tests skipped for missing independent database; 81 frontend tests passed. Includes process kill, thread-start failure, owner/tenant/mod isolation, no replay and UI polling termination. Windows execution and full new-head CI remain unverified.",
+      "validation": "141 backend tests passed, 3 PostgreSQL tests skipped for missing independent database; 81 frontend tests passed. Includes process kill, thread-start failure, owner/tenant/mod isolation, no replay and UI polling termination. Windows execution and full new-head CI remain unverified. Follow-up after CI: 113 focused tests passed including six resource-interruption cases; broad-except gate reports zero owned broad handlers. Prior full-suite result is not substituted for new-head CI.",
       "follow_up": "@42433422: review legacy running batches individually; old records without worker-protocol proof are not automatically declared dead. Review the existing whole-ledger multi-process persistence boundary separately.",
       "review_owner": "@42433422"
     },
