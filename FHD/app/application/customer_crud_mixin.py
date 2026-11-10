@@ -438,15 +438,7 @@ class CustomerCrudMixin:
             return {"success": False, "message": "删除客户失败", "deleted_count": 0}
 
     def batch_delete(self, ids: list[int], force: bool = False) -> dict[str, Any]:
-        """批量删除购买单位
-
-        Args:
-            ids: 客户ID列表
-            force: 是否强制删除（忽略关联检查）
-
-        Returns:
-            删除结果，包含关联检查信息
-        """
+        """批量删除购买单位；强制删除可跳过关联检查。"""
         try:
             session = self._get_session()
             try:
