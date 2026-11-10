@@ -455,7 +455,8 @@ class TestEmployeeDispatcher:
             _employee_dispatcher(tool_id="emp", action="run", params={"task": "t"})
         assert captured["kw"]["user_id"] == 0
 
-    def test_workspace_root_from_params(self) -> None:
+    @pytest.mark.parametrize("trusted_root", [None, "/trusted-workspace"])
+    def test_workspace_root_only_from_runtime_context(self, trusted_root) -> None:
         captured: dict[str, Any] = {}
 
         class _SpyAgent:
@@ -473,9 +474,13 @@ class TestEmployeeDispatcher:
             _employee_dispatcher(
                 tool_id="emp",
                 action="run",
-                params={"task": "t", "workspace_root": "/ws"},
+                params={
+                    "task": "t",
+                    "workspace_root": "/ws",
+                    "_runtime_context": {"workspace_root": trusted_root},
+                },
             )
-        assert captured["kw"]["workspace_root"] == "/ws"
+        assert captured["kw"]["workspace_root"] == trusted_root
 
     def test_session_id_from_ctx(self) -> None:
         captured: dict[str, Any] = {}

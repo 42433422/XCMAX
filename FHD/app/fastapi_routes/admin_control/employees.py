@@ -40,26 +40,68 @@ class LocalEmployees:
     ):
         """手动触发本机员工定时任务，供管理端立即验证 daily 员工是否能跑。"""
         from app.application.employee_runtime.scheduler import run_employee_cron_job
-        from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+        from app.domain.app_pure.auth_permission_resolver import require_allowed
+        from app.infrastructure.tenant_scope import owned_tenant_scope
+        from app.infrastructure.workspace import workspace_root
 
-        sid = _session_id_from_request(request)
-        if not sid:
-            return JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
-        payload = body.get("input_data") if isinstance(body.get("input_data"), dict) else {}
-        task = str(body.get("task") or "").strip() or None
-        try:
-            user_id = int(body.get("user_id") or 0)
-        except (TypeError, ValueError):
-            user_id = 0
-        result = run_employee_cron_job(
-            job_id,
-            task=task,
-            input_data=payload,
-            user_id=user_id,
-            workspace_root=str(body.get("workspace_root") or "").strip() or None,
-            session_id=str(body.get("session_id") or sid),
-            source="manual",
+        from .employee_backend import employee_identity, trusted_tenant
+
+        principal = employee_identity(request)
+        if isinstance(principal, JSONResponse):
+            return principal
+        meta, user = principal.metadata, principal.user
+        require_allowed(
+            user=user,
+            account_kind=str(meta.get("account_kind") or getattr(user, "account_kind", "personal")),
+            session_meta=meta,
+            # Cron executes employee work; reuse the existing employee.invoke policy.
+            route="/local/employees/cron/execute",
         )
+        tenant_id = trusted_tenant(meta)
+        if tenant_id is None:
+            return JSONResponse({"success": False, "message": "缺少可信租户"}, status_code=403)
+        raw_input = body.get("input_data")
+        if raw_input is not None and not isinstance(raw_input, dict):
+            return JSONResponse(
+                {"success": False, "message": "input_data 必须是对象"}, status_code=400
+            )
+        server_workspace = str(workspace_root())
+        requested_workspace = str(body.get("workspace_root") or "").strip()
+        if requested_workspace and requested_workspace != server_workspace:
+            return JSONResponse(
+                {"success": False, "message": "员工工作区必须使用服务器配置"},
+                status_code=403,
+            )
+        payload = dict(raw_input or {})
+        for reserved in (
+            "_runtime_context",
+            "runtime_context",
+            "_mod_authorization",
+            "_actor_authorization",
+            "actor_id",
+            "owner_id",
+            "employee_id",
+        ):
+            payload.pop(reserved, None)
+        user_id = int(user.id)
+        sid = principal.session_id
+        payload.update(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            session_id=sid,
+            workspace_root=server_workspace,
+        )
+        task = str(body.get("task") or "").strip() or None
+        with owned_tenant_scope(tenant_id):
+            result = run_employee_cron_job(
+                job_id,
+                task=task,
+                input_data=payload,
+                user_id=user_id,
+                workspace_root=server_workspace,
+                session_id=sid,
+                source="manual",
+            )
         if not result.get("success") and "unknown employee cron job" in str(
             result.get("error") or ""
         ):

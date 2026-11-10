@@ -85,7 +85,7 @@ def _employee_dispatcher(
     if not isinstance(params, dict):
         params = {}
     user_id = int(params.get("user_id") or ctx.get("user_id") or 0)
-    workspace_root = params.get("workspace_root") or ctx.get("workspace_root")
+    workspace_root = ctx.get("workspace_root")
     session_id = params.get("session_id") or ctx.get("session_id")
     try:
         result = EmployeeAgent(tool_id).run(

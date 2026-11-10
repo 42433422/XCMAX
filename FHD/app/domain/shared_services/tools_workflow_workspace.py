@@ -415,10 +415,7 @@ def _registered_router_employee(
         payload.setdefault(key, value)
     payload.setdefault("source", "workflow_tool.employee")
     payload.setdefault("user_message", user_message)
-    workspace_root = (
-        str(params.get("workspace_root") or runtime_context.get("workspace_root") or "").strip()
-        or None
-    )
+    workspace_root = str(runtime_context.get("workspace_root") or "").strip() or None
     raw_user_id = params.get("user_id") or runtime_context.get("user_id") or 0
     try:
         numeric_user_id = int(raw_user_id)

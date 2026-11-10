@@ -213,6 +213,7 @@ class EmployeeAgent:
         employee_id = self.employee_id
         t0 = time.perf_counter()
         payload = dict(input_data or {})
+        payload.pop("workspace_root", None)
         if workspace_root:
             payload["workspace_root"] = workspace_root
         from app.application.employee_runtime.task_continuity import maybe_continue_employee_task
@@ -403,7 +404,7 @@ class EmployeeAgent:
                 task,
                 employee_id,
                 pack_root,
-                payload.get("workspace_root") or workspace_root,
+                workspace_root,
                 agent_tools=agent_tools,
                 agent_gate=agent_gate,
             )
