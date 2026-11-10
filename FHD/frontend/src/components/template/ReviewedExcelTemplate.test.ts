@@ -59,6 +59,7 @@ async function mountIntakeCandidate() {
 }
 describe('reviewed Excel template', () => {
   beforeEach(() => {
+    api.saveReviewedExcel.mockClear()
     api.previewReviewedIntake.mockReset().mockImplementation(async () => intakeResult())
     api.archiveClassifyExcel.mockReset().mockImplementation(async (form: FormData) => {
       const response = await api.classifyExcel(form)
@@ -863,8 +864,7 @@ describe('reviewed Excel template', () => {
       expect(wrapper.find('.reviewed-template__candidate-capsule--saved').exists()).toBe(false)
       expect(wrapper.findAll('button').some(b => b.text() === '保存模板')).toBe(true)
       expect(api.saveReviewedExcel).not.toHaveBeenCalled()
-      expect(wrapper.text()).toContain('新增 2，更新 1，跳过 3')
-      expect(wrapper.text()).toContain('知识库 1 份')
+      expect(api.previewReviewedIntake).not.toHaveBeenCalled()
       await wrapper.findAll('button').find(b => b.text() === '保存模板')!.trigger('click')
       await flushPromises()
       expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
@@ -872,12 +872,13 @@ describe('reviewed Excel template', () => {
       expect(form.get('private_intake')).toBe('true')
       expect(form.get('publish_to_tenant')).toBe('false')
       expect(form.get('candidate_id')).toBe('table')
-      expect(form.get('intake_run_id')).toBe('intake-run')
-      expect(form.get('preview_revision')).toBe('revision-1')
-      expect(form.get('valid_rows_only')).toBe('false')
+      expect(form.get('template_only')).toBe('true')
+      expect(form.get('intake_run_id')).toBeNull()
+      expect(form.get('preview_revision')).toBeNull()
       expect(form.get('composer_note')).toBe('保留客户栏，清理空白行')
       expect(wrapper.emitted('saved')).toHaveLength(1)
       expect(workspace.saved(doc)).toBe(true)
+      expect(api.previewReviewedIntake).toHaveBeenCalledOnce()
       expect(wrapper.find('.reviewed-template__candidate-capsule--saved').exists()).toBe(true)
       expect(wrapper.find('.reviewed-document-picker').exists()).toBe(false)
     } finally { wrapper.unmount() }
@@ -911,6 +912,7 @@ describe('reviewed Excel template', () => {
     api.downloadReviewedCandidate.mockResolvedValue({ blob: async () => new Blob(['cand']) })
     api.downloadReviewedExcel.mockResolvedValue({ blob: async () => new Blob(['saved']) })
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    vi.stubGlobal('URL', class extends URL { static createObjectURL = vi.fn(() => 'blob:test'); static revokeObjectURL = vi.fn() })
     const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     try {
       const input = wrapper.get('input[type="file"][multiple]')
@@ -930,6 +932,7 @@ describe('reviewed Excel template', () => {
       expect(click).toHaveBeenCalled()
     } finally {
       click.mockRestore()
+      vi.unstubAllGlobals()
       wrapper.unmount()
     }
   })
@@ -951,67 +954,62 @@ describe('reviewed Excel template', () => {
     if (change !== 'unmount') wrapper.unmount()
   })
 
-  it('shows pending document preview and blocks saving when its preview contains error rows', async () => {
+  it('saves only the template before reporting a pending preview with error rows', async () => {
     let finish!: (value: unknown) => void
+    api.saveReviewedExcel.mockResolvedValueOnce({ template_id: 'saved-template' })
     api.previewReviewedIntake.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
-    const { wrapper, save } = await mountIntakeCandidate()
-    expect(wrapper.get('.reviewed-document-picker').text()).toContain('正在核对入库范围')
-    expect(save().attributes('disabled')).toBeDefined()
-    expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+    const { wrapper, doc, save } = await mountIntakeCandidate()
+    await save().trigger('click'); await flushPromises()
+    expect(doc.intakePending).toBe(true)
+    expect((api.saveReviewedExcel.mock.calls[0][0] as FormData).get('template_only')).toBe('true')
     finish(intakeResult({ new: 2, update: 1, skip: 3, error: 1, executed: 0 }))
     await flushPromises()
-    expect(save().attributes('disabled')).toBeDefined()
-    expect(wrapper.get('.reviewed-document-picker').text()).toContain('1 行错误，尚不能保存')
-    expect(wrapper.findAll('input[type=checkbox]')).toHaveLength(0)
-    await save().trigger('click'); await flushPromises()
-    expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+    expect(doc.intake?.business.summary.error).toBe(1)
+    expect(doc.intake?.business.summary.executed).toBe(0)
     wrapper.unmount()
   })
 
-  it.each(['failed', 'missing-revision', 'wrong-mod'])('blocks unconfirmed %s preview results', async failure => {
+  it.each(['failed', 'missing-revision', 'wrong-mod'])('keeps %s preview results unconfirmed after template save', async failure => {
     const result = intakeResult()
     if (failure === 'failed') result.intake.business.status = 'failed'
     else if (failure === 'missing-revision') result.intake.business.preview_revision = ''
     else result.intake.mod_id = 'another-workspace'
-    api.previewReviewedIntake.mockResolvedValue(result)
-    const { wrapper, save } = await mountIntakeCandidate()
-    expect(save().attributes('disabled')).toBeDefined()
-    expect(wrapper.get('.reviewed-document-picker [role=alert]').text()).toContain(failure === 'wrong-mod' ? '范围无法核实' : '预演未完成')
-    expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+    api.saveReviewedExcel.mockResolvedValueOnce({ template_id: 'saved-template' })
+    api.previewReviewedIntake.mockResolvedValueOnce(result)
+    const { wrapper, doc, save } = await mountIntakeCandidate()
+    await save().trigger('click'); await flushPromises()
+    expect(doc.intakeError).toContain(failure === 'wrong-mod' ? '范围无法核实' : '预演未完成')
+    expect((api.saveReviewedExcel.mock.calls[0][0] as FormData).get('template_only')).toBe('true')
     wrapper.unmount()
   })
 
   it('invalidates edited intake metadata without parsing on every keystroke', async () => {
-    const { wrapper, doc, workspace, save } = await mountIntakeCandidate()
-    expect(save().attributes('disabled')).toBeUndefined()
+    const { wrapper, doc, workspace } = await mountIntakeCandidate()
+    await workspace.prepare(doc); await flushPromises()
     const initialCalls = api.previewReviewedIntake.mock.calls.length
     doc.displayName = '新名称'; await flushPromises()
-    expect(save().attributes('disabled')).toBeDefined()
     expect(api.previewReviewedIntake).toHaveBeenCalledTimes(initialCalls)
-    await workspace.prepare(doc)
-    await flushPromises()
-    expect(save().attributes('disabled')).toBeUndefined()
+    await workspace.prepare(doc); await flushPromises()
     expect((api.previewReviewedIntake.mock.calls.at(-1)![0] as FormData).get('name')).toBe('新名称')
     wrapper.unmount()
   })
 
-  it('ignores a late previous candidate plan and saves only the displayed run revision', async () => {
+  it('ignores a late previous candidate preview', async () => {
     let finishOld!: (value: unknown) => void
     api.previewReviewedIntake.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
-    const { wrapper, save } = await mountIntakeCandidate()
+    const { wrapper, doc, workspace } = await mountIntakeCandidate()
+    void workspace.prepare(doc); await flushPromises()
     const latest = intakeResult()
     latest.intake.run_id = latest.intake.business.id = 'latest-run'
     latest.intake.business.preview_revision = 'latest-revision'
     api.previewReviewedIntake.mockResolvedValueOnce(latest)
     await selectCandidate(wrapper, 1)
+    await workspace.prepare(doc); await flushPromises()
     finishOld(intakeResult({ new: 999, update: 0, skip: 0, error: 0, executed: 0 }))
     await flushPromises()
-    expect(wrapper.get('.reviewed-document-picker').text()).not.toContain('999')
-    api.saveReviewedExcel.mockResolvedValue({ template_id: 'bound' })
-    await save().trigger('click'); await flushPromises()
-    const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
-    expect(form.get('intake_run_id')).toBe('latest-run')
-    expect(form.get('preview_revision')).toBe('latest-revision')
+    expect(doc.intake?.run_id).toBe('latest-run')
+    expect(doc.intake?.business.summary.new).not.toBe(999)
+    expect(api.saveReviewedExcel).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
