@@ -668,6 +668,7 @@ MODEL_WINDOW_CHARS = 20_000
 # Each unit's answer must fit the 8192-token output in one call.
 MAX_BUSINESS_UNITS = 8
 _UNIT_ROWS = 60
+_PREFERRED_UNIT_ROWS = 30
 _UNIT_CONTEXT_ROWS = 8
 
 
@@ -678,6 +679,10 @@ def business_units(source: str) -> list[str]:
     as context, so the header customer stays visible. Rows are never split.
     """
     units: list[str] = []
+    # Smaller units bound the model's response, while retaining the previous
+    # eight-unit capacity for larger workbooks instead of rejecting them early.
+    row_count = sum(1 for line in source.splitlines() if not line.startswith("# sheet:"))
+    target_rows = min(_UNIT_ROWS, max(_PREFERRED_UNIT_ROWS, (row_count + MAX_BUSINESS_UNITS - 1) // MAX_BUSINESS_UNITS))
     current: list[str] = []
     size = 0
     fresh = 0
@@ -687,7 +692,7 @@ def business_units(source: str) -> list[str]:
             sheet_head = [line]
         elif len(sheet_head) <= _UNIT_CONTEXT_ROWS:
             sheet_head.append(line)
-        if current and (size + len(line) + 1 > MODEL_WINDOW_CHARS - 2_000 or fresh >= _UNIT_ROWS):
+        if current and (size + len(line) + 1 > MODEL_WINDOW_CHARS - 2_000 or fresh >= target_rows):
             units.append("\n".join(current))
             current = list(sheet_head) if not line.startswith("# sheet:") else []
             if current and current[-1] == line:

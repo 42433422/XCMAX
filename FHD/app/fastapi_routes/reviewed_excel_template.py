@@ -2387,8 +2387,8 @@ def reviewed_excel_intake_preview(
                         else 0,
                         "coverage": row_coverage(
                             original_text,
-                            list(business_llm.data.get("rows") or [])
-                            if ai_table is not None and business_llm
+                            [{"source_sheet": row.sheet, "source_row": row.row_number} for row in ai_table.rows]
+                            if ai_table is not None
                             else [],
                         ),
                     }

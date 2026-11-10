@@ -2837,6 +2837,18 @@ def test_intake_does_not_invoke_provider_if_call_record_fails(monkeypatch):
     assert result.degraded and not calls
 
 
+@pytest.mark.parametrize('rows', [162, 480])
+def test_business_units_limit_model_output_without_losing_source_rows(rows):
+    from app.application.elt.llm_assist import MAX_BUSINESS_UNITS, business_units
+
+    source = '# sheet:合成\n' + '\n'.join(f'R{i} | 合成货品{i}' for i in range(1, rows + 1))
+    units = business_units(source)
+    assert len(units) <= MAX_BUSINESS_UNITS
+    assert {line.split(' | ', 1)[0] for unit in units for line in unit.splitlines() if line.startswith('R')} == {f'R{i}' for i in range(1, rows + 1)}
+    if rows == 162:
+        assert len(units) == 6
+
+
 def test_business_units_have_separate_bounded_deadlines(monkeypatch):
     from app.application.elt import llm_assist
 

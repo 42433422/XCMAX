@@ -768,6 +768,40 @@ def test_import_lanes_do_not_share_a_circuit(monkeypatch):
         assert llm_assist._circuit_key("template") == "owner:7:template"
 
 
+def test_database_model_rows_keep_incomplete_rows_for_review():
+    from app.application.elt.candidate_table import dataset_from_business_rows
+
+    dataset = dataset_from_business_rows([
+        {"product_name": "合成货品甲", "quantity": "2", "source_sheet": "表", "source_row": "2"},
+        {"purchase_unit": "合成客户", "product_name": "合成货品乙", "quantity": "", "source_sheet": "表", "source_row": "3"},
+        {"purchase_unit": "合成客户", "quantity": "4", "source_sheet": "表", "source_row": "4"},
+    ])
+    assert dataset is not None and [row.row_number for row in dataset.rows] == [2, 3, 4]
+    assert [row.provenance['validation_issues'][0]['field'] for row in dataset.rows] == ['purchase_unit', 'quantity', 'product_name']
+    assert all(row.provenance['validation_issues'][0]['severity'] == 'error' for row in dataset.rows)
+
+
+def test_incomplete_model_rows_are_visible_as_errors_in_preview(intake_store):
+    from app.application.elt.candidate_table import dataset_from_business_rows
+
+    dataset = dataset_from_business_rows([
+        {"product_name": "合成货品甲", "quantity": "2", "source_sheet": "表", "source_row": "2"},
+        {"purchase_unit": "合成客户", "product_name": "合成货品乙", "quantity": "3", "source_sheet": "表", "source_row": "3"},
+    ])
+    store = intake_store
+    with tenant_scope(1), store.factory() as db:
+        upload = store.service.save_upload(db, owner_user_id=7, file_name='合成.xlsx', content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', stream=BytesIO(_delivery_note_bytes()))
+        db.commit()
+        preview = store.service.create_preview(db, owner_user_id=7, upload_id=upload['upload_id'], target_type='shipment_records', source_dataset=dataset)
+    store.executor.futures[-1].result(timeout=10)
+    with tenant_scope(1), store.factory() as db:
+        result = store.service.get_run(db, run_id=preview['id'], owner_user_id=7)
+    assert result['status'] == 'preview_ready'
+    assert result['total_rows'] == 2
+    assert result['summary']['error'] == 1 and result['summary']['new'] == 1
+    assert result['summary']['executed'] == 0
+
+
 def test_database_model_rows_drop_header_labels():
     from app.application.elt.candidate_table import dataset_from_business_rows
 
