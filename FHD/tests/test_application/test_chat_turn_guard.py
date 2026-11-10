@@ -306,6 +306,18 @@ def test_preview_uses_authorized_tenant_rows_not_caller_counts(monkeypatch):
         prepare_turn("清空所有产品", {**action, "destructive_confirmed": True})["success"] is False
     )
     product_scope = scope_snapshot(ctx)[3]
+    changed_action = {**action, "idempotency_key": "same-id"}
+    prepare_turn("清空所有产品", changed_action)
+    with Session(engine) as db:
+        db.query(Product).filter(Product.id == 999).one().name = "changed"
+        db.commit()
+    assert scope_snapshot(ctx)[1] == products
+    assert scope_snapshot(ctx)[3] != product_scope
+    assert (
+        prepare_turn("清空所有产品", {**changed_action, "destructive_confirmed": True})["success"]
+        is False
+    )
+    product_scope = scope_snapshot(ctx)[3]
     monkeypatch.setattr(
         "app.application.agent_orchestrator.tool_permission.actor_tool_denial",
         lambda tool, *_: {} if tool == "customers" else None,

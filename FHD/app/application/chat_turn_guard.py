@@ -111,7 +111,7 @@ def _tenant(ctx: dict[str, Any]) -> str:
 
 
 def scope_snapshot(ctx: dict[str, Any]) -> tuple[int | None, int | None, str | None, str | None]:
-    """Capture tenant-scoped identities, never caller-provided counts or IDs."""
+    """Capture tenant-scoped records, never caller-provided counts or IDs."""
     try:
         from app.application.agent_orchestrator.tool_permission import actor_tool_denial
         from app.db.models import Product
@@ -131,13 +131,18 @@ def scope_snapshot(ctx: dict[str, Any]) -> tuple[int | None, int | None, str | N
                     continue
                 digest, count = hashlib.sha256(), 0
                 rows = (
-                    db.query(model.id)
+                    db.query(*model.__table__.columns)
                     .filter(model.tenant_id == tenant)
                     .order_by(model.id)
                     .yield_per(1000)
                 )
                 for row in rows:
-                    digest.update(f"{row[0]}\n".encode())
+                    digest.update(
+                        json.dumps(
+                            tuple(row), ensure_ascii=False, default=str, separators=(",", ":")
+                        ).encode()
+                    )
+                    digest.update(b"\n")
                     count += 1
                 snapshots.append((count, digest.hexdigest()))
         return snapshots[0][0], snapshots[1][0], snapshots[0][1], snapshots[1][1]

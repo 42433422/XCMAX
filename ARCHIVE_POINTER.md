@@ -1,5 +1,7 @@
 # XCMAX 历史与大文件归档指针
 
+2026-11-10 旧分支余债快照外置：`FHD/docs/architecture/DEBT19_STILL9_FOLLOWUP.md` 原文及 SHA256 位于 `~/XCMAX-archives/debt19-followup-20261110/`，亦可从提交 `532b1978d5` 恢复；历史数字不代表当前状态。
+
 2026-11-10 认知全栈历史快照外置：`FHD/docs/architecture/COGNITIVE_FULL_STACK_20260729.md` 原文及 SHA256 位于 `~/XCMAX-archives/cognitive-snapshot-20261110/`，亦可从提交 `58090c512c` 恢复；历史实现清单不代表当前运行或验收状态。
 
 2026-11-10 历史余债报告外置：`FHD/docs/reports/DEBT24_CLOSEOUT.md` 原文及 SHA256 保存在 `~/XCMAX-archives/debt24-closeout-20261110/`，亦可从提交 `58090c512c` 恢复；其旧分支数据不代表当前验收状态。
