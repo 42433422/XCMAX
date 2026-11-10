@@ -42,8 +42,12 @@ def execute_guarded_batch_delete(
             if dialect == "sqlite":
                 db.execute(text("BEGIN IMMEDIATE"))
             elif dialect == "postgresql":
-                table = "products" if tool_id == "products" else "purchase_units"
-                db.execute(text(f"LOCK TABLE {table} IN SHARE ROW EXCLUSIVE MODE"))
+                statement = (
+                    "LOCK TABLE products IN SHARE ROW EXCLUSIVE MODE"
+                    if tool_id == "products"
+                    else "LOCK TABLE purchase_units IN SHARE ROW EXCLUSIVE MODE"
+                )
+                db.execute(text(statement))
                 if tool_id == "customers":
                     db.execute(text("LOCK TABLE shipment_records IN SHARE ROW EXCLUSIVE MODE"))
             else:

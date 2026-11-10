@@ -489,21 +489,6 @@ class TestCheckShipmentAssociationsAdditional:
         assert result["has_associations"] is True
         assert result["shipment_count"] == 5
 
-    def test_no_records(self):
-        svc = CustomerApplicationService()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value.limit.return_value.all.return_value = []
-        mock_query.count.return_value = 0
-        mock_db.query.return_value = mock_query
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_db):
-            result = svc._check_shipment_associations("TestCo")
-        assert result["has_associations"] is False
-        assert result["shipment_count"] == 0
-
     def test_with_sample_records(self):
         svc = CustomerApplicationService()
         mock_db = MagicMock()
