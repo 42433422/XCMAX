@@ -259,6 +259,52 @@ class TestAiWorkflowAuthorization:
         req = SimpleNamespace(applicant_id=7)
         assert _can_review_ai_workflow_request(db, req, 8) is True
 
+    def _flow_db(self, user, nodes):
+        db = MagicMock()
+
+        def query(model):
+            result = MagicMock()
+            if getattr(model, "__name__", "") == "User":
+                result.filter.return_value.first.return_value = user
+            else:
+                result.filter.return_value.all.return_value = nodes
+            return result
+
+        db.query.side_effect = query
+        return db
+
+    def test_applicant_can_approve_when_no_reviewers_are_configured(self):
+        user = SimpleNamespace(id=7, role="user", tenant_id=1, is_active=True)
+        db = self._flow_db(user, [SimpleNamespace(approver_ids=None)])
+        req = SimpleNamespace(
+            applicant_id=7, tenant_id=1, flow_id=3, tool_id="data_docking", action="auto_ingest"
+        )
+        assert _can_review_ai_workflow_request(db, req, 7) is True
+
+    def test_other_user_cannot_approve_unconfigured_flow(self):
+        user = SimpleNamespace(id=8, role="user", tenant_id=1, is_active=True)
+        db = self._flow_db(user, [SimpleNamespace(approver_ids=None)])
+        req = SimpleNamespace(
+            applicant_id=7, tenant_id=1, flow_id=3, tool_id="data_docking", action="auto_ingest"
+        )
+        assert _can_review_ai_workflow_request(db, req, 8) is False
+
+    def test_configured_reviewers_still_block_the_applicant(self):
+        user = SimpleNamespace(id=7, role="user", tenant_id=1, is_active=True)
+        db = self._flow_db(user, [SimpleNamespace(approver_ids="[8, 9]")])
+        req = SimpleNamespace(
+            applicant_id=7, tenant_id=1, flow_id=3, tool_id="sales", action="execute_closed_loop"
+        )
+        assert _can_review_ai_workflow_request(db, req, 7) is False
+
+    def test_designated_reviewer_can_approve_without_admin_role(self):
+        user = SimpleNamespace(id=8, role="user", tenant_id=1, is_active=True)
+        db = self._flow_db(user, [SimpleNamespace(approver_ids=[8, 9])])
+        req = SimpleNamespace(
+            applicant_id=7, tenant_id=1, flow_id=3, tool_id="sales", action="execute_closed_loop"
+        )
+        assert _can_review_ai_workflow_request(db, req, 8) is True
+
 
 class TestNodeQueryForUser:
     def test_none_node(self):
