@@ -51,7 +51,10 @@ def test_keeps_displayable_text_and_rejects_whitespace_or_reasoning():
 
 
 def test_bulk_preview_names_scope_and_does_not_call_the_model(monkeypatch):
-    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (4, 9))
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard.scope_snapshot",
+        lambda ctx: (4, 9, "customers-4", "products-9"),
+    )
     client = MagicMock()
     result = chat(
         "清理全部客户和产品",
@@ -101,7 +104,10 @@ def test_whitespace_stream_stays_an_explicit_empty_result():
 
 
 def test_retry_and_second_confirm_do_not_write(monkeypatch):
-    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (1, 1))
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard.scope_snapshot",
+        lambda ctx: (1, 1, "customers-1", "products-1"),
+    )
     ctx = {
         "tenant_id": "demo",
         "idempotency_key": "turn-1",
@@ -146,7 +152,10 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
         "turn_id": "turn-bulk",
         "scope_counts": {"customers": 2, "products": 3},
     }
-    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (2, 3))
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard.scope_snapshot",
+        lambda ctx: (2, 3, "customers-2", "products-3"),
+    )
     preview = list(
         chat_stream_sse_events("清理全部客户和产品", runtime_context=ctx, client=MagicMock())
     )
@@ -196,7 +205,10 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
 
 
 def test_uncommitted_confirm_is_not_repeated_by_another_confirm(monkeypatch):
-    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (0, 0))
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard.scope_snapshot",
+        lambda ctx: (0, 0, "customers-0", "products-0"),
+    )
     first = {
         "idempotency_key": "turn-2",
         "destructive_confirmed": True,
@@ -248,7 +260,7 @@ def test_preview_uses_authorized_tenant_rows_not_caller_counts(monkeypatch):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
-    from app.application.chat_turn_guard import preview_message, scope_counts
+    from app.application.chat_turn_guard import preview_message, scope_snapshot
     from app.db.db_base import Base
     from app.db.models import Product
     from app.db.models.purchase_unit import PurchaseUnit
@@ -278,20 +290,32 @@ def test_preview_uses_authorized_tenant_rows_not_caller_counts(monkeypatch):
         "app.application.agent_orchestrator.tool_permission.actor_tool_denial", lambda *args: None
     )
     ctx = {"tenant_id": 1, "scope_counts": {"customers": 999, "products": 999}}
-    customers, products = scope_counts(ctx)
+    customers, products, customer_scope, product_scope = scope_snapshot(ctx)
     assert (customers, products) == (1, 1)
     text = preview_message(ctx, "清空所有产品", customers=customers, products=products)
     assert "产品 1 条" in text and "客户" not in text and "999" not in text
+    action = {**ctx, "user_id": "10", "idempotency_key": "preview"}
+    prepare_turn("清空所有产品", action)
+    with Session(engine) as db:
+        db.delete(db.query(Product).filter(Product.tenant_id == 1).one())
+        db.add(Product(id=999, tenant_id=1, name="replacement"))
+        db.commit()
+    assert scope_snapshot(ctx)[1] == products
+    assert scope_snapshot(ctx)[3] != product_scope
+    assert (
+        prepare_turn("清空所有产品", {**action, "destructive_confirmed": True})["success"] is False
+    )
+    product_scope = scope_snapshot(ctx)[3]
     monkeypatch.setattr(
         "app.application.agent_orchestrator.tool_permission.actor_tool_denial",
         lambda tool, *_: {} if tool == "customers" else None,
     )
-    assert scope_counts(ctx) == (None, 1)
+    assert scope_snapshot(ctx) == (None, 1, None, product_scope)
     monkeypatch.setattr(
         "app.infrastructure.auth.agent_mod_scope._bound_actor",
         lambda ctx: (_ for _ in ()).throw(ValueError("invalid session")),
     )
-    assert scope_counts(ctx) == (None, None)
+    assert scope_snapshot(ctx) == (None, None, None, None)
     assert "租户：未核验" in preview_message(ctx, "清空所有产品", customers=None, products=None)
     engine.dispose()
 
@@ -299,7 +323,10 @@ def test_preview_uses_authorized_tenant_rows_not_caller_counts(monkeypatch):
 def test_identical_turn_keys_are_isolated_between_tenants_and_users(monkeypatch):
     from app.application.chat_turn_guard import execution_for_context
 
-    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (1, 2))
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard.scope_snapshot",
+        lambda ctx: (1, 2, "customers-1", "products-2"),
+    )
     first = {"tenant_id": "1", "user_id": "10", "idempotency_key": "same"}
     prepare_turn("清空所有产品", first)
     assert execution_for_context(first)["tenant_id"] == "1"
@@ -311,7 +338,10 @@ def test_concurrent_confirmation_and_dispatch_are_claimed_once(monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
 
-    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (1, 1))
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard.scope_snapshot",
+        lambda ctx: (1, 1, "customers-1", "products-1"),
+    )
     ctx = {
         "tenant_id": "1",
         "user_id": "10",
@@ -339,7 +369,10 @@ def test_concurrent_confirmation_and_dispatch_are_claimed_once(monkeypatch):
 
 
 def test_confirmation_rejects_missing_or_changed_preview(monkeypatch):
-    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (1, 1))
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard.scope_snapshot",
+        lambda ctx: (1, 1, "customers-1", "products-1"),
+    )
     ctx = {
         "tenant_id": "1",
         "user_id": "10",
@@ -349,5 +382,8 @@ def test_confirmation_rejects_missing_or_changed_preview(monkeypatch):
     assert prepare_turn("清空所有产品", ctx)["success"] is False
     prepare_turn("清空所有产品", {**ctx, "destructive_confirmed": False})
     assert prepare_turn("清理全部客户和产品", ctx)["success"] is False
-    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (1, 2))
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard.scope_snapshot",
+        lambda ctx: (1, 2, "customers-1", "products-2"),
+    )
     assert prepare_turn("清空所有产品", ctx)["success"] is False

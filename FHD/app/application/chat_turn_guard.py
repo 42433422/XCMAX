@@ -6,6 +6,7 @@ the model call. This module decides whether a turn may mutate, independent of th
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import threading
@@ -40,6 +41,8 @@ class TurnRecord:
     customer_count: int | None
     product_count: int | None
     request_text: str = ""
+    customer_scope: str | None = None
+    product_scope: str | None = None
 
 
 def reset_turn_ledger() -> None:
@@ -107,11 +110,9 @@ def _tenant(ctx: dict[str, Any]) -> str:
     return str(ctx.get("tenant_id") or "未确认")
 
 
-def scope_counts(ctx: dict[str, Any]) -> tuple[int | None, int | None]:
-    """Count the same tenant-scoped entities the batch-delete tools operate on."""
+def scope_snapshot(ctx: dict[str, Any]) -> tuple[int | None, int | None, str | None, str | None]:
+    """Capture tenant-scoped identities, never caller-provided counts or IDs."""
     try:
-        from sqlalchemy import func
-
         from app.application.agent_orchestrator.tool_permission import actor_tool_denial
         from app.db.models import Product
         from app.db.models.purchase_unit import PurchaseUnit
@@ -121,26 +122,29 @@ def scope_counts(ctx: dict[str, Any]) -> tuple[int | None, int | None]:
         _bound_actor(ctx)
         tenant = int(ctx.get("tenant_id") or 0)
         if tenant <= 0:
-            return None, None
+            return None, None, None, None
+        snapshots: list[tuple[int | None, str | None]] = []
         with get_db() as db:
-            counts: list[int | None] = []
             for tool, model in (("customers", PurchaseUnit), ("products", Product)):
                 if actor_tool_denial(tool, "query", ctx) is not None:
-                    counts.append(None)
-                else:
-                    counts.append(
-                        int(
-                            db.query(func.count(model.id))
-                            .filter(model.tenant_id == tenant)
-                            .scalar()
-                            or 0
-                        )
-                    )
-        return counts[0], counts[1]
+                    snapshots.append((None, None))
+                    continue
+                digest, count = hashlib.sha256(), 0
+                rows = (
+                    db.query(model.id)
+                    .filter(model.tenant_id == tenant)
+                    .order_by(model.id)
+                    .yield_per(1000)
+                )
+                for row in rows:
+                    digest.update(f"{row[0]}\n".encode())
+                    count += 1
+                snapshots.append((count, digest.hexdigest()))
+        return snapshots[0][0], snapshots[1][0], snapshots[0][1], snapshots[1][1]
     except SQLAlchemyError:
-        return None, None
+        return None, None, None, None
     except RECOVERABLE_ERRORS:
-        return None, None
+        return None, None, None, None
 
 
 def _count_phrase(count: int | None) -> str:
@@ -224,7 +228,7 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
         _use_policy("model_only")
         return _remember(existing, ctx)
     if bulk and not confirmed:
-        customers, products = scope_counts(ctx)
+        customers, products, customer_scope, product_scope = scope_snapshot(ctx)
         text = preview_message(ctx, message, customers=customers, products=products)
         record = TurnRecord(
             key,
@@ -236,11 +240,13 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
             customers,
             products,
             message.strip(),
+            customer_scope,
+            product_scope,
         )
         _use_policy("block")
         return _remember(record, ctx)
     if bulk and confirmed:
-        customers, products = scope_counts(ctx)
+        customers, products, customer_scope, product_scope = scope_snapshot(ctx)
         with _LEDGER_LOCK:
             existing = _LEDGER.get(_scope_key(ctx))
             if existing and existing.effect in {"opened", "executing", "unknown"}:
@@ -263,9 +269,20 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
                 or existing.request_text != message.strip()
                 or (
                     "客户" in message
-                    and (customers is None or customers != existing.customer_count)
+                    and (
+                        customers is None
+                        or customer_scope is None
+                        or customer_scope != existing.customer_scope
+                    )
                 )
-                or ("产品" in message and (products is None or products != existing.product_count))
+                or (
+                    "产品" in message
+                    and (
+                        products is None
+                        or product_scope is None
+                        or product_scope != existing.product_scope
+                    )
+                )
             ):
                 _use_policy("block")
                 text = "删除范围或权限未确认，请重新预览；本次未执行删除。"

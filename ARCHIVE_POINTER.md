@@ -1,5 +1,9 @@
 # XCMAX 历史与大文件归档指针
 
+2026-11-10 认知全栈历史快照外置：`FHD/docs/architecture/COGNITIVE_FULL_STACK_20260729.md` 原文及 SHA256 位于 `~/XCMAX-archives/cognitive-snapshot-20261110/`，亦可从提交 `58090c512c` 恢复；历史实现清单不代表当前运行或验收状态。
+
+2026-11-10 历史余债报告外置：`FHD/docs/reports/DEBT24_CLOSEOUT.md` 原文及 SHA256 保存在 `~/XCMAX-archives/debt24-closeout-20261110/`，亦可从提交 `58090c512c` 恢复；其旧分支数据不代表当前验收状态。
+
 2026-11-10 旧发布日志外置：`FHD/CHANGELOG.md` 中 1.0.0.0–1.0.0.4 历史条目的原文及 SHA256 保存在 `~/XCMAX-archives/release-changelog-20261110/`，也可从提交 `f5c4a2d164` 恢复；未发布变更仍保留在现行日志。
 
 2026-11-10 旧 LangGraph 基准记录外置：`FHD/docs/architecture/langgraph-absorption/09-baseline.md` 的原文和 SHA256 在 `~/XCMAX-archives/langgraph-baseline-20261110/`；亦可从提交 `d79eff902e` 恢复。该记录是历史测量，不代表当前性能；基准脚本仍可显式生成新的结果。
