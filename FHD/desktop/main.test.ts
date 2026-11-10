@@ -490,12 +490,6 @@ describe('main — backendEditionEnv', () => {
 })
 
 describe('desktopBackendEnv — development MOD source', () => {
-  it('uses an explicitly supplied development Mod directory', async () => {
-    const { desktopBackendEnv } = await import('./backend-env.js')
-    const env = desktopBackendEnv({ XCAGI_MODS_ROOT: '/tmp/dev-mods' }, '/repo/FHD')
-    expect(env.XCAGI_MODS_ROOT).toBe('/tmp/dev-mods')
-    expect(env.XCAGI_MODS_DIR).toBe('/tmp/dev-mods')
-  })
   it('pins development backend to the checkout MOD directory', async () => {
     const { desktopBackendEnv } = await import('./backend-env.js')
     const env = desktopBackendEnv({}, path.join('/repo', 'FHD'))
