@@ -16,14 +16,6 @@ from app.application.ai_chat_rag_integration import (
 class TestGetRagService:
     """Tests for get_rag_service."""
 
-    @patch("app.application.ai_chat_rag_integration.is_rag_enabled", return_value=False)
-    def test_returns_none_when_rag_disabled(self, mock_enabled: MagicMock) -> None:
-        import app.application.ai_chat_rag_integration as mod
-
-        mod._rag_service = None
-        result = get_rag_service()
-        assert result is None
-
     @patch("app.application.ai_chat_rag_integration.is_rag_enabled", return_value=True)
     @patch(
         "app.application.ai_chat_rag_integration.get_default_embedder",

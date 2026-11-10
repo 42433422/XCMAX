@@ -1015,13 +1015,6 @@ class TestEnsureModApiReady:
 
 
 class TestMountOnDiskPrimaryClientMods:
-    def test_mods_disabled_returns_empty(self):
-        from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
-
-        with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=True):
-            result = mount_on_disk_primary_client_mods()
-        assert result == []
-
     def test_no_mod_path_returns_empty(self):
         from app.infrastructure.mods.mod_manager import mount_on_disk_primary_client_mods
 

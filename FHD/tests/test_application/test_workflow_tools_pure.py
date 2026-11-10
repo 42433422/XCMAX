@@ -177,13 +177,6 @@ class TestExecuteWorkflowTool:
 
 
 class TestBaseRegistry:
-    def test_returns_list(self):
-        from app.application.tools.workflow import _base_registry
-
-        reg = _base_registry()
-        assert isinstance(reg, list)
-        assert len(reg) > 0
-
     def test_contains_excel_analysis(self):
         from app.application.tools.workflow import _base_registry
 

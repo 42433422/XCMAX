@@ -348,7 +348,7 @@ class TestModEmployeeComplete:
 
         mock_svc = MagicMock()
         mock_svc.api_key = "sk-host"
-        mock_svc.call_deepseek_api = AsyncMock(return_value=None)
+        completion = AsyncMock(return_value=None)
         with (
             patch.object(
                 mod_employee_llm,
@@ -363,11 +363,12 @@ class TestModEmployeeComplete:
                 "app.infrastructure.llm.providers.registry.get_active_provider",
                 return_value=object(),
             ),
+            patch("app.infrastructure.llm.invoke.chat_completion_openai_format", completion),
         ):
             out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
         assert out["success"] is False
         assert "LLM 返回空" in out["error"]
-        mock_svc.call_deepseek_api.assert_awaited_once()
+        completion.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_direct_path_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -413,59 +414,74 @@ class TestModEmployeeComplete:
         assert "OpenAI-compatible/XCauto" in out["error"]
 
     @pytest.mark.asyncio
-    async def test_default_path_call_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize("outcome", ["empty", "error", "success"])
+    async def test_host_uses_selected_provider(self, monkeypatch, outcome):
         monkeypatch.delenv("XCAGI_LLM_PROVIDER", raising=False)
-
-        mock_svc = MagicMock()
-        mock_svc.api_key = "sk-host"
-        mock_svc.call_deepseek_api = AsyncMock(return_value=None)
-        with patch(
-            "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service",
-            return_value=mock_svc,
-        ):
-            out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
-        assert out["success"] is False
-        assert "LLM 返回空" in out["error"]
-
-    @pytest.mark.asyncio
-    async def test_default_path_recoverable_error_returns_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.delenv("XCAGI_LLM_PROVIDER", raising=False)
-
-        mock_svc = MagicMock()
-        mock_svc.api_key = "sk-host"
-        mock_svc.call_deepseek_api = AsyncMock(side_effect=ConnectionError("db down"))
-        with patch(
-            "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service",
-            return_value=mock_svc,
-        ):
-            out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
-        assert out["success"] is False
-        assert out["error"] == "LLM service unavailable"
-
-    @pytest.mark.asyncio
-    async def test_default_path_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("XCAGI_LLM_PROVIDER", raising=False)
-
-        mock_svc = MagicMock()
-        mock_svc.api_key = "sk-host"
-        mock_svc.call_deepseek_api = AsyncMock(
-            return_value={"choices": [{"message": {"content": "host-reply"}}]}
+        provider = object()
+        response = (
+            {"choices": [{"message": {"content": "host-reply"}}]} if outcome == "success" else None
         )
-        with patch(
-            "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service",
-            return_value=mock_svc,
+        completion = AsyncMock(
+            side_effect=ConnectionError("unavailable") if outcome == "error" else None,
+            return_value=response,
+        )
+        with (
+            patch.object(mod_employee_llm, "_resolve_provider_override", return_value={}),
+            patch.object(mod_employee_llm, "_resolve_fallback_overrides", return_value=[]),
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                return_value=provider,
+            ),
+            patch("app.infrastructure.llm.invoke.chat_completion_openai_format", completion),
         ):
-            out = await mod_employee_llm.mod_employee_complete(
-                [{"role": "user", "content": "hi"}],
-                response_format={"type": "json_object"},
+            result = await mod_employee_llm.mod_employee_complete(
+                [{"role": "user", "content": "hi"}], response_format={"type": "json_object"}
             )
-        assert out["success"] is True
-        assert out["content"] == "host-reply"
-        # 验证 response_format 透传到 kwargs
-        call_kwargs = mock_svc.call_deepseek_api.call_args.kwargs
-        assert call_kwargs["response_format"] == {"type": "json_object"}
+        assert result["success"] is (outcome == "success")
+        assert completion.await_args.kwargs["provider"] is provider
+        assert completion.await_args.kwargs["response_format"] == {"type": "json_object"}
+        if outcome == "success":
+            assert result["content"] == "host-reply"
+        elif outcome == "error":
+            assert result["error"] == "LLM service unavailable"
+        else:
+            assert "LLM 返回空" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_host_rejects_mismatched_vision_provider(self):
+        provider = MagicMock(provider_id="host")
+        with (
+            patch.object(mod_employee_llm, "_resolve_provider_override", return_value={}),
+            patch.object(mod_employee_llm, "_resolve_fallback_overrides", return_value=[]),
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                return_value=provider,
+            ),
+            patch(
+                "app.infrastructure.llm.vlm_route.resolve_vlm_route",
+                return_value={"ok": True, "provider": "other", "model": "vision"},
+            ),
+            patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new_callable=AsyncMock,
+            ) as completion,
+        ):
+            result = await mod_employee_llm.mod_employee_complete(
+                [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": "data:image/png;base64,AA=="},
+                            }
+                        ],
+                    }
+                ]
+            )
+        assert result["success"] is False
+        assert "视觉模型提供方不可用" in result["error"]
+        completion.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_default_path_import_error_returns_error(

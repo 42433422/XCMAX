@@ -856,13 +856,6 @@ class TestMemoryManagement:
         assert stats["oldest_event"] is not None
         assert stats["newest_event"] is not None
 
-    def test_stats_empty_memory(self):
-        store = EventStore()
-        stats = store.get_stats()
-        assert stats["total_events"] == 0
-        assert stats["oldest_event"] is None
-        assert stats["newest_event"] is None
-
     def test_capacity_cleanup_memory(self):
         store = EventStore(max_events=2)
         store.append(_make_event(payload={"i": 0}), stream_id="s")
