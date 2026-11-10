@@ -11,7 +11,7 @@ from app.application.chat_turn_guard import (
     joined_display_text,
     mutation_block,
     mutation_policy,
-    note_tool_commit,
+    note_tool_result,
     prepare_turn,
     reset_turn_ledger,
 )
@@ -115,16 +115,18 @@ def test_retry_and_second_confirm_do_not_write():
         {"mutation_policy": "model_only", "idempotency_key": "turn-1"},
     )
     assert blocked["committed"] is False
-    note_tool_commit(ctx, "delete_customers")
+    note_tool_result(ctx, "delete_customers")
     again = prepare_turn(
         "清理全部客户和产品",
         {"idempotency_key": "turn-1", "destructive_confirmed": True, "tenant_id": "demo"},
     )
-    assert again["execution"]["committed"] is True
+    assert again["execution"]["committed"] is False
+    assert again["execution"]["effect"] == "unknown"
+    assert again["success"] is False
     retry_ctx = {"idempotency_key": "turn-1", "retry_of": "turn-1"}
     assert prepare_turn("清理全部客户和产品", retry_ctx) is None
     assert mutation_policy() == "model_only"
-    assert mutation_block("delete_customers", "{}", retry_ctx)["error"] == "already_committed"
+    assert mutation_block("delete_customers", "{}", retry_ctx)["error"] == "outcome_unknown"
 
 
 def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monkeypatch):
@@ -168,8 +170,8 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
     )
     assert executed == ["delete_all_customers"]
     assert failed[-1]["type"] == "error"
-    assert failed[-1]["execution"]["committed"] is True
-    assert failed[-1]["result"]["execution"]["effect"] == "committed"
+    assert failed[-1]["execution"]["committed"] is False
+    assert failed[-1]["result"]["execution"]["effect"] == "unknown"
 
     retry = list(
         chat_stream_sse_events(
@@ -187,7 +189,7 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
         )
     )
     assert executed == ["delete_all_customers"]
-    assert retry[-1]["result"]["execution"]["committed"] is True
+    assert retry[-1]["result"]["execution"]["effect"] == "unknown"
 
 
 def test_uncommitted_confirm_is_not_repeated_by_another_confirm():

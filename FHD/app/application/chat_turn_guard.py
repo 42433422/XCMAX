@@ -173,7 +173,7 @@ def _remember(record: TurnRecord) -> dict[str, Any]:
     if record.key:
         _LEDGER[record.key] = record
     return {
-        "success": record.effect != "none" or record.intent == "bulk_destructive",
+        "success": record.effect in {"preview", "committed"},
         "response": record.summary,
         "text": record.summary,
         "message": record.summary,
@@ -204,7 +204,7 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
     if retry:
         _use_policy("model_only")
         return None
-    if existing and existing.committed:
+    if existing and (existing.committed or existing.effect == "unknown"):
         _use_policy("model_only")
         return _remember(existing)
     if bulk and not confirmed:
@@ -273,12 +273,12 @@ def mutation_block(name: str, raw_args: str, runtime_context: Any) -> dict[str, 
     policy = str(ctx.get("mutation_policy") or "") or _POLICY.get()
     key = _key(ctx)
     existing = _LEDGER.get(key) if key else None
-    if existing and existing.committed:
+    if existing and (existing.committed or existing.effect == "unknown"):
         return {
             "success": False,
-            "committed": True,
-            "error": "already_committed",
-            "message": "该操作已经提交过，不会再次执行。",
+            "committed": existing.committed,
+            "error": "already_committed" if existing.committed else "outcome_unknown",
+            "message": "原操作状态待核验，不会再次执行。",
         }
     if policy in {"block", "model_only"}:
         return {
@@ -290,7 +290,7 @@ def mutation_block(name: str, raw_args: str, runtime_context: Any) -> dict[str, 
     return None
 
 
-def note_tool_commit(runtime_context: Any, name: str) -> None:
+def note_tool_result(runtime_context: Any, name: str) -> None:
     policy = (
         str(runtime_context.get("mutation_policy") or "")
         if isinstance(runtime_context, dict)
@@ -302,14 +302,12 @@ def note_tool_commit(runtime_context: Any, name: str) -> None:
     if not key:
         return
     current = _LEDGER.get(key)
-    summary = f"已提交：{name}"
-    if current and current.summary and name not in current.summary:
-        summary = f"{current.summary}；{name}"
+    summary = f"{name} 已返回，实际写入状态待核验，请勿重复操作。"
     _LEDGER[key] = TurnRecord(
         key,
         "bulk_destructive",
-        True,
-        "committed",
+        False,
+        "unknown",
         summary,
         _tenant(runtime_context),
         current.customer_count if current else None,

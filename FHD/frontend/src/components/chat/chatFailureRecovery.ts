@@ -22,11 +22,12 @@ export function readChatExecution(payload: unknown): ChatExecutionRecord | undef
 }
 
 /** Do not claim a write survived unless an execution record shows it committed. */
-export function chatFailureRecoveryText(execution?: { committed?: boolean } | null): string {
+export function chatFailureRecoveryText(execution?: { committed?: boolean; effect?: string } | null): string {
   if (execution?.committed === true) {
     return '请先检查模型状态。重试只会重新请求模型，已提交的业务操作不会再次执行，也不会撤销。'
   }
-  return '请先检查模型状态。本次没有提交业务写入。重试只会重新请求模型，不会执行原来的写入。'
+  if (execution?.effect === 'preview' || execution?.effect === 'none') return '本轮尚未提交写入，重试只会重新请求模型。'
+  return '原任务的写入状态未确认，请先核对业务结果，不要重复提交。'
 }
 
 export function modelOutcomeFromText(text: string): 'healthy' | 'degraded' | 'ignore' {

@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import Context, ContextVar, copy_context
 from typing import Any, cast
 
-from app.application.chat_turn_guard import mutation_block, note_tool_commit
+from app.application.chat_turn_guard import mutation_block, note_tool_result
 from app.application.workflow.multimodal_user_content import (
     EmptyMultimodalResponseError as EmptyMultimodalResponseError,
 )
@@ -381,7 +381,7 @@ def append_tool_messages(
         except json.JSONDecodeError:
             parsed_payload = None
         if isinstance(parsed_payload, dict) and parsed_payload.get("success") is True:
-            note_tool_commit(runtime_context, name)
+            note_tool_result(runtime_context, name)
         return text
 
     if not use_parallel:

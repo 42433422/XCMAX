@@ -328,7 +328,7 @@ it('offers failure recovery with visible original text without sending a request
   ]
   const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages } })
   expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).toContain('仅回答测试')
-  expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).toContain('本次没有提交业务写入')
+  expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).toContain('写入状态未确认')
   expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).not.toContain('已执行的业务操作不会撤销')
   expect(wrapper.find('[data-testid="proactive-suggestions"]').exists()).toBe(false)
   await wrapper.findAll('button').find(button => button.text().includes('不重复写入'))!.trigger('click')
