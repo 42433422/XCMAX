@@ -119,7 +119,7 @@ def _isolated_task_execution_queue(root: Path):
 
 
 @contextmanager
-def _authenticated_route_fixture(client, *, tenant_id=7):
+def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user"):
     """Real test-owned host session; never bypass the production principal verifier."""
     from datetime import timedelta
     from uuid import uuid4
@@ -142,7 +142,7 @@ def _authenticated_route_fixture(client, *, tenant_id=7):
         factory = sessionmaker(bind=engine)
         sid = uuid4().hex
         with factory.begin() as db:
-            role = Role(name="user")
+            role = Role(name=role_name)
             # Route contracts call OCR through the live permission check.
             role.permissions = [
                 Permission(code=p["code"], name=p["name"]) for p in DEFAULT_PERMISSIONS
@@ -152,7 +152,7 @@ def _authenticated_route_fixture(client, *, tenant_id=7):
                 username="fixture-" + sid,
                 password=generate_password_hash(uuid4().hex),
                 tenant_id=tenant_id,
-                role="user",
+                role=role_name,
                 tier="enterprise",
             )
             db.add(user)

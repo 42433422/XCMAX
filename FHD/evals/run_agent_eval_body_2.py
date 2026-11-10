@@ -194,7 +194,7 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
-            stack.enter_context(_authenticated_route_fixture(client))
+            stack.enter_context(_authenticated_route_fixture(client, role_name="admin"))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
