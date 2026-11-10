@@ -99,6 +99,18 @@ class KnowledgeAdapter(TargetAdapter):
         content_hash = self._content_hash(data, context)
         source_label = self._source_label(data, context)
         documents = self._documents(context)
+        source_fingerprint = str(data.get("source_fingerprint") or "")
+        duplicate_source = next(
+            (document for document in documents if source_fingerprint and
+             str((document.get("metadata") or {}).get("source_fingerprint") or "") == source_fingerprint),
+            None,
+        )
+        if duplicate_source:
+            return PreviewDecision(
+                "skip", match_ref=str(duplicate_source.get("document_id") or ""),
+                before=json_safe(duplicate_source), after=json_safe(duplicate_source),
+                reason="duplicate_source_fingerprint",
+            )
         duplicate = next(
             (
                 document
@@ -164,7 +176,8 @@ class KnowledgeAdapter(TargetAdapter):
             raise EltError("ELT_EXECUTION_CONTEXT_REQUIRED", "知识库写入缺少运行标识")
         stable = self._content_hash(data, context)
         tenant_key = str(tenant_id_for_write())
-        scoped_hash = hashlib.sha256(f"{tenant_key}:{stable}".encode()).hexdigest()
+        source_fingerprint = str(data.get("source_fingerprint") or "")
+        scoped_hash = hashlib.sha256(f"{tenant_key}:{source_fingerprint or stable}".encode()).hexdigest()
         document_id = f"etl-{scoped_hash}"
         # Preview caches never authorize an execution. A retry may reuse only
         # this run's own receipt; another run's duplicate must be re-previewed.
@@ -173,9 +186,10 @@ class KnowledgeAdapter(TargetAdapter):
             db, data, allowed_update_fields=allowed_update_fields, context=fresh_context
         )
         own_retry = (
-            decision.reason == "duplicate_content_hash"
+            decision.reason in {"duplicate_content_hash", "duplicate_source_fingerprint"}
             and str(((decision.before or {}).get("metadata") or {}).get("etl_run_id") or "")
             == run_id
+            and str(((decision.before or {}).get("metadata") or {}).get("content_hash") or "") == stable
         )
         expected_before = context.get("preview_before")
         if not own_retry and (
@@ -198,7 +212,7 @@ class KnowledgeAdapter(TargetAdapter):
             file_path=str(data.get("document_path") or ""),
             document_id=document_id,
             tenant_id=tenant_key,
-            metadata={"etl_run_id": run_id, "content_hash": stable},
+            metadata={"etl_run_id": run_id, "content_hash": stable, **({"source_fingerprint": source_fingerprint} if source_fingerprint else {})},
             idempotency_key=f"etl:{run_id}:{stable}",
             expected_source_version=source_version,
             access_context=access,

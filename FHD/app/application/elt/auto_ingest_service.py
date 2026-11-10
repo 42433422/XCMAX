@@ -293,6 +293,9 @@ class AutoIngestService:
         )
         document = raw_text
         source_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+        source_fingerprint = hashlib.sha256(
+            dump_json({"source_hash": source_hash, "note": note.strip()}).encode("utf-8")
+        ).hexdigest()
         assist_used = False
         degraded = False
         degradation_code = ""
@@ -330,7 +333,7 @@ class AutoIngestService:
         content_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
         decision = KnowledgeAdapter().preview(
             None,
-            {"content": body, "source_key": file_name},
+            {"content": body, "source_key": file_name, "source_fingerprint": source_fingerprint},
             allowed_update_fields={"content", "document_path"},
             context={
                 "owner_user_id": owner_user_id,
@@ -357,6 +360,7 @@ class AutoIngestService:
             "documents": 1,
             "fingerprint": fingerprint,
             "source_hash": source_hash,
+            "source_fingerprint": source_fingerprint,
             "used_llm": assist_used,
             "model_applied": model_applied,
             "degraded": degraded,
@@ -445,6 +449,8 @@ class AutoIngestService:
             )
             if "model_applied" not in stored_knowledge:
                 knowledge.pop("model_applied", None)  # plans stored before the flag existed
+            if "source_fingerprint" not in stored_knowledge:
+                knowledge.pop("source_fingerprint", None)  # pre-existing preview
             if knowledge != stored_knowledge:
                 raise EltError(
                     "ELT_PREVIEW_STALE", "知识库已变化，请重新预演并确认", status_code=409
@@ -941,6 +947,15 @@ class AutoIngestService:
             "content": body,
             "source_key": source_key,
         }
+        if expected_plan and expected_plan.get("source_hash"):
+            from app.application.elt.service_support import dump_json
+
+            source_fingerprint = hashlib.sha256(
+                dump_json({"source_hash": expected_plan["source_hash"], "note": note.strip()}).encode("utf-8")
+            ).hexdigest()
+            if expected_plan.get("source_fingerprint") not in (None, source_fingerprint):
+                raise EltError("ELT_PREVIEW_STALE", "知识来源已变化，请重新预演", status_code=409)
+            data["source_fingerprint"] = source_fingerprint
         context = {
             "owner_user_id": owner_user_id,
             "run_id": run_id,
@@ -951,6 +966,14 @@ class AutoIngestService:
             decision = adapter.preview(
                 None, data, allowed_update_fields={"content", "document_path"}, context=context
             )
+            # Another confirmed run may have imported this exact archive since
+            # preview. Skipping it has no write side effect and avoids duplicates.
+            if (decision.reason == "duplicate_source_fingerprint" and
+                str(((decision.before or {}).get("metadata") or {}).get("etl_run_id") or "") != run_id):
+                return {
+                    "action": "skip", "reason": decision.reason, "match_ref": decision.match_ref,
+                    "run_id": run_id, "content_hash": content_hash,
+                }
             if expected_plan:
                 from app.application.elt.service_support import dump_json
 

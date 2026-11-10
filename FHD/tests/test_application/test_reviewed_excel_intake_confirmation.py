@@ -841,6 +841,36 @@ def test_database_model_rows_drop_header_labels():
     assert located.rows[0].provenance["location"] == "model"
 
 
+def test_same_archive_with_different_model_summaries_deduplicates_by_source(intake_store, monkeypatch, tmp_path):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    monkeypatch.setenv('FHD_ETL_LLM', 'on')
+    summaries = iter(['合成摘要甲', '合成摘要乙', '合成摘要丙'])
+    monkeypatch.setattr('app.application.elt.llm_assist.advise_knowledge_import', lambda _: LlmAssistResult(used_llm=True, data={'content': next(summaries)}))
+    intake = intake_store.intake
+    source = '# sheet:合成\nR2 | 合成货品 | 2'
+    def plan(name, note=''):
+        return intake.knowledge_plan(path=tmp_path / 'unused.xlsx', file_name=name, note=note, owner_user_id=7, source_text=source)
+
+    with tenant_scope(1):
+        first = plan('模板甲')
+        second = plan('模板乙')
+        assert first['action'] == second['action'] == 'new'
+        receipt = intake._ingest_knowledge(text=first['content'], source_key='模板甲', run_id='synthetic-run', owner_user_id=7, content_hash='unused', note='', tenant_id=1, expected_plan=first)
+        with pytest.raises(EltError) as same_run:
+            intake._ingest_knowledge(text=first['content'], source_key='模板甲', run_id='synthetic-run', owner_user_id=7, content_hash='unused', note='', tenant_id=1, expected_plan=first)
+        assert same_run.value.code == 'ELT_PREVIEW_STALE'
+        assert second['source_fingerprint'] == first['source_fingerprint']
+        duplicate = intake._ingest_knowledge(text=second['content'], source_key='模板乙', run_id='synthetic-second', owner_user_id=7, content_hash='unused', note='', tenant_id=1, expected_plan=second)
+        assert duplicate['action'] == 'skip' and duplicate['match_ref'] == receipt['match_ref']
+        legacy = {key: value for key, value in second.items() if key != 'source_fingerprint'}
+        assert intake._ingest_knowledge(text=second['content'], source_key='旧模板', run_id='synthetic-legacy', owner_user_id=7, content_hash='unused', note='', tenant_id=1, expected_plan=legacy)['action'] == 'skip'
+        assert receipt['match_ref']
+        changed_note = plan('模板丙', '不同整理要求')
+        assert changed_note['source_fingerprint'] != first['source_fingerprint']
+        assert changed_note['action'] == 'new'
+
+
 def test_knowledge_line_calls_its_own_model(intake_store, monkeypatch, tmp_path):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
