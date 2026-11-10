@@ -100,13 +100,15 @@ def test_whitespace_stream_stays_an_explicit_empty_result():
     )
 
 
-def test_retry_and_second_confirm_do_not_write():
+def test_retry_and_second_confirm_do_not_write(monkeypatch):
+    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (1, 1))
     ctx = {
         "tenant_id": "demo",
         "idempotency_key": "turn-1",
         "destructive_confirmed": True,
         "scope_counts": {"customers": 1, "products": 1},
     }
+    prepare_turn("清理全部客户和产品", {**ctx, "destructive_confirmed": False})
     assert prepare_turn("清理全部客户和产品", ctx) is None
     assert mutation_policy() == "allow_once"
     blocked = mutation_block(
@@ -144,6 +146,7 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
         "turn_id": "turn-bulk",
         "scope_counts": {"customers": 2, "products": 3},
     }
+    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (2, 3))
     preview = list(
         chat_stream_sse_events("清理全部客户和产品", runtime_context=ctx, client=MagicMock())
     )
@@ -192,13 +195,15 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
     assert retry[-1]["result"]["execution"]["effect"] == "unknown"
 
 
-def test_uncommitted_confirm_is_not_repeated_by_another_confirm():
+def test_uncommitted_confirm_is_not_repeated_by_another_confirm(monkeypatch):
+    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (0, 0))
     first = {
         "idempotency_key": "turn-2",
         "destructive_confirmed": True,
         "tenant_id": "demo",
         "scope_counts": {"customers": 0, "products": 0},
     }
+    prepare_turn("清空所有产品", {**first, "destructive_confirmed": False})
     assert prepare_turn("清空所有产品", first) is None
     second = {"idempotency_key": "turn-2", "destructive_confirmed": True, "tenant_id": "demo"}
     reply = prepare_turn("清空所有产品", second)
@@ -300,3 +305,49 @@ def test_identical_turn_keys_are_isolated_between_tenants_and_users(monkeypatch)
     assert execution_for_context(first)["tenant_id"] == "1"
     assert execution_for_context({**first, "tenant_id": "2"}) is None
     assert execution_for_context({**first, "user_id": "11"}) is None
+
+
+def test_concurrent_confirmation_and_dispatch_are_claimed_once(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (1, 1))
+    ctx = {
+        "tenant_id": "1",
+        "user_id": "10",
+        "idempotency_key": "same",
+        "destructive_confirmed": True,
+        "mutation_policy": "allow_once",
+    }
+    prepare_turn("清空所有产品", {**ctx, "destructive_confirmed": False})
+    barrier = Barrier(2)
+
+    def attempt(_):
+        barrier.wait()
+        if prepare_turn("清空所有产品", ctx) is not None:
+            return "blocked"
+        return "allowed" if mutation_block("delete_products", "{}", ctx) is None else "blocked"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(attempt, range(2)))
+    assert sorted(outcomes) == ["allowed", "blocked"]
+    assert (
+        prepare_turn("清空所有产品", {**ctx, "destructive_confirmed": False})["execution"]["effect"]
+        == "executing"
+    )
+    assert mutation_block("delete_products", "{}", ctx)["error"] == "outcome_unknown"
+
+
+def test_confirmation_rejects_missing_or_changed_preview(monkeypatch):
+    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (1, 1))
+    ctx = {
+        "tenant_id": "1",
+        "user_id": "10",
+        "idempotency_key": "key",
+        "destructive_confirmed": True,
+    }
+    assert prepare_turn("清空所有产品", ctx)["success"] is False
+    prepare_turn("清空所有产品", {**ctx, "destructive_confirmed": False})
+    assert prepare_turn("清理全部客户和产品", ctx)["success"] is False
+    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (1, 2))
+    assert prepare_turn("清空所有产品", ctx)["success"] is False

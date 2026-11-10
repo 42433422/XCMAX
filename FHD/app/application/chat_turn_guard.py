@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
@@ -25,6 +26,7 @@ _MUTATION = re.compile(
 )
 _READ_ONLY = re.compile(r"(query|list|search|read|get|count|status|preview|schema)", re.IGNORECASE)
 _LEDGER: dict[tuple[str, str, str], TurnRecord] = {}
+_LEDGER_LOCK = threading.RLock()
 
 
 @dataclass
@@ -37,6 +39,7 @@ class TurnRecord:
     tenant_id: str
     customer_count: int | None
     product_count: int | None
+    request_text: str = ""
 
 
 def reset_turn_ledger() -> None:
@@ -171,7 +174,12 @@ def execution_payload(record: TurnRecord) -> dict[str, Any]:
 
 def _remember(record: TurnRecord, ctx: dict[str, Any]) -> dict[str, Any]:
     if record.key:
-        _LEDGER[_scope_key(ctx)] = record
+        with _LEDGER_LOCK:
+            previous = _LEDGER.get(_scope_key(ctx))
+            if record.effect == "preview" and previous and previous.effect != "preview":
+                record = previous
+            else:
+                _LEDGER[_scope_key(ctx)] = record
     return {
         "success": record.effect in {"preview", "committed"},
         "response": record.summary,
@@ -219,37 +227,60 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
         customers, products = scope_counts(ctx)
         text = preview_message(ctx, message, customers=customers, products=products)
         record = TurnRecord(
-            key, "bulk_destructive", False, "preview", text, _tenant(ctx), customers, products
+            key,
+            "bulk_destructive",
+            False,
+            "preview",
+            text,
+            _tenant(ctx),
+            customers,
+            products,
+            message.strip(),
         )
         _use_policy("block")
         return _remember(record, ctx)
     if bulk and confirmed:
-        if existing and existing.effect == "opened":
-            _use_policy("model_only")
-            text = "上一轮写入状态未确认，请先核对原任务；本次不会执行删除。"
-            return {
-                "success": True,
-                "response": text,
-                "text": text,
-                "message": text,
-                "execution": execution_payload(
-                    TurnRecord(
-                        key,
-                        "bulk_destructive",
-                        False,
-                        "unknown",
-                        text,
-                        existing.tenant_id,
-                        existing.customer_count,
-                        existing.product_count,
-                    )
-                ),
-            }
         customers, products = scope_counts(ctx)
-        record = TurnRecord(
-            key, "bulk_destructive", False, "opened", "", _tenant(ctx), customers, products
-        )
-        if key:
+        with _LEDGER_LOCK:
+            existing = _LEDGER.get(_scope_key(ctx))
+            if existing and existing.effect in {"opened", "executing", "unknown"}:
+                _use_policy("model_only")
+                text = "上一轮写入状态未确认，请先核对原任务；本次不会执行删除。"
+                return {
+                    "success": False,
+                    "response": text,
+                    "text": text,
+                    "message": text,
+                    "execution": {**execution_payload(existing), "effect": "unknown"},
+                }
+            valid_scope = ("客户" in message or "产品" in message) and not any(
+                label in message for label in ("订单", "资料", "数据")
+            )
+            if (
+                not existing
+                or existing.effect != "preview"
+                or not valid_scope
+                or existing.request_text != message.strip()
+                or (
+                    "客户" in message
+                    and (customers is None or customers != existing.customer_count)
+                )
+                or ("产品" in message and (products is None or products != existing.product_count))
+            ):
+                _use_policy("block")
+                text = "删除范围或权限未确认，请重新预览；本次未执行删除。"
+                return {"success": False, "response": text, "text": text, "message": text}
+            record = TurnRecord(
+                key,
+                "bulk_destructive",
+                False,
+                "opened",
+                "",
+                _tenant(ctx),
+                customers,
+                products,
+                message.strip(),
+            )
             _LEDGER[_scope_key(ctx)] = record
         _use_policy("allow_once")
         return None
@@ -280,21 +311,30 @@ def mutation_block(name: str, raw_args: str, runtime_context: Any) -> dict[str, 
     ctx = runtime_context if isinstance(runtime_context, dict) else {}
     policy = str(ctx.get("mutation_policy") or "") or _POLICY.get()
     key = _key(ctx)
-    existing = _LEDGER.get(_scope_key(ctx)) if key else None
-    if existing and (existing.committed or existing.effect == "unknown"):
-        return {
-            "success": False,
-            "committed": existing.committed,
-            "error": "already_committed" if existing.committed else "outcome_unknown",
-            "message": "原操作状态待核验，不会再次执行。",
-        }
-    if policy in {"block", "model_only"}:
-        return {
-            "success": False,
-            "committed": False,
-            "error": "mutation_blocked",
-            "message": "未授权或本轮只重试模型，未执行写入。",
-        }
+    with _LEDGER_LOCK:
+        existing = _LEDGER.get(_scope_key(ctx)) if key else None
+        if existing and (existing.committed or existing.effect in {"executing", "unknown"}):
+            return {
+                "success": False,
+                "committed": existing.committed,
+                "error": "already_committed" if existing.committed else "outcome_unknown",
+                "message": "原操作状态待核验，不会再次执行。",
+            }
+        if policy in {"block", "model_only"}:
+            return {
+                "success": False,
+                "committed": False,
+                "error": "mutation_blocked",
+                "message": "未授权或本轮只重试模型，未执行写入。",
+            }
+        if policy == "allow_once":
+            if not existing or existing.effect != "opened":
+                return {
+                    "success": False,
+                    "error": "outcome_unknown",
+                    "message": "原操作状态待核验。",
+                }
+            existing.effect = "executing"
     return None
 
 
@@ -309,15 +349,16 @@ def note_tool_result(runtime_context: Any, name: str) -> None:
     key = _key(runtime_context)
     if not key:
         return
-    current = _LEDGER.get(_scope_key(runtime_context))
-    summary = f"{name} 已返回，实际写入状态待核验，请勿重复操作。"
-    _LEDGER[_scope_key(runtime_context)] = TurnRecord(
-        key,
-        "bulk_destructive",
-        False,
-        "unknown",
-        summary,
-        _tenant(runtime_context),
-        current.customer_count if current else None,
-        current.product_count if current else None,
-    )
+    with _LEDGER_LOCK:
+        current = _LEDGER.get(_scope_key(runtime_context))
+        summary = f"{name} 已返回，实际写入状态待核验，请勿重复操作。"
+        _LEDGER[_scope_key(runtime_context)] = TurnRecord(
+            key,
+            "bulk_destructive",
+            False,
+            "unknown",
+            summary,
+            _tenant(runtime_context),
+            current.customer_count if current else None,
+            current.product_count if current else None,
+        )
