@@ -67,12 +67,12 @@ export const useIndustryStore = defineStore('industry', () => {
     }
   }
 
-  async function loadIndustries() {
+  async function loadIndustries(options?: { timeoutMs?: number; quiet?: boolean }) {
     loading.value = true
     error.value = null
 
     try {
-      const response = await systemApi.getIndustries()
+      const response = await systemApi.getIndustries(options)
       if (response.success && response.data) {
         industries.value = asArray<Industry>(asRecord(response.data).industries)
       } else {
@@ -99,11 +99,11 @@ export const useIndustryStore = defineStore('industry', () => {
       description: typeof ind.description === 'string' ? ind.description : '', config: ind, ...ind } : null
   }
 
-  async function loadCurrentIndustry() {
+  async function loadCurrentIndustry(options?: { timeoutMs?: number; quiet?: boolean }) {
     loading.value = true
     error.value = null
     try {
-      const response = await systemApi.getCurrentIndustry()
+      const response = await systemApi.getCurrentIndustry(options)
       if (response.success && response.data) applyCurrentIndustry(response.data as Industry)
       else {
         const fallback = fallbackIndustry()
@@ -121,7 +121,10 @@ export const useIndustryStore = defineStore('industry', () => {
 
   /** Login requires verified server data; ordinary display refresh retains its existing fallback. */
   async function loadFromServer(required = false): Promise<void> {
-    if (!required) return void await Promise.all([loadIndustries(), loadCurrentIndustry()])
+    if (!required) {
+      const shellRead = { timeoutMs: 30_000, quiet: true }
+      return void await Promise.all([loadIndustries(shellRead), loadCurrentIndustry(shellRead)])
+    }
     const epoch = productReadAccountEpoch.value
     const version = ++readVersion
     const currentRequest = () => epoch === productReadAccountEpoch.value && version === readVersion
@@ -132,7 +135,11 @@ export const useIndustryStore = defineStore('industry', () => {
       industries.value = []
     }
     try {
-      const [list, selected] = await Promise.allSettled([systemApi.getIndustries(), systemApi.getCurrentIndustry()])
+      const loginRead = { timeoutMs: 8_000, quiet: false }
+      const [list, selected] = await Promise.allSettled([
+        systemApi.getIndustries(loginRead),
+        systemApi.getCurrentIndustry(loginRead),
+      ])
       if (!currentRequest()) throw new Error('登录工作空间已改变，请重试')
       if (selected.status === 'rejected') throw selected.reason
       const current = selected.value

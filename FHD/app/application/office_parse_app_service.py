@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import re
+import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -150,3 +153,423 @@ def read_workspace_output_files(
         text = blob.decode("utf-8", errors="replace")
         out.append({"path": rel, "kind": "text", "text": text})
     return out
+
+
+_OFFICE_ACTION_RE = re.compile(r"导入|入库|解析办公")
+_OFFICE_PATH_RE = re.compile(
+    r"@?((?:[^\s'\"<>])+?\.(?:xlsx|xlsm|xls|csv|docx|doc|pdf|pptx|ppt))"
+    r"(?=$|[\s,，。.!！?？]|导入|入库)",
+    re.IGNORECASE,
+)
+_SHEET_LABEL_RE = re.compile(r"(?:工作表|sheet)\s*[:：]?\s*([^\s,，。]+)", re.IGNORECASE)
+_PREVIEW_READY = "preview_ready"
+_PREVIEW_FAILED = {"failed", "error", "interrupted"}
+
+
+def is_office_elt_chat_message(message: str) -> bool:
+    text = str(message or "")
+    return bool(_OFFICE_ACTION_RE.search(text) and _OFFICE_PATH_RE.search(text))
+
+
+def _resolve_office_path(file_path: str) -> Path:
+    from urllib.parse import unquote
+
+    from app.application.elt.errors import EltError
+    from app.infrastructure.workspace import resolve_existing_workspace_file, workspace_root
+
+    raw = unquote(str(file_path or "").strip()).replace("\\", "/")
+    if raw.startswith("@"):
+        raw = raw[1:]
+    root = workspace_root().as_posix().rstrip("/")
+    if raw.startswith(f"{root}/"):
+        raw = raw[len(root) + 1 :]
+    raw = raw.lstrip("/")
+    try:
+        return resolve_existing_workspace_file(raw)
+    except FileNotFoundError as exc:
+        raise EltError("ELT_UPLOAD_MISSING", "找不到要入库的办公文件", status_code=404) from exc
+    except (ValueError, OSError) as exc:
+        raise EltError("ELT_UPLOAD_PATH_INVALID", "办公文件路径无效") from exc
+
+
+def _elt_parse_path(path: Path) -> tuple[Path, Path | None]:
+    if path.suffix.lower() != ".xls":
+        return path, None
+    from app.application.elt.errors import EltError, ReviewedExcelError
+    from app.application.reviewed_excel_legacy import ensure_slice_workbook
+
+    try:
+        data, _receipt = ensure_slice_workbook(path.read_bytes())
+    except ReviewedExcelError as exc:
+        raise EltError("ELT_FILE_TYPE_UNSUPPORTED", str(exc)) from exc
+    handle = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+    try:
+        handle.write(data)
+    finally:
+        handle.close()
+    converted = Path(handle.name)
+    return converted, converted
+
+
+def _elt_target(detection: dict[str, Any], suffix: str) -> str:
+    from app.application.elt.parsers import KNOWLEDGE_ONLY_SUFFIXES
+
+    target = str(detection.get("target_type") or "")
+    if suffix in KNOWLEDGE_ONLY_SUFFIXES:
+        return "knowledge"
+    if target in {
+        "products",
+        "customers",
+        "customer_products",
+        "shipment_records",
+        "attendance",
+        "purchase_orders",
+        "knowledge",
+    }:
+        return target
+    return "products"
+
+
+def _worksheet_templates(path: Path) -> list[dict[str, str]]:
+    if path.suffix.lower() not in {".xlsx", ".xlsm"}:
+        return []
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(path, read_only=True, data_only=False, keep_links=False)
+    try:
+        templates: list[dict[str, str]] = []
+        for worksheet in workbook.worksheets:
+            if getattr(worksheet, "sheet_state", "visible") in {"hidden", "veryHidden"}:
+                continue
+            title = str(worksheet.title)
+            templates.append({"id": title, "label": title, "sheet": title})
+        return templates
+    finally:
+        workbook.close()
+
+
+def _one_sheet(data: bytes, sheet: str) -> bytes:
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(BytesIO(data))
+    try:
+        if sheet not in workbook.sheetnames:
+            return data
+        for name in list(workbook.sheetnames):
+            if name != sheet:
+                del workbook[name]
+        out = BytesIO()
+        workbook.save(out)
+        return out.getvalue()
+    finally:
+        workbook.close()
+
+
+def _stage_bytes(path: Path, template: dict[str, Any] | None) -> tuple[bytes, str]:
+    data = path.read_bytes()
+    name = path.name
+    suffix = path.suffix.lower()
+    if suffix == ".xls":
+        from app.application.elt.errors import EltError, ReviewedExcelError
+        from app.application.reviewed_excel_legacy import ensure_slice_workbook
+
+        try:
+            data, _receipt = ensure_slice_workbook(data)
+        except ReviewedExcelError as exc:
+            raise EltError("ELT_FILE_TYPE_UNSUPPORTED", str(exc)) from exc
+        name = f"{path.stem}.xlsx"
+        suffix = ".xlsx"
+    if template and suffix in {".xlsx", ".xlsm"}:
+        sheet = str(template.get("sheet") or "")
+        data = _one_sheet(data, sheet)
+        name = f"{Path(name).stem}-{sheet or 'sheet'}{suffix}"
+    return data, name
+
+
+def parse_office_file_elt(file_path: str) -> dict[str, Any]:
+    """Parse one office file with the docking ELT parser. Worksheets stay optional."""
+    from app.application.elt.parsers import parse_file
+    from app.application.elt.target_detection import detect_etl_target
+
+    path = _resolve_office_path(file_path)
+    parse_path, cleanup = _elt_parse_path(path)
+    try:
+        detection = detect_etl_target(parse_path)
+        target = _elt_target(detection, parse_path.suffix.lower())
+        dataset = parse_file(parse_path, target_type=target)
+        try:
+            row_count = len(dataset.rows or [])
+            headers = [str(item) for item in (dataset.headers or [])[:12]]
+            warnings = [
+                str(item.get("message") if isinstance(item, dict) else item)
+                for item in (dataset.warnings or [])[:4]
+            ]
+        finally:
+            dataset.close()
+        templates = _worksheet_templates(parse_path)
+    finally:
+        if cleanup is not None:
+            cleanup.unlink(missing_ok=True)
+    return {
+        "pipeline": "elt",
+        "file_path": file_path,
+        "file_name": path.name,
+        "target_type": target,
+        "detection": detection,
+        "templates": templates,
+        "selected_template_index": -1,
+        "row_count": row_count,
+        "headers": headers,
+        "warnings": warnings,
+        "summary": f"ELT 已解析 {path.name}，{row_count} 行。工作表模板可选，当前未选用。",
+    }
+
+
+def _preview_ready(run: dict[str, Any] | None) -> bool:
+    return (
+        bool(run)
+        and str(run.get("status") or "") == _PREVIEW_READY
+        and bool(run.get("preview_revision"))
+    )
+
+
+def _await_office_preview(service: Any, db: Any, run_id: str, owner: int, wait_seconds: float):
+    if wait_seconds <= 0 or not run_id:
+        return None
+    deadline = time.monotonic() + wait_seconds
+    last = None
+    while time.monotonic() < deadline:
+        time.sleep(0.4)
+        expire = getattr(db, "expire_all", None)
+        if callable(expire):
+            expire()
+        last = service.get_run(db, run_id=run_id, owner_user_id=owner)
+        if _preview_ready(last):
+            return last
+        if str((last or {}).get("status") or "") in _PREVIEW_FAILED:
+            return None
+    return last if _preview_ready(last) else None
+
+
+def _plan_from_preview(
+    owned_path: str,
+    *,
+    file_name: str,
+    owner: int,
+    upload_id: str,
+    run: dict[str, Any],
+    detection: dict[str, Any],
+    sha: str,
+) -> dict[str, Any] | None:
+    from app.application.elt.auto_ingest_service import get_auto_ingest_service
+    from app.application.elt.errors import EltError
+    from app.request_active_mod_ctx import get_request_active_mod_id
+
+    try:
+        knowledge = get_auto_ingest_service().knowledge_plan(
+            path=Path(owned_path),
+            file_name=file_name,
+            note="",
+            owner_user_id=owner,
+            owned_upload_user_id=owner,
+            allow_model=False,
+        )
+    except EltError:
+        logger.debug("office elt knowledge plan skipped", exc_info=True)
+        return None
+    return {
+        "run_id": str(run.get("id") or run.get("run_id") or ""),
+        "upload_id": upload_id,
+        "preview_revision": str(run.get("preview_revision") or ""),
+        "target_type": str(run.get("target_type") or detection.get("target_type") or ""),
+        "detection": detection,
+        "name": file_name,
+        "note": "",
+        "mod_id": get_request_active_mod_id(),
+        "candidate_sha256": sha,
+        "knowledge": knowledge,
+        "valid_rows_only": True,
+    }
+
+
+def save_office_file_elt(
+    file_path: str,
+    *,
+    tenant_id: int,
+    owner_user_id: int,
+    template_index: int = -1,
+    parsed: dict[str, Any] | None = None,
+    preview_wait_seconds: float = 180,
+    client_disconnected: bool = False,
+) -> dict[str, Any]:
+    """Stage the file and queue one docking approval. A disconnect does not skip the queue.
+
+    The write stays on ``submit_docking_write``: status ``awaiting_approval``, titled
+    ``数据对接入库：{file}``. Approval releases the existing ELT batch. There is no
+    immediate ``start_background`` write. A preview that is not ready is omitted, so
+    release keeps the existing ``ELT_CANDIDATE_REQUIRED`` gate instead of a side door.
+    """
+    _ = client_disconnected
+    from io import BytesIO
+
+    from app.application.elt.docking_approval import submit_docking_write
+    from app.application.elt.optional_template import choose_optional_template
+    from app.application.elt.service import get_elt_service
+    from app.db.session import get_db
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    if parsed is None:
+        parsed = parse_office_file_elt(file_path)
+    path = _resolve_office_path(str(parsed.get("file_path") or file_path))
+    templates = [item for item in (parsed.get("templates") or []) if isinstance(item, dict)]
+    chosen = choose_optional_template(templates, template_index)
+    template_id = str(chosen.get("id") or "") if isinstance(chosen, dict) else ""
+    payload, staged_name = _stage_bytes(path, chosen if isinstance(chosen, dict) else None)
+    detection = dict(parsed.get("detection") or {})
+    target = str(parsed.get("target_type") or _elt_target(detection, path.suffix.lower()))
+    service = get_elt_service()
+    plan = None
+    owned_path = ""
+    with tenant_scope(int(tenant_id)):
+        with get_db() as db:
+            upload = service.save_upload(
+                db,
+                owner_user_id=int(owner_user_id),
+                file_name=staged_name,
+                content_type=None,
+                stream=BytesIO(payload),
+            )
+            owned = service._owned_upload(db, str(upload["upload_id"]), int(owner_user_id))
+            owned_path = str(owned.storage_path)
+            preview = service.create_preview(
+                db,
+                owner_user_id=int(owner_user_id),
+                upload_id=str(upload["upload_id"]),
+                target_type=target,
+            )
+            run = (
+                preview
+                if _preview_ready(preview)
+                else _await_office_preview(
+                    service,
+                    db,
+                    str(preview.get("id") or ""),
+                    int(owner_user_id),
+                    preview_wait_seconds,
+                )
+            )
+            if _preview_ready(run):
+                plan = _plan_from_preview(
+                    owned_path,
+                    file_name=staged_name,
+                    owner=int(owner_user_id),
+                    upload_id=str(upload["upload_id"]),
+                    run=run,
+                    detection=detection or {"target_type": target},
+                    sha=str(getattr(owned, "sha256", "") or run.get("file_sha256") or ""),
+                )
+    receipt = submit_docking_write(
+        owner_user_id=int(owner_user_id),
+        tenant_id=int(tenant_id),
+        source_path=owned_path,
+        file_name=staged_name,
+        template_id=template_id,
+        prepared_plan=plan,
+        owned_upload_user_id=int(owner_user_id),
+    )
+    return {
+        "pipeline": "elt",
+        "status": receipt.get("status"),
+        "batch_id": receipt.get("batch_id"),
+        "approval_request_id": receipt.get("approval_request_id"),
+        "template_id": template_id,
+        "selected_template_index": template_index if chosen else -1,
+        "prepared": plan is not None,
+        "auto_ingest": receipt,
+        "file_name": staged_name,
+    }
+
+
+def _office_actor(runtime_context: dict[str, Any] | None) -> tuple[int, int] | None:
+    ctx = runtime_context or {}
+    owner = ctx.get("local_user_id", ctx.get("user_id"))
+    tenant = ctx.get("tenant_id")
+    if isinstance(owner, bool) or isinstance(tenant, bool):
+        return None
+    try:
+        owner_i = int(owner)
+        tenant_i = int(tenant)
+    except (TypeError, ValueError):
+        return None
+    if owner_i <= 0 or tenant_i <= 0:
+        return None
+    return tenant_i, owner_i
+
+
+def _sheet_index(message: str, templates: list[dict[str, Any]]) -> int:
+    match = _SHEET_LABEL_RE.search(message)
+    if not match:
+        return -1
+    label = match.group(1)
+    for index, item in enumerate(templates):
+        if label in {
+            str(item.get("label") or ""),
+            str(item.get("sheet") or ""),
+            str(item.get("id") or ""),
+        }:
+            return index
+    return -1
+
+
+def _office_reply(text: str, *, success: bool) -> dict[str, Any]:
+    return {
+        "success": success,
+        "response": text,
+        "text": text,
+        "thinking_steps": "[调用工具: elt/office_parse]",
+        "action": "office_parse_elt",
+        "trace_intent": "office_parse_elt",
+    }
+
+
+def office_chat_elt_reply(
+    message: str, runtime_context: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
+    """Deterministic office import. A miss returns None; a hit never calls the model."""
+    if not is_office_elt_chat_message(message):
+        return None
+    match = _OFFICE_PATH_RE.search(str(message))
+    rel = match.group(1) if match else ""
+    wants_save = bool(re.search(r"导入|入库", str(message)))
+    from app.application.elt.errors import EltError
+
+    try:
+        parsed = parse_office_file_elt(rel)
+        if not wants_save:
+            labels = "、".join(str(item.get("label") or "") for item in parsed["templates"]) or "无"
+            return _office_reply(
+                f"已用 ELT 解析 {parsed['file_name']}。可选工作表模板：{labels}。未选用模板，保存后才会提交入库审批。",
+                success=True,
+            )
+        actor = _office_actor(runtime_context)
+        if actor is None:
+            return _office_reply("处理失败：需要登录后再入库。", success=False)
+        tenant_id, owner = actor
+        saved = save_office_file_elt(
+            rel,
+            tenant_id=tenant_id,
+            owner_user_id=owner,
+            template_index=_sheet_index(str(message), parsed["templates"]),
+            parsed=parsed,
+        )
+        return _office_reply(
+            f"已提交审批：数据对接入库：{saved.get('file_name') or parsed.get('file_name')}。通过后才会写入，驳回不写入。",
+            success=True,
+        )
+    except EltError as exc:
+        return _office_reply(f"处理失败：{exc.message}", success=False)
+    except Exception:
+        logger.exception("office elt chat path failed")
+        return _office_reply("处理失败：办公文件入库没有完成。", success=False)

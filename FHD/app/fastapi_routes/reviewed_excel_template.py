@@ -2437,12 +2437,13 @@ async def reviewed_excel_save(
         auto_ingest = {"success": False, "error": "confirmation_required"}
         if confirmed_plan:
             try:
-                from app.application.elt.auto_ingest_service import get_auto_ingest_service
+                from app.application.elt.docking_approval import submit_docking_write
 
-                auto_ingest = get_auto_ingest_service().start_background(
+                auto_ingest = submit_docking_write(
                     owner_user_id=owner,
                     tenant_id=tenant,
-                    # Staged candidate workbook chosen at preview.
+                    # Staged candidate workbook chosen at preview. The path stays
+                    # in the server ledger; the approval request only carries the batch id.
                     source_path=str(prepared_path),
                     file_name=name.strip(),
                     template_id=str(template_id),
@@ -2450,7 +2451,6 @@ async def reviewed_excel_save(
                     classification_id=str(summary_for_ingest.get("classification_id") or ""),
                     composer_note=composer_note.strip(),
                     prepared_plan=confirmed_plan,
-                    # Pin etl/uploads/<tenant>/<owner> jail (ownership already checked).
                     owned_upload_user_id=owner,
                 )
             except BOUNDARY_ERRORS as exc:

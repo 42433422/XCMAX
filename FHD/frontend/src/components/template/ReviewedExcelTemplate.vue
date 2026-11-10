@@ -12,6 +12,7 @@ import { autoIngestStatusLabel, actionLabel, targetLabel } from '@/views/eltCent
 import TemplateCandidatePreview from './TemplateCandidatePreview.vue'
 import WorkbookEmployeeReport from './WorkbookEmployeeReport.vue'
 import { workbookEmployeeReports } from './workbookEmployeeReport'
+import { initialOptionalTemplateIndex, pickOptionalTemplate } from '@/domain/optionalTemplateSelection'
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
@@ -125,7 +126,7 @@ const currentRestrictions = computed(() => [...new Set([
 ])])
 const publicationRestricted = computed(() => currentRestrictions.value.length > 0)
 
-const candidateIndex = ref(props.archiveOnSelect ? -1 : 0)
+const candidateIndex = ref(initialOptionalTemplateIndex(props.archiveOnSelect))
 const proposals = ref<Proposal[]>([])
 const selectedVersion = ref(0)
 const proposal = computed(() => proposals.value[selectedVersion.value])
@@ -330,7 +331,7 @@ async function pollIngestProgress() {
     if (!current()) return
     kbProgress.value = data.kb_progress || null
     businessProgress.value = data.business_progress || null
-    const terminal = ['applied', 'partial', 'completed_empty', 'failed', 'withdrawn', 'awaiting_confirmation'].includes(String(data.status || ''))
+    const terminal = ['applied', 'partial', 'completed_empty', 'failed', 'withdrawn', 'awaiting_confirmation', 'rejected'].includes(String(data.status || ''))
     if (terminal) {
       stopIngestPoll()
       savedModelStatus.value = `自动入库批次 ${id}（状态 ${autoIngestStatusLabel(data.status)}）。请到审批工作台核对结果与可用的撤回操作。`
@@ -390,7 +391,7 @@ function equivalentTo(index: number): number | null {
 function cellStyle(cell: LayoutCell): CSSProperties {
   return { fontWeight: cell.bold ? 'bold' : 'normal', fontStyle: cell.italic ? 'italic' : 'normal', fontSize: `${cell.font_size}pt`, color: /^[0-9a-fA-F]{6}$/.test(cell.font_color) ? `#${cell.font_color}` : undefined, backgroundColor: /^[0-9a-fA-F]{6}$/.test(cell.fill) ? `#${cell.fill}` : undefined, textAlign: ['left', 'right', 'center'].includes(cell.align) ? cell.align as CSSProperties['textAlign'] : undefined }
 }
-function switchVersion(index: number) { selectedVersion.value = index; candidateIndex.value = props.archiveOnSelect ? -1 : 0 }
+function switchVersion(index: number) { selectedVersion.value = index; candidateIndex.value = initialOptionalTemplateIndex(props.archiveOnSelect) }
 let alive = true
 let operationEpoch = 0
 let selectionEpoch = 0
@@ -405,7 +406,7 @@ function captureFileOperation() {
 }
 function resetReview() {
   resetIntake()
-  review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = props.archiveOnSelect ? -1 : 0
+  review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = initialOptionalTemplateIndex(props.archiveOnSelect)
   savedId.value = ''; savedModelStatus.value = ''; ingestBatchId.value = ''; kbProgress.value = null; businessProgress.value = null; stopIngestPoll(); sheetIndex.value = 0
   feedback.value = ''; publishToTenant.value = false
 }
@@ -1116,7 +1117,7 @@ async function preview(slice?: AutoSlice) {
     if (props.archiveOnSelect && result.proposal.model.status !== 'returned') throw new Error('模型连接异常：模型未返回有效候选，请核对服务端处理记录后重试。')
     proposals.value = result.versions?.length ? result.versions : [result.proposal]
     selectedVersion.value = proposals.value.length - 1
-    candidateIndex.value = props.archiveOnSelect ? -1 : 0
+    candidateIndex.value = initialOptionalTemplateIndex(props.archiveOnSelect)
     review.value = result
     if (props.archiveOnSelect) archiveProgress.value = '平台模型候选已生成，请核对。'
     emit('stage', 'template')
@@ -1140,8 +1141,9 @@ function canCommitSelectedTemplate() {
   return true
 }
 function pickCandidate(index: number) {
-  if (busy.value || !Number.isInteger(index) || !proposal.value?.candidates[index]) return
-  candidateIndex.value = index
+  const next = pickOptionalTemplate(proposal.value?.candidates.length || 0, index, busy.value)
+  if (next === null) return
+  candidateIndex.value = next
   closeCandidatePicker()
   if (props.archiveOnSelect) void nextTick(() => candidateCapsule.value?.focus({ preventScroll: true }))
 }
@@ -1179,7 +1181,9 @@ async function save() {
     if (ingest?.batch_id) {
       kbProgress.value = ingest.kb_progress || { stage: 'queued', pct: 0, message: '排队写入知识库' }
       businessProgress.value = ingest.business_progress || { stage: 'queued', pct: 0, message: '排队写入业务域' }
-      savedModelStatus.value = `正在自动入库（批次 ${ingest.batch_id}，状态 ${autoIngestStatusLabel(ingest.status)}）…`
+      savedModelStatus.value = ingest.status === 'awaiting_approval'
+        ? `已提交审批工作台，通过后才会写入（批次 ${ingest.batch_id}）。`
+        : `正在自动入库（批次 ${ingest.batch_id}，状态 ${autoIngestStatusLabel(ingest.status)}）…`
       startIngestPoll(String(ingest.batch_id))
     } else if (ingest?.success === false) {
       savedModelStatus.value = ingest.error === 'confirmation_required' ? '仅模板已保存；知识与业务入库尚未确认，因此未启动。' : ingest.error === 'outcome_unknown' ? '模板已保存，入库回执尚未确认；请到审批工作台核对，勿重复提交。' : '模板已保存，但自动入库未能启动；请到审批工作台核对批次，勿重复提交。'
@@ -1212,7 +1216,7 @@ async function refine() {
     if (!current()) return
     proposals.value.push(result.proposal)
     selectedVersion.value = proposals.value.length - 1
-    candidateIndex.value = props.archiveOnSelect ? -1 : 0
+    candidateIndex.value = initialOptionalTemplateIndex(props.archiveOnSelect)
     return true
   } catch (err) {
     if (!current()) return

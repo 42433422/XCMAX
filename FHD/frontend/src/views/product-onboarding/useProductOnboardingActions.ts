@@ -276,8 +276,10 @@ export function useProductOnboardingActions(
     nav.goStep('host-pack')
   }
 
+  const workspaceEntered = ref(false)
   async function createWorkspace() {
-    if (bootstrapBusy.value || loading.value || finishing.value) return
+    if (workspaceEntered.value || bootstrapBusy.value || loading.value || finishing.value) return
+    autoEnterAttempted.value = true
     finishing.value = true
     try {
       if (!(await requireAccount())) return
@@ -291,6 +293,7 @@ export function useProductOnboardingActions(
       const saved = await patchWorkspacePrefs({ host_pack_acknowledged: true, product_flow_completed: true })
       if (saved.success !== true) throw new Error('工作空间配置未保存，请重试')
       nav.finishHostPackFlow()
+      workspaceEntered.value = true
     } catch (error) {
       if (!handleMissingAccount(error)) await appAlert(productErrorMessage(error, '工作空间暂时未准备好，请重试'))
     } finally {
@@ -317,6 +320,30 @@ export function useProductOnboardingActions(
     await nextTick()
     nav.launchFirstAiTask()
   }
+
+  const autoEnterAttempted = ref(false)
+  function maybeAutoEnterWorkspace() {
+    if (autoEnterAttempted.value) return
+    if (state.currentStep.value !== 'host-pack') return
+    if (state.fromTutorial.value || loginRequired.value || !baselineOk.value) return
+    if (loading.value || bootstrapBusy.value || finishing.value || state.companySaving.value) return
+    autoEnterAttempted.value = true
+    void createWorkspace()
+  }
+  watch(
+    () => [
+      state.currentStep.value,
+      baselineOk.value,
+      loginRequired.value,
+      state.fromTutorial.value,
+      loading.value,
+      bootstrapBusy.value,
+      finishing.value,
+      state.companySaving.value,
+    ],
+    () => { maybeAutoEnterWorkspace() },
+    { immediate: true },
+  )
 
   return {
     loginRequired,

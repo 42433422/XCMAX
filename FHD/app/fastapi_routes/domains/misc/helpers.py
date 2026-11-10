@@ -143,4 +143,22 @@ def _dispatch_tool_for_approval(
 ) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
+    if tool_id == "data_docking" and action == "auto_ingest":
+        from app.application.elt.auto_ingest_service import get_auto_ingest_service
+        from app.application.elt.errors import EltError
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        batch_id = str((params or {}).get("batch_id") or "").strip()
+        tenant = current_tenant_id()
+        if tenant is None or not batch_id:
+            return {"success": False, "error": "tenant_or_batch_missing"}
+        try:
+            return get_auto_ingest_service().release_approved_batch(
+                batch_id=batch_id, tenant_id=int(tenant)
+            )
+        except EltError as exc:
+            return {
+                "success": False,
+                "error": str(getattr(exc, "code", "") or "docking_write_rejected"),
+            }
     return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)

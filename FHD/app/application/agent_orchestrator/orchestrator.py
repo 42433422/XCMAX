@@ -45,6 +45,7 @@ from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, v
 from app.application.workflow.workflow_types import (
     PlanGraph,
     WorkflowNode,
+    plan_from_dict,
     plan_to_dict,
     skip_unselected_step,
 )
@@ -74,6 +75,41 @@ def _authorized_step_matches_plan(run: AgentRun, step: AgentStep) -> bool:
         and dict(node.get("params") or {}) == dict(step.params or {})
         and list(node.get("depends_on") or []) == list(step.depends_on or [])
     )
+
+
+def _queue_next_approval(run: AgentRun) -> None:
+    """A later sensitive step stays on the same run and gets its own approval-center request."""
+    if run.status != "waiting_user":
+        return
+    step = next((item for item in run.steps if item.status == "waiting_user"), None)
+    if step is None or step.tool_id == "clarify" or RunRepair.can_auto_execute(step):
+        return
+    stored = run.metadata.get("plan")
+    plan = plan_from_dict(stored) if isinstance(stored, dict) else None
+    if plan is None:
+        return
+    node = next((item for item in plan.nodes if item.node_id == step.node_id), None)
+    if node is None:
+        return
+    from app.application.workflow.approval_service import get_approval_service
+
+    service = get_approval_service()
+    context = dict(run.metadata.get("runtime_context") or {})
+    try:
+        request = service.create_approval_request(
+            plan_id=plan.plan_id,
+            node=node,
+            runtime_context=context,
+            plan=plan,
+            require_persistence=True,
+        )
+        service.attach_pending_agent_run(
+            request.request_id,
+            agent_run_id=run.run_id,
+            approved_step_id=step.node_id,
+        )
+    except (RECOVERABLE_ERRORS, RuntimeError):
+        logger.warning("follow-up approval was not persisted run_id=%s", run.run_id)
 
 
 def _verified_catalog_terminal(run: AgentRun, step: AgentStep) -> dict[str, Any] | None:
@@ -391,6 +427,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         self._execute_with_durable_lease(
             run, runtime_context=context, approved_step_id=waiting_step.step_id
         )
+        try:
+            _queue_next_approval(run)
+        except RuntimeError:
+            logger.warning("follow-up approval was not created run_id=%s", run.run_id)
         return cast("AgentRun | None", self._repo.save(run))
 
     def resume_failed_safe_steps(self, run_id: str) -> AgentRun | None:

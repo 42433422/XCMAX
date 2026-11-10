@@ -128,25 +128,29 @@
       />
       <ChatModelRecovery :scope-key="messageSessionKey" />
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
-        <span class="sheet-link-label">关联工作表：</span>
-        <button class="sheet-link-btn" :class="{ active: linkedExcelAllSheets }" @click="bindAllExcelSheetsToChat">
-          全部（{{ excelSheetOptions.length }}）
+        <button type="button" class="sheet-link-btn" :class="{ active: worksheetTemplateOpen || !!linkedExcelSheet || linkedExcelAllSheets }" @click="worksheetTemplateOpen = !worksheetTemplateOpen">
+          {{ worksheetTemplateLabel }}
         </button>
-        <button
-          v-for="sheet in excelSheetOptions"
-          :key="`${sheet.sheet_index}-${sheet.sheet_name}`"
-          class="sheet-link-btn"
-          :class="{
-            active:
-              !linkedExcelAllSheets &&
-              linkedExcelSheet &&
-              linkedExcelSheet.sheet_name === sheet.sheet_name &&
-              linkedExcelSheet.sheet_index === sheet.sheet_index,
-          }"
-          @click="bindExcelSheetToChat(sheet)"
-        >
-          Sheet {{ sheet.sheet_index }}（{{ sheet.sheet_name }}）
-        </button>
+        <div v-if="worksheetTemplateOpen" class="sheet-link-picker">
+          <button type="button" class="sheet-link-btn" :class="{ active: !linkedExcelSheet && !linkedExcelAllSheets }" @click="clearWorksheetTemplate">不使用模板</button>
+          <button type="button" class="sheet-link-btn" :class="{ active: linkedExcelAllSheets }" @click="chooseAllWorksheetTemplates">全部工作表</button>
+          <button
+            v-for="sheet in excelSheetOptions"
+            :key="`${sheet.sheet_index}-${sheet.sheet_name}`"
+            type="button"
+            class="sheet-link-btn"
+            :class="{
+              active:
+                !linkedExcelAllSheets &&
+                linkedExcelSheet &&
+                linkedExcelSheet.sheet_name === sheet.sheet_name &&
+                linkedExcelSheet.sheet_index === sheet.sheet_index,
+            }"
+            @click="chooseWorksheetTemplate(sheet)"
+          >
+            {{ sheet.sheet_name }}
+          </button>
+        </div>
       </div>
       <div class="input-wrapper">
         <textarea
@@ -224,6 +228,7 @@
       :items="officeDockingReviewItems"
       :processing="officeDockingProcessing"
       @toggle-target="toggleOfficeDockingTarget"
+      @pick-template="pickOfficeWorksheetTemplate"
       @confirm="confirmOfficeDockingReview"
       @close="clearOfficeDockingReview"
     />
@@ -610,6 +615,7 @@ const {
   triggerOfficeDocking,
   onOfficeDockingFileChange,
   toggleOfficeDockingTarget,
+  pickOfficeWorksheetTemplate,
   confirmOfficeDockingReview,
   clearOfficeDockingReview,
 } = useChatOfficeDocking({
@@ -620,6 +626,26 @@ const {
     await sendMessage()
   },
 })
+
+const worksheetTemplateOpen = ref(false)
+const worksheetTemplateLabel = computed(() => {
+  if (linkedExcelAllSheets.value) return '全部工作表'
+  if (linkedExcelSheet.value?.sheet_name) return String(linkedExcelSheet.value.sheet_name)
+  return excelSheetOptions.value.length ? '选择工作表模板' : '暂无可选模板'
+})
+function clearWorksheetTemplate() {
+  linkedExcelSheet.value = null
+  linkedExcelAllSheets.value = false
+  worksheetTemplateOpen.value = false
+}
+function chooseWorksheetTemplate(sheet: { sheet_name: string; sheet_index: number }) {
+  worksheetTemplateOpen.value = false
+  void bindExcelSheetToChat(sheet)
+}
+function chooseAllWorksheetTemplates() {
+  worksheetTemplateOpen.value = false
+  void bindAllExcelSheetsToChat()
+}
 
 const sendQuick = (text: string) => {
   messageInput.value = text

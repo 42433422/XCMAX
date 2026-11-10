@@ -167,7 +167,11 @@ class WorkflowApprovalBridge:
         self, request_id: str, workflow: JsonObject, approved: bool, approvals: PendingApprovals
     ) -> JsonObject:
         plan = cast("PlanGraph", workflow["plan"])
-        context = workflow.get("runtime_context", {})
+        context = dict(workflow.get("runtime_context") or {})
+        observed = str(workflow.get("observed_run_id") or "").strip()
+        trace_context = dict(context)
+        if observed and not str(workflow.get("agent_run_id") or "").strip():
+            trace_context["agent_run_id"] = observed
         engine = self.backends.engine()
         nodes = list(getattr(plan, "nodes", []) or [])
         restore_run = (
@@ -179,7 +183,7 @@ class WorkflowApprovalBridge:
         )
         result = engine.run(plan=plan, runtime_context=context, max_retries=1)
         run_id = self.backends.legacy_trace(
-            request_id, context, result, run_before_restore=restore_run
+            request_id, trace_context, result, run_before_restore=restore_run
         )
         approvals.remove_pending_workflow(request_id)
         success = bool(result.success)
@@ -216,6 +220,40 @@ class WorkflowApprovalBridge:
             ],
         }
 
+    @staticmethod
+    def _cancel_docking_batch(workflow: JsonObject) -> None:
+        plan = workflow.get("plan") if isinstance(workflow, dict) else None
+        batch_id = ""
+        for node in list(getattr(plan, "nodes", []) or []):
+            if (getattr(node, "tool_id", ""), getattr(node, "action", "")) != (
+                "data_docking",
+                "auto_ingest",
+            ):
+                continue
+            batch_id = str((getattr(node, "params", None) or {}).get("batch_id") or "").strip()
+            break
+        if not batch_id:
+            return
+        context = workflow.get("runtime_context") if isinstance(workflow, dict) else None
+        raw_tenant = context.get("tenant_id") if isinstance(context, dict) else None
+        try:
+            tenant_id = int(raw_tenant or 0)
+        except (TypeError, ValueError):
+            return
+        if tenant_id <= 0:
+            return
+        try:
+            from app.application.elt.auto_ingest_service import get_auto_ingest_service
+            from app.infrastructure.tenant_scope import tenant_scope
+            from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+            with tenant_scope(tenant_id):
+                get_auto_ingest_service().cancel_unreleased_batch(
+                    batch_id=batch_id, tenant_id=tenant_id
+                )
+        except RECOVERABLE_ERRORS:
+            return
+
     def reject(self, *, request_no: str, reason: str) -> JsonObject | None:
         request_id = str(request_no or "").strip()
         if not request_id:
@@ -242,6 +280,7 @@ class WorkflowApprovalBridge:
                 cancelled_run_id = self.backends.legacy_trace(
                     request_id, workflow.get("runtime_context") or {}
                 )
+            self._cancel_docking_batch(workflow)
             removed = approvals.remove_pending_workflow(request_id)
             return {
                 "workflow_executed": False,

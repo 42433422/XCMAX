@@ -142,6 +142,7 @@ def _build_workflow_snapshot(
         "runtime_context": dict(runtime_context or {}),
         "agent_run_id": "",
         "approved_step_id": "",
+        "observed_run_id": "",
     }
 
 
@@ -223,6 +224,31 @@ def persist_agent_run_link(
             db.commit()
     except _APPROVAL_STORAGE_ERRORS as exc:
         logger.warning("AI 审批关联 Agent Run 持久化失败 type=%s", type(exc).__name__)
+
+
+def persist_observed_run_link(request_id: str, *, observed_run_id: str) -> None:
+    """Link the chat trace that is waiting. This is not the run resume will execute."""
+    try:
+        from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
+        from app.db.session import get_db
+
+        with get_db() as db:
+            persisted = (
+                db.query(ApprovalRequestModel)
+                .filter(ApprovalRequestModel.request_no == request_id)
+                .first()
+            )
+            if persisted is None:
+                return
+            business_data = json.loads(persisted.business_data) if persisted.business_data else {}
+            snapshot = business_data.get(SNAPSHOT_KEY)
+            if isinstance(snapshot, dict):
+                snapshot["observed_run_id"] = str(observed_run_id or "").strip()
+                business_data[SNAPSHOT_KEY] = snapshot
+                persisted.business_data = json.dumps(business_data, ensure_ascii=False, default=str)
+                db.commit()
+    except _APPROVAL_STORAGE_ERRORS as exc:
+        logger.warning("AI 审批关联观察任务持久化失败 type=%s", type(exc).__name__)
 
 
 def _safe_plan_from_snapshot(plan_data: Any) -> PlanGraph | None:
@@ -341,6 +367,7 @@ def _validated_snapshot(persisted) -> dict[str, Any] | None:
         "plan_id": plan_id,
         "agent_run_id": str(snapshot.get("agent_run_id") or "").strip(),
         "approved_step_id": str(snapshot.get("approved_step_id") or "").strip(),
+        "observed_run_id": str(snapshot.get("observed_run_id") or "").strip(),
     }
 
 

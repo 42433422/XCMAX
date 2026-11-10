@@ -10,13 +10,15 @@ export interface Industry {
   [key: string]: unknown
 }
 
+type ShellReadOptions = { timeoutMs?: number; quiet?: boolean }
+
 export const systemApi = {
-  getIndustries(): Promise<ApiResponse<Industry[]>> {
-    return api.get<ApiResponse<Industry[]>>('/api/system/industries', {}, { timeoutMs: 8_000, quiet: true })
+  getIndustries(options: ShellReadOptions = {}): Promise<ApiResponse<Industry[]>> {
+    return api.get<ApiResponse<Industry[]>>('/api/system/industries', {}, { timeoutMs: 30_000, quiet: true, ...options })
   },
 
-  getCurrentIndustry(): Promise<ApiResponse<Industry>> {
-    return api.get<ApiResponse<Industry>>('/api/system/industry', {}, { timeoutMs: 8_000, quiet: true })
+  getCurrentIndustry(options: ShellReadOptions = {}): Promise<ApiResponse<Industry>> {
+    return api.get<ApiResponse<Industry>>('/api/system/industry', {}, { timeoutMs: 30_000, quiet: true, ...options })
   },
 
   getIndustryDetail(industryId: number | string): Promise<ApiResponse<Industry>> {

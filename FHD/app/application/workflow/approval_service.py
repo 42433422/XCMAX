@@ -128,6 +128,7 @@ class ApprovalService:
         runtime_context: dict[str, Any] | None = None,
         plan: PlanGraph | None = None,
         require_persistence: bool = False,
+        title: str | None = None,
     ) -> ApprovalRequest:
         request_id = uuid.uuid4().hex
         request = ApprovalRequest(
@@ -152,7 +153,9 @@ class ApprovalService:
 
         # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）。
         # 携带 plan 使持久化层能写入绑定 request_no 的可靠工作流快照，供重启后重建/续跑。
-        metadata = self._persist_request_to_db(request, runtime_context=runtime_context, plan=plan)
+        metadata = self._persist_request_to_db(
+            request, runtime_context=runtime_context, plan=plan, title=title
+        )
         if metadata is None and require_persistence:
             self._pending_requests.pop(request_id, None)
             self._pending_workflows.pop(request_id, None)
@@ -167,6 +170,7 @@ class ApprovalService:
         runtime_context: dict[str, Any] | None = None,
         *,
         plan: PlanGraph | None = None,
+        title: str | None = None,
     ) -> dict[str, Any] | None:
         """将内存审批请求写入 DB approval_requests 表（幂等且外键完整）。
 
@@ -180,6 +184,7 @@ class ApprovalService:
             runtime_context,
             flow_key=self._AI_WORKFLOW_FLOW_KEY,
             plan=plan,
+            title=title,
         )
 
     def get_request_metadata(self, request_id: str) -> dict[str, Any] | None:
@@ -223,6 +228,17 @@ class ApprovalService:
             approved_step_id=approved_step_id,
         )
         return True
+
+    def note_observed_legacy_run(self, request_id: str, run_id: str) -> None:
+        """Remember the chat trace that is waiting. Do not treat it as the executable run."""
+        pending = self._pending_workflows.get(str(request_id or "").strip())
+        observed = str(run_id or "").strip()
+        if not isinstance(pending, dict) or not observed or pending.get("agent_run_id"):
+            return
+        pending["observed_run_id"] = observed
+        from app.application.workflow.approval_persistence import persist_observed_run_link
+
+        persist_observed_run_link(str(request_id or "").strip(), observed_run_id=observed)
 
     def remove_pending_workflow(self, request_id: str) -> dict[str, Any] | None:
         return self._pending_workflows.pop(request_id, None)

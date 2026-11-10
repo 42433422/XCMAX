@@ -360,9 +360,10 @@ class AIChatApplicationService(
             reply_text = str(
                 deterministic_reply.get("response") or deterministic_reply.get("text") or ""
             ).strip()
+            failed = deterministic_reply.get("success") is False
             payload = {
-                "success": True,
-                "message": "处理完成",
+                "success": not failed,
+                "message": reply_text if failed else "处理完成",
                 "response": reply_text,
                 "data": {
                     "text": reply_text,
@@ -375,6 +376,8 @@ class AIChatApplicationService(
                     },
                 },
             }
+            if failed:
+                return _finalize(payload)
             return _finalize(
                 self._attach_deterministic_workflow_trace(
                     payload,

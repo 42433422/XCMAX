@@ -642,10 +642,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       const restored = readPersistedExcelAnalysisContext(sid)
       if (restored) lastExcelAnalysisContext.value = restored
     }
-    if (!linkedExcelSheet.value) {
-      const first = excelSheetOptions.value[0]
-      if (first) linkedExcelSheet.value = first
-    }
     window.addEventListener(FHD_DB_WRITE_UNLOCKED_EVENT, dbGate.onDbWriteUnlockedForChatRetry)
     workflowPanel.mountWorkflowPanel()
     agentTaskRuntime.start()

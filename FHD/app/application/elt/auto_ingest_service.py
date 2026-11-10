@@ -48,6 +48,14 @@ def _utcnow() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _public_batch(batch: dict[str, Any]) -> dict[str, Any]:
+    public = dict(batch)
+    public.pop("prepared_plan", None)
+    public.pop("labels", None)
+    public.pop("source_path", None)
+    return public
+
+
 def _ledger_path(tenant_id: int | str) -> Path:
     root = Path(get_app_data_dir()).resolve() / "etl" / "auto_ingest" / str(tenant_id)
     root.mkdir(parents=True, exist_ok=True)
@@ -655,6 +663,138 @@ class AutoIngestService:
                 raise
             raise EltError("ETL_AUTO_INGEST_FAILED", f"自动入库失败：{type(exc).__name__}") from exc
 
+    def _launch_worker(self, batch: dict[str, Any]) -> None:
+        batch_id = str(batch.get("batch_id") or "")
+        tenant_id = int(batch["tenant_id"])
+        owner_user_id = int(batch["owner_user_id"])
+        path = batch.get("source_path") or ""
+        prepared_plan = batch.get("prepared_plan")
+        labels = batch.get("labels") if isinstance(batch.get("labels"), list) else None
+
+        def _worker() -> None:
+            from app.db.session import get_db
+            from app.infrastructure.tenant_scope import tenant_scope
+
+            try:
+                with tenant_scope(tenant_id), get_db() as db:
+                    self.run(
+                        db,
+                        owner_user_id=owner_user_id,
+                        tenant_id=tenant_id,
+                        source_path=path,
+                        file_name=str(batch.get("file_name") or ""),
+                        template_id=str(batch.get("template_id") or ""),
+                        review_id=str(batch.get("review_id") or ""),
+                        classification_id=str(batch.get("classification_id") or ""),
+                        composer_note=str(batch.get("composer_note") or ""),
+                        labels=labels,
+                        batch_id=batch_id,
+                        prepared_plan=prepared_plan if isinstance(prepared_plan, dict) else None,
+                        owned_upload_user_id=owner_user_id,
+                    )
+                    db.commit()
+            except BOUNDARY_ERRORS:
+                logger.exception("background auto-ingest failed batch_id=%s", batch_id)
+
+        context = copy_context()
+        threading.Thread(
+            target=lambda: context.run(_worker), name=f"auto-ingest-{batch_id}", daemon=True
+        ).start()
+
+    def queue_for_approval(
+        self,
+        *,
+        owner_user_id: int,
+        tenant_id: int,
+        source_path: str | Path,
+        file_name: str = "",
+        template_id: str = "",
+        review_id: str = "",
+        classification_id: str = "",
+        composer_note: str = "",
+        labels: list[str] | None = None,
+        prepared_plan: dict[str, Any] | None = None,
+        owned_upload_user_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Record the write and wait. Approval in the approval center releases it."""
+        resolve_owner = owned_upload_user_id
+        if resolve_owner is None and prepared_plan is not None:
+            resolve_owner = owner_user_id
+        if resolve_owner is not None and resolve_owner != owner_user_id:
+            raise EltError("ELT_INTAKE_FORBIDDEN", "上传文件不属于当前用户", status_code=403)
+        path = _resolve_auto_ingest_source(source_path, owner_user_id=resolve_owner)
+        batch_id = f"aib-{uuid4().hex[:16]}"
+        safe_name = (file_name or path.name).strip() or path.name
+        batch = {
+            "batch_id": batch_id,
+            "status": "awaiting_approval",
+            "created_at": _utcnow(),
+            "updated_at": _utcnow(),
+            "tenant_id": int(tenant_id),
+            "mod_id": get_request_active_mod_id(),
+            "owner_user_id": int(owner_user_id),
+            "template_id": template_id,
+            "review_id": review_id,
+            "classification_id": classification_id,
+            "file_name": safe_name,
+            "composer_note": composer_note,
+            "detection": {},
+            "knowledge": {},
+            "business": {},
+            "kb_progress": _progress("queued", 0, message="等待审批中心通过后写入知识库"),
+            "business_progress": _progress("queued", 0, message="等待审批中心通过后写入业务域"),
+            "withdrawn_at": None,
+            "source_path": str(path),
+            "prepared_plan": prepared_plan,
+            "labels": list(labels or []),
+        }
+        with _LOCK:
+            ledger = _load_ledger(tenant_id)
+            ledger.setdefault("batches", {})[batch_id] = batch
+            _save_ledger(tenant_id, ledger)
+        return _public_batch(batch)
+
+    def release_approved_batch(self, *, batch_id: str, tenant_id: int) -> dict[str, Any]:
+        """Start a write that the approval center has already authorized."""
+        with _LOCK:
+            ledger = _load_ledger(tenant_id)
+            batch = (ledger.get("batches") or {}).get(batch_id)
+            if not isinstance(batch, dict) or int(batch.get("tenant_id") or 0) != int(tenant_id):
+                raise EltError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
+            status = str(batch.get("status") or "")
+            if status in {"running", "applied", "partial", "awaiting_confirmation"}:
+                return {
+                    "success": True,
+                    "batch_id": batch_id,
+                    "status": status,
+                    "already_released": True,
+                }
+            if status != "awaiting_approval":
+                raise EltError(
+                    "ETL_AUTO_INGEST_NOT_PENDING", "该批次不在待审批写入", status_code=409
+                )
+            batch["status"] = "running"
+            batch["updated_at"] = _utcnow()
+            _save_ledger(tenant_id, ledger)
+            stored = dict(batch)
+        self._launch_worker(stored)
+        public = _public_batch(stored)
+        public["success"] = True
+        public["status"] = "running"
+        return public
+
+    def cancel_unreleased_batch(self, *, batch_id: str, tenant_id: int) -> None:
+        with _LOCK:
+            ledger = _load_ledger(tenant_id)
+            batch = (ledger.get("batches") or {}).get(batch_id)
+            if not isinstance(batch, dict) or int(batch.get("tenant_id") or 0) != int(tenant_id):
+                return
+            if str(batch.get("status") or "") != "awaiting_approval":
+                return
+            batch["status"] = "rejected"
+            batch["updated_at"] = _utcnow()
+            _save_ledger(tenant_id, ledger)
+
     def start_background(
         self,
         *,
@@ -699,42 +839,15 @@ class AutoIngestService:
             "business_progress": _progress("queued", 0, message="排队写入业务域"),
             "withdrawn_at": None,
             "source_path": str(path),
+            "prepared_plan": prepared_plan,
+            "labels": list(labels or []),
         }
         with _LOCK:
             ledger = _load_ledger(tenant_id)
             ledger.setdefault("batches", {})[batch_id] = batch
             _save_ledger(tenant_id, ledger)
-
-        def _worker() -> None:
-            from app.db.session import get_db
-            from app.infrastructure.tenant_scope import tenant_scope
-
-            try:
-                with tenant_scope(tenant_id), get_db() as db:
-                    self.run(
-                        db,
-                        owner_user_id=owner_user_id,
-                        tenant_id=tenant_id,
-                        source_path=path,
-                        file_name=safe_name,
-                        template_id=template_id,
-                        review_id=review_id,
-                        classification_id=classification_id,
-                        composer_note=composer_note,
-                        labels=labels,
-                        batch_id=batch_id,
-                        prepared_plan=prepared_plan,
-                        owned_upload_user_id=resolve_owner,
-                    )
-                    db.commit()
-            except BOUNDARY_ERRORS:
-                logger.exception("background auto-ingest failed batch_id=%s", batch_id)
-
-        context = copy_context()
-        threading.Thread(
-            target=lambda: context.run(_worker), name=f"auto-ingest-{batch_id}", daemon=True
-        ).start()
-        return dict(batch)
+        self._launch_worker(dict(batch))
+        return _public_batch(batch)
 
     def _refresh_business(self, batch: dict[str, Any]) -> dict[str, Any]:
         if batch.get("mod_id") != get_request_active_mod_id():
@@ -832,7 +945,7 @@ class AutoIngestService:
             items = [b for b in items if int(b.get("owner_user_id") or 0) == int(owner_user_id)]
         items.sort(key=lambda b: str(b.get("created_at") or ""), reverse=True)
         return [
-            self._refresh_business(dict(batch))
+            _public_batch(self._refresh_business(dict(batch)))
             for batch in items[: max(1, min(int(limit or 50), 200))]
         ]
 
@@ -847,8 +960,8 @@ class AutoIngestService:
         if owner_user_id is not None:
             if int(item.get("owner_user_id") or 0) != owner_user_id:
                 raise EltError("ETL_AUTO_INGEST_FORBIDDEN", "无权查看该批次", status_code=403)
-            return self._refresh_business(dict(item))
-        return dict(item)
+            return _public_batch(self._refresh_business(dict(item)))
+        return _public_batch(dict(item))
 
     def get_progress(self, *, tenant_id: int, owner_user_id: int, batch_id: str) -> dict[str, Any]:
         batch = self.get_batch(tenant_id=tenant_id, batch_id=batch_id, owner_user_id=owner_user_id)
