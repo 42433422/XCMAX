@@ -232,6 +232,22 @@ class CustomerCrudMixin:
                 if not unit:
                     return {"success": False, "message": "客户不存在"}
 
+                old_name, unit_tenant = unit.unit_name, unit.tenant_id
+                new_name = data.get("customer_name", old_name)
+
+                def rename_children() -> None:
+                    if not new_name or new_name == old_name:
+                        return
+                    from app.db.models.product import Product
+                    from app.db.models.shipment import ShipmentRecord
+                    from sqlalchemy import inspect, or_
+
+                    inspector = inspect(session.connection())
+                    if inspector.has_table(Product.__tablename__):
+                        session.query(Product).filter(Product.tenant_id == unit_tenant, Product.unit == old_name).update({Product.unit: new_name}, synchronize_session=False)
+                    if inspector.has_table(ShipmentRecord.__tablename__):
+                        session.query(ShipmentRecord).filter(ShipmentRecord.tenant_id == unit_tenant, ShipmentRecord.purchase_unit == old_name, or_(ShipmentRecord.unit_id == customer_id, ShipmentRecord.unit_id.is_(None))).update({ShipmentRecord.purchase_unit: new_name}, synchronize_session=False)
+
                 expected_version, version_invalid = _explicit_version(data)
                 if version_invalid:
                     return {
@@ -264,6 +280,7 @@ class CustomerCrudMixin:
                             "error_code": "version_conflict",
                             "message": "客户版本已变化，本次修改没有写入",
                         }
+                    rename_children()
                     session.commit()
                     unit = (
                         _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
@@ -282,6 +299,7 @@ class CustomerCrudMixin:
                     current_version = getattr(unit, "version", None)
                     if isinstance(current_version, int) and not isinstance(current_version, bool):
                         unit.version = current_version + 1
+                    rename_children()
                     session.commit()
                     session.refresh(unit)
 
@@ -396,20 +414,41 @@ class CustomerCrudMixin:
 
                 unit_name = unit.unit_name
 
-                association_check = self._check_shipment_associations(unit_name)
+                from sqlalchemy import and_, inspect, or_
+                from app.db.models.product import Product
+                from app.db.models.shipment import ShipmentRecord
+                from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
 
-                if association_check.get("has_associations") and not force:
+                inspector = inspect(session.connection())
+                products = session.query(Product).filter(
+                    Product.tenant_id == unit.tenant_id, Product.unit == unit_name
+                ) if inspector.has_table(Product.__tablename__) else None
+                shipments = session.query(ShipmentRecord).filter(
+                    ShipmentRecord.tenant_id == unit.tenant_id,
+                    or_(ShipmentRecord.unit_id == customer_id, and_(
+                        ShipmentRecord.unit_id.is_(None), ShipmentRecord.purchase_unit == unit_name
+                    )),
+                ) if inspector.has_table(ShipmentRecord.__tablename__) else None
+                product_count = products.count() if products is not None else 0
+                shipment_count = shipments.count() if shipments is not None else 0
+                if (product_count or shipment_count) and not force:
                     return {
-                        "success": False,
-                        "message": f"无法删除客户「{unit_name}」，存在 {association_check['shipment_count']} 条关联发货记录",
-                        "deleted_count": 0,
-                        "has_associations": True,
-                        "association_details": {
-                            "shipment_count": association_check["shipment_count"],
-                            "sample_records": association_check["sample_records"],
-                        },
-                        "suggestion": "请先删除关联的发货记录，或使用 force=True 强制删除",
+                        "success": False, "deleted_count": 0, "has_associations": True,
+                        "message": f"无法删除客户「{unit_name}」，存在 {product_count} 条关联产品和 {shipment_count} 条关联发货记录",
+                        "association_details": {"product_count": product_count, "shipment_count": shipment_count},
                     }
+                if force:
+                    if shipments is not None:
+                        shipment_ids = [row[0] for row in shipments.with_entities(ShipmentRecord.id).all()]
+                        if shipment_ids and inspector.has_table(ShipmentEtlImportFingerprint.__tablename__):
+                            tenant_key = f"tenant:{unit.tenant_id}" if unit.tenant_id is not None else "tenant:local"
+                            session.query(ShipmentEtlImportFingerprint).filter(
+                                ShipmentEtlImportFingerprint.tenant_key == tenant_key,
+                                ShipmentEtlImportFingerprint.shipment_id.in_(shipment_ids),
+                            ).delete(synchronize_session=False)
+                        shipments.delete(synchronize_session=False)
+                    if products is not None:
+                        products.delete(synchronize_session=False)
 
                 session.delete(unit)
                 session.commit()

@@ -146,8 +146,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         )
 
     @router.delete("/customers/{customer_id:int}")
-    def mod_customers_delete(request: Request, customer_id: int):
-        return _invoke("customers", "delete", request=request, customer_id=customer_id)
+    def mod_customers_delete(request: Request, customer_id: int, cascade: bool = False):
+        return _invoke("customers", "delete", request=request, customer_id=customer_id, cascade=cascade)
 
     # ── 出货（G：ShipmentAppService 经 domain_handlers）──────────────
     @router.get("/shipment/shipment-records/records")

@@ -207,6 +207,53 @@ def test_mod_shipment_routes_keep_permission_and_file_tenant_scope(
     assert client.get(base + "/download/note.xlsx").status_code == 401
 
 
+@pytest.mark.parametrize("tenant,allowed,status", [(None, True, 403), (23, False, 403), (23, True, 200)])
+def test_mod_shipment_order_delete_uses_session_tenant(monkeypatch, tenant, allowed, status):
+    from pathlib import Path
+    from app.fastapi_routes import shipment_orders
+    from app.infrastructure.mods.mod_manager import import_mod_backend_py
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    user = SimpleNamespace(id=8, tenant_id=tenant, role="user", is_active=True)
+    monkeypatch.setattr(dependencies, "resolve_session_user", lambda _request: user)
+    monkeypatch.setattr("app.application.facades.session_facade.get_auth_service", lambda: SimpleNamespace(has_permission=lambda *_args: allowed))
+    calls = []
+    monkeypatch.setattr(shipment_orders, "shipment_orders_delete", lambda request, number: calls.append((current_tenant_id(), number)) or {"success": True})
+    mod = import_mod_backend_py(str(Path(__file__).resolve().parents[2] / "mods" / "xcagi-erp-domain-bridge"), "xcagi-erp-domain-bridge", "blueprints")
+    app = FastAPI()
+    mod.register_fastapi_routes(app, "xcagi-erp-domain-bridge")
+    response = TestClient(app).delete('/api/mod/xcagi-erp-domain-bridge/shipment/orders/74', headers={'X-Tenant-ID': '24'})
+    assert response.status_code == status
+    assert calls == ([(23, '74')] if status == 200 else [])
+
+
+def test_mod_order_crud_routes_share_authenticated_tenant(monkeypatch):
+    from pathlib import Path
+    from app.fastapi_routes import shipment_orders
+    from app.infrastructure.mods.mod_manager import import_mod_backend_py
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    user = SimpleNamespace(id=8, tenant_id=23, role="user", is_active=True)
+    monkeypatch.setattr(dependencies, "resolve_session_user", lambda _request: user)
+    monkeypatch.setattr("app.application.facades.session_facade.get_auth_service", lambda: SimpleNamespace(has_permission=lambda *_args: True))
+    calls = []
+    def fake(name):
+        return lambda *args: calls.append((name, current_tenant_id())) or {"success": True}
+    for name in ('api_orders_create', 'api_orders_get', 'api_orders_update', 'api_orders_latest', 'api_orders_search'):
+        monkeypatch.setattr(shipment_orders, name, fake(name))
+    mod = import_mod_backend_py(str(Path(__file__).resolve().parents[2] / "mods" / "xcagi-erp-domain-bridge"), "xcagi-erp-domain-bridge", "blueprints")
+    app = FastAPI()
+    mod.register_fastapi_routes(app, "xcagi-erp-domain-bridge")
+    client = TestClient(app)
+    base = '/api/mod/xcagi-erp-domain-bridge/orders'
+    assert client.post(base, json={'tenant_id': 24}).status_code == 201
+    assert client.get(base + '/74').status_code == 200
+    assert client.patch(base + '/74', json={'tenant_id': 24}).status_code == 200
+    assert client.get(base + '/latest').status_code == 200
+    assert client.get(base + '/search?q=test').status_code == 200
+    assert len(calls) == 5 and all(tenant == 23 for _, tenant in calls)
+
+
 @pytest.mark.parametrize(
     "tenant,allowed,status", [(None, True, 403), (23, False, 403), (23, True, 200)]
 )

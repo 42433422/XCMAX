@@ -94,6 +94,13 @@
       <div class="modal-content">
         <div class="modal-header">{{ isEdit ? '编辑' + entityName : '添加' + entityName }}</div>
         <div class="modal-body">
+          <div v-if="!isEdit" class="form-group">
+            <label>所属客户 *</label>
+            <select v-model="formData.unit">
+              <option value="">请选择客户</option>
+              <option v-for="u in units" :key="u" :value="u">{{ u }}</option>
+            </select>
+          </div>
           <div class="form-group">
             <label>{{ fieldLabel('model_number', '产品型号') }} *</label>
             <input v-model="formData.model_number" data-tutorial-id="product-model" type="text" placeholder="如：A001">
@@ -229,11 +236,13 @@ const loadMoreProducts = async () => {
 const loadUnits = createProductUnitsLoader(store, units);
 
 const showAddModal = () => {
+  void loadUnits();
   isEdit.value = false;
   formData.value = {
     id: null,
     model_number: '',
     name: '',
+    unit: selectedUnit.value,
     specification: '',
     price: 0,
     quantity: 0
@@ -251,6 +260,7 @@ const editProduct = (product) => {
 
 const saveProduct = async () => {
   if (isEdit.value && !canEditProducts.value) return;
+  if (!isEdit.value && !formData.value.unit) { await appAlert('请先选择所属客户'); return; }
   formData.value.price = formData.value.price || 0;
   const fieldErrors = productsSchema.validate(formData.value);
   if (fieldErrors.length > 0) {
@@ -260,7 +270,7 @@ const saveProduct = async () => {
 
   const result = isEdit.value && formData.value.id
     ? await store.updateProduct(formData.value.id, formData.value)
-    : await store.createProduct({ ...formData.value, unit: selectedUnit.value });
+    : await store.createProduct({ ...formData.value });
 
   if (result.success) {
     showModal.value = false;

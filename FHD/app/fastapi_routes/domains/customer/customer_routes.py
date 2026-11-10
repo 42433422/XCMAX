@@ -386,7 +386,7 @@ def customers_update(
 
 @router.delete("/customers/{customer_id}")
 @router.delete("/customers/{customer_id}/", include_in_schema=False)
-def customers_delete(request: Request, customer_id: int) -> dict:
+def customers_delete(request: Request, customer_id: int, cascade: bool = False) -> dict:
     try:
         from app.mod_sdk.erp_customers_facade import (
             customers_delete as customers_delete_via_service,
@@ -395,8 +395,8 @@ def customers_delete(request: Request, customer_id: int) -> dict:
             is_erp_customers_via_service_enabled,
         )
 
-        if is_erp_customers_via_service_enabled():
-            return customers_delete_via_service(request, customer_id)
+        if cascade or is_erp_customers_via_service_enabled():
+            return customers_delete_via_service(request, customer_id, cascade)
     except HTTPException:
         raise
     except RECOVERABLE_ERRORS:

@@ -230,7 +230,7 @@ export function useCustomers() {
   const confirmDelete = async () => {
     if (!itemToDelete.value?.id) return;
     try {
-      await customersApi.deleteCustomer(itemToDelete.value.id);
+      await customersApi.deleteCustomer(itemToDelete.value.id, true);
       await loadCustomers({ reset: true });
     } catch (e) {
       console.error('删除客户失败:', e);
