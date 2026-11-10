@@ -1,5 +1,7 @@
 # XCMAX 历史与大文件归档指针
 
+2026-11-10 旧余债 P2 快照外置：`FHD/docs/architecture/DEBT24_P2_CLOSEOUT.md` 原文及 SHA256 位于 `~/XCMAX-archives/debt24-p2-20261110/`，亦可从提交 `9c53fb4f00` 恢复；现行边界以各注册 SSOT 为准。
+
 2026-11-10 旧分支余债快照外置：`FHD/docs/architecture/DEBT19_STILL9_FOLLOWUP.md` 原文及 SHA256 位于 `~/XCMAX-archives/debt19-followup-20261110/`，亦可从提交 `532b1978d5` 恢复；历史数字不代表当前状态。
 
 2026-11-10 认知全栈历史快照外置：`FHD/docs/architecture/COGNITIVE_FULL_STACK_20260729.md` 原文及 SHA256 位于 `~/XCMAX-archives/cognitive-snapshot-20261110/`，亦可从提交 `58090c512c` 恢复；历史实现清单不代表当前运行或验收状态。

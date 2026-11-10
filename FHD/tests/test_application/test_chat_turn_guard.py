@@ -399,3 +399,13 @@ def test_confirmation_rejects_missing_or_changed_preview(monkeypatch):
         lambda ctx: (1, 2, "customers-1", "products-2"),
     )
     assert prepare_turn("清空所有产品", ctx)["success"] is False
+    prepare_turn("清空所有产品", {**ctx, "destructive_confirmed": False})
+    assert prepare_turn("清空所有产品", ctx) is None
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard.scope_snapshot",
+        lambda ctx: (1, 2, "customers-1", "different"),
+    )
+    assert (
+        mutation_block("delete_products", "{}", {**ctx, "mutation_policy": "allow_once"})["error"]
+        == "scope_changed"
+    )

@@ -302,6 +302,8 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
                 customers,
                 products,
                 message.strip(),
+                customer_scope,
+                product_scope,
             )
             _LEDGER[_scope_key(ctx)] = record
         _use_policy("allow_once")
@@ -333,6 +335,7 @@ def mutation_block(name: str, raw_args: str, runtime_context: Any) -> dict[str, 
     ctx = runtime_context if isinstance(runtime_context, dict) else {}
     policy = str(ctx.get("mutation_policy") or "") or _POLICY.get()
     key = _key(ctx)
+    current_scope = scope_snapshot(ctx) if policy == "allow_once" else None
     with _LEDGER_LOCK:
         existing = _LEDGER.get(_scope_key(ctx)) if key else None
         if existing and (existing.committed or existing.effect in {"executing", "unknown"}):
@@ -355,6 +358,23 @@ def mutation_block(name: str, raw_args: str, runtime_context: Any) -> dict[str, 
                     "success": False,
                     "error": "outcome_unknown",
                     "message": "原操作状态待核验。",
+                }
+            if current_scope is None or (
+                (
+                    "客户" in existing.request_text
+                    and (current_scope[2] is None or current_scope[2] != existing.customer_scope)
+                )
+                or (
+                    "产品" in existing.request_text
+                    and (current_scope[3] is None or current_scope[3] != existing.product_scope)
+                )
+            ):
+                existing.effect = "scope_changed"
+                return {
+                    "success": False,
+                    "committed": False,
+                    "error": "scope_changed",
+                    "message": "范围或权限已变化，本次未执行。",
                 }
             existing.effect = "executing"
     return None
