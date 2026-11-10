@@ -17,6 +17,7 @@ const { archive, legacy } = vi.hoisted(() => ({
   },
   legacy: {
     capabilities: vi.fn(), templates: vi.fn(), runs: vi.fn(), targetConfigs: vi.fn(),
+    autoIngestBatches: vi.fn().mockResolvedValue([]),
     run: vi.fn(), upload: vi.fn(), preview: vi.fn(), execute: vi.fn(),
   },
 }))
@@ -63,6 +64,7 @@ async function setup(runId = '') {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  legacy.autoIngestBatches.mockResolvedValue([])
   archive.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   archive.archiveClassifyExcel.mockResolvedValue(classification())
   archive.analyzeClassification.mockResolvedValue({ version: 'model-v2', model_status: 'returned', sheets: classification().sheets })

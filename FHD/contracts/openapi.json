@@ -30767,6 +30767,7 @@
           "event_type": {
             "type": "string",
             "enum": [
+              "approval.authorization_mismatch",
               "approval.rejected",
               "approval.timed_out",
               "artifact.attached",

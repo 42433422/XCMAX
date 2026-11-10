@@ -116,7 +116,8 @@ _GENERAL_EXPLANATION = re.compile(
     r"^(?:请|帮我|麻烦)?(?:简要|简单|用三句话)?(?:解释|介绍|讲解)\s*"
     r"(?:HTTP\s*(?:和|与)\s*HTTPS|HTTPS?|TCP|DNS|TLS|SSL|流式输出)"
     r"(?:\s*(?:是什么|的区别))?[？?。.]?"
-    r"(?:\s*[,，]?\s*不要调用工具[。.]?)?$", re.IGNORECASE
+    r"(?:\s*[,，]?\s*不要调用工具[。.]?)?$",
+    re.IGNORECASE,
 )
 
 _CONFIDENCE_MIN = 0.7

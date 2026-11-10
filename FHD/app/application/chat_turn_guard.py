@@ -20,7 +20,9 @@ _POLICY: ContextVar[str] = ContextVar("xcagi_chat_mutation_policy", default="all
 
 _BULK_ACTION = re.compile(r"(清理|删除|清空|清除).{0,16}(全部|所有|全量)")
 _BULK_TARGET = re.compile(r"客户|产品|订单|资料|数据")
-_MUTATION = re.compile(r"delete|clear|remove|drop|update|create|write|insert|upsert|清理|删除|清空|写入", re.IGNORECASE)
+_MUTATION = re.compile(
+    r"delete|clear|remove|drop|update|create|write|insert|upsert|清理|删除|清空|写入", re.IGNORECASE
+)
 _READ_ONLY = re.compile(r"(query|list|search|read|get|count|status|preview|schema)", re.IGNORECASE)
 _LEDGER: dict[str, TurnRecord] = {}
 
@@ -199,7 +201,9 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
     if bulk and not confirmed:
         customers, products = scope_counts(ctx)
         text = preview_message(ctx, customers=customers, products=products)
-        record = TurnRecord(key, "bulk_destructive", False, "preview", text, _tenant(ctx), customers, products)
+        record = TurnRecord(
+            key, "bulk_destructive", False, "preview", text, _tenant(ctx), customers, products
+        )
         _use_policy("block")
         return _remember(record)
     if bulk and confirmed:
@@ -211,13 +215,23 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
                 "response": text,
                 "text": text,
                 "message": text,
-                "execution": execution_payload(TurnRecord(
-                    key, "bulk_destructive", False, "none", text,
-                    existing.tenant_id, existing.customer_count, existing.product_count,
-                )),
+                "execution": execution_payload(
+                    TurnRecord(
+                        key,
+                        "bulk_destructive",
+                        False,
+                        "none",
+                        text,
+                        existing.tenant_id,
+                        existing.customer_count,
+                        existing.product_count,
+                    )
+                ),
             }
         customers, products = scope_counts(ctx)
-        record = TurnRecord(key, "bulk_destructive", False, "opened", "", _tenant(ctx), customers, products)
+        record = TurnRecord(
+            key, "bulk_destructive", False, "opened", "", _tenant(ctx), customers, products
+        )
         if key:
             _LEDGER[key] = record
         _use_policy("allow_once")
@@ -236,7 +250,9 @@ def _is_mutation(name: str, raw_args: str) -> bool:
         parsed = json.loads(raw_args) if raw_args.strip() else {}
     except json.JSONDecodeError:
         parsed = {}
-    if isinstance(parsed, dict) and (parsed.get("all") is True or str(parsed.get("scope") or "") in {"all", "tenant"}):
+    if isinstance(parsed, dict) and (
+        parsed.get("all") is True or str(parsed.get("scope") or "") in {"all", "tenant"}
+    ):
         return True
     return not bool(_READ_ONLY.search(name))
 
@@ -266,7 +282,11 @@ def mutation_block(name: str, raw_args: str, runtime_context: Any) -> dict[str, 
 
 
 def note_tool_commit(runtime_context: Any, name: str) -> None:
-    policy = str(runtime_context.get("mutation_policy") or "") if isinstance(runtime_context, dict) else ""
+    policy = (
+        str(runtime_context.get("mutation_policy") or "")
+        if isinstance(runtime_context, dict)
+        else ""
+    )
     if (policy or _POLICY.get()) != "allow_once":
         return
     key = _key(runtime_context)

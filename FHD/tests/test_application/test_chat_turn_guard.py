@@ -34,7 +34,9 @@ def test_keeps_displayable_text_and_rejects_whitespace_or_reasoning():
         message=SimpleNamespace(content="客户仍在，未删除。"),
     )
     assert chunk_display_text(choice) == "客户仍在，未删除。"
-    reasoning_only = SimpleNamespace(delta=SimpleNamespace(content=None, reasoning_content="只是思考"), message=None)
+    reasoning_only = SimpleNamespace(
+        delta=SimpleNamespace(content=None, reasoning_content="只是思考"), message=None
+    )
     assert chunk_display_text(reasoning_only) == ""
 
 
@@ -69,7 +71,9 @@ def test_stream_shows_message_body_when_delta_content_is_empty():
     client.chat.completions.create.return_value = iter([chunk])
     parts = list(chat_stream_text("你好", client=client, model="test-model"))
     assert "可见的模型正文" in parts
-    assert not any(isinstance(part, dict) and part.get("error") == "planner_empty_response" for part in parts)
+    assert not any(
+        isinstance(part, dict) and part.get("error") == "planner_empty_response" for part in parts
+    )
 
 
 def test_whitespace_stream_stays_an_explicit_empty_result():
@@ -80,17 +84,31 @@ def test_whitespace_stream_stays_an_explicit_empty_result():
     client = MagicMock(is_modstore_openai_compatible=False)
     client.chat.completions.create.return_value = iter([chunk])
     parts = list(chat_stream_text("你好", client=client, model="test-model"))
-    assert any(isinstance(part, dict) and part.get("error") == "planner_empty_response" for part in parts)
+    assert any(
+        isinstance(part, dict) and part.get("error") == "planner_empty_response" for part in parts
+    )
 
 
 def test_retry_and_second_confirm_do_not_write():
-    ctx = {"tenant_id": "demo", "idempotency_key": "turn-1", "destructive_confirmed": True, "scope_counts": {"customers": 1, "products": 1}}
+    ctx = {
+        "tenant_id": "demo",
+        "idempotency_key": "turn-1",
+        "destructive_confirmed": True,
+        "scope_counts": {"customers": 1, "products": 1},
+    }
     assert prepare_turn("清理全部客户和产品", ctx) is None
     assert mutation_policy() == "allow_once"
-    blocked = mutation_block("delete_customers", '{"all": true}', {"mutation_policy": "model_only", "idempotency_key": "turn-1"})
+    blocked = mutation_block(
+        "delete_customers",
+        '{"all": true}',
+        {"mutation_policy": "model_only", "idempotency_key": "turn-1"},
+    )
     assert blocked["committed"] is False
     note_tool_commit(ctx, "delete_customers")
-    again = prepare_turn("清理全部客户和产品", {"idempotency_key": "turn-1", "destructive_confirmed": True, "tenant_id": "demo"})
+    again = prepare_turn(
+        "清理全部客户和产品",
+        {"idempotency_key": "turn-1", "destructive_confirmed": True, "tenant_id": "demo"},
+    )
     assert again["execution"]["committed"] is True
     retry_ctx = {"idempotency_key": "turn-1", "retry_of": "turn-1"}
     assert prepare_turn("清理全部客户和产品", retry_ctx) is None
@@ -113,47 +131,71 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
         "turn_id": "turn-bulk",
         "scope_counts": {"customers": 2, "products": 3},
     }
-    preview = list(chat_stream_sse_events("清理全部客户和产品", runtime_context=ctx, client=MagicMock()))
+    preview = list(
+        chat_stream_sse_events("清理全部客户和产品", runtime_context=ctx, client=MagicMock())
+    )
     assert preview[-1]["result"]["execution"]["effect"] == "preview"
     assert preview[-1]["result"]["execution"]["committed"] is False
     assert executed == []
 
     def chunk(content="", calls=None, finish="stop"):
         return SimpleNamespace(
-            choices=[SimpleNamespace(
-                delta=SimpleNamespace(content=content, tool_calls=calls or []),
-                finish_reason=finish,
-            )]
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(content=content, tool_calls=calls or []),
+                    finish_reason=finish,
+                )
+            ]
         )
 
-    call = SimpleNamespace(index=0, id="call-1", function=SimpleNamespace(name="delete_all_customers", arguments="{}"))
-    rounds = iter([
-        iter([chunk(calls=[call], finish="tool_calls")]),
-        iter([chunk("  \n")]),
-    ])
+    call = SimpleNamespace(
+        index=0, id="call-1", function=SimpleNamespace(name="delete_all_customers", arguments="{}")
+    )
+    rounds = iter(
+        [
+            iter([chunk(calls=[call], finish="tool_calls")]),
+            iter([chunk("  \n")]),
+        ]
+    )
     client = MagicMock(is_modstore_openai_compatible=False)
     client.chat.completions.create.side_effect = lambda **_: next(rounds)
     confirmed = {**ctx, "destructive_confirmed": True}
-    failed = list(chat_stream_sse_events("清理全部客户和产品", runtime_context=confirmed, client=client, model="test"))
+    failed = list(
+        chat_stream_sse_events(
+            "清理全部客户和产品", runtime_context=confirmed, client=client, model="test"
+        )
+    )
     assert executed == ["delete_all_customers"]
     assert failed[-1]["type"] == "error"
     assert failed[-1]["execution"]["committed"] is True
     assert failed[-1]["result"]["execution"]["effect"] == "committed"
 
-    retry = list(chat_stream_sse_events(
-        "清理全部客户和产品",
-        runtime_context={**ctx, "retry_of": "turn-bulk"},
-        client=MagicMock(is_modstore_openai_compatible=False, chat=MagicMock(
-            completions=MagicMock(create=MagicMock(return_value=iter([chunk("只回答，不删除。")])))
-        )),
-        model="test",
-    ))
+    retry = list(
+        chat_stream_sse_events(
+            "清理全部客户和产品",
+            runtime_context={**ctx, "retry_of": "turn-bulk"},
+            client=MagicMock(
+                is_modstore_openai_compatible=False,
+                chat=MagicMock(
+                    completions=MagicMock(
+                        create=MagicMock(return_value=iter([chunk("只回答，不删除。")]))
+                    )
+                ),
+            ),
+            model="test",
+        )
+    )
     assert executed == ["delete_all_customers"]
     assert retry[-1]["result"]["execution"]["committed"] is True
 
 
 def test_uncommitted_confirm_is_not_repeated_by_another_confirm():
-    first = {"idempotency_key": "turn-2", "destructive_confirmed": True, "tenant_id": "demo", "scope_counts": {"customers": 0, "products": 0}}
+    first = {
+        "idempotency_key": "turn-2",
+        "destructive_confirmed": True,
+        "tenant_id": "demo",
+        "scope_counts": {"customers": 0, "products": 0},
+    }
     assert prepare_turn("清空所有产品", first) is None
     second = {"idempotency_key": "turn-2", "destructive_confirmed": True, "tenant_id": "demo"}
     reply = prepare_turn("清空所有产品", second)

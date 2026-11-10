@@ -208,7 +208,9 @@ def iter_market_sse_data_payloads(
         if data is not None:
             if not first_content and payload_has_content(data):
                 first_content = True
-                logger.info("market_stream_first_content_ms=%.1f", (time.monotonic() - started) * 1000)
+                logger.info(
+                    "market_stream_first_content_ms=%.1f", (time.monotonic() - started) * 1000
+                )
             yield data
         if decoder.done:
             break
@@ -228,7 +230,9 @@ async def aiter_market_sse_data_payloads(
         if data is not None:
             if not first_content and payload_has_content(data):
                 first_content = True
-                logger.info("market_stream_first_content_ms=%.1f", (time.monotonic() - started) * 1000)
+                logger.info(
+                    "market_stream_first_content_ms=%.1f", (time.monotonic() - started) * 1000
+                )
             yield data
         if decoder.done:
             break

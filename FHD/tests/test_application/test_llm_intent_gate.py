@@ -68,7 +68,9 @@ async def test_general_explanation_skips_async_classifier(monkeypatch):
     from unittest.mock import AsyncMock
 
     classifier = AsyncMock()
-    monkeypatch.setattr("app.infrastructure.llm.structured_output.complete_structured_bounded", classifier)
+    monkeypatch.setattr(
+        "app.infrastructure.llm.structured_output.complete_structured_bounded", classifier
+    )
     assert await gate.llm_route_message_async("请简要解释 HTTPS 是什么，不要调用工具。") is None
     classifier.assert_not_awaited()
 

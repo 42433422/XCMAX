@@ -379,7 +379,10 @@ def _chat_stream_after_guard(
                 content = chunk_display_text(choice)
                 tc_list = getattr(delta, "tool_calls", None) or []
                 if direct_stream and tc_list:
-                    yield {"_planner_sse": "error", "message": "解释请求收到意外的工具调用，已停止。"}
+                    yield {
+                        "_planner_sse": "error",
+                        "message": "解释请求收到意外的工具调用，已停止。",
+                    }
                     return
                 if content:
                     text_parts.append(content)
@@ -637,5 +640,7 @@ def chat_stream_sse_events(
                 return
             yield {"type": "token", "text": str(item)}
         yield from consume("", final=True)
-    done = _with_execution(_facade()._attach_last_tool_records({}), runtime_context, guard_execution)
+    done = _with_execution(
+        _facade()._attach_last_tool_records({}), runtime_context, guard_execution
+    )
     yield {"type": "done", "result": done}

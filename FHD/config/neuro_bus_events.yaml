@@ -31,6 +31,7 @@ streams:
         - { type: "run.completed",         const: RUN_COMPLETED,         sla_tier: conscious, terminal: true }
         - { type: "run.failed",            const: RUN_FAILED,            sla_tier: conscious, terminal: true }
         - { type: "run.continue_ignored",  const: RUN_CONTINUE_IGNORED }
+        - { type: "approval.authorization_mismatch", const: APPROVAL_AUTHORIZATION_MISMATCH }
         - { type: "run.observation_interrupted", const: RUN_OBSERVATION_INTERRUPTED, payload_fields: [reason, worker_pending, business_outcome, replay_allowed] }
       task:
         - { type: "task.approval_required", const: TASK_APPROVAL_REQUIRED }

@@ -465,7 +465,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         if (round.isActive()) {
           const extras = responseExtras(donePayload) || {}
           if (responseCameFromCache(donePayload)) extras.sameAsPrevious = true
-          applyPlainTextToMessageIndex(msgIndex, finalText, extras)
+          if (extras && Object.keys(extras).length) applyPlainTextToMessageIndex(msgIndex, finalText, extras)
+          else applyPlainTextToMessageIndex(msgIndex, finalText)
           observeModelOutcome(finalText, donePayload)
         }
         if (round.isActive() && ttsShouldSpeakThisMessage && ttsEnabled.value && donePayload.success !== false) {
@@ -526,7 +527,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] `
             : timedOut ? `${errText}\n` : ''
           const shown = `${presentation.status === 'unknown' ? pendingText : ''}${presentation.text}`
-          applyPlainTextToMessageIndex(msgIndex, shown, failureExecution ? { execution: failureExecution } : undefined)
+          if (failureExecution) applyPlainTextToMessageIndex(msgIndex, shown, { execution: failureExecution })
+          else applyPlainTextToMessageIndex(msgIndex, shown)
           observeModelOutcome(shown, failureExecution ? { execution: failureExecution } : undefined)
           if (streamMessage) {
             streamMessage.workflowAction = presentation.workflowAction
@@ -538,7 +540,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           const visibleError = err instanceof IncompletePlannerSseError
             ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] ${errText}`
             : transport || (timedOut && streamRunId ? errText : `处理失败：${errText}`)
-          applyPlainTextToMessageIndex(msgIndex, visibleError, failureExecution ? { execution: failureExecution } : undefined)
+          if (failureExecution) applyPlainTextToMessageIndex(msgIndex, visibleError, { execution: failureExecution })
+          else applyPlainTextToMessageIndex(msgIndex, visibleError)
           observeModelOutcome(visibleError, failureExecution ? { execution: failureExecution } : undefined)
           if (streamMessage) {
             streamMessage.workflowAction = 'failed'
@@ -554,7 +557,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           const unfinished = leftover
             ? `${leftover}\n\n[回复未完成] 本轮回复已结束，但没有完成回执。请重试。`
             : '处理失败：本轮回复已结束，但没有收到正文。请重试。'
-          applyPlainTextToMessageIndex(msgIndex, unfinished, failureExecution ? { execution: failureExecution } : undefined)
+          if (failureExecution) applyPlainTextToMessageIndex(msgIndex, unfinished, { execution: failureExecution })
+          else applyPlainTextToMessageIndex(msgIndex, unfinished)
           observeModelOutcome(unfinished, failureExecution ? { execution: failureExecution } : undefined)
           streamMessage.workflowAction = 'failed'
           delete streamMessage.streamingShell

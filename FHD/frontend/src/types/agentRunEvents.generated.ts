@@ -3,6 +3,7 @@
 
 
 export type AgentRunEventType =
+  | 'approval.authorization_mismatch'
   | 'approval.rejected'
   | 'approval.timed_out'
   | 'artifact.attached'

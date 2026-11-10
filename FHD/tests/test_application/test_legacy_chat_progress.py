@@ -132,9 +132,7 @@ def test_explicit_explanation_streams_before_completion_without_tools(fixture_to
 
 def test_explicit_explanation_rejects_unexpected_tool_calls(fixture_tools):
     cli = client(lambda **_: iter([chunk(calls=[tool()], finish="tool_calls")]))
-    events = list(adapter.chat_stream_sse_events(
-        "解释 DNS 是什么", client=cli, model="synthetic"
-    ))
+    events = list(adapter.chat_stream_sse_events("解释 DNS 是什么", client=cli, model="synthetic"))
     assert any(event["type"] == "error" for event in events)
     fixture_tools.assert_not_called()
 
