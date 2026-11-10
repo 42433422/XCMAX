@@ -4825,14 +4825,14 @@ def test_product_saves_document_outside_original_print_with_explicit_choice(
     assert inspect_workbook(original)["read_only_print_areas"][0]["value"] == "报价!$1:$19"
 
 
-def _nine_batch_workbook():
+def _nine_batch_workbook(*, hidden_first=True):
     wb = Workbook()
     # Counts sized for MAX_MODEL_CELLS=2000 to keep the historical 9-batch fairness shape
     # (was 1900/600/600/265 under the prior 500-cell pack budget).
     for index, count in enumerate((7600, 2400, 2400, 1060)):
         ws = wb.active if index == 0 else wb.create_sheet()
         ws.title = f"表{index}"
-        if index == 0:
+        if index == 0 and hidden_first:
             ws.sheet_state = "hidden"
         for row in range(1, count + 1):
             ws.cell(row, 1, f"合成记录{row}")
@@ -4867,8 +4867,9 @@ def test_classification_default_budget_handles_four_batches_without_repeated_pau
 
 
 @pytest.mark.parametrize("per_round", [3, 4])
+@pytest.mark.parametrize("hidden_first", [False, True])
 def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
-    review_store, monkeypatch, per_round
+    review_store, monkeypatch, per_round, hidden_first
 ):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
@@ -4909,17 +4910,25 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
     item = client.post(
         "/api/templates/reviewed-excel/classify",
         data={"expected_actor": "1:7"},
-        files={"files": ("synthetic.xlsx", _nine_batch_workbook())},
+        files={"files": ("synthetic.xlsx", _nine_batch_workbook(hidden_first=hidden_first))},
     ).json()["files"][0]
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     form = {"version": item["version"], "own_file_authorized": "true"}
-    from app.application.reviewed_excel_evidence import plan_semantic_batches
+    from app.application.reviewed_excel_evidence import (
+        plan_semantic_batches,
+        prepare_auto_slice_review,
+    )
 
     planned, _ = plan_semantic_batches(
-        inspect_workbook(_nine_batch_workbook()), per_round, neutral=True
+        prepare_auto_slice_review(
+            inspect_workbook(_nine_batch_workbook(hidden_first=hidden_first)),
+            skip_hidden_sheets=True,
+        ),
+        per_round,
+        neutral=True,
     )
     total = len(planned)
-    assert total >= 9
+    assert total == (5 if hidden_first else 9)
     for index in range(total):
         response = client.post(
             url + "/analyze",
@@ -4946,7 +4955,12 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
     )
     assert len({doc["document_id"] for doc in result["suggested_documents"]}) == total
     assert all(not item["unread"] for item in result["coverage"])
-    authorization = client.get(url).json()["versions"][-1]["model_authorization"]
+    saved = client.get(url).json()
+    assert saved["checkpoint"] is None
+    assert saved["versions"][-1]["source_scope"]["sheets"] == [
+        f"表{index}" for index in range(1 if hidden_first else 0, 4)
+    ]
+    authorization = saved["versions"][-1]["model_authorization"]
     assert (
         authorization["kind"] == "account_session"
         and authorization["source_sha256"] == item["sha256"]
@@ -4956,6 +4970,18 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
         for sheet in result["sheets"]
         for region in sheet["regions"]
     ]
+    if hidden_first:
+        blocked = client.post(
+            url + "/confirm",
+            data={
+                "version": result["version"],
+                "labels_json": json.dumps(
+                    labels + [{"sheet": "表0", "range": "A1", "labels": ["quotation"]}]
+                ),
+                "independent_confirmed": "true",
+            },
+        )
+        assert blocked.status_code == 400, blocked.text
     confirmed = client.post(
         url + "/confirm",
         data={
