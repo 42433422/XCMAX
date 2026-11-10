@@ -17,11 +17,22 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def client(trusted_actor, local_tools) -> TestClient:
+def client(trusted_actor, local_tools, monkeypatch, tmp_path) -> TestClient:
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "tool-idempotency.sqlite"))
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("XCAGI_DESKTOP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
     app = FastAPI()
     app.include_router(routes.router)
     app.include_router(tools_execute_router)
-    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
+    return TestClient(
+        app, raise_server_exceptions=False, headers=trusted_actor(role="admin").headers
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -206,45 +217,25 @@ class TestDatabaseBackups:
             r = client.post("/api/database/backup")
             assert r.status_code == 500
 
-    def test_delete_backup_success(self, client: TestClient, local_tools):
-        mock_svc = MagicMock()
-        mock_svc.delete_backup.return_value = {"success": True}
+    @pytest.mark.parametrize("action", ["delete", "restore"])
+    def test_destructive_backup_action_requires_approval(self, client: TestClient, action):
+        service = MagicMock()
         with patch(
-            "app.application.facades.session_facade.get_database_service", return_value=mock_svc
+            "app.application.facades.session_facade.get_database_service", return_value=service
         ):
-            r = client.delete("/api/database/backup/test.sql")
-            assert r.status_code == 200
-        mock_svc.delete_backup.assert_called_once_with("test.sql")
-
-    def test_delete_backup_error(self, client: TestClient):
-        with patch(
-            "app.application.facades.session_facade.get_database_service",
-            side_effect=RuntimeError("fail"),
-        ):
-            r = client.delete("/api/database/backup/test.sql")
-            assert r.status_code == 500
+            response = (
+                client.delete("/api/database/backup/test.sql")
+                if action == "delete"
+                else client.post("/api/database/restore", json={"backup_file": "backup.sql"})
+            )
+        assert response.status_code == 202
+        assert response.json()["error_code"] == "approval_required"
+        service.delete_backup.assert_not_called()
+        service.restore_database.assert_not_called()
 
     def test_restore_missing_file(self, client: TestClient):
         r = client.post("/api/database/restore", json={})
         assert r.status_code == 400
-
-    def test_restore_success(self, client: TestClient, local_tools):
-        mock_svc = MagicMock()
-        mock_svc.restore_database.return_value = {"success": True}
-        with patch(
-            "app.application.facades.session_facade.get_database_service", return_value=mock_svc
-        ):
-            r = client.post("/api/database/restore", json={"backup_file": "backup.sql"})
-            assert r.status_code == 200
-        mock_svc.restore_database.assert_called_once_with("backup.sql")
-
-    def test_restore_error(self, client: TestClient, local_tools):
-        with patch(
-            "app.application.facades.session_facade.get_database_service",
-            side_effect=RuntimeError("fail"),
-        ):
-            r = client.post("/api/database/restore", json={"backup_file": "backup.sql"})
-            assert r.status_code == 500
 
 
 # ---------------------------------------------------------------------------
@@ -572,23 +563,14 @@ class TestPerformanceSlowQueries:
 
 
 class TestPerformanceOptimizeReinitialize:
-    def test_success(self, client: TestClient):
-        mock_opt = MagicMock()
-        mock_opt.get_status.return_value = {"status": "ok"}
+    def test_reinitialize_requires_approval(self, client: TestClient):
         with patch(
-            "app.utils.performance.performance_initializer.init_performance_optimization",
-            return_value=mock_opt,
-        ):
-            r = client.post("/api/performance/optimize/reinitialize")
-            assert r.json()["success"] is True
-
-    def test_error(self, client: TestClient, local_tools):
-        with patch(
-            "app.utils.performance.performance_initializer.init_performance_optimization",
-            side_effect=RuntimeError("fail"),
-        ):
-            r = client.post("/api/performance/optimize/reinitialize")
-            assert r.status_code == 500
+            "app.utils.performance.performance_initializer.init_performance_optimization"
+        ) as init:
+            response = client.post("/api/performance/optimize/reinitialize")
+        assert response.status_code == 202
+        assert response.json()["error_code"] == "approval_required"
+        init.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -621,7 +603,7 @@ class TestTemplatesDelete:
             content=json.dumps({}),
             headers={"Content-Type": "application/json"},
         )
-        assert r.status_code == 400
+        assert r.status_code == 400, r.text
 
     def test_fs_template_empty_filename(self, client: TestClient):
         r = client.request(
@@ -806,7 +788,8 @@ class TestAdminLlmReload:
             assert r.json()["success"] is True
 
 
-def test_maintenance_denial_uses_signed_actor_and_never_calls_service(client):
+def test_maintenance_denial_uses_signed_actor_and_never_calls_service(client, trusted_actor):
+    client.headers.update(trusted_actor(role="user").headers)
     service = MagicMock()
     with patch("app.application.facades.session_facade.get_system_service", return_value=service):
         response = client.post("/api/system/printer", json={"printer_name": "HP"})
