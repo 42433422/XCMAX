@@ -113,6 +113,17 @@ def httpx_sync_client(**kwargs: Any) -> httpx.Client:
     proxy = kwargs.pop("proxy", None) or (os.environ.get("XCAGI_MARKET_PROXY") or "").strip()
     if proxy:
         kwargs["proxy"] = proxy
+    elif "transport" not in kwargs:
+        # HTTPX retries only connection establishment, never a sent POST/read timeout.
+        kwargs["transport"] = httpx.HTTPTransport(
+            retries=market_connect_attempts() - 1,
+            trust_env=kwargs["trust_env"],
+            verify=kwargs.get("verify", True),
+            cert=kwargs.get("cert"),
+            http1=kwargs.get("http1", True),
+            http2=kwargs.get("http2", False),
+            limits=kwargs.get("limits", httpx.Limits()),
+        )
     return httpx.Client(**kwargs)
 
 

@@ -330,3 +330,30 @@ def test_reference_refusal_uses_canonical_idempotency_for_previous_steps(tool_id
     if not blocked:
         assert run.final_output["node_outputs"]["query_product"] == run.steps[0].output
     executor.execute.assert_not_called()
+
+
+def test_typed_employee_rows_receive_complete_result_without_scalar_narrowing():
+    from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
+
+    rows = [{"id": 7}, {"id": 8}]
+    outputs = {"query": {"success": True, "data": rows}}
+    params = {"input": {"table_json": {"rows": "{{query.data}}"}}}
+    schema = build_tool_specs_v2()[("employee", "execute")].input_schema
+    problems = []
+    resolved = resolve_references(params, outputs, problems, schema)
+    assert not problems and resolved["input"]["table_json"]["rows"] == rows
+    resolved["input"]["table_json"]["rows"][0]["id"] = 99
+    assert rows[0]["id"] == 7
+    scalar_problems = []
+    assert (
+        resolve_references({"customer_id": "{{query.data}}"}, outputs, scalar_problems)[
+            "customer_id"
+        ]
+        == "{{query.data}}"
+    )
+    assert scalar_problems
+    bad = []
+    resolve_references(
+        {"input": {"table_json": {"rows": "{{query.data.orders}}"}}}, outputs, bad, schema
+    )
+    assert bad

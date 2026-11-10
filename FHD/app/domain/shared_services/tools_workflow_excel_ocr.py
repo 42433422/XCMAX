@@ -45,6 +45,28 @@ def _registered_router_excel_analysis(
         return {"success": False, "message": f"Excel 分析失败：{str(err)}"}
     if not isinstance(result, dict):
         return {"success": False, "message": str(result)}
+    if (
+        result.get("success")
+        and action == "statistics"
+        and ("expected_row_count" in params or "expected_totals" in params)
+    ):
+        from math import isclose
+
+        mismatches = []
+        if (
+            "expected_row_count" in params
+            and result.get("row_count") != params["expected_row_count"]
+        ):
+            mismatches.append("明细行数")
+        for column, expected in (params.get("expected_totals") or {}).items():
+            actual = (result.get("numeric_summary") or {}).get(column, {}).get("sum")
+            if actual is None or not isclose(
+                float(actual), float(expected), rel_tol=1e-9, abs_tol=1e-9
+            ):
+                mismatches.append(str(column))
+        result["verification"] = {"verified": not mismatches, "mismatches": mismatches}
+        if mismatches:
+            result.update(success=False, message="Excel 核验未通过：" + "、".join(mismatches))
     if not result.get("success") and "error" in result and "message" not in result:
         result["message"] = result["error"]
     if result.get("success") is True and not isinstance(result.get("data"), dict):

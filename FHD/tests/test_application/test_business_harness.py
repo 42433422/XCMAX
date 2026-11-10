@@ -416,3 +416,16 @@ def test_wrapped_read_is_not_evidence_of_a_write():
         )
     ]
     assert ensure_terminal_business_result(run)["success"] is False
+
+
+def test_statistics_receipt_exposes_actual_rows_and_amount_without_recalculation():
+    from app.application.agent_orchestrator.business_harness import _result_facts
+    from app.application.business_harness_projection import _message_for_result
+
+    facts = _result_facts(
+        [{"success": True, "row_count": 2, "numeric_summary": {"total_amount": {"sum": 200.0}}}]
+    )
+    assert facts == {"row_count": 2, "amount_total": 200.0}
+    text = _message_for_result({"status": "completed", "facts": facts}, "")
+    assert "明细行数: 2" in text or "明细行数：2" in text
+    assert "200" in text

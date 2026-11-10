@@ -9,6 +9,25 @@ from pathlib import Path
 import pytest
 
 
+def test_employee_list_matches_the_declared_tool_result(employee_mods_root):
+    from app.application.agent_orchestrator.tool_spec import validate_tool_result
+    from app.domain.shared_services.tools_workflow_workspace import _registered_router_employee
+
+    _write_csv_read_pack(employee_mods_root)
+    result = _registered_router_employee("list", {}, {}, "normal", "有哪些员工")
+    assert validate_tool_result("employee", "list", result).ok
+    assert any(item["employee_id"] == "csv-full-read-employee" for item in result["data"])
+
+
+def test_sales_filter_contract_rejects_invented_state_field():
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
+
+    assert validate_tool_call(
+        "sales", "query", {"status": "confirmed", "customer_name": "客户甲"}
+    ).ok
+    assert not validate_tool_call("sales", "query", {"order_state": "confirmed"}).ok
+
+
 def _write_csv_read_pack(root: Path, pack_id: str = "csv-full-read-employee") -> Path:
     pack_dir = root / "_employees" / pack_id
     vendor = pack_dir / "backend" / "vendor" / "csv_read"
@@ -195,3 +214,94 @@ def test_employee_tools_status_counts(employee_mods_root):
     status = build_employee_tools_status()
     assert status["installed_employee_pack_count"] >= 1
     assert status["registered_tool_count"] >= 1
+
+
+def test_seeded_employee_cache_uses_trusted_source_without_trusting_modified_code(
+    tmp_path, monkeypatch
+):
+    from app.application.employee_runtime import loader
+
+    installed, bundled = tmp_path / "installed", tmp_path / "bundled"
+    for root in (installed, bundled):
+        pack = root / "test-worker"
+        pack.mkdir(parents=True)
+        (pack / "manifest.json").write_text("{}")
+        (pack / "worker.py").write_text("def run(): return 1")
+    cache = installed / "test-worker" / "__pycache__"
+    cache.mkdir()
+    (cache / "worker.pyc").write_bytes(b"cache")
+    monkeypatch.setattr(loader, "_employee_roots", lambda: [installed, bundled])
+    monkeypatch.setattr(
+        loader, "verify_direct_python_pack_trust", lambda path: (path.parent == bundled, "source")
+    )
+    assert loader.resolve_pack_dir("test-worker") == bundled / "test-worker"
+    (installed / "test-worker" / "worker.py").write_text("def run(): return 2")
+    assert loader.resolve_pack_dir("test-worker") == installed / "test-worker"
+
+
+def test_employee_handoff_exposes_only_verified_real_output(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator import artifact_files
+    from app.application.employee_runtime import executor
+    from app.domain.shared_services.tools_workflow_workspace import _registered_router_employee
+
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setattr(artifact_files, "get_app_data_dir", lambda: str(tmp_path / "receipts"))
+    output = tmp_path / "report.xlsx"
+    output.write_bytes(b"real-output")
+    monkeypatch.setattr(
+        executor,
+        "execute_employee_task_local",
+        lambda *a, **kw: {
+            "success": True,
+            "result": {"outputs": [{"ok": True, "output": {"output_path": str(output)}}]},
+        },
+    )
+    result = _registered_router_employee(
+        "execute",
+        {"employee_id": "test-worker", "task": "生成报表"},
+        {"workspace_root": str(tmp_path), "run_id": "run_verified"},
+        "normal",
+        "",
+    )
+    assert result["success"] and result["data"]["file_path"] == str(output)
+    output.unlink()
+    assert (
+        artifact_files.read_verified_spreadsheet("run_verified", result["artifacts"][0])
+        == b"real-output"
+    )
+    with pytest.raises(OSError):
+        _registered_router_employee(
+            "execute",
+            {"employee_id": "test-worker", "task": "生成报表"},
+            {"workspace_root": str(tmp_path)},
+            "normal",
+            "",
+        )
+
+
+@pytest.mark.parametrize("count,total,ok", [(2, 200, True), (1, 200, False), (2, 201, False)])
+def test_excel_verification_rejects_incorrect_count_or_total(monkeypatch, count, total, ok):
+    from app.domain.shared_services.tools_workflow_excel_ocr import (
+        _registered_router_excel_analysis,
+    )
+
+    monkeypatch.setattr(
+        "app.application.tools.workflow.handle_excel_analysis",
+        lambda *a, **kw: {
+            "success": True,
+            "row_count": 2,
+            "numeric_summary": {"total_amount": {"sum": 200}},
+        },
+    )
+    result = _registered_router_excel_analysis(
+        "statistics",
+        {
+            "file_path": "report.xlsx",
+            "expected_row_count": count,
+            "expected_totals": {"total_amount": total},
+        },
+        {},
+        "normal",
+        "",
+    )
+    assert result["success"] is ok and result["verification"]["verified"] is ok

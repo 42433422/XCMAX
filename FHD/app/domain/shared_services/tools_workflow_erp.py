@@ -406,6 +406,8 @@ def _registered_router_reports(
             "end_date",
             "group_by",
             "customer_id",
+            "customer_name",
+            "status",
             "payment_state",
             "min_amount_exclusive",
             "region",

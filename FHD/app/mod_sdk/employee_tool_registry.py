@@ -137,6 +137,7 @@ def build_employee_pack_tools_detail() -> list[dict[str, Any]]:
             "handlers": row.get("handlers") or [],
             "runtime_ok": bool(row.get("runtime_ok")),
             "installed": True,
+            "description": str((row.get("function") or {}).get("description") or "")[:240],
         }
         for row in _cached_tool_rows()
     ]

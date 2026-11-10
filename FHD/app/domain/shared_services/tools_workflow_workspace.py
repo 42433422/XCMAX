@@ -365,7 +365,12 @@ def _registered_router_employee(
         return {
             "success": True,
             "message": f"已发现 {status.get('registered_tool_count', 0)} 个可调用员工",
-            "data": status,
+            "data": [
+                {**item, "employee_id": item.get("pack_id") or item.get("employee_id")}
+                for item in status.get("employee_pack_tools", [])
+                if isinstance(item, dict)
+            ],
+            "status": status,
         }
     if action not in {"execute", "context"}:
         return {"success": False, "message": f"未注册的 employee 动作: {action}"}
@@ -455,9 +460,41 @@ def _registered_router_employee(
         runtime_context=runtime_context,
     )
     ok = bool(result.get("success")) and (not bool(result.get("blocked_by_risk_gate")))
+    artifacts = []
+    if ok:
+        from app.application.shipment_excel_etl_security import (
+            open_etl_input_file,
+            resolve_etl_path,
+        )
+
+        paths = set()
+        for output in (result.get("result") or {}).get("outputs") or []:
+            nested = output.get("output") or {}
+            raw = output.get("output_path") or nested.get("output_path")
+            if raw:
+                path = resolve_etl_path(str(raw), workspace_root=workspace_root)
+                with open_etl_input_file(path, workspace_root=workspace_root):
+                    paths.add(str(path))
+        if len(paths) == 1:
+            result["file_path"] = paths.pop()
+            run_id = str(runtime_context.get("run_id") or "")
+            if run_id and result["file_path"].lower().endswith(".xlsx"):
+                from pathlib import Path
+
+                from app.application.agent_orchestrator.artifact_files import store_spreadsheet
+
+                with open_etl_input_file(
+                    result["file_path"], workspace_root=workspace_root
+                ) as source:
+                    artifacts.append(
+                        store_spreadsheet(
+                            run_id, source.read(), name=Path(result["file_path"]).name
+                        )
+                    )
     return {
         "success": ok,
         "message": "员工执行完成" if ok else str(result.get("error") or "员工执行失败"),
         "employee_id": employee_id,
         "data": result,
+        "artifacts": artifacts,
     }

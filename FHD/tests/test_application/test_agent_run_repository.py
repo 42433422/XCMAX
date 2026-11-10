@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -16,6 +17,37 @@ from app.application.agent_orchestrator import (
     SQLAlchemyAgentRunRepository,
     ToolCall,
 )
+
+
+def test_retry_reuses_saved_chat_plan_without_another_model_request(monkeypatch):
+    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    service = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+    plan = PlanGraph(
+        plan_id="saved-chat-plan",
+        intent="query",
+        nodes=[
+            WorkflowNode(
+                node_id="query",
+                tool_id="customers",
+                action="query",
+                params={"keyword": "synthetic"},
+            )
+        ],
+    )
+    original = service.start_run_from_plan(
+        user_id="7", message="query", plan=plan, auto_execute=False
+    )
+    original.status = "failed"
+    service.save_run(original)
+    monkeypatch.setattr(
+        service, "_plan", lambda *_a, **_k: pytest.fail("retry must reuse the saved plan")
+    )
+    retried = service.retry_run(original.run_id, requested_by="7", auto_execute=False)
+    assert retried.status == "waiting_user"
+    assert retried.steps[0].params == {"keyword": "synthetic"}
+    assert retried.metadata["provided_plan"]["nodes"][0]["tool_id"] == "customers"
 
 
 def test_sql_tenant_filter_precedes_limit_across_streaming_batches(tmp_path):

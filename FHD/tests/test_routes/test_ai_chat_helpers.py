@@ -331,3 +331,33 @@ class TestNormalizeBatchMessagesPayload:
 
 
 # ========================= unified_chat_single_payload ===================
+
+
+def test_unified_chat_binds_and_clears_authenticated_model_scope(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.infrastructure.llm.client import _scoped_client, get_llm_client
+
+    client = object()
+    request = object()
+    monkeypatch.setattr(
+        "app.application.ai_chat.chat_evidence.prepare_chat_evidence", lambda *_: {}
+    )
+    monkeypatch.setattr(
+        "app.application.modstore_conversation_app.create_modstore_openai_client_from_request",
+        lambda current: (client, "test/model") if current is request else None,
+    )
+
+    def process_chat(**kwargs):
+        assert get_llm_client() is client
+        return {"success": True}
+
+    monkeypatch.setattr(
+        "app.application.get_ai_chat_app_service",
+        lambda: SimpleNamespace(process_chat=process_chat),
+    )
+    assert _scoped_client.get() is None
+    assert unified_chat_single_payload("hello", "2", "127.0.0.1", "normal", None, {}, request)[
+        "success"
+    ]
+    assert _scoped_client.get() is None

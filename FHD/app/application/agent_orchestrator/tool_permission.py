@@ -229,6 +229,25 @@ def actor_tool_denial(
 
     try:
         actor = _bound_actor(ctx)
+        if tool_id == "memory_v2":
+            aliases = {str(actor.id)}
+            if not str(actor.username).isdecimal():
+                aliases.add(str(actor.username))
+            target = str(
+                (params or {}).get("user_id")
+                or (params or {}).get("userId")
+                or ctx.get("user_id")
+                or ""
+            )
+            if target not in aliases:
+                return _denial(
+                    "tool_permission_denied",
+                    "只能操作当前账户的记忆",
+                    context=ctx,
+                    tool_id=tool_id,
+                    action=action,
+                    reason="memory_owner_mismatch",
+                )
         if getattr(actor, "role", "") == "admin":
             return None
         permission = spec.permission

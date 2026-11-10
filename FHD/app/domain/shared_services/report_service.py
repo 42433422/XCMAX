@@ -60,6 +60,8 @@ class ReportService(NeuroEventPublisherMixin):
         payment_state: str | None = None,
         min_amount_exclusive: Any = None,
         region: str | None = None,
+        status: str | None = None,
+        customer_name: str | None = None,
     ) -> dict[str, Any]:
         """销售报表。
 
@@ -81,6 +83,8 @@ class ReportService(NeuroEventPublisherMixin):
             payment_state,
             min_amount_exclusive,
             region,
+            status,
+            customer_name,
         )
 
     def _get_sales_report_from_orders(
@@ -92,6 +96,8 @@ class ReportService(NeuroEventPublisherMixin):
         payment_state: str | None = None,
         min_amount_exclusive: Any = None,
         region: str | None = None,
+        status: str | None = None,
+        customer_name: str | None = None,
     ) -> dict[str, Any]:
         """SalesOrder 正交读模型聚合（主源）。
 
@@ -110,6 +116,10 @@ class ReportService(NeuroEventPublisherMixin):
                 query = query.filter(SalesOrder.created_at <= end_date)
             if customer_id:
                 query = query.filter(SalesOrder.customer_id == customer_id)
+            if customer_name:
+                query = query.filter(SalesOrder.customer_name == customer_name)
+            if status:
+                query = query.filter(SalesOrder.state == status)
             if payment_state:
                 query = query.filter(SalesOrder.payment_state == payment_state)
             if min_amount_exclusive is not None:

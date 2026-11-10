@@ -7,6 +7,78 @@ import json
 import httpx
 import pytest
 
+
+@pytest.fixture
+def local_inference_receiver():
+    import threading
+    import time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    state = {"posts": 0, "delay": 0}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            state["posts"] += 1
+            time.sleep(state["delay"])
+            try:
+                self.send_response(200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+            except BrokenPipeError:
+                pass
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}/api/llm/chat/stream", state
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(5)
+
+
+def test_connect_failures_retry_before_the_single_post(local_inference_receiver, monkeypatch):
+    import httpcore
+
+    from app.infrastructure.modstore_transport import httpx_sync_client
+
+    monkeypatch.delenv("XCAGI_MARKET_PROXY", raising=False)
+    monkeypatch.setenv("XCAGI_MARKET_CONNECT_ATTEMPTS", "3")
+    url, state = local_inference_receiver
+    with httpx_sync_client(timeout=2) as client:
+        backend = client._transport._pool._network_backend
+        connect = backend.connect_tcp
+        attempts = []
+
+        def flaky_connect(*args, **kwargs):
+            attempts.append(1)
+            if len(attempts) < 3:
+                raise httpcore.ConnectError("synthetic pre-send failure")
+            return connect(*args, **kwargs)
+
+        monkeypatch.setattr(backend, "connect_tcp", flaky_connect)
+        assert client.post(url, json={"synthetic": True}).status_code == 200
+    assert len(attempts) == 3
+    assert state["posts"] == 1
+
+
+def test_read_timeout_never_replays_a_sent_post(local_inference_receiver, monkeypatch):
+    from app.infrastructure.modstore_transport import httpx_sync_client
+
+    monkeypatch.delenv("XCAGI_MARKET_PROXY", raising=False)
+    url, state = local_inference_receiver
+    state["delay"] = 0.2
+    with httpx_sync_client(timeout=0.03) as client, pytest.raises(httpx.ReadTimeout):
+        client.post(url, json={"synthetic": True})
+    assert state["posts"] == 1
+
+
 from app.domain.shared_services.conversation.modstore_adapter import (
     _iter_market_sse_data_payloads,
     _iter_market_transport_plans,

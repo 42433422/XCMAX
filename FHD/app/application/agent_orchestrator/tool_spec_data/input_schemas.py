@@ -55,7 +55,154 @@ _SHIPMENT_PRODUCTS_SCHEMA = {
     },
 }
 
+_SALES_FILTERS = {
+    "start_date": {"type": "string", "description": "开始日期 YYYY-MM-DD"},
+    "end_date": {"type": "string", "description": "结束日期 YYYY-MM-DD，包含当天"},
+    "customer_id": {"type": "integer"},
+    "customer_name": {"type": "string", "description": "客户完整名称"},
+    "status": {"type": "string", "description": "订单状态，已确认用 confirmed"},
+    "payment_state": {"type": "string"},
+    "min_amount_exclusive": {"type": "number"},
+    "region": {"type": "string"},
+}
+
+_PRODUCTS_DELETE_INPUT = {
+    "type": "object",
+    "required": ["id"],
+    "properties": {"id": {"type": "integer"}},
+}
+
+_PRINT_TEST_INPUT = {
+    "type": "object",
+    "required": ["printer_name"],
+    "properties": {"printer_name": {"type": "string"}},
+}
+
+_SYSTEM_MAINTENANCE_DELETE_DATABASE_BACKUP_INPUT = {
+    "type": "object",
+    "required": ["backup_file"],
+    "properties": {"backup_file": {"type": "string"}},
+}
+
+_EXCEL_TOOLKIT_VIEW_INPUT = {
+    "type": "object",
+    "required": ["file_path"],
+    "properties": {
+        "file_path": {"type": "string"},
+        "sheet_name": {"type": "string"},
+        "max_rows": {"type": "integer"},
+    },
+}
+
+_EXCEL_TOOLKIT_MERGED_INPUT = {
+    "type": "object",
+    "required": ["file_path"],
+    "properties": {"file_path": {"type": "string"}, "sheet_name": {"type": "string"}},
+}
+
+_DOCUMENT_TEMPLATE_INGEST_INPUT = {
+    "type": "object",
+    "required": [],
+    "properties": {
+        "file_path": {"type": "string"},
+        "original_file_path": {"type": "string"},
+        "filename": {"type": "string"},
+        "template_name": {"type": "string"},
+        "name": {"type": "string"},
+        "template_scope": {"type": "string"},
+        "business_scope": {"type": "string"},
+        "source": {"type": "string"},
+    },
+}
+
+_SALES_QUOTE_INPUT = {
+    "type": "object",
+    "required": ["items"],
+    "anyOf": [{"required": ["customer_id"]}, {"required": ["customer_name"]}],
+    "properties": {
+        "customer_id": {"type": "integer", "title": "客户编号"},
+        "customer_name": {"type": "string", "title": "客户名称"},
+        "items": {
+            "type": "array",
+            "title": "报价明细",
+            "items": {
+                "type": "object",
+                "required": ["quantity", "unit_price"],
+                "properties": {
+                    "product_id": {"type": "integer"},
+                    "model_number": {"type": "string"},
+                    "quantity": {"type": "number"},
+                    "unit_price": {"type": "number"},
+                },
+            },
+        },
+    },
+}
+
+_MEMORY_V2_REJECT_INPUT = {
+    "type": "object",
+    "required": ["user_id", "memory_id"],
+    "properties": {
+        "user_id": {"type": "string"},
+        "memory_id": {"type": "string"},
+        "reason": {"type": "string"},
+    },
+}
+
+_OCR_RECOGNIZE_INPUT = {
+    "type": "object",
+    "required": ["file_path"],
+    "properties": {"file_path": {"type": "string"}},
+}
+
+_OCR_EXTRACT_INPUT = {
+    "type": "object",
+    "required": ["text"],
+    "properties": {"text": {"type": "string"}},
+}
+
+
 _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
+    ("excel_analysis", "statistics"): {
+        "type": "object",
+        "required": ["file_path"],
+        "properties": {
+            "file_path": {"type": "string"},
+            "sheet_name": {"type": "string"},
+            "expected_row_count": {"type": "integer"},
+            "expected_totals": {"type": "object", "additionalProperties": {"type": "number"}},
+        },
+    },
+    ("sales", "query"): {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            **_SALES_FILTERS,
+            "keyword": {"type": "string"},
+            "search": {"type": "string"},
+            "page": {"type": "integer"},
+            "per_page": {"type": "integer"},
+        },
+    },
+    ("reports", "sales_summary"): {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {**_SALES_FILTERS, "group_by": {"type": "string"}},
+    },
+    ("reports", "export"): {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            **_SALES_FILTERS,
+            "report_type": {"type": "string", "enum": ["sales", "inventory", "purchase"]},
+            "group_by": {"type": "string"},
+            "filename": {"type": "string"},
+            "data": {"type": "array"},
+            "warehouse_id": {"type": "integer"},
+            "category": {"type": "string"},
+            "model_number": {"type": "string"},
+        },
+    },
     ("business_db", "read"): {
         "type": "object",
         "required": ["entity"],
@@ -169,11 +316,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "quantity": {"type": "number"},
         },
     },
-    ("products", "delete"): {
-        "type": "object",
-        "required": ["id"],
-        "properties": {"id": {"type": "integer"}},
-    },
+    ("products", "delete"): _PRODUCTS_DELETE_INPUT,
     ("products", "batch_create"): {
         "type": "object",
         "required": ["products"],
@@ -210,11 +353,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "min_stock": {"type": "number"},
         },
     },
-    ("materials", "delete"): {
-        "type": "object",
-        "required": ["id"],
-        "properties": {"id": {"type": "integer"}},
-    },
+    ("materials", "delete"): _PRODUCTS_DELETE_INPUT,
     ("materials", "batch_delete"): {
         "type": "object",
         "required": [],
@@ -448,7 +587,19 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "employee_id": {"type": "string"},
             "pack_id": {"type": "string"},
             "task": {"type": "string"},
-            "input": {"type": "object"},
+            "input": {
+                "type": "object",
+                "properties": {
+                    "user_request": {"type": "string"},
+                    "table_json": {
+                        "type": "object",
+                        "properties": {
+                            "columns": {"type": "array", "items": {"type": "string"}},
+                            "rows": {"type": "array", "items": {"type": "object"}},
+                        },
+                    },
+                },
+            },
         },
     },
     ("employee", "context"): {
@@ -624,11 +775,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "status": {"type": "string"},
         },
     },
-    ("shipment_records", "delete"): {
-        "type": "object",
-        "required": ["id"],
-        "properties": {"id": {"type": "integer"}},
-    },
+    ("shipment_records", "delete"): _PRODUCTS_DELETE_INPUT,
     ("shipment_orders", "generate"): {
         "type": "object",
         "required": ["unit_name", "products"],
@@ -694,11 +841,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "copies": {"type": "integer"},
         },
     },
-    ("print", "test"): {
-        "type": "object",
-        "required": ["printer_name"],
-        "properties": {"printer_name": {"type": "string"}},
-    },
+    ("print", "test"): _PRINT_TEST_INPUT,
     ("print", "save_printer_selection"): {
         "type": "object",
         "properties": {"document_printer": {"type": "string"}, "label_printer": {"type": "string"}},
@@ -712,24 +855,15 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "idempotency_key": {"type": "string"},
         },
     },
-    ("system_maintenance", "set_default_printer"): {
-        "type": "object",
-        "required": ["printer_name"],
-        "properties": {"printer_name": {"type": "string"}},
-    },
+    ("system_maintenance", "set_default_printer"): _PRINT_TEST_INPUT,
     ("system_maintenance", "enable_startup"): {"type": "object", "required": [], "properties": {}},
     ("system_maintenance", "disable_startup"): {"type": "object", "required": [], "properties": {}},
     ("system_maintenance", "backup_database"): {"type": "object", "required": [], "properties": {}},
-    ("system_maintenance", "delete_database_backup"): {
-        "type": "object",
-        "required": ["backup_file"],
-        "properties": {"backup_file": {"type": "string"}},
-    },
-    ("system_maintenance", "restore_database"): {
-        "type": "object",
-        "required": ["backup_file"],
-        "properties": {"backup_file": {"type": "string"}},
-    },
+    (
+        "system_maintenance",
+        "delete_database_backup",
+    ): _SYSTEM_MAINTENANCE_DELETE_DATABASE_BACKUP_INPUT,
+    ("system_maintenance", "restore_database"): _SYSTEM_MAINTENANCE_DELETE_DATABASE_BACKUP_INPUT,
     ("system_maintenance", "clear_performance_cache"): {
         "type": "object",
         "required": [],
@@ -795,34 +929,10 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "output_json": {"type": "string"},
         },
     },
-    ("excel_toolkit", "view"): {
-        "type": "object",
-        "required": ["file_path"],
-        "properties": {
-            "file_path": {"type": "string"},
-            "sheet_name": {"type": "string"},
-            "max_rows": {"type": "integer"},
-        },
-    },
-    ("excel_toolkit", "merged"): {
-        "type": "object",
-        "required": ["file_path"],
-        "properties": {"file_path": {"type": "string"}, "sheet_name": {"type": "string"}},
-    },
-    ("excel_toolkit", "styles"): {
-        "type": "object",
-        "required": ["file_path"],
-        "properties": {
-            "file_path": {"type": "string"},
-            "sheet_name": {"type": "string"},
-            "max_rows": {"type": "integer"},
-        },
-    },
-    ("excel_toolkit", "structure"): {
-        "type": "object",
-        "required": ["file_path"],
-        "properties": {"file_path": {"type": "string"}, "sheet_name": {"type": "string"}},
-    },
+    ("excel_toolkit", "view"): _EXCEL_TOOLKIT_VIEW_INPUT,
+    ("excel_toolkit", "merged"): _EXCEL_TOOLKIT_MERGED_INPUT,
+    ("excel_toolkit", "styles"): _EXCEL_TOOLKIT_VIEW_INPUT,
+    ("excel_toolkit", "structure"): _EXCEL_TOOLKIT_MERGED_INPUT,
     ("label_template_generator", "execute"): {
         "type": "object",
         "required": ["image_path"],
@@ -874,34 +984,8 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         "required": ["id"],
         "properties": {"id": {}},
     },
-    ("document_template", "ingest"): {
-        "type": "object",
-        "required": [],
-        "properties": {
-            "file_path": {"type": "string"},
-            "original_file_path": {"type": "string"},
-            "filename": {"type": "string"},
-            "template_name": {"type": "string"},
-            "name": {"type": "string"},
-            "template_scope": {"type": "string"},
-            "business_scope": {"type": "string"},
-            "source": {"type": "string"},
-        },
-    },
-    ("document_template", "upload"): {
-        "type": "object",
-        "required": [],
-        "properties": {
-            "file_path": {"type": "string"},
-            "original_file_path": {"type": "string"},
-            "filename": {"type": "string"},
-            "template_name": {"type": "string"},
-            "name": {"type": "string"},
-            "template_scope": {"type": "string"},
-            "business_scope": {"type": "string"},
-            "source": {"type": "string"},
-        },
-    },
+    ("document_template", "ingest"): _DOCUMENT_TEMPLATE_INGEST_INPUT,
+    ("document_template", "upload"): _DOCUMENT_TEMPLATE_INGEST_INPUT,
     ("dataset_rag", "query"): {
         "type": "object",
         "required": ["dataset_id", "query"],
@@ -980,29 +1064,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "access_context": {"type": "object"},
         },
     },
-    ("sales", "quote"): {
-        "type": "object",
-        "required": ["items"],
-        "anyOf": [{"required": ["customer_id"]}, {"required": ["customer_name"]}],
-        "properties": {
-            "customer_id": {"type": "integer", "title": "客户编号"},
-            "customer_name": {"type": "string", "title": "客户名称"},
-            "items": {
-                "type": "array",
-                "title": "报价明细",
-                "items": {
-                    "type": "object",
-                    "required": ["quantity", "unit_price"],
-                    "properties": {
-                        "product_id": {"type": "integer"},
-                        "model_number": {"type": "string"},
-                        "quantity": {"type": "number"},
-                        "unit_price": {"type": "number"},
-                    },
-                },
-            },
-        },
-    },
+    ("sales", "quote"): _SALES_QUOTE_INPUT,
     ("dataset_rag", "delete_document"): {
         "type": "object",
         "required": ["dataset_id", "document_id"],
@@ -1035,15 +1097,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "correction": {"type": "object"},
         },
     },
-    ("memory_v2", "reject"): {
-        "type": "object",
-        "required": ["user_id", "memory_id"],
-        "properties": {
-            "user_id": {"type": "string"},
-            "memory_id": {"type": "string"},
-            "reason": {"type": "string"},
-        },
-    },
+    ("memory_v2", "reject"): _MEMORY_V2_REJECT_INPUT,
     ("memory_v2", "correct"): {
         "type": "object",
         "required": ["user_id", "memory_id"],
@@ -1055,15 +1109,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "reason": {"type": "string"},
         },
     },
-    ("memory_v2", "delete"): {
-        "type": "object",
-        "required": ["user_id", "memory_id"],
-        "properties": {
-            "user_id": {"type": "string"},
-            "memory_id": {"type": "string"},
-            "reason": {"type": "string"},
-        },
-    },
+    ("memory_v2", "delete"): _MEMORY_V2_REJECT_INPUT,
     ("template_extract", "extract"): {
         "type": "object",
         "required": ["file_path"],
@@ -1102,11 +1148,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "top_k": {"type": "integer"},
         },
     },
-    ("ocr", "recognize"): {
-        "type": "object",
-        "required": ["file_path"],
-        "properties": {"file_path": {"type": "string"}},
-    },
+    ("ocr", "recognize"): _OCR_RECOGNIZE_INPUT,
     ("ocr", "request"): {
         "type": "object",
         "required": ["request_id", "image_url"],
@@ -1117,21 +1159,9 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "user_id": {"type": "string"},
         },
     },
-    ("ocr", "extract"): {
-        "type": "object",
-        "required": ["text"],
-        "properties": {"text": {"type": "string"}},
-    },
-    ("ocr", "analyze"): {
-        "type": "object",
-        "required": ["text"],
-        "properties": {"text": {"type": "string"}},
-    },
-    ("ocr", "recognize_and_extract"): {
-        "type": "object",
-        "required": ["file_path"],
-        "properties": {"file_path": {"type": "string"}},
-    },
+    ("ocr", "extract"): _OCR_EXTRACT_INPUT,
+    ("ocr", "analyze"): _OCR_EXTRACT_INPUT,
+    ("ocr", "recognize_and_extract"): _OCR_RECOGNIZE_INPUT,
     ("generate_office_document", "execute"): {
         "type": "object",
         "required": [],
@@ -1142,27 +1172,5 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "output_format": {"type": "string", "enum": ["docx", "xlsx"]},
         },
     },
-    ("sales", "create_order"): {
-        "type": "object",
-        "required": ["items"],
-        "anyOf": [{"required": ["customer_id"]}, {"required": ["customer_name"]}],
-        "properties": {
-            "customer_id": {"type": "integer", "title": "客户编号"},
-            "customer_name": {"type": "string", "title": "客户名称"},
-            "items": {
-                "type": "array",
-                "title": "报价明细",
-                "items": {
-                    "type": "object",
-                    "required": ["quantity", "unit_price"],
-                    "properties": {
-                        "product_id": {"type": "integer"},
-                        "model_number": {"type": "string"},
-                        "quantity": {"type": "number"},
-                        "unit_price": {"type": "number"},
-                    },
-                },
-            },
-        },
-    },
+    ("sales", "create_order"): _SALES_QUOTE_INPUT,
 }

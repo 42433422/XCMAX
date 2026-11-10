@@ -268,10 +268,21 @@ def unified_chat_single_payload(
     file_context = runtime_context.get("file_context")
     if not isinstance(file_context, dict):
         file_context = runtime_context.get("file_analysis")
-    return get_ai_chat_app_service().process_chat(
-        user_id=_resolve_mode_scoped_user_id(requested_user_id, remote_addr, "normal"),
-        message=str(message or "").strip(),
-        context=runtime_context,
-        source=str(source or "normal"),
-        file_context=file_context if isinstance(file_context, dict) else {},
+    from contextlib import nullcontext
+
+    from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
+    from app.infrastructure.llm.client import llm_client_factory_scope
+
+    model_scope = (
+        llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request))
+        if request is not None
+        else nullcontext()
     )
+    with model_scope:
+        return get_ai_chat_app_service().process_chat(
+            user_id=_resolve_mode_scoped_user_id(requested_user_id, remote_addr, "normal"),
+            message=str(message or "").strip(),
+            context=runtime_context,
+            source=str(source or "normal"),
+            file_context=file_context if isinstance(file_context, dict) else {},
+        )

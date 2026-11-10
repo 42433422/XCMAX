@@ -220,12 +220,25 @@ class ModstorePlatformAdapter:
                     await client.aclose()
                 except RuntimeError:
                     pass
+            limits = httpx.Limits(max_keepalive_connections=10, max_connections=30)
+            proxy = (os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None
             client = httpx.AsyncClient(
                 timeout=httpx.Timeout(self.timeout, connect=10.0),
-                limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
+                limits=limits,
                 headers={"Content-Type": "application/json", "Accept": "application/json"},
                 trust_env=False,
-                proxy=(os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None,
+                proxy=proxy,
+                **(
+                    {
+                        "transport": httpx.AsyncHTTPTransport(
+                            retries=_market_connect_attempts() - 1,
+                            trust_env=False,
+                            limits=limits,
+                        )
+                    }
+                    if proxy is None
+                    else {}
+                ),
             )
             self._client = client
             self._client_loop_id = loop_id
