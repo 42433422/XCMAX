@@ -14,6 +14,7 @@ from app.application.workflow.approval_persistence import (
     canonical_workflow_outcome,
     closed_loop_setup_failure_code,
 )
+
 from .protocols import JsonObject, PendingApprovals, WorkflowBackends
 
 if TYPE_CHECKING:

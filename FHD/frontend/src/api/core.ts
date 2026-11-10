@@ -235,7 +235,7 @@ export function isDurableToolRequest(url: string): boolean {
     || /\/api\/elt\//.test(path)
 }
 
-function durableToolBudget(url: string, timeoutMs: number | undefined, callerSignal: AbortSignal | undefined) {
+function durableToolBudget(url: string, timeoutMs: number | undefined, callerSignal: AbortSignal | null | undefined) {
   if (!isDurableToolRequest(url)) return { timeoutMs, callerSignal }
   const kept = typeof timeoutMs === 'number' && timeoutMs > 8_000 ? timeoutMs : undefined
   return { timeoutMs: kept, callerSignal: undefined as AbortSignal | undefined }

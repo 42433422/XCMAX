@@ -1,5 +1,9 @@
 # XCMAX 历史与大文件归档指针
 
+2026-11-10 历史方案收敛：旧 XCAGI v6 架构副本 `docs/modstore/ddd.md` 与 2026-06 的 `FHD/docs/reports/TO_9_PROGRAM.md` 原样外置至 `~/XCMAX-archives/superseded-plans-20261110/`；原始路径及 SHA256 见 `MANIFEST.json`，亦可从提交 `8f9d6bdb39` 恢复。现行架构以 `FHD/docs/ARCHITECTURE.md` 为准，审计评分以 `FHD/config/audit_benchmark_ssot.json` 为准；历史评估不得当作当前审计结果。
+
+2026-11-10 支付文档整理：未登记的 Java 支付早期设计、SQLite 迁移和压测方案三份快照外置至 `~/XCMAX-archives/payment-plans-20261110/`；逐文件 SHA256 见该目录 `MANIFEST.json`，也可从提交 `8f9d6bdb39` 恢复。现行配置和迁移入口见 `成都修茈科技有限公司/MODstore_deploy/java_payment_service/README.md`，压测方案归档不代表压测已执行。
+
 2026-11-10 集成整理：`FHD/CHANGELOG.md` 中 2026-07-12 及更早的历史 Unreleased 记录外置至 `~/XCMAX-archives/changelog-20261110-pr-integration/CHANGELOG-full-before-pr-integration.md`（完整原文 SHA256 `3d1d80c9335c6965c3b7a65129ed0f378e90ee34d4b46e0aa0b047abb8dbaded`，亦可从集成分支提交 `af00026e09` 恢复）。当前发布记录保留在原文件。
 
 2026-10-24 工单交付整理：未登记且已被 v10 指南替代的 `成都修茈科技有限公司/docs/modstore/MOD_AUTHORING_GUIDE.md`（942 行）逐字节校验外置到 `~/XCMAX-archives/docs-20261024-ticket-mod-authoring/`，原文与 SHA256 见 `MANIFEST.json`；现行入口为 `FHD/docs/guides/MOD_AUTHORING_GUIDE.md`。

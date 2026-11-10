@@ -140,7 +140,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       touchItems()
       return
     }
-    const next = pickOptionalTemplate(item.worksheetTemplates?.length || 0, index, item.commitStatus === 'committing')
+    const next = pickOptionalTemplate(item.worksheetTemplates?.length || 0, index, false)
     if (next === null) return
     item.selectedTemplateIndex = next
     touchItems()

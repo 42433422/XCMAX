@@ -76,7 +76,7 @@ async function reload() {
 
 async function withdraw(batchId: string) {
   const batch = items.value.find(item => item.batch_id === batchId)
-  if (!batchId || busyId.value || !['applied', 'partial'].includes(String(batch?.status))) return
+  if (!batch || !batchId || busyId.value || !['applied', 'partial'].includes(String(batch.status))) return
   const sessionCurrent = captureAuthSession()
   const current = () => active && sessionCurrent()
   busyId.value = batchId
