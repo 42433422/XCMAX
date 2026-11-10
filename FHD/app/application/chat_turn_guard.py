@@ -11,7 +11,7 @@ import json
 import re
 import threading
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -43,6 +43,7 @@ class TurnRecord:
     request_text: str = ""
     customer_scope: str | None = None
     product_scope: str | None = None
+    submitted_tools: set[str] = field(default_factory=set)
 
 
 def reset_turn_ledger() -> None:
@@ -229,7 +230,7 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
     if retry:
         _use_policy("model_only")
         return None
-    if existing and (existing.committed or existing.effect == "unknown"):
+    if existing and (existing.committed or existing.effect in {"unknown", "pending_approval"}):
         _use_policy("model_only")
         return _remember(existing, ctx)
     if bulk and not confirmed:
@@ -329,6 +330,34 @@ def _is_mutation(name: str, raw_args: str) -> bool:
     return not bool(_READ_ONLY.search(name))
 
 
+def _matches_previewed_batch(name: str, raw_args: str, ctx: dict[str, Any], message: str) -> bool:
+    """Only the previewed tenant's complete ID set may reach the approval gate."""
+    from app.db.models import Product
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.db.session import get_db
+
+    try:
+        args = json.loads(raw_args)
+        if name != "execute_erp_capability" or not isinstance(args, dict):
+            return False
+        tool, action, params = args.get("tool_id"), args.get("action"), args.get("params")
+        labels = {"customers": "客户", "products": "产品"}
+        if tool not in labels or labels[tool] not in message or action != "batch_delete":
+            return False
+        if not isinstance(params, dict) or set(params) != {"ids"}:
+            return False
+        ids = params["ids"]
+        if not isinstance(ids, list) or not ids or any(type(i) is not int or i <= 0 for i in ids):
+            return False
+        tenant = int(ctx.get("tenant_id") or 0)
+        model = Product if tool == "products" else PurchaseUnit
+        with get_db() as db:
+            actual = {row[0] for row in db.query(model.id).filter(model.tenant_id == tenant)}
+        return tenant > 0 and len(ids) == len(actual) and set(ids) == actual
+    except (ValueError, TypeError, SQLAlchemyError):
+        return False
+
+
 def mutation_block(name: str, raw_args: str, runtime_context: Any) -> dict[str, Any] | None:
     if not _is_mutation(name, raw_args):
         return None
@@ -376,11 +405,32 @@ def mutation_block(name: str, raw_args: str, runtime_context: Any) -> dict[str, 
                     "error": "scope_changed",
                     "message": "范围或权限已变化，本次未执行。",
                 }
+            if not _matches_previewed_batch(name, raw_args, ctx, existing.request_text):
+                return {
+                    "success": False,
+                    "error": "scope_mismatch",
+                    "message": "工具操作与预览范围不一致，本次未执行。",
+                }
+            tool = json.loads(raw_args)["tool_id"]
+            if tool in existing.submitted_tools:
+                return {
+                    "success": False,
+                    "error": "already_submitted",
+                    "message": "该范围已提交审批。",
+                }
+            ctx["_bulk_preview_scope"] = {
+                "tool": tool,
+                "digest": existing.customer_scope
+                if tool == "customers"
+                else existing.product_scope,
+            }
             existing.effect = "executing"
     return None
 
 
-def note_tool_result(runtime_context: Any, name: str) -> None:
+def note_tool_result(
+    runtime_context: Any, name: str, raw_args: str = "", *, pending: bool = False
+) -> None:
     policy = (
         str(runtime_context.get("mutation_policy") or "")
         if isinstance(runtime_context, dict)
@@ -393,6 +443,23 @@ def note_tool_result(runtime_context: Any, name: str) -> None:
         return
     with _LEDGER_LOCK:
         current = _LEDGER.get(_scope_key(runtime_context))
+        if pending and current and current.effect == "executing":
+            try:
+                tool = json.loads(raw_args)["tool_id"]
+            except (ValueError, KeyError, TypeError):
+                tool = ""
+            if tool in {"customers", "products"}:
+                current.submitted_tools.add(tool)
+                required = {
+                    key
+                    for key, label in (("customers", "客户"), ("products", "产品"))
+                    if label in current.request_text
+                }
+                current.effect = (
+                    "pending_approval" if required <= current.submitted_tools else "opened"
+                )
+                current.summary = "删除申请已提交审批，尚未确认业务写入。"
+                return
         summary = f"{name} 已返回，实际写入状态待核验，请勿重复操作。"
         _LEDGER[_scope_key(runtime_context)] = TurnRecord(
             key,

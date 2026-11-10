@@ -213,10 +213,23 @@ class WorkflowApprovalBridge:
         }
         if batch:
             from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+            from app.application.chat_turn_guard import scope_snapshot
             from app.application.workflow.approval_persistence import claim_batch_dispatch
             from app.infrastructure.auth.agent_mod_scope import _bound_actor
 
             _bound_actor(context)
+            if context.get("mutation_policy") == "allow_once":
+                expected = context.get("_bulk_preview_scope")
+                current = scope_snapshot(context)
+                tool = nodes[0].tool_id
+                digest = current[2] if tool == "customers" else current[3]
+                if (
+                    not isinstance(expected, dict)
+                    or expected.get("tool") != tool
+                    or not digest
+                    or expected.get("digest") != digest
+                ):
+                    return unknown
             if actor_tool_denial(
                 nodes[0].tool_id, nodes[0].action, context
             ) is not None or not claim_batch_dispatch(request_id, plan, context):

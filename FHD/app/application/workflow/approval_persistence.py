@@ -547,7 +547,7 @@ def claim_batch_dispatch(request_id: str, plan: PlanGraph, context: dict[str, An
                     synchronize_session=False,
                 )
             )
-            return changed == 1
+            return bool(changed == 1)
     except _APPROVAL_STORAGE_ERRORS:
         logger.warning("batch dispatch claim failed request_no=%s", request_id)
         return False

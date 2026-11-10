@@ -380,8 +380,15 @@ def append_tool_messages(
             parsed_payload = json.loads(text)
         except json.JSONDecodeError:
             parsed_payload = None
-        if isinstance(parsed_payload, dict) and parsed_payload.get("success") is True:
-            note_tool_result(runtime_context, name)
+        if isinstance(parsed_payload, dict) and (
+            parsed_payload.get("success") is True or parsed_payload.get("pending_approval") is True
+        ):
+            note_tool_result(
+                runtime_context,
+                name,
+                raw_eff,
+                pending=parsed_payload.get("pending_approval") is True,
+            )
         return text
 
     if not use_parallel:

@@ -132,3 +132,5 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 2026-11-10：未登记、无仓库引用的旧 Windows 验证报告及 mypy 状态快照外置至 `~/XCMAX-archives/docs-20261110-historical-reports/`；原路径及 SHA256 见 `MANIFEST.json`。
 
 同日，未登记的旧架构退役看板及审计收口说明外置至 `~/XCMAX-archives/docs-20261110-historical-architecture/`，原路径及 SHA256 见 `MANIFEST.json`。
+
+同日，未登记且含失效报告路径的 OpenAPI 旧指南外置至 `~/XCMAX-archives/docs-20261110-openapi-old-guide/`；校验入口为 `FHD/scripts/tools/check_openapi_consistency.py --help`。

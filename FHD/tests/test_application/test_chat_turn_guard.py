@@ -146,6 +146,9 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
 
     monkeypatch.setattr(adapter, "_get_workflow_tool_registry", lambda: [])
     monkeypatch.setattr(adapter, "_resolve_chat_execute_tool", lambda: execute)
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard._matches_previewed_batch", lambda *args: True
+    )
     ctx = {
         "tenant_id": "demo-tenant",
         "idempotency_key": "turn-bulk",
@@ -164,7 +167,12 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
     assert executed == []
 
     call = SimpleNamespace(
-        index=0, id="call-1", function=SimpleNamespace(name="delete_all_customers", arguments="{}")
+        index=0,
+        id="call-1",
+        function=SimpleNamespace(
+            name="execute_erp_capability",
+            arguments='{"tool_id":"customers","action":"batch_delete","params":{"ids":[1]}}',
+        ),
     )
     rounds = iter(
         [
@@ -180,7 +188,7 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
             "清理全部客户和产品", runtime_context=confirmed, client=client, model="test"
         )
     )
-    assert executed == ["delete_all_customers"]
+    assert executed == ["execute_erp_capability"]
     assert failed[-1]["type"] == "error"
     assert failed[-1]["execution"]["committed"] is False
     assert failed[-1]["result"]["execution"]["effect"] == "unknown"
@@ -200,7 +208,7 @@ def test_stream_keeps_the_execution_record_through_preview_commit_and_retry(monk
             model="test",
         )
     )
-    assert executed == ["delete_all_customers"]
+    assert executed == ["execute_erp_capability"]
     assert retry[-1]["result"]["execution"]["effect"] == "unknown"
 
 
@@ -260,7 +268,11 @@ def test_preview_uses_authorized_tenant_rows_not_caller_counts(monkeypatch):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
-    from app.application.chat_turn_guard import preview_message, scope_snapshot
+    from app.application.chat_turn_guard import (
+        _matches_previewed_batch,
+        preview_message,
+        scope_snapshot,
+    )
     from app.db.db_base import Base
     from app.db.models import Product
     from app.db.models.purchase_unit import PurchaseUnit
@@ -290,6 +302,19 @@ def test_preview_uses_authorized_tenant_rows_not_caller_counts(monkeypatch):
         "app.application.agent_orchestrator.tool_permission.actor_tool_denial", lambda *args: None
     )
     ctx = {"tenant_id": 1, "scope_counts": {"customers": 999, "products": 999}}
+    valid = '{"tool_id":"products","action":"batch_delete","params":{"ids":[1]}}'
+    assert _matches_previewed_batch("execute_erp_capability", valid, ctx, "清空所有产品")
+    assert not _matches_previewed_batch("execute_erp_capability", valid, ctx, "清空所有客户")
+    assert not _matches_previewed_batch("delete_products", valid, ctx, "清空所有产品")
+    assert not _matches_previewed_batch(
+        "execute_erp_capability", valid.replace("[1]", "[1, 999]"), ctx, "清空所有产品"
+    )
+    assert not _matches_previewed_batch(
+        "execute_erp_capability",
+        valid.replace('"ids":[1]', '"ids":[1],"force":true'),
+        ctx,
+        "清空所有产品",
+    )
     customers, products, customer_scope, product_scope = scope_snapshot(ctx)
     assert (customers, products) == (1, 1)
     text = preview_message(ctx, "清空所有产品", customers=customers, products=products)
@@ -351,6 +376,10 @@ def test_concurrent_confirmation_and_dispatch_are_claimed_once(monkeypatch):
     from threading import Barrier
 
     monkeypatch.setattr(
+        "app.application.chat_turn_guard._matches_previewed_batch", lambda *args: True
+    )
+
+    monkeypatch.setattr(
         "app.application.chat_turn_guard.scope_snapshot",
         lambda ctx: (1, 1, "customers-1", "products-1"),
     )
@@ -368,7 +397,10 @@ def test_concurrent_confirmation_and_dispatch_are_claimed_once(monkeypatch):
         barrier.wait()
         if prepare_turn("清空所有产品", ctx) is not None:
             return "blocked"
-        return "allowed" if mutation_block("delete_products", "{}", ctx) is None else "blocked"
+        args = '{"tool_id":"products","action":"batch_delete","params":{"ids":[1]}}'
+        return (
+            "allowed" if mutation_block("execute_erp_capability", args, ctx) is None else "blocked"
+        )
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         outcomes = list(pool.map(attempt, range(2)))
@@ -378,6 +410,56 @@ def test_concurrent_confirmation_and_dispatch_are_claimed_once(monkeypatch):
         == "executing"
     )
     assert mutation_block("delete_products", "{}", ctx)["error"] == "outcome_unknown"
+
+
+def test_both_previewed_ranges_can_submit_one_approval_each(monkeypatch):
+    from app.application.chat_turn_guard import execution_for_context
+
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard.scope_snapshot", lambda ctx: (1, 1, "c", "p")
+    )
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard._matches_previewed_batch", lambda *args: True
+    )
+    ctx = {"tenant_id": "1", "user_id": "1", "turn_id": "both", "mutation_policy": "allow_once"}
+    message = "清空所有客户和产品"
+    prepare_turn(message, ctx)
+    assert prepare_turn(message, {**ctx, "destructive_confirmed": True}) is None
+    customer = '{"tool_id":"customers","action":"batch_delete","params":{"ids":[1]}}'
+    product = '{"tool_id":"products","action":"batch_delete","params":{"ids":[2]}}'
+    assert mutation_block("execute_erp_capability", customer, ctx) is None
+    note_tool_result(ctx, "execute_erp_capability", customer, pending=True)
+    assert mutation_block("execute_erp_capability", customer, ctx)["error"] == "already_submitted"
+    assert mutation_block("execute_erp_capability", product, ctx) is None
+    note_tool_result(ctx, "execute_erp_capability", product, pending=True)
+    assert execution_for_context(ctx)["effect"] == "pending_approval"
+
+
+def test_approval_refuses_previewed_scope_changed_while_waiting(monkeypatch):
+    import logging
+
+    from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_mod_scope._bound_actor", lambda ctx: object()
+    )
+    monkeypatch.setattr(
+        "app.application.chat_turn_guard.scope_snapshot", lambda ctx: (0, 1, "c", "changed")
+    )
+    backends = MagicMock()
+    plan = PlanGraph(
+        "p", "delete", nodes=[WorkflowNode("n", "products", "batch_delete", {"ids": [1]})]
+    )
+    context = {
+        "mutation_policy": "allow_once",
+        "_bulk_preview_scope": {"tool": "products", "digest": "original"},
+    }
+    result = WorkflowApprovalBridge(backends, (ValueError,), logging.getLogger())._run_legacy(
+        "request", {"plan": plan, "runtime_context": context}, True, MagicMock()
+    )
+    assert result["code"] == "outcome_unknown"
+    backends.engine.return_value.run.assert_not_called()
 
 
 def test_confirmation_rejects_missing_or_changed_preview(monkeypatch):
