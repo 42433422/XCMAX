@@ -85,6 +85,8 @@ jobs:
         # PytestWarning → run 日志带 traceback → kill report 判诊断无效）。
         # 串行执行消除竞态；268 变体串行仍远小于 60 分钟超时。pytest 修复后可恢复并发。
         run: |
+          mkdir -p mutants
+          cp -R packages mutants/packages
           export PYTHONPATH="$PWD/mutants/packages/xcagi_langgraph_core:$PWD/mutants/packages/xcagi_langgraph_checkpoint:$PWD/mutants/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite:$PWD/mutants/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres:$PWD/mutants/packages/xcagi_langgraph_prebuilt:$PWD/mutants/packages/xcagi_langgraph_sdk${PYTHONPATH:+:$PYTHONPATH}"
           mutmut run --max-children 1 2>&1 | tee mutmut-run.log
 

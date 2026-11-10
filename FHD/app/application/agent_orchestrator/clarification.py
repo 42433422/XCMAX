@@ -62,6 +62,11 @@ def apply_clarification_answer(
         from app.domain.app_pure.inventory_inputs import missing_stock_in_fields
 
         missing = set(missing_stock_in_fields(target.params))
+    from app.application.shipment_inputs import missing_shipment_call_fields, shipment_call_payload
+
+    shipment = shipment_call_payload(target.tool_id, target.action, target.params)
+    if shipment is not None:
+        missing = set(missing_shipment_call_fields(target.tool_id, target.action, target.params))
     detail = step.params.get("clarification")
     detail = detail if isinstance(detail, dict) else {}
     reason = str(detail.get("reason") or "")
@@ -71,7 +76,29 @@ def apply_clarification_answer(
         allowed_missing = {str(value) for value in detail.get("missing_fields", [])}
         if not missing <= allowed_missing or set(parameters) != missing:
             raise ClarificationAnswerError("请一次补齐当前问题列出的全部必填参数")
-        candidate.update(deepcopy(parameters))
+        if shipment is None:
+            candidate.update(deepcopy(parameters))
+        else:
+            payload = shipment_call_payload(target.tool_id, target.action, candidate)
+            assert payload is not None
+            for key, value in parameters.items():
+                parts = key.split(".")
+                if len(parts) == 1:
+                    payload[key] = deepcopy(value)
+                elif len(parts) == 3 and parts[0] == "products" and parts[1].isdigit():
+                    products = payload.get("products") or payload.get("items")
+                    index = int(parts[1])
+                    if (
+                        not isinstance(products, list)
+                        or index >= len(products)
+                        or not isinstance(products[index], dict)
+                    ):
+                        raise ClarificationAnswerError("商品明细已变化，请重新规划任务")
+                    products[index][parts[2]] = deepcopy(value)
+                else:
+                    raise ClarificationAnswerError("商品明细格式无效，请重新规划任务")
+            if missing_shipment_call_fields(target.tool_id, target.action, candidate):
+                raise ClarificationAnswerError("请提供有效的发货信息")
     elif reason in {"ambiguous_target", "missing_target"}:
         if target.tool_id == "business_db" and target.action == "write":
             if set(parameters) == {"id"}:

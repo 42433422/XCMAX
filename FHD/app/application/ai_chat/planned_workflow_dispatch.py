@@ -292,8 +292,13 @@ class PlannedWorkflowDispatch:
         # analysis must execute that same durable AgentRun graph as every other
         # workflow; the former second, model-directed tool loop had no complete
         # approval/permission/receipt boundary and is retired.
-        if not has_approval_requirement:
+        if not has_approval_requirement or any(
+            node.tool_id == "clarify" and node.action == "ask" for node in plan.nodes
+        ):
             from app.application.agent_orchestrator import AgentOrchestrator
+
+            if has_approval_requirement:
+                plan.metadata["approval_required_node_ids"] = sorted(approval_ids)
 
             agent_run = AgentOrchestrator().start_run_from_plan(
                 user_id=self.callbacks._task_owner_id(user_id, runtime_ctx),

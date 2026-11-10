@@ -53,36 +53,49 @@ def _no_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_stream_entry_creates_order_with_explicit_quantity_and_price(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _no_llm(monkeypatch)
+def test_stream_entry_stages_order_with_explicit_quantity_and_price(monkeypatch):
+    from app.application.workflow.workflow_types import WorkflowNode
+
     service = AIChatApplicationService()
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     shipment_svc = MagicMock()
-    shipment_svc.generate_shipment_document.return_value = {
-        "success": True,
-        "message": "发货单生成成功",
-        "doc_name": "发货单_2067.xlsx",
-    }
+    plan = PlanGraph(
+        plan_id="shipment-2067",
+        intent="shipment_generate",
+        nodes=[
+            WorkflowNode(
+                node_id="generate",
+                tool_id="shipment_orders",
+                action="generate",
+                params={
+                    "unit_name": "客户闭环验收客户",
+                    "products": [
+                        {
+                            "name": "客户闭环测试商品A",
+                            "quantity": 24,
+                            "unit": "kg",
+                            "unit_price": 3.5,
+                        }
+                    ],
+                },
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm", lambda *_args: plan
+    )
     body = chat_helpers.XcagiCompatChatBody(
         message=ISSUE_MESSAGE.replace("数量24", "数量24kg"), user_id="u-2067"
     )
     with patch("app.bootstrap.get_shipment_app_service", return_value=shipment_svc):
-        raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
-
-    events = _events(raw)
-    assert [event["type"] for event in events] == ["token", "done"]
-    shipment_svc.generate_shipment_document.assert_called_once()
-    kwargs = shipment_svc.generate_shipment_document.call_args.kwargs
-    assert kwargs["unit_name"] == "客户闭环验收客户"
-    (product,) = kwargs["products"]
-    assert product["name"] == "客户闭环测试商品A"
-    assert product["quantity"] == 24
-    assert product["unit"] == "kg"
-    assert product["unit_price"] == 3.5
-    document = events[-1]["result"]["data"]["data"]["document"]
-    assert document["doc_name"] == "发货单_2067.xlsx"
+        events = _events(
+            b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
+        )
+    assert events[-1]["type"] == "done"
+    assert events[-1]["result"]["message"] == "等待确认"
+    pending = next(iter(service._pending_workflows.values()))
+    assert pending["plan"].nodes[-1].params == plan.nodes[-1].params
+    shipment_svc.generate_shipment_document.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -131,16 +144,16 @@ def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, cas
         }
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     execute = MagicMock(side_effect=AssertionError("Invalid control must not execute"))
-    monkeypatch.setattr(service, "_run_workflow_with_state_updates", execute)
-    trace = MagicMock(side_effect=AssertionError("取消不得创建闲聊业务任务"))
-    monkeypatch.setattr(service, "_attach_deterministic_workflow_trace", trace)
+    monkeypatch.setattr("app.application.agent_orchestrator.AgentOrchestrator", execute)
+    monkeypatch.setattr(
+        "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm", execute
+    )
     body = chat_helpers.XcagiCompatChatBody(
         message=message, user_id="u-cancel", context={"session_id": "s"}
     )
     result = _events(
         b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
     )[-1]["result"]
-    trace.assert_not_called()
     assert result["data"]["action"] == "clarification_required"
     execute.assert_not_called()
     assert (
@@ -152,8 +165,26 @@ def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, cas
 
 def test_stream_missing_spec_requests_clarification_without_document(monkeypatch):
     from app.application.shipment_app_service import ShipmentApplicationService
+    from app.application.workflow.workflow_types import WorkflowNode
 
-    _no_llm(monkeypatch)
+    plan = PlanGraph(
+        plan_id="missing-unit",
+        intent="shipment_generate",
+        nodes=[
+            WorkflowNode(
+                node_id="generate",
+                tool_id="shipment_records",
+                action="create",
+                params={
+                    "unit_name": "客户闭环验收客户",
+                    "products": [{"name": "客户闭环测试商品A", "quantity": 24, "unit_price": 3.5}],
+                },
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm", lambda *_args: plan
+    )
     service = AIChatApplicationService()
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     generator = MagicMock()
@@ -162,7 +193,7 @@ def test_stream_missing_spec_requests_clarification_without_document(monkeypatch
     with patch("app.bootstrap.get_shipment_app_service", return_value=shipment):
         raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
     result = _events(raw)[-1]["result"]
-    assert result["success"] is False
+    assert result["message"] == "需要澄清"
     assert "计量单位" in result["response"]
     assert "已生成" not in result["response"]
     generator.generate.assert_not_called()

@@ -65,3 +65,51 @@ def test_clarification_metadata_does_not_share_mutable_candidates():
     node = build_clarify_node("请选择客户", ambient={"clarification": detail})
     detail["candidates"][0]["id"] = 99
     assert node.params["clarification"]["candidates"][0]["id"] == 1
+
+
+def test_shipment_nested_answer_requires_approval_and_rejects_other_fields():
+    import pytest
+
+    from app.application.agent_orchestrator.clarification import ClarificationAnswerError
+
+    params = {
+        "unit_name": "客户甲",
+        "products": [{"product_name": "产品甲", "quantity_tins": 2, "unit_price": 50}],
+    }
+    question = build_clarify_node(
+        "请提供规格",
+        ambient={
+            "target_node_id": "shipment",
+            "clarification": {
+                "reason": "missing_required",
+                "missing_fields": ["products.0.tin_spec"],
+            },
+        },
+    )
+    shipment = WorkflowNode(
+        node_id="shipment", tool_id="shipment_records", action="create", params=params
+    )
+    orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+    run = orchestrator.start_run_from_plan(
+        user_id="owner",
+        message="发货",
+        plan=PlanGraph(plan_id="shipment-clarify", intent="shipment", nodes=[question, shipment]),
+    )
+    with pytest.raises(ClarificationAnswerError):
+        orchestrator.stage_clarification_answer(
+            run.run_id,
+            step_id=run.steps[0].step_id,
+            parameters={"products.1.tin_spec": 20},
+            requested_by="owner",
+        )
+    orchestrator.stage_clarification_answer(
+        run.run_id,
+        step_id=run.steps[0].step_id,
+        parameters={"products.0.tin_spec": 20},
+        requested_by="owner",
+    )
+    continued = orchestrator.execute_dispatched_run(run.run_id)
+    assert continued.status == "waiting_user"
+    assert continued.steps[1].status == "waiting_user"
+    assert continued.steps[1].params["products"][0]["tin_spec"] == 20
+    assert continued.tool_calls == []

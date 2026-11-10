@@ -42,9 +42,10 @@ def _missing_fields(params: dict[str, Any], required: list[str]) -> list[str]:
 
 
 def _build_missing_question(node: WorkflowNode, missing: list[str]) -> str:
+    labels = ["计量单位和每件/每桶规格" if key.endswith(".tin_spec") else key for key in missing]
     return (
         f"执行 {node.tool_id}.{node.action} 前需要补充必填参数："
-        f"{'、'.join(missing)}。请提供后再执行，避免误操作。"
+        f"{'、'.join(labels)}。请提供后再执行，避免误操作。"
     )
 
 
