@@ -44,6 +44,18 @@ def _make_plan(nodes: list[WorkflowNode] | None = None) -> PlanGraph:
     )
 
 
+def test_empty_plan_is_rejected_without_creating_an_approval():
+    from app.application.workflow.approval_policy import WorkflowApprovalPolicy
+
+    service = MagicMock()
+    decision = WorkflowApprovalPolicy(approval_service=service).evaluate_plan(
+        PlanGraph(plan_id="empty", intent="test", nodes=[])
+    )
+    assert decision.risk_decision.to_dict()["risk_level"] == "high"
+    assert decision.risk_decision.allowed is False
+    service.create_approval_request.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # ApprovalService — check_node_requires_approval
 # ---------------------------------------------------------------------------

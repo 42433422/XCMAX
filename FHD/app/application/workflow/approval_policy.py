@@ -5,9 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.domain.autonomy.risk_types import RiskLevel
+
 from .approval_service import ApprovalService, get_approval_service
 from .risk_gate import HybridRiskGate, RiskDecision
-from .workflow_types import PlanGraph, RiskLevel
+from .workflow_types import PlanGraph
 
 
 @dataclass

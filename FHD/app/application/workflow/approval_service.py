@@ -353,6 +353,7 @@ def process_approval_timeouts() -> dict[str, Any]:
     """
     results: list[dict] = []
     try:
+        from datetime import UTC
         from datetime import datetime as _dt
 
         from sqlalchemy import and_
@@ -360,7 +361,7 @@ def process_approval_timeouts() -> dict[str, Any]:
         from app.db.models.approval import ApprovalFlow, ApprovalRequest, ApprovalStatus
         from app.db.session import get_db
 
-        now = _dt.utcnow()
+        now = _dt.now(UTC).replace(tzinfo=None)
         with get_db() as db:
             expired = (
                 db.query(ApprovalRequest)
