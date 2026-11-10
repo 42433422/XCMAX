@@ -45,6 +45,34 @@ def test_gate_off_env_and_pytest_default(monkeypatch):
     assert gate._gate_enabled() is False
 
 
+@pytest.mark.parametrize("message", ["请简要解释 HTTPS 是什么，不要调用工具。", "解释 DNS 是什么"])
+def test_general_explanation_skips_classifier(monkeypatch, message):
+    monkeypatch.setenv("XCAGI_LLM_INTENT_GATE", "1")
+    classifier = Mock()
+    monkeypatch.setattr(gate, "_classify", classifier)
+    assert gate.llm_route_message(message) is None
+    classifier.assert_not_called()
+
+
+def test_business_context_still_reaches_classifier(monkeypatch):
+    monkeypatch.setenv("XCAGI_LLM_INTENT_GATE", "1")
+    classifier = Mock(return_value={"intent": "products", "slots": {}})
+    monkeypatch.setattr(gate, "_classify", classifier)
+    assert gate.llm_route_message("解释 HTTPS 产品价格是多少") is not None
+    classifier.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_general_explanation_skips_async_classifier(monkeypatch):
+    monkeypatch.setenv("XCAGI_LLM_INTENT_GATE", "1")
+    from unittest.mock import AsyncMock
+
+    classifier = AsyncMock()
+    monkeypatch.setattr("app.infrastructure.llm.structured_output.complete_structured_bounded", classifier)
+    assert await gate.llm_route_message_async("请简要解释 HTTPS 是什么，不要调用工具。") is None
+    classifier.assert_not_awaited()
+
+
 def test_hit_customers_query(monkeypatch):
     monkeypatch.setenv("XCAGI_LLM_INTENT_GATE", "1")
     _patch_llm(
