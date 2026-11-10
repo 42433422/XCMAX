@@ -16,7 +16,7 @@
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
       "base_blob": "20d2379adc81acc88bec8e7a98d040ce9f3f7d16",
-      "head_blob": "edaf1237888b57d9b39fbe363232475ef1a57f14",
+      "head_blob": "2760b3ab543b1af78b86c63814c9c3aa76663e74",
       "before_lines": 816,
       "after_lines": 924,
       "reason": "Freeze resolved approval parameters, preserve later steps and refuse modified grants.",
