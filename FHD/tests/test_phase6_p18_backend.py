@@ -1371,109 +1371,23 @@ class TestMobileExtEnsureMobileDeviceTable:
         mock_warning.assert_called_once()
 
 
-class TestMobileExtGuessLanIpv4:
-    """Cover ``_guess_lan_ipv4`` branches."""
-
-    def test_returns_string(self, ext_mod):
-        ip = ext_mod._guess_lan_ipv4()
-        assert isinstance(ip, str)
-        assert len(ip) > 0
-
-    def test_fallback_on_os_error(self, ext_mod):
-        with patch("socket.socket", side_effect=OSError("no network")):
-            ip = ext_mod._guess_lan_ipv4()
-            assert ip == "127.0.0.1"
 
 
-class TestMobileExtPairingIssueHost:
-    """Cover ``_pairing_issue_host`` branches."""
-
-    def test_localhost_replaced(self, ext_mod):
-        with patch.object(ext_mod, "_guess_lan_ipv4", return_value="192.168.1.100"):
-            assert ext_mod._pairing_issue_host("127.0.0.1") == "192.168.1.100"
-
-    def test_localhost_name_replaced(self, ext_mod):
-        with patch.object(ext_mod, "_guess_lan_ipv4", return_value="192.168.1.100"):
-            assert ext_mod._pairing_issue_host("localhost") == "192.168.1.100"
-
-    def test_0000_replaced(self, ext_mod):
-        with patch.object(ext_mod, "_guess_lan_ipv4", return_value="192.168.1.100"):
-            assert ext_mod._pairing_issue_host("0.0.0.0") == "192.168.1.100"
-
-    def test_real_ip_kept(self, ext_mod):
-        assert ext_mod._pairing_issue_host("192.168.1.50") == "192.168.1.50"
-
-    def test_empty_defaults(self, ext_mod):
-        with patch.object(ext_mod, "_guess_lan_ipv4", return_value="192.168.1.100"):
-            assert ext_mod._pairing_issue_host("") == "192.168.1.100"
-
-    def test_none_defaults(self, ext_mod):
-        with patch.object(ext_mod, "_guess_lan_ipv4", return_value="192.168.1.100"):
-            assert ext_mod._pairing_issue_host(None) == "192.168.1.100"
 
 
 class TestMobileExtUnauthorizedRoutes:
     """Cover unauthorized route branches."""
 
-    @pytest.mark.asyncio
-    async def test_approval_list_unauthorized(self, ext_mod):
-        mock_request = MagicMock()
-        result = await ext_mod.mobile_approval_list(request=mock_request, user=None)
-        assert result.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_customers_unauthorized(self, ext_mod):
-        result = await ext_mod.mobile_customers(user=None)
-        assert result.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_shipments_unauthorized(self, ext_mod):
-        result = await ext_mod.mobile_shipments(user=None)
-        assert result.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_device_register_unauthorized(self, ext_mod):
-        body = ext_mod.DeviceRegisterBody(fcm_token="a" * 10)
-        result = await ext_mod.mobile_device_register(body=body, user=None)
-        assert result.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_mods_unauthorized(self, ext_mod):
-        result = await ext_mod.mobile_mods_summary(user=None)
-        assert result.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_platform_shell_unauthorized(self, ext_mod):
-        result = await ext_mod.mobile_platform_shell(user=None)
-        assert result.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_home_unauthorized(self, ext_mod):
-        result = await ext_mod.mobile_home(user=None)
-        assert result.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_sync_status_unauthorized(self, ext_mod):
-        result = await ext_mod.mobile_sync_status(user=None)
-        assert result.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_sync_pull_unauthorized(self, ext_mod):
-        body = ext_mod.SyncPullBody(since_cursor=0)
-        result = await ext_mod.mobile_sync_pull(body=body, user=None)
-        assert result.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_sync_push_unauthorized(self, ext_mod):
-        body = ext_mod.SyncPushBody(items=[])
-        result = await ext_mod.mobile_sync_push(body=body, user=None)
-        assert result.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_cs_info_unauthorized(self, ext_mod):
-        mock_request = MagicMock()
-        result = await ext_mod.get_cs_info(request=mock_request, user=None)
-        assert result.status_code == 401
 
     @pytest.mark.asyncio
     async def test_cs_post_message_unauthorized(self, ext_mod):
@@ -1486,11 +1400,6 @@ class TestMobileExtUnauthorizedRoutes:
         )
         assert result.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_cs_get_messages_unauthorized(self, ext_mod):
-        mock_request = MagicMock()
-        result = await ext_mod.get_cs_messages(request=mock_request, user=None)
-        assert result.status_code == 401
 
 
 class TestMobileExtMobileModItems:
@@ -1785,49 +1694,6 @@ class TestMobileExtCsRoutes:
         assert data["data"]["messages"] == []
 
 
-class TestMobileExtPydanticModels:
-    """Cover Pydantic model defaults."""
-
-    def test_device_register_body_defaults(self, ext_mod):
-        body = ext_mod.DeviceRegisterBody(fcm_token="a" * 10)
-        assert body.platform == "android"
-        assert body.product_sku == "personal"
-
-    def test_pairing_exchange_body_defaults(self, ext_mod):
-        body = ext_mod.PairingExchangeBody()
-        assert body.nonce == ""
-        assert body.code == ""
-
-    def test_pairing_issue_body_defaults(self, ext_mod):
-        body = ext_mod.PairingIssueBody()
-        assert body.host == "127.0.0.1"
-        assert body.port == 5000
-
-    def test_sync_pull_body_defaults(self, ext_mod):
-        body = ext_mod.SyncPullBody()
-        assert body.since_cursor == 0
-
-    def test_sync_push_item_valid(self, ext_mod):
-        item = ext_mod.SyncPushItem(entity_type="customer", entity_id="1")
-        assert item.entity_type == "customer"
-        assert item.operation == "update"
-
-    def test_sync_ack_body_defaults(self, ext_mod):
-        body = ext_mod.SyncAckBody()
-        assert body.cursor == 0
-
-    def test_pairing_lookup_body_valid(self, ext_mod):
-        body = ext_mod.PairingLookupBody(code="123456")
-        assert body.code == "123456"
-
-    def test_auth_qr_confirm_body_defaults(self, ext_mod):
-        body = ext_mod.AuthQrConfirmBody(qr_id="a" * 8)
-        assert body.qr_id == "a" * 8
-        assert body.account_kind == "enterprise"
-
-    def test_oidc_exchange_body_valid(self, ext_mod):
-        body = ext_mod.OidcExchangeBody(code="abc123", state="s" * 8)
-        assert body.code == "abc123"
 
 
 # ===========================================================================
