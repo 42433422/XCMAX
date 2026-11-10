@@ -312,13 +312,9 @@ def _normalize_cidrs(values: list[str]) -> list[str]:
     return normalized
 
 
-# ``/api/lan/admin/settings`` 的规范实现位于 ``app/fastapi_routes/lan_settings_routes.py``
-# （使用 ``LanSettingsView`` 响应模型）；该路由在 ``register_all_routes`` 中于本
-# 模块之后注册，运行时会覆盖下面的实现。这里保留函数体是为了 ``update_settings``
-# 的回读依赖（``return await get_settings(actor)``），但从 OpenAPI 文档中隐藏以避免
-# Duplicate Operation ID 告警。
-@router.get("/settings", include_in_schema=False)
-async def get_settings(actor: dict = Depends(require_admin_host)) -> dict:
+# HTTP ``/api/lan/admin/settings`` 只由 ``lan_settings_routes`` 注册。
+# 这两个函数留给本模块的设置回读，不再挂到路由表。
+async def get_settings(_actor: dict) -> dict:
     import os
 
     from app.security.lan_settings_store import load_overrides
@@ -381,11 +377,7 @@ async def get_settings(actor: dict = Depends(require_admin_host)) -> dict:
     }
 
 
-@router.post("/settings", include_in_schema=False)
-@router.put("/settings", include_in_schema=False)
-async def update_settings(
-    payload: SettingsUpdate, actor: dict = Depends(require_admin_host)
-) -> dict:
+async def update_settings(payload: SettingsUpdate, _actor: dict) -> dict:
     from app.security.lan_config import reset_lan_config_cache
     from app.security.lan_settings_store import LanSettingsOverride, save_overrides
 
@@ -405,4 +397,4 @@ async def update_settings(
     save_overrides(override, merge=True)
     reset_lan_config_cache()
 
-    return await get_settings(actor)
+    return await get_settings(_actor)

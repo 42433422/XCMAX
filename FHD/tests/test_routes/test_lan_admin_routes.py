@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes.lan_admin_routes import (
@@ -14,9 +15,11 @@ from app.fastapi_routes.lan_admin_routes import (
     SettingsUpdate,
     _is_admin_host_ip,
     _normalize_cidrs,
+    get_settings,
     require_admin,
     require_admin_host,
     router,
+    update_settings,
 )
 
 _TEST_LICENSE_SECRET = "license-test-secret-" + ("x" * 24)
@@ -436,7 +439,6 @@ class TestSettingsEndpoints:
         mock_config.admin_bootstrap_key = _TEST_BOOTSTRAP_KEY
         mock_config.allowed_cidrs = ["10.0.0.0/8"]
         mock_cfg.return_value = mock_config
-        client = _make_app_with_overrides(dep_host_override=_admin_host_actor)
         with patch("app.security.lan_settings_store.load_overrides") as mock_load:
             mock_overrides = MagicMock()
             mock_overrides.enabled = None
@@ -444,9 +446,7 @@ class TestSettingsEndpoints:
             mock_overrides.admin_bootstrap_key = None
             mock_overrides.allowed_cidrs = None
             mock_load.return_value = mock_overrides
-            resp = client.get("/api/lan/admin/settings")
-        assert resp.status_code == 200
-        data = resp.json()
+            data = asyncio.run(get_settings(_admin_host_actor()))
         assert data["enabled"] is True
 
     @patch("app.security.lan_config.reset_lan_config_cache")
@@ -460,7 +460,6 @@ class TestSettingsEndpoints:
         mock_config.admin_bootstrap_key = _TEST_BOOTSTRAP_KEY
         mock_config.allowed_cidrs = ["10.0.0.0/8"]
         mock_cfg.return_value = mock_config
-        client = _make_app_with_overrides(dep_host_override=_admin_host_actor)
         with patch("app.security.lan_settings_store.load_overrides") as mock_load:
             mock_overrides = MagicMock()
             mock_overrides.enabled = None
@@ -468,19 +467,18 @@ class TestSettingsEndpoints:
             mock_overrides.admin_bootstrap_key = None
             mock_overrides.allowed_cidrs = None
             mock_load.return_value = mock_overrides
-            resp = client.put(
-                "/api/lan/admin/settings",
-                json={"enabled": True, "allowed_cidrs": ["10.0.0.0/8"]},
+            data = asyncio.run(
+                update_settings(
+                    SettingsUpdate(enabled=True, allowed_cidrs=["10.0.0.0/8"]),
+                    _admin_host_actor(),
+                )
             )
-        assert resp.status_code == 200
+        assert data["enabled"] is True
 
     def test_update_settings_secret_too_short(self):
-        client = _make_app_with_overrides(dep_host_override=_admin_host_actor)
-        resp = client.put(
-            "/api/lan/admin/settings",
-            json={"license_secret": "short"},
-        )
-        assert resp.status_code == 400
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(update_settings(SettingsUpdate(license_secret="short"), _admin_host_actor()))
+        assert exc.value.status_code == 400
 
 
 class TestIssueKeyRequestModel:

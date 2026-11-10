@@ -13,6 +13,7 @@ import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { createAdminConsoleAtAliasPlugin, createWorkflowComponentsAliasPlugin } from './vite.shared-alias.js'
+import { resolveViteGitSha } from './vite/build.js'
 import { resolveApiBase } from './vite/resolveApiBase.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -101,6 +102,9 @@ function buildDevProxy(apiBase) {
 }
 
 export default defineConfig(() => ({
+  define: {
+    'import.meta.env.VITE_XCAGI_GIT_SHA': JSON.stringify(resolveViteGitSha(process.env.VITE_XCAGI_GIT_SHA)),
+  },
   root: adminRoot,
   plugins: [
     createAdminConsoleAtAliasPlugin(hostRoot),
@@ -145,11 +149,11 @@ export default defineConfig(() => ({
       },
       {
         find: '@/data/workflow-employee-docs.json',
-        replacement: path.join(hostRoot, 'public/workflow-employee-docs.json'),
+        replacement: path.join(hostRoot, 'src/data/workflow-employee-docs.json'),
       },
       {
         find: '@/data/workflow-employees.json',
-        replacement: path.join(hostRoot, 'public/workflow-employees.json'),
+        replacement: path.join(hostRoot, 'src/data/workflow-employees.json'),
       },
       {
         find: '@admin-console-inject/adminHostRoutes',

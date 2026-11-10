@@ -23,6 +23,8 @@ export function createBuildOptions() {
     outDir: '../templates/vue-dist',
     assetsDir: 'assets',
     emptyOutDir: true,
+    // elk、mermaid、xlsx 和入口包已经拆开，体积仍超过 Rollup 默认 500 kB。
+    chunkSizeWarningLimit: 1600,
     rollupOptions: {
       output: {
         chunkFileNames: 'assets/js/[name]-[hash].js',

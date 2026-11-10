@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "pageTitle": "工作流可视化",
+  "pageSubtitle": "副窗「工作流员工」与流程全景仅展示已从 MOD 商店安装并在 manifest 中声明 workflow_employees 的扩展。",
+  "pipelineBranchLabel": "未安装工作流员工",
+  "overviewNote": "共 0 条；安装工作流员工 Mod 后本页与副窗将自动更新。",
+  "floatPanelHint": "与侧栏「专业版」开关样式一致：打开即启用对应 AI 员工。可在侧栏「员工工作流管理」查看，并进入「流程全景」查看图解说明。",
+  "workflowVisualLinkTitle": "查看已安装工作流员工的执行逻辑与过程",
+  "recommendIntroOneClick": "",
+  "recommendIntroLobster": "",
+  "branches": [],
+  "flows": []
+}
