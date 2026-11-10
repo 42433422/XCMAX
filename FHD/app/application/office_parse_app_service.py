@@ -394,6 +394,43 @@ def _plan_from_preview(
     }
 
 
+def _accept_suggested_mappings(service, db, run_id: str, owner: int) -> dict[str, Any] | None:
+    """Office save is the person's confirmation of the suggested column mapping.
+
+    The capsule has no separate mapping step. A proposed source column is accepted
+    here, then the preview is republished so approval executes that exact mapping.
+    """
+    owned = getattr(service, "_owned_run", None)
+    if owned is None or not run_id:
+        return None
+    run = owned(db, run_id, owner)
+    raw = getattr(run, "draft_json", None)
+    if not isinstance(raw, str):
+        return None
+    from app.application.elt.preview_confirmation import publish_preview
+    from app.application.elt.service_support import dump_json, load_json
+
+    draft = load_json(raw, {})
+    mappings = draft.get("field_mappings")
+    if not isinstance(mappings, list):
+        return None
+    changed = False
+    for item in mappings:
+        if not isinstance(item, dict) or not str(item.get("source") or "").strip():
+            continue
+        if item.get("confirmed") is True:
+            continue
+        item["confirmed"] = True
+        changed = True
+    if not changed or str(getattr(run, "status", "")) != "preview_ready":
+        return None
+    draft["field_mappings"] = mappings
+    run.draft_json = dump_json(draft)
+    publish_preview(db, run)
+    db.commit()
+    return service.get_run(db, run_id=run_id, owner_user_id=owner)
+
+
 def save_office_file_elt(
     file_path: str,
     *,
@@ -461,6 +498,11 @@ def save_office_file_elt(
                 )
             )
             if _preview_ready(run):
+                accepted = _accept_suggested_mappings(
+                    service, db, str(run.get("id") or ""), int(owner_user_id)
+                )
+                if _preview_ready(accepted):
+                    run = accepted
                 plan = _plan_from_preview(
                     owned_path,
                     file_name=staged_name,

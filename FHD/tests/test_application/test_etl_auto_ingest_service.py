@@ -76,6 +76,51 @@ def _shipment_xlsx(path: Path) -> Path:
     return path
 
 
+def test_confirmed_preview_target_waits_for_business_receipt(ledger_root, monkeypatch):
+    service = AutoIngestService()
+    fake = MagicMock()
+    ready = {
+        "id": "run-products",
+        "status": "preview_ready",
+        "preview_revision": "rev-products",
+        "target_type": "products",
+    }
+    done = {
+        "id": "run-products",
+        "status": "completed",
+        "target_type": "products",
+        "preview_revision": "rev-products",
+        "summary": {"executed": 2, "new": 2, "error": 0},
+        "executed_rows": 2,
+    }
+    fake.get_run.side_effect = [ready, {"status": "executing"}, done]
+    fake.execute.return_value = {"id": "run-products", "status": "executing"}
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake)
+    plan = {
+        "run_id": "run-products",
+        "upload_id": "up-products",
+        "preview_revision": "rev-products",
+        "target_type": "products",
+        "valid_rows_only": True,
+    }
+    with tenant_scope(2):
+        business = service._ingest_business(
+            MagicMock(),
+            owner_user_id=3,
+            path=Path("purchase.xlsx"),
+            file_name="purchase.xlsx",
+            target_type="abnormal",
+            batch_id="missing-batch",
+            poll_seconds=2,
+            prepared_plan=plan,
+        )
+    assert business["target_type"] == "products"
+    assert business["status"] == "completed"
+    assert business["pending_execution"] is False
+    assert business["failed"] is False
+    fake.execute.assert_called_once()
+
+
 def test_auto_ingest_writes_knowledge_and_records_business(
     rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):

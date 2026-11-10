@@ -13,6 +13,7 @@ import io
 import json
 import logging
 import threading
+import time
 from contextvars import copy_context
 from datetime import UTC, datetime
 from io import BytesIO
@@ -1183,10 +1184,11 @@ class AutoIngestService:
             except RECOVERABLE_ERRORS:
                 logger.debug("auto-ingest progress_cb failed", exc_info=True)
 
-        # Knowledge-only targets: KB path already covered.
-        if target_type == "knowledge":
+        # Confirmed preview target wins over a detector label such as abnormal.
+        confirmed = str((prepared_plan or {}).get("target_type") or target_type)
+        if confirmed == "knowledge":
             _notify("skipped", 100, "knowledge_only_target")
-            return {"skipped": True, "reason": "knowledge_only_target", "target_type": target_type}
+            return {"skipped": True, "reason": "knowledge_only_target", "target_type": confirmed}
 
         service = get_elt_service()
         if prepared_plan:
@@ -1194,7 +1196,7 @@ class AutoIngestService:
             upload_id = str(prepared_plan["upload_id"])
             current = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
             if (
-                current.get("target_type") != target_type
+                current.get("target_type") != confirmed
                 or current.get("preview_revision") != prepared_plan["preview_revision"]
             ):
                 raise EltError(
@@ -1216,7 +1218,7 @@ class AutoIngestService:
             business={
                 "run_id": run_id,
                 "upload_id": upload_id,
-                "target_type": target_type,
+                "target_type": confirmed,
                 "status": "executing",
             },
         )
@@ -1228,8 +1230,21 @@ class AutoIngestService:
             valid_rows_only=bool(prepared_plan.get("valid_rows_only")) if prepared_plan else True,
             preview_revision=str(preview_revision or ""),
         )
+        deadline = time.monotonic() + max(0.0, float(poll_seconds))
+        while (
+            isinstance(executed, dict)
+            and str(executed.get("status") or "") in {"queued", "executing"}
+            and time.monotonic() < deadline
+        ):
+            time.sleep(min(0.25, deadline - time.monotonic()))
+            db.expire_all()
+            try:
+                db.rollback()
+            except RECOVERABLE_ERRORS:
+                logger.debug("auto-ingest release read lock failed", exc_info=True)
+            executed = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
         return {
-            "target_type": target_type,
+            "target_type": confirmed,
             "upload_id": upload_id,
             "run_id": run_id,
             "preview_revision": preview_revision,
