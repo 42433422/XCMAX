@@ -17,7 +17,6 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-from app.services.tools_execution.registry import get_workflow_tool_registry
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 from app.fastapi_routes.domains.conversation.helpers import (
     XcagiCompatChatBody,
@@ -46,6 +45,7 @@ from app.infrastructure.persistence.compat_db.compat_db_base import (
     _validate_order_clause,
 )
 from app.infrastructure.persistence.extract_log_store_impl import SQLAlchemyExtractLogStore
+from app.services.tools_execution.registry import get_workflow_tool_registry
 
 
 def _http_request(**headers: str) -> Request:

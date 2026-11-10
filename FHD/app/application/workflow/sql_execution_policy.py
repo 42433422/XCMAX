@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+
 from app.application.workflow.workflow_types import PlanGraph
 
 REFUSAL_CODE = "raw_sql_execution_not_supported"

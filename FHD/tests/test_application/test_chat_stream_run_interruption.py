@@ -15,8 +15,8 @@ from sqlalchemy.orm import sessionmaker
 from app.application.agent_orchestrator import run_sql_repository as installed_sql
 from app.application.agent_orchestrator.run_models import AgentRun
 from tests.test_application.test_chat_stream_lifetime import (
-    bind_entrypoint_modules,
     ROOT,
+    bind_entrypoint_modules,
     bridge,
     extract,
     life,

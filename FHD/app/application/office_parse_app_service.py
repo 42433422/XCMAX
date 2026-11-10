@@ -573,3 +573,21 @@ def office_chat_elt_reply(
     except RECOVERABLE_ERRORS:
         logger.exception("office elt chat path failed")
         return _office_reply("处理失败：办公文件入库没有完成。", success=False)
+
+
+def registered_office_stage(user_message: str, runtime_context: dict) -> dict:
+    """Bind the office-stage write to the authenticated actor and tenant."""
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    try:
+        actor = _bound_actor(runtime_context)
+        tenant_id = int(runtime_context.get("tenant_id") or 0)
+        if tenant_id <= 0 or int(actor.tenant_id or 0) != tenant_id:
+            raise AgentModAuthorizationError("企业范围与登录账号不一致")
+        context = {**runtime_context, "local_user_id": int(actor.id), "tenant_id": tenant_id}
+    except (AgentModAuthorizationError, AttributeError, TypeError, ValueError):
+        return {"success": False, "message": "需要有效的企业登录身份"}
+    with tenant_scope(tenant_id):
+        result = office_chat_elt_reply(user_message, context)
+    return result or {"success": False, "message": "原始请求缺少办公文件或导入意图"}

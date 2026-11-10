@@ -15,8 +15,8 @@ from app.application.workflow.clarification_node import (
     resolve_confirmed_target,
     sweep_expired,
 )
-from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 
 
 def _customers_registry() -> dict:

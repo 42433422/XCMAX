@@ -5,11 +5,17 @@ from __future__ import annotations
 import contextvars
 import os
 import re
+import sys
 import threading
 import time
 from contextlib import contextmanager
 from typing import Any, Iterator, Mapping
 
+from app.domain.model_admission_errors import (
+    ModelCircuitOpenError,
+    ModelConcurrencyLimitError,
+    ModelRateLimitError,
+)
 from app.utils.resilience.rate_limiter import (
     RateLimitBackendError,
     check_rate_limit,
@@ -26,33 +32,6 @@ _SAFE_KEY = re.compile(r"[^A-Za-z0-9_.:@-]")
 _MODEL_GATE_LOCK = threading.Lock()
 _MODEL_INFLIGHT = 0
 _MODEL_BREAKERS: dict[str, tuple[int, float, bool]] = {}
-
-
-class ModelRateLimitError(RuntimeError):
-    """A model request was refused before contacting the configured provider."""
-
-    def __init__(self, retry_after: int) -> None:
-        super().__init__("当前账户模型请求过于频繁，请稍后重试。")
-        self.code = "model_rate_limited"
-        self.retry_after = max(1, int(retry_after))
-
-
-class ModelConcurrencyLimitError(RuntimeError):
-    """The process-wide model concurrency budget is full."""
-
-    def __init__(self, retry_after: int = 1) -> None:
-        super().__init__("模型并发请求已达上限，请稍后重试。")
-        self.code = "model_concurrency_limited"
-        self.retry_after = max(1, int(retry_after))
-
-
-class ModelCircuitOpenError(RuntimeError):
-    """Repeated provider failures temporarily opened its circuit."""
-
-    def __init__(self, retry_after: int = 30) -> None:
-        super().__init__("模型服务连续失败，已暂时熔断，请稍后重试。")
-        self.code = "model_circuit_open"
-        self.retry_after = max(1, int(retry_after))
 
 
 def _limit_identity(context: Mapping[str, Any] | None) -> str | None:
@@ -151,7 +130,7 @@ def model_call_slot(provider: Any, *, profile: str = "default") -> Iterator[None
             if now - opened_at < cooldown or probing:
                 raise ModelCircuitOpenError(max(1, int(cooldown - (now - opened_at))))
             _MODEL_BREAKERS[key] = (failures, opened_at, True)
-        if _MODEL_INFLIGHT >= concurrency:
+        if concurrency <= _MODEL_INFLIGHT:
             if failures >= threshold:
                 _MODEL_BREAKERS[key] = (failures, opened_at, False)
             raise ModelConcurrencyLimitError()
@@ -160,12 +139,11 @@ def model_call_slot(provider: Any, *, profile: str = "default") -> Iterator[None
     succeeded = False
     try:
         yield
-    except BaseException as exc:
-        failed = _is_transient_provider_failure(exc)
-        raise
-    else:
         succeeded = True
     finally:
+        if not succeeded:
+            exc = sys.exc_info()[1]
+            failed = exc is not None and _is_transient_provider_failure(exc)
         with _MODEL_GATE_LOCK:
             _MODEL_INFLIGHT = max(0, _MODEL_INFLIGHT - 1)
             failures, opened_at, _probing = _MODEL_BREAKERS.get(key, (0, 0.0, False))
@@ -193,9 +171,7 @@ def admit_model_call(
     """Apply per-actor and per-tenant quotas before network I/O."""
     _ = profile  # One account quota spans planning, chat, memory, and repair calls.
     try:
-        actor_limit = max(
-            1, min(600, int(os.environ.get("XCAGI_MODEL_CALLS_PER_MINUTE", "60")))
-        )
+        actor_limit = max(1, min(600, int(os.environ.get("XCAGI_MODEL_CALLS_PER_MINUTE", "60"))))
     except ValueError:
         actor_limit = 60
     try:

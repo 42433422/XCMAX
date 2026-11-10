@@ -71,8 +71,6 @@ def _ambiguous_delete_plan(plan_id: str = "p_delete") -> PlanGraph:
 # ===========================================================================
 
 
-
-
 # ===========================================================================
 # 规划器：删除客户（多同名）→ 图首部插入 clarify 节点
 # ===========================================================================
@@ -84,9 +82,7 @@ class TestPlannerClarifyNode:
 
         planner = _make_planner()
         with (
-            patch.object(
-                planner, "_plan_with_llm", return_value=_ambiguous_delete_plan()
-            ),
+            patch.object(planner, "_plan_with_llm", return_value=_ambiguous_delete_plan()),
             patch(
                 "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                 return_value="full",
@@ -197,6 +193,8 @@ class TestFinalizeValidateDecoratedGraph:
             context={},
             validate=validate_plan_graph,
             warn=self._noop_warn,
+            plan_type=PlanGraph,
+            node_type=WorkflowNode,
         )
         assert result is plan
         assert any(n.tool_id == "clarify" for n in result.nodes)
@@ -214,6 +212,8 @@ class TestFinalizeValidateDecoratedGraph:
             context={},
             validate=validate_plan_graph,
             warn=self._noop_warn,
+            plan_type=PlanGraph,
+            node_type=WorkflowNode,
         )
         assert result.metadata["planning_rejected"] is True
         assert result.nodes[0].tool_id == "clarify"

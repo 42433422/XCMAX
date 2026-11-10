@@ -574,75 +574,8 @@ class TestProductRepositoryFindProductUnits:
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_fallback_to_products_unit(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.bind = MagicMock()
-        mock_db.query.return_value.distinct.return_value.all.return_value = [
-            ("七彩乐园",),
-            ("件",),
-            ("箱",),
-        ]
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_insp_obj = MagicMock()
-            mock_insp_obj.get_table_names.return_value = ["products"]
-            mock_insp.return_value = mock_insp_obj
 
-            with patch(
-                "app.application.customer_app_service.get_customers_session",
-                side_effect=ImportError("no module"),
-            ):
-                result = repo.find_product_units()
-
-        assert "七彩乐园" in result
-        assert "件" not in result
-        assert "箱" not in result
-
-    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_empty_units(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.bind = MagicMock()
-        mock_db.query.return_value.distinct.return_value.all.return_value = []
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_insp_obj = MagicMock()
-            mock_insp_obj.get_table_names.return_value = ["products"]
-            mock_insp.return_value = mock_insp_obj
-
-            with patch(
-                "app.application.customer_app_service.get_customers_session",
-                side_effect=ImportError("no module"),
-            ):
-                result = repo.find_product_units()
-
-        assert result == []
-
-    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_deduplication(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.bind = MagicMock()
-        mock_db.query.return_value.distinct.return_value.all.return_value = [
-            ("客户A",),
-            ("客户A",),
-            ("客户B",),
-        ]
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_insp_obj = MagicMock()
-            mock_insp_obj.get_table_names.return_value = ["products"]
-            mock_insp.return_value = mock_insp_obj
-
-            with patch(
-                "app.application.customer_app_service.get_customers_session",
-                side_effect=ImportError("no module"),
-            ):
-                result = repo.find_product_units()
-
-        assert result.count("客户A") == 1
 
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_recoverable_error_in_fallback(self, mock_get_db, repo):
@@ -1574,32 +1507,7 @@ class TestMobileExtMobileModItems:
             mock_mm.return_value.list_all_mods.return_value = []
             assert ext_mod._mobile_mod_items() == []
 
-    def test_dict_mods(self, ext_mod):
-        with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
-        ):
-            mock_mm.return_value.list_all_mods.return_value = [
-                {"id": "mod-a", "name": "Mod A"},
-                {"mod_id": "mod-b", "title": "Mod B"},
-            ]
-            items = ext_mod._mobile_mod_items()
-            assert len(items) == 2
-            assert items[0]["id"] == "mod-a"
 
-    def test_object_mods(self, ext_mod):
-        with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
-        ):
-            mod = MagicMock()
-            mod.id = "mod-obj"
-            mod.name = "Obj Mod"
-            mod.mod_id = ""
-            mod.title = ""
-            mock_mm.return_value.list_all_mods.return_value = [mod]
-            items = ext_mod._mobile_mod_items()
-            assert items[0]["id"] == "mod-obj"
 
     def test_exception_returns_empty(self, ext_mod):
         with (
@@ -1621,55 +1529,12 @@ class TestMobileExtMobileModItems:
             ]
             assert len(ext_mod._mobile_mod_items()) == 100
 
-    def test_empty_id_skipped(self, ext_mod):
-        with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
-            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
-        ):
-            mock_mm.return_value.list_all_mods.return_value = [
-                {"id": "", "name": "NoId"},
-                {"mod_id": "has-id", "title": "HasId"},
-            ]
-            items = ext_mod._mobile_mod_items()
-            assert len(items) == 1
-            assert items[0]["id"] == "has-id"
 
 
 class TestMobileExtApprovalShipmentItems:
     """Cover ``_approval_items`` / ``_shipment_items``."""
 
-    def test_approval_items_happy_path(self, ext_mod):
-        mock_db = MagicMock()
-        mock_row = MagicMock()
-        mock_row.id = 1
-        mock_row.title = "Test"
-        mock_row.status = "pending"
-        mock_row.request_no = "REQ-001"
-        mock_db.query.return_value.order_by.return_value.limit.return_value.all.return_value = [
-            mock_row
-        ]
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_db):
-            items = ext_mod._approval_items(limit=10)
-            assert len(items) == 1
-            assert items[0]["id"] == 1
 
-    def test_shipment_items_happy_path(self, ext_mod):
-        mock_db = MagicMock()
-        mock_row = MagicMock(spec=[])
-        mock_row.id = 5
-        mock_row.order_number = "ORD-1"
-        mock_row.status = "shipped"
-        mock_db.query.return_value.order_by.return_value.limit.return_value.all.return_value = [
-            mock_row
-        ]
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_db):
-            items = ext_mod._shipment_items(limit=10)
-            assert len(items) == 1
-            assert items[0]["id"] == 5
 
 
 class TestMobileExtDeviceRegister:

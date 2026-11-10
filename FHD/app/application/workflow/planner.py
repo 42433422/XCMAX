@@ -19,7 +19,7 @@ from .planning_graph_policy import (
     filter_registry_for_profile as _filter_tool_registry_for_profile,
 )
 from .tool_profile import resolve_tool_execution_profile
-from .workflow_types import PlanGraph, validate_plan_graph
+from .workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 
 logger = logging.getLogger(__name__)
 _planner_http_client: httpx.Client | None = None
@@ -92,9 +92,7 @@ class LLMWorkflowPlanner:
                     # writes move to the stable owner namespace.
                     legacy_res = rag.query(user_id=user_id, query_text=message, top_k=3)
                     legacy_hits = (
-                        (legacy_res or {}).get("hits")
-                        if isinstance(legacy_res, dict)
-                        else None
+                        (legacy_res or {}).get("hits") if isinstance(legacy_res, dict) else None
                     )
                     hits = hits if isinstance(hits, list) else []
                     merged = {
@@ -124,9 +122,7 @@ class LLMWorkflowPlanner:
                 from app.application.task_conversation_store import durable_user_id
                 from app.domain.shared_services.user_memory_service import get_user_memory_service
 
-                owner_id = durable_user_id(
-                    context.get("local_user_id") or context.get("actor_id")
-                )
+                owner_id = durable_user_id(context.get("local_user_id") or context.get("actor_id"))
                 memory_v2_summary = (
                     get_user_memory_service().format_memory_v2_for_prompt(
                         user_id=str(owner_id), max_items=6
@@ -167,9 +163,7 @@ class LLMWorkflowPlanner:
                 action_meta = actions.get(node.action) if isinstance(actions, dict) else None
                 if not isinstance(action_meta, dict):
                     return f"节点 {node.node_id} 使用未授权动作: {node.tool_id}.{node.action}"
-                node.risk = normalize_workflow_risk(
-                    action_meta.get("risk"), default="high"
-                )
+                node.risk = normalize_workflow_risk(action_meta.get("risk"), default="high")
                 node.idempotent = action_meta.get("idempotent") is True
             # The deterministic preflight owns missing/ambiguous input detection.
             # It may attach a typed clarify node, but it never invents business
@@ -208,6 +202,8 @@ class LLMWorkflowPlanner:
                 context=context,
                 validate=validate_candidate,
                 warn=logger.warning,
+                plan_type=PlanGraph,
+                node_type=WorkflowNode,
             ),
         )
 
@@ -229,7 +225,9 @@ class LLMWorkflowPlanner:
         max_tokens: int = 1200,
     ) -> dict[str, Any] | None:
         """Send a bounded model task through this planner's configured provider."""
-        completion = self._completion if self._completion is not None else request_planner_completion
+        completion = (
+            self._completion if self._completion is not None else request_planner_completion
+        )
         return completion(
             ai_service=self._ai_service,
             context=context,

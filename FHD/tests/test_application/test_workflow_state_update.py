@@ -7,8 +7,8 @@
 
 from unittest.mock import MagicMock
 
-from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from tests.test_application.ai_chat_test_helpers import _make_svc
 
 

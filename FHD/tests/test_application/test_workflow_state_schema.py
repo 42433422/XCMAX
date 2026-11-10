@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import pytest
 
-from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from app.application.workflow.workflow_types import (
     PlanGraph,
     StateSchema,
     WorkflowNode,
     apply_state_schema,
 )
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 
 
 def _make_engine(dispatch_result=None):

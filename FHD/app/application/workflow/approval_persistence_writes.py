@@ -166,25 +166,26 @@ def persist_workflow_approval(
                 db.add(persisted)
                 db.flush()
                 try:
-                    db.execute(
-                        facade.text(
-                            "INSERT INTO ai_action_audit (actor, action, payload) "
-                            "VALUES (:actor, :action, :payload)"
-                        ),
-                        {
-                            "actor": str(applicant.id),
-                            "action": "approval.submit_ai_workflow",
-                            "payload": facade.json.dumps(
-                                {
-                                    "approval_request_id": persisted.id,
-                                    "request_no": persisted.request_no,
-                                    "plan_id": request.plan_id,
-                                    "node_id": request.node_id,
-                                },
-                                ensure_ascii=False,
+                    with db.begin_nested():
+                        db.execute(
+                            facade.text(
+                                "INSERT INTO ai_action_audit (actor, action, payload) "
+                                "VALUES (:actor, :action, :payload)"
                             ),
-                        },
-                    )
+                            {
+                                "actor": str(applicant.id),
+                                "action": "approval.submit_ai_workflow",
+                                "payload": facade.json.dumps(
+                                    {
+                                        "approval_request_id": persisted.id,
+                                        "request_no": persisted.request_no,
+                                        "plan_id": request.plan_id,
+                                        "node_id": request.node_id,
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        )
                 except facade._APPROVAL_STORAGE_ERRORS:
                     facade.logger.warning("AI 审批提交审计写入失败")
                 metadata = {

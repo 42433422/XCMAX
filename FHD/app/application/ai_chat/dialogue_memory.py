@@ -85,9 +85,9 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
                 "status": "processing",
                 "at": time.time(),
             }
+        _write(key, data)
         if turn_id:
             _INFLIGHT.add((key, turn_id))
-        _write(key, data)
         return None
 
 
@@ -448,7 +448,13 @@ def _read(key: str) -> dict[str, Any]:
     if not path.is_file():
         return {"active": False, "turns": [], "receipts": {}}
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        stored = path.read_bytes()
+        if stored.startswith(b"fernet:"):
+            from app.application.group_chat.storage import GroupChatRepository
+
+            cipher = GroupChatRepository.message_cipher(data_dir=str(_memory_dir()))
+            stored = cipher.decrypt(stored[len(b"fernet:") :])
+        data = json.loads(stored)
     except RECOVERABLE_ERRORS:
         return {"active": False, "turns": [], "receipts": {}}
     if not isinstance(data, dict):
@@ -479,7 +485,12 @@ def _write(key: str, data: dict[str, Any]) -> None:
     }
     path = _path(key)
     temporary = path.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    from app.application.group_chat.storage import GroupChatRepository
+
+    cipher = GroupChatRepository.message_cipher(data_dir=str(_memory_dir()))
+    temporary.write_bytes(
+        b"fernet:" + cipher.encrypt(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+    )
     temporary.replace(path)
 
 

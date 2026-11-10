@@ -13,8 +13,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_FULL = re.compile(r"^\s*\{\{\s*([^{}]+?)\s*\}\}\s*$")
-_EMBEDDED = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
+_FULL = re.compile(r"^\s*\{\{([^{}]+)\}\}\s*$")
+_EMBEDDED = re.compile(r"\{\{([^{}]+)\}\}")
 _TOKEN = re.compile(r"\[(\d+)\]|\.?([A-Za-z_\u4e00-\u9fff][\w\-\u4e00-\u9fff]*)")
 _ALIASES = {"data_preview": "data", "rows": "data", "items": "data", "result": "data"}
 _PREFIXES = ("node_outputs", "outputs", "steps", "nodes")

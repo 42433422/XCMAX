@@ -525,9 +525,8 @@ def load_durable_workflow_snapshot(
 def load_workflow_snapshot_for_execution(request_id: str) -> dict[str, Any] | None:
     """获批后恢复执行专用的严格加载器（fail-closed，绝不重放）。
 
-    状态守卫：仅接受预终态 ``pending`` / ``in_progress``（审批尚未写库终态时调用）；
-    任何终态一律拒绝——尤其 ``cancelled``（执行失败/取消）与 ``approved``（已获批成功），
-    杜绝重复审批重新进入业务。
+    状态守卫：接受审批中的请求，或已获批且带有精确 AgentRun 领取记录的请求。
+    取消、失败和已记录执行结果的请求一律拒绝。
     重放守卫：一旦写入 ``workflow_execution``（无论成/败）即已执行过，一律拒绝。
     """
     from app.db.models.approval import (
@@ -545,7 +544,7 @@ def load_workflow_snapshot_for_execution(request_id: str) -> dict[str, Any] | No
             if persisted is None:
                 return None
             status = str(persisted.status or "").strip()
-            if status not in ("pending", "in_progress"):
+            if status not in ("pending", "in_progress", "approved"):
                 return None
             try:
                 business_data = (
@@ -558,7 +557,19 @@ def load_workflow_snapshot_for_execution(request_id: str) -> dict[str, Any] | No
             # 重放守卫：已经执行过（workflow_execution 已落）→ 拒绝再现，杜绝重放。
             if "workflow_execution" in business_data:
                 return None
-            return _validated_snapshot(persisted)
+            snapshot = _validated_snapshot(persisted)
+            if status == "approved":
+                claim = business_data.get("agent_execution_claim")
+                if (
+                    not isinstance(claim, dict)
+                    or not snapshot
+                    or (
+                        claim.get("agent_run_id") != snapshot.get("agent_run_id")
+                        or claim.get("approved_step_id") != snapshot.get("approved_step_id")
+                    )
+                ):
+                    return None
+            return snapshot
     except _APPROVAL_STORAGE_ERRORS:
         logger.warning("load workflow snapshot for execution failed request_no=%s", request_id)
         return None
@@ -669,7 +680,7 @@ def claim_agent_approval(request_id: str, *, agent_run_id: str, approved_step_id
     try:
         with get_db() as db:
             row = db.query(ApprovalRequestModel).filter_by(request_no=request_id).first()
-            if row is None or str(row.status) not in {"pending", "in_progress"}:
+            if row is None or str(row.status) not in {"pending", "in_progress", "approved"}:
                 return False
             saved = row.business_data or "{}"
             data = json.loads(saved)
@@ -694,7 +705,7 @@ def claim_agent_approval(request_id: str, *, agent_run_id: str, approved_step_id
                 db.query(ApprovalRequestModel)
                 .filter(
                     ApprovalRequestModel.id == row.id,
-                    ApprovalRequestModel.status.in_(["pending", "in_progress"]),
+                    ApprovalRequestModel.status.in_(["pending", "in_progress", "approved"]),
                     ApprovalRequestModel.business_data == saved,
                 )
                 .update(

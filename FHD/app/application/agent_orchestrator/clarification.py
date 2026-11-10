@@ -145,8 +145,8 @@ def apply_clarification_answer(
     # Validate and update a candidate full graph before changing live state. The
     # durable plan and its AgentSteps must never diverge across clarification.
     from app.application.workflow.workflow_types import (
-        plan_from_dict,
         plan_fingerprint,
+        plan_from_dict,
         plan_to_dict,
         validate_plan_graph,
     )

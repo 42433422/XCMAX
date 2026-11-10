@@ -971,21 +971,23 @@ def test_full_plan_survives_restart_between_two_approvals(db, monkeypatch, rejec
             assert calls == ["first", "second", "third"]
 
 
-def test_only_one_concurrent_reviewer_can_claim_approval(tmp_path, monkeypatch):
+@pytest.mark.parametrize("preapproved", [False, True])
+def test_only_one_concurrent_reviewer_can_claim_approval(locking_engine, monkeypatch, preapproved):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
 
-    from app.application.workflow.approval_persistence import claim_agent_approval
+    from app.application.workflow.approval_persistence import (
+        claim_agent_approval,
+        load_workflow_snapshot_for_execution,
+        mark_durable_request_approved_and_load,
+    )
     from app.application.workflow.approval_service import ApprovalService
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.db.models import User
     from app.infrastructure.tenant_scope import tenant_scope
 
-    engine = create_engine(
-        f"sqlite:///{tmp_path / 'claim.db'}", connect_args={"check_same_thread": False}
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
+    Base.metadata.create_all(locking_engine)
+    factory = sessionmaker(bind=locking_engine)
     monkeypatch.setattr("app.db.session.SessionLocal", factory)
     with factory() as session:
         session.add(User(id=41, username="claim-test", password="test", tenant_id=1))
@@ -1010,6 +1012,9 @@ def test_only_one_concurrent_reviewer_can_claim_approval(tmp_path, monkeypatch):
         assert service.attach_pending_agent_run(
             request.request_id, agent_run_id="run-test", approved_step_id="first"
         )
+        if preapproved:
+            assert mark_durable_request_approved_and_load(request.request_id)
+            assert load_workflow_snapshot_for_execution(request.request_id) is None
     barrier = Barrier(2)
 
     def claim():
@@ -1022,4 +1027,5 @@ def test_only_one_concurrent_reviewer_can_claim_approval(tmp_path, monkeypatch):
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda _: claim(), range(2)))
     assert sorted(results) == [False, True]
-    engine.dispose()
+    with tenant_scope(1):
+        assert load_workflow_snapshot_for_execution(request.request_id) is not None

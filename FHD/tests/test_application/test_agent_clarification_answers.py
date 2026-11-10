@@ -4,10 +4,6 @@ from app.application.workflow.clarification_node import build_clarify_node
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 
-
-
-
-
 def test_named_quote_answer_stops_at_write_approval():
     params = {"items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}]}
     question = build_clarify_node(

@@ -11,11 +11,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.workflow.planning_graph_policy import filter_registry_for_profile as _filter_tool_registry_for_profile
+from app.application.workflow.planning_graph_policy import (
+    filter_registry_for_profile as _filter_tool_registry_for_profile,
+)
 from app.domain.shared_services.purchase_service import PurchaseService
-from app.services.tools_execution.registry import get_workflow_tool_registry
 from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
 from app.domain.shared_services.tools_workflow_registered import _registered_router_customers
+from app.services.tools_execution.registry import get_workflow_tool_registry
 
 # ---------------------------------------------------------------------------
 # DB mock helpers

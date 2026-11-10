@@ -148,12 +148,17 @@ def test_rejected_model_plan_never_enters_agent_run(monkeypatch):
     risk_gate.evaluate.assert_not_called()
 
 
-
 def test_missing_model_result_is_not_reported_as_invalid_business_plan(monkeypatch):
     from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
     plan = finalize_planned_graph(
-        None, plan_id="missing", context={}, validate=lambda _: None, warn=lambda _: None
+        None,
+        plan_id="missing",
+        context={},
+        validate=lambda _: None,
+        warn=lambda _: None,
+        plan_type=PlanGraph,
+        node_type=WorkflowNode,
     )
     callbacks = Mock()
     callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
@@ -170,6 +175,7 @@ def test_missing_model_result_is_not_reported_as_invalid_business_plan(monkeypat
     assert "模型连接" in result["response"]
     assert result["data"]["execution_started"] is False
     risk_gate.evaluate.assert_not_called()
+
 
 def test_autonomy_guard_denial_stops_before_agent_run():
     from app.domain.autonomy.risk_types import RiskDecision, RiskLevel

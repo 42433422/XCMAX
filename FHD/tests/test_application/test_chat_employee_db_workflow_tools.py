@@ -484,8 +484,8 @@ def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tm
 
 def test_chat_formats_employee_and_business_db_outputs():
 
-    from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.ai_chat_app_service import AIChatApplicationService
 
     service = AIChatApplicationService.__new__(AIChatApplicationService)
     plan = PlanGraph(
@@ -725,7 +725,9 @@ def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(local_tools, 
 
 
 def test_workflow_engine_does_not_retry_non_idempotent_write():
-    from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
+    from app.infrastructure.workflow.langgraph_runtime import (
+        XCAGILangGraphRuntime as WorkflowEngine,
+    )
 
     calls = {"count": 0}
 
@@ -767,8 +769,10 @@ def test_workflow_engine_does_not_retry_non_idempotent_write():
 
 
 def test_workflow_engine_retries_idempotent_write_once_then_succeeds():
-    from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.infrastructure.workflow.langgraph_runtime import (
+        XCAGILangGraphRuntime as WorkflowEngine,
+    )
 
     calls = {"count": 0}
 
@@ -803,8 +807,8 @@ def test_workflow_engine_retries_idempotent_write_once_then_succeeds():
 
 
 def test_chat_formats_recovery_hint_for_non_retryable_failure():
-    from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     service = AIChatApplicationService.__new__(AIChatApplicationService)

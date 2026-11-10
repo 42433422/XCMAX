@@ -29,7 +29,7 @@ def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch, late):
 
     monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
     moments = iter((10.0, 12.0 if late else 10.5))
-    monkeypatch.setattr(tools.time, "monotonic", lambda: next(moments))
+    monkeypatch.setattr(tools, "time", SimpleNamespace(monotonic=lambda: next(moments)))
     seen = []
 
     def execute(step, *, runtime_context):

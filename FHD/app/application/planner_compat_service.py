@@ -22,10 +22,14 @@ from app.application.planner_compat.persona import (
     ConversationService,
     IndustryResolver,
     PersonaEnricher,
-    recent_history as _recent_history,
     request_session_candidates,
-    resolve_chat_user_id as _resolve_chat_user_id,
     summarize_context_for_log,
+)
+from app.application.planner_compat.persona import (
+    recent_history as _recent_history,
+)
+from app.application.planner_compat.persona import (
+    resolve_chat_user_id as _resolve_chat_user_id,
 )
 from app.application.planner_compat.protocols import (
     ChatBackends,
@@ -35,8 +39,8 @@ from app.application.planner_compat.protocols import (
     Context,
     Payload,
 )
-from app.application.planner_compat.runtime import execute_mainline
 from app.application.planner_compat.runtime import await_with_timeout as _await_with_timeout
+from app.application.planner_compat.runtime import execute_mainline
 from app.application.planner_compat.runtime import (
     merge_kitten_attachments as _merge_kitten_attachments,
 )

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import time
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -338,13 +339,15 @@ def tool_execution_slot(action_key: str, *, tenant_id: str = "shared"):
         result_success = isinstance(result, dict) and result.get("success") is True
         result_failure = _transient_tool_failure(result=result)
 
+    completed = False
     try:
         yield report_result
-    except BaseException as exc:
-        result_failure = _transient_tool_failure(error=exc)
-        result_seen = True
-        raise
+        completed = True
     finally:
+        if not completed:
+            exc = sys.exc_info()[1]
+            result_failure = exc is not None and _transient_tool_failure(error=exc)
+            result_seen = True
         with _tool_gate_lock:
             _tool_inflight = max(0, _tool_inflight - 1)
             tenant_remaining = _tool_inflight_by_tenant.get(tenant, 0) - 1

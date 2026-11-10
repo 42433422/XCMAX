@@ -1,5 +1,6 @@
 import { ERP_DOMAIN_BRIDGE_MOD_ID, LEGACY_CLIENT_ERP_MOD_ID, readErpDomainModFacadeEnabled } from '@/constants/erpDomainMod'
 import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack'
+import { isProtectedClientModId } from '@/constants/protectedMods'
 import { clientModPolicies } from '@/stores/hostConfig'
 import { useModsStore } from '@/stores/mods'
 import { getActivePinia } from 'pinia'
@@ -103,7 +104,7 @@ function isIndustryShellModId(modId: string): boolean {
 /** 该 mod 是否为可路由的客户 ERP mod（受保护客户 mod，且非行业壳 mod） */
 function isRoutableClientErpModId(modId: string): boolean {
   const id = String(modId || '').trim()
-  return id === LEGACY_CLIENT_ERP_MOD_ID
+  return id !== 'sz-qsm-pro' && (id === LEGACY_CLIENT_ERP_MOD_ID || isProtectedClientModId(id)) && !isIndustryShellModId(id)
 }
 
 function resolveErpBaseForClientMod(activeClient: string, ids: string[]): string {

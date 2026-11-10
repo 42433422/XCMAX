@@ -60,8 +60,8 @@ except ImportError:
 # 否则 redis 宕机时所有 ``except RECOVERABLE_ERRORS`` 探针都会 500。
 _redis_extra: tuple[type[Exception], ...] = ()
 try:
-    from redis.exceptions import RedisError as _RedisError
     from redis.exceptions import ConnectionError as _RedisConnectionError
+    from redis.exceptions import RedisError as _RedisError
     from redis.exceptions import TimeoutError as _RedisTimeoutError
 
     _redis_extra = (_RedisConnectionError, _RedisTimeoutError, _RedisError)

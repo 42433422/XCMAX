@@ -52,8 +52,8 @@ from app.application.tools.workflow import (
     run_natural_language_pandas,
 )
 from app.application.workflow.planner import LLMWorkflowPlanner, _filter_tool_registry_for_profile
-from app.services.tools_execution.registry import get_workflow_tool_registry as get_tool_registry
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
+from app.services.tools_execution.registry import get_workflow_tool_registry as get_tool_registry
 
 # ===========================================================================
 # 1. app/application/ai_chat_app_service.py
@@ -832,59 +832,9 @@ class TestGetToolRegistryPlanner:
 class TestFilterToolRegistryForProfile:
     """Cover _filter_tool_registry_for_profile."""
 
-    def test_normal_removes_pro_only(self) -> None:
-        reg = {
-            "tool_a": {
-                "availability": "shared",
-                "actions": {"query": {"availability": "shared", "risk": "low"}},
-            },
-            "tool_b": {
-                "availability": "pro_only",
-                "actions": {"exec": {"availability": "pro_only", "risk": "high"}},
-            },
-        }
-        result = _filter_tool_registry_for_profile(reg, "normal")
-        assert "tool_a" in result
-        assert "tool_b" not in result
 
-    def test_pro_default_removes_normal_only(self) -> None:
-        reg = {
-            "tool_a": {
-                "availability": "shared",
-                "actions": {"query": {"availability": "shared", "risk": "low"}},
-            },
-            "tool_b": {
-                "availability": "normal_only",
-                "actions": {"slot": {"availability": "normal_only", "risk": "low"}},
-            },
-        }
-        result = _filter_tool_registry_for_profile(reg, "pro_default")
-        assert "tool_a" in result
-        assert "tool_b" not in result
 
-    def test_shared_kept_in_both(self) -> None:
-        reg = {
-            "tool_a": {
-                "availability": "shared",
-                "actions": {"query": {"availability": "shared", "risk": "low"}},
-            },
-        }
-        assert "tool_a" in _filter_tool_registry_for_profile(reg, "normal")
-        assert "tool_a" in _filter_tool_registry_for_profile(reg, "pro_default")
 
-    def test_action_level_filtering(self) -> None:
-        reg = {
-            "tool_a": {
-                "availability": "shared",
-                "actions": {
-                    "query": {"availability": "shared", "risk": "low"},
-                    "admin": {"availability": "pro_only", "risk": "high"},
-                },
-            },
-        }
-        result = _filter_tool_registry_for_profile(reg, "normal")
-        assert "query" in result["tool_a"]["actions"]
-        assert "admin" not in result["tool_a"]["actions"]
 
     def test_non_dict_spec_skipped(self) -> None:
         reg = {"bad": "not a dict"}

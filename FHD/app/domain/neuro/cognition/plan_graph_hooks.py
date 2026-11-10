@@ -74,6 +74,8 @@ def finalize_planned_graph(
     context: dict[str, Any] | None,
     validate: Callable[[Any], str | None],
     warn: Callable[[str], None],
+    plan_type: Any,
+    node_type: Any,
 ) -> Any:
     """Validate generated plans and pause safely on rejection; never execute a fallback plan."""
     trace_id = str((context or {}).get("trace_id") or plan_id)
@@ -107,15 +109,15 @@ def finalize_planned_graph(
             plan_id=plan_id,
             validate_error=err,
         )
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-
-    question = "我没能生成通过系统校验的计划，本轮没有执行任何业务操作。请补充业务对象和目标后重试。"
-    rejected = PlanGraph(
+    question = (
+        "我没能生成通过系统校验的计划，本轮没有执行任何业务操作。请补充业务对象和目标后重试。"
+    )
+    rejected = plan_type(
         plan_id=plan_id,
         intent="plan_rejected",
         todo_steps=["等待补充信息后重新规划"],
         nodes=[
-            WorkflowNode(
+            node_type(
                 node_id="plan_rejected_clarification",
                 tool_id="clarify",
                 action="ask",

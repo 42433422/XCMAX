@@ -8,7 +8,6 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.application.workflow.checkpointer import DatabaseWorkflowCheckpointer
-from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from app.application.workflow.plan_store import WorkflowPlanStore
 from app.application.workflow.workflow_types import (
     Branch,
@@ -18,6 +17,7 @@ from app.application.workflow.workflow_types import (
     plan_to_dict,
 )
 from app.db.db_base import Base
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 
 
 @pytest.fixture()
@@ -133,8 +133,8 @@ class TestWorkflowPlanStore:
     ):
         from unittest.mock import Mock, patch
 
-        from app.application.ai_chat_app_service import AIChatApplicationService
         from app.application.agent_orchestrator.run_models import AgentRun
+        from app.application.ai_chat_app_service import AIChatApplicationService
 
         store = WorkflowPlanStore(session_factory=session_factory)
         svc = object.__new__(AIChatApplicationService)

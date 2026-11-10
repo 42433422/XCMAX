@@ -134,7 +134,7 @@ class ConversationLlmMixin:
         except ContextWindowExceeded as error:
             return {"error": {"code": "context_window_exceeded", "message": str(error)}}
         except RECOVERABLE_ERRORS as error:
-            from app.infrastructure.llm.model_admission import (
+            from app.domain.model_admission_errors import (
                 ModelCircuitOpenError,
                 ModelConcurrencyLimitError,
                 ModelRateLimitError,

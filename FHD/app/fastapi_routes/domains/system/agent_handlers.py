@@ -106,6 +106,18 @@ def run_system_maintenance_agent(
     if not isinstance(action_meta, dict):
         return {"success": False, "message": f"未注册的系统维护动作: {action}"}, 400
 
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
+    trusted_context = request_runtime_context(request)
+    validation = validate_tool_call("system_maintenance", action, data)
+    if not validation.ok:
+        return {
+            "success": False,
+            "message": validation.message,
+            "error_code": validation.error_code,
+        }, 400
+
     node_id = f"system_maintenance_{action}"
     risk = normalize_workflow_risk(str(action_meta.get("risk") or "high"))
     plan = PlanGraph(
@@ -124,10 +136,19 @@ def run_system_maintenance_agent(
             )
         ],
         risk_level=risk,
-        metadata={"source": "system_maintenance_route", "route": route_path},
+        metadata={
+            "source": "system_maintenance_route",
+            "route": route_path,
+            **(
+                {"approval_required_node_ids": [node_id]}
+                if risk == "high" or action_meta.get("approval") == "always"
+                else {}
+            ),
+        },
     )
-    user_id = _user_id_from_tool_request(request, data)
+    user_id = str(trusted_context["user_id"])
     runtime_context = {
+        **trusted_context,
         "source": "system_maintenance_route",
         "route": route_path,
         "request_path": str(request.url.path),
@@ -141,7 +162,9 @@ def run_system_maintenance_agent(
         plan=plan,
         runtime_context=runtime_context,
     )
-    if run.status in {"waiting_user", "running"}:
+    if run.status == "running" or (
+        run.status == "waiting_user" and risk != "high" and action_meta.get("approval") != "always"
+    ):
         continued = orchestrator.continue_run(
             run.run_id,
             approved_by=user_id or "system-maintenance-route",
@@ -150,13 +173,54 @@ def run_system_maintenance_agent(
         )
         if continued is not None:
             run = continued
+    approval_request_id = ""
+    if run.status == "waiting_user" and (risk == "high" or action_meta.get("approval") == "always"):
+        from app.application.workflow.approval_service import ApprovalService
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        approval = ApprovalService()
+        try:
+            approval_request_id = f"sys_{run.run_id}"
+            with tenant_scope(int(trusted_context["tenant_id"])):
+                pending = approval.create_approval_request(
+                    plan_id=plan.plan_id,
+                    node=plan.nodes[0],
+                    runtime_context={**runtime_context, "_approval_agent_run_required": True},
+                    plan=plan,
+                    require_persistence=True,
+                    request_id=approval_request_id,
+                )
+                if not approval.attach_pending_agent_run(
+                    pending.request_id, agent_run_id=run.run_id, approved_step_id=node_id
+                ):
+                    raise RuntimeError("approval binding unavailable")
+        except RECOVERABLE_ERRORS:
+            return {
+                "success": False,
+                "error_code": "approval_persistence_failed",
+                "message": "审批请求未能安全持久化，操作未执行",
+                "run_id": run.run_id,
+            }, 503
     payload = _tool_route_agent_payload(run, node_id)
+    if approval_request_id:
+        payload["approval_request_id"] = approval_request_id
+    if run.status == "blocked":
+        for event in reversed(run.events):
+            if event.event_type == "workflow.plan_audit_rejected":
+                code = event.data.get("error_code")
+                if code in {"tool_permission_denied", "tool_identity_required"}:
+                    payload.update(
+                        success=False, error_code=code, message="权限不足，已拒绝执行工具"
+                    )
+                break
     status_code = int(
         payload.pop("http_status_code", 0) or (200 if payload.get("success") else 400)
     )
     if payload.get("error_code") == "tool_exception":
         status_code = 500
-    if run.status in {"waiting_user", "blocked"}:
+    elif payload.get("error_code") in {"tool_permission_denied", "tool_identity_required"}:
+        status_code = 403
+    if run.status == "waiting_user":
         status_code = 202
     return payload, status_code
 

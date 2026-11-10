@@ -20,12 +20,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.application.workflow.approval_service import ApprovalService
-from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.db.db_base import Base
 from app.db.models import InventoryLedger, JournalEntry, Product, Warehouse
 from app.domain.autonomy.risk_types import RiskDecision, RiskLevel
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 
 
 def _make_sale_payload(env: dict) -> dict:

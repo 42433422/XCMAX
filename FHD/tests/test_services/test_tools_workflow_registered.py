@@ -27,8 +27,6 @@ from app.domain.shared_services.tools_workflow_registered import (
     execute_registered_workflow_tool,
 )
 
-
-
 # ---------------------------------------------------------------------------
 # _registered_router_customers
 # ---------------------------------------------------------------------------

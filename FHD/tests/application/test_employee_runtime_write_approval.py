@@ -12,8 +12,6 @@ from app.application.employee_runtime.write_approval import (
 )
 
 
-
-
 class TestComposeGates:
     def test_all_none_returns_none(self):
         assert compose_gates(None, None) is None

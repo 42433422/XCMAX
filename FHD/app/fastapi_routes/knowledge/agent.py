@@ -135,6 +135,7 @@ class DatasetAgent:
                 runtime_context["dataset_tenant_id"] = access_payload["tenant_id"]
             runtime_context["dataset_permissions"] = list(access_payload.get("permissions") or [])
             runtime_context["dataset_admin"] = bool(access_payload.get("is_admin"))
+        finished = False
         try:
             orchestrator = self._runtime()
             run = orchestrator.start_run_from_plan(
@@ -155,8 +156,9 @@ class DatasetAgent:
             payload = self._output(run, node_id)
             if action == "query":
                 payload = self._recall(payload, request=request, params=data)
-        except BaseException:
-            if claim_key:
+            finished = True
+        finally:
+            if not finished and claim_key:
                 from app.application.agent_orchestrator.tool_permission import (
                     finish_idempotent_replay,
                 )
@@ -165,7 +167,6 @@ class DatasetAgent:
                     claim_key,
                     {"success": False, "outcome": "unknown", "reconciliation_required": True},
                 )
-            raise
         if run.status in {"waiting_user", "blocked"}:
             status_code = 202
         elif payload.get("error_code") == "dataset_permission_denied":

@@ -804,3 +804,74 @@ class TestAdminLlmReload:
         with patch.object(reg_mod, "_registry", None):
             r = client.post("/api/admin/llm/reload")
             assert r.json()["success"] is True
+
+
+def test_maintenance_denial_uses_signed_actor_and_never_calls_service(client):
+    service = MagicMock()
+    with patch("app.application.facades.session_facade.get_system_service", return_value=service):
+        response = client.post("/api/system/printer", json={"printer_name": "HP"})
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "tool_permission_denied"
+    service.set_default_printer.assert_not_called()
+
+
+def test_maintenance_admin_can_execute_with_own_identity(trusted_actor, local_tools):
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.include_router(tools_execute_router)
+    admin = trusted_actor(role="admin")
+    client = TestClient(app, raise_server_exceptions=False, headers=admin.headers)
+    service = MagicMock()
+    service.set_default_printer.return_value = {"success": True}
+    with patch("app.application.facades.session_facade.get_system_service", return_value=service):
+        response = client.post("/api/system/printer", json={"printer_name": "HP"})
+    assert response.status_code == 200, response.text
+    assert response.json()["success"] is True
+    service.set_default_printer.assert_called_once_with("HP")
+
+
+def test_restore_waits_for_approval_even_for_applicant_admin(
+    trusted_actor, local_tools, monkeypatch
+):
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.include_router(tools_execute_router)
+    admin = trusted_actor(role="admin")
+    client = TestClient(app, raise_server_exceptions=False, headers=admin.headers)
+    from sqlalchemy import text
+
+    from app.application.approval_workspace_app_service import approve_request
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    monkeypatch.setattr("app.db.session.SessionLocal", admin.factory)
+    service = MagicMock()
+    service.restore_database.return_value = {"success": True}
+    with patch("app.application.facades.session_facade.get_database_service", return_value=service):
+        response = client.post("/api/database/restore", json={"backup_file": "test.sql"})
+        assert response.status_code == 202, response.text
+        assert response.json()["error_code"] == "approval_required"
+        service.restore_database.assert_not_called()
+        with admin.factory() as db:
+            row = db.execute(
+                text("SELECT id, applicant_id, tenant_id FROM approval_requests")
+            ).one()
+            assert (row.applicant_id, row.tenant_id) == (admin.user_id, admin.tenant_id)
+        with tenant_scope(admin.tenant_id):
+            from app.application.agent_orchestrator import AgentOrchestrator
+
+            current = AgentOrchestrator().get_run(response.json()["run_id"])
+            assert current is not None and current.status == "waiting_user", current
+            receipt = approve_request(row.id, admin.request, body={}, x_user_id=None)
+        if hasattr(receipt, "body"):
+            receipt = json.loads(receipt.body)
+        assert receipt["success"] is True, (
+            AgentOrchestrator().get_run(response.json()["run_id"]).error
+        )
+        assert "durable_workflow_snapshot" not in receipt["data"]["business_data"]
+        assert "_actor_authorization" not in json.dumps(receipt)
+        with tenant_scope(admin.tenant_id):
+            repeated = approve_request(row.id, admin.request, body={}, x_user_id=None)
+        if hasattr(repeated, "body"):
+            repeated = json.loads(repeated.body)
+        assert repeated["success"] is False
+        service.restore_database.assert_called_once_with("test.sql")

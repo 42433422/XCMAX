@@ -187,9 +187,9 @@ def test_reused_query_component_resolves_current_mod_database_and_tenant(monkeyp
 
 
 def test_bridge_preserves_bound_context_and_resolves_backend_per_call(monkeypatch):
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
     from app.application.approval_workspace.protocols import WorkflowBackends
     from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
-    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 
     contexts = [
@@ -385,8 +385,8 @@ def test_removed_approved_tool_does_not_resume_agent():
 
 
 def test_langgraph_runtime_dispatches_registered_tool(monkeypatch):
-    from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
 
     calls = []
     def dispatch(tool_id, action, params):

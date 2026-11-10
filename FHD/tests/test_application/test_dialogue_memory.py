@@ -37,7 +37,9 @@ def _context(session: str, turn: str, **extra: object) -> dict[str, object]:
 def test_business_and_smalltalk_turns_share_the_same_transcript(memory_dir: Path) -> None:
     first = _context("unified", "1")
     assert prepare_chat_turn("查一下客户", first) is None
-    settle_chat_turn("查一下客户", first, {"success": True, "response": "找到客户记录。"}, "completed")
+    settle_chat_turn(
+        "查一下客户", first, {"success": True, "response": "找到客户记录。"}, "completed"
+    )
 
     second = _context("unified", "2")
     assert prepare_chat_turn("你好", second) is None
@@ -76,9 +78,7 @@ def test_abandoned_turn_is_not_treated_as_completed(memory_dir: Path) -> None:
 
 
 @pytest.mark.parametrize("status", ["waiting_approval", "unknown"])
-def test_unfinished_turn_replays_only_the_original_run(
-    memory_dir: Path, status: str
-) -> None:
+def test_unfinished_turn_replays_only_the_original_run(memory_dir: Path, status: str) -> None:
     context = _context("pending", "original")
     assert prepare_chat_turn("删除旧记录", context) is None
     waiting = {
@@ -145,3 +145,27 @@ def test_anonymous_conversations_do_not_share_persisted_transcripts(memory_dir: 
     assert prepare_chat_turn("私有内容", context) is None
     assert recent_conversation_messages(context) == []
     assert list(memory_dir.iterdir()) == []
+
+
+def test_transcript_is_encrypted_and_legacy_plaintext_is_migrated(memory_dir: Path) -> None:
+    context = _context("encrypted", "first")
+    key = conversation_key(context)
+    path = memory_dir / f"{key}.json"
+    path.write_text(json.dumps({"active": True, "turns": [], "receipts": {}}))
+    assert prepare_chat_turn("private message", context) is None
+    assert b"private message" not in path.read_bytes()
+    assert path.read_bytes().startswith(b"fernet:")
+    assert turn_status(key, "first") == "processing"
+
+
+def test_failed_transcript_write_does_not_leave_turn_in_flight(memory_dir, monkeypatch):
+    from app.application.ai_chat import dialogue_memory as memory
+
+    context = _context("write-failure", "first")
+    key = conversation_key(context)
+    with monkeypatch.context() as patch:
+        patch.setattr(memory, "_write", lambda *_: (_ for _ in ()).throw(OSError("disk")))
+        with pytest.raises(OSError):
+            prepare_chat_turn("private message", context)
+    assert (key, "first") not in memory._INFLIGHT
+    assert prepare_chat_turn("private message", context) is None

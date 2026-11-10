@@ -7,9 +7,9 @@ import time
 
 import pytest
 
-from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 
 
 def _engine_with_dispatch(dispatch):

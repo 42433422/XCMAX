@@ -17,7 +17,6 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-
 def _sse_payloads(chunks: list[bytes]) -> list[dict]:
     payloads: list[dict] = []
     for item in b"".join(chunks).decode("utf-8").split("\n\n"):
