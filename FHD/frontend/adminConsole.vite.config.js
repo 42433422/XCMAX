@@ -102,9 +102,6 @@ function buildDevProxy(apiBase) {
 }
 
 export default defineConfig(() => ({
-  define: {
-    'import.meta.env.VITE_XCAGI_GIT_SHA': JSON.stringify(resolveViteGitSha(process.env.VITE_XCAGI_GIT_SHA)),
-  },
   root: adminRoot,
   plugins: [
     createAdminConsoleAtAliasPlugin(hostRoot),
@@ -124,6 +121,7 @@ export default defineConfig(() => ({
     routerDevtoolsNullGuard(),
   ],
   define: {
+    'import.meta.env.VITE_XCAGI_GIT_SHA': JSON.stringify(resolveViteGitSha(process.env.VITE_XCAGI_GIT_SHA)),
     'import.meta.env.VITE_XCMAX_ADMIN_CONSOLE': JSON.stringify('1'),
     'import.meta.env.VITE_XCMAX_SUNBIRD_CONSOLE': JSON.stringify(''),
   },
