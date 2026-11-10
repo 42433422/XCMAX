@@ -41,6 +41,25 @@ describe('api core types', () => {
     await vi.advanceTimersByTimeAsync(900)
     await rejection
   })
+
+  it('a quiet 8s probe does not toast the chat failure, and a user request does', async () => {
+    vi.useFakeTimers()
+    document.getElementById('stability-notice')?.remove()
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+    })))
+    const quiet = api.get('/api/auth/session/validate', {}, { timeoutMs: 8000, quiet: true, retry: false })
+    const quietRejection = expect(quiet).rejects.toThrow('请求超时（>8s）。该请求未成功。')
+    await vi.advanceTimersByTimeAsync(8000)
+    await quietRejection
+    expect(document.getElementById('stability-notice')).toBeNull()
+
+    const noisy = api.get('/api/stalled-user', {}, { timeoutMs: 8000, retry: false })
+    const noisyRejection = expect(noisy).rejects.toThrow('请求超时（>8s）。该请求未成功。')
+    await vi.advanceTimersByTimeAsync(8000)
+    await noisyRejection
+    expect(document.getElementById('stability-notice')?.textContent).toBe('请求超时（>8s）。该请求未成功。')
+  })
 })
 
 describe('auth api module', () => {

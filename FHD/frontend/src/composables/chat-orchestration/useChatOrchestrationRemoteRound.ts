@@ -26,6 +26,9 @@ import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDelive
 import type { UiChatMessageExtras } from '@/types/chat-ui'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
 import { captureAuthSession, probeEnterpriseSession } from '@/utils/authSessionCache'
+import { noteModelPath } from '@/components/sidebar/modelPathHealth'
+import { modelOutcomeFromText, readChatExecution } from '@/components/chat/chatFailureRecovery'
+import type { PlannerChatOptions } from '../useChatRequest'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -115,8 +118,22 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
   }
   function responseExtras(payload: ChatPlannerPayload, failed = false): UiChatMessageExtras | undefined {
     const routeMetadata = readChatModelRoute(payload.route_metadata)
-    const extras = { ...(routeMetadata ? { routeMetadata } : {}), ...(failed ? { workflowAction: 'failed' } : {}), ...(responseCameFromCache(payload) ? { sameAsPrevious: true } : {}) }
+    const execution = readChatExecution(payload)
+    const extras = {
+      ...(routeMetadata ? { routeMetadata } : {}),
+      ...(failed ? { workflowAction: 'failed' } : {}),
+      ...(responseCameFromCache(payload) ? { sameAsPrevious: true } : {}),
+      ...(execution ? { execution } : {}),
+    }
     return Object.keys(extras).length ? extras : undefined
+  }
+
+  function observeModelOutcome(text: string, payload?: ChatPlannerPayload) {
+    const execution = readChatExecution(payload)
+    if (execution?.effect === 'preview') return
+    const outcome = modelOutcomeFromText(text)
+    if (outcome === 'degraded' || payload?.success === false) noteModelPath('degraded')
+    else if (outcome === 'healthy') noteModelPath('healthy')
   }
 
   /** 消费后端 state.update 事件（payload.data.data.state_updates），维护「步骤进度」UI 状态 */
@@ -156,7 +173,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     )
   }
 
-  async function executeRemoteChatRound(remoteMessages: string[], opts?: { fromWriteUnlock?: boolean }, scope?: ChatRequestScope) {
+  async function executeRemoteChatRound(remoteMessages: string[], opts?: PlannerChatOptions, scope?: ChatRequestScope) {
     if (!remoteMessages.length) return
     const requestScope = scope || { sessionId: sessionId.value, messages: [...messages.value] }
     if (!requestScope.isCurrent) Object.assign(requestScope, chatSessionActivity.beginRound(requestScope.sessionId))
@@ -356,17 +373,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       let doneResult: unknown = null
       let awaitingAuthorization = false
       let sseError: string | null = null
+      let failureExecution: ReturnType<typeof readChatExecution> = undefined
       let streamRunId = ''
       const ttsShouldSpeakThisMessage = ttsEnabled.value
       let receivedDone = false
       try {
-        const { body } = buildPlannerChatRequestPayload(
-          primaryForStream,
-          {
-            fromWriteUnlock: !!opts?.fromWriteUnlock,
-          },
-          requestScope,
-        )
+        const { body } = buildPlannerChatRequestPayload(primaryForStream, opts, requestScope)
         const res = await chatApi.sendChatStream(
           { ...body, message: String(body.message || primaryForStream) } as ChatRequest & Record<string, unknown>,
           { signal: controller.signal },
@@ -417,6 +429,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             consumeRoute(ev.route_metadata)
             streamRunId = ev.run_id || streamRunId
             sseError = String(ev.message || '流式接口错误')
+            failureExecution = readChatExecution(ev.result || ev) || failureExecution
           } else if (ev.type === 'requires_token') {
             awaitingAuthorization = true
             streamRunId = ev.run_id || streamRunId
@@ -445,11 +458,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         consumeRoute(donePayload.route_metadata)
         const finalText = collapseExactDuplicateReply(String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）')
         if (round.isActive()) {
-          if (responseCameFromCache(donePayload)) {
-            applyPlainTextToMessageIndex(msgIndex, finalText, { sameAsPrevious: true })
-          } else {
-            applyPlainTextToMessageIndex(msgIndex, finalText)
-          }
+          const extras = responseExtras(donePayload) || {}
+          if (responseCameFromCache(donePayload)) extras.sameAsPrevious = true
+          applyPlainTextToMessageIndex(msgIndex, finalText, extras)
+          observeModelOutcome(finalText, donePayload)
         }
         if (round.isActive() && ttsShouldSpeakThisMessage && ttsEnabled.value && donePayload.success !== false) {
           const clean = stripPlannerDisplayMarkers(finalText.replace(/（正在(?:将 Excel 导入数据库|生成 Word 文档|生成 Excel 工作簿|生成可下载文件)(?:[^（）]|（[^（）]*）)*）/g, '\n')).trim()
@@ -508,7 +520,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           const pendingText = err instanceof IncompletePlannerSseError
             ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] `
             : timedOut ? `${errText}\n` : ''
-          applyPlainTextToMessageIndex(msgIndex, `${presentation.status === 'unknown' ? pendingText : ''}${presentation.text}`)
+          const shown = `${presentation.status === 'unknown' ? pendingText : ''}${presentation.text}`
+          applyPlainTextToMessageIndex(msgIndex, shown, failureExecution ? { execution: failureExecution } : undefined)
+          observeModelOutcome(shown, failureExecution ? { execution: failureExecution } : undefined)
           if (streamMessage) {
             streamMessage.workflowAction = presentation.workflowAction
             delete streamMessage.streamingShell
@@ -519,7 +533,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           const visibleError = err instanceof IncompletePlannerSseError
             ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] ${errText}`
             : transport || (timedOut && streamRunId ? errText : `处理失败：${errText}`)
-          applyPlainTextToMessageIndex(msgIndex, visibleError)
+          applyPlainTextToMessageIndex(msgIndex, visibleError, failureExecution ? { execution: failureExecution } : undefined)
+          observeModelOutcome(visibleError, failureExecution ? { execution: failureExecution } : undefined)
           if (streamMessage) {
             streamMessage.workflowAction = 'failed'
             delete streamMessage.streamingShell
@@ -531,12 +546,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         if (round.isActive() && streamMessage) delete streamMessage.waitingHint
         if (round.isActive() && streamMessage?.streamingShell) {
           const leftover = streamPlain.trim()
-          applyPlainTextToMessageIndex(
-            msgIndex,
-            leftover
-              ? `${leftover}\n\n[回复未完成] 本轮回复已结束，但没有完成回执。请重试。`
-              : '处理失败：本轮回复已结束，但没有收到正文。请重试。',
-          )
+          const unfinished = leftover
+            ? `${leftover}\n\n[回复未完成] 本轮回复已结束，但没有完成回执。请重试。`
+            : '处理失败：本轮回复已结束，但没有收到正文。请重试。'
+          applyPlainTextToMessageIndex(msgIndex, unfinished, failureExecution ? { execution: failureExecution } : undefined)
+          observeModelOutcome(unfinished, failureExecution ? { execution: failureExecution } : undefined)
           streamMessage.workflowAction = 'failed'
           delete streamMessage.streamingShell
           delete streamMessage.waitingHint
@@ -567,14 +581,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const timeoutMs = Math.min(120000, remoteMessages.length <= 1 ? base : base * remoteMessages.length)
       let rawData: unknown
       if (remoteMessages.length === 1) {
-        rawData = await requestChatByModeWithTimeout(
-          remoteMessages[0],
-          timeoutMs,
-          {
-            fromWriteUnlock: !!opts?.fromWriteUnlock,
-          },
-          requestScope,
-        )
+        rawData = await requestChatByModeWithTimeout(remoteMessages[0], timeoutMs, opts, requestScope)
       } else {
         rawData = await requestChatByModeBatchWithTimeout(remoteMessages, timeoutMs, requestScope)
       }
@@ -668,6 +675,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         handleChatRequiresToken(data.token_name || '', data.token_description || '', remoteMessages)
       }
       await addRoundMessage(data.response || '', responseExtras(data))
+      observeModelOutcome(String(data.response || data.message || ''), data)
       if (!round.isActive()) return
       syncTaskFromChatResponse(data, primaryText)
       await syncAgentRunFromPayload(data, primaryText, isOwnerCurrent)
@@ -699,7 +707,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         maybeCloseAssistantFloatForShipmentTask(data.task, data.autoAction)
       }
     } else {
-      await addRoundMessage('处理失败: ' + (data.message || '未知错误'), responseExtras(data, true))
+      const failedText = '处理失败: ' + (data.message || '未知错误')
+      await addRoundMessage(failedText, responseExtras(data, true))
+      observeModelOutcome(failedText, data)
     }
   }
 

@@ -14,6 +14,8 @@
       <ChatMessageList
         :empty-intro="getIndustryPreset(currentIndustryId).scenario"
         @fill-example="fillComposer"
+        @retry-model="retryFailedModel"
+        @confirm-destructive="confirmDestructiveScope"
         :session-key="messageSessionKey"
         :proactive-suggestions="proactiveSuggestionsByMessage"
         @pick-proactive-suggestion="pickProactiveSuggestion"
@@ -340,6 +342,8 @@ const {
   taskTableItems,
   taskOrderNumber,
   sendMessage: chatSendMessage,
+  retryModelOnly,
+  confirmDestructive,
   stopReply,
   confirmWorkflowFromCard,
   cancelWorkflowFromCard,
@@ -405,6 +409,13 @@ const messageInput = ref('')
 function fillComposer(text: string) {
   messageInput.value = text
   document.getElementById('messageInput')?.focus()
+}
+function retryFailedModel(payload: { text: string; turnId: string }) {
+  messageInput.value = ''
+  void retryModelOnly(payload.text, payload.turnId)
+}
+function confirmDestructiveScope(payload: { text: string; idempotencyKey: string }) {
+  void confirmDestructive(payload.text, payload.idempotencyKey)
 }
 const composerDragOver = ref(false)
 let composerDragDepth = 0

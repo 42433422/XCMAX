@@ -14,7 +14,13 @@ export type ChatRequestScope = {
   turnId?: string
   taskId?: string
 }
-export type PlannerChatOptions = { fromWriteUnlock?: boolean; expectedWorkflowPlanId?: string }
+export type PlannerChatOptions = {
+  fromWriteUnlock?: boolean
+  expectedWorkflowPlanId?: string
+  retryOf?: string
+  idempotencyKey?: string
+  destructiveConfirmed?: boolean
+}
 
 export interface UseChatRequestDeps {
   messages: Ref<ChatMessage[]>
@@ -69,6 +75,8 @@ export function useChatRequest(deps: UseChatRequestDeps) {
         .trim()
         .slice(0, 80),
       ...(plannerOpts?.expectedWorkflowPlanId ? { expected_workflow_plan_id: plannerOpts.expectedWorkflowPlanId } : {}),
+      ...(plannerOpts?.retryOf ? { retry_of: plannerOpts.retryOf, idempotency_key: plannerOpts.idempotencyKey || plannerOpts.retryOf } : {}),
+      ...(plannerOpts?.destructiveConfirmed ? { destructive_confirmed: true, idempotency_key: plannerOpts.idempotencyKey || turnId } : {}),
     }
     // industry 由后端根据 session account_kind 自动派生（单一真相源），前端不传
     const contextParts: string[] = []

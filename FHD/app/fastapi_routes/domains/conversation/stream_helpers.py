@@ -221,6 +221,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
     llm_client = _facade().create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []
+    carried_execution: dict[str, Any] | None = None
     try:
         halted_for_write_token = False
         for ev in _facade()._xcagi_guarded_planner_stream_events(
@@ -240,6 +241,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 halted_for_write_token = True
                 break
             elif et == "done":
+                result = ev.get("result")
+                if isinstance(result, dict) and isinstance(result.get("execution"), dict):
+                    carried_execution = result["execution"]
                 continue
             else:
                 yield _facade()._sse_event_line(ev)
@@ -256,6 +260,11 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         else:
             done_reply = merged
         payload = _facade()._xcagi_compat_reply_payload(done_reply)
+        if carried_execution:
+            payload["execution"] = carried_execution
+            data = payload.get("data")
+            if isinstance(data, dict):
+                data["execution"] = carried_execution
         payload = _facade().attach_chat_trace_run(
             payload,
             message=body.message,

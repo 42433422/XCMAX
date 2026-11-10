@@ -8,6 +8,13 @@ from collections.abc import Iterable
 from types import SimpleNamespace
 from typing import Any
 
+from app.application.chat_turn_guard import (
+    chunk_display_text,
+    execution_for_context,
+    joined_display_text,
+    prepare_turn,
+    release_mutation_policy,
+)
 from app.domain.app_pure.document_employee_routing import forced_document_tool_choice
 from app.infrastructure.chat_stream_lifetime import check_stream_active, owned_model_read
 from app.infrastructure.llm.client import llm_client_scope
@@ -149,6 +156,21 @@ def _prepare_chat(user_message, runtime_context, system_prompt, client, model):
     return messages, has_image_input, cli, mdl, tools, tool_choice, backup_required
 
 
+def _message_display_text(message: Any) -> str:
+    return chunk_display_text(SimpleNamespace(message=message))
+
+
+def _with_execution(
+    payload: dict[str, Any],
+    runtime_context: dict[str, Any] | None,
+    execution: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    record = execution or execution_for_context(runtime_context)
+    if record and "execution" not in payload:
+        payload["execution"] = record
+    return payload
+
+
 def chat(
     user_message: str,
     *,
@@ -161,6 +183,38 @@ def chat(
     client: Any | None = None,
 ) -> Any:
     _facade().reset_planner_tool_dedup_state()
+    runtime_context = dict(runtime_context or {})
+    try:
+        if short := prepare_turn(user_message, runtime_context):
+            return short
+        result = _chat_after_guard(
+            user_message,
+            runtime_context=runtime_context,
+            system_prompt=system_prompt,
+            workspace_root=workspace_root,
+            max_iterations=max_iterations,
+            db_write_token=db_write_token,
+            model=model,
+            client=client,
+        )
+        if isinstance(result, dict):
+            _with_execution(result, runtime_context)
+        return result
+    finally:
+        release_mutation_policy()
+
+
+def _chat_after_guard(
+    user_message: str,
+    *,
+    runtime_context: dict[str, Any],
+    system_prompt: str | None,
+    workspace_root: str | None,
+    max_iterations: int | None,
+    db_write_token: str | None,
+    model: str | None,
+    client: Any | None,
+) -> Any:
     max_iterations = 8 if max_iterations is None else max_iterations
     messages, has_image_input, cli, mdl, tools, tool_choice, backup_required = _prepare_chat(
         user_message, runtime_context, system_prompt, client, model
@@ -222,12 +276,12 @@ def chat(
             continue
         if backup_required:
             raise RuntimeError(_BACKUP_NOT_EXECUTED)
-        result = str(msg.content or "").strip()
-        if has_image_input and (not result):
+        result = _message_display_text(msg)
+        if has_image_input and (not result.strip()):
             raise _facade().EmptyMultimodalResponseError(
                 f"模型 {mdl} 完成了图片处理请求，但没有返回可显示的正文。系统已停止重复空请求，请重试或切换视觉模型。"
             )
-        if not result:
+        if not result.strip():
             return _failed_reply(_EMPTY_RESPONSE, "planner_empty_response")
         full_response = result
         if tool_outputs:
@@ -254,6 +308,40 @@ def chat_stream_text(
     client: Any | None = None,
 ) -> Iterable[str | dict[str, Any]]:
     _facade().reset_planner_tool_dedup_state()
+    runtime_context = dict(runtime_context or {})
+    try:
+        if short := prepare_turn(user_message, runtime_context):
+            yield {
+                "_planner_sse": "turn_guard",
+                "text": short.get("response") or "",
+                "execution": short.get("execution"),
+            }
+            return
+        yield from _chat_stream_after_guard(
+            user_message,
+            runtime_context=runtime_context,
+            system_prompt=system_prompt,
+            workspace_root=workspace_root,
+            max_iterations=max_iterations,
+            db_write_token=db_write_token,
+            model=model,
+            client=client,
+        )
+    finally:
+        release_mutation_policy()
+
+
+def _chat_stream_after_guard(
+    user_message: str,
+    *,
+    runtime_context: dict[str, Any],
+    system_prompt: str | None,
+    workspace_root: str | None,
+    max_iterations: int | None,
+    db_write_token: str | None,
+    model: str | None,
+    client: Any | None,
+) -> Iterable[str | dict[str, Any]]:
     max_iterations = 8 if max_iterations is None else max_iterations
     messages, has_image_input, cli, mdl, tools, tool_choice, backup_required = _prepare_chat(
         user_message, runtime_context, system_prompt, client, model
@@ -281,9 +369,9 @@ def chat_stream_text(
                 delta = getattr(choice, "delta", None)
                 if delta is None:
                     continue
-                content = getattr(delta, "content", None)
+                content = chunk_display_text(choice)
                 if content:
-                    text_parts.append(str(content))
+                    text_parts.append(content)
                 tc_list = getattr(delta, "tool_calls", None) or []
                 if content or tc_list:
                     yield {"_planner_sse": "model_activity"}
@@ -388,7 +476,7 @@ def chat_stream_text(
         if backup_required:
             yield {"_planner_sse": "error", "message": _BACKUP_NOT_EXECUTED}
             return
-        if "".join(text_parts).strip():
+        if joined_display_text(text_parts):
             yield from text_parts
             return
         if has_image_input:
@@ -466,12 +554,17 @@ def chat_stream_sse_events(
                 yield {"type": "tool_progress", "phase": "running", "text": pending[:end]}
                 pending = pending[end:]
             elif final or len(pending) > 4096:
-                if pending in ("[", "【", "（"):
+                # An unfinished tool marker is not an answer. Any other buffered text is.
+                if any(prefix.startswith(pending) for prefix in prefixes):
+                    if pending in ("[", "【", "（"):
+                        yield {"type": "token", "text": pending}
+                else:
                     yield {"type": "token", "text": pending}
                 pending = ""
             else:
                 break
 
+    guard_execution = None
     with owned_model_read(
         _facade().chat_stream_text(
             user_message,
@@ -485,6 +578,10 @@ def chat_stream_sse_events(
         )
     ) as stream:
         for item in stream:
+            if isinstance(item, dict) and item.get("_planner_sse") == "turn_guard":
+                guard_execution = item.get("execution")
+                yield from consume(str(item.get("text") or ""))
+                continue
             if isinstance(item, str):
                 yield from consume(item)
                 continue
@@ -500,11 +597,16 @@ def chat_stream_sse_events(
                 }
                 continue
             if isinstance(item, dict) and item.get("_planner_sse") == "error":
+                reply = _with_execution(
+                    _failed_reply(item["message"], item.get("error") or "planner_failed"),
+                    runtime_context,
+                )
                 yield {
                     "type": "error",
                     "message": item["message"],
                     "error": item.get("error") or "planner_failed",
-                    "result": _failed_reply(item["message"], item.get("error") or "planner_failed"),
+                    "result": reply,
+                    "execution": reply.get("execution"),
                 }
                 return
             if isinstance(item, dict) and item.get("_planner_sse") == "requires_token":
@@ -522,4 +624,5 @@ def chat_stream_sse_events(
                 return
             yield {"type": "token", "text": str(item)}
         yield from consume("", final=True)
-    yield {"type": "done", "result": _facade()._attach_last_tool_records({})}
+    done = _with_execution(_facade()._attach_last_tool_records({}), runtime_context, guard_execution)
+    yield {"type": "done", "result": done}
