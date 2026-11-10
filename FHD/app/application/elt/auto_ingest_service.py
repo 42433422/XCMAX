@@ -887,6 +887,18 @@ class AutoIngestService:
                         message="业务写入失败或结果待核对；请核对已写入部分，勿重复提交",
                     ),
                 )
+            elif status == "preview_ready" and batch.get("error"):
+                # A refused write rolls the run back to preview. Keep the failure
+                # closed so a later read does not invite a second submission.
+                batch_status, progress = (
+                    "failed",
+                    _progress(
+                        "failed",
+                        0,
+                        message="业务写入未完成，请核对已写入部分，勿重复提交",
+                        error=str(batch.get("error") or "") or None,
+                    ),
+                )
             elif status == "preview_ready":
                 batch_status, progress = (
                     "awaiting_confirmation",

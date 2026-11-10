@@ -76,6 +76,36 @@ def _shipment_xlsx(path: Path) -> Path:
     return path
 
 
+def test_failed_batch_stays_failed_when_preview_rolls_back(ledger_root, monkeypatch):
+    from contextlib import nullcontext
+
+    fake = MagicMock()
+    fake.get_run.return_value = {
+        "id": "run-rolled-back",
+        "status": "preview_ready",
+        "progress": 100,
+        "summary": {},
+    }
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake)
+    monkeypatch.setattr("app.db.session.get_db", lambda: nullcontext(MagicMock()))
+    monkeypatch.setattr(ais, "get_request_active_mod_id", lambda: "")
+    batch = {
+        "batch_id": "aib-rolled-back",
+        "status": "awaiting_confirmation",
+        "tenant_id": 2,
+        "owner_user_id": 3,
+        "mod_id": "",
+        "error": "EltConflict",
+        "business": {"run_id": "run-rolled-back", "status": "preview_ready"},
+        "knowledge": {"action": "skip"},
+        "detection": {"target_type": "products"},
+    }
+    ais._save_ledger(2, {"batches": {"aib-rolled-back": dict(batch)}})
+    refreshed = AutoIngestService()._refresh_business(dict(batch))
+    assert refreshed["status"] == "failed"
+    assert refreshed["business_progress"]["stage"] == "failed"
+
+
 def test_confirmed_preview_target_waits_for_business_receipt(ledger_root, monkeypatch):
     service = AutoIngestService()
     fake = MagicMock()
@@ -256,6 +286,8 @@ def test_async_business_receipts_follow_actual_run_without_reexecution(
 ):
     from contextlib import nullcontext
 
+    clock = iter((0.0, 100.0))
+    monkeypatch.setattr(ais.time, "monotonic", lambda: next(clock, 100.0))
     fake = MagicMock()
     fake.save_upload.return_value = {"upload_id": "up-async"}
     fake.create_preview.return_value = {
