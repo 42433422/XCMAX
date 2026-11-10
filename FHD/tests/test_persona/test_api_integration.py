@@ -75,3 +75,17 @@ class TestApiPersonaIntegration:
             context_prompt="当前意图：查询",
         )
         assert "考勤管家" in prompt
+
+
+def test_persona_wiring_attaches_to_existing_conversation(monkeypatch):
+    from app.domain.shared_services.conversation import manager
+    from app.infrastructure.persona import conversation_wiring
+
+    service = manager.AIConversationService()
+    persona = object()
+    monkeypatch.setattr(manager, "_ai_conversation_service", service)
+    monkeypatch.setattr(manager, "_persona_factory", None)
+    monkeypatch.setattr(conversation_wiring, "_create_persona_service", lambda: persona)
+    conversation_wiring.wire_conversation_persona()
+    assert manager.get_ai_conversation_service() is service
+    assert service.persona_service is persona
