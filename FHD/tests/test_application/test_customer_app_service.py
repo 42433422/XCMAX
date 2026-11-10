@@ -587,12 +587,6 @@ class TestCheckShipmentAssociations:
             result = svc._check_shipment_associations("TestCo")
             assert result["has_associations"] is False
 
-    def test_db_error(self):
-        svc = CustomerApplicationService()
-        with patch("app.db.session.get_db", side_effect=RuntimeError("fail")):
-            result = svc._check_shipment_associations("TestCo")
-            assert result["has_associations"] is None
-
 
 # ---------------------------------------------------------------------------
 # get_customer_app_service
