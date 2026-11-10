@@ -98,6 +98,10 @@ def resolve_products(db: Session, order: dict[str, Any], tenant_id: int) -> list
                     "resolve_product", f"产品名匹配数为 {matches}（应为恰好 1）: {pname}"
                 )
             product = products[0]
+        if getattr(product, "is_active", 1) == 0:
+            raise ClosedLoopExecutionError(
+                "resolve_product", f"产品已停用，不能下单: {product.name}"
+            )
         unit = item.get("unit")
         if product.unit and product.unit != unit:
             raise ClosedLoopExecutionError(

@@ -296,6 +296,108 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
     assert params["_runtime_context"]["source"] == "approval-test"
 
 
+def test_approved_sales_step_continues_the_dependent_export():
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    repo = InMemoryAgentRunRepository()
+    plan = PlanGraph(
+        plan_id="sales-then-export",
+        intent="sales_write",
+        nodes=[
+            WorkflowNode(
+                node_id="sales_execute_closed_loop",
+                tool_id="sales",
+                action="execute_closed_loop",
+                params={"payload": {"order": {"customer_name": "测试客户 A"}}},
+                risk="high",
+                idempotent=True,
+            ),
+            WorkflowNode(
+                node_id="verify_sales_result",
+                tool_id="sales",
+                action="verify_closed_loop",
+                params={"payload": {"order": {"customer_name": "测试客户 A"}}},
+                risk="low",
+                idempotent=True,
+                depends_on=["sales_execute_closed_loop"],
+            ),
+            WorkflowNode(
+                node_id="export_sales",
+                tool_id="reports",
+                action="export",
+                params={"report_type": "sales"},
+                risk="low",
+                idempotent=True,
+                depends_on=["verify_sales_result"],
+            ),
+        ],
+    )
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value={"success": True, "message": "已完成"},
+    ) as mock_execute:
+        orchestrator = AgentOrchestrator(repository=repo)
+        waiting = orchestrator.start_run_from_plan(user_id="u1", message="销售后导出", plan=plan)
+        assert waiting.status == "waiting_user"
+        assert [step.status for step in waiting.steps] == ["waiting_user", "pending", "pending"]
+        assert waiting.steps[1].depends_on == ["sales_execute_closed_loop"]
+        assert waiting.steps[2].depends_on == ["verify_sales_result"]
+        mock_execute.assert_not_called()
+        completed = orchestrator.continue_run(
+            waiting.run_id,
+            approved_by="approver",
+            approved_step_id="sales_execute_closed_loop",
+        )
+
+    assert completed is not None
+    assert completed.status == "completed"
+    assert [step.status for step in completed.steps] == ["completed", "completed", "completed"]
+    assert [call.args[0:2] for call in mock_execute.call_args_list] == [
+        ("sales", "execute_closed_loop"),
+        ("sales", "verify_closed_loop"),
+        ("reports", "export"),
+    ]
+
+
+def test_changed_sale_quantity_cannot_reuse_the_approval():
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    repo = InMemoryAgentRunRepository()
+    plan = PlanGraph(
+        plan_id="sales-tamper",
+        intent="sales_write",
+        nodes=[
+            WorkflowNode(
+                node_id="sales_execute_closed_loop",
+                tool_id="sales",
+                action="execute_closed_loop",
+                params={"payload": {"order": {"items": [{"quantity": 10, "unit_price": 100}]}}},
+                risk="high",
+                idempotent=True,
+            )
+        ],
+    )
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value={"success": True},
+    ) as mock_execute:
+        orchestrator = AgentOrchestrator(repository=repo)
+        waiting = orchestrator.start_run_from_plan(user_id="u1", message="销售", plan=plan)
+        waiting.steps[0].params["payload"]["order"]["items"][0]["quantity"] = 99
+        repo.save(waiting)
+        refused = orchestrator.continue_run(
+            waiting.run_id, approved_by="approver", approved_step_id="sales_execute_closed_loop"
+        )
+    assert refused is not None
+    assert refused.status == "waiting_user"
+    assert mock_execute.call_count == 0
+    assert "approval.authorization_mismatch" in [event.event_type for event in refused.events]
+
+
 def test_agent_orchestrator_resumes_exact_pending_step_after_durable_snapshot():
     """Route confirmation survives a SQL-style pending snapshot race."""
     from app.application.agent_orchestrator import AgentOrchestrator

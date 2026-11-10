@@ -700,7 +700,14 @@ def _seed_approver_user(factory, username: str = "w1-10-approver") -> dict:
             existing = db.query(User).filter(User.username == username).first()
             if existing is not None:
                 return {"user_id": int(existing.id)}
-            user = User(username=username, password="x", display_name=username, is_active=True)
+            user = User(
+                username=username,
+                password="x",
+                display_name=username,
+                is_active=True,
+                role="admin",
+                tenant_id=1,
+            )
             db.add(user)
             db.commit()
             return {"user_id": int(user.id)}

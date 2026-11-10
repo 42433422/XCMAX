@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Protocol, cast
@@ -526,65 +525,64 @@ class WorkflowSession:
                     approval_requests: list[dict[str, Any]] = []
                     try:
                         from app.application.agent_orchestrator import AgentOrchestrator
-                        from app.application.workflow.workflow_types import PlanGraph
 
-                        for node_info in approval_nodes:
-                            node = None
-                            for n in pending_plan.nodes:
-                                if n.node_id == node_info.get("node_id"):
-                                    node = n
-                                    break
-                            if node:
-                                approved_node = copy.deepcopy(node)
-                                approved_node.depends_on = []
-                                approved_node.next = None
-                                approved_node.branches = []
-                                approved_plan = PlanGraph(
-                                    plan_id=f"{pending_plan.plan_id}:{node.node_id}",
-                                    intent=pending_plan.intent,
-                                    todo_steps=[
-                                        node.description or f"{node.tool_id}.{node.action}"
-                                    ],
-                                    nodes=[approved_node],
-                                    risk_level=node.risk,
-                                    metadata={
-                                        **dict(pending_plan.metadata or {}),
-                                        "approval_parent_plan_id": pending_plan.plan_id,
-                                        "approval_parent_node_id": node.node_id,
-                                    },
-                                )
-                                agent_run = AgentOrchestrator().start_run_from_plan(
-                                    user_id=self.callbacks._task_owner_id(user_id, runtime_ctx),
-                                    message=str(runtime_ctx.get("message") or message),
-                                    plan=approved_plan,
-                                    runtime_context=runtime_ctx,
-                                    auto_execute=True,
-                                )
-                                if agent_run.status != "waiting_user":
-                                    raise RuntimeError(
-                                        f"审批节点未进入安全等待态：{node.node_id} ({agent_run.status})"
-                                    )
-                                request = self.approval.create_approval_request(
-                                    plan_id=pending_plan.plan_id,
-                                    node=node,
-                                    runtime_context=runtime_ctx,
-                                    plan=approved_plan,
-                                    require_persistence=True,
-                                )
-                                request_id = str(request.request_id or "").strip()
-                                if not request_id:
-                                    raise RuntimeError("审批请求缺少请求号")
-                                self.approval.attach_pending_agent_run(
-                                    request_id,
-                                    agent_run_id=agent_run.run_id,
-                                    approved_step_id=approved_node.node_id,
-                                )
-                                approval_request_ids.append(request_id)
-                                metadata = self.approval.get_request_metadata(request_id) or {
-                                    "request_no": request_id
-                                }
-                                metadata["agent_run_id"] = agent_run.run_id
-                                approval_requests.append(metadata)
+                        # 审批只暂停当前节点。原计划、依赖和后续步骤留在同一次运行里。
+                        agent_run = AgentOrchestrator().start_run_from_plan(
+                            user_id=self.callbacks._task_owner_id(user_id, runtime_ctx),
+                            message=str(runtime_ctx.get("message") or message),
+                            plan=pending_plan,
+                            runtime_context=runtime_ctx,
+                            auto_execute=True,
+                        )
+                        if agent_run.status != "waiting_user":
+                            raise RuntimeError(
+                                f"审批计划未进入安全等待态：{pending_plan.plan_id} ({agent_run.status})"
+                            )
+                        approval_ids = {
+                            str(item.get("node_id") or "")
+                            for item in approval_nodes
+                            if isinstance(item, dict)
+                        }
+                        waiting_steps = [
+                            step
+                            for step in list(getattr(agent_run, "steps", []) or [])
+                            if getattr(step, "status", "") == "waiting_user"
+                            and str(getattr(step, "node_id", "") or "") in approval_ids
+                        ]
+                        if len(waiting_steps) != 1:
+                            raise RuntimeError("审批计划没有唯一等待授权的原计划节点")
+                        waiting = waiting_steps[0]
+                        node = next(
+                            (
+                                item
+                                for item in pending_plan.nodes
+                                if item.node_id == waiting.node_id
+                            ),
+                            None,
+                        )
+                        if node is None:
+                            raise RuntimeError(f"等待授权的节点不在原计划中：{waiting.node_id}")
+                        request = self.approval.create_approval_request(
+                            plan_id=pending_plan.plan_id,
+                            node=node,
+                            runtime_context=runtime_ctx,
+                            plan=pending_plan,
+                            require_persistence=True,
+                        )
+                        request_id = str(request.request_id or "").strip()
+                        if not request_id:
+                            raise RuntimeError("审批请求缺少请求号")
+                        self.approval.attach_pending_agent_run(
+                            request_id,
+                            agent_run_id=agent_run.run_id,
+                            approved_step_id=node.node_id,
+                        )
+                        approval_request_ids.append(request_id)
+                        metadata = self.approval.get_request_metadata(request_id) or {
+                            "request_no": request_id
+                        }
+                        metadata["agent_run_id"] = agent_run.run_id
+                        approval_requests.append(metadata)
                     except RuntimeError:
                         self.pending.pop(user_id, None)
                         return _control_reply(

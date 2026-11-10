@@ -209,6 +209,16 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
     if template_preview:
         return {"intent": "unknown", "slots": {}}
     if any(k in text for k in ("出货", "发货", "送货")):
+        staged_sale = ports.sales_write(text)
+        if (
+            isinstance(staged_sale, dict)
+            and staged_sale.get("acceptance_profile") == "sales-order-v1"
+        ):
+            return {
+                "intent": "sales_write",
+                "action": "execute_closed_loop",
+                "payload": staged_sale,
+            }
         return {"intent": "workflow", "slots": {}}
     sales_write_payload = ports.sales_write(text)
     if sales_write_payload is not None:

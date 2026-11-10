@@ -24,18 +24,33 @@ from tests.test_application.ai_chat_test_helpers import (
 )
 
 
-def test_approval_child_preserves_exact_parent_link_without_mutating_parent():
+def test_confirmation_keeps_original_plan_and_authorizes_only_the_waiting_node():
+    from app.application.agent_orchestrator.run_models import AgentStep
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
-    node = WorkflowNode(
-        node_id="sales_create_order",
+    sale = WorkflowNode(
+        node_id="sales_execute_closed_loop",
         tool_id="sales",
-        action="create_order",
+        action="execute_closed_loop",
         params={"quantity": 2},
         risk="high",
+        idempotent=True,
+        next="export_sales",
+    )
+    export = WorkflowNode(
+        node_id="export_sales",
+        tool_id="reports",
+        action="export",
+        params={"report_type": "sales"},
+        risk="low",
+        idempotent=True,
+        depends_on=["sales_execute_closed_loop"],
     )
     parent = PlanGraph(
-        plan_id="wp-session:original", intent="sales", nodes=[node], metadata={"keep": "original"}
+        plan_id="wp-session:original",
+        intent="sales_write",
+        nodes=[sale, export],
+        metadata={"keep": "original"},
     )
     svc = object.__new__(AIChatApplicationService)
     svc._pending_workflows = {
@@ -43,7 +58,10 @@ def test_approval_child_preserves_exact_parent_link_without_mutating_parent():
             "plan": parent,
             "runtime_context": {"local_user_id": 41},
             "approval_required": True,
-            "approval_nodes": [{"node_id": node.node_id}],
+            "approval_nodes": [
+                {"node_id": sale.node_id},
+                {"node_id": export.node_id},
+            ],
         }
     }
     svc.approval_service = Mock()
@@ -53,18 +71,46 @@ def test_approval_child_preserves_exact_parent_link_without_mutating_parent():
     svc.approval_service.get_request_metadata.return_value = {"request_no": "APR-parent"}
     orchestrator = Mock()
     orchestrator.start_run_from_plan.return_value = SimpleNamespace(
-        status="waiting_user", run_id="run-child"
+        status="waiting_user",
+        run_id="run-original",
+        steps=[
+            AgentStep(
+                node_id=sale.node_id,
+                tool_id=sale.tool_id,
+                action=sale.action,
+                status="waiting_user",
+            ),
+            AgentStep(
+                node_id=export.node_id,
+                tool_id=export.tool_id,
+                action=export.action,
+                status="pending",
+                depends_on=[sale.node_id],
+            ),
+        ],
     )
     with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
         handled, response = svc._resume_pending_dynamic_workflow(
             "web_normal_session", "确认", "确认"
         )
     assert handled and response["success"]
-    child = orchestrator.start_run_from_plan.call_args.kwargs["plan"]
-    assert child.metadata["approval_parent_plan_id"] == parent.plan_id
-    assert child.metadata["approval_parent_node_id"] == node.node_id
-    assert child.plan_id == f"{parent.plan_id}:{node.node_id}"
-    assert svc.approval_service.create_approval_request.call_args.kwargs["plan"] is child
+    assert orchestrator.start_run_from_plan.call_count == 1
+    started = orchestrator.start_run_from_plan.call_args.kwargs["plan"]
+    assert started is parent
+    assert [node.node_id for node in started.nodes] == [
+        "sales_execute_closed_loop",
+        "export_sales",
+    ]
+    assert started.nodes[0].depends_on == []
+    assert started.nodes[0].next == "export_sales"
+    assert started.nodes[1].depends_on == ["sales_execute_closed_loop"]
+    approval = svc.approval_service.create_approval_request.call_args.kwargs
+    assert approval["plan"] is parent
+    assert approval["plan_id"] == parent.plan_id
+    assert approval["node"] is sale
+    svc.approval_service.attach_pending_agent_run.assert_called_once_with(
+        "APR-parent", agent_run_id="run-original", approved_step_id=sale.node_id
+    )
     assert parent.metadata == {"keep": "original"}
     assert "web_normal_session" not in svc._pending_workflows
 
@@ -544,7 +590,11 @@ class TestTryHandleDynamicWorkflowEdge:
             "approval_required": True,
             "approval_nodes": [{"node_id": "approval_node", "tool_id": "db", "action": "write"}],
         }
-        waiting_run = SimpleNamespace(status="waiting_user", run_id="run-approval-1")
+        waiting_run = SimpleNamespace(
+            status="waiting_user",
+            run_id="run-approval-1",
+            steps=[SimpleNamespace(status="waiting_user", node_id="approval_node")],
+        )
         with (
             patch.object(svc.approval_service, "create_approval_request") as mock_create,
             patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_orchestrator,
