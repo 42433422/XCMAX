@@ -1011,6 +1011,8 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
         assert "product_source_node" not in payload
         assert payload["products"][0]["tin_spec"] == 1
         assert payload["products"][0]["unit_price"] == 99
+        frozen = waiting.metadata["plan"]["nodes"][-1]
+        assert frozen["params"] == waiting.steps[-1].params
         assert [call.node_id for call in waiting.tool_calls] == ["find_customer", "find_product"]
         run = orchestrator.continue_run(waiting.run_id, approved_by="u1")
 

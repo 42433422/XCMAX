@@ -26,7 +26,7 @@ from tests.test_application.ai_chat_test_helpers import (
 
 def test_confirmation_keeps_original_plan_and_authorizes_only_the_waiting_node():
     from app.application.agent_orchestrator.run_models import AgentStep
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 
     sale = WorkflowNode(
         node_id="sales_execute_closed_loop",
@@ -69,10 +69,13 @@ def test_confirmation_keeps_original_plan_and_authorizes_only_the_waiting_node()
         request_id="APR-parent"
     )
     svc.approval_service.get_request_metadata.return_value = {"request_no": "APR-parent"}
+    frozen = plan_to_dict(parent)
+    frozen["nodes"][0]["params"] = {"quantity": 3}
     orchestrator = Mock()
     orchestrator.start_run_from_plan.return_value = SimpleNamespace(
         status="waiting_user",
         run_id="run-original",
+        metadata={"plan": frozen},
         steps=[
             AgentStep(
                 node_id=sale.node_id,
@@ -105,9 +108,11 @@ def test_confirmation_keeps_original_plan_and_authorizes_only_the_waiting_node()
     assert started.nodes[0].next == "export_sales"
     assert started.nodes[1].depends_on == ["sales_execute_closed_loop"]
     approval = svc.approval_service.create_approval_request.call_args.kwargs
-    assert approval["plan"] is parent
+    assert plan_to_dict(approval["plan"]) == frozen
+    assert approval["node"].params == {"quantity": 3}
+    assert parent.nodes[0].params == {"quantity": 2}
     assert approval["plan_id"] == parent.plan_id
-    assert approval["node"] is sale
+    assert approval["node"].node_id == sale.node_id
     svc.approval_service.attach_pending_agent_run.assert_called_once_with(
         "APR-parent", agent_run_id="run-original", approved_step_id=sale.node_id
     )
@@ -576,7 +581,7 @@ class TestTryHandleDynamicWorkflowEdge:
         mock_start.assert_called_once()
 
     def test_pending_workflow_confirm_with_approval_required(self):
-        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 
         svc = _make_svc()
         plan = PlanGraph(
@@ -593,6 +598,7 @@ class TestTryHandleDynamicWorkflowEdge:
         waiting_run = SimpleNamespace(
             status="waiting_user",
             run_id="run-approval-1",
+            metadata={"plan": plan_to_dict(plan)},
             steps=[SimpleNamespace(status="waiting_user", node_id="approval_node")],
         )
         with (

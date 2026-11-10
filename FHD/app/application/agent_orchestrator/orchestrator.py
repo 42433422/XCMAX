@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from typing import Any, cast
 
 from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
@@ -631,6 +632,12 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 return
             step_is_approved = bool(approved and approved in {step.step_id, step.node_id})
             if not self._can_auto_execute(step) and (not step_is_approved):
+                # Freeze the concrete values shown for this approval after reference resolution.
+                stored = run.metadata.get("plan")
+                nodes = stored.get("nodes", []) if isinstance(stored, dict) else []
+                node = next((item for item in nodes if item.get("node_id") == step.node_id), None)
+                if node is not None:
+                    node["params"] = deepcopy(step.params)
                 step.status = "waiting_user"
                 run.status = "waiting_user"
                 run.add_event(

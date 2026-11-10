@@ -8,6 +8,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
+from app.db.models.inventory import InventoryLedger, InventoryTransaction
+from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.domain.shared_services.inventory_service")
@@ -210,11 +212,11 @@ class InventoryOrdersMixin:
 
         def _run(db):
             ledger = (
-                db.query(_facade().InventoryLedger)
+                db.query(InventoryLedger)
                 .filter(
-                    _facade().InventoryLedger.product_id == product_id,
-                    _facade().InventoryLedger.warehouse_id == warehouse_id,
-                    _facade().InventoryLedger.batch_no == batch_no,
+                    InventoryLedger.product_id == product_id,
+                    InventoryLedger.warehouse_id == warehouse_id,
+                    InventoryLedger.batch_no == batch_no,
                 )
                 .first()
             )
@@ -228,7 +230,7 @@ class InventoryOrdersMixin:
             ledger.available_quantity = Decimal(str(ledger.available_quantity or 0)) + qty
             ledger.updated_at = now
             db.flush()
-            txn = _facade().InventoryTransaction(
+            txn = InventoryTransaction(
                 ledger_id=ledger.id,
                 transaction_type="release",
                 product_id=product_id,
@@ -259,7 +261,7 @@ class InventoryOrdersMixin:
 
         if db is not None:
             return cast("dict[str, Any]", _run(db))
-        with _facade().get_db() as db:
+        with get_db() as db:
             try:
                 result = _run(db)
                 if result["success"]:
@@ -267,7 +269,7 @@ class InventoryOrdersMixin:
                 return cast("dict[str, Any]", result)
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("释放预留失败: %s", e)
+                logger.error("释放预留失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def restock_for_order(

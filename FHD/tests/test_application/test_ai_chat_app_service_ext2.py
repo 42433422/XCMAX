@@ -856,7 +856,10 @@ class TestTryHandleDynamicWorkflowExtended:
             "approval_nodes": [{"node_id": "n1", "tool_id": "products", "action": "create"}],
         }
         approval_request = Mock(request_id="approval-1")
+        from app.application.workflow.workflow_types import plan_to_dict
+
         agent_run = Mock(
+            metadata={"plan": plan_to_dict(mock_plan)},
             run_id="run-1",
             status="waiting_user",
             steps=[Mock(status="waiting_user", node_id="n1")],

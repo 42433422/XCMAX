@@ -552,10 +552,16 @@ class WorkflowSession:
                         if len(waiting_steps) != 1:
                             raise RuntimeError("审批计划没有唯一等待授权的原计划节点")
                         waiting = waiting_steps[0]
+                        from app.application.workflow.workflow_types import plan_from_dict
+
+                        frozen = agent_run.metadata.get("plan")
+                        approval_plan = plan_from_dict(frozen) if isinstance(frozen, dict) else None
+                        if approval_plan is None:
+                            raise RuntimeError("审批计划快照缺失")
                         node = next(
                             (
                                 item
-                                for item in pending_plan.nodes
+                                for item in approval_plan.nodes
                                 if item.node_id == waiting.node_id
                             ),
                             None,
@@ -566,7 +572,7 @@ class WorkflowSession:
                             plan_id=pending_plan.plan_id,
                             node=node,
                             runtime_context=runtime_ctx,
-                            plan=pending_plan,
+                            plan=approval_plan,
                             require_persistence=True,
                         )
                         request_id = str(request.request_id or "").strip()
