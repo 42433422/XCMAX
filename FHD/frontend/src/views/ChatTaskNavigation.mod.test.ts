@@ -147,7 +147,7 @@ describe('shipped chat Mod task navigation', () => {
       expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toBe('')
       expect(chatApi.sendMessage).not.toHaveBeenCalled()
       expect(chatApi.retryModelOnly).toHaveBeenCalledWith('仅回答测试', 'test-turn')
-      expect(wrapper!.get('[data-testid="chat-error-recovery"]').text()).toContain('本次没有提交业务写入')
+      expect(wrapper!.get('[data-testid="chat-error-recovery"]').text()).toContain('原任务的写入状态未确认')
       expect(wrapper!.text()).not.toContain('已执行的业务操作不会撤销')
       expect(wrapper!.text()).not.toContain('查看模型状态')
     },
