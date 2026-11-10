@@ -1004,6 +1004,33 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 code = str(denial.get("error_code") or "tool_permission_denied")
                 run.status, run.error = "blocked", str(denial.get("message") or "权限校验失败")
                 unsafe = _mark_prior_effects_for_reconciliation(run, code)
+                # Preflight denial is a non-execution receipt, not a generic
+                # tool failure. Never overwrite an already executed receipt.
+                reason = str(denial.get("reason") or code)
+                if step.status in {"pending", "waiting_user"}:
+                    step.error = run.error
+                    step.output = {
+                        "success": False,
+                        "error_code": code,
+                        "reason": reason,
+                        "message": run.error,
+                        "user_id": str(runtime_context.get("user_id") or ""),
+                        "tool_id": node.tool_id,
+                        "action": node.action,
+                        "task_id": run.run_id,
+                    }
+                run.add_event(
+                    "tool.permission_denied",
+                    run.error,
+                    {
+                        "step_id": step.step_id,
+                        "tool_id": node.tool_id,
+                        "action": node.action,
+                        "reason": reason,
+                        "user_id": str(runtime_context.get("user_id") or ""),
+                        "execution_started": False,
+                    },
+                )
                 run.add_event(
                     "workflow.plan_audit_rejected",
                     "完整计划权限预检未通过，未执行任何节点",

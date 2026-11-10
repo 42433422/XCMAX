@@ -140,7 +140,6 @@ class TestMergeToolRuntimeContext:
         with tenant_scope(1):
             result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
         assert result == {
-            "user_id": "u1",
             "conversation_id": "u1",
             "message": "hello",
             "tenant_id": "1",
@@ -154,7 +153,6 @@ class TestMergeToolRuntimeContext:
                 "u1", "hello", "not a dict"
             )
         assert result == {
-            "user_id": "u1",
             "conversation_id": "u1",
             "message": "hello",
             "tenant_id": "1",
@@ -183,46 +181,6 @@ class TestMergeToolRuntimeContext:
         ctx = {"last_excel_analysis_context": last_ea}
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "msg", ctx)
         assert result["last_excel_analysis_context"] == last_ea
-
-
-class TestBuildFallbackResponse:
-    """Cover _build_fallback_response."""
-
-    def test_greeting_message(self) -> None:
-        result = AIChatApplicationService._build_fallback_response("你好", "service down")
-        assert result["success"] is False
-        assert result["message"] == "service down"
-        assert "平台模型未能完成本次回复" in result["response"]
-        assert result["data"]["action"] == "error_fallback"
-        assert result["data"]["data"]["fallback_mode"] is True
-
-    def test_default_message(self) -> None:
-        result = AIChatApplicationService._build_fallback_response("查询产品", "service down")
-        assert result["success"] is False
-        assert "service down" in result["response"]
-        assert result["data"]["action"] == "error_fallback"
-
-    def test_empty_message(self) -> None:
-        result = AIChatApplicationService._build_fallback_response("", "err")
-        assert result["success"] is False
-        assert result["data"]["data"]["original_message"] == ""
-
-    def test_none_message(self) -> None:
-        result = AIChatApplicationService._build_fallback_response(None, "err")  # type: ignore[arg-type]
-        assert result["data"]["data"]["original_message"] == ""
-
-    def test_hello_triggers_greeting(self) -> None:
-        result = AIChatApplicationService._build_fallback_response("hello there", "err")
-        assert "平台模型未能完成本次回复" in result["response"]
-
-    def test_hi_triggers_greeting(self) -> None:
-        result = AIChatApplicationService._build_fallback_response("hi", "err")
-        assert "平台模型未能完成本次回复" in result["response"]
-
-    def test_original_message_truncated(self) -> None:
-        long_msg = "x" * 200
-        result = AIChatApplicationService._build_fallback_response(long_msg, "err")
-        assert len(result["data"]["data"]["original_message"]) <= 100
 
 
 class TestIsNumberText:
@@ -475,34 +433,6 @@ class TestExcelAnalysisPayloadPresent:
     def test_grid_preview_single_row_returns_false(self) -> None:
         ctx = {"excel_analysis": {"preview_data": {"grid_preview": {"rows": [[1]]}}}}
         assert AIChatApplicationService._excel_analysis_payload_present(ctx) is False
-
-
-class TestLooksLikeShortExcelImportCommand:
-    """Cover _looks_like_short_excel_import_command."""
-
-    def test_exact_command(self) -> None:
-        assert AIChatApplicationService._looks_like_short_excel_import_command("加入数据库") is True
-
-    def test_exact_command_ku(self) -> None:
-        assert AIChatApplicationService._looks_like_short_excel_import_command("入库") is True
-
-    def test_containing_command(self) -> None:
-        assert (
-            AIChatApplicationService._looks_like_short_excel_import_command("请加入数据库") is True
-        )
-
-    def test_long_text_returns_false(self) -> None:
-        long_text = "x" * 50 + "加入数据库"
-        assert AIChatApplicationService._looks_like_short_excel_import_command(long_text) is False
-
-    def test_empty_returns_false(self) -> None:
-        assert AIChatApplicationService._looks_like_short_excel_import_command("") is False
-
-    def test_none_returns_false(self) -> None:
-        assert AIChatApplicationService._looks_like_short_excel_import_command(None) is False  # type: ignore[arg-type]
-
-    def test_unrelated_text_returns_false(self) -> None:
-        assert AIChatApplicationService._looks_like_short_excel_import_command("查询产品") is False
 
 
 class TestRowValuesLookLikeTableHeaders:
@@ -1808,3 +1738,58 @@ class TestImportOrdersPreviewOrExecute:
         )
         parsed = json.loads(result)
         assert parsed["success"] is True
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "你好",
+        "查询产品",
+        "",
+        None,
+        "hello there",
+        "hi",
+        "x" * 200,
+        "导入",
+        "导入Excel",
+        "导入到数据库",
+        "写入数据库",
+        "帮我导入数据",
+        "说明表格",
+        "普通消息",
+    ],
+)
+def test_unified_public_chat_never_turns_model_failure_or_import_words_into_success(message):
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from tests.test_application.ai_chat_test_helpers import _make_svc
+
+    completion = MagicMock(return_value=None)
+    svc = _make_svc()
+    svc.workflow_planner = LLMWorkflowPlanner(
+        ai_service=MagicMock(get_context=MagicMock(return_value=None)), completion=completion
+    )
+    with (
+        patch.object(svc, "_persist_chat_turn"),
+        patch.object(svc, "_persist_recallable_chat_turn"),
+        patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
+        patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
+    ):
+        result = svc.process_chat("u1", message, source="pro")
+    assert result["success"] is False
+    assert not result.get("toolCall")
+    assert not svc._pending_workflows
+    if message:
+        completion.assert_called_once()
+        assert result["data"]["execution_started"] is False
+    else:
+        completion.assert_not_called()
+
+
+@pytest.mark.parametrize("source", ["pro", "normal", "admin", "user:7"])
+def test_source_never_supplies_authenticated_identity(source):
+    result = AIChatApplicationService._merge_tool_runtime_context(
+        "conversation-only", "查询", {"source": source}
+    )
+    assert "user_id" not in result
+    assert "_actor_authorization" not in result
+    assert result["conversation_id"] == "conversation-only"

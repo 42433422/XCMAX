@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import io
 import json
+import time
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import Request
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
 
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.workflow.workflow_types import PlanGraph
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 ISSUE_MESSAGE = "客户闭环验收客户 发货单：客户闭环测试商品A 数量24 单价3.5"
 
@@ -26,6 +30,28 @@ def _request() -> Request:
             "client": ("127.0.0.1", 12345),
         }
     )
+
+
+@pytest.fixture(autouse=True)
+def authenticated_stream(monkeypatch, trusted_actor, tmp_path):
+    from evals.run_agent_eval import _isolated_task_execution_queue
+
+    actor = trusted_actor(user_id=2067, tenant_id=7, role="admin", permissions=[])
+    original_request = _request
+
+    def request():
+        scope = dict(original_request().scope)
+        scope["headers"] = [(k.lower().encode(), v.encode()) for k, v in actor.headers.items()]
+        return Request(scope)
+
+    monkeypatch.setattr(__name__ + "._request", request)
+    with _isolated_task_execution_queue(tmp_path):
+        yield actor
+
+
+def _body(**kwargs):
+    kwargs.setdefault("mode", "online")
+    return chat_helpers.XcagiCompatChatBody(**kwargs)
 
 
 def _events(raw: bytes) -> list[dict[str, Any]]:
@@ -84,9 +110,7 @@ def test_stream_entry_stages_order_with_explicit_quantity_and_price(monkeypatch)
     monkeypatch.setattr(
         "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm", lambda *_args: plan
     )
-    body = chat_helpers.XcagiCompatChatBody(
-        message=ISSUE_MESSAGE.replace("数量24", "数量24kg"), user_id="u-2067"
-    )
+    body = _body(message=ISSUE_MESSAGE.replace("数量24", "数量24kg"), user_id="u-2067")
     with patch("app.bootstrap.get_shipment_app_service", return_value=shipment_svc):
         events = _events(
             b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
@@ -114,7 +138,7 @@ def test_stream_entry_hands_shipment_to_the_same_chat_service(
     service = MagicMock(_pending_workflows={})
     service.process_chat.return_value = {"success": True, "response": "已生成发货单"}
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
-    body = chat_helpers.XcagiCompatChatBody(message=message, user_id="u-2067")
+    body = _body(message=message, user_id="u-2067")
     raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
 
     service.process_chat.assert_called_once()
@@ -130,16 +154,43 @@ def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, cas
     _no_llm(monkeypatch)
     service = AIChatApplicationService()
     monkeypatch.setattr(service, "_hydrate_pending_workflow", lambda *_a: False)
+    from app.application.agent_task_context import scoped_conversation_user_id
+    from app.application.workflow.workflow_types import WorkflowNode
+
+    runtime = chat_helpers._runtime_context_with_authenticated_actor(
+        _request(), {"session_id": "s"}
+    )
+    owner_key = scoped_conversation_user_id("u-cancel", runtime)
+    valid = PlanGraph(
+        "pending-control",
+        "fixture",
+        nodes=[
+            WorkflowNode(
+                node_id="generate",
+                tool_id="shipment_orders",
+                action="generate",
+                params={
+                    "unit_name": "客户",
+                    "products": [{"name": "商品", "quantity": 1, "unit": "kg", "unit_price": 1}],
+                },
+            )
+        ],
+    )
     if case != "absent":
-        service._pending_workflows["u-cancel"] = {
+        service._pending_workflows[owner_key] = {
             "plan": {}
             if case == "corrupt"
             else PlanGraph("empty", "fixture")
             if case == "empty"
-            else None,
-            "runtime_context": {"session_id": "other" if case == "cross_session" else "s"},
+            else None
+            if case == "missing"
+            else valid,
+            "runtime_context": {
+                **runtime,
+                "session_id": "other" if case == "cross_session" else "s",
+            },
             "kind": "clarification" if case == "expired" else "workflow",
-            "created_at": 1.0,
+            "created_at": 1.0 if case == "expired" else time.time(),
             "ttl_seconds": 30,
         }
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
@@ -148,9 +199,7 @@ def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, cas
     monkeypatch.setattr(
         "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm", execute
     )
-    body = chat_helpers.XcagiCompatChatBody(
-        message=message, user_id="u-cancel", context={"session_id": "s"}
-    )
+    body = _body(message=message, user_id="u-cancel", context={"session_id": "s"})
     result = _events(
         b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
     )[-1]["result"]
@@ -159,7 +208,7 @@ def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, cas
     assert (
         not service._pending_workflows
         if case in {"absent", "expired"}
-        else "u-cancel" in service._pending_workflows
+        else owner_key in service._pending_workflows
     )
 
 
@@ -189,7 +238,7 @@ def test_stream_missing_spec_requests_clarification_without_document(monkeypatch
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     generator = MagicMock()
     shipment = ShipmentApplicationService(MagicMock(), generator, MagicMock())
-    body = chat_helpers.XcagiCompatChatBody(message=ISSUE_MESSAGE, user_id="u-2292")
+    body = _body(message=ISSUE_MESSAGE, user_id="u-2292")
     with patch("app.bootstrap.get_shipment_app_service", return_value=shipment):
         raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
     result = _events(raw)[-1]["result"]
@@ -205,7 +254,7 @@ def test_stream_fact_and_version_use_same_mainline(monkeypatch, message):
     service = MagicMock(_pending_workflows={})
     service.process_chat.return_value = {"success": True, "response": "同一套对话规则"}
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
-    body = chat_helpers.XcagiCompatChatBody(message=message, user_id="u-fact", mode="online")
+    body = _body(message=message, user_id="u-fact", mode="online")
     result = _events(
         b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
     )[-1]["result"]
@@ -213,15 +262,87 @@ def test_stream_fact_and_version_use_same_mainline(monkeypatch, message):
     assert result["response"] == "同一套对话规则"
 
 
-@pytest.mark.parametrize("key", ["file_context", "file_analysis"])
-def test_stream_mainline_receives_the_same_file_context_as_json(monkeypatch, key):
-    _no_llm(monkeypatch)
-    service = MagicMock(_pending_workflows={})
-    service.process_chat.return_value = {"success": True, "response": "收到附件"}
+@pytest.mark.parametrize("endpoint", ["/api/ai/chat", "/api/ai/chat/stream"])
+def test_mainline_uses_owned_upload_not_caller_file_path(
+    monkeypatch,
+    tmp_path,
+    authenticated_stream,
+    endpoint,
+):
+    from app.application.elt.service_uploads import UploadServiceMixin
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.db.models.elt import EltUpload
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.legacy.routes.conversation.compat_routes import router
+
+    actor = authenticated_stream
+    secret = tmp_path / "not-an-upload.txt"
+    secret.write_text("PRIVATE_LOCAL_CONTENT_MUST_NOT_BE_READ", encoding="utf-8")
+    seen = []
+
+    def completion(**kwargs):
+        seen.append(kwargs["context"])
+        return {
+            "choices": [
+                {"message": {"content": json.dumps({"mode": "reply", "reply": "已查看附件"})}}
+            ]
+        }
+
+    service = AIChatApplicationService()
+    service.workflow_planner = LLMWorkflowPlanner(completion=completion)
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
-    file_data = {"filename": "测试表.xlsx", "columns": ["客户", "产品"]}
-    body = chat_helpers.XcagiCompatChatBody(
-        message="刚才说的客户总数是多少？", user_id="u-file", context={key: file_data}
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        "app.application.elt.service_uploads.get_app_data_dir", lambda: str(tmp_path)
     )
-    _ = list(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
-    assert service.process_chat.call_args.kwargs["file_context"] == file_data
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+    with tenant_scope(7), actor.factory.begin() as db:
+        upload = UploadServiceMixin().save_upload(
+            db,
+            owner_user_id=2067,
+            file_name="prices.csv",
+            content_type="text/csv",
+            stream=io.BytesIO(b"product,price\npaint,3.5\n"),
+        )
+    with TestClient(app, headers=actor.headers) as client:
+        response = client.post(
+            endpoint,
+            json={
+                "message": "Summarize attached prices.",
+                "mode": "online",
+                "context": {"attachment_upload_ids": [upload["upload_id"]]},
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert len(seen) == 1
+        assert "paint" in seen[0]["file_context"]["verified_uploads"][0]["text"]
+        assert "已查看附件" in response.text
+        with tenant_scope(7), actor.factory.begin() as db:
+            db.query(EltUpload).filter(EltUpload.id == upload["upload_id"]).one().owner_user_id = 99
+        denied = client.post(
+            endpoint,
+            json={
+                "message": "Read the attachment.",
+                "mode": "online",
+                "context": {"attachment_upload_ids": [upload["upload_id"]]},
+            },
+        )
+        assert "attachment_reupload_required" in denied.text
+        assert len(seen) == 1
+        raw_path = client.post(
+            endpoint,
+            json={
+                "message": "Explain the attached document.",
+                "mode": "online",
+                "context": {
+                    "file_analysis": {"file_path": str(secret)},
+                    "file_context": {"file_path": str(secret)},
+                },
+            },
+        )
+        assert raw_path.status_code == 200, raw_path.text
+        assert len(seen) == 2
+        assert "PRIVATE_LOCAL_CONTENT_MUST_NOT_BE_READ" not in str(seen[-1])
+        assert "verified_uploads" not in str(seen[-1].get("file_context", {}))
+        assert "owned_upload" not in raw_path.text

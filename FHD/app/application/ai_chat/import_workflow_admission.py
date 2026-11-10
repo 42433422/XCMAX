@@ -11,6 +11,7 @@ class ImportAdmissionCallbacks(Protocol):
     def _resume_pending_dynamic_workflow(
         self, user_id: str, message: str, text: str, context: dict[str, Any] | None = None
     ) -> tuple[bool, dict[str, Any] | None]: ...
+    def _hydrate_pending_workflow(self, user_id: str, session_id: str) -> bool: ...
     def _sweep_expired_clarifications(self) -> list[str]: ...
     def _dispatch_model_selection(
         self,
@@ -51,9 +52,11 @@ class ImportWorkflowAdmission:
         planning_context = dict(context)
         if merged_file_context:
             planning_context["file_context"] = merged_file_context
-        if (
+        control = text.lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS
+        session_id = str(context.get("session_id") or context.get("conversation_id") or "")
+        if control and (
             user_id in self.pending
-            and text.lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS
+            or (session_id and self.callbacks._hydrate_pending_workflow(user_id, session_id))
         ):
             return self.callbacks._resume_pending_dynamic_workflow(user_id, message, text, context)[
                 1

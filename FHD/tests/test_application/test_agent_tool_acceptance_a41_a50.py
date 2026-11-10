@@ -43,6 +43,27 @@ def _wallet(monkeypatch, tmp_path):
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
 
 
+def _ocr_effect_probe(tmp_path):
+    """Record the terminal OCR dispatch in SQLite, not only a mocked receipt."""
+    path = tmp_path / "ocr-effects.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE effects(request_id TEXT)")
+
+    def emit(**payload):
+        with sqlite3.connect(path) as db:
+            db.execute("INSERT INTO effects VALUES (?)", (payload["request_id"],))
+        return True
+
+    ocr = Mock()
+    ocr.emit_ocr_requested.side_effect = emit
+
+    def effects():
+        with sqlite3.connect(path) as db:
+            return db.execute("SELECT request_id FROM effects").fetchall()
+
+    return ocr, effects
+
+
 @pytest.fixture(autouse=True)
 def _clear_replay():
     clear_idempotent_replay_for_tests()
@@ -57,8 +78,7 @@ def test_unauthorized_direct_call_is_denied_and_audited(
 ):
     _wallet(monkeypatch, tmp_path)
     repo = InMemoryAgentRunRepository()
-    ocr = Mock()
-    ocr.emit_ocr_requested.return_value = True
+    ocr, effects = _ocr_effect_probe(tmp_path)
     actor = trusted_actor(user_id=41, role="no-tools", permissions=[])
     with (
         patch(
@@ -82,7 +102,7 @@ def test_unauthorized_direct_call_is_denied_and_audited(
                 },
             },
         )
-    assert response.status_code == 400
+    assert response.status_code == 202
     body = response.json()
     assert body["success"] is False
     assert body["error_code"] == "tool_permission_denied"
@@ -90,8 +110,10 @@ def test_unauthorized_direct_call_is_denied_and_audited(
     assert body["tool_id"] == "ocr"
     assert body["task_id"]
     ocr.emit_ocr_requested.assert_not_called()
+    assert effects() == []
     run = repo.get(body["task_id"])
-    assert run is not None and run.status == "failed"
+    assert run is not None and run.status == "blocked"
+    assert run.tool_calls == []
     event = next(item for item in run.events if item.event_type == "tool.permission_denied")
     assert event.data["user_id"] == "41"
     assert event.data["tool_id"] == "ocr"
@@ -103,8 +125,7 @@ def test_permission_revocation_blocks_the_next_call(
 ):
     _wallet(monkeypatch, tmp_path)
     repo = InMemoryAgentRunRepository()
-    ocr = Mock()
-    ocr.emit_ocr_requested.return_value = True
+    ocr, effects = _ocr_effect_probe(tmp_path)
     actor = trusted_actor(user_id=42, role="revocable", permissions=["tool.ocr.request"])
     payload = {
         "tool_id": "ocr",
@@ -133,9 +154,16 @@ def test_permission_revocation_blocks_the_next_call(
             json={**payload, "params": {**payload["params"], "request_id": "revoke-2"}},
         )
     assert allowed.status_code == 200 and allowed.json()["success"] is True
-    assert denied.status_code == 400
+    assert denied.status_code == 202
+    assert denied.json()["success"] is False
     assert denied.json()["error_code"] == "tool_permission_denied"
+    denied_run = repo.get(denied.json()["task_id"])
+    assert denied_run is not None and denied_run.status == "blocked"
+    assert denied_run.tool_calls == []
+    assert any(event.event_type == "tool.permission_denied" for event in denied_run.events)
     assert ocr.emit_ocr_requested.call_count == 1
+    assert ocr.emit_ocr_requested.call_args.kwargs["request_id"] == "revoke-1"
+    assert effects() == [("revoke-1",)]
 
 
 def test_employee_allowlist_rejects_named_tool_and_tenants_do_not_share_keys(
@@ -150,13 +178,17 @@ def test_employee_allowlist_rejects_named_tool_and_tenants_do_not_share_keys(
     context["employee_id"] = "employee-reader"
     context["employee_tool_allowlist"] = ["excel_analysis"]
     orchestrator = AgentOrchestrator(repository=repo)
-    run = orchestrator.start_run_from_plan(
-        user_id=reader.principal.user_id,
-        message="调用 ocr",
-        plan=_ocr_plan("allow-1"),
-        runtime_context=context,
-    )
-    assert run.status == "failed"
+    ocr, effects = _ocr_effect_probe(tmp_path)
+    with patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain", return_value=ocr):
+        run = orchestrator.start_run_from_plan(
+            user_id=reader.principal.user_id,
+            message="调用 ocr",
+            plan=_ocr_plan("allow-1"),
+            runtime_context=context,
+        )
+    ocr.emit_ocr_requested.assert_not_called()
+    assert effects() == []
+    assert run.status == "blocked"
     assert run.steps[0].output["reason"] == "employee_tool_not_granted"
     assert run.tool_calls == []
 

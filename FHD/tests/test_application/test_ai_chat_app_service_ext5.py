@@ -1,8 +1,7 @@
-"""Tests for app.application.ai_chat_app_service — deep coverage (ext5).
+"""Active Excel helpers and unified model-plan contracts; no retired dispatch brain.
 
-Focus: AIChatApplicationService private methods — _is_pro_source, _is_number_text,
-_sanitize_import_scalar, _excel_analysis_payload_present, _looks_like_short_excel_import_command,
-_build_fallback_response, _skip_pro_excel_deterministic_import.
+Removed internal source classifiers are covered through process_chat, model admission,
+registered authenticated tools and the durable approval/session regression suites.
 """
 
 from __future__ import annotations
@@ -12,34 +11,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
 # AIChatApplicationService._is_pro_source
-# ---------------------------------------------------------------------------
 
 
-class TestIsProSource:
-    def test_pro_source(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._is_pro_source("pro")
-        assert result is True
-
-    def test_normal_source(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._is_pro_source("normal")
-        assert result is False
-
-    def test_none_source(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._is_pro_source(None)
-        assert result is False
-
-
-# ---------------------------------------------------------------------------
 # AIChatApplicationService._is_number_text
-# ---------------------------------------------------------------------------
 
 
 class TestIsNumberText:
@@ -74,9 +49,7 @@ class TestIsNumberText:
         assert result is True
 
 
-# ---------------------------------------------------------------------------
 # AIChatApplicationService._sanitize_import_scalar
-# ---------------------------------------------------------------------------
 
 
 class TestSanitizeImportScalar:
@@ -105,9 +78,7 @@ class TestSanitizeImportScalar:
         assert result is None or isinstance(result, (str, float))
 
 
-# ---------------------------------------------------------------------------
 # AIChatApplicationService._excel_analysis_payload_present
-# ---------------------------------------------------------------------------
 
 
 class TestExcelAnalysisPayloadPresent:
@@ -134,54 +105,13 @@ class TestExcelAnalysisPayloadPresent:
         assert result is True
 
 
-# ---------------------------------------------------------------------------
 # AIChatApplicationService._looks_like_short_excel_import_command
-# ---------------------------------------------------------------------------
 
 
-class TestLooksLikeShortExcelImportCommand:
-    def test_import_command(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._looks_like_short_excel_import_command("导入Excel")
-        assert isinstance(result, bool)
-
-    def test_normal_text(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._looks_like_short_excel_import_command("你好")
-        assert result is False
-
-    def test_empty_text(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._looks_like_short_excel_import_command("")
-        assert result is False
-
-
-# ---------------------------------------------------------------------------
 # AIChatApplicationService._build_fallback_response
-# ---------------------------------------------------------------------------
 
 
-class TestBuildFallbackResponse:
-    def test_basic_response(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._build_fallback_response("测试消息", "超时")
-        assert isinstance(result, dict)
-        assert "message" in result or "text" in result or "response" in result
-
-    def test_empty_message(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._build_fallback_response("", "错误")
-        assert isinstance(result, dict)
-
-
-# ---------------------------------------------------------------------------
 # _skip_pro_excel_deterministic_import
-# ---------------------------------------------------------------------------
 
 
 class TestSkipProExcelDeterministicImport:
@@ -198,9 +128,7 @@ class TestSkipProExcelDeterministicImport:
         assert isinstance(result, bool)
 
 
-# ---------------------------------------------------------------------------
 # AIChatApplicationService._row_values_look_like_table_headers
-# ---------------------------------------------------------------------------
 
 
 class TestRowValuesLookLikeTableHeaders:
@@ -225,9 +153,7 @@ class TestRowValuesLookLikeTableHeaders:
         assert result is False
 
 
-# ---------------------------------------------------------------------------
 # AIChatApplicationService._excel_cell_looks_like_product_measure_unit
-# ---------------------------------------------------------------------------
 
 
 class TestExcelCellLooksLikeProductMeasureUnit:
@@ -250,9 +176,7 @@ class TestExcelCellLooksLikeProductMeasureUnit:
         assert result is False
 
 
-# ---------------------------------------------------------------------------
 # AIChatApplicationService._model_like_score
-# ---------------------------------------------------------------------------
 
 
 class TestModelLikeScore:
@@ -274,3 +198,47 @@ class TestModelLikeScore:
 
         result = AIChatApplicationService._model_like_score("")
         assert isinstance(result, float)
+
+
+# Public replacement of removed source/short-command/fallback classifiers.
+# Sources never select a second brain and import words never grant write authority.
+@pytest.mark.parametrize("source", ["pro", "normal", None])
+@pytest.mark.parametrize("message", ["导入Excel", "你好", "确认", "取消", "测试消息"])
+def test_public_chat_model_failure_has_no_local_success_or_implicit_import(source, message):
+    from unittest.mock import Mock
+
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from tests.test_application.ai_chat_test_helpers import _make_svc
+
+    service = _make_svc()
+    completion = Mock(return_value=None)
+    service.workflow_planner = LLMWorkflowPlanner(
+        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
+    )
+    with (
+        patch.object(service, "_persist_chat_turn"),
+        patch.object(service, "_persist_recallable_chat_turn"),
+        patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
+        patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
+    ):
+        result = service.process_chat("single-brain", message, source=source)
+    if message in {"确认", "取消"}:
+        completion.assert_not_called()
+        assert result["data"]["action"] == "clarification_required"
+        assert "没有待确认" in result["response"]
+        assert not result.get("toolCall")
+        assert not service._pending_workflows
+        return
+    completion.assert_called_once()
+    assert result["success"] is False
+    assert result["data"]["execution_started"] is False
+    assert not result.get("toolCall")
+    assert not service._pending_workflows
+
+
+def test_public_chat_empty_input_never_calls_model():
+    from tests.test_application.ai_chat_test_helpers import _make_svc
+
+    service = _make_svc()
+    assert service.process_chat("empty", "")["success"] is False
+    service.workflow_planner.plan.assert_not_called()

@@ -50,8 +50,8 @@ def _collect_evidence(
                 for cell in cells:
                     if cell.get("sheet") != part["sheet"]:
                         continue
-                    col, row = coordinate_from_string(cell["cell"])
-                    col = column_index_from_string(col)
+                    column_name, row = coordinate_from_string(cell["cell"])
+                    col = column_index_from_string(column_name)
                     if c1 <= col <= c2 and r1 <= row <= r2:
                         selected.append(
                             {

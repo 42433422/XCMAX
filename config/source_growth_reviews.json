@@ -16,13 +16,13 @@
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
       "base_blob": "20d2379adc81acc88bec8e7a98d040ce9f3f7d16",
-      "head_blob": "cc4c3ce11ac3e39d94eaf334fa7d0ff806036724",
+      "head_blob": "b0cf2a51255a783d8a497314fbf6a337475f8f64",
       "before_lines": 816,
-      "after_lines": 1546,
+      "after_lines": 1573,
       "reason": "Review request only: Durable plan hashing, stable execution identity, approval proof consumption, resume preflight, reconciliation of prior effects, clarification and conditional execution increase the coordinator.",
       "boundary": "Run lifecycle, frozen-plan authority and guarded continuation only; registered executors still own business effects.",
       "validation": "Validation scope: Approval/restart, stale-plan and changed-contract denial, concurrency and no-double-write coverage. Full integration CI and human architecture review remain outstanding; this request is not approval.",
-      "follow_up": "Human architecture review must prioritize extracting approval/resume coordination and plan validation; do not normalize this 730-line increase as a size baseline.",
+      "follow_up": "Human architecture review must prioritize extracting approval/resume coordination and plan validation; do not normalize this 757-line increase as a size baseline.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
@@ -100,7 +100,7 @@
     "FHD/app/application/reviewed_excel_template.py": {
       "base_file": "FHD/app/application/reviewed_excel_template.py",
       "base_blob": "0a8c90ccbf03e12ec6e469a5276002731306c05b",
-      "head_blob": "59786724f8a41ca30f02c669cbfc312606750b80",
+      "head_blob": "31de0378798993743108e819ca284c7610eddaef",
       "before_lines": 1661,
       "after_lines": 1971,
       "reason": "Review request only: Add bounded full non-formula-cell review, scoped batch analysis, model-call audit and candidate verification while preserving formula/source protection and safe unknown outcomes.",
@@ -304,9 +304,9 @@
     "FHD/app/application/elt/llm_assist.py": {
       "base_file": "FHD/app/application/elt/llm_assist.py",
       "base_blob": "d1f30a505da100ef9f948f4e85331b87711d2fb6",
-      "head_blob": "c85c9aa2af039a09c9335f04d33eb457241a829a",
+      "head_blob": "0a6aafdcf05a7c690c75a05c40dcc98f8e7e8cbe",
       "before_lines": 799,
-      "after_lines": 926,
+      "after_lines": 933,
       "reason": "Review request only: Add audited intake model-call lifecycle, queue-inclusive deadlines, uncertain-outcome handling and bounded per-unit processing/repair budgets.",
       "boundary": "ELT model assistance and audit hooks only; SQL/audit errors are not silently classified as provider outages or successful writes.",
       "validation": "Validation scope: Model timeout, bounded units, malformed-answer repair and unknown-outcome/no-blind-retry regressions. Full integration CI and human architecture review remain outstanding; this request is not approval.",

@@ -207,7 +207,7 @@ def register_tenant_shipment_routes(router) -> None:
     """Expose shipment writes/files with host authorization and authenticated tenant scope."""
     from fastapi import Body, Depends, HTTPException
 
-    from app.fastapi_routes import shipment_orders
+    from app.fastapi_routes.domains.shipment import shipment_orders
     from app.infrastructure.auth.dependencies import require_permission
     from app.infrastructure.tenant_scope import tenant_scope
 

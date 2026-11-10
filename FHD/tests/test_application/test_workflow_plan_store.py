@@ -18,6 +18,7 @@ from app.application.workflow.workflow_types import (
 )
 from app.db.db_base import Base
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture()
@@ -334,3 +335,137 @@ def test_real_integrity_failure_without_committed_row_has_no_strict_receipt(
     else:
         assert store.save(plan=_plan()) == _plan().plan_id
     assert store.load(_plan().plan_id) is None
+
+
+@pytest.mark.parametrize("user_id,session_id", [("u2", "sess"), ("u1", "other")])
+@pytest.mark.parametrize("message", ["取消", "确认"])
+def test_restarted_control_never_loads_another_owner_or_session(
+    session_factory, monkeypatch, user_id, session_id, message
+):
+    from unittest.mock import Mock
+
+    import app.application.workflow.plan_store as module
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    store = WorkflowPlanStore(session_factory=session_factory)
+    plan = _plan()
+    store.save(
+        plan=plan,
+        runtime_context={"user_id": "u1", "session_id": "sess"},
+        status="pending_awaiting",
+        user_id="u1",
+        session_id="sess",
+    )
+    monkeypatch.setattr(module, "WorkflowPlanStore", lambda: store)
+    service = object.__new__(AIChatApplicationService)
+    service._pending_workflows = {}
+    # No matching pending task: retain the normal model-selection path, not a
+    # fabricated cancellation/confirmation success for somebody else's plan.
+    model_reply = {"success": False, "message": "clarification required"}
+    service._dispatch_model_selection = Mock(return_value=model_reply)
+    result = service._try_handle_dynamic_workflow(
+        user_id, message, "normal", {"session_id": session_id}, {}
+    )
+    assert result is model_reply
+    service._dispatch_model_selection.assert_called_once()
+    assert service._pending_workflows == {}
+    assert store.load(plan.plan_id)["status"] == "pending_awaiting"
+
+
+def test_restarted_confirmation_without_execution_record_stays_fail_closed(
+    session_factory, monkeypatch
+):
+    from unittest.mock import Mock
+
+    import app.application.workflow.plan_store as module
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    store = WorkflowPlanStore(session_factory=session_factory)
+    plan = _plan()
+    store.save(
+        plan=plan,
+        runtime_context={"user_id": "u1", "session_id": "sess"},
+        status="pending_awaiting",
+        user_id="u1",
+        session_id="sess",
+    )
+    monkeypatch.setattr(module, "WorkflowPlanStore", lambda: store)
+    service = object.__new__(AIChatApplicationService)
+    service._pending_workflows = {}
+    service._dispatch_model_selection = Mock(side_effect=AssertionError("must not replan"))
+    result = service._try_handle_dynamic_workflow(
+        "u1", "确认", "normal", {"session_id": "sess"}, {}
+    )
+    assert result["success"] is False
+    assert result["data"]["action"] == "workflow_resume_failed"
+    assert store.load(plan.plan_id)["status"] == "pending_awaiting"
+    assert service._pending_workflows["u1"]["plan"].plan_id == plan.plan_id
+    service._dispatch_model_selection.assert_not_called()
+
+
+def test_restarted_confirmation_resumes_signed_durable_agent_run(
+    session_factory, monkeypatch, tmp_path, trusted_actor
+):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.employee_runtime.task_continuity import ledger_path
+
+    actor = trusted_actor(user_id=17, role="admin")
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "idempotency.sqlite"))
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    context = {**actor.context, "user_id": "17", "session_id": "sess"}
+    plan = PlanGraph(
+        plan_id="restart-confirm-plan",
+        intent="employee",
+        nodes=[
+            WorkflowNode(
+                "employee",
+                "employee",
+                "execute",
+                params={
+                    "employee_id": "clerk",
+                    "task": "start continuity",
+                    "continuity_action": "start",
+                    "goal": "verify resumed confirmation",
+                },
+            )
+        ],
+    )
+    repository = SQLAlchemyAgentRunRepository(session_factory=session_factory)
+    run = AgentRun(user_id="17", message="resume", metadata={"runtime_context": context})
+    AgentOrchestrator(repository=repository)._apply_plan(run, plan)
+    run.status = "waiting_user"
+    run.steps[0].status = "waiting_user"
+    repository.save(run)
+    store = WorkflowPlanStore(session_factory=session_factory)
+    store.save(
+        plan=plan,
+        runtime_context={
+            **context,
+            "pending_confirmation": {
+                "agent_run_id": run.run_id,
+            },
+        },
+        status="pending_awaiting",
+        user_id="17",
+        session_id="sess",
+    )
+    # New service and repository objects, not the old in-memory run instance.
+    fresh = SQLAlchemyAgentRunRepository(session_factory=session_factory, auto_create=False)
+    monkeypatch.setattr("app.application.workflow.plan_store.WorkflowPlanStore", lambda: store)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.AgentOrchestrator",
+        lambda: AgentOrchestrator(repository=fresh),
+    )
+    service = object.__new__(AIChatApplicationService)
+    service._pending_workflows = {}
+    service._try_handle_dynamic_workflow("17", "确认", "normal", {"session_id": "sess"}, {})
+    completed = fresh.get(run.run_id)
+    assert completed.status == "completed", completed.to_dict()
+    assert completed.tool_calls and completed.tool_calls[0].output["success"]
+    assert ledger_path(tmp_path).is_file()
+    assert store.load(plan.plan_id)["status"] == "succeeded"

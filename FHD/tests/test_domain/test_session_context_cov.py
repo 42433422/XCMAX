@@ -6,6 +6,8 @@ No external I/O — all pure logic covered through argument variation.
 
 from __future__ import annotations
 
+import pytest
+
 from app.domain.context.session_context import (
     _excel_analysis_from_runtime,
     _format_kitten_runtime_for_llm,
@@ -485,10 +487,11 @@ class TestFormatRecentMessages:
 
     def test_builds_valid_excerpt(self):
         ctx = {
+            "_chat_evidence_authorized": True,
             "recent_messages": [
                 {"role": "user", "content": "hi"},
                 {"role": "assistant", "content": "hello"},
-            ]
+            ],
         }
         out = format_recent_messages_excerpt_for_llm(ctx)
         assert "近期对话摘要" in out
@@ -496,11 +499,25 @@ class TestFormatRecentMessages:
         assert "[assistant] hello" in out
 
     def test_last_six_only(self):
-        ctx = {"recent_messages": [{"role": "user", "content": f"msg{i}"} for i in range(10)]}
+        ctx = {
+            "_chat_evidence_authorized": True,
+            "recent_messages": [{"role": "user", "content": f"msg{i}"} for i in range(10)],
+        }
         out = format_recent_messages_excerpt_for_llm(ctx)
         assert out is not None
         # Only last 6 messages included
-        assert "msg4" in out or "msg5" in out or "msg9" in out
+        for i in range(4):
+            assert f"msg{i}" not in out
+        for i in range(4, 10):
+            assert f"msg{i}" in out
+
+    @pytest.mark.parametrize("authorized", [None, False, "true", 1])
+    def test_untrusted_recent_messages_are_not_model_evidence(self, authorized):
+        ctx = {
+            "_chat_evidence_authorized": authorized,
+            "recent_messages": [{"role": "user", "content": "private history"}],
+        }
+        assert format_recent_messages_excerpt_for_llm(ctx) is None
 
 
 # ─────────────── format_runtime_context_for_llm ─────────────────

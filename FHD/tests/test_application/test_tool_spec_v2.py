@@ -92,7 +92,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     customer_delete_spec = specs[("customers", "delete")]
     assert customer_delete_spec.risk == "high"
-    assert customer_delete_spec.permission == "tool.customers.delete"
+    assert customer_delete_spec.permission == "customer.edit"
 
     customer_batch_spec = specs[("customers", "batch_delete")]
     assert customer_batch_spec.risk == "high"

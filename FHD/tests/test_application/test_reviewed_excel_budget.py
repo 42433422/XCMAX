@@ -667,3 +667,34 @@ def test_schema_rejection_names_each_failing_field():
     assert "$/regions[1] 不是提供的取值之一" in problem
     assert "$/refs 有 2 项，超过上限 1" in problem
     assert "S9" not in problem
+
+
+def test_elt_timeout_retains_the_running_worker_for_budget_accounting(monkeypatch):
+    from threading import Event
+
+    from app.application.elt.llm_assist import EltAssistTimeout, _bounded_structured_completion
+
+    release = Event()
+    monkeypatch.setattr(
+        "app.infrastructure.llm.structured_output.complete_structured_sync",
+        lambda *_args, **_kwargs: release.wait(timeout=2),
+    )
+    worker = None
+    try:
+        with pytest.raises(EltAssistTimeout) as caught:
+            _bounded_structured_completion(
+                [],
+                schema={},
+                max_tokens=1,
+                timeout_seconds=0.01,
+                conversation_service=None,
+                provider=None,
+            )
+        assert isinstance(caught.value, TimeoutError)
+        worker = caught.value.worker
+        assert worker.is_alive()
+    finally:
+        release.set()
+        if worker is not None:
+            worker.join(timeout=2)
+    assert worker is not None and not worker.is_alive()

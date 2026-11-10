@@ -19,6 +19,26 @@ from tests.test_application.test_reviewed_excel_boundaries import synthetic_docu
 
 
 @pytest.fixture(autouse=True)
+def _no_external_network(monkeypatch):
+    """All workbook/provider fixtures are synthetic; never contact the live market."""
+    import socket
+
+    def refused(*_args, **_kwargs):
+        raise AssertionError("Excel unit test attempted external network access")
+
+    original_connect = socket.socket.connect
+
+    def connect(sock, address):
+        if sock.family in {socket.AF_INET, socket.AF_INET6}:
+            refused()
+        return original_connect(sock, address)
+
+    monkeypatch.setattr(socket, "getaddrinfo", refused)
+    monkeypatch.setattr(socket, "create_connection", refused)
+    monkeypatch.setattr(socket.socket, "connect", connect)
+
+
+@pytest.fixture(autouse=True)
 def _legacy_transport_budget(monkeypatch):
     """Pin this suite's historical 2000-cell/384KB multi-batch scenarios.
 
@@ -648,6 +668,13 @@ def review_store(tmp_path, monkeypatch):
         return complete(messages, schema, *args, **kwargs)
 
     monkeypatch.setattr(model_service, "_template_llm_complete", synthetic_models)
+
+    async def unsupported_market_lookup(*_args, **_kwargs):
+        # Synthetic provider has no remote idempotency store. Unknown results stay
+        # locked; recovery-specific tests explicitly supply a supported lookup.
+        return None
+
+    monkeypatch.setattr(routes, "_lookup_market_call", unsupported_market_lookup)
 
     def authorize(permission):
         if not actor[permission]:

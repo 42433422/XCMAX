@@ -123,8 +123,24 @@ class TestBatchDeleteErrorPath:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc.batch_delete([1, 2])
         assert result["success"] is False
-        assert result["message"] == "批量删除失败"
+        assert result["message"] == "删除客户失败"
         assert result["deleted_count"] == 0
+
+    def test_recoverable_query_error_rolls_back_and_closes(self):
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        svc = CustomerApplicationService()
+        session = MagicMock()
+        session.query.side_effect = RuntimeError("db read error")
+        with tenant_scope(1), patch.object(svc, "_get_session", return_value=session):
+            result = svc.batch_delete([1, 2])
+        assert result["success"] is False
+        assert result["message"] == "删除客户失败"
+        assert result["deleted_count"] == 0
+        session.rollback.assert_called_once()
+        session.close.assert_called_once()
+        session.delete.assert_not_called()
+        session.commit.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

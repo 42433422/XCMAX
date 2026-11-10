@@ -1465,7 +1465,7 @@ def refine_proposal(
         # Cover every non-formula cell in bounded calls. Fixed headings provide
         # context for each batch; model decisions remain scoped to that batch.
         import contextvars
-        from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+        from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 
         from app.application.reviewed_excel_audit import call_key, current_call_id
 
@@ -1478,7 +1478,7 @@ def refine_proposal(
         if len(batches) > 50:
             raise ReviewedExcelError("模板内容过多，请分批处理")
         call_id = current_call_id()
-        combined = [
+        combined: list[dict[str, Any]] = [
             {
                 "id": f"model_initial_{i}",
                 "label": f"模型候选 {i}",
@@ -1563,9 +1563,9 @@ def refine_proposal(
                 )
             return part
 
-        parts = {}
+        parts: dict[int, dict[str, Any]] = {}
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix="template-model-batch") as pool:
-            pending = {}
+            pending: dict[Future[dict[str, Any]], int] = {}
             next_index = 0
             while next_index < len(batches) or pending:
                 while next_index < len(batches) and len(pending) < 2:
@@ -1591,13 +1591,13 @@ def refine_proposal(
                 )
         for candidate in combined:
             seen = set()
-            unique = []
+            unique_cells = []
             for cell in candidate["clear"]:
                 key = (cell["sheet"], cell["cell"])
                 if key not in seen:
                     seen.add(key)
-                    unique.append(cell)
-            candidate["clear"] = unique
+                    unique_cells.append(cell)
+            candidate["clear"] = unique_cells
         base["candidates"] = combined
         base["parent_version"] = parent_version
         base["version"] = hashlib.sha256(

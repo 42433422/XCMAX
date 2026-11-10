@@ -147,6 +147,9 @@ class ApprovalService:
 
         # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）。
         # 携带 plan 使持久化层能写入绑定 request_no 的可靠工作流快照，供重启后重建/续跑。
+        from app.application.workflow.approval_persistence import freeze_approval_plan
+
+        plan = freeze_approval_plan(plan, request.node_id)
         metadata = self._persist_request_to_db(
             request, runtime_context=runtime_context, plan=plan, title=title
         )

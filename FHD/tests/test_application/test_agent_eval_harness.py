@@ -18,7 +18,8 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
     assert orchestrator.AgentToolExecutor is original_executor
     assert result["execution_mode"] == "fixture_local"
     assert result["failed"] == 0, [case for case in result["results"] if not case["passed"]]
-    assert result["passed"] == 121
+    assert result["passed"] == 123
+    assert len(result["results"]) == 123
     assert result["score"] == 1.0
     missing_spec = next(
         row

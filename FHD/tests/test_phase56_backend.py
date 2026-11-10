@@ -210,16 +210,21 @@ def test_skip_pro_excel_deterministic_import_flags(monkeypatch: pytest.MonkeyPat
     assert _skip_pro_excel_deterministic_import({}) is True
 
 
-def test_ai_chat_is_pro_source_and_merge_context() -> None:
-    assert AIChatApplicationService._is_pro_source("xcagi-pro") is True
-    assert AIChatApplicationService._is_pro_source("basic") is False
+@pytest.mark.parametrize("source", ["xcagi-pro", "basic"])
+def test_ai_chat_merge_context_does_not_trust_source_as_identity(source: str) -> None:
     ctx = AIChatApplicationService._merge_tool_runtime_context(
         "u1",
         "查产品",
-        {"ui_surface": "chat", "excel_analysis": {"sheet": "S1"}},
+        {
+            "ui_surface": "chat",
+            "excel_analysis": {"sheet": "S1"},
+            "source": source,
+            "user_id": "forged-actor",
+        },
     )
     assert ctx["conversation_id"] == "u1"
-    assert "user_id" not in ctx  # A conversation label is not an authenticated actor.
+    assert "user_id" not in ctx  # Neither conversation nor source grants actor authority.
+    assert "source" not in ctx
     assert ctx["excel_analysis"]["sheet"] == "S1"
 
 

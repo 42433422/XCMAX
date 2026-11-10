@@ -50,6 +50,10 @@ def looks_like_issue_report(message: str) -> bool:
 
 
 def _manufacturing_intake(message: str) -> bool:
+    # A negated production-query clause must not suppress an explicit request
+    # for the product-issue feature. Any remaining production intent still wins.
+    if re.search(r"请使用产品问题上报(?:功能)?", message or ""):
+        message = re.sub(r"(?:我)?不是(?:要|在)?(?:查询|查看)生产任务", "", message)
     return bool(re.search(r"生产|制造|车间|排产|加工|装配", message or "")) and not bool(
         re.search(r"软件|页面|界面|后台|客户端|菜单|侧栏|样式|显示|图谱|看板|列表", message or "")
     )

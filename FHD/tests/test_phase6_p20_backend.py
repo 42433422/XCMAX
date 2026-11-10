@@ -1211,7 +1211,8 @@ class TestShipmentApprovalApproveRoute:
             ),
         ):
             svc = MagicMock()
-            svc.get_pending_request.return_value.tenant_id = None
+            svc.get_pending_request.return_value = SimpleNamespace(request_id="r1", tenant_id=None)
+            svc.get_pending_workflow.return_value = None
             svc.approve.return_value = True
             svc.get_pending_workflow.return_value = None
             mock_get.return_value = svc
@@ -1224,6 +1225,7 @@ class TestShipmentApprovalApproveRoute:
         assert body["success"] is True
         run = repo.get(body["run_id"])
         assert run is not None
+        svc.approve.assert_called_once_with("r1", "ok")
         assert run.intent == "approval_decision_approve"
         assert run.metadata["runtime_context"]["request_id"] == "r1"
 
@@ -1241,7 +1243,8 @@ class TestShipmentApprovalApproveRoute:
     def test_approve_fail_returns_400(self, shipment_client: TestClient):
         with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
-            svc.get_pending_request.return_value.tenant_id = None
+            svc.get_pending_request.return_value = SimpleNamespace(request_id="r1", tenant_id=None)
+            svc.get_pending_workflow.return_value = None
             svc.approve.return_value = False
             mock_get.return_value = svc
             r = shipment_client.post(
@@ -1249,6 +1252,8 @@ class TestShipmentApprovalApproveRoute:
                 json={"request_id": "r1"},
             )
         assert r.status_code == 400
+        assert r.json()["success"] is False
+        svc.approve.assert_called_once_with("r1", "")
 
     def test_approve_with_workflow_executed(self, shipment_client: TestClient):
         with (
@@ -1268,7 +1273,8 @@ class TestShipmentApprovalApproveRoute:
             ) as resume,
         ):
             svc = MagicMock()
-            svc.get_pending_request.return_value.tenant_id = None
+            svc.get_pending_request.return_value = SimpleNamespace(request_id="r1", tenant_id=None)
+            svc.get_pending_workflow.return_value = None
             svc.get_pending_workflow.return_value = {"agent_run_id": "run-1"}
             mock_get.return_value = svc
             r = shipment_client.post(
@@ -1308,7 +1314,8 @@ class TestShipmentApprovalRejectRoute:
             ),
         ):
             svc = MagicMock()
-            svc.get_pending_request.return_value.tenant_id = None
+            svc.get_pending_request.return_value = SimpleNamespace(request_id="r1", tenant_id=None)
+            svc.get_pending_workflow.return_value = None
             svc.reject.return_value = True
             mock_get.return_value = svc
             r = shipment_client.post(
@@ -1320,6 +1327,7 @@ class TestShipmentApprovalRejectRoute:
         assert body["data"]["status"] == "rejected"
         run = repo.get(body["run_id"])
         assert run is not None
+        svc.reject.assert_called_once_with("r1", "no")
         assert run.intent == "approval_decision_reject"
         assert run.metadata["runtime_context"]["request_id"] == "r1"
 
@@ -1337,7 +1345,8 @@ class TestShipmentApprovalRejectRoute:
     def test_reject_fail_returns_400(self, shipment_client: TestClient):
         with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
-            svc.get_pending_request.return_value.tenant_id = None
+            svc.get_pending_request.return_value = SimpleNamespace(request_id="r1", tenant_id=None)
+            svc.get_pending_workflow.return_value = None
             svc.reject.return_value = False
             mock_get.return_value = svc
             r = shipment_client.post(
@@ -1345,6 +1354,8 @@ class TestShipmentApprovalRejectRoute:
                 json={"request_id": "r1"},
             )
         assert r.status_code == 400
+        assert r.json()["success"] is False
+        svc.reject.assert_called_once_with("r1", "")
 
     def test_reject_recoverable_error(self, shipment_client: TestClient):
         with patch("app.application.workflow.get_approval_service") as mock_get:

@@ -24,7 +24,7 @@ class AttachmentInputError(ValueError):
 def _decode(raw: bytes, suffix: str) -> tuple[str, dict[str, Any]]:
     coverage: dict[str, Any] = {"truncated": False, "max_text_chars": MAX_TEXT}
 
-    def finish(text: str):
+    def finish(text: str) -> tuple[str, dict[str, Any]]:
         coverage["truncated"] = coverage["truncated"] or len(text) > MAX_TEXT
         coverage["notice"] = (
             "仅提取了部分附件内容，不得据此声称已读完整文件或作全量统计。"

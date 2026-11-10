@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from starlette.requests import Request
 
 from app.application.planner_compat.admission import ChatAdmission
 from app.application.planner_compat.application import CompatChatApplication, FastPaths
@@ -16,6 +17,7 @@ from app.application.planner_compat.runtime import await_with_timeout
 from app.application.planner_compat.streaming import CompatStream
 from app.application.planner_compat_execute import ChatTurnExecutor
 from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _components(business):
@@ -80,14 +82,25 @@ async def test_offline_stream_and_json_match_without_calling_online_paths(
         assert response == business_result
 
 
-def test_stream_offline_never_creates_remote_client(monkeypatch):
+def test_stream_offline_never_creates_remote_client(monkeypatch, trusted_actor):
     from app.fastapi_routes import xcagi_compat_chat_helpers as facade
 
     factory = Mock(side_effect=AssertionError("remote client must not be created"))
     monkeypatch.setattr(facade, "create_modstore_openai_client_from_request", factory)
+    actor = trusted_actor(user_id=73, tenant_id=7, role="offline-reader", permissions=[])
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/ai/chat-stream",
+            "headers": [
+                (name.lower().encode(), value.encode()) for name, value in actor.headers.items()
+            ],
+        }
+    )
     events = list(
         facade._xcagi_planner_stream_bytes(
-            Mock(),
+            request,
             XcagiCompatChatBody(message="普通问答", mode="offline"),
             ai_tier="standard",
         )

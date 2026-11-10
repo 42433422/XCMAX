@@ -90,8 +90,8 @@ class TestMergeToolRuntimeContext:
 
     def test_none_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hi", None)
+        assert "user_id" not in result  # A conversation label cannot authorize an actor.
         assert result == {
-            "user_id": "u1",
             "conversation_id": "u1",
             "message": "hi",
             "tenant_id": "1",

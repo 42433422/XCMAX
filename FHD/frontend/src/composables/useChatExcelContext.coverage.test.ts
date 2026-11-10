@@ -15,7 +15,7 @@
  * 铁律4：仅 mock 外部边界（useChatPersistence / multimodalAttachments），被测 composable 真实调用
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { ref } from 'vue'
+import { ref, effectScope } from 'vue'
 import { useChatExcelContext } from './useChatExcelContext'
 
 // ── mock 外部边界 ──────────────────────────────────────────────────
@@ -595,5 +595,50 @@ describe('useChatExcelContext — coverage ramp', () => {
       expect(ctx).toHaveProperty('bindAllExcelSheetsToChat')
       expect(ctx).toHaveProperty('persistExcelAnalysisContextForSession')
     })
+  })
+})
+
+describe('attachment ownership during asynchronous file reads', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockReadPersistedExcelAnalysisContext.mockReturnValue(null)
+    mockResolveExcelFilePathFromAnalysis.mockReturnValue('')
+    mockResolveExcelSheetOptionsFromContext.mockReturnValue([])
+  })
+  it('resets all attachment and sheet state when the authenticated identity changes', () => {
+    const identity = ref('owner-a'), deps = makeDeps(), scope = effectScope()
+    const ctx = scope.run(() => useChatExcelContext({ ...deps, getIdentity: () => identity.value }))!
+    ctx.lastExcelAnalysisContext.value = { upload_id: 'owned-a' }
+    ctx.linkedExcelSheet.value = makeSheet('A', 1); ctx.linkedExcelAllSheets.value = true
+    ctx.multimodalStaging.value = [makeRow('private.png')]
+    identity.value = 'owner-b'
+    expect(ctx.lastExcelAnalysisContext.value).toBeNull()
+    expect(ctx.linkedExcelSheet.value).toBeNull(); expect(ctx.linkedExcelAllSheets.value).toBe(false)
+    expect(ctx.multimodalPendingCount.value).toBe(0)
+    scope.stop()
+  })
+  it.each(['session', 'dispose', 'capture'] as const)('discards in-flight attachment reads after %s invalidation', async invalidation => {
+    let finish!: (value: unknown) => void
+    mockFilesToMultimodalRows.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const deps = makeDeps(), scope = effectScope(); let live = true
+    const ctx = scope.run(() => useChatExcelContext({ ...deps, captureIsCurrent: () => () => live }))!
+    const task = ctx.stageMultimodalFiles([new File(['private'], 'private.png', { type: 'image/png' })])
+    if (invalidation === 'session') deps.sessionId.value = 'another-session'
+    else if (invalidation === 'dispose') scope.stop()
+    else live = false
+    finish({ ok: true, rows: [makeRow('private.png')] }); await task
+    expect(ctx.multimodalPendingCount.value).toBe(0)
+    expect(deps.addAndSaveMessage).not.toHaveBeenCalled()
+    scope.stop()
+  })
+  it('sends the normalized owned upload identifier without treating an empty selection as a new file', async () => {
+    const deps = makeDeps(), ctx = useChatExcelContext(deps)
+    ctx.lastExcelAnalysisContext.value = { upload_id: '  owner-scoped-upload  ' }
+    const payload: Record<string, unknown> = {}, parts: string[] = []
+    expect(ctx.injectExcelContextPayload(payload, parts)).toBe(true)
+    expect(payload.attachment_upload_ids).toEqual(['owner-scoped-upload'])
+    await ctx.stageMultimodalFiles([])
+    expect(mockFilesToMultimodalRows).not.toHaveBeenCalled()
+    expect(deps.addAndSaveMessage).not.toHaveBeenCalled()
   })
 })

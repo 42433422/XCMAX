@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from sqlalchemy import and_, inspect, or_
 
@@ -29,7 +30,7 @@ def cascade_tenant(context):
     return tenant
 
 
-def delete_customers(session, ids, *, force=False, runtime_context=None):
+def delete_customers(session, ids, *, force=False, runtime_context=None) -> dict[str, Any]:
     from app.db.models.product import Product
     from app.db.models.purchase_unit import PurchaseUnit
     from app.db.models.shipment import ShipmentRecord

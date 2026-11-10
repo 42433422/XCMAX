@@ -174,6 +174,25 @@ def closed_loop_setup_failure_code(agent_run: Any) -> str | None:
     return None
 
 
+def freeze_approval_plan(plan: PlanGraph | None, node_id: str) -> PlanGraph | None:
+    """Copy and elevate the reviewed graph identically for memory and storage."""
+    # Approval itself is a server policy elevation. Keep that elevation in the
+    # reviewed graph before hashing it; otherwise the durable approval snapshot
+    # can retain a low-risk node while the AgentRun persists the same node as
+    # high-risk, making a legitimate restart/resume fail its plan fingerprint.
+    snapshot_plan = plan_from_dict(plan)
+    if snapshot_plan is not None:
+        metadata = snapshot_plan.metadata if isinstance(snapshot_plan.metadata, dict) else {}
+        required = {
+            str(value) for value in metadata.get("approval_required_node_ids", []) if str(value)
+        }
+        required.add(str(node_id or ""))
+        for item in snapshot_plan.nodes:
+            if item.node_id in required:
+                item.risk = "high"
+    return snapshot_plan
+
+
 def _build_workflow_snapshot(
     request: ApprovalRequest,
     runtime_context: dict[str, Any] | None,
@@ -182,20 +201,7 @@ def _build_workflow_snapshot(
     """构造绑定当前租户的完整工作流快照。"""
     from app.infrastructure.tenant_scope import current_tenant_id
 
-    # Approval itself is a server policy elevation. Keep that elevation in the
-    # reviewed graph before hashing it; otherwise the durable approval snapshot
-    # can retain a low-risk node while the AgentRun persists the same node as
-    # high-risk, making a legitimate restart/resume fail its plan fingerprint.
-    snapshot_plan = plan_from_dict(plan) if plan is not None else None
-    if snapshot_plan is not None:
-        metadata = snapshot_plan.metadata if isinstance(snapshot_plan.metadata, dict) else {}
-        required = {
-            str(value) for value in metadata.get("approval_required_node_ids", []) if str(value)
-        }
-        required.add(str(request.node_id or ""))
-        for item in snapshot_plan.nodes:
-            if item.node_id in required:
-                item.risk = "high"
+    snapshot_plan = freeze_approval_plan(plan, request.node_id)
     persisted_plan_id = str(getattr(snapshot_plan, "plan_id", "") or request.plan_id)
     return {
         "version": SNAPSHOT_VERSION,

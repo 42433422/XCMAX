@@ -23,6 +23,15 @@ from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+
+class EltAssistTimeout(TimeoutError):
+    """Provider call exceeded its deadline while its tracked worker is still active."""
+
+    def __init__(self, worker: threading.Thread):
+        super().__init__("ETL LLM assist timed out")
+        self.worker = worker
+
+
 _REGION_ROLES = frozenset(
     {
         "delivery_note",
@@ -120,9 +129,7 @@ def _bounded_structured_completion(
     worker.start()
     worker.join(timeout=timeout_seconds)
     if worker.is_alive():
-        error = TimeoutError("ETL LLM assist timed out")
-        error.worker = worker
-        raise error
+        raise EltAssistTimeout(worker)
     if "error" in box:
         raise box["error"]
     if "result" not in box:

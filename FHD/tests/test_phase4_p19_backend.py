@@ -10,6 +10,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.application.customer_app_service import CustomerApplicationService
+from app.db.models.purchase_unit import PurchaseUnit
+from app.infrastructure.tenant_scope import tenant_scope
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_customer_cascade_authority import deletion as deletion
+from tests.test_application.test_customer_cascade_authority import snapshot
 
 
 def _fluent(*, first=None, all_=None, count_=0) -> MagicMock:
@@ -138,27 +143,32 @@ def test_update_not_found(svc) -> None:
     assert out["success"] is False
 
 
-def test_update_success_no_rename(svc) -> None:
-    s = _session([_fluent(first=_unit())])
-    with _bind(svc, s):
-        out = svc.update(
+def test_update_success_no_rename(deletion) -> None:
+    _, actor, service = deletion
+    with tenant_scope(7):
+        out = service.update(
             1, {"contact_person": "新人", "contact_phone": "111", "contact_address": "上海"}
         )
     assert out["success"] is True
+    with tenant_scope(7), actor.factory() as db:
+        row = db.get(PurchaseUnit, 1)
+        assert (row.contact_person, row.contact_phone, row.address) == ("新人", "111", "上海")
 
 
-def test_update_rename_conflict(svc) -> None:
-    s = _session([_fluent(first=_unit()), _fluent(first=_unit(id=2))])
-    with _bind(svc, s):
-        out = svc.update(1, {"customer_name": "占用名"})
+def test_update_rename_conflict(deletion) -> None:
+    _, actor, service = deletion
+    before = snapshot(actor)
+    with tenant_scope(7):
+        out = service.update(1, {"customer_name": "Similar"})
     assert out["success"] is False
     assert "已存在" in out["message"]
+    assert snapshot(actor) == before
 
 
-def test_update_rename_ok(svc) -> None:
-    s = _session([_fluent(first=_unit()), _fluent(first=None)])
-    with _bind(svc, s):
-        out = svc.update(1, {"customer_name": "新名字"})
+def test_update_rename_ok(deletion) -> None:
+    _, _, service = deletion
+    with tenant_scope(7):
+        out = service.update(1, {"customer_name": "新名字"})
     assert out["success"] is True
     assert out["data"]["customer_name"] == "新名字"
 
@@ -199,72 +209,89 @@ def test_check_shipment_associations_error(svc) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_delete_not_found(svc) -> None:
-    s = _session([_fluent(first=None)])
-    with _bind(svc, s):
-        out = svc.delete(1)
+def test_delete_not_found(deletion) -> None:
+    _, actor, service = deletion
+    before = snapshot(actor)
+    with tenant_scope(7):
+        out = service.delete(999)
     assert out["success"] is False
     assert out["deleted_count"] == 0
+    assert snapshot(actor) == before
 
 
-def test_delete_blocked_by_associations(svc) -> None:
-    s = _session([_fluent(first=_unit())])
-    check = {"has_associations": True, "shipment_count": 2, "sample_records": []}
-    with _bind(svc, s), patch.object(svc, "_check_shipment_associations", return_value=check):
-        out = svc.delete(1, force=False)
+def test_delete_blocked_by_associations(deletion) -> None:
+    _, actor, service = deletion
+    before = snapshot(actor)
+    with tenant_scope(7):
+        out = service.delete(1)
     assert out["success"] is False
     assert out["has_associations"] is True
+    assert out["association_details"]["product_count"] == 1
+    assert snapshot(actor) == before
 
 
 @pytest.mark.parametrize("batch", [False, True])
-def test_customer_delete_fails_closed_when_association_check_fails(svc, batch) -> None:
-    s = _session([_fluent(all_=[_unit()]) if batch else _fluent(first=_unit())])
-    with (
-        _bind(svc, s),
-        patch.object(svc, "_check_shipment_associations", return_value={"has_associations": None}),
-    ):
-        out = svc.batch_delete([1]) if batch else svc.delete(1)
-    assert out["success"] is False
-    s.delete.assert_not_called()
-    s.commit.assert_not_called()
+def test_customer_delete_fails_closed_when_association_check_fails(deletion, batch) -> None:
+    from sqlalchemy import event
+    from sqlalchemy.exc import OperationalError
+
+    _, actor, service = deletion
+    before = snapshot(actor)
+    engine = actor.factory.kw["bind"]
+
+    def fail_association_read(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().startswith("SELECT") and "shipment_records" in statement:
+            raise OperationalError(statement, parameters, Exception("association read failed"))
+
+    event.listen(engine, "before_cursor_execute", fail_association_read)
+    try:
+        with tenant_scope(7):
+            out = service.batch_delete([1, 3]) if batch else service.delete(1)
+        assert out["success"] is False
+        assert out["deleted_count"] == 0
+    finally:
+        event.remove(engine, "before_cursor_execute", fail_association_read)
+    assert snapshot(actor) == before
 
 
-def test_delete_success_force(svc) -> None:
-    s = _session([_fluent(first=_unit())])
-    check = {"has_associations": True, "shipment_count": 2, "sample_records": []}
-    with _bind(svc, s), patch.object(svc, "_check_shipment_associations", return_value=check):
-        out = svc.delete(1, force=True)
+def test_delete_success_force(deletion) -> None:
+    _, actor, service = deletion
+    with tenant_scope(7):
+        out = service.delete(1, force=True, runtime_context=actor.context)
     assert out["success"] is True
     assert out["deleted_count"] == 1
-    s.delete.assert_called_once()
+    assert snapshot(actor)[0] == [(2,), (3,), (101,), (102,), (103,)]
+    assert snapshot(actor)[1] == [(2,), (101,), (102,)]
 
 
-def test_batch_delete_none_found(svc) -> None:
-    s = _session([_fluent(all_=[])])
-    with _bind(svc, s):
-        out = svc.batch_delete([1, 2])
+def test_batch_delete_none_found(deletion) -> None:
+    _, actor, service = deletion
+    before = snapshot(actor)
+    with tenant_scope(7):
+        out = service.batch_delete([999, 1000])
     assert out["success"] is False
+    assert snapshot(actor) == before
 
 
-def test_batch_delete_blocked(svc) -> None:
-    s = _session([_fluent(all_=[_unit(), _unit(id=2, unit_name="第二")])])
-    check = {"has_associations": True, "shipment_count": 1, "sample_records": []}
-    with _bind(svc, s), patch.object(svc, "_check_shipment_associations", return_value=check):
-        out = svc.batch_delete([1, 2], force=False)
+def test_batch_delete_blocked(deletion) -> None:
+    _, actor, service = deletion
+    before = snapshot(actor)
+    with tenant_scope(7):
+        out = service.batch_delete([1, 3])
     assert out["success"] is False
     assert out["has_associations"] is True
+    assert snapshot(actor) == before
 
 
-def test_batch_delete_success(svc) -> None:
-    s = _session([_fluent(all_=[_unit(), _unit(id=2, unit_name="第二")])])
-    with (
-        _bind(svc, s),
-        patch.object(svc, "_check_shipment_associations", return_value={"has_associations": False}),
-    ):
-        out = svc.batch_delete([1, 2], force=False)
+def test_batch_delete_success(deletion) -> None:
+    _, actor, service = deletion
+    with tenant_scope(7), actor.factory.begin() as db:
+        db.add(PurchaseUnit(id=4, tenant_id=7, unit_name="Empty second"))
+    with tenant_scope(7):
+        out = service.batch_delete([3, 4])
     assert out["success"] is True
     assert out["deleted_count"] == 2
-    assert s.delete.call_count == 2
+    assert snapshot(actor)[0] == [(1,), (2,), (101,), (102,), (103,)]
 
 
 # ---------------------------------------------------------------------------

@@ -8,6 +8,7 @@ configured).
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -16,22 +17,47 @@ from app.infrastructure.llm.providers.registry import LLMProviderRegistry
 
 def _provider(provider_id: str, configured: bool) -> SimpleNamespace:
     """A minimal stand-in matching the LLMProvider protocol surface used here."""
-    return SimpleNamespace(provider_id=provider_id, is_configured=configured)
+    return SimpleNamespace(
+        provider_id=provider_id,
+        is_configured=configured,
+        chat_completion=AsyncMock(return_value={"content": "reply"}),
+    )
 
 
 class TestLLMProviderRegistry:
     @pytest.fixture(autouse=True)
     def _disable_instrumentation(self, monkeypatch) -> None:
-        # 本套件测 registry 注册/路由逻辑本身；关闭装饰层使身份断言聚焦路由边界。
+        # Optional telemetry is disabled; mandatory admission remains active.
         # 装饰行为由 test_instrumented_provider.py 专门覆盖。
         monkeypatch.setenv("XCAGI_GENAI_TRACE_ENABLED", "0")
         monkeypatch.setenv("XCAGI_GUARDRAILS_ENABLED", "0")
 
-    def test_register_and_get_roundtrip(self) -> None:
+    @pytest.mark.asyncio
+    async def test_register_and_get_roundtrip(self, monkeypatch) -> None:
         reg = LLMProviderRegistry()
         fake = _provider("fake", configured=True)
         reg.register("fake", fake)
-        assert reg.get("fake") is fake
+        await self._assert_admitted_call(reg.get("fake"), fake, monkeypatch)
+
+    async def _assert_admitted_call(self, wrapped, underlying, monkeypatch):
+        from app.infrastructure.llm.model_admission import ModelRateLimitError, RateLimitedProvider
+        from app.utils.resilience import rate_limiter
+
+        # Isolate the actual in-memory quota storage, not admission or the wrapper.
+        monkeypatch.setenv("TESTING", "1")
+        monkeypatch.setenv("XCAGI_REQUIRE_REDIS_RATE_LIMIT", "0")
+        monkeypatch.setenv("XCAGI_TENANT_MODEL_CALLS_PER_MINUTE", "1")
+        monkeypatch.setattr(rate_limiter, "_get_redis_client", lambda: None)
+        monkeypatch.setattr(rate_limiter, "_rate_limiters", {})
+        assert isinstance(wrapped, RateLimitedProvider)
+        assert wrapped.provider_id == underlying.provider_id
+        assert wrapped.is_configured is True
+        messages = [{"role": "user", "content": "hello"}]
+        assert await wrapped.chat_completion(messages, temperature=0) == {"content": "reply"}
+        underlying.chat_completion.assert_awaited_once_with(messages, temperature=0)
+        with pytest.raises(ModelRateLimitError):
+            await wrapped.chat_completion(messages, temperature=0)
+        assert underlying.chat_completion.await_count == 1
 
     def test_get_unknown_returns_none(self) -> None:
         reg = LLMProviderRegistry()
@@ -76,12 +102,13 @@ class TestLLMProviderRegistry:
         assert out is not None
         assert out.provider_id == "openai_compatible"
 
-    def test_resolve_header_override_when_configured(self) -> None:
+    @pytest.mark.asyncio
+    async def test_resolve_header_override_when_configured(self, monkeypatch) -> None:
         reg = LLMProviderRegistry()
         configured = _provider("custom", configured=True)
         reg.register("custom", configured)
         out = reg.resolve(header_provider="custom")
-        assert out is configured
+        await self._assert_admitted_call(out, configured, monkeypatch)
 
     def test_resolve_header_override_ignored_when_not_configured(self) -> None:
         reg = LLMProviderRegistry()
