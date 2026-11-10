@@ -24,7 +24,7 @@ _MUTATION = re.compile(
     r"delete|clear|remove|drop|update|create|write|insert|upsert|清理|删除|清空|写入", re.IGNORECASE
 )
 _READ_ONLY = re.compile(r"(query|list|search|read|get|count|status|preview|schema)", re.IGNORECASE)
-_LEDGER: dict[str, TurnRecord] = {}
+_LEDGER: dict[tuple[str, str, str], TurnRecord] = {}
 
 
 @dataclass
@@ -169,9 +169,9 @@ def execution_payload(record: TurnRecord) -> dict[str, Any]:
     }
 
 
-def _remember(record: TurnRecord) -> dict[str, Any]:
+def _remember(record: TurnRecord, ctx: dict[str, Any]) -> dict[str, Any]:
     if record.key:
-        _LEDGER[record.key] = record
+        _LEDGER[_scope_key(ctx)] = record
     return {
         "success": record.effect in {"preview", "committed"},
         "response": record.summary,
@@ -185,12 +185,20 @@ def _key(ctx: dict[str, Any]) -> str:
     return str(ctx.get("idempotency_key") or ctx.get("turn_id") or "").strip()
 
 
+def _scope_key(ctx: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(ctx.get("tenant_id") or ""),
+        str(ctx.get("user_id") or ctx.get("local_user_id") or ""),
+        _key(ctx),
+    )
+
+
 def execution_for_context(ctx: dict[str, Any] | None) -> dict[str, Any] | None:
     """The turn's intent-versus-commit record, when this request has one."""
     if not isinstance(ctx, dict):
         return None
     key = _key(ctx)
-    record = _LEDGER.get(key) if key else None
+    record = _LEDGER.get(_scope_key(ctx)) if key else None
     return execution_payload(record) if record else None
 
 
@@ -200,13 +208,13 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
     retry = bool(str(ctx.get("retry_of") or "").strip())
     confirmed = ctx.get("destructive_confirmed") is True and bool(key)
     bulk = is_bulk_destructive(message)
-    existing = _LEDGER.get(key) if key else None
+    existing = _LEDGER.get(_scope_key(ctx)) if key else None
     if retry:
         _use_policy("model_only")
         return None
     if existing and (existing.committed or existing.effect == "unknown"):
         _use_policy("model_only")
-        return _remember(existing)
+        return _remember(existing, ctx)
     if bulk and not confirmed:
         customers, products = scope_counts(ctx)
         text = preview_message(ctx, message, customers=customers, products=products)
@@ -214,11 +222,11 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
             key, "bulk_destructive", False, "preview", text, _tenant(ctx), customers, products
         )
         _use_policy("block")
-        return _remember(record)
+        return _remember(record, ctx)
     if bulk and confirmed:
         if existing and existing.effect == "opened":
             _use_policy("model_only")
-            text = "上一轮没有提交写入。这次只会重新请求模型，不会执行删除。"
+            text = "上一轮写入状态未确认，请先核对原任务；本次不会执行删除。"
             return {
                 "success": True,
                 "response": text,
@@ -229,7 +237,7 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
                         key,
                         "bulk_destructive",
                         False,
-                        "none",
+                        "unknown",
                         text,
                         existing.tenant_id,
                         existing.customer_count,
@@ -242,7 +250,7 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
             key, "bulk_destructive", False, "opened", "", _tenant(ctx), customers, products
         )
         if key:
-            _LEDGER[key] = record
+            _LEDGER[_scope_key(ctx)] = record
         _use_policy("allow_once")
         return None
     _use_policy("allow")
@@ -272,7 +280,7 @@ def mutation_block(name: str, raw_args: str, runtime_context: Any) -> dict[str, 
     ctx = runtime_context if isinstance(runtime_context, dict) else {}
     policy = str(ctx.get("mutation_policy") or "") or _POLICY.get()
     key = _key(ctx)
-    existing = _LEDGER.get(key) if key else None
+    existing = _LEDGER.get(_scope_key(ctx)) if key else None
     if existing and (existing.committed or existing.effect == "unknown"):
         return {
             "success": False,
@@ -301,9 +309,9 @@ def note_tool_result(runtime_context: Any, name: str) -> None:
     key = _key(runtime_context)
     if not key:
         return
-    current = _LEDGER.get(key)
+    current = _LEDGER.get(_scope_key(runtime_context))
     summary = f"{name} 已返回，实际写入状态待核验，请勿重复操作。"
-    _LEDGER[key] = TurnRecord(
+    _LEDGER[_scope_key(runtime_context)] = TurnRecord(
         key,
         "bulk_destructive",
         False,

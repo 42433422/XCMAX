@@ -112,7 +112,7 @@ def test_retry_and_second_confirm_do_not_write():
     blocked = mutation_block(
         "delete_customers",
         '{"all": true}',
-        {"mutation_policy": "model_only", "idempotency_key": "turn-1"},
+        {"mutation_policy": "model_only", "idempotency_key": "turn-1", "tenant_id": "demo"},
     )
     assert blocked["committed"] is False
     note_tool_result(ctx, "delete_customers")
@@ -123,7 +123,7 @@ def test_retry_and_second_confirm_do_not_write():
     assert again["execution"]["committed"] is False
     assert again["execution"]["effect"] == "unknown"
     assert again["success"] is False
-    retry_ctx = {"idempotency_key": "turn-1", "retry_of": "turn-1"}
+    retry_ctx = {"idempotency_key": "turn-1", "retry_of": "turn-1", "tenant_id": "demo"}
     assert prepare_turn("清理全部客户和产品", retry_ctx) is None
     assert mutation_policy() == "model_only"
     assert mutation_block("delete_customers", "{}", retry_ctx)["error"] == "outcome_unknown"
@@ -289,3 +289,14 @@ def test_preview_uses_authorized_tenant_rows_not_caller_counts(monkeypatch):
     assert scope_counts(ctx) == (None, None)
     assert "租户：未核验" in preview_message(ctx, "清空所有产品", customers=None, products=None)
     engine.dispose()
+
+
+def test_identical_turn_keys_are_isolated_between_tenants_and_users(monkeypatch):
+    from app.application.chat_turn_guard import execution_for_context
+
+    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (1, 2))
+    first = {"tenant_id": "1", "user_id": "10", "idempotency_key": "same"}
+    prepare_turn("清空所有产品", first)
+    assert execution_for_context(first)["tenant_id"] == "1"
+    assert execution_for_context({**first, "tenant_id": "2"}) is None
+    assert execution_for_context({**first, "user_id": "11"}) is None
