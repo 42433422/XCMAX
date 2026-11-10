@@ -260,7 +260,7 @@ class WorkflowApprovalBridge:
                 ),
                 None,
             )
-            plan = workflow.get("plan")
+            plan = durable_plan
             stored_plan = None
             if current is not None:
                 from app.application.workflow.workflow_types import plan_from_dict

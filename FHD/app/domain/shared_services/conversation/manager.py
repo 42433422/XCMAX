@@ -314,7 +314,9 @@ class AIConversationService(ContextMixin, PromptsMixin):
             )
             if not isinstance(payload, dict):
                 return {"success": False, "text": "统一聊天服务没有返回有效结果", "action": "error"}
-            data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+            data = payload.get("data") or {}
+            if not isinstance(data, dict):
+                data = {}
             return {
                 **payload,
                 "text": str(payload.get("response") or payload.get("message") or ""),

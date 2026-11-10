@@ -528,7 +528,8 @@ class LangGraphConstructionMixin:
             target = str(state.get("next_node") or "__end__")
             return target if target in node_ids else "__end__"
 
-        graph.add_node(schedule_id, schedule)
+        # The state schema is generated at runtime, so its TypedDict is not static.
+        cast(Any, graph).add_node(schedule_id, schedule)
         graph.add_edge(START, schedule_id)
         for node in nodes:
             graph.add_edge(node.node_id, schedule_id)

@@ -344,7 +344,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 and existing.metadata.get("plan_sha256") == plan_sha256
                 and existing.metadata.get("execution_idempotency_key") == idempotency_key
             ):
-                return existing
+                return cast("AgentRun", existing)
             logger.error("plan idempotency collision; refusing to start run_id=%s", run_id)
             conflict = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
             conflict.status = "blocked"
@@ -431,6 +431,8 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 return None
             return cast("AgentRun | None", self._repo.get(run_id))
         plan = self._durable_plan(run)
+        if plan is None:
+            return None
         required = set((plan.metadata or {}).get("approval_required_node_ids") or [])
         approval_plan_sha256 = ""
         if waiting_step.node_id in required:

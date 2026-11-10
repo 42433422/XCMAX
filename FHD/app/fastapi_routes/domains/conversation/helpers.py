@@ -19,7 +19,6 @@ from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run as attach_chat_trace_run,
@@ -40,6 +39,9 @@ from app.domain.context.session_context import (
 )
 from app.domain.context.session_context import (
     runtime_context_after_workflow_interrupt as runtime_context_after_workflow_interrupt,
+)
+from app.fastapi_routes.xcagi_compat_chat_models import (
+    XcagiCompatChatBatchBody as XcagiCompatChatBatchBody,
 )
 from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody as XcagiCompatChatBody
 from app.infrastructure.auth.db_token import effective_db_read_token
@@ -144,35 +146,6 @@ def _ensure_chat_db_read_authorized(
         _touch_chat_db_read_grace(request)
         return True, None
     return False, _chat_read_token_required_payload(message)
-
-
-class XcagiCompatChatBatchBody(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    messages: list[str] = Field(default_factory=list)
-    context: dict | None = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "context",
-            "runtime_context",
-            "session_context",
-            "ddd_context",
-            "neuro_context",
-            "neuro_ddd_context",
-        ),
-    )
-    system_prompt: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("system_prompt", "system", "instructions"),
-    )
-    mode: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("mode", "llm_mode"),
-    )
-    db_read_token: str | None = Field(default=None)
-    db_write_token: str | None = Field(default=None)
-    user_id: str | None = None
-    source: str | None = None
 
 
 def _market_connection_label() -> str:

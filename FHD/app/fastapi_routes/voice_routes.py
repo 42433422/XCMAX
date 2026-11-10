@@ -442,7 +442,9 @@ async def voice_command(
                 file_context={},
             )
             result = payload if isinstance(payload, dict) else {"response": str(payload)}
-            details = result.get("data") if isinstance(result.get("data"), dict) else {}
+            details = result.get("data") or {}
+            if not isinstance(details, dict):
+                details = {}
             inner = details.get("data") if isinstance(details.get("data"), dict) else {}
             node_results = inner.get("node_results") if isinstance(inner, dict) else []
             executed = any(

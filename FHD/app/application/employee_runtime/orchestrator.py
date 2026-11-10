@@ -157,7 +157,7 @@ class EmployeeOrchestrator:
         ctx.setdefault("employee_id", employee_id)
         raw_user_id = ctx.get("user_id")
         try:
-            user_id = int(raw_user_id)
+            user_id = int(raw_user_id) if raw_user_id is not None else 0
         except (TypeError, ValueError):
             user_id = 0
         if user_id <= 0:

@@ -16,12 +16,12 @@
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
       "base_blob": "20d2379adc81acc88bec8e7a98d040ce9f3f7d16",
-      "head_blob": "956706770f87be87fe42d922a050e842a9b41ab7",
+      "head_blob": "4ba1dcfc71287f960174520046b80e0eda77d762",
       "before_lines": 816,
-      "after_lines": 1542,
+      "after_lines": 1544,
       "reason": "Durable run approval staging, continuation, plan validation and concurrency handling are integrated in the coordinator.",
       "boundary": "Run lifecycle and approval authorization; execution remains gated by the validated plan.",
-      "validation": "Approval workspace, PostgreSQL race and agent orchestration tests; full CI remains outstanding.",
+      "validation": "Approval workspace and applicant self-approval regressions pass locally; full CI and architecture review remain outstanding.",
       "follow_up": "Extract durable approval staging from the coordinator after architecture review.",
       "review_owner": "@42433422"
     },

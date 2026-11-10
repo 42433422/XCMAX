@@ -464,7 +464,9 @@ def _read(key: str) -> dict[str, Any]:
         if isinstance(data.get("turns"), list)
         else []
     )
-    receipts = data.get("receipts") if isinstance(data.get("receipts"), dict) else {}
+    receipts = data.get("receipts") or {}
+    if not isinstance(receipts, dict):
+        receipts = {}
     return {"active": bool(data.get("active")), "turns": turns, "receipts": receipts}
 
 
@@ -477,7 +479,9 @@ def _write(key: str, data: dict[str, Any]) -> None:
     ][-_MEMORY_MAX_TURNS:]
     data["turns"] = turns
     retained = {str(item.get("turn_id") or "") for item in turns}
-    receipts = data.get("receipts") if isinstance(data.get("receipts"), dict) else {}
+    receipts = data.get("receipts") or {}
+    if not isinstance(receipts, dict):
+        receipts = {}
     data["receipts"] = {
         key: value
         for key, value in receipts.items()
@@ -500,6 +504,8 @@ def _safe_attachment(item: Mapping[str, Any]) -> dict[str, Any]:
     for source, target in (("name", "name"), ("mime_type", "mime_type"), ("size", "size")):
         value = item.get(source)
         if source == "size":
+            if value is None:
+                continue
             try:
                 safe[target] = max(0, int(value))
             except (TypeError, ValueError):

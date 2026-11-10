@@ -123,7 +123,7 @@ def apply_clarification_answer(
             candidate.update(deepcopy(parameters))
         if not confirmed and detail.get("requires_confirmation", True):
             raise ClarificationAnswerError("请明确回答该操作的澄清问题")
-    if confirmed and isinstance(spec.input_schema if spec else None, dict):
+    if confirmed and spec is not None and isinstance(spec.input_schema, dict):
         properties = spec.input_schema.get("properties") or {}
         if "confirmed" in properties:
             candidate["confirmed"] = True

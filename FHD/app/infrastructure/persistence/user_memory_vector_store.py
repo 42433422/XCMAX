@@ -152,7 +152,8 @@ class PgUserMemoryVectorStore(VectorStorePort):
     ) -> list[dict[str, Any]]:
         query_filter = filters if isinstance(filters, dict) else {}
         try:
-            created_after = float(query_filter.get("created_after"))
+            raw_created_after = query_filter.get("created_after")
+            created_after = float(raw_created_after) if raw_created_after is not None else None
         except (TypeError, ValueError):
             created_after = None
         created_clause = " AND created_at >= :created_after" if created_after is not None else ""
@@ -383,7 +384,8 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
     ) -> list[dict[str, Any]]:
         query_filter = filters if isinstance(filters, dict) else {}
         try:
-            created_after = float(query_filter.get("created_after"))
+            raw_created_after = query_filter.get("created_after")
+            created_after = float(raw_created_after) if raw_created_after is not None else None
         except (TypeError, ValueError):
             created_after = None
         where = "index_id = ?"

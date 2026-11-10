@@ -43,9 +43,10 @@ async def chat_completion_openai_format(
     # receive an unsupported ``thinking`` field.
     if reasoning_enabled is False and provider.provider_id == "xiaomi":
         kwargs.setdefault("thinking", {"type": "disabled"})
-    return await provider.chat_completion(
+    response = await provider.chat_completion(
         messages,
         temperature=temperature,
         max_tokens=max_tokens,
         **kwargs,
     )
+    return response if isinstance(response, dict) else None

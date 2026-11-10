@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import httpx
 
@@ -444,9 +444,9 @@ class LlmPlanGeneration:
             if spec is None:
                 return None
             schema = spec.input_schema if isinstance(spec.input_schema, dict) else {}
-            properties = (
-                schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
-            )
+            properties = schema.get("properties") or {}
+            if not isinstance(properties, dict):
+                properties = {}
             allowed = sorted(str(key) for key in allowed_fields)
             field_schema: dict[str, Any] = {}
             for key in allowed:
@@ -508,7 +508,7 @@ class LlmPlanGeneration:
                 return None
             if set(map(str, parameters)) - set(allowed):
                 return None
-            return _model_context_value(parameters)
+            return cast("dict[str, Any]", _model_context_value(parameters))
         except (ValueError, TypeError, KeyError, IndexError):
             logger.info("模型未能从澄清回答中提取有效参数")
             return None

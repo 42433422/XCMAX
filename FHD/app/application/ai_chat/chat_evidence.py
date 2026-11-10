@@ -236,10 +236,10 @@ def prepare_chat_evidence(
             and responses[dataset].get("success") is True
         ]
         for dataset in eligible:
-            response = responses.get(dataset)
-            if not isinstance(response, dict) or not response.get("success"):
+            dataset_response = responses.get(dataset)
+            if not isinstance(dataset_response, dict) or not dataset_response.get("success"):
                 continue
-            for sheet in response.get("sheet_contexts") or []:
+            for sheet in dataset_response.get("sheet_contexts") or []:
                 if isinstance(sheet, dict) and sheet.get("text"):
                     evidence.append(
                         {
