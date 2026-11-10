@@ -25,7 +25,7 @@ type FragmentLinks = { items: { sheet: string; first: string; second: string; sh
 type LogicalDocument = { logical_document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type SuggestedDocument = { document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; type_label?: string; fragments: { sheet: string; range: string }[] }
-type Checkpoint = { phase: 'ready' | 'paused' | 'inflight' | 'failed'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; remaining_in_round?: number; message: string }
+type Checkpoint = { phase: 'ready' | 'paused' | 'inflight' | 'failed'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; repair_rounds?: number; remaining_in_round?: number; message: string }
 type ConversionReceipt = { converter: string; source_sha256: string; derived_sha256: string; purpose?: string; print_layout_verified?: boolean; warnings?: string[] }
 type Classification = { usage_restrictions?: string[]; original_sha256?: string; conversion_receipt?: ConversionReceipt | null; template_write_state?: string; independent_confirmed?: boolean; confirmed_document_count?: number | null; document_count_status?: string; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; read_only_print_areas?: { sheet: string; value: string }[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; checkpoint?: Checkpoint | null; name: string; status: string; sha256?: string; message?: string; classification_id?: string; version?: string; confirmed?: boolean; model_status?: string; budget?: { calls: number; max_calls: number; unread: number }; input_messages?: unknown[]; input_summaries?: unknown[]; coverage?: { sheet: string; total: number; sent: number; unread: string[]; unassigned: string[]; model_unassigned?: string[]; value_truncated: string[]; deferred_large_values?: string[]; deferred_oversized_rows?: string[]; merged_sent: number; merged_omitted: number }[]; sheets: ClassificationSheet[] }
 type RecentClassification = { usage_restrictions?: string[]; conversion_receipt?: ConversionReceipt | null; archive_version_id?: string | null; template_write_state?: string; checkpoint?: Checkpoint | null; classification_id: string; name: string; sha256: string; latest: { usage_restrictions?: string[]; conversion_receipt?: ConversionReceipt | null; version: string; confirmed: boolean; model_status: string; sheets: ClassificationSheet[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; coverage?: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] } | null }
@@ -875,7 +875,7 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
       analysisProgress.value = `模型分析 ${index + 1}/${pending.length}：${item.name}`
       try {
         if (!item.classification_id || !item.version) throw new Error('分类来源或版本缺失，请重新分类')
-        let lastPausedCompleted = -1
+        const pausedProgress = new Set<string>()
         while (!cancelAnalysis.value) {
           const form = new FormData(); form.append('version', item.version)
           form.append('auto_group', 'true')
@@ -892,8 +892,9 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
             if (pipeline) archiveProgress.value = `${analysisProgress.value}，正在继续处理…`
             if (result.phase === 'paused') {
               const completed = result.checkpoint?.completed
-              if (!pipeline || typeof completed !== 'number' || completed <= lastPausedCompleted) break
-              lastPausedCompleted = completed
+              const progress = JSON.stringify([completed, result.checkpoint?.repair_rounds ?? 0])
+              if (!pipeline || typeof completed !== 'number' || pausedProgress.has(progress)) break
+              pausedProgress.add(progress)
               analysisProgress.value = `${item.name}：已完成 ${completed}/${result.checkpoint?.total} 批，正在继续处理`
             } else if (retryItem && !pipeline) break
             continue

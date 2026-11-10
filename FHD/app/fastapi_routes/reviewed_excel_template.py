@@ -335,6 +335,7 @@ def _checkpoint_view(checkpoint):
         "remaining": checkpoint["total"] - len(checkpoint["results"]),
         "max_calls": checkpoint["max_calls"],
         "calls_in_round": checkpoint.get("calls_in_round", 0),
+        "repair_rounds": (checkpoint.get("repair") or {}).get("rounds", 0),
         "remaining_in_round": max(0, checkpoint["max_calls"] - checkpoint.get("calls_in_round", 0)),
         "message": message,
     }

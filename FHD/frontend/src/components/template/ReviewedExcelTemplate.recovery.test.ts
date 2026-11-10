@@ -100,6 +100,13 @@ describe('archive round recovery and stopping', () => {
     expect(api.reviewExcel).toHaveBeenCalled()
   })
 
+  it('continues bounded format repairs even before a batch completes', async () => {
+    for (const rounds of [1, 2]) api.analyzeClassification.mockResolvedValueOnce({ ...modelResult(), phase: 'paused', checkpoint: { ...checkpoint('paused'), repair_rounds: rounds }, version: 'v1', model_status: 'not_called' })
+    await stage(); await start()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(3)
+    expect(api.reviewExcel).toHaveBeenCalled()
+  })
+
   it('stops automatic continuation if paused batches make no progress', async () => {
     api.analyzeClassification.mockResolvedValue({ ...modelResult(), phase: 'paused', checkpoint: checkpoint('paused'), version: 'v1', model_status: 'not_called' })
     await stage(); await start()

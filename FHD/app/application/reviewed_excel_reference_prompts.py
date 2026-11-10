@@ -81,6 +81,7 @@ IDENTIFY_PROMPT = (
     "Return real sheet_name and inclusive integer row_start,row_end,column_start,column_end; do not invent or report IDs. "
     "Each rectangle means ALL original nonempty cells within its boundaries. The server reads the source to verify every supplied primary cell is covered exactly once. "
     "Never include context_only or unread nonempty content, overlap ranges even on blanks, cut any source merge, or exceed source sheet dimensions. "
+    "Do not return a parent/summary rectangle alongside its child rectangles: choose one nonoverlapping partition, never both the whole ledger and its segments. "
     "Every intersected merge must be wholly contained. Internal blanks are allowed; blank-only ranges are not. "
     "每个划定范围至少包含一个非空主单元格（合并格无值不算）。不要覆盖全空尾部行。范围之间不能重叠，否则整批拒绝。 "
     "由你决定这些单据现在能不能切片；无论是否有范围外的主单元格，顶层都必须返回布尔值 can_slice：能切为 true，不能切为 false。不要为了盖住范围外的格子去补范围。 "
@@ -91,7 +92,7 @@ IDENTIFY_PROMPT = (
     "Do not place hidden or veryHidden sheets (sheets[].sheet_state) into documents unless explicitly required; never invent workbook-title-specific rules. "
     "Template cuts follow business boundaries. Cross-document formulas, aggregates and AutoFilter spans alone must not make can_slice false or cause document merging. The archived original and data layer retain source references; return false only when supplied evidence cannot establish valid boundaries. "
     "Decide from supplied cell values and sheet facts only; never invent coordinates that are not justified by that evidence. "
-    "No cleaning, numbering, printing or template decisions. Return exactly output_schema."
+    "No cleaning, numbering, printing or template decisions. Return one JSON instance satisfying output_schema, never the schema itself."
 )
 RANGE_GROUP_PROMPT = (
     "Group the supplied validated ranges into complete documents using source content. Return documents with nested ranges and reasons, no IDs. "
@@ -104,7 +105,7 @@ RANGE_GROUP_PROMPT = (
     "fragment_structure.has_filter_aware_aggregates and covers_sheet_filter are source facts for that decision. "
     "When workbook_structural_index is present, treat it as whole-book structural context for grouping decisions only; do not invent ranges outside the supplied validated ranges. If structural candidates show distinct ledger_key_run or block_title spans, keep those as separate documents — do not merge adjacent order/date runs or titled period blocks. Server verify-after-cut: after you return documents, each cut is checked for source geometry and over-merged ledgers (multiple titled blocks or two or more distinct date+order runs inside one document). Prefer keeping atomic documents separate; do not merge merely to satisfy a distant aggregate when that would glue unrelated orders together. "
     "Technical batches are not document boundaries. Adjacency, sheet membership and repeated headers alone do not prove document identity. "
-    "This step groups existing ranges only; do not change source data or make cleaning, numbering, printing or template decisions. Return exactly output_schema."
+    "This step groups existing ranges only; do not change source data or make cleaning, numbering, printing or template decisions. Return one JSON instance satisfying output_schema, never the schema itself."
 )
 DRAWING_IDENTIFY_PROMPT = LEGACY_IDENTIFY_PROMPT + (
     " cells[] entries are cell objects; only their evidence_id may be used in evidence_ids, dependency_ids, and primary_id. "

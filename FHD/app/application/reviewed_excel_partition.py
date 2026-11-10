@@ -442,8 +442,13 @@ def _normalize_boundaries(data: dict, references: dict, review: dict) -> dict:
                 # A blank rectangle is not a document. Leave the ranges that
                 # contain primary cells unchanged, and do not invent a replacement.
                 continue
-            if seen.intersection(covered):
-                raise ReviewedExcelError("模型边界主体为空或重复覆盖")
+            duplicate = seen.intersection(covered)
+            if duplicate:
+                duplicate_sheet, duplicate_cell = min(duplicate)
+                raise ReviewedExcelError(
+                    f"模型边界主体为空或重复覆盖：{part['sheet']}!{part['range']} 重复包含 {duplicate_sheet}!{duplicate_cell}；"
+                    "不能同时返回整表父范围和其分段子范围，请仅保留一套不重复的单据分区"
+                )
             decoded.append(
                 {
                     **part,
