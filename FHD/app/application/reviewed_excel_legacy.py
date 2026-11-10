@@ -516,6 +516,10 @@ def _validate_layout(source, sheet, styles, records):
             _error("打印选项改变")
 
 
+from app.application.reviewed_excel_io_lock import serialize_workbook_io
+
+
+@serialize_workbook_io
 def validate_conversion(book, converted, styles, records=()):
     review = inspect_workbook(converted)
     target = load_workbook(BytesIO(converted), data_only=False)

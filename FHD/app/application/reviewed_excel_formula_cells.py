@@ -129,6 +129,10 @@ def content_bounds(sheet: object, facts: FormulaFacts) -> tuple[int, int]:
     return max_row, max_col
 
 
+from app.application.reviewed_excel_io_lock import serialize_workbook_io
+
+
+@serialize_workbook_io
 def load_cached_workbook(body: bytes):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

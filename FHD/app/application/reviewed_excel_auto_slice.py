@@ -22,6 +22,7 @@ _COMPATIBILITY_MARKERS = (
 
 from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
+from app.application.reviewed_excel_io_lock import serialize_workbook_io
 from app.application.reviewed_excel_legacy import ensure_slice_workbook
 from app.application.reviewed_excel_template import derive_document_workbook, inspect_workbook
 from app.utils.operational_errors import BOUNDARY_ERRORS
@@ -108,6 +109,7 @@ def _review_copy(sources: dict, body: bytes, fragment: dict, reason: str) -> byt
     return _review_document(sources, body, [fragment], reason)
 
 
+@serialize_workbook_io
 def _review_document(sources: dict, body: bytes, fragments: list[dict], reason: str) -> bytes:
     """Value copy of one document's regions. A hidden sheet stays for a person to confirm."""
     from io import BytesIO
@@ -226,6 +228,7 @@ def _rule_slice(body, source, sheet, region, hidden, used_names, copy_sources) -
     return record
 
 
+@serialize_workbook_io
 def rule_row_dispositions(body: bytes, latest: dict, slices: list[dict]) -> list[dict]:
     """One outcome per non-empty source row: import, pending_review or rejected, with reason."""
     from io import BytesIO
@@ -422,7 +425,7 @@ def _compatibility_revision(fragments, message, overview, owner_id, earlier, all
 
 
 def derive_classified_documents(
-    body: bytes, classification: dict, *, owner_id: int | None = None
+    body: bytes, classification: dict, *, owner_id: int | None = None, only_index: int | None = None, metadata_only: bool = False
 ) -> list[dict]:
     """Export only documents with explicit model grouping, without inferring missing groups.
 
@@ -510,9 +513,14 @@ def derive_classified_documents(
     ]
     results = []
     used_names: set[str] = set()
-    for fragments, basis, reason in groups:
+    for group_index, (fragments, basis, reason) in enumerate(groups):
+        if only_index is not None and group_index != only_index:
+            continue
         if fragments and all(part.get("sheet") in hidden_sheets for part in fragments):
             logger.info("skip hidden sheet %s", fragments[0]["sheet"])
+            continue
+        if metadata_only:
+            results.append({"print_area_mode": "source", "range_objects_receipt": {}, "fragments": fragments, "basis": basis, "confirmed": False, "source_sha256": source["sha256"], "filename": _slice_filename(fragments, source["cells"], used_names, reason=reason)})
             continue
         print_area_mode = "source"
         # A print area that crosses this fragment continues as the fragment.

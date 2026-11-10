@@ -310,31 +310,55 @@ def _update_candidate_claim(
     db, classification_id, key, tenant, owner, review_id="", *, unknown=False
 ):
     """Complete, release (definite failure) or keep locked as ``unknown``."""
-    run = _classification_run(db, classification_id, tenant, owner)
-    old = run.draft_json
-    state = load_json(old, {})
-    claims = state.get("template_candidate_requests", {})
-    if claims.get(key, {}).get("state") not in {"inflight", "sent"}:
-        raise HTTPException(status_code=409, detail="模型候选请求状态已改变，请核对")
-    if review_id:
-        claims[key] = {"state": "completed", "review_id": review_id}
-    elif unknown:
-        claims[key]["state"] = "unknown"
-    else:
-        claims.pop(key)
-    _classification_cas(db, run, old, state)
+    for _ in range(5):
+        if not review_id:
+            db.rollback()
+            db.expire_all()
+        run = _classification_run(db, classification_id, tenant, owner)
+        old = run.draft_json
+        state = load_json(old, {})
+        claims = state.get("template_candidate_requests", {})
+        if claims.get(key, {}).get("state") not in {"inflight", "sent"}:
+            raise HTTPException(status_code=409, detail="模型候选请求状态已改变，请核对")
+        if review_id:
+            claims[key] = {"state": "completed", "review_id": review_id}
+        elif unknown or any(item.get("status") in {"sent", "unknown"} for item in (claims[key].get("batches") or {}).values()):
+            claims[key]["state"] = "unknown"
+        elif any(item.get("status") == "complete" for item in (claims[key].get("batches") or {}).values()):
+            # Model batches with known outcomes can resume without redoing them.
+            claims[key]["state"] = "retryable"
+        else:
+            claims.pop(key)
+        try:
+            _classification_cas(db, run, old, state)
+            return
+        except HTTPException as exc:
+            if exc.status_code != 409 or review_id:
+                raise
+    raise HTTPException(status_code=409, detail="分类正在更新，请稍后核对候选状态")
 
 
 def _stored_candidate_response(db, review_id, tenant, owner):
     run = _run(db, review_id, tenant, owner)
     _review_source_version(db, run, tenant, owner)
-    _, versions = _proposals(run)
+    state, versions = _proposals(run)
     if run.status == _MODEL_PENDING or versions[-1]["model"].get("status") != "returned":
         error = _model_processing_failure(
             ReviewedExcelError("候选存在未完成的模型请求，请先核对状态")
         )
         error.status_code = 409
         raise error
+    saved = None
+    if run.status == _SAVED:
+        confirmation = state.get("confirmation") or {}
+        receipt = load_json(run.receipt_json, {})
+        if receipt.get("template_id") and confirmation.get("version") and confirmation.get("candidate"):
+            saved = {
+                "review_id": run.id,
+                "proposal_version": confirmation["version"],
+                "candidate_id": confirmation["candidate"],
+                "template_id": receipt["template_id"],
+            }
     return {
         "success": True,
         **inspect_workbook(_source(db, run, tenant, owner)),
@@ -342,6 +366,7 @@ def _stored_candidate_response(db, review_id, tenant, owner):
         "proposal": versions[-1],
         "versions": versions,
         "selected_region": load_json(run.summary_json, {}).get("selected_region"),
+        **({"saved_receipt": saved} if saved else {}),
     }
 
 

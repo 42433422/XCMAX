@@ -41,6 +41,19 @@ describe('api core types', () => {
     await vi.advanceTimersByTimeAsync(900)
     await rejection
   })
+
+  it('waits for a long request when no client timeout is configured', async () => {
+    vi.useFakeTimers()
+    let finish!: (value: Response) => void
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { finish = resolve })))
+    let settled = false
+    const pending = api.post('/api/templates/reviewed-excel/preview', new FormData())
+      .finally(() => { settled = true })
+    await vi.advanceTimersByTimeAsync(181_000)
+    expect(settled).toBe(false)
+    finish({ ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true }) } as unknown as Response)
+    await expect(pending).resolves.toEqual({ success: true })
+  })
 })
 
 describe('auth api module', () => {

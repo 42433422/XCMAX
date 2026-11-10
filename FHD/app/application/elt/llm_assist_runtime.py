@@ -12,7 +12,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _CIRCUIT_LOCK = threading.Lock()
 _CIRCUIT_OPEN_UNTIL: dict[str, tuple[float, str]] = {}
-_OWNER_CALL_LOCKS: dict[str, threading.Lock] = {}
+_OWNER_CALL_LOCKS: dict[str, threading.BoundedSemaphore] = {}
 
 
 @dataclass(slots=True)
@@ -58,7 +58,7 @@ def etl_llm_timeout_seconds(*, full_sheet: bool = False) -> float:
     """Probe calls stay short. A full archived sheet uses the template-analysis ceiling.
 
     ``FHD_ETL_LLM_TIMEOUT`` defaults to 6 seconds and cannot exceed 180.
-    ``FHD_ETL_IMPORT_LLM_TIMEOUT`` is the whole database or knowledge import,
+    ``FHD_ETL_IMPORT_LLM_TIMEOUT`` bounds each database unit or knowledge import,
     default 180, same ceiling. The old 12-second clamp cut a real delivery
     note off while the remote model was still writing rows.
     """
@@ -86,29 +86,19 @@ def degradation_code(exc: BaseException) -> str:
     message = str(exc).lower()
     if "quota exhausted" in message or "额度" in message or "429" in message:
         return "ELT_LLM_QUOTA_EXHAUSTED"
+    if isinstance(exc, TimeoutError) or "structured completion timeout" in message or "sync bridge timeout" in message:
+        return "ELT_LLM_TIMEOUT"
     return "ELT_LLM_UNAVAILABLE"
 
 
-def clip_model_raw(raw: object, *, limit: int = 2000) -> str:
-    """Keep the start and end of a model body so a failed import can be read."""
-    text = str(raw or "")
-    if len(text) <= limit:
-        return text
-    marker = "\n…[middle omitted]…\n"
-    room = max(0, limit - len(marker))
-    head = room // 2
-    return f"{text[:head]}{marker}{text[-(room - head) :]}"
-
-
 def log_etl_llm_degradation(logger, *, code: str, lane: str, exc: BaseException) -> None:
-    """StructuredOutputError keeps last_raw; the degradation line must show it."""
+    """Log the failure class without writing workbook content to application logs."""
     logger.info(
-        "general etl llm assist degraded (%s lane=%s): %s %s last_raw=%s",
+        "general etl llm assist degraded (%s lane=%s): %s response_received=%s",
         code,
         lane or "shared",
         type(exc).__name__,
-        getattr(exc, "last_errors", ""),
-        clip_model_raw(getattr(exc, "last_raw", "")),
+        bool(getattr(exc, "last_raw", "")),
     )
 
 
@@ -160,11 +150,14 @@ def open_circuit(key: str, code: str) -> None:
         )
 
 
-def owner_call_lock(key: str) -> threading.Lock:
+def owner_call_lock(key: str) -> threading.BoundedSemaphore:
     with _CIRCUIT_LOCK:
         lock = _OWNER_CALL_LOCKS.get(key)
         if lock is None:
-            lock = threading.Lock()
+            # Independent saved documents may preview concurrently. Keep a
+            # bounded per-account, per-lane cap without forcing all three
+            # documents to spend their model deadline waiting behind one call.
+            lock = threading.BoundedSemaphore(3)
             _OWNER_CALL_LOCKS[key] = lock
         return lock
 
