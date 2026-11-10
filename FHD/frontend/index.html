@@ -69,21 +69,13 @@
         <p class="startup-placeholder__mark">XCAGI</p>
         <p class="startup-placeholder__status">正在准备工作台…</p>
         <div class="startup-placeholder__bar" aria-hidden="true"></div>
-        <p class="startup-placeholder__hint" id="startup-timeout-hint" hidden>
-          启动时间较长。若始终没有变化，请重新加载或重启应用后再试。
-          <button id="startup-reload" type="button">重新加载</button>
-        </p>
+        <p class="startup-placeholder__hint">启动遇到问题？<button id="startup-reload" type="button">重新加载</button></p>
       </main>
     </div>
-    <script type="module" src="/src/main.ts"></script>
-    <script>
+    <script id="startup-recovery">
       document.getElementById('startup-reload')?.addEventListener('click', () => location.reload())
-      window.setTimeout(() => {
-        const root = document.getElementById('app')
-        const hint = document.getElementById('startup-timeout-hint')
-        if (root?.dataset.startupMounted !== 'true' && hint) hint.hidden = false
-      }, 20000)
     </script>
+    <script type="module" src="/src/main.ts"></script>
     <script>
       // Legacy static JS — opt-in only (Vue SPA is default). Set __ENABLE_LEGACY__ = true for old Flask shells.
       window.__ENABLE_LEGACY__ = window.__ENABLE_LEGACY__ === true

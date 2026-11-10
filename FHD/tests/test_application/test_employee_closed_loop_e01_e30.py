@@ -342,6 +342,24 @@ def _execute_closed_loop(loop: Acceptance) -> None:
             )
         ],
     )
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+
+    paused_run.metadata["plan"] = plan_to_dict(
+        PlanGraph(
+            plan_id=paused_run.run_id,
+            intent="customer_create",
+            nodes=[
+                WorkflowNode(
+                    node_id="create-customer",
+                    tool_id="customers",
+                    action="create",
+                    params={"unit_name": "闭环待审批客户丁"},
+                    risk="medium",
+                    idempotent=False,
+                )
+            ],
+        )
+    )
     paused_run.metadata["runtime_context"] = loop.context(paused_run.run_id)
     before_approval = len(_units(engine))
     gate = AgentOrchestrator(
@@ -486,7 +504,7 @@ def _execute_closed_loop(loop: Acceptance) -> None:
     from app.db.models.agent_approval import AgentApprovalConsumption
 
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
-    AgentApprovalConsumption.__table__.create(engine)
+    AgentApprovalConsumption.__table__.create(engine, checkfirst=True)
     runs = SQLAlchemyAgentRunRepository(session_factory=factory)
     sql_queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
     durable = AgentRun(
@@ -576,7 +594,9 @@ def _execute_closed_loop(loop: Acceptance) -> None:
                 {"tool": "list_customers", "params": {"filters": {"keyword": "闭环指定客户甲"}}}
             ],
         },
+        user_id=11,
         workspace_root=str(workspace),
+        runtime_context=loop.context("e25-start"),
     )
     parent_id = str(started.get("task_id") or "")
     _note_runtime(loop, started, task_id=parent_id, action="start")
@@ -596,7 +616,9 @@ def _execute_closed_loop(loop: Acceptance) -> None:
             "delegated_params": {"keyword": "闭环指定客户甲"},
             "effect": {"goal": started.get("task", {}).get("goal")},
         },
+        user_id=11,
         workspace_root=str(workspace),
+        runtime_context=loop.context(parent_id),
     )
     handoff = handed.get("handoff") or {}
     _note_runtime(loop, handed, task_id=parent_id, action="handoff")

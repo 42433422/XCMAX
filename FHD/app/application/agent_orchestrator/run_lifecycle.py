@@ -190,10 +190,12 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         )
         provided_plan = previous.metadata.get("provided_plan")
         if isinstance(provided_plan, dict) and provided_plan.get("nodes"):
+            retry_plan = self.plan_from_snapshot(provided_plan)
+            retry_plan.plan_id = f"{retry_plan.plan_id}:retry:{previous.run_id}"
             retried = self.start_task_from_plan(
                 user_id=previous.user_id,
                 message=previous.message,
-                plan=self.plan_from_snapshot(provided_plan),
+                plan=retry_plan,
                 runtime_context=context,
             )
         else:
@@ -273,10 +275,12 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         requested_by: str = "",
         command_id: str = "",
     ) -> None:
-        if run.metadata.get("trace_mode") in {
-            "legacy_planner_run",
-            "legacy_planner_run_with_tools",
-        } and run.status in {"planning", "running", "retrying"}:
+        channel = str(run.metadata.get("channel") or "").strip().lower()
+        if (
+            run.metadata.get("trace_mode")
+            in {"legacy_planner_run", "legacy_planner_run_with_tools"}
+            or channel in {"compat_chat_stream", "compat_chat_stream_langgraph"}
+        ) and run.status in {"planning", "running", "retrying"}:
             # The observation callback may not have run yet. Persist the replay
             # gate atomically with control while the original stream can write.
             run.metadata["non_retryable"] = True

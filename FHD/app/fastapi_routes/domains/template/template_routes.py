@@ -12,8 +12,9 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
+from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
@@ -355,6 +356,7 @@ def _bundle_to_sheet_entry(bundle: dict, sheet_index: int) -> dict:
 @router.post("/templates/extract-grid")
 @router.post("/templates/extract-grid/", include_in_schema=False)
 async def templates_extract_grid(
+    user: Any = Depends(get_logged_in_user),
     file: UploadFile = File(...),
     sheet_name: str | None = Form(default=None),
     analyze_all_sheets: str | None = Form(default=None),
@@ -376,6 +378,13 @@ async def templates_extract_grid(
         from openpyxl import load_workbook
 
         raw = await file.read()
+        from app.application.elt.errors import EltError
+        from app.application.elt.service_uploads import register_chat_upload
+
+        try:
+            receipt = register_chat_upload(user, name, file.content_type, BytesIO(raw))
+        except EltError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
         logger.info("extract-grid: read upload %d bytes, persisting + load_workbook", len(raw))
         workspace_root = Path(os.environ.get("WORKSPACE_ROOT", os.getcwd())).resolve()
         workspace_root_str = str(workspace_root)
@@ -399,6 +408,7 @@ async def templates_extract_grid(
             "success": True,
             "template_name": name,
             "file_path": persisted_rel,
+            "upload_id": receipt["upload_id"],
             "workspace_root": workspace_root_str,
             "fields": [],
             "sheets": [],
@@ -407,6 +417,7 @@ async def templates_extract_grid(
                 "selected_sheet_name": "",
                 "sheet_name": "",
                 "file_path": persisted_rel,
+                "upload_id": receipt["upload_id"],
                 "sample_rows": [],
                 "grid_preview": {"rows": [], "max_row": 0, "max_col": 0},
                 "grid_style_cache": {"styles": {}, "cell_style_refs": {}},
@@ -431,6 +442,7 @@ async def templates_extract_grid(
             "success": True,
             "template_name": name,
             "file_path": persisted_rel,
+            "upload_id": receipt["upload_id"],
             "workspace_root": workspace_root_str,
             "fields": first["fields"],
             "sheets": sheets_top,
@@ -439,6 +451,7 @@ async def templates_extract_grid(
                 "selected_sheet_name": first["sheet_name"],
                 "sheet_name": first["sheet_name"],
                 "file_path": persisted_rel,
+                "upload_id": receipt["upload_id"],
                 "sample_rows": first["sample_rows"],
                 "grid_preview": first["grid_preview"],
                 "grid_style_cache": first["grid_style_cache"],
@@ -454,6 +467,7 @@ async def templates_extract_grid(
         "success": True,
         "template_name": name,
         "file_path": persisted_rel,
+        "upload_id": receipt["upload_id"],
         "workspace_root": workspace_root_str,
         "fields": bundle["fields"],
         "sheets": [one],
@@ -462,6 +476,7 @@ async def templates_extract_grid(
             "selected_sheet_name": bundle["sheet_name"],
             "sheet_name": bundle["sheet_name"],
             "file_path": persisted_rel,
+            "upload_id": receipt["upload_id"],
             "sample_rows": bundle["sample_rows"],
             "grid_preview": bundle["grid_preview"],
             "grid_style_cache": bundle["grid_style_cache"],

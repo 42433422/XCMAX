@@ -61,7 +61,7 @@ class StateUpdatePayload(TypedDict, total=False):
 class StateUpdateEvent:
     """Typed DTO for a ``state.update`` event.
 
-    Mirrors the ``state.update`` dict emitted by ``WorkflowEngine``; the optional
+    Mirrors the ``state.update`` dict emitted by the LangGraph workflow runtime; the optional
     ``payload`` carries the raw dict for consumers that prefer the original shape.
     """
 

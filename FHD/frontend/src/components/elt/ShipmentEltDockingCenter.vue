@@ -15,7 +15,7 @@
           </button>
           <span class="muted etl-hint">支持 .xlsx / .xls / .csv / .pdf / .docx / .pptx</span>
         </div>
-        <p class="muted etl-lead">上传后系统会调用办公读取员工识别内容，检出「送货单 / 发货单」意图后，可在下方确认并写入数据库。</p>
+        <p class="muted etl-lead">上传后用数据对接 ELT 解析。工作表模板可选，保存后提交入库审批，通过后才写入。</p>
       </div>
 
       <input
@@ -32,6 +32,7 @@
         :items="officeDockingReviewItems"
         :processing="processing"
         @toggle-target="toggleOfficeDockingTarget"
+        @pick-template="pickOfficeWorksheetTemplate"
         @confirm="confirmOfficeDockingReview"
         @close="clearOfficeDockingReview"
       />
@@ -55,6 +56,7 @@ const {
   triggerOfficeDocking,
   onOfficeDockingFileChange,
   toggleOfficeDockingTarget,
+  pickOfficeWorksheetTemplate,
   confirmOfficeDockingReview,
   clearOfficeDockingReview,
 } = useChatOfficeDocking({

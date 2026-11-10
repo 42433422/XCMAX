@@ -33,8 +33,7 @@ from app.application.shipment_excel_etl_security import (
     open_etl_input_file,
     resolve_etl_path,
 )
-from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
-from app.application.workflow.engine import WorkflowEngine
+from app.application.workflow.approval_policy import WorkflowApprovalPolicy
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.db.models.elt import EltUpload
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
@@ -307,6 +306,7 @@ def _run_employee(
         {**payload, "skip_collaboration": True, "workspace_root": str(workspace)},
         user_id=user_id,
         workspace_root=str(workspace),
+        runtime_context={"employee_collaboration_skip": True},
     )
     return {"pack": {"id": pack["pack_id"], "version": pack["version"]}, "result": result}
 
@@ -566,13 +566,12 @@ def begin_cross_module_http(
     from app.application.workflow.approval_service import get_approval_service
 
     approval = get_approval_service()
-    gate = ApprovalGatedEngine(
-        WorkflowEngine(lambda **_kwargs: {"success": False}),
+    gate = WorkflowApprovalPolicy(
         approval_service=approval,
         require_persistence=True,
     )
     with tenant_scope(int(tenant_text)):
-        decision = gate.evaluate_plan(plan, runtime_context=context, strategy="interactive")
+        decision = gate.evaluate_plan(plan, runtime_context=context)
         request_id = decision.approval_request_ids[0] if decision.approval_request_ids else ""
         if not request_id:
             created = approval.create_approval_request(

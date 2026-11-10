@@ -121,7 +121,7 @@
     <ConfirmDialog
       v-model="showDeleteConfirm"
       title="确认删除"
-      :message="`确定删除${entityName} &quot;${itemToDelete?.customer_name || itemToDelete?.unit_name || ''}&quot; 吗？`"
+      :message="`确定删除${entityName} &quot;${itemToDelete?.customer_name || itemToDelete?.unit_name || ''}&quot; 吗？该客户关联的产品和发货记录也会一并删除，且无法撤销。`"
       confirm-text="删除"
       confirm-class="btn-danger"
       @confirm="confirmDelete"

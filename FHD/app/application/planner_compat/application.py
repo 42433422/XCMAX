@@ -25,6 +25,7 @@ from app.fastapi_routes.xcagi_compat_chat_models import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .admission import ChatAdmission
+from .offline import is_offline, offline_turn
 from .protocols import ChatBody, ChatTurn, Context, Payload
 
 
@@ -39,15 +40,9 @@ class BusinessAction(Protocol):
     ) -> Payload | None: ...
 
 
-class SlotRead(Protocol):
-    async def __call__(self, message: str, *, request: Request, user_id: str) -> Payload | None: ...
-
-
 @dataclass(frozen=True)
 class FastPaths:
-    issue: Callable[[Request, Context, str], Awaitable[tuple[str, Payload] | None]]
     business: BusinessAction
-    slot: SlotRead
     kitten: Callable[[Context, str], Awaitable[tuple[Context, Payload]]]
 
 
@@ -77,53 +72,43 @@ class CompatChatApplication:
         )
 
     async def single(self, request: Request, body: XcagiCompatChatBody) -> Payload:
-        self._mode(body)
         context = self.admission.context(request, body.context, body.message)
+        from app.infrastructure.llm.model_admission import model_rate_limit_scope
+
         self.assert_access(request)
         context = self.admission.with_tier(context, self.resolve_tier(request))
-        from app.application.ai_chat.chat_evidence import (
-            _CUSTOMER_LOOKUP,
-            customer_name_question,
-            prepare_chat_evidence,
-        )
+        if is_offline(body.mode):
+            turn = ChatTurn(body, body.message, context, "compat_chat_offline")
+            from app.application.ai_chat.dialogue_memory import prepare_chat_turn
 
-        if _CUSTOMER_LOOKUP.search(body.message):
-            enriched = await asyncio.to_thread(
-                prepare_chat_evidence, request, context, body.message
-            )
-            question = customer_name_question(body.message, enriched)
-            if question:
-                return self._attach(
-                    self.admission.reply(question),
-                    ChatTurn(body, body.message, context, "compat_chat_customer_disambiguation"),
-                )
-        issue = await self.fast_paths.issue(request, context, body.message)
-        if issue is not None:
+            prepared = prepare_chat_turn(body.message, context)
+            if prepared is not None:
+                return self._attach(prepared, turn)
             return self._attach(
-                issue[1], ChatTurn(body, body.message, context, "compat_chat_issue")
+                offline_turn(request, turn, self.admission, self.fast_paths.business),
+                turn,
             )
-        business = self.fast_paths.business(
-            body.message, runtime_context=context, user_id=body.user_id, request=request
-        )
-        if business is not None:
-            return business
-        context, kitten_extra = await self.fast_paths.kitten(context, body.message)
-        slot = await self.fast_paths.slot(
-            body.message, request=request, user_id=str(body.user_id or "default")
-        )
         from app.application.ai_chat.chat_evidence import (
             prepare_chat_evidence,
-            use_contextual_reply,
         )
 
         context = await asyncio.to_thread(prepare_chat_evidence, request, context, body.message)
-        if isinstance(slot, dict) and use_contextual_reply(slot, context, body.message):
-            slot = None
-        if isinstance(slot, dict) and slot.get("response"):
-            channel = (
-                "compat_chat_agent_tool" if slot.get("agent_tool_dispatch") else "compat_chat_slot"
-            )
-            return self._attach(slot, ChatTurn(body, body.message, context, channel))
+        context.setdefault(
+            "conversation_id",
+            context.get("session_id")
+            or body.user_id
+            or context.get("local_user_id")
+            or context.get("actor_id")
+            or "default",
+        )
+        context.pop("_chat_evidence_prepared_marker", None)
+        body.context = context
+        if context.get("kitten_analyzer"):
+            with model_rate_limit_scope(context):
+                context, kitten_extra = await self.fast_paths.kitten(context, body.message)
+            body.context = context
+        else:
+            kitten_extra = {}
         turn = ChatTurn(body, body.message, context, "compat_chat", kitten_extra or None)
         admitted = self.admission.check(request, turn)
         if admitted.payload is not None:
@@ -132,16 +117,11 @@ class CompatChatApplication:
                 ChatTurn(
                     body,
                     body.message,
-                    admitted.context_update if admitted.context_update is not None else context,
+                    (admitted.context_update if admitted.context_update is not None else context),
                     turn.channel,
                 ),
             )
-        from app.application.ai_chat.dialogue_memory import prepare_chat_turn
-
-        prepared = prepare_chat_turn(body.message, context)
-        if prepared is not None:
-            return self._attach(prepared, turn)
-        return await self.execution.execute(request, turn, timeout=self.timeout_seconds())
+        return await self.execution.execute(turn, timeout=self.timeout_seconds())
 
     async def batch(self, request: Request, body: XcagiCompatChatBatchBody) -> Payload:
         messages = [str(item).strip() for item in body.messages or [] if str(item).strip()]

@@ -11,6 +11,9 @@ from sqlalchemy.orm import sessionmaker
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.db.models.purchase_unit import PurchaseUnit
 from app.fastapi_routes.domains.customer import routes as customer_routes
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_customer_cascade_authority import deletion as deletion
+from tests.test_application.test_customer_cascade_authority import snapshot
 
 
 def _client() -> TestClient:
@@ -58,8 +61,6 @@ def test_customer_mutation_routes_execute_through_agent_orchestrator(
     repo = InMemoryAgentRunRepository()
     client = _client()
 
-    deleted_ids: list[int] = []
-
     def _insert_customer(name: str, contact: str, phone: str, address: str) -> dict:
         with customer_sessions.begin() as db:
             row = PurchaseUnit(
@@ -73,9 +74,6 @@ def test_customer_mutation_routes_execute_through_agent_orchestrator(
             db.add(row)
             db.flush()
             return {"id": row.id, "unit_name": row.unit_name}
-
-    def _delete_customer(customer_id: int) -> None:
-        deleted_ids.append(customer_id)
 
     with (
         patch(
@@ -101,7 +99,6 @@ def test_customer_mutation_routes_execute_through_agent_orchestrator(
             "_customer_pg_update",
             return_value={"id": 7, "unit_name": "星光贸易二部"},
         ) as update_customer,
-        patch.object(customer_routes, "_customer_delete_unified", side_effect=_delete_customer),
         patch(
             "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
             return_value=repo,
@@ -117,32 +114,17 @@ def test_customer_mutation_routes_execute_through_agent_orchestrator(
             json={"unit_name": "星光贸易二部"},
             headers={"X-User-Id": "tenant-a"},
         )
-        delete_customer = client.delete("/customers/7", headers={"X-User-Id": "tenant-a"})
-        batch_delete = client.post(
-            "/customers/batch-delete",
-            json={"ids": [7, "bad", 8]},
-            headers={"X-User-Id": "tenant-a"},
-        )
 
     assert create_customer.status_code == 200
     assert update_customer_resp.status_code == 200
-    assert delete_customer.status_code == 200
-    assert batch_delete.status_code == 200
 
     insert_customer.assert_called_once_with("星光贸易", "张三", "13900000000", "上海")
     update_customer.assert_called_once_with(7, "星光贸易二部", "李四", "13800000000", "杭州")
-    assert deleted_ids == [7, 7, 8]
 
     assert create_customer.json()["data"]["unit_name"] == "星光贸易"
     assert update_customer_resp.json()["data"]["unit_name"] == "星光贸易二部"
-    assert delete_customer.json()["message"] == "已删除"
-    assert batch_delete.json()["deleted"] == 2
-    assert "bad" in batch_delete.json()["skipped"]
-
     _assert_customer_run(repo, create_customer.json()["run_id"], "create")
     _assert_customer_run(repo, update_customer_resp.json()["run_id"], "update")
-    _assert_customer_run(repo, delete_customer.json()["run_id"], "delete")
-    _assert_customer_run(repo, batch_delete.json()["run_id"], "batch_delete")
 
 
 def test_customer_create_route_requires_a_persisted_row(customer_sessions, local_tools) -> None:
@@ -185,3 +167,64 @@ def test_customer_create_route_requires_a_persisted_row(customer_sessions, local
             db.scalars(select(PurchaseUnit.id).execution_options(skip_tenant_filter=True)).all()
             == []
         )
+
+
+@pytest.mark.parametrize("action,ids", [("delete", [3]), ("batch_delete", [3, 4])])
+def test_customer_delete_routes_use_real_scoped_service_and_signed_approval(
+    deletion, monkeypatch, local_tools, action, ids
+):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    _, actor, _ = deletion
+    with tenant_scope(7), actor.factory.begin() as db:
+        db.add(PurchaseUnit(id=4, tenant_id=7, unit_name="Empty second"))
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
+    before = snapshot(actor)
+    monkeypatch.setattr(
+        "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", lambda: False
+    )
+    with _client() as client:
+        if action == "delete":
+            response = client.delete("/customers/3", headers={**actor.headers, "X-User-ID": "999"})
+        else:
+            response = client.post(
+                "/customers/batch-delete", json={"ids": ids}, headers=actor.headers
+            )
+    assert response.status_code == 200, response.text
+    run = repo.get(response.json()["run_id"])
+    assert run.user_id == str(actor.user_id)
+    done = run
+    if run.status == "waiting_user":
+        assert snapshot(actor) == before
+        issue_approval_grant(run, principal_id=str(actor.user_id))
+        with tenant_scope(7):
+            done = AgentOrchestrator(repository=repo).continue_run(
+                run.run_id, approved_by=str(actor.user_id), runtime_context=actor.context
+            )
+    assert done.status == "completed", done.error
+    assert done.metadata["approval_receipt"]["approved_by"] == str(actor.user_id)
+    assert done.tool_calls[0].permission == "customer.edit"
+    assert done.tool_calls[0].output["deleted_count"] == len(ids)
+    assert {"step.approved", "tool.completed", "run.completed"} <= {
+        e.event_type for e in done.events
+    }
+    assert all((value,) not in snapshot(actor)[0] for value in ids)
+    assert snapshot(actor)[1:] == before[1:]
+    assert (103,) in snapshot(actor)[0]
+
+
+def test_customer_batch_route_rejects_invalid_ids_without_partial_effect(deletion, local_tools):
+    _, actor, _ = deletion
+    before = snapshot(actor)
+    with _client() as client:
+        response = client.post(
+            "/customers/batch-delete", json={"ids": [3, "bad", 4]}, headers=actor.headers
+        )
+    assert response.status_code == 200
+    assert response.json()["success"] is False
+    assert snapshot(actor) == before

@@ -89,6 +89,10 @@ def _create_fastapi_app(
 
     wire_cache_port()
 
+    from app.infrastructure.persona.conversation_wiring import wire_conversation_persona
+
+    wire_conversation_persona()
+
     if not getattr(config_object, "SECRET_KEY", None):
         is_debug = getattr(config_object, "DEBUG", False)
         is_desktop = getattr(config_object, "DESKTOP_MODE", False)

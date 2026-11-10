@@ -41,6 +41,15 @@ export function useModsActiveSelection(deps: ModsActiveSelectionDeps) {
       if (current === CLIENT_PRIMARY_ERP_MOD_ID) setActiveModId('')
       return
     }
+    const entitled = new Set(entitledModIds.value)
+    if (entitled.size && current && !entitlementMatchesMod(current, entitled)) {
+      setActiveModId(pickModIdFromEntitled(entitledModIds.value, mods.value, CLIENT_PRIMARY_ERP_MOD_ID))
+      return
+    }
+    if (entitled.size && !current) {
+      setActiveModId(pickModIdFromEntitled(entitledModIds.value, mods.value, CLIENT_PRIMARY_ERP_MOD_ID))
+      return
+    }
     if (current && mods.value.some((m) => String(m.id || '').trim() === current)) {
       // 若误选宿主 bridge，优先改到第一个行业扩展包（bridge 不作为「当前扩展」）
       if (!isSelectableExtensionModId(current)) {
@@ -86,7 +95,10 @@ export function useModsActiveSelection(deps: ModsActiveSelectionDeps) {
     if (!next && (force || !current || !entitlementMatchesMod(current, entitledSet))) {
       next = pickModIdFromEntitled(entitled, mods.value, primaryErp)
     }
-    if (!next) return
+    if (!next) {
+      if (current && !entitlementMatchesMod(current, entitledSet)) setActiveModId('')
+      return
+    }
 
     const listedNext = mods.value.some((m) => String(m.id || '').trim() === next)
     if (!listedNext) return

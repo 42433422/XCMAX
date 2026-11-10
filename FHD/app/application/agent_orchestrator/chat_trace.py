@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any
 
-from app.application.workflow.workflow_types import PlanGraph, WorkflowRunResult
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .artifact_ingestion import ingest_artifact_to_dataset
 from .budget import refresh_ai_budget_metadata
 from .run_models import AgentArtifact, AgentRun, LLMCall
 from .run_repository import AgentRunRepository, get_agent_run_repository
-from .tool_spec import ToolActionSpecV2
-from .trace_approval import resolve_legacy_approval as _resolve_approval
 from .trace_artifacts import (
     _append_artifacts_to_final_output as _append_artifacts_to_final_output,
 )
@@ -112,9 +109,6 @@ from .trace_payloads import (
     _coerce_trace_int as _coerce_trace_int,
 )
 from .trace_payloads import (
-    _extract_legacy_tool_records as _extract_legacy_tool_records,
-)
-from .trace_payloads import (
     _iter_payload_dicts as _iter_payload_dicts,
 )
 from .trace_payloads import (
@@ -155,18 +149,6 @@ from .trace_retrieval import (
     _retrieval_signature as _retrieval_signature,
 )
 from .trace_runs import TraceRunService
-from .trace_tools import (
-    _candidate_tool_actions as _candidate_tool_actions,
-)
-from .trace_tools import (
-    _extract_low_risk_tool_call as _extract_low_risk_tool_call,
-)
-from .trace_tools import (
-    _iter_tool_call_payloads as _iter_tool_call_payloads,
-)
-from .trace_tools import (
-    _normalized_record_payload as _normalized_record_payload,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -175,41 +157,14 @@ def _model_usage() -> ModelUsageRecorder:
     return ModelUsageRecorder(_record_llm_usage_entry, refresh_ai_budget_metadata)
 
 
-def _tool_spec(tool_id: str, action: str) -> ToolActionSpecV2 | None:
-    from .tool_spec import get_tool_action_spec
-
-    return get_tool_action_spec(tool_id, action)
-
-
 def _recording() -> TraceRecorder:
-    return TraceRecorder(_model_usage(), ingest_artifact_to_dataset, _tool_spec)
-
-
-def _execute_observed_plan(
-    *,
-    repository: AgentRunRepository,
-    user_id: str,
-    message: str,
-    plan: PlanGraph,
-    runtime_context: dict[str, Any],
-    auto_execute: bool,
-) -> AgentRun:
-    from app.application.agent_orchestrator import AgentOrchestrator
-
-    return AgentOrchestrator(repository=repository).start_run_from_plan(
-        user_id=user_id,
-        message=message,
-        plan=plan,
-        runtime_context=runtime_context,
-        auto_execute=auto_execute,
-    )
+    return TraceRecorder(_model_usage())
 
 
 def _run_service(repository: AgentRunRepository | None = None) -> TraceRunService:
     return TraceRunService(
         repository if repository is not None else get_agent_run_repository(),
         _recording(),
-        _execute_observed_plan,
     )
 
 
@@ -233,73 +188,6 @@ def _append_artifacts_to_run(run: AgentRun, artifacts: list[AgentArtifact]) -> N
     _recording().append_artifacts(run, artifacts)
 
 
-def _append_legacy_tool_records_to_run(
-    run: AgentRun, records: list[dict[str, Any]]
-) -> tuple[dict[str, Any], int]:
-    return _recording().observe_tools(run, records)
-
-
-def start_legacy_chat_run(
-    *,
-    message: str,
-    runtime_context: dict[str, Any] | None = None,
-    user_id: str | None = None,
-    source: str | None = None,
-    channel: str = "compat_chat",
-    intent: str = "legacy_chat_adapter",
-) -> AgentRun:
-    return _run_service().start(
-        message=message,
-        runtime_context=runtime_context,
-        user_id=user_id,
-        source=source,
-        channel=channel,
-        intent=intent,
-    )
-
-
-def _create_legacy_tool_records_run(
-    payload: dict[str, Any],
-    *,
-    message: str,
-    runtime_context: dict[str, Any] | None,
-    user_id: str | None,
-    source: str | None,
-    channel: str,
-    repository: AgentRunRepository,
-    intent: str = "legacy_tool_chain",
-) -> AgentRun | None:
-    return _run_service(repository).create_observed_tools(
-        payload,
-        message=message,
-        runtime_context=runtime_context,
-        user_id=user_id,
-        source=source,
-        channel=channel,
-        intent=intent,
-    )
-
-
-def _create_tool_call_agent_run(
-    payload: dict[str, Any],
-    *,
-    message: str,
-    runtime_context: dict[str, Any] | None,
-    user_id: str | None,
-    source: str | None,
-    channel: str,
-    repository: AgentRunRepository,
-) -> AgentRun | None:
-    return _run_service(repository).create_tool_plan(
-        payload,
-        message=message,
-        runtime_context=runtime_context,
-        user_id=user_id,
-        source=source,
-        channel=channel,
-    )
-
-
 def create_chat_trace_run(
     payload: dict[str, Any],
     *,
@@ -308,7 +196,7 @@ def create_chat_trace_run(
     user_id: str | None = None,
     source: str | None = None,
     channel: str = "compat_chat",
-    intent: str = "legacy_chat_adapter",
+    intent: str = "chat_reply",
 ) -> AgentRun:
     from app.application.network_stability import emit_current_lane
 
@@ -324,60 +212,6 @@ def create_chat_trace_run(
     )
 
 
-def finalize_legacy_chat_run(
-    run_id: str,
-    payload: dict[str, Any],
-    *,
-    message: str,
-    runtime_context: dict[str, Any] | None = None,
-    user_id: str | None = None,
-    source: str | None = None,
-    channel: str = "compat_chat",
-    intent: str = "legacy_chat_adapter",
-) -> dict[str, Any]:
-    if not isinstance(payload, dict):
-        return payload
-    service = _run_service()
-    run = service.repository.get(run_id)
-    if run is None:
-        return attach_chat_trace_run(
-            payload,
-            message=message,
-            runtime_context=runtime_context,
-            user_id=user_id,
-            source=source,
-            channel=channel,
-            intent=intent,
-        )
-    return service.finalize(
-        run,
-        payload,
-        message=message,
-        runtime_context=runtime_context,
-        user_id=user_id,
-        source=source,
-        channel=channel,
-        intent=intent,
-    )
-
-
-def resolve_legacy_approval(
-    request_id: str,
-    context: dict[str, Any],
-    result: WorkflowRunResult | None = None,
-    *,
-    run_before_restore: AgentRun | None = None,
-) -> str:
-    return _resolve_approval(
-        request_id,
-        context,
-        result,
-        repository=get_agent_run_repository(),
-        recording=_recording(),
-        run_before_restore=run_before_restore,
-    )
-
-
 def attach_chat_trace_run(
     payload: dict[str, Any],
     *,
@@ -386,7 +220,7 @@ def attach_chat_trace_run(
     user_id: str | None = None,
     source: str | None = None,
     channel: str = "compat_chat",
-    intent: str = "legacy_chat_adapter",
+    intent: str = "chat_reply",
 ) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return payload
@@ -408,10 +242,16 @@ def attach_chat_trace_run(
     except RECOVERABLE_ERRORS:
         logger.exception("failed to attach AgentRun trace to chat response")
         return payload
-    return _attach_run_id(payload, run.run_id)
+    from app.application.agent_orchestrator.business_harness import guard_unexecuted_payload
+
+    if run.error == "unplanned_tool_call_rejected":
+        # The trace service rejected and replaced this response. Do not return
+        # the original model payload after persisting a failed run.
+        payload = copy.deepcopy(run.final_output["chat_payload"])
+    return _attach_run_id(guard_unexecuted_payload(run, payload), run.run_id)
 
 
-def mark_legacy_chat_stream_interrupted(expected: AgentRun, *, pending: bool, reason: str) -> None:
+def mark_chat_stream_interrupted(expected: AgentRun, *, pending: bool, reason: str) -> None:
     """Record lost observation using the original owner/generation, never settle tools."""
     import copy
 

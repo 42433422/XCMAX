@@ -6,13 +6,25 @@ import pytest
 
 from app.application.agent_orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.workflow_types import (
     Branch,
     PlanGraph,
     WorkflowNode,
     validate_plan_graph,
 )
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
+
+
+@pytest.fixture(autouse=True)
+def _allow_synthetic_test_actor(monkeypatch):
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.tool_permission.actor_tool_denial",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.tool_executor._reviewed_query_tenant",
+        lambda *_args, **_kwargs: (None, None),
+    )
 
 
 def node(name, deps=()):
@@ -27,10 +39,18 @@ def node(name, deps=()):
     )
 
 
-def run_plan(plan):
-    return AgentOrchestrator(repository=InMemoryAgentRunRepository()).start_run_from_plan(
-        user_id="test", message="read products", plan=plan
-    )
+def run_plan(plan, *, tool_executor=None):
+    return AgentOrchestrator(
+        repository=InMemoryAgentRunRepository(), tool_executor=tool_executor
+    ).start_run_from_plan(user_id="test", message="read products", plan=plan)
+
+
+class _PlanTestExecutor:
+    def __init__(self, dispatch):
+        self.dispatch = dispatch
+
+    def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
+        return self.dispatch(step.tool_id, step.action, dict(step.params or {}))
 
 
 def test_permuted_dag_executes_dependencies_first(local_tools):
@@ -62,8 +82,9 @@ def test_invalid_graph_has_zero_side_effects_across_runtimes(nodes):
     assert run.status == "blocked" and run.error
     dispatch.assert_not_called()
     calls = []
-    result = WorkflowEngine(tool_dispatcher=lambda *a: calls.append(a)).run(plan)
-    assert not result.success and calls == []
+    with pytest.raises(ValueError):
+        WorkflowEngine(tool_dispatcher=lambda *a: calls.append(a)).run(plan)
+    assert calls == []
 
 
 @pytest.mark.parametrize("available,chosen", [(True, "yes"), (False, "no")])
@@ -80,13 +101,18 @@ def test_conditional_plan_executes_only_selected_branch(available, chosen, rever
         calls.append(params["keyword"])
         return {"success": True, "available": available, "data": [{"model_number": "5003"}]}
 
-    with patch(
-        "app.application.facades.tools_facade.execute_registered_workflow_tool",
-        side_effect=dispatch,
-    ):
-        run = run_plan(plan)
-    assert run.status == "completed", run.error
-    assert calls == (["first", "yes"] if chosen == "yes" else ["first", "no", "after_no"])
+    run = AgentOrchestrator(
+        repository=InMemoryAgentRunRepository(), tool_executor=_PlanTestExecutor(dispatch)
+    ).start_run_from_plan(user_id="test", message="read products", plan=plan)
+    assert run.status == "completed", (
+        run.error,
+        [(s.node_id, s.status, s.error) for s in run.steps],
+    )
+    assert calls == (["first", "yes"] if chosen == "yes" else ["first", "no", "after_no"]), (
+        run.status,
+        run.error,
+        [(s.node_id, s.status, s.error, s.output) for s in run.steps],
+    )
     assert (
         next(s for s in run.steps if s.node_id == ("no" if chosen == "yes" else "yes")).status
         == "skipped"
@@ -115,30 +141,47 @@ def test_branch_decision_survives_approval_and_repository_round_trip(
     first = node("first")
     first.next = "no"
     first.branches = [Branch(target="yes", condition={"key": "available", "equals": True})]
-    repo = InMemoryAgentRunRepository()
-    runner = AgentOrchestrator(repository=repo)
-    run = runner.start_run_from_plan(
-        user_id="owner",
-        message="test",
-        auto_execute=False,
-        plan=PlanGraph(plan_id="approval", intent="test", nodes=[node("no"), node("yes"), first]),
+    yes = node("yes")
+    plan = PlanGraph(
+        plan_id="approval",
+        intent="test",
+        nodes=[node("no"), yes, first],
+        metadata={"approval_required_node_ids": ["yes"]},
     )
-    next(s for s in run.steps if s.node_id == "yes").risk = "high"
+    repo = InMemoryAgentRunRepository()
     calls = []
 
     def dispatch(tool, action, params):
         calls.append(params["keyword"])
         return {"success": True, "data": [{"model_number": "5003"}], "available": True}
 
+    runner = AgentOrchestrator(repository=repo, tool_executor=_PlanTestExecutor(dispatch))
+    run = runner.start_run_from_plan(
+        user_id="owner",
+        message="test",
+        auto_execute=False,
+        plan=plan,
+    )
+    runner._execute_ready_steps(run, runtime_context={})
+    assert run.status == "waiting_user", (
+        run.error,
+        [(s.node_id, s.status, s.error) for s in run.steps],
+    )
+    repo.save(agent_run_from_dict(json.loads(json.dumps(run.to_dict()))))
+    resumed_runner = AgentOrchestrator(repository=repo, tool_executor=_PlanTestExecutor(dispatch))
     with patch(
-        "app.application.facades.tools_facade.execute_registered_workflow_tool",
-        side_effect=dispatch,
+        "app.application.workflow.approval_persistence.load_workflow_snapshot_for_execution",
+        return_value={
+            "agent_run_id": run.run_id,
+            "approved_step_id": "yes",
+            "plan": run.metadata["plan"],
+        },
     ):
-        runner._execute_ready_steps(run, runtime_context={})
-        assert run.status == "waiting_user"
-        repo.save(agent_run_from_dict(json.loads(json.dumps(run.to_dict()))))
-        restored = AgentOrchestrator(repository=repo).continue_run(
-            run.run_id, approved_step_id="yes", approved_by="owner"
+        restored = resumed_runner.continue_run(
+            run.run_id,
+            approved_step_id="yes",
+            approved_by="owner",
+            approval_request_id="approval-request",
         )
     assert restored.status == "completed"
     assert calls == ["first", "yes"]
@@ -283,7 +326,9 @@ def test_resume_missing_router_evidence_fails_closed(outputs):
 def test_partial_read_resume_preserves_each_attempt_output(parallel):
     from app.application.workflow.checkpointer import WorkflowCheckpointer
 
-    plan = PlanGraph(plan_id="partial-read", intent="test", nodes=[node("bad"), node("good")])
+    # A serial graph executes the successful sibling first; parallel graphs
+    # prove that a successful member of a mixed superstep is still checkpointed.
+    plan = PlanGraph(plan_id="partial-read", intent="test", nodes=[node("good"), node("bad")])
     cp = WorkflowCheckpointer()
     engine = WorkflowEngine(lambda tool_id, action, params: {"success": params["keyword"] != "bad"})
     assert not engine.run(plan, checkpointer=cp, parallel=parallel, max_retries=0).success
@@ -302,7 +347,5 @@ def test_partial_read_resume_preserves_each_attempt_output(parallel):
     assert calls == ["bad"]
     replay = engine.replay_run(plan.plan_id, checkpointer=cp)
     attempts = [result for result in replay.node_results if result.node_id == "bad"]
-    assert [(result.success, result.output["success"]) for result in attempts] == [
-        (False, False),
-        (True, True),
-    ]
+    expected = [(False, False), (True, True)] if parallel else [(True, True)]
+    assert [(result.success, result.output["success"]) for result in attempts] == expected

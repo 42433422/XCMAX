@@ -227,17 +227,34 @@ async function request<T = unknown>(url: string, options: RequestOptions = {}): 
   return requestWithRetry<T>(url, options)
 }
 
+/** Office-file ELT and docking saves keep running through an 8s budget or a dropped chat. */
+export function isDurableToolRequest(url: string): boolean {
+  const path = String(url || '').split('?')[0]
+  return /\/api\/platform-shell\/(?:office\/confirm|chat-office-file-upload)$/.test(path)
+    || /\/api\/templates\/reviewed-excel\/(?:save|intake-preview|preview|refine|analyze|archive-classify)$/.test(path)
+    || /\/api\/elt\//.test(path)
+}
+
+function durableToolBudget(url: string, timeoutMs: number | undefined, callerSignal: AbortSignal | null | undefined) {
+  if (!isDurableToolRequest(url)) return { timeoutMs, callerSignal }
+  const kept = typeof timeoutMs === 'number' && timeoutMs > 8_000 ? timeoutMs : undefined
+  return { timeoutMs: kept, callerSignal: undefined as AbortSignal | undefined }
+}
+
 async function requestOnce<T = unknown>(
   url: string,
   options: RequestOptions = {},
   accountEpoch = productReadAccountEpoch.value,
 ): Promise<T | Response> {
   const fullUrl = buildApiUrl(url)
-  const { skipDefaultJsonHeader = false, responseType = 'json', timeoutMs, quiet = false, signal: callerSignal, ...requestOptions } = options
+  const { skipDefaultJsonHeader = false, responseType = 'json', timeoutMs: requestedTimeoutMs, quiet = false, signal: requestedCallerSignal, ...requestOptions } = options
+  const budget = durableToolBudget(url, requestedTimeoutMs, requestedCallerSignal)
+  const timeoutMs = budget.timeoutMs
+  const callerSignal = budget.callerSignal
   const timeoutController = typeof timeoutMs === 'number' && timeoutMs > 0 ? new AbortController() : null
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   let detachCallerAbort: (() => void) | null = null
-  if (timeoutController) {
+  if (timeoutController && typeof timeoutMs === 'number') {
     timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs)
     if (callerSignal) {
       const abortFromCaller = () => timeoutController.abort(callerSignal.reason)

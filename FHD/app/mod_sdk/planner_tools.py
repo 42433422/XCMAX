@@ -249,10 +249,7 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
     # otherwise the bundled Office employees cannot write their verified
     # artifacts on a fresh install.
     workspace_root = str(
-        payload.get("workspace_root")
-        or os.environ.get("WORKSPACE_ROOT")
-        or os.environ.get("XCAGI_DATA_DIR")
-        or os.getcwd()
+        os.environ.get("WORKSPACE_ROOT") or os.environ.get("XCAGI_DATA_DIR") or os.getcwd()
     ).strip()
     db_write_token = payload.get("db_write_token")
     if db_write_token is not None:

@@ -7,7 +7,6 @@ import type { useChatTaskList } from '../useChatTaskList'
 import {
   persistExcelAnalysisContext,
   resolveExcelFilePathFromAnalysis,
-  resolveExcelSheetOptionsFromContext,
 } from '../useChatPersistence'
 import { useExcelAnalysis } from '../useExcelAnalysis'
 import type { useChatExcelContext } from '../useChatExcelContext'
@@ -60,6 +59,7 @@ export function useChatOrchestrationExcelTasks(deps: ChatOrchestrationExcelTasks
           const persistedPath = resolveExcelFilePathFromAnalysis(result)
           const payload = {
             file_name: fileName,
+            ...(result.upload_id ? { upload_id: result.upload_id } : {}),
             ...(persistedPath ? { file_path: persistedPath } : {}),
             summary,
             fields: Array.isArray(result?.fields) ? result.fields : [],
@@ -68,8 +68,7 @@ export function useChatOrchestrationExcelTasks(deps: ChatOrchestrationExcelTasks
           }
           lastExcelAnalysisContext.value = payload
           linkedExcelAllSheets.value = false
-          const sheetOptions = resolveExcelSheetOptionsFromContext(payload)
-          linkedExcelSheet.value = sheetOptions[0] || null
+          linkedExcelSheet.value = null
           window.dispatchEvent(
             new CustomEvent('xcagi:excel-sheet-context', {
               detail: {

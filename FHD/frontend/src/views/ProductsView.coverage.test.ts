@@ -366,6 +366,7 @@ describe('ProductsView.coverage', () => {
         id: null,
         model_number: '',
         name: '',
+        unit: '',
         specification: '',
         price: 0,
         quantity: 0,
@@ -385,6 +386,15 @@ describe('ProductsView.coverage', () => {
   })
 
   describe('saveProduct 保存产品', () => {
+    it('requires an explicitly selected customer before creating a product', async () => {
+      const wrapper = await mountProducts()
+      const state = getSetupState(wrapper)
+      state.showAddModal()
+      await flushPromises()
+      await state.saveProduct()
+      expect(mockAppAlert).toHaveBeenCalledWith('请先选择所属客户')
+      expect(mockCreateProduct).not.toHaveBeenCalled()
+    })
     it.each([[10, 10], ['', 0], [0, 0]])('新建产品价格 %s 正常化为 %s 并保留客户', async (price, expectedPrice) => {
       mockCreateProduct.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
@@ -394,6 +404,7 @@ describe('ProductsView.coverage', () => {
         id: null,
         model_number: 'A1',
         name: 'N1',
+        unit: '验收客户',
         specification: '',
         price,
       })
@@ -414,6 +425,7 @@ describe('ProductsView.coverage', () => {
         id: null,
         model_number: 'A1',
         name: 'N1',
+        unit: '验收客户',
         specification: '',
         price: 10,
       })
@@ -962,6 +974,7 @@ describe('ProductsView.coverage', () => {
         id: null,
         model_number: 'A1',
         name: 'N1',
+        unit: '验收客户',
         specification: '',
         price: 10,
       })
@@ -1055,11 +1068,13 @@ describe('ProductsView.coverage', () => {
     const wrapper = await mountProducts()
     await wrapper.get('[data-tutorial-id="product-create"]').trigger('click')
     expect(wrapper.get('.modal-header').text()).toBe('添加人员')
+    await flushPromises()
+    await wrapper.findAll('.modal select')[0].setValue('单位A')
     await wrapper.get('[data-tutorial-id="product-save"]').trigger('click')
     expect(mockAppAlert).toHaveBeenCalledWith('姓名不能为空')
     expect(mockCreateProduct).not.toHaveBeenCalled()
     await wrapper.get('[data-tutorial-id="product-name"]').setValue('小王')
-    await wrapper.get('.modal select').setValue('晚班')
+    await wrapper.findAll('.modal select')[1].setValue('晚班')
     await wrapper.get('[data-tutorial-id="product-inventory"]').setValue('4')
     for (const [placeholder, value] of [['入职日', '2026-10-15'], ['工时', '8'], ['备注', '临时']]) await wrapper.get(`input[placeholder="${placeholder}"]`).setValue(value)
     await wrapper.get('[data-tutorial-id="product-save"]').trigger('click')

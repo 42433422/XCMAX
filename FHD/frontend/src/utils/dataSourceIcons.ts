@@ -1,6 +1,6 @@
-/** 数据来源卡片内联 SVG（与 public/data-sources/icons 同步）。 */
+/** 数据来源卡片内联 SVG。 */
 
-const iconModules = import.meta.glob('../../public/data-sources/icons/*.svg', {
+const iconModules = import.meta.glob('../data-sources/icons/*.svg', {
   eager: true,
   query: '?raw',
   import: 'default',
@@ -8,7 +8,7 @@ const iconModules = import.meta.glob('../../public/data-sources/icons/*.svg', {
 
 function iconPath(name: string): string {
   const id = String(name || '').trim()
-  return `../../public/data-sources/icons/${id}.svg`
+  return `../data-sources/icons/${id}.svg`
 }
 
 export function dataSourceIconMarkup(name: string): string {

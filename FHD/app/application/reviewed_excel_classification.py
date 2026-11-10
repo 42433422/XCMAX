@@ -302,7 +302,7 @@ def _classify_semantic_batch(
     if reference_ids:
         payload = json.loads(messages[1]["content"])
         payload["batch_decision_scope"] = (
-            "can_slice 只判断本次 cells 中非 context_only 的单元格及其可核验边界；sheets 和全工作簿索引只是背景。其他表或后续批次未提供单元格，不代表本批不能切片；若本批自身边界不确定或有未解决依赖，仍须返回 false。不得推测未读内容。"
+            "can_slice 只判断本次 cells 中非 context_only 的单元格及其可核验边界；sheets 和全工作簿索引只是背景。其他表或后续批次未提供单元格，不代表本批不能切片；跨单据公式、汇总或筛选范围由归档原件和数据层保留，不构成不能切片的理由，不得据此扩大或合并业务单据。仅当已提供证据无法确定单据边界时返回 false。不得推测未读内容。"
         )
         messages[1]["content"] = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     max_output_tokens = output_budget(chosen)

@@ -17,7 +17,6 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-from app.application.workflow.planner import get_tool_registry
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 from app.fastapi_routes.domains.conversation.helpers import (
     XcagiCompatChatBody,
@@ -46,6 +45,7 @@ from app.infrastructure.persistence.compat_db.compat_db_base import (
     _validate_order_clause,
 )
 from app.infrastructure.persistence.extract_log_store_impl import SQLAlchemyExtractLogStore
+from app.services.tools_execution.registry import get_workflow_tool_registry
 
 
 def _http_request(**headers: str) -> Request:
@@ -210,16 +210,21 @@ def test_skip_pro_excel_deterministic_import_flags(monkeypatch: pytest.MonkeyPat
     assert _skip_pro_excel_deterministic_import({}) is True
 
 
-def test_ai_chat_is_pro_source_and_merge_context() -> None:
-    assert AIChatApplicationService._is_pro_source("xcagi-pro") is True
-    assert AIChatApplicationService._is_pro_source("basic") is False
+@pytest.mark.parametrize("source", ["xcagi-pro", "basic"])
+def test_ai_chat_merge_context_does_not_trust_source_as_identity(source: str) -> None:
     ctx = AIChatApplicationService._merge_tool_runtime_context(
         "u1",
         "查产品",
-        {"ui_surface": "chat", "excel_analysis": {"sheet": "S1"}},
+        {
+            "ui_surface": "chat",
+            "excel_analysis": {"sheet": "S1"},
+            "source": source,
+            "user_id": "forged-actor",
+        },
     )
     assert ctx["conversation_id"] == "u1"
-    assert "user_id" not in ctx  # A conversation label is not an authenticated actor.
+    assert "user_id" not in ctx  # Neither conversation nor source grants actor authority.
+    assert "source" not in ctx
     assert ctx["excel_analysis"]["sheet"] == "S1"
 
 
@@ -251,7 +256,7 @@ def test_validate_plan_graph_errors() -> None:
 
 
 def test_get_tool_registry_has_core_tools() -> None:
-    reg = get_tool_registry()
+    reg = get_workflow_tool_registry()
     assert "shipment_orders" in reg
     assert "products" in reg
     assert reg["customers"]["actions"]["query"]["risk"] == "low"

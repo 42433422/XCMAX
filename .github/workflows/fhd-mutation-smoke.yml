@@ -76,9 +76,6 @@ jobs:
       - name: Install dependencies
         if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        # 与 backend-test 同口径（pip + requirements 锁文件）。
-        # 2026-09-08：原 `uv sync --group dev` 引用了 pyproject 不存在的 dev 组，
-        # 且 N01 路径修复前该分支从未真实执行，命令错误一直未被暴露。
         run: |
           python -m pip install --upgrade pip
           python scripts/dev/check_requirements_lock.py --pytest-pin > /tmp/mutation-pytest-constraint.txt
@@ -93,7 +90,11 @@ jobs:
         # /tmp/pytest-of-runner/garbage-* 时竞态（Errno 39 Directory not empty →
         # PytestWarning → run 日志带 traceback → kill report 判诊断无效）。
         # 串行执行消除竞态；268 变体串行仍远小于 60 分钟超时。pytest 修复后可恢复并发。
-        run: mutmut run --max-children 1 2>&1 | tee mutmut-run.log
+        run: |
+          mkdir -p mutants
+          cp -R packages mutants/packages
+          export PYTHONPATH="$PWD/mutants/packages/xcagi_langgraph_core:$PWD/mutants/packages/xcagi_langgraph_checkpoint:$PWD/mutants/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite:$PWD/mutants/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres:$PWD/mutants/packages/xcagi_langgraph_prebuilt:$PWD/mutants/packages/xcagi_langgraph_sdk${PYTHONPATH:+:$PYTHONPATH}"
+          mutmut run --max-children 1 2>&1 | tee mutmut-run.log
 
       - name: Generate kill report
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'

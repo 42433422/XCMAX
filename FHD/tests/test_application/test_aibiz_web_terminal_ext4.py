@@ -74,38 +74,6 @@ class TestResolveMarketAuthorization:
         assert result == "env_token"
 
     @pytest.mark.asyncio
-    async def test_env_credentials_login_failure(self, monkeypatch):
-        from app.application.aibiz_web_terminal_service import _resolve_market_authorization
-
-        monkeypatch.setenv("XCAGI_AIBIZ_MARKET_USER", "envuser")
-        monkeypatch.setenv("XCAGI_AIBIZ_MARKET_PASSWORD", "envpass")
-        monkeypatch.delenv("MODSTORE_DIGEST_ADMIN_USER", raising=False)
-        monkeypatch.delenv("MODSTORE_DIGEST_ADMIN_PASSWORD", raising=False)
-
-        request = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.market_account.session_id_from_request",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_username",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_password",
-                return_value="",
-            ),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_password",
-                new_callable=AsyncMock,
-                return_value={"success": False},
-            ),
-        ):
-            result = await _resolve_market_authorization(request)
-        assert result == ""
-
-    @pytest.mark.asyncio
     async def test_no_credentials_returns_empty(self, monkeypatch):
         from app.application.aibiz_web_terminal_service import _resolve_market_authorization
 

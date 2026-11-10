@@ -714,7 +714,7 @@ class TestMarketSessionHandoffRoute:
             patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None),
             patch.object(ma, "latest_session_market_token", return_value="desktop_tok"),
         ):
-            result = await ma.market_session_handoff(request)
+            result = await ma.market_session_handoff(request, ma.BackgroundTasks())
         assert isinstance(result, ma.JSONResponse)
         assert result.status_code == 401
         assert b"desktop_tok" not in result.body
@@ -729,7 +729,7 @@ class TestMarketSessionHandoffRoute:
             patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None),
             patch.object(ma, "latest_session_market_token", return_value=""),
         ):
-            result = await ma.market_session_handoff(request)
+            result = await ma.market_session_handoff(request, ma.BackgroundTasks())
         assert isinstance(result, ma.JSONResponse)
         assert result.status_code == 401
 
@@ -749,7 +749,7 @@ class TestMarketSessionHandoffRoute:
             patch.object(ma, "session_market_refresh_token", return_value=""),
             patch.object(ma, "latest_session_market_refresh_token", return_value=""),
         ):
-            result = await ma.market_session_handoff(request)
+            result = await ma.market_session_handoff(request, ma.BackgroundTasks())
         assert result.status_code == 200
         assert json.loads(result.body)["data"]["market_access_token"] == "valid_tok"
 
@@ -767,7 +767,7 @@ class TestMarketSessionHandoffRoute:
             patch.object(ma, "session_market_token", return_value="fallback_tok"),
             patch.object(ma, "latest_session_market_token", return_value=""),
         ):
-            result = await ma.market_session_handoff(request)
+            result = await ma.market_session_handoff(request, ma.BackgroundTasks())
         assert result.status_code == 502
         assert b"fallback_tok" not in result.body
 
@@ -785,6 +785,6 @@ class TestMarketSessionHandoffRoute:
             patch.object(ma, "session_market_token", return_value=""),
             patch.object(ma, "latest_session_market_token", return_value=""),
         ):
-            result = await ma.market_session_handoff(request)
+            result = await ma.market_session_handoff(request, ma.BackgroundTasks())
         assert isinstance(result, ma.JSONResponse)
         assert result.status_code == 502

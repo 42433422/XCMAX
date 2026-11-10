@@ -124,6 +124,7 @@ REQUIRED_PARAMS_BY_TOOL_ACTION = {
     ("wechat", "refresh_contact_cache"): [],
     ("wechat", "refresh_messages_cache"): [],
     ("employee", "execute"): ["task"],
+    ("employee", "context"): ["task"],
     ("business_db", "read"): ["entity"],
     ("business_db", "write"): ["entity", "operation", "payload"],
     ("dataset_rag", "query"): ["dataset_id", "query"],

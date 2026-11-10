@@ -8,10 +8,9 @@ import pytest
 from app.application.workflow.planner import (
     LLMWorkflowPlanner,
     _filter_tool_registry_for_profile,
-    execute_tool,
-    get_tool_registry,
 )
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
+from app.services.tools_execution.registry import get_workflow_tool_registry as get_tool_registry
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ========================= get_tool_registry =============================
@@ -107,225 +106,148 @@ class TestFilterToolRegistryForProfile:
         assert "tool_a" not in result
 
 
-# ========================= execute_tool ==================================
-
-
-class TestExecuteTool:
-    def test_unknown_tool_action(self):
-        result = execute_tool("nonexistent_tool", {})
-        assert result["success"] is False
-        assert "未知工具" in result["message"]
-
-    @patch("app.bootstrap.get_products_service")
-    def test_default_action_resolution(self, mock_svc):
-        mock_svc.return_value.get_products.return_value = {"success": True, "products": []}
-        result = execute_tool("products", {"_action": ""})
-        # Should resolve to "query" by default
-        assert isinstance(result, dict)
-
-    @patch("app.bootstrap.get_products_service")
-    def test_runtime_context_removed(self, mock_svc):
-        mock_svc.return_value.get_products.return_value = {"success": True, "products": []}
-        result = execute_tool(
-            "products", {"_runtime_context": {"user_id": "x"}, "_action": "query"}
-        )
-        assert isinstance(result, dict)
-
-
-# ========================= LLMWorkflowPlanner ============================
-
-
-class TestLLMWorkflowPlanner:
-    def _make_planner(self):
-        with patch("app.application.workflow.planner.get_ai_conversation_service"):
-            return LLMWorkflowPlanner()
-
-    def test_fallback_plan_products(self):
-        planner = self._make_planner()
-        with (
-            patch.object(planner, "_plan_with_react_multiagent", return_value=None),
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-                return_value="full",
-            ),
-            patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        ):
-            reg = get_tool_registry()
-            plan = planner.plan("u1", "添加产品到公司A", reg)
-        assert plan.intent == "add_product_to_unit"
-        assert len(plan.nodes) >= 1
-
-    def test_explicit_business_write_uses_deterministic_plan_before_llm(self):
-        planner = self._make_planner()
-        with (
-            patch.object(planner, "_plan_with_react_multiagent") as react,
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-                return_value="full",
-            ),
-            patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        ):
-            plan = planner.plan(
-                "u1",
-                "新建客户 CHATCRUD-TEST-涂料门店，联系人张三。只显示写入预览。",
-                get_tool_registry(),
-            )
-        assert plan.intent == "business_db_write"
-        assert plan.nodes[0].tool_id == "business_db"
-        assert plan.nodes[0].params["payload"]["contact_person"] == "张三"
-        react.assert_not_called()
-
-    def test_fallback_plan_generic(self):
-        planner = self._make_planner()
-        with (
-            patch.object(planner, "_plan_with_react_multiagent", return_value=None),
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-                return_value="full",
-            ),
-            patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        ):
-            reg = get_tool_registry()
-            plan = planner.plan("u1", "查询信息", reg)
-        # 2026-09 起未命中意图不再静默 products.query，而是 clarify.ask。
-        assert plan.intent == "clarify_ask"
-        assert len(plan.nodes) >= 1
-
-    def test_fallback_plan_risk_level(self):
-        planner = self._make_planner()
-        with (
-            patch.object(planner, "_plan_with_react_multiagent", return_value=None),
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-                return_value="full",
-            ),
-            patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        ):
-            reg = get_tool_registry()
-            plan = planner.plan("u1", "添加产品", reg)
-        # Should have medium risk since add operations are medium
-        assert plan.risk_level in ("low", "medium", "high")
-
-    def test_plan_injects_active_memory_v2_into_context_and_metadata(self, trusted_actor):
-        from app.application.agent_task_context import scoped_conversation_user_id
-
-        actor = trusted_actor(user_id=7, tenant_id=2)
-        context = {**actor.context, "session_id": "memory-v2-regression"}
-        namespace = scoped_conversation_user_id("7", context)
-        planner = self._make_planner()
-        memory_summary = (
-            '【MemoryV2】已确认记忆:\n1. type=preference; key=favorite_customer; value="ACME"'
-        )
-        captured_context = {}
-
-        def fake_react(plan_id, user_id, message, tool_registry, context):
-            captured_context.update(context)
-            return PlanGraph(
-                plan_id=plan_id,
-                intent="product_query",
-                nodes=[
-                    WorkflowNode(
-                        node_id="n1",
-                        tool_id="products",
-                        action="query",
-                        params={"keyword": "ACME 5003"},
-                    )
-                ],
-                metadata={"memory_v2_summary": context["memory_v2"]["summary"]},
-            )
-
-        mock_memory = Mock()
-        mock_memory.format_memory_v2_for_prompt.return_value = memory_summary
-        with (
-            patch.object(planner, "_plan_with_react_multiagent", side_effect=fake_react),
-            patch(
-                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-                return_value="full",
-            ),
-            patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-            patch(
-                "app.domain.shared_services.user_memory_service.get_user_memory_service",
-                return_value=mock_memory,
-            ),
-        ):
-            plan = planner.plan(namespace, "查询上次客户的5003", get_tool_registry(), context)
-
-        assert captured_context["memory_v2"]["summary"] == memory_summary
-        assert "favorite_customer" in plan.metadata["memory_v2_summary"]
-        mock_memory.format_memory_v2_for_prompt.assert_called_once_with(
-            user_id=namespace, max_items=6
-        )
-
-
-# ========================= _validate_required_params =====================
-
-
-class TestValidateRequiredParams:
-    def test_valid_plan(self):
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[
-                WorkflowNode(
-                    node_id="n1",
-                    tool_id="customers",
-                    action="ensure_exists",
-                    params={"unit_name": "公司A"},
-                )
-            ],
-        )
-        reg = {
-            "customers": {
-                "actions": {
-                    "ensure_exists": {
-                        "required_params": ["unit_name"],
-                    }
-                }
-            }
-        }
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is None
-
-    def test_missing_required_param(self):
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[
-                WorkflowNode(
-                    node_id="n1",
-                    tool_id="customers",
-                    action="ensure_exists",
-                    params={},
-                )
-            ],
-        )
-        reg = {
-            "customers": {
-                "actions": {
-                    "ensure_exists": {
-                        "required_params": ["unit_name"],
-                    }
-                }
-            }
-        }
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is not None
-        assert "unit_name" in result
-
-    def test_unknown_tool_skipped(self):
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="unknown_tool", action="x", params={})],
-        )
-        result = LLMWorkflowPlanner._validate_required_params(plan, {})
-        assert result is None
-
-
-# ========================= _plan_with_llm ================================
-
-
 class TestPlanWithLLM:
+    def test_reply_rejects_unexpected_tool_calls(self):
+        from app.application.workflow.llm_plan_generation import _decode_completion
+
+        content = json.dumps({"mode": "reply", "reply": "这是说明。"}, ensure_ascii=False)
+        assert _decode_completion({"choices": [{"message": {"content": content}}]}) is not None
+        for field in ("tool_calls", "function_call"):
+            result = {"choices": [{"message": {"content": content, field: [{"name": "write"}]}}]}
+            assert _decode_completion(result) is None
+
+    def test_auxiliary_model_task_reuses_the_configured_planner_provider(self):
+        ai_service = Mock()
+        result_payload = {"choices": [{"message": {"content": "{}"}}]}
+        completion = Mock(return_value=result_payload)
+        planner = LLMWorkflowPlanner(ai_service=ai_service, completion=completion)
+        messages = [{"role": "user", "content": "map columns"}]
+        context = {"tenant_id": 17}
+
+        result = planner.complete_messages(
+            messages=messages,
+            context=context,
+            temperature=0,
+            max_tokens=300,
+        )
+
+        assert result is result_payload
+        assert completion.call_args.kwargs["ai_service"] is ai_service
+        assert completion.call_args.kwargs["messages"] == messages
+        assert completion.call_args.kwargs["context"] == context
+        assert completion.call_args.kwargs["temperature"] == 0
+        assert completion.call_args.kwargs["max_tokens"] == 300
+
+    def test_planner_receives_current_conversation_history_without_turn_classifier(
+        self, monkeypatch, tmp_path
+    ):
+        from app.application.ai_chat.dialogue_memory import prepare_chat_turn, settle_chat_turn
+
+        monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
+        captured = {}
+
+        def completion(**kwargs):
+            captured.update(json.loads(kwargs["messages"][1]["content"]))
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {"mode": "reply", "reply": "这是同一会话的回复。"},
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            }
+
+        context = {
+            "local_user_id": 31,
+            "tenant_id": 5,
+            "conversation_id": "unified-session",
+            "turn_id": "current",
+        }
+        previous = {**context, "turn_id": "previous"}
+        assert prepare_chat_turn("查一下客户", previous) is None
+        settle_chat_turn(
+            "查一下客户",
+            previous,
+            {"success": True, "response": "上一轮已查询到客户记录。"},
+            "completed",
+        )
+        assert prepare_chat_turn("你好", context) is None
+
+        ai_service = Mock()
+        ai_service.get_context.return_value = None
+        plan = LLMWorkflowPlanner(ai_service=ai_service, completion=completion).plan(
+            "owner", "你好", get_tool_registry(), context=context
+        )
+
+        assert plan.metadata["response_mode"] == "reply"
+        assert captured["recent_messages"] == [
+            {"role": "user", "content": "查一下客户"},
+            {"role": "assistant", "content": "上一轮已查询到客户记录。"},
+        ]
+
+    def test_plan_prompt_receives_current_memory_and_authorized_knowledge(self):
+        captured = {}
+
+        def completion(**kwargs):
+            captured.update(json.loads(kwargs["messages"][1]["content"]))
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "intent": "customer_query",
+                                    "todo_steps": ["查询客户"],
+                                    "risk_level": "low",
+                                    "nodes": [
+                                        {
+                                            "node_id": "query_customer",
+                                            "tool_id": "customers",
+                                            "action": "query",
+                                            "params": {"keyword": "宗南"},
+                                            "risk": "low",
+                                            "idempotent": True,
+                                            "description": "查询客户",
+                                            "depends_on": [],
+                                        }
+                                    ],
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+
+        ai_service = Mock()
+        ai_service.get_context.return_value = None
+        planner = LLMWorkflowPlanner(ai_service=ai_service, completion=completion)
+        context = {
+            "recent_messages": [{"role": "user", "content": "之前提到宗南账单"}],
+            "chat_knowledge_evidence": [
+                {"dataset": "business-documents", "source": "宗南账单.xlsx", "text": "订单 SO-91"}
+            ],
+            "_chat_evidence_authorized": True,
+            "tenant_id": 2,
+        }
+
+        plan = planner.plan(
+            "owner-41",
+            "查那个账单",
+            get_tool_registry(),
+            context=context,
+        )
+
+        assert plan.nodes
+        model_context = captured["context"]
+        assert model_context["recent_messages"][0]["content"] == "之前提到宗南账单"
+        assert model_context["chat_knowledge_evidence"][0]["text"] == "订单 SO-91"
+        assert "_chat_evidence_authorized" not in model_context
+        assert "tenant_id" not in model_context
+
     def test_no_api_key_returns_none(self):
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
@@ -383,6 +305,38 @@ class TestPlanWithLLM:
         assert result.intent == "product_query"
         assert len(result.nodes) == 1
 
+    def test_same_model_can_select_reply_and_reply_runs_through_langgraph(self):
+        from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
+
+        def completion(**_kwargs):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {"mode": "reply", "reply": "你好，我可以帮你查询业务数据。"},
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            }
+
+        ai_service = Mock()
+        ai_service.get_context.return_value = None
+        planner = LLMWorkflowPlanner(ai_service=ai_service, completion=completion)
+        plan = planner.plan("owner", "你好", get_tool_registry(), context={})
+
+        assert plan.metadata["response_mode"] == "reply"
+        assert len(plan.nodes) == 1
+        assert (plan.nodes[0].tool_id, plan.nodes[0].action) == ("conversation", "reply")
+
+        result = PlannedWorkflowDispatch._execute_reply_plan(plan, {})
+
+        assert result["success"] is True
+        assert result["response"] == "你好，我可以帮你查询业务数据。"
+        assert result["data"]["workflow_runtime"] == "xcagi-langgraph"
+
     def test_llm_http_error_returns_none(self):
         mock_response = Mock()
         mock_response.status_code = 500
@@ -401,163 +355,3 @@ class TestPlanWithLLM:
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
 
         assert result is None
-
-
-@pytest.mark.parametrize("prefix", ["请创建销售订单", "帮我新建一张销售订单"])
-def test_labeled_sales_order_never_creates_product(prefix):
-    planner = LLMWorkflowPlanner()
-    plan = planner._fallback_plan(
-        "sales-regression",
-        prefix + "：客户Mac新main验收客户-20261008，产品Mac新main验收包装盒，"
-        "型号MAC-MAIN-20261008，数量2件，单价12.50元，总金额25元。"
-        "请先展示销售订单执行计划，提交人工审批后再执行。",
-        get_tool_registry(),
-    )
-    assert len(plan.nodes) == 1
-    node = plan.nodes[0]
-    assert (node.tool_id, node.action) == ("sales", "create_order")
-    assert node.risk == "medium" and not node.idempotent
-    assert node.params == {
-        "customer_name": "Mac新main验收客户-20261008",
-        "items": [
-            {
-                "model_number": "MAC-MAIN-20261008",
-                "product_name": "Mac新main验收包装盒",
-                "quantity": 2.0,
-                "unit_price": 12.5,
-            }
-        ],
-    }
-
-
-def test_labeled_sales_order_does_not_invent_commercial_terms():
-    from app.application.workflow.sales_quote_plan import sales_quote_node
-
-    node = sales_quote_node("创建销售订单：客户测试企业，产品测试商品，型号ABC-1", {"sales": {}})
-    assert node is not None
-    assert node.params == {
-        "customer_name": "测试企业",
-        "items": [{"model_number": "ABC-1", "product_name": "测试商品"}],
-    }
-
-
-@pytest.mark.parametrize(
-    "message", ["不要创建销售订单：客户A，产品B，数量2，单价3", "别新建一张销售订单：客户A，型号B"]
-)
-def test_negated_labeled_sales_order_has_no_sales_write(message):
-    from app.application.workflow.sales_quote_plan import sales_quote_node
-
-    assert sales_quote_node(message, {"sales": {}}) is None
-
-
-def test_labeled_sales_missing_terms_still_require_clarification():
-    from app.application.workflow.clarification_node import needs_clarification
-
-    plan = LLMWorkflowPlanner()._fallback_plan(
-        "missing-sales", "创建销售订单：客户测试企业，产品测试商品，型号ABC-1", get_tool_registry()
-    )
-    assert (plan.nodes[0].tool_id, plan.nodes[0].action) == ("clarify", "ask")
-    assert any((node.tool_id, node.action) == ("sales", "create_order") for node in plan.nodes)
-    missing = needs_clarification(plan, get_tool_registry())
-    assert missing[0]["missing_fields"] == ["items.0.quantity", "items.0.unit_price"]
-
-
-@pytest.mark.parametrize(
-    "message",
-    [
-        "创建销售订单：客户A，型号B，数量2，单价3。然后导出客户列表",
-        "先导出客户列表，再创建销售订单：客户A，型号B，数量2，单价3",
-        "创建销售订单：客户A，型号B，数量2，单价3，同时删除产品B",
-    ],
-)
-def test_sales_precedence_does_not_discard_additional_operations(message):
-    from app.application.workflow.sales_quote_plan import sales_quote_node
-
-    assert sales_quote_node(message, {"sales": {}}, single_request=True) is None
-    assert sales_quote_node(message, {"sales": {}}) is not None
-
-
-def test_sales_named_product_master_create_remains_product_crud():
-    plan = LLMWorkflowPlanner()._fallback_plan(
-        "product-master", "创建产品：产品名称销售订单收纳盒，型号BOX-1，单价5", get_tool_registry()
-    )
-    assert (plan.nodes[0].tool_id, plan.nodes[0].action) == ("business_db", "write")
-    assert plan.nodes[0].params["entity"] == "products"
-
-
-@pytest.mark.parametrize("llm_variant", ["drops_customer", "adds_confirmation"])
-def test_online_sales_planner_preserves_explicit_fields_before_model(llm_variant):
-    with patch("app.application.workflow.planner.get_ai_conversation_service"):
-        planner = LLMWorkflowPlanner()
-    item = {
-        "model_number": "WRONG-MODEL",
-        "product_name": "模型猜测产品",
-        "quantity": 99,
-        "unit_price": 100,
-    }
-    nodes = [
-        WorkflowNode(
-            node_id="llm_create",
-            tool_id="sales",
-            action="create_order",
-            params={
-                "customer_name": "" if llm_variant == "drops_customer" else "模型猜测客户",
-                "items": [item],
-            },
-            risk="medium",
-            idempotent=False,
-        )
-    ]
-    if llm_variant == "adds_confirmation":
-        nodes.append(
-            WorkflowNode(
-                node_id="llm_confirm",
-                tool_id="sales",
-                action="confirm",
-                params={"order_id": "模型猜测订单"},
-                depends_on=["llm_create"],
-                risk="medium",
-                idempotent=False,
-            )
-        )
-    memory = Mock()
-    memory.format_memory_v2_for_prompt.return_value = "无已确认记忆"
-    with (
-        patch.object(
-            planner,
-            "_plan_with_react_multiagent",
-            return_value=PlanGraph(plan_id="model-plan", intent="sales_create_order", nodes=nodes),
-        ) as online,
-        patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
-            return_value="full",
-        ),
-        patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        patch(
-            "app.domain.shared_services.user_memory_service.get_user_memory_service",
-            return_value=memory,
-        ),
-        patch("app.application.workflow.planner.execute_tool") as execute,
-    ):
-        for attempt in range(2):
-            plan = planner.plan(
-                "u1",
-                "请创建销售订单：客户Mac新main验收客户-20261008，产品Mac新main验收包装盒，型号MAC-MAIN-20261008，数量2件，单价12.50元，总金额25元。请先展示销售订单执行计划，提交人工审批后再执行。",
-                get_tool_registry(),
-                {"conversation_id": f"retry-{attempt}"},
-            )
-            assert [(n.tool_id, n.action) for n in plan.nodes] == [("sales", "create_order")]
-            assert plan.nodes[0].params == {
-                "customer_name": "Mac新main验收客户-20261008",
-                "items": [
-                    {
-                        "model_number": "MAC-MAIN-20261008",
-                        "product_name": "Mac新main验收包装盒",
-                        "quantity": 2.0,
-                        "unit_price": 12.5,
-                    }
-                ],
-            }
-            assert plan.nodes[0].risk == "medium" and not plan.nodes[0].idempotent
-        online.assert_not_called()
-        execute.assert_not_called()

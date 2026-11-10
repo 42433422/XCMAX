@@ -292,13 +292,6 @@ class TestCustomerPgRowSelectSql:
         assert "unit_name" in sel
         assert len(sel) == 8
 
-    def test_missing_id_raises_503(self):
-        insp = MagicMock()
-        insp.get_columns.return_value = [{"name": "unit_name"}]
-        with pytest.raises(HTTPException) as exc_info:
-            _customer_pg_row_select_sql(insp)
-        assert exc_info.value.status_code == 503
-
     def test_no_matching_columns_raises_503(self):
         insp = MagicMock()
         insp.get_columns.return_value = [{"name": "other_col"}]

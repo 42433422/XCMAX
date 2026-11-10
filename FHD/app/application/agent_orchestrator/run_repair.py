@@ -54,10 +54,27 @@ class RunRepair:
             if not params_patch and (not retry_without_patch):
                 return False
             previous_params = copy.deepcopy(step.params)
+            candidate_params = copy.deepcopy(previous_params)
             if params_patch:
-                step.params.update(copy.deepcopy(params_patch))
-            if previous_params == step.params and (not retry_without_patch):
+                candidate_params.update(copy.deepcopy(params_patch))
+                validation = self.dependencies.validate(step.tool_id, step.action, candidate_params)
+                if not validation.ok:
+                    run.add_event(
+                        "step.repair_rejected",
+                        "受控修复未通过 ToolSpec 校验",
+                        {
+                            "step_id": step.step_id,
+                            "node_id": step.node_id,
+                            "tool_id": step.tool_id,
+                            "action": step.action,
+                            "error_code": validation.error_code,
+                            "message": validation.message,
+                        },
+                    )
+                    return False
+            if previous_params == candidate_params and (not retry_without_patch):
                 return False
+            step.params = candidate_params
             repair_record = {
                 "attempt_count": step.attempt_count,
                 "source": source_name,
@@ -110,6 +127,11 @@ class RunRepair:
         *,
         runtime_context: dict[str, Any],
     ) -> bool:
+        # A repair can change business parameters. Keep that capability limited to
+        # actions that the server independently marked low-risk and idempotent;
+        # a prior human approval never authorizes a different repaired payload.
+        if not self.can_auto_execute(step):
+            return False
         if not self.dependencies.repair_enabled(run, runtime_context):
             return False
         limit = self.dependencies.repair_limit(run, step, runtime_context)

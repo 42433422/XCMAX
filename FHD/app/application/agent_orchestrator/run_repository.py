@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 class AgentRunRepository(Protocol):
     def save(self, run: AgentRun) -> AgentRun: ...
 
+    def save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool: ...
+
     def save_stream_interruption_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool: ...
 
     def save_control_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool: ...
@@ -150,6 +152,9 @@ class InMemoryAgentRunRepository:
                 return False
             self.save(run)
             return True
+
+    def save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        return self._save_if_unchanged(run, previous)
 
     def get(self, run_id: str) -> AgentRun | None:
         with self._lock:

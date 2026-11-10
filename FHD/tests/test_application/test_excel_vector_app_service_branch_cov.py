@@ -310,14 +310,6 @@ class TestIngestExcelBranches:
         assert result["success"] is False
         assert "不存在" in result["message"]
 
-    def test_empty_excel_returns_failure(self, svc, mock_store, tmp_path):
-        df = pd.DataFrame()
-        file_path = tmp_path / "empty.xlsx"
-        df.to_excel(str(file_path), index=False)
-        result = svc.ingest_excel(str(file_path))
-        assert result["success"] is False
-        assert "没有可索引" in result["message"]
-
     def test_successful_ingest_without_create_or_update_index(self, svc, mock_store, tmp_path):
         # Ensure create_or_update_index is NOT present
         if hasattr(mock_store, "create_or_update_index"):

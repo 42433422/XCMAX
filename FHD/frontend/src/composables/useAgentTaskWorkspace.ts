@@ -1,6 +1,5 @@
 import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
 import { getCurrentInstance, onActivated, onBeforeUnmount, onDeactivated, ref, type Ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
 import agentRunsApi from '@/api/agentRuns'
 import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import type { AgentTaskSummary } from '@/api/agentRuns'
@@ -190,14 +189,13 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   if (getCurrentInstance()) {
     chatWorkspaceHiders.add(hideCachedPage)
     onDeactivated(() => { for (const hide of chatWorkspaceHiders) hide() })
-    onBeforeRouteLeave(() => { for (const hide of chatWorkspaceHiders) hide() })
     onActivated(() => {
       if (!resumeAfterPageShow) return
       resumeAfterPageShow = false
       hiddenByLeave = false
       start()
     })
-    onBeforeUnmount(() => { chatWorkspaceHiders.delete(hideCachedPage) })
+    onBeforeUnmount(() => { hideCachedPage(); chatWorkspaceHiders.delete(hideCachedPage) })
   }
 
   async function selectTask(task: TaskItem): Promise<void> {

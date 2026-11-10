@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import Request
 
 from app.application.workflow.workflow_types import normalize_workflow_risk
+from app.middleware.request_id import ensure_request_id
 
 
 def print_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
@@ -72,7 +73,7 @@ def run_print_agent(
     user_id = print_agent_user_id(request, params)
     risk = normalize_workflow_risk(str(action_meta.get("risk") or "medium"))
     plan = PlanGraph(
-        plan_id=node_id,
+        plan_id=f"{node_id}:{ensure_request_id(request)}",
         intent=node_id,
         todo_steps=[f"通过 AgentOrchestrator 执行 print.{action}"],
         nodes=[

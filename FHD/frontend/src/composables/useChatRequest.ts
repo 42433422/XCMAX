@@ -1,10 +1,10 @@
-import { computed, getCurrentInstance, onActivated, onDeactivated, ref, type Ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { computed, getCurrentInstance, onActivated, onBeforeUnmount, onDeactivated, ref, type Ref } from 'vue'
 import type { ChatMessage } from './useChatMessages'
 import chatApi from '../api/chat'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
+import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 export type ChatRequestScope = {
   signal?: AbortSignal
   isCurrent?: () => boolean
@@ -14,7 +14,13 @@ export type ChatRequestScope = {
   turnId?: string
   taskId?: string
 }
-export type PlannerChatOptions = { fromWriteUnlock?: boolean; expectedWorkflowPlanId?: string }
+export type PlannerChatOptions = {
+  fromWriteUnlock?: boolean
+  expectedWorkflowPlanId?: string
+  retryOf?: string
+  idempotencyKey?: string
+  destructiveConfirmed?: boolean
+}
 
 export interface UseChatRequestDeps {
   messages: Ref<ChatMessage[]>
@@ -69,6 +75,8 @@ export function useChatRequest(deps: UseChatRequestDeps) {
         .trim()
         .slice(0, 80),
       ...(plannerOpts?.expectedWorkflowPlanId ? { expected_workflow_plan_id: plannerOpts.expectedWorkflowPlanId } : {}),
+      ...(plannerOpts?.retryOf ? { retry_of: plannerOpts.retryOf, idempotency_key: plannerOpts.idempotencyKey || plannerOpts.retryOf } : {}),
+      ...(plannerOpts?.destructiveConfirmed ? { destructive_confirmed: true, idempotency_key: plannerOpts.idempotencyKey || turnId } : {}),
     }
     // industry 由后端根据 session account_kind 自动派生（单一真相源），前端不传
     const contextParts: string[] = []
@@ -208,12 +216,12 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   }
   if (getCurrentInstance()) {
     onDeactivated(pauseWaitProgress)
-    onBeforeRouteLeave(() => { pauseWaitProgress() })
     onActivated(() => {
       const keys = pausedProgressKeys
       pausedProgressKeys = []
       for (const key of keys) startWaitProgressTimer(key)
     })
+    onBeforeUnmount(pauseWaitProgress)
   }
 
   async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {
@@ -246,10 +254,12 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     plannerOpts?: PlannerChatOptions,
     scope?: ChatRequestScope,
   ): Promise<ChatPlannerPayload> {
+    if (isOfficeEltToolMessage(message)) return requestChatByMode(message, {}, plannerOpts, scope)
     return withRequestTimeout(signal => requestChatByMode(message, { signal }, plannerOpts, scope), timeoutMs, scope?.signal)
   }
 
   function requestChatByModeBatchWithTimeout(batchTexts: string[], timeoutMs = 90_000, scope?: ChatRequestScope): Promise<ChatPlannerPayload> {
+    if (batchTexts.some(isOfficeEltToolMessage)) return requestChatByModeBatch(batchTexts, {}, scope)
     return withRequestTimeout(signal => requestChatByModeBatch(batchTexts, { signal }, scope), timeoutMs, scope?.signal)
   }
 

@@ -3,14 +3,27 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 from app.application import agent_task_context
 from app.application.agent_orchestrator.public_step_errors import public_step_error
 
-logger = logging.getLogger(__name__)
 _PUBLIC_WORKFLOW_FAILURE = "工作流执行失败，详细信息已记录"
+
+
+def _customer_query_summary(output: Any) -> str | None:
+    if not isinstance(output, dict):
+        return None
+    rows, total = output.get("data"), output.get("total")
+    if not isinstance(rows, list) or type(total) is not int or total < 0:
+        return None
+    lines = [f"客户总数：{total}；本次显示 {len(rows)} 条。"]
+    for row in rows:
+        if isinstance(row, dict):
+            name = str(row.get("customer_name") or row.get("unit_name") or "").strip()
+            if name:
+                lines.append(f"- {name}")
+    return "\n".join(lines)
 
 
 def normalize_product_float_query(raw: str) -> str:
@@ -66,31 +79,6 @@ class AIChatWorkflowResponseMixin:
                 description = f"{action_name}{tool_name}"
             node_lines.append(f"- {description}")
         nodes_text = "\n".join(node_lines) if node_lines else "- 直接生成答复，无需执行业务步骤"
-        metadata = getattr(plan, "metadata", {}) or {}
-        user_memory_rag_summary = str(metadata.get("user_memory_rag_summary") or "").strip()
-        memory_v2_summary = str(metadata.get("memory_v2_summary") or "").strip()
-        tool_probe_outputs = metadata.get("tool_probe_outputs") or []
-        if not isinstance(tool_probe_outputs, list):
-            tool_probe_outputs = []
-        successful_probe_count = 0
-        for item in tool_probe_outputs[:3]:
-            if not isinstance(item, dict):
-                continue
-            ok = bool(item.get("success"))
-            successful_probe_count += int(ok)
-        memory_block = (
-            f"3.5) 用户记忆 RAG 概览:\n{user_memory_rag_summary}\n"
-            if user_memory_rag_summary
-            else ""
-        )
-        memory_v2_block = (
-            f"3.6) Memory v2 已确认记忆:\n{memory_v2_summary}\n" if memory_v2_summary else ""
-        )
-        probe_block = (
-            f"3.7) 能力预检: 已确认 {successful_probe_count} 项业务能力可用\n"
-            if tool_probe_outputs
-            else ""
-        )
         raw_intent = str(getattr(plan, "intent", "") or "").strip()
         intent_text = intent_labels.get(raw_intent, "处理当前业务请求")
         risks = {str(getattr(node, "risk", "low") or "low") for node in (plan.nodes or [])}
@@ -103,38 +91,9 @@ class AIChatWorkflowResponseMixin:
             f"工作编排:\n1) 业务目标: {intent_text}\n"
             f"2) 执行计划: 共 {len(node_lines)} 个业务步骤\n"
             f"3) 安全边界: {risk_text}\n"
-            f"{memory_block}{memory_v2_block}{probe_block}"
             f"4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n"
             f"5) 业务步骤:\n{nodes_text}"
         )
-
-    def _workflow_products_float_query(self, plan, run_result, user_message: str) -> str:
-        """从产品查询节点参数/结果或用户原话中提取副窗搜索词。"""
-        for node in plan.nodes or []:
-            if node.tool_id == "products" and node.action == "query":
-                p = node.params or {}
-                q = (
-                    str(p.get("keyword") or "").strip()
-                    or str(p.get("model_number") or "").strip()
-                    or str(p.get("product_name") or p.get("name") or "").strip()
-                )
-                if q := self._normalize_product_query(q):
-                    return q
-        for r in run_result.node_results:
-            if not r.success or r.tool_id != "products" or r.action != "query":
-                continue
-            out = r.output or {}
-            rows = out.get("data") or []
-            if isinstance(rows, list) and rows:
-                row = rows[0] if isinstance(rows[0], dict) else {}
-                if isinstance(row, dict):
-                    m = str(row.get("model_number") or "").strip()
-                    n = str(row.get("name") or row.get("product_name") or "").strip()
-                    if m:
-                        return m
-                if n:
-                    return n
-        return self._normalize_product_query(user_message)
 
     @staticmethod
     def _attach_task_tenant(runtime_context: dict[str, Any]) -> None:
@@ -195,7 +154,16 @@ class AIChatWorkflowResponseMixin:
                 reason = public_step_error(step) or _PUBLIC_WORKFLOW_FAILURE
                 lines.append(f"- {step.node_id}: {step.status}（{reason}）")
 
-        success = agent_run.status == "completed"
+        from app.domain.task_lifecycle.results import execution_result_outcome_unknown
+
+        recovery = (agent_run.metadata or {}).get("recovery")
+        uncertain = (
+            isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+        ) or any(
+            isinstance(step.output, dict) and execution_result_outcome_unknown(step.output)
+            for step in getattr(agent_run, "steps", []) or []
+        )
+        success = agent_run.status == "completed" and not uncertain
         cost_units_total = int((agent_run.metadata or {}).get("cost_units_total") or 0)
         tool_call_count = int((agent_run.metadata or {}).get("tool_call_count") or 0)
         artifact_payloads = [
@@ -206,6 +174,11 @@ class AIChatWorkflowResponseMixin:
         if artifact_payloads:
             lines.append(f"Artifacts: {len(artifact_payloads)} 个")
         response_text = "\n".join(lines)
+        steps = getattr(agent_run, "steps", []) or []
+        if success and len(steps) == 1:
+            step = steps[0]
+            if (step.status, step.tool_id, step.action) == ("completed", "customers", "query"):
+                response_text = _customer_query_summary(step.output) or response_text
         payload: dict[str, Any] = {
             "success": success,
             "message": "处理完成" if success else "处理失败",
@@ -266,6 +239,17 @@ class AIChatWorkflowResponseMixin:
                 },
             },
         }
+        if uncertain:
+            text = "业务结果暂时无法核实，请核对原任务和业务数据，勿重复提交。"
+            payload.update(
+                success=False,
+                message=text,
+                response=text,
+                execution_state="unknown",
+                requires_reconciliation=True,
+                retryable=False,
+            )
+            payload["data"].update(text=text, requires_reconciliation=True)
         if success and any(
             step.status == "completed" and step.tool_id == "products" and step.action == "query"
             for step in getattr(agent_run, "steps", []) or []
@@ -365,6 +349,11 @@ class AIChatWorkflowResponseMixin:
         message = self._workflow_output_message(out)
         preview = self._workflow_output_preview(out)
 
+        if item.tool_id == "customers" and item.action == "query":
+            summary = _customer_query_summary(out)
+            if summary is not None:
+                return [f"- {item.node_id}: {summary}"]
+
         if item.tool_id == "employee":
             if item.action in ("list", "query"):
                 data = out.get("data") if isinstance(out.get("data"), dict) else {}
@@ -395,166 +384,3 @@ class AIChatWorkflowResponseMixin:
         if message:
             return [f"- {item.node_id}: 成功（{message}）"]
         return [f"- {item.node_id}: 成功"]
-
-    def _format_workflow_run_response(
-        self,
-        plan,
-        run_result,
-        thinking_steps: str = "",
-        user_message: str = "",
-        state_updates: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
-        lines = [f"工作流: {plan.intent}", f"计划ID: {plan.plan_id}"]
-        if thinking_steps:
-            lines.append(thinking_steps)
-        if plan.todo_steps:
-            lines.append("TODO:")
-            lines.extend([f"- {x}" for x in plan.todo_steps])
-        lines.append("执行结果:")
-        plan_nodes = getattr(plan, "nodes", None)
-        if not isinstance(plan_nodes, (list, tuple)):
-            plan_nodes = []
-        node_params_by_id = {
-            str(getattr(node, "node_id", "")): (getattr(node, "params", None) or {})
-            for node in plan_nodes
-        }
-        for item in run_result.node_results:
-            if item.success and item.tool_id == "products" and item.action == "query":
-                rows = (item.output or {}).get("data") or []
-                n = len(rows) if isinstance(rows, list) else 0
-                lines.append(f"- {item.node_id}: 成功（产品库命中 {n} 条）")
-                if isinstance(rows, list) and rows:
-                    from app.utils.ai_helpers import format_money, safe_float
-
-                    for row in rows[:5]:
-                        if not isinstance(row, dict):
-                            continue
-                        m = str(row.get("model_number") or "").strip() or "-"
-                        name = str(row.get("name") or row.get("product_name") or "-").strip()
-                        p = safe_float(row.get("price"))
-                        u = str(row.get("unit") or "").strip() or "-"
-                        lines.append(f"    · {m} / {name} / ￥{format_money(p)} / 单位:{u}")
-            elif item.success:
-                node_params = node_params_by_id.get(str(item.node_id), {})
-                lines.extend(self._format_workflow_tool_success_line(item, node_params))
-            else:
-                lines.append(
-                    f"- {item.node_id}: 失败（{public_step_error(item, allow_reference_message=False) or _PUBLIC_WORKFLOW_FAILURE}）"
-                )
-                retryable = getattr(item, "retryable", True)
-                retryable = retryable if isinstance(retryable, bool) else True
-                try:
-                    retries = int(getattr(item, "retries", 0) or 0)
-                except (TypeError, ValueError):
-                    retries = 0
-                if retryable and retries:
-                    lines.append(f"    · 已自动重试: {retries} 次")
-                elif not retryable:
-                    lines.append("    · 未自动重试: 非幂等或中高风险操作")
-                raw_recovery_hint = getattr(item, "recovery_hint", "")
-                recovery_hint = (
-                    raw_recovery_hint.strip() if isinstance(raw_recovery_hint, str) else ""
-                )
-                if recovery_hint:
-                    lines.append("    · 恢复建议: 请检查依赖服务后重试")
-        if run_result.success and run_result.message:
-            lines.append(f"说明: {run_result.message}")
-        response_text = "\n".join(lines)
-        payload: dict[str, Any] = {
-            "success": run_result.success,
-            "message": "处理完成" if run_result.success else "处理失败",
-            "response": response_text,
-            "data": {
-                "text": response_text,
-                "action": "workflow_done" if run_result.success else "workflow_failed",
-                "data": {
-                    "plan_id": plan.plan_id,
-                    "intent": plan.intent,
-                    "thinking_steps": thinking_steps,
-                    "todo": plan.todo_steps,
-                    "node_results": [
-                        {
-                            "node_id": r.node_id,
-                            "success": r.success,
-                            "tool_id": r.tool_id,
-                            "action": r.action,
-                            "message": (
-                                self._workflow_output_message(r.output)
-                                if r.success
-                                else public_step_error(r, allow_reference_message=False)
-                                or _PUBLIC_WORKFLOW_FAILURE
-                            ),
-                            "output_preview": self._workflow_output_preview(r.output)
-                            if r.success
-                            else "",
-                            "retries": getattr(r, "retries", 0),
-                            "retryable": getattr(r, "retryable", True),
-                            "recovery_hint": ("" if r.success else "请检查依赖服务后重试"),
-                            "duration_ms": getattr(r, "duration_ms", 0),
-                        }
-                        for r in run_result.node_results
-                    ],
-                    "workflow_status": getattr(run_result, "final_context", {}).get(
-                        "workflow_status", {}
-                    )
-                    if run_result.success
-                    and isinstance(getattr(run_result, "final_context", {}), dict)
-                    else {},
-                    "workflow_trace": getattr(run_result, "final_context", {}).get(
-                        "workflow_trace", []
-                    )
-                    if run_result.success
-                    and isinstance(getattr(run_result, "final_context", {}), dict)
-                    else [],
-                    "state_updates": (state_updates or []) if run_result.success else [],
-                },
-            },
-        }
-        if run_result.success and any(
-            r.success and r.tool_id == "products" and r.action == "query"
-            for r in run_result.node_results
-        ):
-            q = self._workflow_products_float_query(plan, run_result, user_message)
-            payload["autoAction"] = {
-                "type": "show_products_float",
-                "feature": "products",
-                "query": q,
-            }
-            if q:
-                lines.append(f"\n已为你打开产品副窗，搜索：{q}")
-            else:
-                lines.append("\n已为你打开产品副窗，可在卡片中查询或编辑。")
-            payload["response"] = "\n".join(lines)
-            payload["data"]["text"] = payload["response"]
-
-        slot_overlay = self._normal_slot_dispatch_chat_overlay(run_result)
-        if slot_overlay:
-            if slot_overlay.get("response"):
-                payload["response"] = slot_overlay["response"]
-            if slot_overlay.get("message"):
-                payload["message"] = slot_overlay["message"]
-            if slot_overlay.get("autoAction"):
-                payload["autoAction"] = slot_overlay["autoAction"]
-            if slot_overlay.get("task"):
-                payload["task"] = slot_overlay["task"]
-            payload.setdefault("data", {})
-            payload["data"]["text"] = payload["response"]
-
-        return payload
-
-    @staticmethod
-    def _normal_slot_dispatch_chat_overlay(run_result) -> dict[str, Any]:
-        for item in reversed(run_result.node_results):
-            if not item.success or item.tool_id != "normal_slot_dispatch":
-                continue
-            out = item.output or {}
-            if not isinstance(out, dict) or not out.get("success"):
-                continue
-            if not (out.get("autoAction") or out.get("task")):
-                continue
-            picked: dict[str, Any] = {}
-            for key in ("response", "message", "autoAction", "task"):
-                if key in out:
-                    picked[key] = out[key]
-            return picked
-        return {}

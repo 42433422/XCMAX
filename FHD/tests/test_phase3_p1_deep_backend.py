@@ -1,4 +1,4 @@
-"""COVERAGE_RAMP Phase 3 round 1: workflow/planner deep branches, price_list_export,
+"""COVERAGE_RAMP Phase 3 round 1: workflow utility and service deep branches, price_list_export,
 service_bridge + excel_extract routes, compat_db writes."""
 
 from __future__ import annotations
@@ -22,15 +22,6 @@ from app.application.tools.workflow import (
     execute_workflow_tool,
     handle_excel_analysis,
     run_natural_language_pandas,
-)
-from app.application.workflow.planner import (
-    _execute_excel_analysis_tool,
-    _execute_excel_decompose_tool,
-    _execute_excel_schema_tool,
-    _execute_import_excel_tool,
-    _execute_print_label_tool,
-    _execute_template_extract_tool,
-    execute_tool,
 )
 from app.infrastructure.documents.price_list_export import (
     _format_price_cell,
@@ -336,87 +327,6 @@ def test_run_natural_language_pandas_fallback() -> None:
     out = run_natural_language_pandas(df, "求和")
     assert out["row_count"] == 3
     assert "records" in out
-
-
-# ---------------------------------------------------------------------------
-# planner tool handlers
-# ---------------------------------------------------------------------------
-
-
-def test_execute_print_label_with_products() -> None:
-    with patch(
-        "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator"
-    ) as mock_gen_cls:
-        mock_gen_cls.return_value.generate_labels_for_order.return_value = [{"id": 1}]
-        out = _execute_print_label_tool(
-            {"products": [{"name": "漆", "model": "5003"}], "unit_name": "甲公司"}
-        )
-    assert out["success"] is True
-
-
-def test_execute_excel_decompose_missing_path() -> None:
-    out = _execute_excel_decompose_tool({})
-    assert out["success"] is False
-    assert out["error_code"] == "missing_file_path"
-
-
-@patch("app.bootstrap.get_template_app_service")
-def test_execute_excel_decompose_ok(mock_get: MagicMock) -> None:
-    mock_get.return_value.decompose_template.return_value = {"success": True}
-    out = _execute_excel_decompose_tool({"file_path": "/tmp/t.xlsx"})
-    assert out["success"] is True
-
-
-def test_execute_template_extract_delegates() -> None:
-    with patch(
-        "app.application.workflow.planner._execute_excel_decompose_tool",
-        return_value={"success": True},
-    ):
-        out = _execute_template_extract_tool({"file_path": "a.xlsx"})
-    assert out["success"] is True
-
-
-def test_execute_excel_schema_openpyxl_fallback(tmp_path) -> None:
-    p = _write_xlsx(tmp_path / "schema.xlsx", [["型号", "单价"], ["M1", 10]])
-    out = _execute_excel_schema_tool({"file_path": str(p)})
-    assert out["success"] is True
-    assert out["fields"]
-
-
-def test_execute_excel_schema_missing_path() -> None:
-    out = _execute_excel_schema_tool({})
-    assert out["error_code"] == "missing_file_path"
-
-
-def test_execute_excel_analysis_openpyxl_fallback(tmp_path) -> None:
-    p = _write_xlsx(tmp_path / "data.xlsx", [["产品", "单价"], ["漆", 88]])
-    out = _execute_excel_analysis_tool({"file_path": str(p)})
-    assert out["success"] is True
-
-
-@patch("app.bootstrap.get_products_service")
-def test_execute_import_excel_tool(mock_products: MagicMock, tmp_path) -> None:
-    p = _write_xlsx(
-        tmp_path / "import.xlsx",
-        [["产品名称", "型号", "单价", "单位"], ["清漆", "5003", 120, "甲公司"]],
-    )
-    svc = MagicMock()
-    svc.get_products.return_value = {"success": True, "data": []}
-    svc.create_product.return_value = {"success": True}
-    mock_products.return_value = svc
-    with patch("app.bootstrap.get_customer_app_service") as mock_cust:
-        mock_cust.return_value.match_purchase_unit.return_value = {"unit_name": "甲公司"}
-        out = _execute_import_excel_tool(
-            {"file_path": str(p), "unit_name": "甲公司", "skip_duplicates": False}
-        )
-    assert out["success"] is True
-
-
-def test_execute_tool_action_defaults() -> None:
-    with patch("app.bootstrap.get_shipment_app_service") as mock_ship:
-        mock_ship.return_value.get_shipment_records.return_value = []
-        out = execute_tool("shipment_records", {})
-    assert out["success"] is True
 
 
 # ---------------------------------------------------------------------------

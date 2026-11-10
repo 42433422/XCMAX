@@ -20,6 +20,7 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.customer_app_service import CustomerApplicationService
 from app.db.bootstrap.locations import create_desktop_business_tables
 from app.db.models.purchase_unit import PurchaseUnit
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _engine(path: Path):
@@ -268,6 +269,69 @@ def test_duplicate_name_does_not_write_phone():
         assert _phone(engine, other) == "13800000009"
 
 
+@pytest.mark.parametrize("versioned", [False, True])
+def test_customer_rename_preserves_product_and_shipment_links_within_tenant(versioned):
+    from app.db.models.product import Product, UomUnit
+    from app.db.models.shipment import ShipmentRecord
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with (
+        tempfile.TemporaryDirectory(prefix="customer-rename-") as raw,
+        _prepare(Path(raw)) as engine,
+    ):
+        UomUnit.__table__.create(engine, checkfirst=True)
+        Product.__table__.create(engine, checkfirst=True)
+        ShipmentRecord.__table__.create(engine, checkfirst=True)
+        unit_id = _seed(engine, "合成客户", "", 11)
+        with Session(engine) as db:
+            db.add_all(
+                [
+                    Product(name="本租户产品", unit="合成客户", tenant_id=11),
+                    Product(name="其他租户产品", unit="合成客户", tenant_id=22),
+                    ShipmentRecord(
+                        quantity_kg=1,
+                        quantity_tins=1,
+                        purchase_unit="合成客户",
+                        product_name="本租户记录",
+                        tenant_id=11,
+                    ),
+                    ShipmentRecord(
+                        quantity_kg=1,
+                        quantity_tins=1,
+                        purchase_unit="合成客户",
+                        product_name="其他租户记录",
+                        tenant_id=22,
+                    ),
+                ]
+            )
+            db.commit()
+        payload = {"customer_name": "合成客户新名"}
+        if versioned:
+            payload["expected_version"] = 1
+        with tenant_scope(11):
+            result = CustomerApplicationService().update(unit_id, payload)
+        assert result["success"] is True
+        with Session(engine) as db:
+            products = db.execute(
+                select(Product.tenant_id, Product.unit).execution_options(skip_tenant_filter=True)
+            ).all()
+            shipments = db.execute(
+                select(ShipmentRecord.tenant_id, ShipmentRecord.purchase_unit).execution_options(
+                    skip_tenant_filter=True
+                )
+            ).all()
+        assert sorted(products) == [(11, "合成客户新名"), (22, "合成客户")], (
+            "products",
+            products,
+            shipments,
+        )
+        assert sorted(shipments) == [(11, "合成客户新名"), (22, "合成客户")], (
+            "shipments",
+            products,
+            shipments,
+        )
+
+
 def test_commit_failure_leaves_no_partial_write(monkeypatch):
     with tempfile.TemporaryDirectory(prefix="e22-rollback-") as raw, _prepare(Path(raw)) as engine:
         unit_id = _seed(engine, "回滚客户", "13800000010", 11)
@@ -395,3 +459,75 @@ def test_prepare_restores_runtime_and_closes_database(tmp_path, fail_body):
     assert {key: os.environ.get(key) for key in previous_env} == previous_env
     with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
         pooled_connection.execute("SELECT 1")
+
+
+def test_customer_cascade_only_deletes_own_children(trusted_actor):
+    from app.db.models.product import Product, UomUnit
+    from app.db.models.shipment import ShipmentRecord
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with (
+        tempfile.TemporaryDirectory(prefix="customer-cascade-") as raw,
+        _prepare(Path(raw)) as engine,
+    ):
+        actor = trusted_actor(
+            tenant_id=11,
+            role="cascade-review",
+            permissions=["customer.edit", "product.edit", "shipment.edit"],
+        )
+        UomUnit.__table__.create(engine, checkfirst=True)
+        Product.__table__.create(engine, checkfirst=True)
+        ShipmentRecord.__table__.create(engine, checkfirst=True)
+        unit_id = _seed(engine, "合成客户", "", 11)
+        other_id = _seed(engine, "另一客户", "", 11)
+        with Session(engine) as db:
+            db.add_all(
+                [
+                    Product(name="目标产品", unit="合成客户", tenant_id=11),
+                    Product(name="其他企业产品", unit="合成客户", tenant_id=22),
+                    ShipmentRecord(
+                        quantity_kg=1,
+                        quantity_tins=1,
+                        purchase_unit="合成客户",
+                        product_name="目标发货",
+                        tenant_id=11,
+                        unit_id=unit_id,
+                    ),
+                    ShipmentRecord(
+                        quantity_kg=1,
+                        quantity_tins=1,
+                        purchase_unit="合成客户",
+                        product_name="其他客户发货",
+                        tenant_id=11,
+                        unit_id=other_id,
+                    ),
+                    ShipmentRecord(
+                        quantity_kg=1,
+                        quantity_tins=1,
+                        purchase_unit="合成客户",
+                        product_name="其他企业发货",
+                        tenant_id=22,
+                    ),
+                ]
+            )
+            db.commit()
+        with tenant_scope(11):
+            assert not CustomerApplicationService().delete(unit_id)["success"]
+            assert CustomerApplicationService().delete(
+                unit_id, force=True, runtime_context=actor.context
+            )["success"]
+        with Session(engine) as db:
+            products = (
+                db.execute(select(Product.name).execution_options(skip_tenant_filter=True))
+                .scalars()
+                .all()
+            )
+            shipments = (
+                db.execute(
+                    select(ShipmentRecord.product_name).execution_options(skip_tenant_filter=True)
+                )
+                .scalars()
+                .all()
+            )
+        assert products == ["其他企业产品"]
+        assert set(shipments) == {"其他客户发货", "其他企业发货"}

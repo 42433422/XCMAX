@@ -4,7 +4,6 @@ from .approval_service import (
     reload_approval_service,
 )
 from .checkpointer import DatabaseWorkflowCheckpointer, WorkflowCheckpointer
-from .engine import WorkflowEngine
 from .planner import LLMWorkflowPlanner
 from .risk_gate import HybridRiskGate, RiskDecision
 from .workflow_types import (
@@ -22,7 +21,6 @@ from .workflow_types import (
 )
 
 __all__ = [
-    "WorkflowEngine",
     "WorkflowCheckpointer",
     "DatabaseWorkflowCheckpointer",
     "LLMWorkflowPlanner",

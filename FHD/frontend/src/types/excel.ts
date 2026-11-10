@@ -45,12 +45,14 @@ export interface ExcelPreviewData {
 }
 
 export interface ExcelAnalysisResult {
+  upload_id?: string
   fields?: string[]
   sheets?: ExcelSheetDetail[]
   preview_data?: ExcelPreviewData
 }
 
 export interface ExcelExtractGridResponse {
+  upload_id?: string
   success?: boolean
   fields?: ExcelFieldInfo[]
   sheets?: ExcelSheetDetail[]

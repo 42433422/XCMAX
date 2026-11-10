@@ -3,6 +3,7 @@
 import asyncio
 import json
 from io import BytesIO
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import UploadFile
@@ -22,11 +23,12 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
     trusted_actor, monkeypatch, entrypoint, failure
 ):
     from app.application import get_ai_chat_app_service
-    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.facades.tools_facade import execute_registered_workflow_tool
+    from app.application.workflow.workflow_types import PlanGraph
     from app.fastapi_routes import ai_intent, voice_routes
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "local")
     actor = trusted_actor(permissions=["customer.edit"])
     engine = actor.factory.kw["bind"]
     request = Request(
@@ -42,32 +44,33 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
     # response formatting remain intact. No model/server request is performed.
     app = get_ai_chat_app_service()
 
-    async def classified(*args, **kwargs):
-        return {
-            "action": "tool_call",
-            "data": {
-                "tool_key": "customers",
-                "params": {"unit_name": name},
-                "slots": {},
-            },
-        }
+    monkeypatch.setattr("app.application.customer_app_service.get_customers_session", actor.factory)
+    monkeypatch.setattr(
+        "app.application.ai_chat.chat_evidence.prepare_chat_evidence",
+        lambda request, ctx, text: ctx,
+    )
+    monkeypatch.setattr(
+        voice_routes, "_platform_transcribe", AsyncMock(return_value={"text": message})
+    )
 
-    monkeypatch.setattr(app.ai_service, "chat", classified)
-    monkeypatch.setattr(LLMWorkflowPlanner, "plan", lambda *a, **k: None)
-    monkeypatch.setattr(
-        "app.application.normal_chat_dispatch.route_normal_mode_message",
-        lambda text: {"intent": "chat"},
-    )
-    monkeypatch.setattr(voice_routes, "_transcribe_audio", lambda *a: message)
-    monkeypatch.setattr(
-        voice_routes,
-        "_recognize_intent",
-        lambda text: {
-            "tool_key": "customers",
-            "confidence": 1.0,
-            "slots": {"unit_name": name},
-        },
-    )
+    def planned(user_id, message, source, context, file_context):
+        runtime = app._merge_tool_runtime_context(user_id, message, context)
+        output = execute_registered_workflow_tool(
+            "customers", "ensure_exists", {"unit_name": name, "_runtime_context": runtime}
+        )
+        step = AgentStep(
+            node_id="customer",
+            tool_id="customers",
+            action="ensure_exists",
+            status="failed",
+            output=output,
+        )
+        run = AgentRun(user_id=user_id, message=message, status="blocked", steps=[step])
+        return app._format_agent_run_response(
+            PlanGraph(plan_id="customer", intent="customer_write"), run
+        )
+
+    monkeypatch.setattr(app, "_try_handle_dynamic_workflow", planned)
     state = {"inserts": 0, "committed": False, "postcommit_reads": 0, "faults": 0}
 
     def business_db(connection):
@@ -105,7 +108,7 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
                 request, {"message": message, "source": "normal"}
             )
             payload = json.loads(response.body)
-            receipt = payload["data"]["data"]
+            receipt = payload
             text = payload.get("response", "")
         else:
 
@@ -119,12 +122,12 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
                 )
 
             payload = asyncio.run(invoke())
-            receipt = payload["data"]["result"]["data"]
+            receipt = payload["data"]["result"]
             text = payload["data"]["result"].get("response", "")
         assert "已创建" not in text
         assert receipt["success"] is False
-        assert receipt["outcome"] == "unknown"
-        assert receipt["retryable"] is False and receipt["reconciliation_required"] is True
+        assert receipt["execution_state"] == "unknown"
+        assert receipt["retryable"] is False and receipt["requires_reconciliation"] is True
         assert state["committed"] and state["faults"] == 1
         assert state["postcommit_reads"] == 1
         assert state["inserts"] == 1  # No automatic duplicate within this request.

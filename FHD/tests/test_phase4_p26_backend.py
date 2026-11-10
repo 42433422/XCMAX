@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,7 +12,6 @@ from app.domain.shared_services.tools_workflow_registered import (
     _registered_router_excel_analysis,
     _registered_router_excel_import,
     _registered_router_materials,
-    _registered_router_normal_slot_dispatch,
     _registered_router_print,
     _registered_router_printer_list,
     _registered_router_products,
@@ -32,37 +30,6 @@ def test_execute_registered_unknown_tool() -> None:
     out = execute_registered_workflow_tool("not_a_tool", "view", {})
     assert out["success"] is False
     assert "未注册" in out["message"]
-
-
-@patch("app.application.normal_chat_dispatch.run_normal_slot_shipment_preview")
-def test_execute_registered_normal_slot_via_dispatcher(mock_run: MagicMock) -> None:
-    mock_run.return_value = {"success": True}
-    out = execute_registered_workflow_tool(
-        "normal_slot_dispatch",
-        "shipment_preview",
-        {"_runtime_context": {"message": "订单预览"}},
-    )
-    assert out["success"] is True
-
-
-# ---------------------------------------------------------------------------
-# normal_slot_dispatch
-# ---------------------------------------------------------------------------
-
-
-def test_normal_slot_unknown_action() -> None:
-    out = _registered_router_normal_slot_dispatch("unknown", {}, {}, "normal", "")
-    assert out["success"] is False
-
-
-@patch("app.application.normal_chat_dispatch.run_normal_slot_shipment_preview")
-def test_normal_slot_shipment_preview(mock_run: MagicMock) -> None:
-    mock_run.return_value = {"success": True, "preview": True}
-    out = _registered_router_normal_slot_dispatch(
-        "shipment_preview", {"order_text": "单号1"}, {}, "pro", ""
-    )
-    assert out["success"] is True
-    mock_run.assert_called_once_with("单号1")
 
 
 # ---------------------------------------------------------------------------
@@ -327,23 +294,6 @@ def test_excel_import_success(
     )
     assert out["success"] is True
     assert ai_svc._pending_excel_imports == {}
-
-
-# ---------------------------------------------------------------------------
-# legacy_chat_adapter pure helpers
-# ---------------------------------------------------------------------------
-
-
-def test_resolve_chat_model_for_client_modstore() -> None:
-    from app.legacy.chat.legacy_chat_adapter import _resolve_chat_model_for_client
-
-    client = SimpleNamespace(
-        is_modstore_openai_compatible=True,
-        default_model="deepseek-chat",
-        default_provider="deepseek",
-    )
-    assert _resolve_chat_model_for_client(client, None) == "deepseek/deepseek-chat"
-    assert _resolve_chat_model_for_client(None, "explicit") == "explicit"
 
 
 if __name__ == "__main__":  # pragma: no cover

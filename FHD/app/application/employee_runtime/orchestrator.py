@@ -1,7 +1,7 @@
 """员工协作编排：``collaboration.depends_on`` 本地依赖图执行。
 
-把 manifest 声明的上游依赖建模为 WorkflowEngine DAG，复用 ``_run_batch`` 做
-拓扑执行 + 死锁检测；上游 ``node_outputs`` 注入下游 ``EmployeeAgent.run`` 输入。
+把 manifest 声明的上游依赖建模为 LangGraph DAG；上游 ``node_outputs``
+注入下游 ``EmployeeAgent.run`` 输入。
 
 仅用于 FHD 本地/桌面单机场景，不回写 MODstore duty_graph。
 """
@@ -9,17 +9,14 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any
 
 from app.application.employee_runtime.loader import (
     list_installed_pack_records,
     parse_employee_config_v2,
 )
-from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.domain.employee.collaboration_graph import CollaborationGraph
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -54,65 +51,11 @@ def build_global_collaboration_graph() -> CollaborationGraph:
     return graph
 
 
-def _employee_dispatcher(
-    *,
-    tool_id: str,
-    action: str,
-    params: dict[str, Any],
-) -> dict[str, Any]:
-    """WorkflowEngine 工具分发：tool_id = employee pack_id。"""
-    from app.application.employee_runtime.agent import EmployeeAgent
-
-    ctx = params.get("_runtime_context") if isinstance(params.get("_runtime_context"), dict) else {}
-    if not isinstance(ctx, dict):
-        ctx = {}
-    node_outputs = ctx.get("node_outputs") if isinstance(ctx.get("node_outputs"), dict) else {}
-    task = str(
-        params.get("task")
-        or params.get("user_request")
-        or ctx.get("task")
-        or f"协作步骤：{tool_id}"
-    )
-    input_data = {
-        k: v for k, v in params.items() if k not in ("_runtime_context", "task", "user_request")
-    }
-    input_data["invoke_mode"] = "collaboration_context"
-    input_data["source"] = "employee_collaboration"
-    input_data["client_surface"] = "employee_runtime"
-    input_data["root_employee_id"] = str(ctx.get("employee_id") or "")
-    input_data["upstream_outputs"] = node_outputs
-    input_data["skip_collaboration"] = True
-    if not isinstance(params, dict):
-        params = {}
-    user_id = int(params.get("user_id") or ctx.get("user_id") or 0)
-    workspace_root = params.get("workspace_root") or ctx.get("workspace_root")
-    session_id = params.get("session_id") or ctx.get("session_id")
-    try:
-        result = EmployeeAgent(tool_id).run(
-            task,
-            input_data,
-            user_id=user_id,
-            workspace_root=workspace_root,
-            session_id=session_id,
-        )
-        ok = bool(result.get("success"))
-        return {
-            "success": ok,
-            "message": "员工协作步骤完成" if ok else "员工协作步骤失败",
-            "employee_id": tool_id,
-            "output": result,
-        }
-    except RECOVERABLE_ERRORS:
-        logger.exception("employee orchestrator step failed")
-        return {"success": False, "error": "员工协作步骤失败", "employee_id": tool_id}
-
-
 class EmployeeOrchestrator:
     """本地员工依赖图编排器。"""
 
     def __init__(self, graph: CollaborationGraph | None = None) -> None:
         self.graph = graph or build_global_collaboration_graph()
-        self._engine = WorkflowEngine(tool_dispatcher=lambda **kw: _employee_dispatcher(**kw))
 
     def depends_on(
         self, employee_id: str, manifest: dict[str, Any], config: dict[str, Any]
@@ -146,19 +89,26 @@ class EmployeeOrchestrator:
             nodes.append(
                 WorkflowNode(
                     node_id=node_eid,
-                    tool_id=node_eid,
-                    action="run",
+                    tool_id="employee",
+                    action="context",
                     params={
+                        "employee_id": node_eid,
                         "task": (
                             task if include_root and node_eid == eid else f"上游协作：{node_eid}"
-                        )
+                        ),
+                        "input": {
+                            "invoke_mode": "collaboration_context",
+                            "source": "employee_collaboration",
+                            "client_surface": "employee_runtime",
+                            "root_employee_id": eid,
+                        },
                     },
                     depends_on=direct_deps,
                     description=f"员工协作节点 {node_eid}",
                 )
             )
         return PlanGraph(
-            plan_id=f"emp-collab-{eid}-{uuid.uuid4().hex[:8]}",
+            plan_id=f"emp-collab-{eid}",
             intent=f"员工 {eid} 协作编排",
             todo_steps=[f"执行 {n}" for n in exec_order],
             nodes=nodes,
@@ -205,22 +155,72 @@ class EmployeeOrchestrator:
         ctx = dict(runtime_context or {})
         ctx.setdefault("task", task)
         ctx.setdefault("employee_id", employee_id)
-        run = self._engine._run_batch(plan, ctx)
+        raw_user_id = ctx.get("user_id")
+        try:
+            user_id = int(raw_user_id) if raw_user_id is not None else 0
+        except (TypeError, ValueError):
+            user_id = 0
+        if user_id <= 0:
+            return {
+                "skipped": False,
+                "employee_id": employee_id,
+                "success": False,
+                "error_code": "employee_actor_required",
+                "message": "员工协作缺少已认证的账号，已阻止执行",
+                "node_outputs": {},
+                "node_results": [],
+            }
+        from app.application.agent_orchestrator import AgentOrchestrator
+        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+        stable_id = canonical_hash(
+            {
+                "employee_id": str(employee_id),
+                "task": str(task),
+                "dependencies": [node.node_id for node in plan.nodes],
+                "user_id": user_id,
+                "tenant_id": str(ctx.get("tenant_id") or ""),
+                "session_id": str(ctx.get("session_id") or ctx.get("conversation_id") or ""),
+                "task_id": str(ctx.get("task_id") or ""),
+                "parent_run_id": str(ctx.get("run_id") or ctx.get("agent_run_id") or ""),
+                "parent_step_id": str(ctx.get("step_id") or ""),
+            }
+        )
+        plan.plan_id = f"emp-collab-{stable_id[:32]}"
+        ctx["employee_collaboration_run"] = True
+        parent_run_id = str(ctx.get("run_id") or "").strip()
+        if parent_run_id:
+            ctx["parent_run_id"] = parent_run_id
+            ctx["parent_task_id"] = str(ctx.get("task_id") or parent_run_id)
+        orchestrator = AgentOrchestrator()
+        run = orchestrator.start_run_from_plan(
+            user_id=str(user_id),
+            message=str(task),
+            plan=plan,
+            runtime_context=ctx,
+            auto_execute=True,
+        )
+        if parent_run_id:
+            orchestrator.attach_child_run(parent_run_id, run)
+        outputs = (run.final_output or {}).get("node_outputs")
+        outputs = outputs if isinstance(outputs, dict) else {}
         return {
             "skipped": False,
             "employee_id": employee_id,
-            "plan_id": plan.plan_id,
-            "success": run.success,
-            "message": run.message,
-            "node_outputs": (run.final_context or {}).get("node_outputs") or {},
+            "plan_id": run.plan_id,
+            "agent_run_id": run.run_id,
+            "status": run.status,
+            "success": run.status == "completed",
+            "message": run.error or str((run.final_output or {}).get("message") or run.status),
+            "node_outputs": outputs,
             "node_results": [
                 {
                     "node_id": nr.node_id,
-                    "success": nr.success,
+                    "success": nr.status == "completed",
                     "tool_id": nr.tool_id,
                     "error": nr.error,
                 }
-                for nr in (run.node_results or [])
+                for nr in run.steps
             ],
         }
 

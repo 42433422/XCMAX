@@ -7,9 +7,9 @@ import time
 
 import pytest
 
-from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 
 
 def _engine_with_dispatch(dispatch):
@@ -58,7 +58,7 @@ class TestWorkflowParallel:
         plan = _plan([_read_node("n1"), _read_node("n2"), _read_node("n3")])
 
         t0 = time.perf_counter()
-        result = engine._run_batch(plan)
+        result = engine.run(plan)
         elapsed = time.perf_counter() - t0
 
         assert result.success is True
@@ -100,7 +100,7 @@ class TestWorkflowParallel:
                 idempotent=False,
             ),
         ]
-        result = engine._run_batch(_plan(nodes))
+        result = engine.run(_plan(nodes))
         assert result.success is True
         assert max_active == 1
 
@@ -116,7 +116,7 @@ class TestWorkflowParallel:
             _read_node("n3", marker="c"),
         ]
         with tenant_scope(tenant_id):
-            result = engine._run_batch(_plan(nodes))
+            result = engine.run(_plan(nodes))
 
         outputs = result.final_context["node_outputs"]
         assert outputs["n1"]["data"] == "a"
@@ -142,7 +142,7 @@ class TestWorkflowParallel:
 
         engine = _engine_with_dispatch(dispatch)
         plan = _plan([_read_node("n1"), _read_node("n2")])
-        result = engine._run_batch(plan, parallel=False)
+        result = engine.run(plan, parallel=False)
         assert result.success is True
         assert max_active == 1
         assert "n1" in result.final_context["node_outputs"]

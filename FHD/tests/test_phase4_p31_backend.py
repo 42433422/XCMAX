@@ -102,23 +102,6 @@ def test_load_mod_bundle_metadata_only(isolated_mods) -> None:
 # ---------------------------------------------------------------------------
 
 
-@patch("app.application.print_app_service.get_print_application_service")
-def test_build_label_print_response_print_failed(mock_get: MagicMock) -> None:
-    from app.application.normal_chat_dispatch import (
-        build_label_print_response_dict,
-        route_normal_mode_message,
-    )
-
-    mock_get.return_value.print_single_label.return_value = {
-        "success": False,
-        "message": "printer offline",
-    }
-    rr = route_normal_mode_message("贴标 ABCDEF 2张")
-    body = build_label_print_response_dict(rr)
-    assert body is not None
-    assert "失败" in body["response"] or "printer" in body["response"]
-
-
 # ---------------------------------------------------------------------------
 # session_account_meta — enrich admin short-circuit
 # ---------------------------------------------------------------------------

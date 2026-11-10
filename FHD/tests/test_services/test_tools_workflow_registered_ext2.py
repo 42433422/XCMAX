@@ -15,6 +15,10 @@ from app.domain.shared_services.tools_workflow_registered import (
     _registered_router_shipment_orders,
     _registered_router_shipment_records,
 )
+from app.infrastructure.tenant_scope import tenant_scope
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_customer_cascade_authority import deletion as deletion
+from tests.test_application.test_customer_cascade_authority import snapshot
 
 
 class TestCustomersRouterMissingBranches:
@@ -67,24 +71,35 @@ class TestCustomersRouterMissingBranches:
             result = _registered_router_customers("delete", {"id": 3}, {}, "admin", "")
         assert result["success"] is True
 
-    def test_delete_with_force(self):
-        svc = self._mock_svc()
-        svc.delete.return_value = {"success": True}
-        with patch("app.application.get_customer_app_service", return_value=svc):
-            _registered_router_customers("delete", {"id": 3, "force": True}, {}, "admin", "")
-        svc.delete.assert_called_once_with(3, force=True)
+    def test_delete_with_force(self, deletion):
+        _, actor, svc = deletion
+        with patch("app.application.get_customer_app_service", return_value=svc), tenant_scope(7):
+            result = _registered_router_customers(
+                "delete", {"id": 1, "force": True}, actor.context, "admin", ""
+            )
+        assert result["success"] is True
+        remaining = snapshot(actor)
+        assert remaining[0] == [(2,), (3,), (101,), (102,), (103,)]
+        assert remaining[1] == [(2,), (101,), (102,)]
+        assert remaining[2] == [(2,), (101,), (102,)]
+        assert len(remaining[3]) == 1
 
     def test_delete_missing_id(self):
         result = _registered_router_customers("delete", {}, {}, "admin", "")
         assert result["success"] is False
         assert "id" in result["message"]
 
-    def test_delete_uses_customer_id_alias(self):
-        svc = self._mock_svc()
-        svc.delete.return_value = {"success": True}
-        with patch("app.application.get_customer_app_service", return_value=svc):
-            _registered_router_customers("delete", {"customer_id": 9}, {}, "admin", "")
-        svc.delete.assert_called_once_with(9, force=False)
+    def test_delete_uses_customer_id_alias(self, deletion):
+        _, actor, svc = deletion
+        before = snapshot(actor)
+        with patch("app.application.get_customer_app_service", return_value=svc), tenant_scope(7):
+            result = _registered_router_customers(
+                "delete", {"customer_id": 3}, actor.context, "admin", ""
+            )
+        assert result["success"] is True
+        remaining = snapshot(actor)
+        assert remaining[0] == [(1,), (2,), (101,), (102,), (103,)]
+        assert remaining[1:] == before[1:]
 
     def test_batch_delete_success(self):
         svc = self._mock_svc()
@@ -93,12 +108,19 @@ class TestCustomersRouterMissingBranches:
             result = _registered_router_customers("batch_delete", {"ids": [1, 2]}, {}, "admin", "")
         assert result["success"] is True
 
-    def test_batch_delete_uses_customer_ids_alias(self):
-        svc = self._mock_svc()
-        svc.batch_delete.return_value = {"success": True}
-        with patch("app.application.get_customer_app_service", return_value=svc):
-            _registered_router_customers("batch_delete", {"customer_ids": [4, 5]}, {}, "admin", "")
-        svc.batch_delete.assert_called_once_with([4, 5], force=False)
+    def test_batch_delete_uses_customer_ids_alias(self, deletion):
+        _, actor, svc = deletion
+        with patch("app.application.get_customer_app_service", return_value=svc), tenant_scope(7):
+            result = _registered_router_customers(
+                "batch_delete", {"customer_ids": [1, 2], "force": True}, actor.context, "admin", ""
+            )
+        assert result["success"] is True
+        assert result["deleted_count"] == 2
+        remaining = snapshot(actor)
+        assert remaining[0] == [(3,), (101,), (102,), (103,)]
+        assert remaining[1] == [(101,), (102,)]
+        assert remaining[2] == [(101,), (102,)]
+        assert len(remaining[3]) == 1
 
     def test_batch_delete_empty_list(self):
         result = _registered_router_customers("batch_delete", {"ids": []}, {}, "admin", "")
@@ -109,23 +131,30 @@ class TestCustomersRouterMissingBranches:
         result = _registered_router_customers("batch_delete", {"ids": "1,2"}, {}, "admin", "")
         assert result["success"] is False
 
-    def test_batch_delete_all_invalid(self):
-        result = _registered_router_customers(
-            "batch_delete", {"ids": ["abc", "xyz"]}, {}, "admin", ""
-        )
-        assert result["success"] is False
-        assert "有效数字" in result["message"]
-
-    def test_batch_delete_mixed_valid_invalid(self):
-        svc = self._mock_svc()
-        svc.batch_delete.return_value = {"success": True}
-        with patch("app.application.get_customer_app_service", return_value=svc):
+    def test_batch_delete_all_invalid(self, deletion):
+        _, actor, svc = deletion
+        before = snapshot(actor)
+        with patch("app.application.get_customer_app_service", return_value=svc), tenant_scope(7):
             result = _registered_router_customers(
-                "batch_delete", {"ids": [1, "bad", 3]}, {}, "admin", ""
+                "batch_delete", {"ids": ["abc", "xyz"]}, actor.context, "admin", ""
             )
-        assert result["success"] is True
-        assert "skipped" in result
-        assert "bad" in result["skipped"]
+        assert result["success"] is False
+        assert result["deleted_count"] == 0
+        assert "非空正整数列表" in result["message"]
+        assert snapshot(actor) == before
+
+    @pytest.mark.parametrize("ids", [[3, "bad", 1], [3, 101], [3, 999]])
+    def test_batch_delete_mixed_valid_invalid(self, deletion, ids):
+        _, actor, svc = deletion
+        before = snapshot(actor)
+        with patch("app.application.get_customer_app_service", return_value=svc), tenant_scope(7):
+            result = _registered_router_customers(
+                "batch_delete", {"ids": ids, "force": True}, actor.context, "admin", ""
+            )
+        assert result["success"] is False
+        assert result["deleted_count"] == 0
+        assert "skipped" not in result
+        assert snapshot(actor) == before
 
     def test_batch_delete_with_force(self):
         svc = self._mock_svc()

@@ -10,10 +10,15 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes.domains.customer import routes as customer_compat
 from app.fastapi_routes.domains.customer import routes as customer_routes
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def compat_customer_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def compat_customer_client(monkeypatch: pytest.MonkeyPatch, request) -> TestClient:
+    actor = None
+    if "delete" in request.node.name:
+        actor = request.getfixturevalue("trusted_actor")(tenant_id=7, role="admin")
+        monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setattr(
         customer_routes,
         "_load_customers_rows",
@@ -38,7 +43,7 @@ def compat_customer_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     )
     app = FastAPI()
     app.include_router(customer_compat.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, headers=actor.headers if actor else {}, raise_server_exceptions=False)
 
 
 def test_compat_customers_all_and_list(compat_customer_client: TestClient) -> None:
@@ -115,11 +120,25 @@ def test_compat_customer_get_one_and_create(
         assert created.json()["data"]["id"] == 3
 
 
-def test_compat_customer_batch_delete(compat_customer_client: TestClient, local_tools) -> None:
+def test_compat_customer_batch_delete(
+    compat_customer_client: TestClient, local_tools, trusted_actor
+) -> None:
+    actor = trusted_actor(tenant_id=7, role="admin")
+    compat_customer_client.headers.update(actor.headers)
+    service = MagicMock()
+    service.batch_delete.return_value = {"success": True, "deleted_count": 2}
     with (
         patch.object(customer_routes, "_customers_write_raise"),
-        patch.object(customer_routes, "_customer_delete_unified"),
+        patch("app.application.get_customer_app_service", return_value=service),
     ):
         batch = compat_customer_client.post("/customers/batch-delete", json={"ids": [2, 3]})
     assert batch.status_code == 200
     assert batch.json()["deleted"] == 2
+    from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+
+    service.batch_delete.assert_called_once()
+    assert service.batch_delete.call_args.args == ([2, 3],)
+    context = service.batch_delete.call_args.kwargs["runtime_context"]
+    assert str(context["tenant_id"]) == str(actor.tenant_id)
+    assert str(context["user_id"]) == str(actor.user_id)
+    assert validate_actor_context(context) is None

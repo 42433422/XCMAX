@@ -8,7 +8,6 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.domains.misc.helpers import _dispatch_tool_for_approval
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.infrastructure.auth.tenant_context import tenant_id_for_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -202,7 +201,7 @@ def ai_approval_approve(
         request_id = payload.get("request_id") or ""
         plan_id = payload.get("plan_id") or ""
         comment = payload.get("comment") or ""
-        from app.application.workflow import WorkflowEngine, get_approval_service
+        from app.application.workflow import get_approval_service
 
         approval_service = get_approval_service()
         if not request_id and not plan_id:
@@ -212,47 +211,46 @@ def ai_approval_approve(
         actual_request_id = _owned_request_id(approval_service, user, request_id, plan_id)
         if not actual_request_id:
             return JSONResponse({"success": False, "message": "没有待审批的请求"}, status_code=404)
-        success = approval_service.approve(actual_request_id, comment)
-
-        if not success:
-            return JSONResponse({"success": False, "message": "审批失败"}, status_code=400)
-
-        workflow_data = (
-            approval_service.get_pending_workflow(actual_request_id) if actual_request_id else None
+        workflow_data = approval_service.get_pending_workflow(actual_request_id)
+        from app.application.approval_workspace_app_service import (
+            _pending_snapshot,
+            _resume_pending_ai_workflow_after_approval,
         )
-        run_result_data = None
-        if workflow_data:
-            plan_obj = workflow_data.get("plan")
-            runtime_ctx = workflow_data.get("runtime_context", {})
-            if plan_obj:
-                engine = WorkflowEngine(tool_dispatcher=_dispatch_tool_for_approval)
-                run_result = engine.run(plan=plan_obj, runtime_context=runtime_ctx, max_retries=1)
-                run_result_data = {
-                    "plan_id": plan_obj.plan_id,
-                    "intent": plan_obj.intent,
-                    "nodes_executed": len(run_result.node_results),
-                    "nodes_total": len(plan_obj.nodes),
-                    "has_errors": any(bool(r.error) for r in run_result.node_results),
-                    "results_summary": [
-                        {
-                            "node_id": r.node_id,
-                            "success": r.success,
-                            "output": str(r.output)[:200] if r.output else None,
-                        }
-                        for r in run_result.node_results[:5]
-                    ],
-                }
-                approval_service.remove_pending_workflow(actual_request_id)
 
-        response_data: dict[str, Any] = {
-            "status": "approved",
-            "workflow_executed": workflow_data is not None,
-        }
-        if run_result_data:
-            response_data["workflow_result"] = run_result_data
-        message = "审批已通过" + ("，工作流已执行" if workflow_data else "")
+        has_workflow = workflow_data is not None or _pending_snapshot(actual_request_id) is not None
+        if has_workflow:
+            workflow_result = _resume_pending_ai_workflow_after_approval(
+                request_no=actual_request_id,
+                opinion=comment,
+                approved_by=str(getattr(user, "id", "") or ""),
+            )
+            if not isinstance(workflow_result, dict):
+                workflow_result = {
+                    "success": False,
+                    "workflow_executed": False,
+                    "message": "审批已提交，但 AgentRun 恢复结果不可用",
+                }
+            message = str(workflow_result.get("message") or "审批工作流未能恢复")
+            execution_failed = not bool(
+                workflow_result.get("success") or workflow_result.get("execution_accepted")
+            )
+            response_data: dict[str, Any] = {
+                "status": "approved",
+                **workflow_result,
+            }
+        else:
+            if not approval_service.approve(actual_request_id, comment):
+                return JSONResponse({"success": False, "message": "审批失败"}, status_code=400)
+            response_data = {"status": "approved", "workflow_executed": False}
+            execution_failed = False
+            message = "审批已通过"
         return _trace_approval_route(
-            {"success": True, "message": message, "response": message, "data": response_data},
+            {
+                "success": not execution_failed,
+                "message": message,
+                "response": message,
+                "data": response_data,
+            },
             route="/api/ai/approval/approve",
             message=message,
             body=payload,
@@ -282,6 +280,38 @@ def ai_approval_reject(
         owned_id = _owned_request_id(approval_service, user, request_id, plan_id)
         if not owned_id:
             return JSONResponse({"success": False, "message": "没有待审批的请求"}, status_code=404)
+        workflow_data = approval_service.get_pending_workflow(owned_id)
+        from app.application.approval_workspace_app_service import (
+            _drop_pending_ai_workflow_after_rejection,
+            _pending_snapshot,
+        )
+
+        has_workflow = workflow_data is not None or _pending_snapshot(owned_id) is not None
+        if has_workflow:
+            workflow_result = _drop_pending_ai_workflow_after_rejection(
+                request_no=owned_id, reason=comment
+            )
+            if not isinstance(workflow_result, dict) or not (
+                workflow_result.get("code") == "approval_rejected" or workflow_result.get("success")
+            ):
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "message": (workflow_result or {}).get("message")
+                        or "审批拒绝后工作流取消失败",
+                        "data": workflow_result,
+                    },
+                    status_code=500,
+                )
+            message = str(workflow_result.get("message") or "审批已拒绝，AI 工作流已取消")
+            return _trace_approval_route(
+                {"success": True, "message": message, "response": message, "data": workflow_result},
+                route="/api/ai/approval/reject",
+                message=message,
+                body=payload,
+                intent="approval_decision_reject",
+            )
+
         success = approval_service.reject(owned_id, comment)
         if success:
             return _trace_approval_route(

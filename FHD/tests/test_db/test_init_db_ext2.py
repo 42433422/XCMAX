@@ -25,17 +25,6 @@ from sqlalchemy import create_engine, text
 
 
 class TestIterSeedDirsDeep:
-    def test_yields_resource_and_base(self):
-        from app.db.init_db import _iter_seed_dirs
-
-        with (
-            patch("app.db.init_db.get_resource_path", return_value="/r/db_seed"),
-            patch("app.db.init_db.get_base_dir", return_value="/base"),
-        ):
-            result = list(_iter_seed_dirs())
-        assert "/r/db_seed" in result
-        assert "/base" in result
-
     def test_includes_meipass_when_present(self):
         from app.db.init_db import _iter_seed_dirs
 

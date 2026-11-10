@@ -14,23 +14,6 @@ from app.domain.shared_services.tools_workflow_common import (
 _DEFAULT_TARGET_CANDIDATES = _business_db_target_candidates
 
 
-def _registered_router_normal_slot_dispatch(
-    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
-) -> dict:
-    from app.application.normal_chat_dispatch import (
-        run_normal_slot_product_query_from_message,
-        run_normal_slot_shipment_preview,
-    )
-
-    if action == "product_query":
-        text = user_message or str(params.get("message") or "").strip()
-        return run_normal_slot_product_query_from_message(text)
-    if action == "shipment_preview":
-        order_text = str(params.get("order_text") or user_message or "").strip()
-        return run_normal_slot_shipment_preview(order_text)
-    return {"success": False, "message": f"未注册的 normal_slot_dispatch 动作: {action}"}
-
-
 def _resolve_target_candidates():
     """目标解析晚绑定：facade 属性 patch 与本模块全局 patch 两个接缝等价生效。"""
     from app.services import tools_workflow_registered as facade
@@ -47,7 +30,9 @@ def _registered_router_customers(
     if str(runtime_context.get("service_source") or "") == "fastapi_customer_route":
         from app.fastapi_routes.domains.customer import routes as customer_routes
 
-        return customer_routes._execute_customers_route_action(action, dict(params or {}))
+        return customer_routes._execute_customers_route_action(
+            action, dict(params or {}), runtime_context=runtime_context
+        )
     from app.application import get_customer_app_service
 
     svc = get_customer_app_service()
@@ -68,11 +53,27 @@ def _registered_router_customers(
             svc.export_to_excel(keyword=keyword, template_id=params.get("template_id")) or {}
         )
     if action == "query":
+        if "id" in params or "customer_id" in params:
+            raw_id = params.get("id") if params.get("id") is not None else params.get("customer_id")
+            text_id = str(raw_id).strip()
+            if not text_id.isdecimal() or int(text_id) <= 0:
+                return {
+                    "success": False,
+                    "message": "客户 id 须为正整数",
+                    "error_code": "invalid_id",
+                }
+            result = svc.get_by_id(int(text_id))
+            return {
+                "success": bool(result.get("success")),
+                "data": result.get("data"),
+                "raw": result,
+            }
         keyword = str(params.get("keyword") or unit_name or "").strip()
         result = svc.get_all(keyword=keyword, page=1, per_page=20)
         return {
             "success": bool(result.get("success")),
             "data": result.get("data", []),
+            "total": result.get("total"),
             "raw": result,
         }
     if action == "update":
@@ -99,23 +100,26 @@ def _registered_router_customers(
         customer_id = int(params.get("id") or params.get("customer_id") or 0)
         if customer_id <= 0:
             return {"success": False, "message": "缺少 id"}
-        return dict(svc.delete(customer_id, force=bool(params.get("force", False))) or {})
+        return dict(
+            svc.delete(
+                customer_id,
+                force=bool(params.get("force", False)),
+                runtime_context=runtime_context,
+            )
+            or {}
+        )
     if action == "batch_delete":
         raw_ids = params.get("ids") or params.get("customer_ids") or []
         if not isinstance(raw_ids, list) or not raw_ids:
             return {"success": False, "message": "ids 须为非空数组"}
-        ids: list[int] = []
-        skipped: list[str] = []
-        for raw in raw_ids:
-            try:
-                ids.append(int(raw))
-            except (TypeError, ValueError):
-                skipped.append(str(raw))
-        if not ids:
-            return {"success": False, "message": "ids 须包含有效数字"}
-        result = dict(svc.batch_delete(ids, force=bool(params.get("force", False))) or {})
-        if skipped:
-            result["skipped"] = list(result.get("skipped") or []) + skipped
+        result = dict(
+            svc.batch_delete(
+                raw_ids,
+                force=bool(params.get("force", False)),
+                runtime_context=runtime_context,
+            )
+            or {}
+        )
         return result
     if action == "add_address":
         payload = dict(params or {})
@@ -383,6 +387,10 @@ def _registered_router_sales(
         return svc.cancel(int(params.get("order_id") or 0))
     if action == "execute_closed_loop":
         return svc.execute_closed_loop(dict(params["payload"]))
+    if action == "verify_closed_loop":
+        from app.application.sales.verification import verify_closed_loop
+
+        return verify_closed_loop(dict(params.get("payload") or {}))
     return {"success": False, "message": f"未注册的 sales 动作: {action}"}
 
 

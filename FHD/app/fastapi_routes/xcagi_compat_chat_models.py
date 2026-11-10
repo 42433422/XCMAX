@@ -125,6 +125,37 @@ def _model_upstream_http_exc(status_code: int) -> HTTPException | None:
 
 
 def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
+    from app.infrastructure.llm.model_admission import (
+        ModelCircuitOpenError,
+        ModelConcurrencyLimitError,
+        ModelRateLimitError,
+    )
+    from app.utils.resilience.rate_limiter import RateLimitBackendError
+
+    if isinstance(exc, ModelRateLimitError):
+        return HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+    if isinstance(exc, ModelConcurrencyLimitError):
+        return HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+    if isinstance(exc, ModelCircuitOpenError):
+        return HTTPException(
+            status_code=503,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+    if isinstance(exc, RateLimitBackendError):
+        return HTTPException(
+            status_code=503,
+            detail="模型限流服务暂不可用，本次模型请求已拒绝，请稍后重试。",
+            headers={"Retry-After": "5"},
+        )
     if isinstance(exc, MarketModelError):
         if exc.status_code == 402 or "余额不足" in str(exc):
             return HTTPException(
@@ -217,16 +248,14 @@ def _xcagi_compat_reply_payload(
             raw.setdefault("tool_params", dict(last_record.get("params") or {}))
             raw["_tool_records"] = reply_records
         else:
-            from app.application.conversation import get_last_tool_result
-
-            raw = get_last_tool_result()
+            raw = {}
         if isinstance(raw, dict) and raw:
             last_result = raw
             raw_records = raw.get("_tool_records")
             records = raw_records if isinstance(raw_records, list) else []
             if records:
                 tool_data["legacy_tool_records"] = records
-            from app.application.tools import flatten_tool_result_dict_for_client
+            from app.application.tools.tool_result_client import flatten_tool_result_dict_for_client
 
             tool_data = flatten_tool_result_dict_for_client(raw)
             if records:

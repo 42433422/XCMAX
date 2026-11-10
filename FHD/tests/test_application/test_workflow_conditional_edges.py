@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import pytest
 
-from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.workflow_types import (
     Branch,
     PlanGraph,
     WorkflowNode,
     validate_plan_graph,
 )
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 
 
 def _make_engine(low_stock: bool):
@@ -152,6 +152,104 @@ class TestEngineConditionalRouting:
         result = engine.run(plan)
         assert result.success is True
         assert _executed(engine, plan) == {"gate"}
+
+    def test_waiting_for_approval_is_not_reported_as_completed(self):
+        from app.application.workflow.checkpointer import WorkflowCheckpointer
+
+        calls = []
+
+        def dispatch(tool_id, action, params):
+            calls.append(action)
+            return {"success": True, "requires_approval": True}
+
+        plan = PlanGraph(
+            plan_id="approval_pause",
+            intent="guarded write",
+            nodes=[
+                WorkflowNode(
+                    node_id="approval",
+                    tool_id="business_db",
+                    action="write",
+                    risk="high",
+                    next="write",
+                ),
+                WorkflowNode(
+                    node_id="write",
+                    tool_id="business_db",
+                    action="write",
+                    risk="high",
+                    depends_on=["approval"],
+                ),
+            ],
+        )
+
+        checkpointer = WorkflowCheckpointer()
+        result = WorkflowEngine(dispatch).run(plan, parallel=False, checkpointer=checkpointer)
+
+        assert result.success is False
+        assert result.final_context["workflow_status"]["state"] == "waiting_approval"
+        assert result.final_context["workflow_status"]["pending_nodes"] == ["write"]
+        assert calls == ["write"]
+        assert (
+            checkpointer.latest_checkpoint("approval_pause")["runtime_context"]["workflow_status"][
+                "state"
+            ]
+            == "waiting_approval"
+        )
+
+    def test_unreachable_nodes_cannot_be_reported_as_completed(self):
+        plan = PlanGraph(
+            plan_id="incomplete",
+            intent="incomplete state",
+            nodes=[
+                WorkflowNode(node_id="done", tool_id="x", action="read"),
+                WorkflowNode(node_id="unreachable", tool_id="x", action="read"),
+            ],
+        )
+        result = WorkflowEngine(lambda *_args: {"success": True})._to_run_result(
+            plan,
+            {
+                "results": [],
+                "failure": {},
+                "executed": ["done"],
+                "blocked": [],
+                "node_outputs": {"done": {"success": True}},
+            },
+        )
+
+        assert result.success is False
+        assert result.final_context["workflow_status"]["state"] == "blocked"
+        assert result.final_context["workflow_status"]["blocked_nodes"] == ["unreachable"]
+
+    def test_blocked_branch_propagates_to_dependency_descendants(self):
+        gate = WorkflowNode(
+            node_id="gate",
+            tool_id="x",
+            action="read",
+            branches=[Branch(target="chosen", condition={"key": "go", "equals": True})],
+            next="skipped",
+        )
+        plan = PlanGraph(
+            plan_id="branch_descendant",
+            intent="branch",
+            nodes=[
+                gate,
+                WorkflowNode(node_id="chosen", tool_id="x", action="read", depends_on=["gate"]),
+                WorkflowNode(node_id="skipped", tool_id="x", action="read", depends_on=["gate"]),
+                WorkflowNode(
+                    node_id="skipped_child", tool_id="x", action="read", depends_on=["skipped"]
+                ),
+            ],
+        )
+        result = WorkflowEngine(lambda *_args: {"success": True, "go": True}).run(
+            plan, parallel=False
+        )
+
+        assert result.success is True
+        assert result.final_context["blocked"] == [
+            "skipped",
+            "skipped_child",
+        ]
 
 
 # ===========================================================================

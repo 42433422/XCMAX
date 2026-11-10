@@ -250,7 +250,8 @@ def test_enrich_excel_tool_arguments_fills_path_and_header() -> None:
 
 def test_format_recent_messages_excerpt() -> None:
     ctx = {
-        "recent_messages": [{"role": "user", "content": "开单"}, {"role": "ai", "content": "好的"}]
+        "_chat_evidence_authorized": True,
+        "recent_messages": [{"role": "user", "content": "开单"}, {"role": "ai", "content": "好的"}],
     }
     txt = format_recent_messages_excerpt_for_llm(ctx)
     assert txt is not None

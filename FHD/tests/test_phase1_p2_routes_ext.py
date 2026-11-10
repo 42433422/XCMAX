@@ -262,12 +262,15 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
 
 
 def test_memory_v2_routes_validate_type_and_status(misc_client: TestClient) -> None:
-    bad_type = misc_client.post(
-        "/memory/v2/candidates",
-        json={"user_id": "u", "memory_type": "unknown", "key": "k", "value": "v"},
-    )
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
+        bad_type = misc_client.post(
+            "/memory/v2/candidates",
+            json={"user_id": "u", "memory_type": "unknown", "key": "k", "value": "v"},
+        )
     assert bad_type.status_code == 400
     assert bad_type.json()["success"] is False
+    assert bad_type.json()["error_code"] == "schema_validation_failed"
+    orchestrator.assert_not_called()
 
     bad_status = misc_client.get("/memory/v2", params={"user_id": "u", "status": "unknown"})
     assert bad_status.status_code == 400
@@ -423,7 +426,9 @@ def system_client(trusted_actor) -> TestClient:
 
     app = FastAPI()
     app.include_router(system_routes.router)
-    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
+    return TestClient(
+        app, raise_server_exceptions=False, headers=trusted_actor(role="admin").headers
+    )
 
 
 @patch("app.application.facades.session_facade.get_system_service")

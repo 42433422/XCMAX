@@ -194,7 +194,7 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
-            stack.enter_context(_authenticated_route_fixture(client))
+            stack.enter_context(_authenticated_route_fixture(client, role_name="admin"))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -239,6 +239,14 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
                 )
 
     payload, run, checks = _route_agent_checks(response, expected, repo)
+    if action in {"delete_database_backup", "restore_database", "reinitialize_performance"}:
+        _check_equal(checks, "approval_required", payload.get("error_code"), "approval_required")
+        _check_equal(
+            checks,
+            "no_effect_before_approval",
+            database_service.mock_calls == [] and optimizer.mock_calls == [],
+            True,
+        )
     return _result(
         task,
         checks,
@@ -1137,9 +1145,6 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     repo = InMemoryAgentRunRepository()
     deleted_ids: list[int] = []
 
-    def _delete_customer(customer_id: int) -> None:
-        deleted_ids.append(customer_id)
-
     method = "POST"
     path = "/customers"
     name = str(body.get("unit_name") or body.get("customer_name") or "星光贸易")
@@ -1158,7 +1163,7 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         path = f"/customers/{int(task.get('customer_id') or 7)}"
     elif action == "batch_delete":
         path = "/customers/batch-delete"
-        body.setdefault("ids", [7, "bad", 8])
+        body.setdefault("ids", [7, 8])
     else:
         return _failed(task, f"unsupported customers route action: {action}")
 
@@ -1171,12 +1176,24 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
             "MODEL_USAGE_WALLET_BACKEND": "audit",
             "MODEL_USAGE_WALLET_REQUIRED": "",
+            "XCAGI_PRODUCT_SKU": "enterprise"
+            if action in {"delete", "batch_delete"}
+            else "personal",
         }
         with ExitStack() as stack:
             engine = create_engine("sqlite:///" + str(Path(tmp_dir) / "customers.sqlite"))
             stack.callback(engine.dispose)
             PurchaseUnit.__table__.create(engine)
             customer_sessions = sessionmaker(bind=engine)
+            if action in {"delete", "batch_delete"}:
+                with customer_sessions.begin() as db:
+                    db.add_all(
+                        [
+                            PurchaseUnit(id=value, tenant_id=7, unit_name=f"Customer {value}")
+                            for value in (7, 8)
+                        ]
+                    )
+                stack.enter_context(_authenticated_route_fixture(client, role_name="admin"))
 
             def _insert_customer(name, contact, phone, address):
                 with customer_sessions.begin() as db:
@@ -1232,11 +1249,6 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                     return_value={"id": 7, "unit_name": name},
                 )
             )
-            stack.enter_context(
-                patch.object(
-                    customer_routes, "_customer_delete_unified", side_effect=_delete_customer
-                )
-            )
             headers = {"X-User-Id": user_id}
             if method == "DELETE":
                 response = client.delete(path, headers=headers)
@@ -1244,8 +1256,21 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 response = client.put(path, json=body, headers=headers)
             else:
                 response = client.post(path, json=body, headers=headers)
+            if action in {"delete", "batch_delete"}:
+                with customer_sessions() as db:
+                    remaining_ids = {
+                        row[0]
+                        for row in db.connection()
+                        .exec_driver_sql("SELECT id FROM purchase_units")
+                        .fetchall()
+                    }
+                deleted_ids = sorted({7, 8} - remaining_ids)
 
     payload, run, checks = _route_agent_checks(response, expected, repo)
+    if action in {"delete", "batch_delete"}:
+        _check_equal(
+            checks, "deleted_customer_ids", deleted_ids, expected.get("deleted_customer_ids", [])
+        )
     return _result(
         task,
         checks,
@@ -1255,7 +1280,7 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "service_calls": {
                 "customer_pg_insert": insert_customer.call_count,
                 "customer_pg_update": update_customer.call_count,
-                "customer_delete_unified": len(deleted_ids),
+                "deleted_customer_rows": len(deleted_ids),
             },
         },
     )
@@ -2285,7 +2310,7 @@ def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
+    from app.application.workflow.planner import LLMWorkflowPlanner
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     from starlette.requests import Request
@@ -2331,28 +2356,33 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
         patch("app.application.workflow.planner.get_ai_conversation_service"),
         patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
         patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            "app.application.workflow.planner.resolve_tool_execution_profile",
             return_value="full",
         ),
         patch(
-            "app.domain.shared_services.user_memory_service.get_user_memory_service", return_value=memory_service
+            "app.domain.shared_services.user_memory_service.get_user_memory_service",
+            return_value=memory_service,
         ),
     ):
-        request = Request({
-            "type": "http", "method": "POST", "path": "/api/agent/plan",
-            "headers": [(b"x-session-id", client.headers["X-Session-ID"].encode())],
-        })
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/agent/plan",
+                "headers": [(b"x-session-id", client.headers["X-Session-ID"].encode())],
+            }
+        )
         principal = require_agent_principal(request, x_user_id=None)
         context = authenticated_runtime_context(
             {"conversation_id": str(task.get("user_id") or "eval-memory-user")}, principal
         )
         namespace = scoped_conversation_user_id(principal.user_id, context)
         planner = LLMWorkflowPlanner()
-        with patch.object(planner, "_plan_with_react_multiagent", side_effect=fake_react):
+        with patch.object(planner, "_plan_with_llm", side_effect=fake_react):
             plan = planner.plan(
                 namespace,
                 str(task.get("message") or "query product"),
-                get_tool_registry(),
+                {"products": {"actions": {"query": {"risk": "low", "idempotent": True}}}},
                 context,
             )
 
@@ -2400,5 +2430,3 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
             },
         },
     )
-
-

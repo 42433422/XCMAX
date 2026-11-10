@@ -207,9 +207,84 @@ def register_tenant_shipment_routes(router) -> None:
     """Expose shipment writes/files with host authorization and authenticated tenant scope."""
     from fastapi import Body, Depends, HTTPException
 
-    from app.fastapi_routes import shipment_orders
+    from app.fastapi_routes.domains.shipment import shipment_orders
     from app.infrastructure.auth.dependencies import require_permission
     from app.infrastructure.tenant_scope import tenant_scope
+
+    @router.post("/orders", status_code=201)
+    def mod_order_create(
+        request: Request,
+        body: dict = Body(default_factory=dict),
+        user=Depends(require_permission("shipment.edit")),
+    ):
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_orders.api_orders_create(request, body)
+
+    @router.get("/orders/latest")
+    def mod_order_latest(user=Depends(require_permission("shipment.view"))):
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_orders.api_orders_latest()
+
+    @router.get("/orders/search")
+    def mod_order_search(q: str = "", user=Depends(require_permission("shipment.view"))):
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_orders.api_orders_search(q)
+
+    @router.get("/orders/export")
+    def mod_order_export(
+        unit: str | None = None,
+        purchase_unit: str | None = None,
+        template_id: str | None = None,
+        status: str | None = None,
+        user=Depends(require_permission("shipment.view")),
+    ):
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_orders.api_orders_export(unit, purchase_unit, template_id, status)
+
+    @router.delete("/orders/clear-all")
+    def mod_order_clear_all(request: Request, user=Depends(require_permission("shipment.edit"))):
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_orders.api_orders_clear_all(request)
+
+    @router.get("/orders/{order_number:int}")
+    def mod_order_get(order_number: int, user=Depends(require_permission("shipment.view"))):
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_orders.api_orders_get(str(order_number))
+
+    @router.patch("/orders/{order_number:int}")
+    def mod_order_update(
+        order_number: int,
+        request: Request,
+        body: dict = Body(default_factory=dict),
+        user=Depends(require_permission("shipment.edit")),
+    ):
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_orders.api_orders_update(request, str(order_number), body)
+
+    @router.delete("/shipment/orders/{order_number}")
+    def mod_shipment_order_delete(
+        order_number: str,
+        request: Request,
+        user=Depends(require_permission("shipment.edit")),
+    ):
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_orders.shipment_orders_delete(request, order_number)
 
     @router.post("/shipment/generate")
     def mod_shipment_generate(

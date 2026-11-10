@@ -1674,7 +1674,7 @@ describe('useChatOrchestration coverage – 生命周期钩子', () => {
     app.mount(el)
     expect(mockReadPersistedExcelAnalysisContext).toHaveBeenCalledWith('lifecycle')
     expect(state.lastExcelAnalysisContext!.value).toBeTruthy()
-    expect(state.linkedExcelSheet!.value).toEqual({ name: 'Sheet1' })
+    expect(state.linkedExcelSheet!.value).toBeNull()
     app.unmount()
   })
 

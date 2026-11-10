@@ -1,4 +1,4 @@
-import { onMounted, onBeforeUnmount, onActivated, onDeactivated, type Ref } from 'vue'
+import { getCurrentInstance, onMounted, onBeforeUnmount, onActivated, onDeactivated, type Ref } from 'vue'
 import type { useModsStore } from '@/stores/mods'
 import { asRecord } from '@/utils/typeGuards'
 import { consumeFirstAiTaskPrompt } from '@/constants/productFlow'
@@ -25,6 +25,7 @@ export interface UseChatViewHostDeps {
 }
 
 export function useChatViewHost(deps: UseChatViewHostDeps) {
+  const inSetup = !!getCurrentInstance()
   const {
     modsStore,
     modsFromStore,
@@ -63,19 +64,20 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
       /* ignore */
     }
   }
-  onDeactivated(() => {
-    returningToChat = true
-    // Pause non-critical ChatView work while keep-alive caches this instance (nav jank 2B).
-    cleanupVoiceInput()
-    stopMessageTts()
-    stopTaskPaneResize()
-    emitChatViewActive(false)
-  })
-  onActivated(() => {
-    emitChatViewActive(true)
-    if (returningToChat) void syncSessionMessages().catch(() => {})
-    returningToChat = false
-  })
+  if (inSetup) {
+    onDeactivated(() => {
+      returningToChat = true
+      cleanupVoiceInput()
+      stopMessageTts()
+      stopTaskPaneResize()
+      emitChatViewActive(false)
+    })
+    onActivated(() => {
+      emitChatViewActive(true)
+      if (returningToChat) void syncSessionMessages().catch(() => {})
+      returningToChat = false
+    })
+  }
 
   /**
    * Legacy WeChat star-refresh persist — retained for workflow settings callers only.
@@ -100,7 +102,7 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
     if (!isTaskPaneResizable.value) stopTaskPaneResize()
   }
 
-  onMounted(() => {
+  if (inSetup) onMounted(() => {
     void (async () => {
       await modsStore.initialize()
       if (!modsStore.isLoaded || modsFromStore.value.length === 0) {
@@ -157,7 +159,7 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
     }
   })
 
-  onBeforeUnmount(() => {
+  if (inSetup) onBeforeUnmount(() => {
     const w = window as unknown as Record<string, unknown>
     if (w.__VUE_CHAT_SEND__) delete w.__VUE_CHAT_SEND__
     if (w.__VUE_CHAT_FILL__) delete w.__VUE_CHAT_FILL__

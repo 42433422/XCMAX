@@ -17,7 +17,7 @@ from app.application.agent_orchestrator.public_step_errors import public_run_err
 BUSINESS_HARNESS_PROTOCOL = "xcagi.business-harness.v1"
 TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
 ERP_ORDER_TOOL_NAME = "execute_erp_capability"
-UNEXECUTED_ORDER_ERROR = "业务动作未执行：没有工具调用，订单、审批和单据都未生成"
+UNEXECUTED_ORDER_ERROR = "业务动作未执行：没有工具调用或有效写入回执，未确认任何数据变更"
 _ORDER_WRITE_RE = re.compile(r"开单|开一张|创建销售订单|新建订单|生成.{0,12}单据")
 _ORDER_NEGATED_RE = re.compile(
     r"(?:不要|别|勿|无需|不用).{0,6}(?:开单|开一张|创建销售订单|新建订单|生成单据)"
@@ -196,6 +196,10 @@ def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
         return public_run_error(run) or "业务任务执行失败，详细信息已记录"
     if status == "cancelled":
         return "业务任务已取消，未继续执行"
+    if status == "blocked":
+        return public_run_error(run) or "业务任务已被安全校验阻止，未确认执行完成"
+    if status == "paused":
+        return "业务任务已暂停，等待处理；尚未确认完成"
     for payload in reversed(payloads):
         raw_nested = payload.get("data")
         nested: dict[str, Any] = raw_nested if isinstance(raw_nested, dict) else {}
@@ -275,21 +279,102 @@ def forced_order_tool_choice(message: str, tools: list[Any] | None) -> dict[str,
     return {"type": "function", "function": {"name": ERP_ORDER_TOOL_NAME}}
 
 
+def business_write_requested(message: str) -> bool:
+    from app.domain.conversation.services.chat_tool_intent import looks_like_business_db_write
+
+    explicit_mutation = bool(
+        re.search(
+            r"新增|添加|创建|新建|修改|更新|删除|移除|写入|入库|\b(?:add|create|insert|upsert|update|delete|remove)\b",
+            str(message or ""),
+            re.IGNORECASE,
+        )
+    )
+    return order_write_requested(message) or (
+        explicit_mutation and looks_like_business_db_write(message)
+    )
+
+
 def mark_unexecuted_order_run(run: Any, message: str) -> bool:
-    """Downgrade a text-only order turn so the task is not shown as completed."""
-    if str(getattr(run, "status", "")) != "completed":
+    """Downgrade a text-only mutation without a verified write receipt."""
+    if str(getattr(run, "status", "")) != "completed" or not business_write_requested(message):
         return False
-    if not order_write_requested(message):
+    calls = list(getattr(run, "tool_calls", []) or [])
+    from app.domain.task_lifecycle.results import execution_result_requires_reconciliation
+
+    if any(
+        isinstance(getattr(call, "output", None), dict)
+        and execution_result_requires_reconciliation(call.output)
+        for call in calls
+    ):
         return False
-    if list(getattr(run, "tool_calls", []) or []):
+    read_only = {
+        "read",
+        "query",
+        "list",
+        "get",
+        "search",
+        "inspect",
+        "describe",
+        "export",
+        "fetch",
+        "lookup",
+        "view",
+        "select",
+        "count",
+        "preview",
+        "download",
+        "verify",
+    }
+
+    def is_potential_write(call: Any) -> bool:
+        action = str(getattr(call, "action", "") or "").strip().lower()
+        params = getattr(call, "params", None)
+        if action in {"execute", "exec", "run"} and isinstance(params, dict):
+            action = str(params.get("action") or action).strip().lower()
+        return action not in read_only
+
+    if any(
+        is_potential_write(call)
+        and str(getattr(call, "status", "") or "").lower() == "completed"
+        and not (
+            isinstance(getattr(call, "output", None), dict) and call.output.get("success") is False
+        )
+        for call in calls
+    ):
         return False
-    if list(getattr(run, "artifacts", []) or []):
+    order_creation = bool(re.search(r"开单|开一张|创建销售订单|新建订单", str(message or "")))
+    if (
+        not order_creation
+        and order_write_requested(message)
+        and list(getattr(run, "artifacts", []) or [])
+        and any(
+            str(getattr(call, "action", "") or "").lower() == "export"
+            and str(getattr(call, "status", "") or "") == "completed"
+            for call in calls
+        )
+    ):
         return False
     if _pending_approval_signal(_iter_result_payloads(run)):
         return False
     run.status = "failed"
     run.error = UNEXECUTED_ORDER_ERROR
     return True
+
+
+def guard_unexecuted_payload(run: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    """Do not expose a model's claimed write as a successful business receipt."""
+    if getattr(run, "error", "") != UNEXECUTED_ORDER_ERROR:
+        return payload
+    data = dict(payload.get("data") or {}) if isinstance(payload.get("data"), dict) else {}
+    data.update(text=UNEXECUTED_ORDER_ERROR, action="business_action_not_executed")
+    return {
+        **payload,
+        "success": False,
+        "execution_state": "failed",
+        "message": UNEXECUTED_ORDER_ERROR,
+        "response": UNEXECUTED_ORDER_ERROR,
+        "data": data,
+    }
 
 
 def ensure_terminal_business_result(run: Any) -> dict[str, Any]:

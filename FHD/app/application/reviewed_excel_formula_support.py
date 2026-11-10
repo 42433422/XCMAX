@@ -28,6 +28,10 @@ def _beyond_sheet_dimensions(col: int, row: int, sheet) -> bool:
     return col < 1 or row < 1 or col > max_col or row > max_row
 
 
+from app.application.reviewed_excel_io_lock import serialize_workbook_io
+
+
+@serialize_workbook_io
 def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int = 20_000) -> dict:
     """Find required same-sheet cells and dependencies; do not rewrite or export a workbook.
 

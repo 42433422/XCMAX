@@ -377,8 +377,10 @@ def test_workflow_retry_approval_and_history() -> None:
 
 
 def test_workflow_engine_retry_stops_at_three_attempts() -> None:
-    from app.application.workflow.engine import WorkflowEngine
-    from app.application.workflow.workflow_types import WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.infrastructure.workflow.langgraph_runtime import (
+        XCAGILangGraphRuntime as WorkflowEngine,
+    )
 
     calls = []
 
@@ -387,10 +389,12 @@ def test_workflow_engine_retry_stops_at_three_attempts() -> None:
         return {"success": False, "message": "timeout", "error_code": "timeout"}
 
     node = WorkflowNode("n1", "products", "query", risk="low", idempotent=True)
-    result = WorkflowEngine(dispatch)._run_node(node, {}, max_retries=9)
+    result = WorkflowEngine(dispatch).run(
+        PlanGraph(plan_id="p-retry-cap", intent="retry", nodes=[node]), max_retries=9
+    )
     assert len(calls) == 3
     assert result.success is False
-    assert len(result.attempts) == 3
+    assert len(result.node_results[0].attempts) == 3
 
 
 def test_employee_runner_retries_the_same_run() -> None:

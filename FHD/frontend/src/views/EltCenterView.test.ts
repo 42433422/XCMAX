@@ -17,6 +17,7 @@ const { archive, legacy } = vi.hoisted(() => ({
   },
   legacy: {
     capabilities: vi.fn(), templates: vi.fn(), runs: vi.fn(), targetConfigs: vi.fn(),
+    autoIngestBatches: vi.fn().mockResolvedValue([]),
     run: vi.fn(), upload: vi.fn(), preview: vi.fn(), execute: vi.fn(),
   },
 }))
@@ -63,6 +64,7 @@ async function setup(runId = '') {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  legacy.autoIngestBatches.mockResolvedValue([])
   archive.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   archive.archiveClassifyExcel.mockResolvedValue(classification())
   archive.analyzeClassification.mockResolvedValue({ version: 'model-v2', model_status: 'returned', sheets: classification().sheets })
@@ -88,7 +90,7 @@ describe('data docking user-only intake', () => {
     const source = await choose()
     expect(archive.archiveClassifyExcel).toHaveBeenCalledTimes(1)
     expect(archive.analyzeClassification).toHaveBeenCalledTimes(1)
-    expect(archive.autoSlices).toHaveBeenCalledWith('production', 'model-v2')
+    expect(archive.autoSlices).toHaveBeenCalledWith('production', 'model-v2', true)
     expect(archive.confirmClassification).not.toHaveBeenCalled()
     expect(archive.reviewExcel).toHaveBeenCalledTimes(1)
     const form = archive.reviewExcel.mock.calls[0][0] as FormData
@@ -114,7 +116,7 @@ describe('data docking user-only intake', () => {
     wrapper.unmount()
   })
 
-  it('previews intake and saves only the explicitly selected candidate from its document capsule', async () => {
+  it('saves the selected template before preparing its intake preview', async () => {
     const { wrapper, choose, openDocument, button } = await setup(); await choose()
     expect((archive.reviewExcel.mock.calls[0][0] as FormData).get('auto_slice_index')).toBe('0')
     const dispatch = vi.spyOn(window, 'dispatchEvent')
@@ -123,18 +125,16 @@ describe('data docking user-only intake', () => {
     expect(archive.previewReviewedIntake).not.toHaveBeenCalled()
     await wrapper.findAll('.reviewed-template__select-candidate')[1].trigger('click'); await flushPromises()
     expect(archive.saveReviewedExcel).not.toHaveBeenCalled()
-    expect(archive.previewReviewedIntake).toHaveBeenCalledTimes(1)
-    const previewForm = archive.previewReviewedIntake.mock.calls[0][0] as FormData
-    expect([previewForm.get('review_id'), previewForm.get('candidate_id')]).toEqual(['review-production-0', 'candidate-1'])
+    expect(archive.previewReviewedIntake).not.toHaveBeenCalled()
     expect(button('保存模板').attributes('disabled')).toBeUndefined()
     await button('保存模板').trigger('click'); await flushPromises()
     expect(archive.saveReviewedExcel).toHaveBeenCalledTimes(1)
     const form = archive.saveReviewedExcel.mock.calls[0][0] as FormData
-    expect(form.get('review_id')).toBe('review-production-0')
-    expect(form.get('private_intake')).toBe('true')
-    expect(form.get('publish_to_tenant')).toBe('false')
-    expect(form.get('candidate_id')).toBe('candidate-1')
-    expect([form.get('intake_run_id'), form.get('preview_revision')]).toEqual(['intake-1', 'rev-1'])
+    expect(['review_id', 'private_intake', 'publish_to_tenant', 'candidate_id'].map(key => form.get(key))).toEqual(['review-production-0', 'true', 'false', 'candidate-1'])
+    expect([form.get('intake_run_id'), form.get('preview_revision'), form.get('template_only')]).toEqual([null, null, 'true'])
+    expect(archive.previewReviewedIntake).toHaveBeenCalledTimes(1)
+    const previewForm = archive.previewReviewedIntake.mock.calls[0][0] as FormData
+    expect([previewForm.get('review_id'), previewForm.get('candidate_id')]).toEqual(['review-production-0', 'candidate-1'])
     expect(dispatch.mock.calls.map(([e]) => e).filter(e => e.type === 'xcagi:templates-updated')).toHaveLength(1)
     expect(wrapper.find('[role=dialog]').exists()).toBe(false)
     expect(wrapper.get('.reviewed-template__candidate-capsule--saved').attributes('aria-label')).toBe('生产单，已保存')
@@ -204,7 +204,7 @@ describe('data docking user-only intake', () => {
     await choices[2].trigger('click'); await flushPromises()
     expect(choices.map(choice => choice.attributes('aria-pressed'))).toEqual(['false', 'false', 'true'])
     expect(cards[3].classes()).toContain('reviewed-template__preview--selected')
-    expect(archive.previewReviewedIntake).toHaveBeenCalledTimes(1)
+    expect(archive.previewReviewedIntake).not.toHaveBeenCalled()
     expect(archive.saveReviewedExcel).not.toHaveBeenCalled()
     wrapper.unmount()
   })

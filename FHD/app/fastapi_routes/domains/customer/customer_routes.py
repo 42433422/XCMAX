@@ -34,7 +34,6 @@ from app.infrastructure.persistence.compat_db.queries import (
     _load_customers_rows,
 )
 from app.infrastructure.persistence.compat_db.writes import (
-    _customer_delete_unified,
     _customer_pg_insert,
     _customer_pg_update,
 )
@@ -52,14 +51,55 @@ __all__ = [
     "router",
 ]
 
-router = APIRouter(
-    tags=["xcagi-compat"],
-    dependencies=[Depends(require_scoped_business_permission("customer.view", "customer.edit"))],
-)
+
+async def _customer_permission(request: Request):
+    path = request.url.path.rstrip("/")
+    parent, _, tail = path.rpartition("/")
+    owned_delete = (
+        request.method == "POST"
+        and path in {"/customers/batch-delete", "/api/customers/batch-delete"}
+    ) or (
+        request.method == "DELETE" and parent in {"/customers", "/api/customers"} and tail.isdigit()
+    )
+    if owned_delete:
+        from app.infrastructure.auth.business_scope_gate import check_owned_business_permission
+        from app.infrastructure.auth.dependencies import get_logged_in_user
+        from app.infrastructure.tenant_scope import owned_tenant_scope
+
+        user = get_logged_in_user(request)
+        if user.tenant_id is None:
+            from app.infrastructure.auth.business_scope_gate import (
+                check_legacy_business_user_permission,
+            )
+            from app.infrastructure.tenant_scope import tenant_scope
+            from app.mod_sdk.product_skus import resolve_product_sku
+
+            if (
+                resolve_product_sku() != "enterprise"
+                or user.role != "admin"
+                or user.tier != "admin"
+            ):
+                raise HTTPException(
+                    status_code=403, detail="个人账号 NULL 数据归属尚未提供安全隔离"
+                )
+            check_legacy_business_user_permission(user, "customer.edit")
+            with tenant_scope(None):
+                yield user
+            return
+        tenant = check_owned_business_permission(user, "customer.edit")
+        with owned_tenant_scope(tenant):
+            yield user
+        return
+    yield require_scoped_business_permission("customer.view", "customer.edit")(request)
+
+
+router = APIRouter(tags=["xcagi-compat"], dependencies=[Depends(_customer_permission)])
 logger = logging.getLogger(__name__)
 
 
-def _execute_customers_route_action(action: str, params: dict[str, Any]) -> dict[str, Any]:
+def _execute_customers_route_action(
+    action: str, params: dict[str, Any], *, runtime_context=None
+) -> dict[str, Any]:
     if action == "create":
         name = str(
             params.get("customer_name") or params.get("unit_name") or params.get("name") or ""
@@ -92,39 +132,22 @@ def _execute_customers_route_action(action: str, params: dict[str, Any]) -> dict
         )
         return {"success": True, "data": data}
 
-    if action == "delete":
-        customer_id = int(params.get("id") or params.get("customer_id") or 0)
-        if customer_id <= 0:
-            return {"success": False, "message": "缺少 id"}
-        _customer_delete_unified(customer_id)
-        return {"success": True, "message": "已删除"}
+    if action in {"delete", "batch_delete"}:
+        from app.application import get_customer_app_service
 
-    if action == "batch_delete":
         ids = params.get("ids") or params.get("customer_ids") or []
-        if not isinstance(ids, list) or not ids:
-            return {"success": False, "message": "ids 须为非空数组"}
-        deleted = 0
-        errors: list[str] = []
-        for raw in ids:
-            try:
-                cid = int(raw)
-            except (TypeError, ValueError):
-                errors.append(str(raw))
-                continue
-            try:
-                _customer_delete_unified(cid)
-                deleted += 1
-            except HTTPException as e:
-                if e.status_code == 404:
-                    errors.append(str(cid))
-                else:
-                    raise
-        return {
-            "success": True,
-            "message": f"已删除 {deleted} 条",
-            "deleted": deleted,
-            "skipped": errors,
-        }
+        if action == "delete":
+            ids = [params.get("id") or params.get("customer_id")]
+        if (
+            not isinstance(ids, list)
+            or not ids
+            or any(type(value) is not int or value <= 0 for value in ids)
+        ):
+            return {"success": False, "message": "ids 须为非空正整数数组", "deleted_count": 0}
+        result = get_customer_app_service().batch_delete(
+            ids, **({"runtime_context": runtime_context} if runtime_context else {})
+        )
+        return {**result, "deleted": result.get("deleted_count", 0)}
 
     return {"success": False, "message": f"未注册的 customers route 动作: {action}"}
 
@@ -386,7 +409,7 @@ def customers_update(
 
 @router.delete("/customers/{customer_id}")
 @router.delete("/customers/{customer_id}/", include_in_schema=False)
-def customers_delete(request: Request, customer_id: int) -> dict:
+def customers_delete(request: Request, customer_id: int, cascade: bool = False) -> dict:
     try:
         from app.mod_sdk.erp_customers_facade import (
             customers_delete as customers_delete_via_service,
@@ -395,8 +418,8 @@ def customers_delete(request: Request, customer_id: int) -> dict:
             is_erp_customers_via_service_enabled,
         )
 
-        if is_erp_customers_via_service_enabled():
-            return customers_delete_via_service(request, customer_id)
+        if cascade or is_erp_customers_via_service_enabled():
+            return customers_delete_via_service(request, customer_id, cascade)
     except HTTPException:
         raise
     except RECOVERABLE_ERRORS:

@@ -381,14 +381,18 @@ def run_employee_agent_loop(
         rounds += 1
         messages[:] = _flatten_tool_transcript(messages)
         try:
-            with invocation_deadline(deadline):
-                completion = client.chat.completions.create(
-                    model=mdl,
-                    messages=messages,
-                    tools=tool_specs if tool_specs else None,
-                    tool_choice="auto" if tool_specs else None,
-                    timeout=max(0.001, deadline - time.monotonic()),
-                )
+            from app.infrastructure.llm.model_admission import admit_model_call, model_call_slot
+
+            with model_call_slot(None, profile="employee_agent"):
+                admit_model_call(None, profile="employee_agent")
+                with invocation_deadline(deadline):
+                    completion = client.chat.completions.create(
+                        model=mdl,
+                        messages=messages,
+                        tools=tool_specs if tool_specs else None,
+                        tool_choice="auto" if tool_specs else None,
+                        timeout=max(0.001, deadline - time.monotonic()),
+                    )
         except RECOVERABLE_ERRORS:
             if time.monotonic() >= deadline:
                 return expired_result()

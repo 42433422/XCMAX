@@ -5,6 +5,7 @@ import json
 from copy import deepcopy
 from datetime import timedelta
 from io import BytesIO
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException, UploadFile
@@ -79,18 +80,12 @@ def context(sid="admin", mod=None):
 
 
 def instant(app, ctx):
-    return app._build_response(
-        {
-            "action": "tool_call",
-            "data": {
-                "tool_key": "customers",
-                "params": {"unit_name": "synthetic-admission-unit"},
-                "slots": {},
-            },
-        },
-        "pro",
-        "新增单位 synthetic-admission-unit",
-        runtime_context=ctx,
+    from app.application.facades.tools_facade import execute_registered_workflow_tool
+
+    return execute_registered_workflow_tool(
+        "customers",
+        "ensure_exists",
+        {"unit_name": "synthetic-admission-unit", "_runtime_context": ctx},
     )
 
 
@@ -120,7 +115,7 @@ def test_customer_denied_before_business_call_or_write(customer_store, sessions,
             )
             db.commit()
     result = instant(app, ctx)
-    assert "无权" in result["response"]
+    assert_customer_denied(result)
     assert calls == [] and writes == []
 
 
@@ -133,10 +128,10 @@ def test_tenantless_admin_denied_before_create(customer_store):
     """Stronger than the retained original TenantScopeError repro: no create attempt."""
     app, calls, writes = customer_store
     result = instant(app, context())
-    assert_customer_denied(result["data"]["data"])
+    assert_customer_denied(result)
     assert calls == []
     assert writes == []
-    assert "已创建" not in result["response"]
+    assert "已创建" not in str(result)
 
 
 def test_chat_http_preserves_tenantless_customer_denial(customer_store, monkeypatch):
@@ -148,15 +143,15 @@ def test_chat_http_preserves_tenantless_customer_denial(customer_store, monkeypa
     monkeypatch.setattr(
         ai_chat_helpers,
         "unified_chat_single_payload",
-        lambda message, user_id, host, source, mode, ctx: instant(app, ctx),
+        lambda message, user_id, host, source, mode, ctx, request=None: instant(app, ctx),
     )
     monkeypatch.setattr(ai_intent, "_attach_unified_chat_run", lambda payload, **kwargs: payload)
     response = ai_intent.ai_chat_unified_alias(
         request("admin"),
         {"message": "新增单位 synthetic-admission-unit", "source": "pro"},
     )
-    assert response.status_code == 200
-    assert_customer_denied(json.loads(response.body)["data"]["data"])
+    assert response.status_code == 500
+    assert_customer_denied(json.loads(response.body))
     assert calls == [] and writes == []
 
 
@@ -205,7 +200,7 @@ def test_nonenterprise_http_anonymous_unchanged_but_tool_denies(customer_store, 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "personal")
     assert require_scoped_business_permission("customer.view", "customer.edit")(request()) is None
     app, calls, writes = customer_store
-    assert "无权" in instant(app, {})["response"]
+    assert_customer_denied(instant(app, {}))
     assert calls == [] and writes == []
 
 
@@ -214,20 +209,13 @@ def test_voice_request_identity_not_trace_id(customer_store, monkeypatch, sid):
     """ASR and classifier are mocked; real Request/auth/instant/router/service are not."""
     from app.fastapi_routes import voice_routes
 
-    monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "local")
     app, calls, writes = customer_store
+    monkeypatch.setattr(app, "process_chat", lambda **kwargs: instant(app, kwargs["context"]))
     monkeypatch.setattr("app.application.ai_chat_app_service.get_ai_chat_app_service", lambda: app)
     monkeypatch.setattr(
-        voice_routes, "_transcribe_audio", lambda *a: "新增单位 synthetic-admission-unit"
-    )
-    monkeypatch.setattr(
         voice_routes,
-        "_recognize_intent",
-        lambda text: {
-            "tool_key": "customers",
-            "confidence": 1.0,
-            "slots": {"unit_name": "synthetic-admission-unit"},
-        },
+        "_platform_transcribe",
+        AsyncMock(return_value={"text": "新增单位 synthetic-admission-unit"}),
     )
 
     async def invoke():
@@ -245,6 +233,6 @@ def test_voice_request_identity_not_trace_id(customer_store, monkeypatch, sid):
     else:
         response = asyncio.run(invoke())
         if sid == "admin":
-            assert_customer_denied(response["data"]["result"]["data"])
+            assert_customer_denied(response["data"]["result"])
     assert calls == []
     assert writes == []  # scope-unavailable lookup cannot authorize even an attempted create

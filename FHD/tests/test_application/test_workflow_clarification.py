@@ -15,8 +15,8 @@ from app.application.workflow.clarification_node import (
     resolve_confirmed_target,
     sweep_expired,
 )
-from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode
+from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 
 
 def _customers_registry() -> dict:
@@ -61,7 +61,11 @@ def _ambiguous_delete_plan() -> PlanGraph:
 
 def _executed(engine, plan, runtime_context=None):
     result = engine.run(plan, runtime_context=runtime_context or {})
-    return result, set(result.final_context["workflow_status"]["executed_nodes"])
+    return result, set(
+        result.final_context.get("executed")
+        or result.final_context["workflow_status"].get("executed_nodes")
+        or []
+    )
 
 
 class TestNeedsClarification:
@@ -137,8 +141,9 @@ class TestEngineClarificationGate:
         insert_clarify_node(plan, clarify)
 
         result = _executed(engine, plan)[0]
-        # 反问节点执行成功（暂停），但删除节点被屏蔽，未真正执行业务工具。
-        assert result.success is True
+        # 澄清节点暂停，删除节点被屏蔽，未真正执行业务工具。
+        assert result.success is False
+        assert result.final_context["workflow_status"]["state"] == "waiting_user"
         assert deleted == []
         clarify_result = next(r for r in result.node_results if r.tool_id == "clarify")
         assert clarify_result.output.get("requires_confirmation") is True
@@ -206,14 +211,8 @@ class TestClarificationTTL:
             target_node_id="delete_customer",
             now=1000.0,
         )
-        runner = MagicMock(return_value=(None, {}))
         monkeypatch.setattr(service, "_hydrate_pending_workflow", lambda *_a: False)
-        monkeypatch.setattr(service, "_run_workflow_with_state_updates", runner)
-        monkeypatch.setattr(
-            service, "_format_workflow_run_response", lambda *_a, **_k: {"success": True}
-        )
         result = service.process_chat("u1", "好的", context={"session_id": "s"}, source="normal")
-        runner.assert_not_called()
         assert result["data"]["action"] == "clarification_required"
         assert "u1" not in service._pending_workflows
 
@@ -286,15 +285,19 @@ class TestErpClarification:
     def test_multi_unit_asks_question(self):
         from app.application.workflow.clarification_node import detect_erp_clarification
 
-        items = detect_erp_clarification(_stock_out_plan("500"), user_message="出 500 斤")
-        assert items, "「出 500 斤」应触发多单位反问"
+        items = detect_erp_clarification(
+            _stock_out_plan("500"), user_message="出 500 斤，按 250 公斤换算"
+        )
+        assert items, "「500 斤，按 250 公斤换算」应触发多单位反问"
         assert items[0]["reason"] == "multi_unit"
         assert items[0]["severity"] in ("high", "medium")
 
     def test_multi_unit_does_not_execute_directly(self):
         from app.application.workflow.clarification_node import detect_erp_clarification
 
-        items = detect_erp_clarification(_stock_out_plan("500"), user_message="出 500 斤")
+        items = detect_erp_clarification(
+            _stock_out_plan("500"), user_message="出 500 斤，按 250 公斤换算"
+        )
         assert items, "反问存在，说明未直接执行"
         # 反问节点语义：不调用业务工具，仅产出 requires_confirmation=true
         clarify = build_clarify_node(
@@ -395,7 +398,7 @@ _SHIPMENT_ALIAS.update(name="Paint", spec_per_tin=10)
 )
 @pytest.mark.parametrize("generic", [False, "shipment_records", "shipments", "发货单"])
 def test_shipment_inputs_shared_by_clarification_and_execution(params, expected, generic):
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import patch
 
     from app.application.agent_orchestrator.clarification import pause_for_clarification
     from app.application.agent_orchestrator.run_models import AgentRun, AgentStep

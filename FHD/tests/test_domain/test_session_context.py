@@ -127,14 +127,17 @@ class TestRecentMessages:
 
     def test_builds_excerpt(self):
         ctx = {
+            "_chat_evidence_authorized": True,
             "recent_messages": [
                 {"role": "user", "content": "hi"},
                 {"role": "assistant", "content": "yo"},
-            ]
+            ],
         }
         out = format_recent_messages_excerpt_for_llm(ctx)
         assert "近期对话摘要" in out
         assert "[user] hi" in out
+        ctx.pop("_chat_evidence_authorized")
+        assert format_recent_messages_excerpt_for_llm(ctx) is None
 
     def test_skips_non_dict_and_empty(self):
         ctx = {"recent_messages": ["x", {"role": "user", "content": ""}]}
@@ -238,6 +241,7 @@ class TestKittenRuntime:
 class TestRuntimeContextRich:
     def test_rich_context_hits_many_branches(self):
         ctx = {
+            "_chat_evidence_authorized": True,
             "excel_file_path": "/tmp/a.xlsx",
             "excel_analysis": {
                 "file_path": "/tmp/a.xlsx",

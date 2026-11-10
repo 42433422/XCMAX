@@ -33,6 +33,9 @@ async def chat_completion_openai_format(
     if provider is None:
         logger.error("No configured LLM provider (profile=%s)", profile)
         return None
+    from app.infrastructure.llm.model_admission import rate_limit_provider
+
+    provider = rate_limit_provider(provider)
     # MiMo V2.5 is a reasoning model.  For short structured-output flows its
     # reasoning can consume the entire completion budget before any JSON body
     # is emitted.  Keep this provider-specific compatibility parameter at the
@@ -40,9 +43,10 @@ async def chat_completion_openai_format(
     # receive an unsupported ``thinking`` field.
     if reasoning_enabled is False and provider.provider_id == "xiaomi":
         kwargs.setdefault("thinking", {"type": "disabled"})
-    return await provider.chat_completion(
+    response = await provider.chat_completion(
         messages,
         temperature=temperature,
         max_tokens=max_tokens,
         **kwargs,
     )
+    return response if isinstance(response, dict) else None

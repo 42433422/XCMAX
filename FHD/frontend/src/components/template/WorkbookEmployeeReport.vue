@@ -14,7 +14,7 @@ const spoken = computed(() => {
   if (!text) return ''
   return /[。！？]$/.test(text) ? text : `${text}。`
 })
-const unfinished = computed(() => props.outcome.includes('没有做完'))
+const unfinished = computed(() => /没有做完|预演预计|预计整理/.test(props.outcome))
 </script>
 
 <template>

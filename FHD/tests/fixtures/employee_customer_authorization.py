@@ -45,6 +45,24 @@ def verify_customer_authorization_and_recovery(loop: Acceptance) -> None:
             )
         ],
     )
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+
+    denied_scheduler.metadata["plan"] = plan_to_dict(
+        PlanGraph(
+            plan_id=denied_scheduler.run_id,
+            intent="customer_query",
+            nodes=[
+                WorkflowNode(
+                    node_id="query",
+                    tool_id="customers",
+                    action="query",
+                    params={"keyword": "闭环指定客户甲"},
+                    risk="low",
+                    idempotent=True,
+                )
+            ],
+        )
+    )
     denied_context = loop.context(
         denied_scheduler.run_id,
         employee_tool_allowlist=["sales.query"],
@@ -61,15 +79,18 @@ def verify_customer_authorization_and_recovery(loop: Acceptance) -> None:
         denied_context,
     )
     e15_ok = (
-        denied_scheduler.status == "failed"
-        and denied_scheduler.steps[0].output.get("error_code") == "tool_permission_denied"
+        denied_scheduler.status == "blocked"
+        and any(
+            event.data.get("error_code") == "tool_permission_denied"
+            for event in denied_scheduler.events
+        )
         and executor_denial.get("error_code") == "tool_permission_denied"
         and len(_units(engine)) == before_deny
     )
     loop.settle(
         "E15",
         "PASS" if e15_ok else "FAIL",
-        f"task {denied_scheduler.run_id} scheduler={denied_scheduler.steps[0].output.get('error_code')} executor={executor_denial.get('error_code')}",
+        f"task {denied_scheduler.run_id} scheduler={denied_scheduler.status} executor={executor_denial.get('error_code')}",
         task_id=denied_scheduler.run_id,
     )
 

@@ -24,7 +24,9 @@ def system_client(trusted_actor) -> TestClient:
 
     app = FastAPI()
     app.include_router(system_routes.router)
-    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
+    return TestClient(
+        app, raise_server_exceptions=False, headers=trusted_actor(role="admin").headers
+    )
 
 
 def test_system_config_get(system_client: TestClient) -> None:

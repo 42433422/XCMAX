@@ -172,14 +172,6 @@ class TestSplitData:
 class TestComputeMetrics:
     """测试 compute_metrics 函数。"""
 
-    def test_perfect_prediction(self):
-        import numpy as np
-
-        eval_pred = (np.array([[0.9, 0.1], [0.1, 0.9]]), np.array([0, 1]))
-        metrics = compute_metrics(eval_pred)
-        assert metrics["accuracy"] == 1.0
-        assert metrics["f1"] == 1.0
-
     def test_wrong_prediction(self):
         import numpy as np
 

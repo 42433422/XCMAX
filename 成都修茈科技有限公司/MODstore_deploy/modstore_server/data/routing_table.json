@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-07T05:21:23+00:00",
+  "generated_at": "2026-11-10T03:13:15+00:00",
   "employees": [
     {
       "id": "artifact-generator",
@@ -250,7 +250,6 @@
         "MODstore_deploy/docs/employee_publish_wizard.md",
         "MODstore_deploy/docs/fhd-employee-composition.md",
         "docs/modstore/员工制作增强设计方案.md",
-        "docs/modstore/ddd.md",
         "docs/adr/0003-artifacts-bundles-employee-packs.md",
         "yuangon/modstore-backend/employee-pack-curator/**"
       ],

@@ -305,6 +305,20 @@ async def test_each_call_resolves_current_account_route_without_login_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_intake_call_id_reaches_platform_adapter(monkeypatch, route_http):
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.application.reviewed_excel_audit import call_key
+    from app.domain.shared_services.conversation import modstore_adapter
+
+    route_http({"ok": True, "provider": "xiaomi", "model": "synthetic-model"})
+    adapter = SimpleNamespace(chat_completion=AsyncMock(return_value={}), close=AsyncMock())
+    monkeypatch.setattr(modstore_adapter, "ModstorePlatformAdapter", Mock(return_value=adapter))
+    with call_key("synthetic-call-123"):
+        await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).chat_completion([])
+    assert adapter.chat_completion.await_args.kwargs["client_request_id"] == "synthetic-call-123"
+
+
+@pytest.mark.asyncio
 async def test_older_platform_metadata_cannot_inherit_caller_snapshot(monkeypatch, route_http):
     from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.domain.shared_services.conversation import modstore_adapter
@@ -393,3 +407,88 @@ async def test_dispatch_failure_is_propagated_and_adapter_is_closed(monkeypatch,
         await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).chat_completion([])
     adapter.chat_completion.assert_awaited_once()
     adapter.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_elt_recovery_uses_explicit_market_proxy(monkeypatch):
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+
+    monkeypatch.setenv("XCAGI_MARKET_PROXY", "http://127.0.0.1:7890")
+    client_factory = httpx.AsyncClient
+    options = []
+
+    def client(**kwargs):
+        options.append(kwargs.copy())
+        kwargs.pop("proxy")
+        return client_factory(
+            transport=httpx.MockTransport(
+                lambda _: httpx.Response(200, json={"state": "completed"})
+            ),
+            **kwargs,
+        )
+
+    monkeypatch.setattr(httpx, "AsyncClient", client)
+    result = await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).lookup_call(
+        "attempt-123"
+    )
+    assert result == {"supported": True, "state": "completed"}
+    assert options[0]["proxy"] == "http://127.0.0.1:7890"
+    assert options[0]["trust_env"] is False
+
+
+@pytest.mark.asyncio
+async def test_transient_route_connection_failure_retries_only_route_get(monkeypatch):
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.domain.shared_services.conversation import modstore_adapter
+
+    monkeypatch.delenv("XCAGI_MARKET_PROXY", raising=False)
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic.invalid")
+    real_client = httpx.AsyncClient
+    seen = []
+
+    def respond(request):
+        seen.append(request.method)
+        if len(seen) == 1:
+            raise httpx.ConnectError("synthetic connection reset")
+        return httpx.Response(200, json={"ok": True, "provider": "synthetic", "model": "model"})
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    adapter = SimpleNamespace(
+        chat_completion=AsyncMock(return_value={"choices": []}), close=AsyncMock()
+    )
+    monkeypatch.setattr(modstore_adapter, "ModstorePlatformAdapter", lambda **kwargs: adapter)
+    await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).chat_completion([])
+    assert seen == ["GET", "GET"]
+    assert adapter.chat_completion.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure, expected_calls",
+    [
+        (httpx.ConnectError("no connection"), 2),
+        (httpx.ReadTimeout("result unknown"), 1),
+    ],
+)
+async def test_intake_retries_only_definitely_unsent_model_calls(
+    monkeypatch, route_http, failure, expected_calls
+):
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.domain.shared_services.conversation import modstore_adapter
+
+    route_http({"ok": True, "provider": "synthetic", "model": "model"})
+    adapter = SimpleNamespace(
+        chat_completion=AsyncMock(side_effect=[failure, {"choices": []}]), close=AsyncMock()
+    )
+    monkeypatch.setattr(modstore_adapter, "ModstorePlatformAdapter", lambda **kwargs: adapter)
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
+    if expected_calls == 1:
+        with pytest.raises(httpx.ReadTimeout):
+            await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).chat_completion([])
+    else:
+        await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).chat_completion([])
+    assert adapter.chat_completion.await_count == expected_calls

@@ -61,10 +61,17 @@ def run_customers_agent(
         }
 
     node_id = f"customers_{action}"
-    user_id = customers_agent_user_id(request, params)
+    principal = None
+    if action in {"delete", "batch_delete"}:
+        from app.infrastructure.auth.agent_principal import require_agent_principal
+
+        principal = require_agent_principal(request, x_user_id=None)
+    user_id = principal.user_id if principal else customers_agent_user_id(request, params)
+    from app.middleware.request_id import ensure_request_id
+
     risk = normalize_workflow_risk(str(action_meta.get("risk") or "medium"))
     plan = PlanGraph(
-        plan_id=node_id,
+        plan_id=f"{node_id}:{ensure_request_id(request)}",
         intent=node_id,
         todo_steps=[f"通过 AgentOrchestrator 执行 customers.{action}"],
         nodes=[
@@ -89,6 +96,10 @@ def run_customers_agent(
         "route_confirmed": True,
         "service_source": "fastapi_customer_route",
     }
+    if principal is not None:
+        from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+
+        runtime_context = authenticated_runtime_context(runtime_context, principal)
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
         user_id=user_id,

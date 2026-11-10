@@ -58,6 +58,7 @@ def trusted_actor(tmp_path, monkeypatch):
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(host_db, "HostSessionLocal", factory)
+    monkeypatch.setattr("app.db.session.SessionLocal", factory)
     monkeypatch.setattr(
         "app.application.facades.session_facade.get_session_service", SessionService
     )

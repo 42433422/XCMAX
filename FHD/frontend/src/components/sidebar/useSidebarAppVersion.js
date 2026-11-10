@@ -4,6 +4,7 @@
 import { computed, ref } from 'vue'
 import { buildFullApiUrl } from '@/api/core'
 import packageJson from '../../../package.json'
+import { modelPathStatus } from './modelPathHealth'
 import { runtimeHealthPresentation } from './runtimeHealthPresentation'
 
 export function displayVersion(value) {
@@ -17,7 +18,7 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
   const healthData = ref(null)
   const connection = ref('checking')
   const lastCheckedAt = ref(null)
-  const runtimeHealth = computed(() => runtimeHealthPresentation(healthData.value, connection.value))
+  const runtimeHealth = computed(() => runtimeHealthPresentation(healthData.value, connection.value, modelPathStatus.value))
   let pollTimer = null
   let controller = null
   let pendingRequest = null

@@ -262,6 +262,10 @@ def _execute_excel_import_records(records: list[dict[str, Any]]) -> dict:
 def _registered_router_excel_import(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    if action == "office_stage":
+        from app.application.office_parse_app_service import registered_office_stage
+
+        return registered_office_stage(user_message, runtime_context)
     if action in {"import_delivery_notes", "execute_delivery_etl"}:
         file_path = str(params.get("file_path") or "").strip()
         notes = params.get("notes")

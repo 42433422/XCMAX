@@ -98,6 +98,8 @@ def _sanitize_untrusted_context_line(text: str, max_len: int) -> str:
 def format_recent_messages_excerpt_for_llm(runtime_context: Mapping[str, Any] | None) -> str | None:
     if not runtime_context:
         return None
+    if runtime_context.get("_chat_evidence_authorized") is not True:
+        return None
     owned = runtime_context.get("chat_owned_history")
     msgs = owned if isinstance(owned, list) else runtime_context.get("recent_messages")
     if not isinstance(msgs, list) or not msgs:
@@ -276,11 +278,12 @@ def format_runtime_context_for_llm(runtime_context: Mapping[str, Any] | None) ->
                 "追问之前的客户、产品或数字时，先从以上同一会话记录找出具体名称或数字并直接写出；"
                 "不要只用‘这家’‘那个’等指代。记录无法确定时如实说明。"
             )
-    memory = runtime_context.get("chat_memory_evidence")
+    evidence_authorized = runtime_context.get("_chat_evidence_authorized") is True
+    memory = runtime_context.get("chat_memory_evidence") if evidence_authorized else None
     if isinstance(memory, str) and memory.strip():
         lines.append("【已授权的个人记忆，仅作参考】")
         lines.append(_sanitize_untrusted_context_line(memory, 3000))
-    knowledge = runtime_context.get("chat_knowledge_evidence")
+    knowledge = runtime_context.get("chat_knowledge_evidence") if evidence_authorized else None
     if isinstance(knowledge, list) and knowledge:
         lines.append(
             "【已授权知识库检索片段】先核对片段是否回答当前问题；若有相关事实，直接依据片段回答并标明来源，"

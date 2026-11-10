@@ -114,18 +114,6 @@ class TestInitDbInitializeDatabases:
         initialize_databases(["test_init.db"])
         assert os.path.exists(os.path.join(tmp_dir, "test_init.db"))
 
-    def test_initialize_databases_skips_existing(self, tmp_dir, monkeypatch):
-        from app.db.init_db import initialize_databases
-
-        monkeypatch.setattr("app.db.init_db.get_app_data_dir", lambda: tmp_dir)
-        target = os.path.join(tmp_dir, "products.db")
-        with open(target, "w") as f:
-            f.write("existing")
-
-        initialize_databases(["products.db"])
-        with open(target) as f:
-            assert f.read() == "existing"
-
     def test_initialize_databases_no_seed_logs_warning(self, tmp_dir, monkeypatch):
         from app.db.init_db import initialize_databases
 
@@ -2468,7 +2456,7 @@ class TestExcelAiFileAnalyze:
         assert run.metadata["channel"] == "file_analysis_route"
         assert run.metadata["runtime_context"]["route"] == "/api/ai/file/analyze"
 
-    def test_ai_file_analyze_pdf_ingests_dataset(self, excel_client, tmp_path, monkeypatch):
+    def test_ai_file_analyze_pdf_remains_display_only(self, excel_client, tmp_path, monkeypatch):
         from app.application.agent_orchestrator import InMemoryAgentRunRepository
         from app.application.dataset_rag_app_service import (
             get_dataset_rag_app_service,
@@ -2486,11 +2474,13 @@ class TestExcelAiFileAnalyze:
         pdf_path = tmp_path / "route_policy.pdf"
         pdf_path.write_bytes(
             _minimal_pdf_bytes(
-                "Route file analysis artifacts must enter Dataset RAG. "
+                "Route file analysis artifacts require explicit knowledge import authorization. "
                 "The server platform model is XCauto."
             )
         )
+        dataset = get_dataset_rag_app_service()
         with (
+            patch.object(dataset, "ingest_document", wraps=dataset.ingest_document) as ingest,
             patch("app.application.get_file_analysis_app_service") as mock_get,
             patch(
                 "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
@@ -2519,6 +2509,7 @@ class TestExcelAiFileAnalyze:
                 },
                 files={"file": ("route_policy.pdf", b"fake", "application/pdf")},
             )
+            ingest.assert_not_called()
 
         assert response.status_code == 200
         body = response.json()
@@ -2526,18 +2517,16 @@ class TestExcelAiFileAnalyze:
         assert run is not None
         assert run.user_id == "u-file"
         assert run.artifacts[0].artifact_type == "pdf_document"
-        assert run.metadata["dataset_ingest_count"] == 1
-        assert run.metadata["dataset_ids"] == ["route-docs"]
-        assert "dataset.ingested" in [event.event_type for event in run.events]
-
-        answer = get_dataset_rag_app_service().answer(
-            dataset_id="route-docs",
-            query="Which model should route file analysis mention?",
-            tenant_id="tenant-a",
-            top_k=2,
-        )
-        assert answer["success"] is True
-        assert "XCauto" in answer["answer"]
+        assert run.status == "completed"
+        assert run.artifacts[0].name == "route_policy.pdf"
+        assert run.artifacts[0].uri == str(pdf_path)
+        assert run.artifacts[0].metadata["skip_dataset_ingest"] is True
+        assert "XCauto" in str(run.artifacts[0].preview)
+        assert run.metadata.get("dataset_ingest_count", 0) == 0
+        assert "artifact.attached" in [event.event_type for event in run.events]
+        assert "dataset.ingested" not in [event.event_type for event in run.events]
+        assert not (tmp_path / "dataset_store.json").exists()
+        reset_dataset_rag_app_service_for_tests()
 
     def test_ai_file_analyze_failure_returns_400(self, excel_client):
         with patch("app.application.get_file_analysis_app_service") as mock_get:

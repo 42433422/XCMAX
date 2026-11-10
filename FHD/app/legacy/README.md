@@ -9,7 +9,6 @@
 
 | 原路径 | 新路径 | 退役条件 | 负责模块 |
 |--------|--------|---------|---------|
-| `app/application/workflow/legacy_chat_adapter.py` | `app/legacy/chat/legacy_chat_adapter.py` | `chat` / `chat_stream_sse_events` 工作流迁移到 `app/application/ai_chat_app_service.py` 原生实现、移除对 `app.legacy.planner` 的吸收式实现后 | AI Chat |
 | `app/fastapi_routes/mounts/legacy_compat.py` | `app/legacy/routes/legacy_compat.py` | 前端从 `xcagi_compat` 历史契约迁移到新 domain API 契约、`register_legacy_compat_routes` 内的历史路由逐个迁入 `app/fastapi_routes/domains/` 后 | FastAPI Routes / Frontend Compat |
 | `app/fastapi_routes/mounts/legacy_gap.py` | `app/legacy/routes/legacy_gap.py` | 所有 domain routes 通过 `xcagi_compat`（SSOT）统一注册、移除 `XCAGI_REGISTER_LEGACY_ROUTES` opt-in gap mount 后 | FastAPI Routes |
 | `app/infrastructure/documents/legacy_shipment_document.py` | `app/legacy/documents/legacy_shipment_document.py` | `ShipmentDocumentGenerator` 生成逻辑完全迁移到 `app/infrastructure/documents/` 原生实现、移除对 `resources/tools_legacy/AI助手/shipment_document.py` 的 `sys.path` + `importlib` 动态加载后 | Shipment Documents |

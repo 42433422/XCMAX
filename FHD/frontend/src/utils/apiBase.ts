@@ -123,14 +123,14 @@ export function getClientModsUiOffHeader(): Record<string, string> {
   }
 }
 
-const ACTIVE_MOD_HEADER_SKIP_PREFIXES = ['/api/auth/', '/api/platform-shell/', '/api/debug/'] as const
+const ACTIVE_MOD_HEADER_SKIP_PREFIXES = ['/api/auth/', '/api/platform-shell/', '/api/debug/', '/api/mods/', '/api/system/industry', '/api/system/industries'] as const
 
 function shouldAttachActiveModHeader(rawUrl = ''): boolean {
   const value = String(rawUrl || '').trim()
   if (!value) return true
   try {
     const pathname = /^https?:\/\//i.test(value) ? new URL(value).pathname : value.split('?')[0] || ''
-    return !ACTIVE_MOD_HEADER_SKIP_PREFIXES.some((p) => pathname.startsWith(p))
+    return pathname !== '/api/mods' && !ACTIVE_MOD_HEADER_SKIP_PREFIXES.some((p) => pathname.startsWith(p))
   } catch {
     return true
   }

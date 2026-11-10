@@ -231,7 +231,6 @@ export function buildDevProxy(apiBase) {
           if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
             proxyRes.headers['cache-control'] = 'no-cache'
             proxyRes.headers['connection'] = 'keep-alive'
-            if (!res.headersSent) res.flushHeaders()
           }
         })
         proxy.on('error', (err, _req, res) => {

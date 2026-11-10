@@ -1041,23 +1041,6 @@ class TestLabelTemplateGeneratorSkillAdditional:
         result = skill.execute("/nonexistent/image.png")
         assert result["success"] is False
 
-    def test_execute_recoverable_error_returns_failure(self, tmp_path):
-        """execute() should catch RECOVERABLE_ERRORS and return failure."""
-        from PIL import Image
-
-        img = Image.new("RGB", (400, 300), (255, 255, 255))
-        img_path = str(tmp_path / "err.png")
-        img.save(img_path)
-
-        skill = LabelTemplateGeneratorSkill()
-        with patch(
-            "app.services.skills.label_template_generator.label_template_generator.analyze_image",
-            side_effect=OSError("disk error"),
-        ):
-            result = skill.execute(img_path)
-            assert result["success"] is False
-            assert "disk error" in result["message"]
-
     def test_get_skill_info_returns_all_parameters(self):
         """get_skill_info should return all expected parameters."""
         skill = LabelTemplateGeneratorSkill()

@@ -11,14 +11,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.workflow.planner import (
-    LLMWorkflowPlanner,
-    _filter_tool_registry_for_profile,
-    get_tool_registry,
+from app.application.workflow.planning_graph_policy import (
+    filter_registry_for_profile as _filter_tool_registry_for_profile,
 )
 from app.domain.shared_services.purchase_service import PurchaseService
 from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
 from app.domain.shared_services.tools_workflow_registered import _registered_router_customers
+from app.services.tools_execution.registry import get_workflow_tool_registry
 
 # ---------------------------------------------------------------------------
 # DB mock helpers
@@ -140,13 +139,6 @@ def test_filter_tool_registry_pro_default() -> None:
     filtered = _filter_tool_registry_for_profile(reg, "pro_default")
     assert "normal_only_tool" not in filtered
     assert "shared" in filtered
-
-
-def test_fallback_plan_export_price_list() -> None:
-    planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
-    plan = planner._fallback_plan("p3", "导出甲公司报价表", get_tool_registry())
-    assert plan.plan_id == "p3"
-    assert plan.nodes
 
 
 # ---------------------------------------------------------------------------

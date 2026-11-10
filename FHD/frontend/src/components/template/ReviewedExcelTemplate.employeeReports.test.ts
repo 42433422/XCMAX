@@ -29,6 +29,7 @@ beforeEach(() => {
   api.analyzeClassification.mockResolvedValue({ version: 'model-v2', model_status: 'returned', sheets: [sheet] })
   api.autoSlices.mockResolvedValue({ slices: [{ index: 0, basis: 'model_group', confirmed: false, sha256: 'slice-0', filename: '送货单.xlsx', display_name: '送货单', fragments: [{ sheet: 'Sheet1', range: 'A1:B2' }] }] })
   api.reviewExcel.mockResolvedValue(reviewed('送货单'))
+  api.saveReviewedExcel.mockResolvedValue({ template_id: 'db:42' })
   api.previewReviewedIntake.mockResolvedValue(intake(
     { action: 'new', documents: 1, degraded: false, lane: 'knowledge', content: '演示客户乙购买螺母五桶' },
     { details: { entities: { customers: 0, purchase_units: 1, products: 2, records: 2 } } },
@@ -45,6 +46,9 @@ async function openAndChoose() {
   await wrapper.get('[data-document-key]').trigger('click')
   await flushPromises()
   await wrapper.get('.reviewed-template__select-candidate').trigger('click')
+  await flushPromises()
+  expect(api.previewReviewedIntake).not.toHaveBeenCalled()
+  await button('保存模板').trigger('click')
   await flushPromises()
 }
 
@@ -64,11 +68,13 @@ describe('template capsule with database and knowledge reports', () => {
     expect(database.classes()).not.toContain('work-status-report')
     expect(database.element.tagName).toBe('ARTICLE')
     expect(database.find('ul, dl, .work-status-report__breakdown').exists()).toBe(false)
-    expect(database.get('.work-utterance__words').text()).toContain('本次入库：客户 0，购买单位 1，产品 2，明细 2。')
+    expect(database.get('.work-utterance__words').text()).toContain('预演预计：客户 0，购买单位 1，产品 2，明细 2。')
     expect(database.get('.work-utterance__detail').text()).toContain('客户 0，购买单位 1，产品 2，明细 2。')
+    expect(database.attributes('data-finished')).toBe('false')
+    expect(knowledge.attributes('data-finished')).toBe('false')
     expect(database.text()).toContain('数据库导入员')
     expect(database.text()).toContain('写入业务数据库')
-    expect(knowledge.get('.work-utterance__words').text()).toContain('本次整理 1 份文档。')
+    expect(knowledge.get('.work-utterance__words').text()).toContain('预计整理 1 份文档。')
     expect(knowledge.get('.work-utterance__detail').text()).toContain('演示客户乙购买螺母五桶')
     expect(thread.find('.workbook-thread__spine').exists()).toBe(true)
     expect(thread.findAll('.workbook-node__dot')).toHaveLength(3)

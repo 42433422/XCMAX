@@ -315,15 +315,15 @@ export const agentRunsApi = {
   },
 
   getRun(runId: string): Promise<AgentRunResponse> {
-    return api.get<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}`, {}, { timeoutMs: 8000 })
+    return api.get<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}`, {}, { timeoutMs: 30_000, quiet: true })
   },
 
   listRuns(params: { limit?: number } = {}): Promise<ApiResponse<AgentRun[]>> {
-    return api.get<ApiResponse<AgentRun[]>>('/api/agent/runs', params, { timeoutMs: 8000 })
+    return api.get<ApiResponse<AgentRun[]>>('/api/agent/runs', params, { timeoutMs: 30_000, quiet: true })
   },
 
   listEvents(runId: string, params: { after_event_id?: string } = {}): Promise<AgentRunEventsResponse> {
-    return api.get<AgentRunEventsResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/events`, params, { timeoutMs: 8000 })
+    return api.get<AgentRunEventsResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/events`, params, { timeoutMs: 30_000, quiet: true })
   },
 
   eventStreamPath(runId: string, afterEventId?: string): string {

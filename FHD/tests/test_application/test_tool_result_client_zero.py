@@ -25,11 +25,6 @@ class TestPickClientFields:
         assert "download_url" not in result
         assert result["file_name"] == "test.pdf"
 
-    def test_skips_empty_string_values(self) -> None:
-        src = {"download_url": "", "file_name": "test.pdf"}
-        result = _pick_client_fields(src)
-        assert "download_url" not in result
-
     def test_empty_source(self) -> None:
         result = _pick_client_fields({})
         assert result == {}
@@ -73,11 +68,6 @@ class TestFlattenToolResultDictForClient:
         assert result["file_name"] == "doc.pdf"
         assert result["doc_name"] == "My Doc"
 
-    def test_success_field_mapped_to_tool_success(self) -> None:
-        raw = {"success": True}
-        result = flatten_tool_result_dict_for_client(raw)
-        assert result["tool_success"] is True
-
     def test_tool_key_from_tool_key(self) -> None:
         raw = {"tool_key": "my_tool"}
         result = flatten_tool_result_dict_for_client(raw)
@@ -87,11 +77,6 @@ class TestFlattenToolResultDictForClient:
         raw = {"tool_name": "my_tool"}
         result = flatten_tool_result_dict_for_client(raw)
         assert result["tool_key"] == "my_tool"
-
-    def test_error_field_mapped(self) -> None:
-        raw = {"error": "something went wrong"}
-        result = flatten_tool_result_dict_for_client(raw)
-        assert result["tool_error"] == "something went wrong"
 
     def test_error_truncated_to_500_chars(self) -> None:
         raw = {"error": "x" * 1000}

@@ -31,9 +31,26 @@ streams:
         - { type: "run.completed",         const: RUN_COMPLETED,         sla_tier: conscious, terminal: true }
         - { type: "run.failed",            const: RUN_FAILED,            sla_tier: conscious, terminal: true }
         - { type: "run.continue_ignored",  const: RUN_CONTINUE_IGNORED }
+        - { type: "approval.authorization_mismatch", const: APPROVAL_AUTHORIZATION_MISMATCH }
         - { type: "run.observation_interrupted", const: RUN_OBSERVATION_INTERRUPTED, payload_fields: [reason, worker_pending, business_outcome, replay_allowed] }
       task:
         - { type: "task.approval_required", const: TASK_APPROVAL_REQUIRED }
+      orchestration:
+        - { type: "approval.resume_plan_rejected", const: APPROVAL_RESUME_PLAN_REJECTED }
+        - { type: "approval.resume_proof_missing", const: APPROVAL_RESUME_PROOF_MISSING }
+        - { type: "run.clarification_resumed", const: RUN_CLARIFICATION_RESUMED }
+        - { type: "run.idempotency_conflict", const: RUN_IDEMPOTENCY_CONFLICT }
+        - { type: "step.clarification_required", const: STEP_CLARIFICATION_REQUIRED }
+        - { type: "step.skipped", const: STEP_SKIPPED }
+        - { type: "task.child_run_attached", const: TASK_CHILD_RUN_ATTACHED }
+        - { type: "workflow.concrete_params_rejected", const: WORKFLOW_CONCRETE_PARAMS_REJECTED }
+        - { type: "workflow.graph_rejected", const: WORKFLOW_GRAPH_REJECTED }
+        - { type: "workflow.plan_audit_rejected", const: WORKFLOW_PLAN_AUDIT_REJECTED }
+        - { type: "workflow.plan_audited", const: WORKFLOW_PLAN_AUDITED }
+        - { type: "workflow.plan_node_updated", const: WORKFLOW_PLAN_NODE_UPDATED }
+        - { type: "workflow.plan_policy_normalized", const: WORKFLOW_PLAN_POLICY_NORMALIZED }
+        - { type: "workflow.plan_policy_rejected", const: WORKFLOW_PLAN_POLICY_REJECTED }
+        - { type: "workflow.plan_reference_resolved", const: WORKFLOW_PLAN_REFERENCE_RESOLVED }
       planner:
         - { type: "planner.started",        const: PLANNER_STARTED }
         - { type: "planner.completed",      const: PLANNER_COMPLETED }

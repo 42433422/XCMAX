@@ -158,24 +158,6 @@ def test_explicit_order_request_forces_the_registered_erp_tool() -> None:
     assert forced_order_tool_choice("请开一张测试订单", []) is None
 
 
-def test_legacy_order_preparation_uses_forced_tool_choice() -> None:
-    from app.legacy.chat import legacy_chat_runtime as runtime
-
-    facade = Mock()
-    facade.merge_system_prompt.return_value = ""
-    facade.build_openai_user_content.return_value = "请开一张测试订单"
-    facade.messages_have_image_parts.return_value = False
-    facade._get_workflow_tool_registry.return_value = [
-        {"type": "function", "function": {"name": "execute_erp_capability"}}
-    ]
-    with (
-        patch.object(runtime, "_facade", return_value=facade),
-        patch.object(runtime, "forced_document_tool_choice", return_value=None),
-    ):
-        prepared = runtime._prepare_chat("请开一张测试订单", None, None, Mock(), "test")
-    assert prepared[5] == {"type": "function", "function": {"name": "execute_erp_capability"}}
-
-
 def test_conversation_message_envelope_restores_whitelisted_harness_ui() -> None:
     row = _message_to_dict(
         (
@@ -345,3 +327,92 @@ def test_terminal_projection_closes_original_plan_without_reexecuting(
         )
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "message", ["请创建客户：测试客户", "请更新产品的型号", "删除数据库里的旧客户"]
+)
+def test_text_only_business_mutation_never_reports_completed(message):
+    run = AgentRun(user_id="2", message=message, status="completed")
+    run.final_output = {"chat_payload": {"success": True, "response": "已处理完成"}}
+    result = ensure_terminal_business_result(run)
+    assert result["success"] is False
+    assert result["status"] == "failed"
+    assert "没有工具调用" in result["summary"]
+
+
+def test_negated_business_mutation_is_not_treated_as_unexecuted():
+    run = AgentRun(user_id="2", message="不要删除客户，告诉我怎么办", status="completed")
+    assert ensure_terminal_business_result(run)["success"] is True
+
+
+def test_unplanned_tool_request_cannot_return_success_payload():
+    from unittest.mock import patch
+
+    from app.application.agent_orchestrator.chat_trace import (
+        attach_chat_trace_run,
+    )
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+
+    repo = InMemoryAgentRunRepository()
+    payload = {
+        "success": True,
+        "response": "查询成功",
+        "data": {"action": "tool_call", "tool_key": "products"},
+    }
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository", return_value=repo
+    ):
+        result = attach_chat_trace_run(
+            payload,
+            message="查询产品",
+            runtime_context={},
+            user_id="u1",
+        )
+    assert result["success"] is False
+    assert result["execution_state"] == "failed"
+    assert result["data"]["execution_started"] is False
+    run = repo.get(result["run_id"])
+    assert run is not None and run.status == "failed" and run.tool_calls == []
+
+
+def test_read_only_tool_is_not_evidence_of_customer_write():
+    run = AgentRun(user_id="2", message="请更新产品的型号", status="completed")
+    run.tool_calls = [
+        ToolCall(
+            step_id="s1", node_id="read", tool_id="business_db", action="read", status="completed"
+        )
+    ]
+    run.final_output = {"chat_payload": {"success": True, "response": "产品已更新"}}
+    result = ensure_terminal_business_result(run)
+    assert result["success"] is False
+    assert run.status == "failed"
+
+
+def test_unrelated_export_artifact_does_not_prove_order_created():
+    from app.application.agent_orchestrator.run_models import AgentArtifact
+
+    run = AgentRun(user_id="2", message="请开一张订单并导出单据", status="completed")
+    run.artifacts = [AgentArtifact(artifact_type="file", name="old.xlsx")]
+    assert ensure_terminal_business_result(run)["success"] is False
+    assert run.status == "failed"
+
+
+def test_long_ordinary_chat_is_not_misclassified_as_a_write():
+    run = AgentRun(user_id="2", message="请解释这个概念。" * 10000, status="completed")
+    assert ensure_terminal_business_result(run)["success"] is True
+
+
+def test_wrapped_read_is_not_evidence_of_a_write():
+    run = AgentRun(user_id="2", message="请更新产品的型号", status="completed")
+    run.tool_calls = [
+        ToolCall(
+            step_id="s1",
+            node_id="read",
+            tool_id="execute_erp_capability",
+            action="execute",
+            params={"tool_id": "business_db", "action": "read"},
+            status="completed",
+        )
+    ]
+    assert ensure_terminal_business_result(run)["success"] is False

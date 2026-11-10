@@ -147,6 +147,7 @@
       "executed",
       "failure",
       "node_outputs",
+      "plan_audit",
       "results",
       "workflow_status",
       "workflow_trace"

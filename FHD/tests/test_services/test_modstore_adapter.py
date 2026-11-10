@@ -857,3 +857,17 @@ class TestBackwardCompat:
         request.headers.get.return_value = "Bearer tok"
         client = create_modstore_openai_client_from_request(request)
         assert isinstance(client, ModstoreOpenAICompatibleClient)
+
+
+@pytest.mark.asyncio
+async def test_market_client_uses_only_explicit_proxy(monkeypatch):
+    monkeypatch.setenv("XCAGI_MARKET_PROXY", "http://127.0.0.1:7890")
+    adapter = ModstorePlatformAdapter(platform_url="https://example.com")
+    client = MagicMock()
+    with patch(
+        "app.domain.shared_services.conversation.modstore_adapter.httpx.AsyncClient",
+        return_value=client,
+    ) as factory:
+        assert await adapter._get_client() is client
+    assert factory.call_args.kwargs["proxy"] == "http://127.0.0.1:7890"
+    assert factory.call_args.kwargs["trust_env"] is False

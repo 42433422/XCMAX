@@ -25,160 +25,6 @@ from tests.test_application.ai_chat_test_helpers import (
 # ---------------------------------------------------------------------------
 
 
-class TestProcessChatNeuroBusBranches:
-    def test_neuro_received_exception_ignored(self):
-        """neuro_notify_chat_received 抛出 RECOVERABLE_ERRORS 时流程继续。"""
-        svc = _make_svc()
-        svc.ai_service.chat = AsyncMock(return_value={"success": True, "message": "ok"})
-        svc._try_handle_dynamic_workflow = MagicMock(return_value=None)
-        svc._handle_confirmation_flow = MagicMock()
-        svc._inject_excel_vector_context = MagicMock(side_effect=lambda **kw: kw.get("context", {}))
-        svc._persist_chat_turn = MagicMock()
-
-        with patch(
-            "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received",
-            side_effect=RuntimeError("bus down"),
-        ):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
-                return_value=None,
-            ):
-                result = svc.process_chat("u1", "随便说点什么")
-        assert result.get("success") is True
-
-    def test_neuro_completed_exception_ignored(self):
-        """neuro_notify_chat_completed 抛出 RECOVERABLE_ERRORS 时仍返回结果。"""
-        svc = _make_svc()
-        svc.ai_service.chat = AsyncMock(return_value={"success": True, "message": "ok"})
-        svc._try_handle_dynamic_workflow = MagicMock(return_value=None)
-        svc._handle_confirmation_flow = MagicMock()
-        svc._inject_excel_vector_context = MagicMock(side_effect=lambda **kw: kw.get("context", {}))
-        svc._persist_chat_turn = MagicMock()
-
-        with patch(
-            "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received",
-            return_value=None,
-        ):
-            with patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
-                side_effect=RuntimeError("bus down"),
-            ):
-                result = svc.process_chat("u1", "随便说点什么")
-        assert result.get("success") is True
-
-
-# ---------------------------------------------------------------------------
-# process_chat — AI 服务错误分支
-# ---------------------------------------------------------------------------
-
-
-class TestProcessChatAIServiceErrors:
-    @pytest.fixture(autouse=True)
-    def isolate_neuro_notifications(self):
-        with (
-            patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_received",
-                return_value=None,
-            ),
-            patch(
-                "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
-                return_value=None,
-            ),
-        ):
-            yield
-
-    def _svc_with_no_workflow(self):
-        svc = _make_svc()
-        svc._try_handle_dynamic_workflow = MagicMock(return_value=None)
-        svc._handle_confirmation_flow = MagicMock()
-        svc._inject_excel_vector_context = MagicMock(side_effect=lambda **kw: kw.get("context", {}))
-        svc._persist_chat_turn = MagicMock()
-        svc._build_fallback_response = MagicMock(
-            side_effect=lambda msg, reason: {"success": False, "message": reason}
-        )
-        return svc
-
-    def test_connection_error(self):
-        svc = self._svc_with_no_workflow()
-        svc.ai_service.chat = AsyncMock(side_effect=ConnectionError("refused"))
-        result = svc.process_chat("u1", "随便说点什么")
-        assert "连接失败" in result["message"]
-
-    def test_timeout_error(self):
-        svc = self._svc_with_no_workflow()
-        svc.ai_service.chat = AsyncMock(side_effect=TimeoutError("timed out"))
-        result = svc.process_chat("u1", "随便说点什么")
-        assert "超时" in result["message"]
-
-    def test_recoverable_error_api_key(self):
-        svc = self._svc_with_no_workflow()
-        # RuntimeError is in RECOVERABLE_ERRORS; message contains "api_key" → special branch
-        svc.ai_service.chat = AsyncMock(side_effect=RuntimeError("invalid api_key provided"))
-        result = svc.process_chat("u1", "随便说点什么")
-        assert "AI 服务暂时不可用" in result["message"]
-
-    def test_recoverable_error_connection(self):
-        svc = self._svc_with_no_workflow()
-        # ValueError is in RECOVERABLE_ERRORS; message contains "connection" → connection branch
-        svc.ai_service.chat = AsyncMock(side_effect=ValueError("connection refused by provider"))
-        result = svc.process_chat("u1", "随便说点什么")
-        assert "AI 服务暂时不可用" in result["message"]
-
-    def test_recoverable_error_other(self):
-        svc = self._svc_with_no_workflow()
-        # RuntimeError is in RECOVERABLE_ERRORS; generic message → else branch
-        svc.ai_service.chat = AsyncMock(side_effect=RuntimeError("internal server error"))
-        result = svc.process_chat("u1", "随便说点什么")
-        assert "暂时不可用" in result["message"]
-
-    def test_excel_file_path_in_file_context(self):
-        """file_context 含 file_path 时注入 excel_analysis。"""
-        svc = self._svc_with_no_workflow()
-        svc.ai_service.chat = AsyncMock(return_value={"success": True, "message": "ok"})
-        svc._inject_excel_vector_context = MagicMock(side_effect=lambda **kw: kw.get("context", {}))
-
-        captured_context: dict = {}
-
-        async def _capture_chat(user_id, message, context, source=None):
-            captured_context.update(context)
-            return {"success": True, "message": "ok"}
-
-        svc.ai_service.chat = _capture_chat
-
-        svc.process_chat(
-            "u1",
-            "导入数据",
-            context={},
-            file_context={"file_path": "/tmp/data.xlsx"},
-        )
-        assert captured_context.get("excel_analysis", {}).get("file_path") == "/tmp/data.xlsx"
-
-    def test_excel_file_path_with_sheet_name(self):
-        """file_context 含 sheet_name 时也注入到 excel_analysis。"""
-        svc = self._svc_with_no_workflow()
-        captured_context: dict = {}
-
-        async def _capture_chat(user_id, message, context, source=None):
-            captured_context.update(context)
-            return {"success": True, "message": "ok"}
-
-        svc.ai_service.chat = _capture_chat
-        svc._inject_excel_vector_context = MagicMock(side_effect=lambda **kw: kw.get("context", {}))
-
-        svc.process_chat(
-            "u1",
-            "导入",
-            file_context={"file_path": "/tmp/d.xlsx", "sheet_name": "Sheet2"},
-        )
-        ea = captured_context.get("excel_analysis", {})
-        assert ea.get("sheet_name") == "Sheet2"
-
-
-# ---------------------------------------------------------------------------
-# _sanitize_import_scalar
-# ---------------------------------------------------------------------------
-
-
 class TestSanitizeImportScalar:
     def test_none_returns_none(self):
         assert AIChatApplicationService._sanitize_import_scalar(None) is None
@@ -701,3 +547,85 @@ class TestTryStructuredReloadRecords:
         assert result is not None
         assert result[0]["val"] is None
         assert result[0]["name"] == "ok"
+
+
+from tests.test_application.test_owned_planner_attachments import owned as owned
+
+
+def _active_model_service(completion):
+    from app.application.workflow.planner import LLMWorkflowPlanner
+
+    svc = _make_svc()
+    svc.workflow_planner = LLMWorkflowPlanner(
+        ai_service=MagicMock(get_context=MagicMock(return_value=None)), completion=completion
+    )
+    svc._persist_chat_turn = MagicMock()
+    svc._persist_recallable_chat_turn = MagicMock()
+    return svc
+
+
+def _reply_completion():
+    return MagicMock(
+        return_value={"choices": [{"message": {"content": '{"mode":"reply","reply":"已读取"}'}}]}
+    )
+
+
+@pytest.mark.parametrize("event", ["received", "completed"])
+def test_neuro_failure_does_not_replace_model_or_bypass_attachment_authority(event):
+    completion = _reply_completion()
+    svc = _active_model_service(completion)
+    with patch(
+        f"app.neuro_bus.application_neuro_bridge.neuro_notify_chat_{event}",
+        side_effect=RuntimeError("bus down"),
+    ):
+        result = svc.process_chat("u1", "说明工作方式")
+        assert result["response"] == "已读取"
+        assert result["data"]["workflow_runtime"] == "xcagi-langgraph"
+        rejected = svc.process_chat("u1", "说明附件", context={"attachment_upload_ids": ["forged"]})
+        assert rejected["success"] is False
+        assert rejected["data"]["error_code"] == "attachment_reupload_required"
+    completion.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ConnectionError("refused"),
+        TimeoutError("timed out"),
+        RuntimeError("invalid api_key=TOPSECRET"),
+        ValueError("connection refused"),
+        RuntimeError("internal server error"),
+    ],
+)
+def test_model_transport_error_is_fail_closed_without_old_chat_fallback(error):
+    from app.application.workflow.planner_llm_gateway import request_planner_completion
+
+    provider = MagicMock()
+    provider.chat_completion = AsyncMock(side_effect=error)
+    svc = _active_model_service(request_planner_completion)
+    with patch(
+        "app.infrastructure.llm.providers.registry.get_active_provider", return_value=provider
+    ):
+        result = svc.process_chat("u1", "说明工作方式")
+    provider.chat_completion.assert_awaited_once()
+    assert result["success"] is False
+    assert result["data"]["execution_started"] is False
+    assert "TOPSECRET" not in str(result)
+    assert not result.get("toolCall")
+
+
+@pytest.mark.parametrize("sheet_name", [None, "Sheet2"])
+def test_registered_upload_reaches_real_planner_without_implicit_import(owned, sheet_name):
+    context, _ = owned
+    completion = _reply_completion()
+    svc = _active_model_service(completion)
+    result = svc.process_chat(
+        "u1", "说明附件", context=context, file_context={"sheet_name": sheet_name}
+    )
+    assert result["success"] is True
+    evidence = completion.call_args.kwargs["context"]["file_context"]["verified_uploads"]
+    assert "paint" in evidence[0]["text"]
+    artifacts = result["data"]["artifacts"]
+    assert artifacts[0]["uri"] == ""
+    assert artifacts[0]["metadata"]["skip_dataset_ingest"] is True
+    assert not result.get("toolCall")

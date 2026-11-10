@@ -3,7 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useReviewedDocuments, type DocumentProposal, type DocumentReview, type DocumentSlice, type ReviewedDocument } from './useReviewedDocuments'
 
-const api = vi.hoisted(() => ({ reviewExcel: vi.fn(), previewReviewedIntake: vi.fn(), saveReviewedExcel: vi.fn(), refineReviewedExcel: vi.fn(), downloadClassificationSource: vi.fn() }))
+const api = vi.hoisted(() => ({ reviewExcel: vi.fn(), reviewedCandidateResult: vi.fn(), previewReviewedIntake: vi.fn(), reviewedIntakeStatus: vi.fn(), retryReviewedIntake: vi.fn(), saveReviewedExcel: vi.fn(), refineReviewedExcel: vi.fn(), downloadClassificationSource: vi.fn() }))
 const elt = vi.hoisted(() => ({ run: vi.fn() }))
 const runtime = vi.hoisted(() => ({ modId: '' }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
@@ -40,7 +40,7 @@ async function generated(id: string, name = '报价单') {
   return doc
 }
 async function selected(doc: ReviewedDocument, index = 0) {
-  controller.choose(doc, index); await flushPromises()
+  controller.choose(doc, index); void controller.prepare(doc); await flushPromises()
 }
 beforeEach(() => {
   vi.resetAllMocks(); runtime.modId = ''; scope = { live: true }; captureLive = true
@@ -56,6 +56,105 @@ beforeEach(() => {
 afterEach(() => { if (wrapper.exists()) wrapper.unmount(); vi.useRealTimers() })
 
 describe('reviewed document ownership and receipts', () => {
+  it('recovers a candidate completed after timeout without resending to the model', async () => {
+    api.reviewExcel.mockRejectedValue({ outcome_unknown: true })
+    const doc = await generated('late')
+    expect(doc.unknown).toBe(true)
+    expect(api.reviewExcel).toHaveBeenCalledWith(expect.any(FormData), { quiet: true })
+    api.reviewedCandidateResult.mockResolvedValue({ status: 'pending' })
+    await controller.recoverCandidate(doc)
+    expect(doc.unknown).toBe(true)
+    api.reviewedCandidateResult.mockResolvedValue({ status: 'complete', review: review('late-result') })
+    await controller.recoverCandidate(doc)
+    expect(doc.review?.review_id).toBe('late-result')
+    expect(doc.unknown).toBe(false)
+    expect(api.reviewExcel).toHaveBeenCalledTimes(1)
+    expect(api.reviewedCandidateResult).toHaveBeenCalledWith('late', 'classification-v1', 0)
+  })
+
+  it('automatically checks a timed-out candidate without repeating the model request', async () => {
+    vi.useFakeTimers()
+    try {
+      api.reviewExcel.mockRejectedValue({ outcome_unknown: true })
+      api.reviewedCandidateResult.mockResolvedValueOnce({ status: 'pending' }).mockResolvedValueOnce({ status: 'complete', review: review('finished') })
+      const doc = await generated('slow')
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(doc.unknown).toBe(true)
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(doc.review?.review_id).toBe('finished')
+      expect(api.reviewExcel).toHaveBeenCalledTimes(1)
+      expect(api.reviewedCandidateResult).toHaveBeenCalledTimes(2)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('offers explicit continuation when completed batches can be reused', async () => {
+    api.reviewExcel.mockRejectedValueOnce({ outcome_unknown: true })
+    const doc = await generated('partial')
+    api.reviewedCandidateResult.mockResolvedValue({ status: 'retryable' })
+    await controller.recoverCandidate(doc)
+    expect(doc.unknown).toBe(false)
+    expect(doc.error).toContain('剩余批次')
+    expect(api.reviewExcel).toHaveBeenCalledTimes(1)
+    await controller.generate(doc)
+    expect(api.reviewExcel).toHaveBeenCalledTimes(2)
+    expect(doc.review).toBeTruthy()
+  })
+  it('restores a saved candidate without starting a duplicate preview', async () => {
+    api.reviewedIntakeStatus.mockResolvedValue({ status: 'outcome_unknown' })
+    api.reviewExcel.mockResolvedValue({ ...review('saved'), saved_receipt: {
+      review_id: 'saved', proposal_version: 'saved-v1', candidate_id: 'saved-candidate-1', template_id: 'db:1',
+    } })
+    const doc = await generated('saved')
+    await flushPromises()
+    expect(controller.saved(doc)).toBe(true)
+    expect(doc.candidateIndex).toBe(1)
+    expect(doc.intakeError).toContain('结果待核对')
+    expect(api.previewReviewedIntake).not.toHaveBeenCalled()
+    api.retryReviewedIntake.mockResolvedValue({ success: true })
+    await controller.retryIntake(doc); await flushPromises()
+    expect(api.retryReviewedIntake).toHaveBeenCalledWith('saved')
+    expect(api.previewReviewedIntake).toHaveBeenCalledTimes(1)
+  })
+
+  it('restores the completed intake from the saved review', async () => {
+    const form = new FormData(); form.set('review_id', 'saved'); form.set('candidate_id', 'saved-candidate-1')
+    api.reviewExcel.mockResolvedValue({ ...review('saved'), saved_receipt: {
+      review_id: 'saved', proposal_version: 'saved-v1', candidate_id: 'saved-candidate-1', template_id: 'db:1',
+    } })
+    api.reviewedIntakeStatus.mockResolvedValue({ status: 'created', ...readyIntake(form) })
+    const doc = await generated('saved'); await flushPromises()
+    expect(doc.intake?.business.status).toBe('preview_ready')
+    expect(doc.intakePending).toBe(false)
+    expect(doc.intakeError).toBe('')
+    expect(api.previewReviewedIntake).not.toHaveBeenCalled()
+  })
+
+  it('keeps a degraded model preview visibly awaiting review', async () => {
+    const doc = await generated('degraded')
+    controller.choose(doc, 0)
+    api.previewReviewedIntake.mockImplementation(async (form: FormData) => {
+      const result = readyIntake(form)
+      return { intake: { ...result.intake, detection: { degraded: true }, knowledge: { ...result.intake.knowledge, degraded: true } } }
+    })
+    await controller.save(doc); await flushPromises()
+    expect(controller.saved(doc)).toBe(true)
+    expect(doc.intakePending).toBe(false)
+    expect(doc.intakeError).toContain('业务、知识模型分析未完成')
+    expect(doc.intake?.business.status).toBe('preview_ready')
+  })
+
+  it('checks the existing preview after an unknown response instead of resending', async () => {
+    const doc = await generated('recover')
+    controller.choose(doc, 0)
+    const form = new FormData(); form.set('review_id', 'review-recover'); form.set('candidate_id', 'review-recover-candidate-0')
+    api.previewReviewedIntake.mockRejectedValue({ outcome_unknown: true })
+    api.reviewedIntakeStatus.mockResolvedValue({ status: 'created', ...readyIntake(form) })
+    await controller.save(doc); await flushPromises()
+    expect(api.previewReviewedIntake).toHaveBeenCalledTimes(1)
+    expect(api.reviewedIntakeStatus).toHaveBeenCalledWith('review-recover')
+    expect(doc.intake?.business.status).toBe('preview_ready')
+  })
+
   it('keys records by classification, version, slice index and hash while preserving each actual reactive record', () => {
     const a = register('A'), same = register('A')
     expect(same).toBe(a)
@@ -101,7 +200,7 @@ describe('reviewed document ownership and receipts', () => {
     await controller.save(a)
     expect(controller.saved(a)).toBe(false); expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
     const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
-    expect([form.get('review_id'), form.get('candidate_id'), form.get('intake_run_id'), form.get('preview_revision')]).toEqual(['review-A', 'review-A-candidate-1', a.intake!.run_id, 'ready-revision'])
+    expect([form.get('review_id'), form.get('candidate_id'), form.get('intake_run_id'), form.get('preview_revision')]).toEqual(['review-A', 'review-A-candidate-1', null, null])
     response.resolve({ template_id: 'template-A' }); await task
     expect(controller.saved(a)).toBe(true); expect(controller.saved(b)).toBe(false)
     expect(a.receipts[0]).toMatchObject({ review_id: 'review-A', proposal_version: 'review-A-v1', candidate_id: 'review-A-candidate-1', template_id: 'template-A' })
@@ -210,7 +309,7 @@ describe('reviewed document ownership and receipts', () => {
   it('ignores old A preparation results after its candidate changes and keeps B intake independent', async () => {
     const a = await generated('A'), b = await generated('B', '采购合同'), response = deferred<ReturnType<typeof readyIntake>>()
     api.previewReviewedIntake.mockReturnValueOnce(response.promise)
-    controller.choose(a, 0)
+    controller.choose(a, 0); void controller.prepare(a)
     const oldForm = api.previewReviewedIntake.mock.calls[0][0] as FormData
     await selected(a, 1); await selected(b, 2)
     const currentA = a.intake!.run_id, currentB = b.intake!.run_id
@@ -250,7 +349,7 @@ describe('reviewed document ownership and receipts', () => {
     vi.useFakeTimers()
     const doc = await generated('A'), response = deferred<ReturnType<typeof readyIntake>>()
     api.previewReviewedIntake.mockReturnValueOnce(response.promise)
-    controller.choose(doc, 0); await flushPromises()
+    controller.choose(doc, 0); void controller.prepare(doc); await flushPromises()
     const stale = readyIntake(api.previewReviewedIntake.mock.calls[0][0] as FormData)
     stale.intake.business.status = 'previewing'; stale.intake.business.preview_revision = ''
     expect(doc.intakePending).toBe(true); expect(vi.getTimerCount()).toBe(0)
@@ -305,4 +404,302 @@ describe('reviewed document ownership and receipts', () => {
     register('C', '报价单', '甲客户.xlsx')
     expect(controller.resolve('整理甲客户的报价单')).toBeNull()
   })
+})
+
+
+it('saves the chosen template before starting background intake preparation', async () => {
+  const doc = await generated('save-first')
+  const pending = deferred<ReturnType<typeof readyIntake>>()
+  api.previewReviewedIntake.mockReturnValue(pending.promise)
+  controller.choose(doc, 0)
+  expect(api.previewReviewedIntake).not.toHaveBeenCalled()
+  expect(controller.canSave(doc)).toBe(true)
+  await controller.save(doc)
+  expect(controller.saved(doc)).toBe(true)
+  expect(doc.phase).toBe('')
+  expect(doc.intakePending).toBe(true)
+  const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
+  expect(form.get('template_only')).toBe('true')
+  expect(form.get('intake_run_id')).toBeNull()
+})
+
+function savedReview(id: string): DocumentReview {
+  const result = review(id)
+  result.saved_receipt = { review_id: id, proposal_version: result.proposal.version, candidate_id: result.proposal.candidates[0].id, template_id: 'already-saved' }
+  return result
+}
+
+it('converts an archived DOCX before generation and does not send the original binary', async () => {
+  const source = new Blob(['converted workbook'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  api.downloadClassificationSource.mockResolvedValue({ blob: async () => source })
+  const doc = register('word', '报价单', 'source.docx')
+  await controller.generate(doc)
+  expect(api.downloadClassificationSource).toHaveBeenCalledExactlyOnceWith('word')
+  const file = (api.reviewExcel.mock.calls[0][0] as FormData).get('file') as File
+  expect(file.name).toBe('source.xlsx')
+  expect(file.size).toBe(source.size)
+  expect(doc.review).not.toBeNull()
+})
+
+it('discards an archive conversion that resolves after its document is removed', async () => {
+  const response = deferred<{ blob: () => Promise<Blob> }>()
+  api.downloadClassificationSource.mockReturnValue(response.promise)
+  const doc = register('old', '报价单', 'source.xls')
+  const task = controller.generate(doc)
+  controller.prune('old', 'new-version', [])
+  const blob = vi.fn().mockResolvedValue(new Blob(['old']))
+  response.resolve({ blob }); await task
+  expect(blob).not.toHaveBeenCalled()
+  expect(api.reviewExcel).not.toHaveBeenCalled()
+})
+
+it('keeps unknown candidate results blocked and retries only the status lookup after a network error', async () => {
+  vi.useFakeTimers()
+  api.reviewExcel.mockRejectedValue({ outcome_unknown: true })
+  const doc = await generated('unknown')
+  api.reviewedCandidateResult.mockResolvedValueOnce({ status: 'unknown' }).mockRejectedValueOnce(new Error('status offline'))
+  await controller.recoverCandidate(doc)
+  expect(doc.error).toContain('尚未确认')
+  await controller.recoverCandidate(doc)
+  expect(doc.error).toBe('status offline')
+  expect(doc.phase).toBe(''); expect(doc.unknown).toBe(true)
+  api.reviewedCandidateResult.mockResolvedValue({ status: 'complete', review: review('recovered') })
+  await vi.advanceTimersByTimeAsync(15_000)
+  expect(doc.review?.review_id).toBe('recovered')
+  expect(api.reviewExcel).toHaveBeenCalledTimes(1)
+})
+
+it('ignores a recovered candidate arriving after session invalidation', async () => {
+  api.reviewExcel.mockRejectedValue({ outcome_unknown: true })
+  const doc = await generated('revoked'), response = deferred<{ status: string; review: DocumentReview }>()
+  api.reviewedCandidateResult.mockReturnValue(response.promise)
+  const task = controller.recoverCandidate(doc)
+  scope.live = false
+  response.resolve({ status: 'complete', review: review('other-session') }); await task
+  expect(doc.review).toBeNull()
+  expect(controller.canSave(doc)).toBe(false)
+})
+
+it('restores a saved receipt through running and queued intake states without resaving', async () => {
+  vi.useFakeTimers()
+  api.reviewExcel.mockResolvedValue(savedReview('saved-running'))
+  const ready = readyIntake(new FormData()).intake
+  api.reviewedIntakeStatus.mockResolvedValueOnce({ status: 'running' })
+    .mockResolvedValueOnce({ status: 'created', intake: { ...ready, business: { ...ready.business, status: 'queued' } } })
+    .mockResolvedValueOnce({ status: 'created', intake: ready })
+  const doc = await generated('saved-running'); await flushPromises()
+  expect(controller.saved(doc)).toBe(true); expect(doc.intakePending).toBe(true)
+  await vi.advanceTimersByTimeAsync(2000)
+  expect(doc.intakePending).toBe(true)
+  await vi.advanceTimersByTimeAsync(2000)
+  expect(doc.intakePending).toBe(false); expect(doc.intakeError).toBe('')
+  expect(doc.intake?.business.status).toBe('preview_ready')
+  expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+})
+
+it.each(['not_started', 'outcome_unknown'])('keeps a saved template separate from %s intake', async status => {
+  api.reviewExcel.mockResolvedValue(savedReview('saved-state'))
+  api.reviewedIntakeStatus.mockResolvedValue({ status })
+  const doc = await generated('saved-state'); await flushPromises()
+  expect(controller.saved(doc)).toBe(true)
+  expect(doc.intakePending).toBe(false)
+  expect(doc.intakeUnknown).toBe(status === 'outcome_unknown')
+  expect(doc.intakeError).toContain(status === 'not_started' ? '尚未开始' : '待核对')
+  expect(api.previewReviewedIntake).not.toHaveBeenCalled()
+})
+
+it('reports failed restoration and explicit retry errors without losing the saved receipt', async () => {
+  api.reviewExcel.mockResolvedValue(savedReview('saved-error'))
+  api.reviewedIntakeStatus.mockRejectedValue(new Error('lookup unavailable'))
+  const doc = await generated('saved-error'); await flushPromises()
+  expect(doc.intakeError).toBe('lookup unavailable'); expect(doc.intakePending).toBe(false)
+  doc.intakeUnknown = true
+  api.retryReviewedIntake.mockRejectedValue(new Error('retry denied'))
+  await controller.retryIntake(doc)
+  expect(doc.intakeError).toBe('retry denied'); expect(doc.intakeUnknown).toBe(true)
+  expect(controller.saved(doc)).toBe(true)
+  expect(api.previewReviewedIntake).not.toHaveBeenCalled()
+})
+
+it('explicitly resumes unknown intake and only then requests a new preview', async () => {
+  api.reviewExcel.mockResolvedValue(savedReview('resume-intake'))
+  api.reviewedIntakeStatus.mockResolvedValue({ status: 'outcome_unknown' })
+  const doc = await generated('resume-intake'); await flushPromises()
+  expect(doc.intakeUnknown).toBe(true)
+  api.retryReviewedIntake.mockResolvedValue({ status: 'retryable' })
+  await controller.retryIntake(doc); await flushPromises()
+  expect(api.retryReviewedIntake).toHaveBeenCalledExactlyOnceWith('resume-intake')
+  expect(api.previewReviewedIntake).toHaveBeenCalledTimes(1)
+  expect(doc.intakeUnknown).toBe(false); expect(doc.intakePending).toBe(false)
+})
+
+it('does not prepare a revoked document after a late intake retry succeeds', async () => {
+  api.reviewExcel.mockResolvedValue(savedReview('retry-late'))
+  api.reviewedIntakeStatus.mockResolvedValue({ status: 'outcome_unknown' })
+  const doc = await generated('retry-late'); await flushPromises()
+  const response = deferred<unknown>(); api.retryReviewedIntake.mockReturnValue(response.promise)
+  const task = controller.retryIntake(doc)
+  controller.reset(); response.resolve({}); await task
+  expect(api.previewReviewedIntake).not.toHaveBeenCalled()
+})
+
+it('stops polling a failed business preview and exposes its failure without saving', async () => {
+  vi.useFakeTimers()
+  api.previewReviewedIntake.mockImplementation(async (form: FormData) => {
+    const result = readyIntake(form); result.intake.business.status = 'queued'; return result
+  })
+  elt.run.mockResolvedValue({ status: 'failed', error: { message: 'invalid source' } })
+  const doc = await generated('failed-preview'); await selected(doc)
+  await vi.advanceTimersByTimeAsync(800)
+  expect(doc.intakePending).toBe(false); expect(doc.intakeError).toBe('invalid source')
+  expect(vi.getTimerCount()).toBe(0); expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+})
+
+it('reports a polling transport error and permits a deliberate fresh preparation', async () => {
+  vi.useFakeTimers()
+  api.previewReviewedIntake.mockImplementation(async (form: FormData) => {
+    const result = readyIntake(form); result.intake.business.status = 'previewing'; return result
+  })
+  elt.run.mockRejectedValue(new Error('poll offline'))
+  const doc = await generated('poll-error'); await selected(doc)
+  await vi.advanceTimersByTimeAsync(800)
+  expect(doc.intakeError).toBe('poll offline'); expect(doc.intakePending).toBe(false)
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it('keeps refinement errors visible and never appends an invalid or missing receipt', async () => {
+  const doc = await generated('bad-refine'), previous = doc.proposals.slice()
+  api.refineReviewedExcel.mockResolvedValueOnce({ proposal: proposal('bad-refine', 'v2') })
+  expect(await controller.refine(doc, '保留客户名称')).toBe(false)
+  expect(doc.error).toContain('整理回执待核对'); expect(doc.proposals).toEqual(previous)
+  api.refineReviewedExcel.mockRejectedValueOnce({ outcome_unknown: true })
+  expect(await controller.refine(doc, '保留价格')).toBe(false)
+  expect(doc.unknown).toBe(true); expect(doc.dirty).toBe(true)
+  expect(doc.error).toBe('模型整理未完成。'); expect(doc.phase).toBe('')
+})
+
+it('keeps only slices still present in a refreshed classification', () => {
+  const keep = register('prune', '报价单', 'a.xlsx', 'v1', 0), removed = register('prune', '报价单2', 'a.xlsx', 'v1', 1)
+  controller.prune('prune', 'v1', [keep.slice])
+  expect(controller.documents.value).toEqual([keep]); expect(controller.records.value[removed.key]).toBeUndefined()
+})
+
+it('does not restart recovery for a completed candidate or an expired capture', async () => {
+  const ready = await generated('ready')
+  await controller.recoverCandidate(ready)
+  expect(api.reviewedCandidateResult).not.toHaveBeenCalled()
+  api.reviewExcel.mockRejectedValue({ outcome_unknown: true })
+  const unknown = await generated('expired')
+  captureLive = false
+  await controller.recoverCandidate(unknown)
+  expect(api.reviewedCandidateResult).not.toHaveBeenCalled()
+})
+
+it('restores saved candidate intake after recovery and notifies the owner once', async () => {
+  wrapper.unmount()
+  const recovered = vi.fn()
+  wrapper = mount(defineComponent({ setup() {
+    controller = useReviewedDocuments({ capture: () => () => true, outcomeUnknown: () => true, saved, recovered })
+    return () => h('div')
+  } }))
+  api.reviewExcel.mockRejectedValue({ outcome_unknown: true })
+  const doc = await generated('saved-recovery')
+  api.reviewedCandidateResult.mockResolvedValue({ status: 'complete', review: savedReview('saved-recovery') })
+  api.reviewedIntakeStatus.mockResolvedValue({ status: 'not_started' })
+  await controller.recoverCandidate(doc); await flushPromises()
+  expect(recovered).toHaveBeenCalledExactlyOnceWith(doc)
+  expect(api.reviewedIntakeStatus).toHaveBeenCalledExactlyOnceWith('saved-recovery')
+  expect(controller.saved(doc)).toBe(true)
+})
+
+it('discards an archived workbook blob that finishes after scope revocation', async () => {
+  const body = deferred<Blob>()
+  api.downloadClassificationSource.mockResolvedValue({ blob: () => body.promise })
+  const doc = register('blob-stale', '报价单', 'a.xls'), task = controller.generate(doc)
+  await flushPromises(); scope.live = false
+  body.resolve(new Blob(['private'])); await task
+  expect(api.reviewExcel).not.toHaveBeenCalled()
+})
+
+it('leaves a saved template intact when its restoration fails business validation', async () => {
+  api.reviewExcel.mockResolvedValue(savedReview('failed-business'))
+  const intake = readyIntake(new FormData()).intake
+  api.reviewedIntakeStatus.mockResolvedValue({ status: 'created', intake: { ...intake, business: { ...intake.business, status: 'failed', error: { message: 'source rejected' } } } })
+  const doc = await generated('failed-business'); await flushPromises()
+  expect(doc.intakeError).toBe('source rejected'); expect(doc.intakePending).toBe(false)
+  expect(controller.saved(doc)).toBe(true)
+})
+
+it('ignores restoration returning after the saved document is removed', async () => {
+  api.reviewExcel.mockResolvedValue(savedReview('stale-restore'))
+  const pending = deferred<unknown>(); api.reviewedIntakeStatus.mockReturnValue(pending.promise)
+  const doc = await generated('stale-restore'); await flushPromises()
+  controller.reset(); pending.resolve({ status: 'created', intake: readyIntake(new FormData()).intake }); await flushPromises()
+  expect(doc.intake).toBeNull(); expect(controller.documents.value).toEqual([])
+})
+
+it('does not retry intake before saving, or after a new capture has expired', async () => {
+  const unsaved = await generated('unsaved')
+  await controller.retryIntake(unsaved)
+  api.reviewExcel.mockResolvedValue(savedReview('expired-retry'))
+  api.reviewedIntakeStatus.mockResolvedValue({ status: 'outcome_unknown' })
+  const doc = await generated('expired-retry'); await flushPromises()
+  captureLive = false
+  await controller.retryIntake(doc)
+  expect(api.retryReviewedIntake).not.toHaveBeenCalled()
+})
+
+it('does not restore a saved intake when the post-generation capture has expired', async () => {
+  const result = deferred<DocumentReview>(); api.reviewExcel.mockReturnValue(result.promise)
+  const doc = register('expired-restore'), task = controller.generate(doc)
+  captureLive = false; result.resolve(savedReview('expired-restore')); await task
+  expect(controller.saved(doc)).toBe(true)
+  expect(api.reviewedIntakeStatus).not.toHaveBeenCalled()
+})
+
+it('rejects an intake preview whose run and business record have different owners or identities', async () => {
+  const doc = await generated('wrong-intake')
+  api.previewReviewedIntake.mockImplementation(async (form: FormData) => {
+    const result = readyIntake(form); result.intake.business.id = 'different-run'; return result
+  })
+  await selected(doc)
+  expect(doc.intakeError).toBe('入库范围无法核实，请核对。')
+  expect(doc.intake).toBeNull(); expect(doc.intakePending).toBe(false)
+})
+
+it('does not start preparation when a freshly captured scope has expired', async () => {
+  const doc = await generated('prepare-expired')
+  controller.choose(doc, 0); captureLive = false
+  await controller.prepare(doc)
+  expect(api.previewReviewedIntake).not.toHaveBeenCalled()
+})
+
+it('recovers saved-template intake after an uncertain preparation without resubmitting it', async () => {
+  const doc = await generated('save-unknown'); controller.choose(doc, 0)
+  api.previewReviewedIntake.mockRejectedValue({ outcome_unknown: true })
+  api.reviewedIntakeStatus.mockResolvedValue({ status: 'outcome_unknown' })
+  await controller.save(doc); await flushPromises()
+  expect(controller.saved(doc)).toBe(true)
+  expect(doc.intakeUnknown).toBe(true)
+  expect(api.previewReviewedIntake).toHaveBeenCalledTimes(1)
+  expect(api.reviewedIntakeStatus).toHaveBeenCalledTimes(1)
+})
+
+it('shows saved-but-intake-failed separately instead of dropping the template receipt', async () => {
+  const doc = await generated('save-warning'); controller.choose(doc, 0)
+  api.saveReviewedExcel.mockResolvedValue({ template_id: 'stored', auto_ingest: { success: false, error: 'storage unavailable' } })
+  await controller.save(doc)
+  expect(controller.saved(doc)).toBe(true)
+  expect(doc.error).toBe('模板已保存，入库状态请核对。')
+})
+
+it('ignores refinement after the user switches to another proposal version', async () => {
+  const doc = await generated('refine-stale'), response = deferred<{ review_id: string; proposal: DocumentProposal }>()
+  api.refineReviewedExcel.mockReturnValue(response.promise)
+  const task = controller.refine(doc, '保留客户')
+  doc.proposals.push(proposal('replacement', 'other-version')); doc.selectedVersion = 1
+  response.resolve({ review_id: 'refine-stale', proposal: proposal('refine-stale', 'late-version') })
+  expect(await task).toBe(false)
+  expect(doc.proposals.map(item => item.version)).not.toContain('late-version')
+  expect(doc.requirements).toEqual([])
 })

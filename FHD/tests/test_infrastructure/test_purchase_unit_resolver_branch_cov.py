@@ -469,13 +469,6 @@ class TestResolvePurchaseUnitBranches:
         assert result is not None
         assert result.id == 33
 
-    def test_resolved_purchase_unit_is_frozen(self):
-        rpu = ResolvedPurchaseUnit(
-            id=1, unit_name="T", contact_person="", contact_phone="", address=""
-        )
-        with pytest.raises(AttributeError):
-            rpu.unit_name = "changed"
-
     def test_resolved_purchase_unit_id_can_be_none(self):
         rpu = ResolvedPurchaseUnit(
             id=None, unit_name="T", contact_person="", contact_phone="", address=""

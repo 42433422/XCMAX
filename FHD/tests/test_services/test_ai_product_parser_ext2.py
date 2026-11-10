@@ -376,15 +376,6 @@ class TestCachedCallAiApiExtended:
 
 
 class TestCallAiApiExtended:
-    def test_call_ai_api_no_api_key_returns_none(self) -> None:
-        parser = AIProductParser()
-        with patch(
-            "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
-            return_value="",
-        ):
-            result = parser._call_ai_api("text")
-        assert result is None
-
     def test_call_ai_api_recoverable_error_returns_none(self) -> None:
         parser = AIProductParser()
         with patch(

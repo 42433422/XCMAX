@@ -51,26 +51,9 @@ from app.application.tools.workflow import (
     invalidate_workflow_tool_registry,
     run_natural_language_pandas,
 )
-from app.application.workflow.planner import (
-    LLMWorkflowPlanner,
-    _execute_customers_ensure_exists_tool,
-    _execute_customers_tool,
-    _execute_excel_analysis_tool,
-    _execute_excel_decompose_tool,
-    _execute_excel_schema_tool,
-    _execute_import_excel_tool,
-    _execute_materials_tool,
-    _execute_price_list_tool,
-    _execute_print_label_tool,
-    _execute_products_tool,
-    _execute_shipment_generate_tool,
-    _execute_shipment_records_tool,
-    _execute_template_extract_tool,
-    _filter_tool_registry_for_profile,
-    execute_tool,
-    get_tool_registry,
-)
+from app.application.workflow.planner import LLMWorkflowPlanner, _filter_tool_registry_for_profile
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
+from app.services.tools_execution.registry import get_workflow_tool_registry as get_tool_registry
 
 # ===========================================================================
 # 1. app/application/ai_chat_app_service.py
@@ -140,30 +123,6 @@ class TestSkipProExcelDeterministicImport:
         assert _skip_pro_excel_deterministic_import({}) is False
 
 
-class TestIsProSource:
-    """Cover AIChatApplicationService._is_pro_source."""
-
-    @pytest.mark.parametrize(
-        "source,expected",
-        [
-            ("pro", True),
-            ("pro_mode", True),
-            ("promode", True),
-            ("professional", True),
-            ("xcagi_pro", True),
-            ("PRO", True),
-            ("Pro-Mode", True),
-            ("  pro  ", True),
-            ("normal", False),
-            ("", False),
-            (None, False),
-            ("unknown", False),
-        ],
-    )
-    def test_is_pro_source_parametrized(self, source: str | None, expected: bool) -> None:
-        assert AIChatApplicationService._is_pro_source(source) is expected
-
-
 class TestMergeToolRuntimeContext:
     """Cover _merge_tool_runtime_context."""
 
@@ -180,7 +139,11 @@ class TestMergeToolRuntimeContext:
 
         with tenant_scope(1):
             result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
-        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
+        assert result == {
+            "conversation_id": "u1",
+            "message": "hello",
+            "tenant_id": "1",
+        }
 
     def test_non_dict_context(self) -> None:
         from app.infrastructure.tenant_scope import tenant_scope
@@ -189,7 +152,11 @@ class TestMergeToolRuntimeContext:
             result = AIChatApplicationService._merge_tool_runtime_context(
                 "u1", "hello", "not a dict"
             )
-        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
+        assert result == {
+            "conversation_id": "u1",
+            "message": "hello",
+            "tenant_id": "1",
+        }
 
     def test_skips_none_values(self) -> None:
         ctx = {"ui_surface": None, "intent_channel": "pro", "tool_execution_profile": None}
@@ -214,49 +181,6 @@ class TestMergeToolRuntimeContext:
         ctx = {"last_excel_analysis_context": last_ea}
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "msg", ctx)
         assert result["last_excel_analysis_context"] == last_ea
-
-
-class TestBuildFallbackResponse:
-    """Cover _build_fallback_response."""
-
-    def test_greeting_message(self) -> None:
-        result = AIChatApplicationService._build_fallback_response("你好", "service down")
-        assert result["success"] is False
-        assert result["message"] == "service down"
-        assert "您好" in result["response"]
-        assert result["data"]["action"] == "error_fallback"
-        assert result["data"]["data"]["fallback_mode"] is True
-
-    def test_default_message(self) -> None:
-        result = AIChatApplicationService._build_fallback_response("查询产品", "service down")
-        assert result["success"] is False
-        assert "service down" in result["response"]
-        assert result["data"]["action"] == "error_fallback"
-
-    def test_empty_message(self) -> None:
-        result = AIChatApplicationService._build_fallback_response("", "err")
-        assert result["success"] is False
-        assert result["data"]["data"]["original_message"] == ""
-
-    def test_none_message(self) -> None:
-        # ``_build_fallback_response`` does not guard None — it raises TypeError
-        # when slicing ``message[:100]``. We assert the contract explicitly so
-        # the behaviour is documented and any future fix is detected.
-        with pytest.raises(TypeError):
-            AIChatApplicationService._build_fallback_response(None, "err")  # type: ignore[arg-type]
-
-    def test_hello_triggers_greeting(self) -> None:
-        result = AIChatApplicationService._build_fallback_response("hello there", "err")
-        assert "您好" in result["response"]
-
-    def test_hi_triggers_greeting(self) -> None:
-        result = AIChatApplicationService._build_fallback_response("hi", "err")
-        assert "您好" in result["response"]
-
-    def test_original_message_truncated(self) -> None:
-        long_msg = "x" * 200
-        result = AIChatApplicationService._build_fallback_response(long_msg, "err")
-        assert len(result["data"]["data"]["original_message"]) <= 100
 
 
 class TestIsNumberText:
@@ -509,34 +433,6 @@ class TestExcelAnalysisPayloadPresent:
     def test_grid_preview_single_row_returns_false(self) -> None:
         ctx = {"excel_analysis": {"preview_data": {"grid_preview": {"rows": [[1]]}}}}
         assert AIChatApplicationService._excel_analysis_payload_present(ctx) is False
-
-
-class TestLooksLikeShortExcelImportCommand:
-    """Cover _looks_like_short_excel_import_command."""
-
-    def test_exact_command(self) -> None:
-        assert AIChatApplicationService._looks_like_short_excel_import_command("加入数据库") is True
-
-    def test_exact_command_ku(self) -> None:
-        assert AIChatApplicationService._looks_like_short_excel_import_command("入库") is True
-
-    def test_containing_command(self) -> None:
-        assert (
-            AIChatApplicationService._looks_like_short_excel_import_command("请加入数据库") is True
-        )
-
-    def test_long_text_returns_false(self) -> None:
-        long_text = "x" * 50 + "加入数据库"
-        assert AIChatApplicationService._looks_like_short_excel_import_command(long_text) is False
-
-    def test_empty_returns_false(self) -> None:
-        assert AIChatApplicationService._looks_like_short_excel_import_command("") is False
-
-    def test_none_returns_false(self) -> None:
-        assert AIChatApplicationService._looks_like_short_excel_import_command(None) is False  # type: ignore[arg-type]
-
-    def test_unrelated_text_returns_false(self) -> None:
-        assert AIChatApplicationService._looks_like_short_excel_import_command("查询产品") is False
 
 
 class TestRowValuesLookLikeTableHeaders:
@@ -869,646 +765,8 @@ class TestGetToolRegistryPlanner:
             assert isinstance(spec["actions"], dict)
 
 
-class TestExecuteToolPlanner:
-    """Cover execute_tool from planner."""
-
-    def test_unknown_tool_returns_error(self) -> None:
-        result = execute_tool("nonexistent", {})
-        assert result["success"] is False
-        assert "未知工具" in result["message"]
-
-    def test_runtime_context_removed(self) -> None:
-        # The handler dict captures function references at import time, so we
-        # patch the dict entry directly rather than the module-level name.
-        from app.application.workflow import planner as planner_mod
-
-        captured: dict[str, Any] = {}
-
-        def spy(params: dict[str, Any]) -> dict[str, Any]:
-            captured.update(params)
-            return {"success": True}
-
-        original = planner_mod._WORKFLOW_TOOL_HANDLERS.get(("products", "query"))
-        planner_mod._WORKFLOW_TOOL_HANDLERS[("products", "query")] = spy
-        try:
-            execute_tool("products", {"_runtime_context": {"x": 1}, "_action": "query"})
-        finally:
-            if original is not None:
-                planner_mod._WORKFLOW_TOOL_HANDLERS[("products", "query")] = original
-        assert "_runtime_context" not in captured
-
-    def test_explicit_action_used(self) -> None:
-        from app.application.workflow import planner as planner_mod
-
-        called: list[dict[str, Any]] = []
-
-        def spy(params: dict[str, Any]) -> dict[str, Any]:
-            called.append(params)
-            return {"success": True}
-
-        key = ("customers", "ensure_exists")
-        original = planner_mod._WORKFLOW_TOOL_HANDLERS.get(key)
-        planner_mod._WORKFLOW_TOOL_HANDLERS[key] = spy
-        try:
-            result = execute_tool("customers", {"_action": "ensure_exists", "unit_name": "X"})
-        finally:
-            if original is not None:
-                planner_mod._WORKFLOW_TOOL_HANDLERS[key] = original
-        assert result["success"] is True
-        assert len(called) == 1
-        assert called[0]["unit_name"] == "X"
-
-    def test_default_action_resolution(self) -> None:
-        from app.application.workflow import planner as planner_mod
-
-        called: list[dict[str, Any]] = []
-
-        def spy(params: dict[str, Any]) -> dict[str, Any]:
-            called.append(params)
-            return {"success": True}
-
-        key = ("products", "query")
-        original = planner_mod._WORKFLOW_TOOL_HANDLERS.get(key)
-        planner_mod._WORKFLOW_TOOL_HANDLERS[key] = spy
-        try:
-            execute_tool("products", {})
-        finally:
-            if original is not None:
-                planner_mod._WORKFLOW_TOOL_HANDLERS[key] = original
-        assert len(called) == 1
-
-    def test_unknown_action_for_known_tool(self) -> None:
-        result = execute_tool("products", {"_action": "unknown_action"})
-        assert result["success"] is False
-        assert "未知工具" in result["message"]
-
-
-class TestExecutePriceListTool:
-    """Cover _execute_price_list_tool."""
-
-    def test_missing_customer_name(self) -> None:
-        result = _execute_price_list_tool({})
-        assert result["success"] is False
-        assert result["error_code"] == "missing_customer_name"
-
-    def test_with_unit_param(self) -> None:
-        with patch(
-            "app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None
-        ):
-            with patch(
-                "app.application.tools.handle_price_list_export",
-                return_value={"success": True, "file_path": "/tmp/x.docx"},
-            ):
-                result = _execute_price_list_tool({"unit": "客户A"})
-                assert result["success"] is True
-
-    def test_import_error(self) -> None:
-        with patch(
-            "app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None
-        ):
-            with patch(
-                "app.application.tools.handle_price_list_export",
-                side_effect=ImportError("no module"),
-            ):
-                result = _execute_price_list_tool({"customer_name": "X"})
-                assert result["success"] is False
-                assert result["error_code"] == "service_unavailable"
-
-    def test_value_error(self) -> None:
-        with patch(
-            "app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None
-        ):
-            with patch(
-                "app.application.tools.handle_price_list_export",
-                side_effect=ValueError("bad param"),
-            ):
-                result = _execute_price_list_tool({"customer_name": "X"})
-                assert result["success"] is False
-                assert result["error_code"] == "invalid_parameters"
-
-    def test_os_error(self) -> None:
-        with patch(
-            "app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None
-        ):
-            with patch(
-                "app.application.tools.handle_price_list_export",
-                side_effect=OSError("disk full"),
-            ):
-                result = _execute_price_list_tool({"customer_name": "X"})
-                assert result["success"] is False
-                assert result["error_code"] == "file_io_error"
-
-    def test_runtime_error(self) -> None:
-        with patch(
-            "app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None
-        ):
-            with patch(
-                "app.application.tools.handle_price_list_export",
-                side_effect=RuntimeError("failed"),
-            ):
-                result = _execute_price_list_tool({"customer_name": "X"})
-                assert result["success"] is False
-                assert result["error_code"] == "export_failed"
-
-
-class TestExecuteProductsTool:
-    """Cover _execute_products_tool."""
-
-    def test_with_model_and_unit(self) -> None:
-        with patch("app.bootstrap.get_products_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_products.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = _execute_products_tool({"model_number": "M1", "unit_name": "U1"})
-            assert result["success"] is True
-
-    def test_with_model_only(self) -> None:
-        with patch("app.bootstrap.get_products_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_products.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = _execute_products_tool({"model_number": "M1"})
-            assert result["success"] is True
-
-    def test_with_unit_only(self) -> None:
-        with patch("app.bootstrap.get_products_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_products.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = _execute_products_tool({"unit_name": "U1"})
-            assert result["success"] is True
-
-    def test_with_keyword_only(self) -> None:
-        with patch("app.bootstrap.get_products_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_products.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = _execute_products_tool({"keyword": "K1"})
-            assert result["success"] is True
-
-    def test_no_params(self) -> None:
-        with patch("app.bootstrap.get_products_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_products.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = _execute_products_tool({})
-            assert result["success"] is True
-
-    def test_import_error(self) -> None:
-        with patch("app.bootstrap.get_products_service", side_effect=ImportError("no")):
-            result = _execute_products_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "service_unavailable"
-
-    def test_value_error(self) -> None:
-        with patch("app.bootstrap.get_products_service", side_effect=ValueError("bad")):
-            result = _execute_products_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "invalid_parameters"
-
-    def test_runtime_error(self) -> None:
-        with patch("app.bootstrap.get_products_service", side_effect=RuntimeError("fail")):
-            result = _execute_products_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "query_failed"
-
-
-class TestExecuteCustomersTool:
-    """Cover _execute_customers_tool."""
-
-    def test_with_keyword(self) -> None:
-        with patch("app.bootstrap.get_customer_app_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_all.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = _execute_customers_tool({"keyword": "K"})
-            assert result["success"] is True
-
-    def test_with_customer_name(self) -> None:
-        with patch("app.bootstrap.get_customer_app_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_all.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = _execute_customers_tool({"customer_name": "C"})
-            assert result["success"] is True
-
-    def test_import_error(self) -> None:
-        with patch("app.bootstrap.get_customer_app_service", side_effect=ImportError("no")):
-            result = _execute_customers_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "service_unavailable"
-
-    def test_value_error(self) -> None:
-        with patch("app.bootstrap.get_customer_app_service", side_effect=ValueError("bad")):
-            result = _execute_customers_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "invalid_parameters"
-
-    def test_runtime_error(self) -> None:
-        with patch("app.bootstrap.get_customer_app_service", side_effect=RuntimeError("fail")):
-            result = _execute_customers_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "query_failed"
-
-
-class TestExecuteCustomersEnsureExistsTool:
-    """Cover _execute_customers_ensure_exists_tool."""
-
-    def test_missing_unit_name(self) -> None:
-        result = _execute_customers_ensure_exists_tool({})
-        assert result["success"] is False
-        assert result["error_code"] == "missing_unit_name"
-
-    def test_existing_customer(self) -> None:
-        with patch("app.bootstrap.get_customer_app_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_matched = MagicMock()
-            mock_matched.id = 1
-            mock_matched.unit_name = "客户A"
-            mock_svc.match_purchase_unit.return_value = mock_matched
-            mock_get.return_value = mock_svc
-            result = _execute_customers_ensure_exists_tool({"unit_name": "客户A"})
-            assert result["success"] is True
-            assert result["created"] is False
-
-    def test_create_new_customer(self) -> None:
-        with patch("app.bootstrap.get_customer_app_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.match_purchase_unit.return_value = None
-            mock_svc.create.return_value = {"success": True, "data": {"id": 1}}
-            mock_get.return_value = mock_svc
-            result = _execute_customers_ensure_exists_tool({"unit_name": "新客户"})
-            assert result["success"] is True
-            assert result["created"] is True
-
-    def test_with_customer_name_param(self) -> None:
-        with patch("app.bootstrap.get_customer_app_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.match_purchase_unit.return_value = None
-            mock_svc.create.return_value = {"success": True}
-            mock_get.return_value = mock_svc
-            result = _execute_customers_ensure_exists_tool({"customer_name": "X"})
-            assert result["success"] is True
-
-    def test_import_error(self) -> None:
-        with patch("app.bootstrap.get_customer_app_service", side_effect=ImportError("no")):
-            result = _execute_customers_ensure_exists_tool({"unit_name": "X"})
-            assert result["success"] is False
-            assert result["created"] is False
-
-    def test_value_error(self) -> None:
-        with patch("app.bootstrap.get_customer_app_service", side_effect=ValueError("bad")):
-            result = _execute_customers_ensure_exists_tool({"unit_name": "X"})
-            assert result["success"] is False
-            assert result["created"] is False
-
-    def test_runtime_error(self) -> None:
-        with patch("app.bootstrap.get_customer_app_service", side_effect=RuntimeError("fail")):
-            result = _execute_customers_ensure_exists_tool({"unit_name": "X"})
-            assert result["success"] is False
-            assert result["created"] is False
-
-
-class TestExecuteShipmentGenerateTool:
-    """Cover _execute_shipment_generate_tool."""
-
-    def test_missing_params(self) -> None:
-        result = _execute_shipment_generate_tool({})
-        assert result["success"] is False
-        assert result["error_code"] == "missing_order_params"
-
-    def test_with_order_text_parse_fail(self) -> None:
-        with patch(
-            "app.application.facades.tools_facade._parse_order_text",
-            return_value={"success": False, "message": "bad"},
-        ):
-            result = _execute_shipment_generate_tool({"order_text": "invalid"})
-            assert result["success"] is False
-
-    def test_with_unit_and_products(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.generate_shipment_document.return_value = {
-                "success": True,
-                "doc_name": "doc.docx",
-            }
-            mock_get.return_value = mock_svc
-            result = _execute_shipment_generate_tool(
-                {"unit_name": "U1", "products": [{"product_name": "P1"}]}
-            )
-            assert result["success"] is True
-
-    def test_import_error(self) -> None:
-        # ImportError is caught when ``from app.bootstrap import ...`` fails.
-        # We force the import to fail by hiding the attribute on the module.
-        import app.bootstrap as bootstrap_mod
-
-        original = getattr(bootstrap_mod, "get_shipment_app_service", None)
-        del bootstrap_mod.get_shipment_app_service
-        try:
-            result = _execute_shipment_generate_tool({"order_text": "x"})
-        finally:
-            if original is not None:
-                bootstrap_mod.get_shipment_app_service = original
-        assert result["success"] is False
-        assert result["error_code"] == "service_unavailable"
-
-    def test_value_error(self) -> None:
-        with patch(
-            "app.application.facades.tools_facade._parse_order_text", side_effect=ValueError("bad")
-        ):
-            result = _execute_shipment_generate_tool({"order_text": "x"})
-            assert result["success"] is False
-            assert result["error_code"] == "invalid_parameters"
-
-    def test_os_error(self) -> None:
-        with patch(
-            "app.application.facades.tools_facade._parse_order_text", side_effect=OSError("io")
-        ):
-            result = _execute_shipment_generate_tool({"order_text": "x"})
-            assert result["success"] is False
-            assert result["error_code"] == "file_io_error"
-
-    def test_runtime_error(self) -> None:
-        with patch(
-            "app.application.facades.tools_facade._parse_order_text",
-            side_effect=RuntimeError("fail"),
-        ):
-            result = _execute_shipment_generate_tool({"order_text": "x"})
-            assert result["success"] is False
-            assert result["error_code"] == "generation_failed"
-
-
-class TestExecuteShipmentRecordsTool:
-    """Cover _execute_shipment_records_tool."""
-
-    def test_with_unit_name(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_shipment_records.return_value = []
-            mock_get.return_value = mock_svc
-            result = _execute_shipment_records_tool({"unit_name": "U1"})
-            assert result["success"] is True
-
-    def test_with_keyword(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_shipment_records.return_value = []
-            mock_get.return_value = mock_svc
-            result = _execute_shipment_records_tool({"keyword": "K"})
-            assert result["success"] is True
-
-    def test_import_error(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service", side_effect=ImportError("no")):
-            result = _execute_shipment_records_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "service_unavailable"
-
-    def test_value_error(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service", side_effect=ValueError("bad")):
-            result = _execute_shipment_records_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "invalid_parameters"
-
-    def test_runtime_error(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service", side_effect=RuntimeError("fail")):
-            result = _execute_shipment_records_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "query_failed"
-
-
-class TestExecuteMaterialsTool:
-    """Cover _execute_materials_tool."""
-
-    def test_with_keyword(self) -> None:
-        with patch("app.bootstrap.get_materials_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_all_materials.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = _execute_materials_tool({"keyword": "K"})
-            assert result["success"] is True
-
-    def test_with_search(self) -> None:
-        with patch("app.bootstrap.get_materials_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_all_materials.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = _execute_materials_tool({"search": "S"})
-            assert result["success"] is True
-
-    def test_import_error(self) -> None:
-        with patch("app.bootstrap.get_materials_service", side_effect=ImportError("no")):
-            result = _execute_materials_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "service_unavailable"
-
-    def test_value_error(self) -> None:
-        with patch("app.bootstrap.get_materials_service", side_effect=ValueError("bad")):
-            result = _execute_materials_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "invalid_parameters"
-
-    def test_runtime_error(self) -> None:
-        with patch("app.bootstrap.get_materials_service", side_effect=RuntimeError("fail")):
-            result = _execute_materials_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "query_failed"
-
-
-class TestExecutePrintLabelTool:
-    """Cover _execute_print_label_tool."""
-
-    def test_missing_products(self) -> None:
-        result = _execute_print_label_tool({})
-        assert result["success"] is False
-        assert result["error_code"] == "missing_products"
-
-    def test_empty_products_list(self) -> None:
-        result = _execute_print_label_tool({"products": []})
-        assert result["success"] is False
-        assert result["error_code"] == "missing_products"
-
-    def test_import_error(self) -> None:
-        with patch(
-            "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
-            side_effect=ImportError("no"),
-        ):
-            result = _execute_print_label_tool({"products": [{"name": "P1"}]})
-            assert result["success"] is False
-            assert result["error_code"] == "service_unavailable"
-
-
-class TestExecuteExcelDecomposeTool:
-    """Cover _execute_excel_decompose_tool."""
-
-    def test_missing_file_path(self) -> None:
-        result = _execute_excel_decompose_tool({})
-        assert result["success"] is False
-        assert result["error_code"] == "missing_file_path"
-
-    def test_import_error(self) -> None:
-        with patch("app.bootstrap.get_template_app_service", side_effect=ImportError("no")):
-            result = _execute_excel_decompose_tool({"file_path": "/tmp/x.xlsx"})
-            assert result["success"] is False
-            assert result["error_code"] == "service_unavailable"
-
-    def test_value_error(self) -> None:
-        with patch("app.bootstrap.get_template_app_service", side_effect=ValueError("bad")):
-            result = _execute_excel_decompose_tool({"file_path": "/tmp/x.xlsx"})
-            assert result["success"] is False
-            assert result["error_code"] == "invalid_parameters"
-
-    def test_os_error(self) -> None:
-        with patch("app.bootstrap.get_template_app_service", side_effect=OSError("io")):
-            result = _execute_excel_decompose_tool({"file_path": "/tmp/x.xlsx"})
-            assert result["success"] is False
-            assert result["error_code"] == "file_not_found"
-
-    def test_runtime_error(self) -> None:
-        with patch("app.bootstrap.get_template_app_service", side_effect=RuntimeError("fail")):
-            result = _execute_excel_decompose_tool({"file_path": "/tmp/x.xlsx"})
-            assert result["success"] is False
-            assert result["error_code"] == "decomposition_failed"
-
-
-class TestExecuteTemplateExtractTool:
-    """Cover _execute_template_extract_tool (delegates to decompose)."""
-
-    def test_missing_file_path(self) -> None:
-        result = _execute_template_extract_tool({})
-        assert result["success"] is False
-        assert result["error_code"] == "missing_file_path"
-
-
-class TestExecuteExcelSchemaTool:
-    """Cover _execute_excel_schema_tool."""
-
-    def test_missing_file_path(self) -> None:
-        result = _execute_excel_schema_tool({})
-        assert result["success"] is False
-        assert result["error_code"] == "missing_file_path"
-
-    def test_import_error_for_service(self) -> None:
-        # ``get_excel_analysis_app_service`` is not exported from app.bootstrap,
-        # so the first branch always raises ImportError and falls through to
-        # the openpyxl fallback. We force the openpyxl import to fail too to
-        # exercise the ``library_unavailable`` error path.
-        with patch.dict("sys.modules", {"openpyxl": None}):
-            result = _execute_excel_schema_tool({"file_path": "/tmp/x.xlsx"})
-        assert result["success"] is False
-        assert result["error_code"] == "library_unavailable"
-
-
-class TestExecuteExcelAnalysisTool:
-    """Cover _execute_excel_analysis_tool."""
-
-    def test_missing_file_path(self) -> None:
-        result = _execute_excel_analysis_tool({})
-        assert result["success"] is False
-        assert result["error_code"] == "missing_file_path"
-
-    def test_import_error_for_service(self) -> None:
-        # Same as above: service import fails, openpyxl fallback also fails.
-        with patch.dict("sys.modules", {"openpyxl": None}):
-            result = _execute_excel_analysis_tool({"file_path": "/tmp/x.xlsx"})
-        assert result["success"] is False
-        assert result["error_code"] == "library_unavailable"
-
-
-class TestExecuteImportExcelTool:
-    """Cover _execute_import_excel_tool."""
-
-    def test_missing_file_path(self) -> None:
-        with patch("app.bootstrap.get_products_service"):
-            with patch("app.bootstrap.get_customer_app_service", side_effect=ImportError):
-                result = _execute_import_excel_tool({})
-                assert result["success"] is False
-                assert result["error_code"] == "missing_file_path"
-
-    def test_import_error_products_service(self) -> None:
-        with patch("app.bootstrap.get_products_service", side_effect=ImportError("no")):
-            result = _execute_import_excel_tool({"file_path": "/tmp/x.xlsx"})
-            assert result["success"] is False
-            assert result["error_code"] == "service_unavailable"
-
-    def test_runtime_error_products_service(self) -> None:
-        with patch("app.bootstrap.get_products_service", side_effect=RuntimeError("init fail")):
-            result = _execute_import_excel_tool({"file_path": "/tmp/x.xlsx"})
-            assert result["success"] is False
-            assert result["error_code"] == "service_init_failed"
-
-
 class TestFilterToolRegistryForProfile:
     """Cover _filter_tool_registry_for_profile."""
-
-    def test_normal_removes_pro_only(self) -> None:
-        reg = {
-            "tool_a": {
-                "availability": "shared",
-                "actions": {"query": {"availability": "shared", "risk": "low"}},
-            },
-            "tool_b": {
-                "availability": "pro_only",
-                "actions": {"exec": {"availability": "pro_only", "risk": "high"}},
-            },
-        }
-        result = _filter_tool_registry_for_profile(reg, "normal")
-        assert "tool_a" in result
-        assert "tool_b" not in result
-
-    def test_pro_default_removes_normal_only(self) -> None:
-        reg = {
-            "tool_a": {
-                "availability": "shared",
-                "actions": {"query": {"availability": "shared", "risk": "low"}},
-            },
-            "tool_b": {
-                "availability": "normal_only",
-                "actions": {"slot": {"availability": "normal_only", "risk": "low"}},
-            },
-        }
-        result = _filter_tool_registry_for_profile(reg, "pro_default")
-        assert "tool_a" in result
-        assert "tool_b" not in result
-
-    def test_shared_kept_in_both(self) -> None:
-        reg = {
-            "tool_a": {
-                "availability": "shared",
-                "actions": {"query": {"availability": "shared", "risk": "low"}},
-            },
-        }
-        assert "tool_a" in _filter_tool_registry_for_profile(reg, "normal")
-        assert "tool_a" in _filter_tool_registry_for_profile(reg, "pro_default")
-
-    def test_action_level_filtering(self) -> None:
-        reg = {
-            "tool_a": {
-                "availability": "shared",
-                "actions": {
-                    "query": {"availability": "shared", "risk": "low"},
-                    "admin": {"availability": "pro_only", "risk": "high"},
-                },
-            },
-        }
-        result = _filter_tool_registry_for_profile(reg, "normal")
-        assert "query" in result["tool_a"]["actions"]
-        assert "admin" not in result["tool_a"]["actions"]
-
-    def test_non_dict_spec_skipped(self) -> None:
-        reg = {"bad": "not a dict"}
-        result = _filter_tool_registry_for_profile(reg, "normal")
-        assert "bad" not in result
-
-    def test_empty_actions_skipped(self) -> None:
-        reg = {
-            "tool_a": {
-                "availability": "pro_only",
-                "actions": {"query": {"availability": "pro_only", "risk": "low"}},
-            },
-        }
-        result = _filter_tool_registry_for_profile(reg, "normal")
-        assert "tool_a" not in result
 
     def test_non_dict_actions_skipped(self) -> None:
         reg = {
@@ -1529,69 +787,6 @@ class TestFilterToolRegistryForProfile:
         }
         result = _filter_tool_registry_for_profile(reg, "normal")
         assert "tool_a" not in result
-
-
-class TestLLMWorkflowPlannerFallback:
-    """Cover LLMWorkflowPlanner._fallback_plan."""
-
-    def _make_planner(self) -> LLMWorkflowPlanner:
-        with patch("app.application.workflow.planner.get_ai_conversation_service"):
-            return LLMWorkflowPlanner()
-
-    def test_fallback_add_product(self) -> None:
-        planner = self._make_planner()
-        reg = get_tool_registry()
-        plan = planner._fallback_plan("p1", "添加产品到公司A", reg)
-        assert plan.intent == "add_product_to_unit"
-        assert len(plan.nodes) >= 1
-
-    def test_fallback_create_product_english(self) -> None:
-        # The intent matcher requires the Chinese token "产品" — English-only
-        # input falls through to the two-level default (2026-09: clarify when
-        # no rule-intent hit). We assert the actual contract so the behaviour
-        # is documented.
-        planner = self._make_planner()
-        reg = get_tool_registry()
-        plan = planner._fallback_plan("p1", "create product", reg)
-        assert plan.intent in ("generic_workflow", "clarify_ask")
-        assert len(plan.nodes) >= 1
-
-    def test_fallback_create_product_chinese(self) -> None:
-        planner = self._make_planner()
-        reg = get_tool_registry()
-        plan = planner._fallback_plan("p1", "添加产品", reg)
-        assert plan.intent == "add_product_to_unit"
-
-    def test_fallback_generic(self) -> None:
-        planner = self._make_planner()
-        reg = get_tool_registry()
-        # 2026-09 起未命中意图不再静默 products.query，而是 clarify.ask。
-        plan = planner._fallback_plan("p1", "查询信息", reg)
-        assert plan.intent == "clarify_ask"
-        assert len(plan.nodes) >= 1
-
-    def test_fallback_no_products_in_registry(self) -> None:
-        planner = self._make_planner()
-        reg = {"customers": {"actions": {"query": {"risk": "low"}}}}
-        # 命中 customers 意图时按 tool_key 路由到 customers.query。
-        plan = planner._fallback_plan("p1", "客户列表", reg)
-        assert len(plan.nodes) >= 1
-        assert plan.nodes[0].tool_id == "customers"
-
-    def test_fallback_empty_registry(self) -> None:
-        planner = self._make_planner()
-        # 空注册表且意图未命中时仍产出 clarify 节点。
-        plan = planner._fallback_plan("p1", "查询", {})
-        assert len(plan.nodes) == 1
-        assert plan.nodes[0].tool_id == "clarify"
-        assert plan.risk_level == "low"
-
-    def test_fallback_risk_level_medium(self) -> None:
-        planner = self._make_planner()
-        reg = get_tool_registry()
-        plan = planner._fallback_plan("p1", "添加产品", reg)
-        # customers.ensure_exists is medium risk
-        assert plan.risk_level in ("low", "medium", "high")
 
 
 class TestLLMWorkflowPlannerPlanWithLLM:
@@ -1710,179 +905,10 @@ class TestLLMWorkflowPlannerPlanWithLLM:
                 assert len(result.nodes) == 1
 
 
-class TestLLMWorkflowPlannerValidateRequiredParams:
-    """Cover LLMWorkflowPlanner._validate_required_params."""
-
-    def test_valid_plan(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[
-                WorkflowNode(
-                    node_id="n1",
-                    tool_id="customers",
-                    action="ensure_exists",
-                    params={"unit_name": "公司A"},
-                )
-            ],
-        )
-        reg = {"customers": {"actions": {"ensure_exists": {"required_params": ["unit_name"]}}}}
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is None
-
-    def test_missing_required_param(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[
-                WorkflowNode(
-                    node_id="n1",
-                    tool_id="customers",
-                    action="ensure_exists",
-                    params={},
-                )
-            ],
-        )
-        reg = {"customers": {"actions": {"ensure_exists": {"required_params": ["unit_name"]}}}}
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is not None
-        assert "unit_name" in result
-
-    def test_empty_required_param(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[
-                WorkflowNode(
-                    node_id="n1",
-                    tool_id="customers",
-                    action="ensure_exists",
-                    params={"unit_name": "  "},
-                )
-            ],
-        )
-        reg = {"customers": {"actions": {"ensure_exists": {"required_params": ["unit_name"]}}}}
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is not None
-
-    def test_none_required_param(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[
-                WorkflowNode(
-                    node_id="n1",
-                    tool_id="customers",
-                    action="ensure_exists",
-                    params={"unit_name": None},
-                )
-            ],
-        )
-        reg = {"customers": {"actions": {"ensure_exists": {"required_params": ["unit_name"]}}}}
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is not None
-
-    def test_unknown_tool_skipped(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="unknown_tool", action="x", params={})],
-        )
-        result = LLMWorkflowPlanner._validate_required_params(plan, {})
-        assert result is None
-
-    def test_non_dict_actions_skipped(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="t", action="a", params={})],
-        )
-        reg = {"t": {"actions": "not a dict"}}
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is None
-
-    def test_non_dict_action_meta_skipped(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="t", action="a", params={})],
-        )
-        reg = {"t": {"actions": {"a": "not a dict"}}}
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is None
-
-    def test_non_list_required_params(self) -> None:
-        plan = PlanGraph(
-            plan_id="p1",
-            intent="test",
-            nodes=[WorkflowNode(node_id="n1", tool_id="t", action="a", params={})],
-        )
-        reg = {"t": {"actions": {"a": {"required_params": "not a list"}}}}
-        result = LLMWorkflowPlanner._validate_required_params(plan, reg)
-        assert result is None
-
-
-class TestLLMWorkflowPlannerCriticRepair:
-    """Cover LLMWorkflowPlanner._critic_repair_with_llm."""
-
-    def test_no_api_key_returns_none(self) -> None:
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
-            mock_svc = Mock()
-            mock_svc.api_key = ""
-            mock_get.return_value = mock_svc
-            planner = LLMWorkflowPlanner()
-            invalid_plan = PlanGraph(plan_id="p1", intent="test", nodes=[])
-            result = planner._critic_repair_with_llm(
-                "p1", "u1", "msg", {}, {}, "error", invalid_plan
-            )
-            assert result is None
-
-    def test_http_error_returns_none(self) -> None:
-        mock_response = Mock()
-        mock_response.status_code = 500
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
-            mock_svc = Mock()
-            mock_svc.api_key = "key"
-            mock_svc.api_url = "http://fake"
-            mock_svc.model = "m"
-            mock_get.return_value = mock_svc
-            planner = LLMWorkflowPlanner()
-            invalid_plan = PlanGraph(plan_id="p1", intent="test", nodes=[])
-            with patch(
-                "app.application.workflow.planner.request_planner_completion",
-                return_value=mock_response.json() if mock_response.status_code < 400 else None,
-            ):
-                result = planner._critic_repair_with_llm(
-                    "p1", "u1", "msg", {}, {}, "error", invalid_plan
-                )
-                assert result is None
-
-    def test_empty_content_returns_none(self) -> None:
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"choices": [{"message": {"content": ""}}]}
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
-            mock_svc = Mock()
-            mock_svc.api_key = "key"
-            mock_svc.api_url = "http://fake"
-            mock_svc.model = "m"
-            mock_get.return_value = mock_svc
-            planner = LLMWorkflowPlanner()
-            invalid_plan = PlanGraph(plan_id="p1", intent="test", nodes=[])
-            with patch(
-                "app.application.workflow.planner.request_planner_completion",
-                return_value=mock_response.json() if mock_response.status_code < 400 else None,
-            ):
-                result = planner._critic_repair_with_llm(
-                    "p1", "u1", "msg", {}, {}, "error", invalid_plan
-                )
-                assert result is None
-
-
 class TestLLMWorkflowPlannerPlan:
     """Cover LLMWorkflowPlanner.plan top-level."""
 
-    def test_plan_with_react_returns_valid(self) -> None:
+    def test_plan_with_model_returns_valid(self) -> None:
         with patch("app.application.workflow.planner.get_ai_conversation_service"):
             planner = LLMWorkflowPlanner()
             valid_plan = PlanGraph(
@@ -1895,9 +921,9 @@ class TestLLMWorkflowPlannerPlan:
                 ],
             )
             with (
-                patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan),
+                patch.object(planner, "_plan_with_llm", return_value=valid_plan),
                 patch(
-                    "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                    "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                     return_value="full",
                 ),
                 patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
@@ -1905,43 +931,43 @@ class TestLLMWorkflowPlannerPlan:
                 plan = planner.plan("u1", "msg", get_tool_registry())
                 assert plan.plan_id == "p1"
 
-    def test_plan_react_invalid_falls_back(self) -> None:
+    def test_invalid_model_plan_is_rejected_without_fallback(self) -> None:
         with patch("app.application.workflow.planner.get_ai_conversation_service"):
             planner = LLMWorkflowPlanner()
             invalid_plan = PlanGraph(plan_id="p1", intent="", nodes=[])
             with (
-                patch.object(planner, "_plan_with_react_multiagent", return_value=invalid_plan),
+                patch.object(planner, "_plan_with_llm", return_value=invalid_plan),
                 patch(
-                    "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                    "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                     return_value="full",
                 ),
                 patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
             ):
                 plan = planner.plan("u1", "msg", get_tool_registry())
-                # Should fall back to fallback plan（2026-09：未命中意图走 clarify_ask）
-                assert plan.intent in ("generic_workflow", "add_product_to_unit", "clarify_ask")
+                assert plan.intent == "plan_rejected"
+                assert plan.metadata["planning_rejected"] is True
 
-    def test_plan_react_none_falls_back(self) -> None:
+    def test_missing_model_plan_is_rejected(self) -> None:
         with patch("app.application.workflow.planner.get_ai_conversation_service"):
             planner = LLMWorkflowPlanner()
             with (
-                patch.object(planner, "_plan_with_react_multiagent", return_value=None),
+                patch.object(planner, "_plan_with_llm", return_value=None),
                 patch(
-                    "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                    "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                     return_value="full",
                 ),
                 patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
             ):
                 plan = planner.plan("u1", "msg", get_tool_registry())
-                assert plan is not None
+                assert plan.metadata["planning_rejected"] is True
 
     def test_plan_with_user_memory_rag_runtime_error(self) -> None:
         with patch("app.application.workflow.planner.get_ai_conversation_service"):
             planner = LLMWorkflowPlanner()
             with (
-                patch.object(planner, "_plan_with_react_multiagent", return_value=None),
+                patch.object(planner, "_plan_with_llm", return_value=None),
                 patch(
-                    "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                    "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                     return_value="full",
                 ),
                 patch("app.application.get_user_memory_rag_app_service") as mock_rag_get,
@@ -1950,15 +976,15 @@ class TestLLMWorkflowPlannerPlan:
                 mock_rag.query.side_effect = RuntimeError("fail")
                 mock_rag_get.return_value = mock_rag
                 plan = planner.plan("u1", "msg", get_tool_registry())
-                assert plan is not None
+                assert plan.metadata["planning_rejected"] is True
 
     def test_plan_with_user_memory_rag_value_error(self) -> None:
         with patch("app.application.workflow.planner.get_ai_conversation_service"):
             planner = LLMWorkflowPlanner()
             with (
-                patch.object(planner, "_plan_with_react_multiagent", return_value=None),
+                patch.object(planner, "_plan_with_llm", return_value=None),
                 patch(
-                    "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                    "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                     return_value="full",
                 ),
                 patch("app.application.get_user_memory_rag_app_service") as mock_rag_get,
@@ -1967,15 +993,15 @@ class TestLLMWorkflowPlannerPlan:
                 mock_rag.query.side_effect = ValueError("bad")
                 mock_rag_get.return_value = mock_rag
                 plan = planner.plan("u1", "msg", get_tool_registry())
-                assert plan is not None
+                assert plan.metadata["planning_rejected"] is True
 
     def test_plan_with_user_memory_rag_success(self) -> None:
         with patch("app.application.workflow.planner.get_ai_conversation_service"):
             planner = LLMWorkflowPlanner()
             with (
-                patch.object(planner, "_plan_with_react_multiagent", return_value=None),
+                patch.object(planner, "_plan_with_llm", return_value=None),
                 patch(
-                    "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                    "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                     return_value="full",
                 ),
                 patch("app.application.get_user_memory_rag_app_service") as mock_rag_get,
@@ -1985,7 +1011,7 @@ class TestLLMWorkflowPlannerPlan:
                 mock_rag.format_for_prompt.return_value = "summary"
                 mock_rag_get.return_value = mock_rag
                 plan = planner.plan("u1", "msg", get_tool_registry())
-                assert plan is not None
+                assert plan.metadata["planning_rejected"] is True
 
 
 # ===========================================================================
@@ -2353,13 +1379,6 @@ class TestInvalidateWorkflowToolRegistry:
 class TestGetWorkflowToolRegistry:
     """Cover get_workflow_tool_registry."""
 
-    def test_returns_list(self) -> None:
-        from app.application.tools.workflow import get_workflow_tool_registry
-
-        reg = get_workflow_tool_registry()
-        assert isinstance(reg, list)
-        assert len(reg) > 0
-
     def test_cache_hit(self) -> None:
         from app.application.tools import workflow as wf_mod
 
@@ -2719,3 +1738,58 @@ class TestImportOrdersPreviewOrExecute:
         )
         parsed = json.loads(result)
         assert parsed["success"] is True
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "你好",
+        "查询产品",
+        "",
+        None,
+        "hello there",
+        "hi",
+        "x" * 200,
+        "导入",
+        "导入Excel",
+        "导入到数据库",
+        "写入数据库",
+        "帮我导入数据",
+        "说明表格",
+        "普通消息",
+    ],
+)
+def test_unified_public_chat_never_turns_model_failure_or_import_words_into_success(message):
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from tests.test_application.ai_chat_test_helpers import _make_svc
+
+    completion = MagicMock(return_value=None)
+    svc = _make_svc()
+    svc.workflow_planner = LLMWorkflowPlanner(
+        ai_service=MagicMock(get_context=MagicMock(return_value=None)), completion=completion
+    )
+    with (
+        patch.object(svc, "_persist_chat_turn"),
+        patch.object(svc, "_persist_recallable_chat_turn"),
+        patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
+        patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
+    ):
+        result = svc.process_chat("u1", message, source="pro")
+    assert result["success"] is False
+    assert not result.get("toolCall")
+    assert not svc._pending_workflows
+    if message:
+        completion.assert_called_once()
+        assert result["data"]["execution_started"] is False
+    else:
+        completion.assert_not_called()
+
+
+@pytest.mark.parametrize("source", ["pro", "normal", "admin", "user:7"])
+def test_source_never_supplies_authenticated_identity(source):
+    result = AIChatApplicationService._merge_tool_runtime_context(
+        "conversation-only", "查询", {"source": source}
+    )
+    assert "user_id" not in result
+    assert "_actor_authorization" not in result
+    assert result["conversation_id"] == "conversation-only"

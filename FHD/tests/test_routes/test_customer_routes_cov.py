@@ -18,6 +18,7 @@ from app.fastapi_routes.domains.customer.customer_routes import (
     _execute_customers_route_action,
     router,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # TestClient fixture
@@ -25,11 +26,15 @@ from app.fastapi_routes.domains.customer.customer_routes import (
 
 
 @pytest.fixture()
-def client():
+def client(request, monkeypatch):
+    actor = None
+    if "delete" in request.node.name:
+        actor = request.getfixturevalue("trusted_actor")(tenant_id=7, role="admin")
+        monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     app = FastAPI()
     # Minimal mocking: patch publish_route_event decorator at router level
     app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, headers=actor.headers if actor else {}, raise_server_exceptions=False)
 
 
 # ---------------------------------------------------------------------------
@@ -165,56 +170,56 @@ class TestExecuteCustomersRouteAction:
         assert result["success"] is False
         assert "不能为空" in result["message"]
 
-    def test_delete_success(self):
-        with patch("app.fastapi_routes.domains.customer.customer_routes._customer_delete_unified"):
-            result = _execute_customers_route_action("delete", {"id": 10})
+    @pytest.mark.parametrize(
+        ("action", "params", "ids"),
+        [
+            ("delete", {"id": 10}, [10]),
+            ("batch_delete", {"ids": [1, 2, 3]}, [1, 2, 3]),
+        ],
+    )
+    def test_delete_delegates_one_atomic_batch(self, action, params, ids):
+        service = MagicMock()
+        service.batch_delete.return_value = {"success": True, "deleted_count": len(ids)}
+        with patch("app.application.get_customer_app_service", return_value=service):
+            result = _execute_customers_route_action(action, params)
         assert result["success"] is True
+        assert result["deleted"] == len(ids)
+        service.batch_delete.assert_called_once_with(ids)
 
-    def test_delete_no_id(self):
-        result = _execute_customers_route_action("delete", {"id": 0})
+    @pytest.mark.parametrize(
+        ("action", "params"),
+        [
+            ("delete", {"id": 0}),
+            ("batch_delete", {"ids": []}),
+            ("batch_delete", {"ids": "bad"}),
+            ("batch_delete", {"ids": [1, "abc", 2]}),
+            ("batch_delete", {"ids": [1, True]}),
+        ],
+    )
+    def test_invalid_batch_rejects_all_before_service(self, action, params):
+        with patch("app.application.get_customer_app_service") as service:
+            result = _execute_customers_route_action(action, params)
         assert result["success"] is False
+        assert result["deleted_count"] == 0
+        service.assert_not_called()
 
-    def test_batch_delete_success(self):
-        with patch("app.fastapi_routes.domains.customer.customer_routes._customer_delete_unified"):
-            result = _execute_customers_route_action("batch_delete", {"ids": [1, 2, 3]})
-        assert result["success"] is True
-        assert result["deleted"] == 3
-
-    def test_batch_delete_empty_ids(self):
-        result = _execute_customers_route_action("batch_delete", {"ids": []})
-        assert result["success"] is False
-
-    def test_batch_delete_non_list(self):
-        result = _execute_customers_route_action("batch_delete", {"ids": "bad"})
-        assert result["success"] is False
-
-    def test_batch_delete_invalid_id_skipped(self):
-        with patch("app.fastapi_routes.domains.customer.customer_routes._customer_delete_unified"):
-            result = _execute_customers_route_action("batch_delete", {"ids": [1, "abc", 2]})
-        assert result["deleted"] == 2
-        assert "abc" in result["skipped"]
-
-    def test_batch_delete_404_http_exception_skipped(self):
-        def _raise_404(cid):
-            if cid == 2:
-                raise HTTPException(status_code=404)
-
-        with patch(
-            "app.fastapi_routes.domains.customer.customer_routes._customer_delete_unified",
-            side_effect=_raise_404,
-        ):
+    def test_missing_customer_result_does_not_partially_delete(self):
+        service = MagicMock()
+        service.batch_delete.return_value = {
+            "success": False,
+            "deleted_count": 0,
+            "message": "客户不存在",
+        }
+        with patch("app.application.get_customer_app_service", return_value=service):
             result = _execute_customers_route_action("batch_delete", {"ids": [1, 2]})
-        assert result["deleted"] == 1
-        assert "2" in result["skipped"]
+        assert result["success"] is False
+        assert result["deleted"] == 0
+        service.batch_delete.assert_called_once_with([1, 2])
 
-    def test_batch_delete_non_404_raises(self):
-        def _raise_500(cid):
-            raise HTTPException(status_code=500)
-
-        with patch(
-            "app.fastapi_routes.domains.customer.customer_routes._customer_delete_unified",
-            side_effect=_raise_500,
-        ):
+    def test_batch_delete_service_error_propagates(self):
+        service = MagicMock()
+        service.batch_delete.side_effect = HTTPException(status_code=500)
+        with patch("app.application.get_customer_app_service", return_value=service):
             with pytest.raises(HTTPException):
                 _execute_customers_route_action("batch_delete", {"ids": [1]})
 

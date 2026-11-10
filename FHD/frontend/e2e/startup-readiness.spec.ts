@@ -9,6 +9,25 @@ test.describe('First usable workspace readiness', () => {
   test.skip(isFullStack(), 'deterministic synthetic API and resource fault injection')
   test.describe.configure({ timeout: 90_000 })
 
+  test('static reload recovers a missing SPA entry and hands controls to the mounted app', async ({ page }) => {
+    await installStartupReadinessMocks(page)
+    let entryBlocked = true, documents = 0
+    page.on('request', request => { if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documents++ })
+    await page.route('**/src/main.ts', route => entryBlocked ? route.abort('failed') : route.continue())
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('#app')).toHaveAttribute('data-startup-mounted', 'false')
+    await expect(page.locator('#startup-reload')).toBeVisible()
+    await expect(overlay(page)).toHaveCount(0)
+    const beforeReload = documents
+    entryBlocked = false
+    await page.locator('#startup-reload').click()
+    await expect.poll(() => documents).toBeGreaterThan(beforeReload)
+    await expect(page.locator('#app')).toHaveAttribute('data-startup-mounted', 'true', { timeout: 25_000 })
+    await expect(page.locator('#startup-reload')).toHaveCount(0)
+    await expect(overlay(page)).toHaveCount(0, { timeout: 25_000 })
+    await expect(page.locator('#messageInput')).toBeVisible()
+  })
+
   test('cold and warm startup allow typing only after readiness', async ({ page }) => {
     await installStartupReadinessMocks(page)
     const errors: string[] = []
@@ -84,7 +103,7 @@ test.describe('First usable workspace readiness', () => {
     expect(await page.evaluate(() => document.fonts.check('14px FontAwesome', '\uf015'))).toBe(true)
   })
 
-  test('timeout exposes recovery and a late resource cannot dismiss the error', async ({ page }) => {
+  test('slow resources stay pending until cancellation, and late completion cannot admit the old attempt', async ({ page }) => {
     await installStartupReadinessMocks(page)
     const gate = deferred()
     await page.route(/fontawesome-webfont\.(woff2|woff|ttf)(\?|$)/, async route => {
@@ -94,17 +113,24 @@ test.describe('First usable workspace readiness', () => {
     try {
       await page.goto('/', { waitUntil: 'domcontentloaded' })
       await expect(overlay(page)).toContainText('正在准备图标和页面', { timeout: 20_000 })
-      const started = Date.now()
-      await expect(overlay(page)).toHaveAttribute('data-state', 'error', { timeout: 25_000 })
-      await expect(overlay(page)).toContainText('超时')
+      // Beyond the former deadline: a slow resource is not an authentication failure.
+      await page.waitForTimeout(21_000)
+      await expect(overlay(page)).toHaveAttribute('data-state', 'loading')
       await expect(workspace(page)).toHaveAttribute('inert')
-      test.info().annotations.push({ type: 'synthetic-linux-chromium', description: `font wait reached recoverable deadline after ${Date.now() - started}ms` })
+      await expect(page.locator('.app-shell.is-ready')).toHaveCount(0)
+      await overlay(page).getByRole('button', { name: '取消', exact: true }).click()
+      await expect(page.locator('#lv-username')).toBeVisible()
+      gate.release()
+      await page.waitForTimeout(200)
+      await expect(page.locator('#lv-username')).toBeVisible()
+      await expect(page.locator('#messageInput')).toHaveCount(0)
+      await page.locator('#lv-username').fill('startup-test')
+      await page.locator('#lv-password').fill('Synthetic@2026')
+      await page.locator('.login-submit').click()
+      await expect(overlay(page)).toHaveCount(0, { timeout: 25_000 })
+      await expect(page.locator('#messageInput')).toBeVisible({ timeout: 25_000 })
+      await page.locator('#messageInput').fill('recovered after cancellation')
     } finally { gate.release() }
-    await page.waitForTimeout(200)
-    await expect(overlay(page)).toHaveAttribute('data-state', 'error')
-    await overlay(page).getByRole('button', { name: '重试', exact: true }).click()
-    await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
-    await expect(overlay(page)).toHaveCount(0)
   })
 
   test('a required failure stays blocked through repeated retries, then recovers', async ({ page }) => {

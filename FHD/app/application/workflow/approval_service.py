@@ -128,8 +128,10 @@ class ApprovalService:
         runtime_context: dict[str, Any] | None = None,
         plan: PlanGraph | None = None,
         require_persistence: bool = False,
+        title: str | None = None,
+        request_id: str | None = None,
     ) -> ApprovalRequest:
-        request_id = uuid.uuid4().hex
+        request_id = request_id or uuid.uuid4().hex
         request = ApprovalRequest(
             request_id=request_id,
             plan_id=plan_id,
@@ -141,6 +143,18 @@ class ApprovalService:
             created_at=datetime.now(),
             tenant_id=_tenant_from_context(runtime_context),
         )
+        logger.info("创建审批请求: %s for %s.%s", request_id, node.tool_id, node.action)
+
+        # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）。
+        # 携带 plan 使持久化层能写入绑定 request_no 的可靠工作流快照，供重启后重建/续跑。
+        from app.application.workflow.approval_persistence import freeze_approval_plan
+
+        plan = freeze_approval_plan(plan, request.node_id)
+        metadata = self._persist_request_to_db(
+            request, runtime_context=runtime_context, plan=plan, title=title
+        )
+        if metadata is None and require_persistence:
+            raise RuntimeError("审批请求未能持久化，已阻止数据库写入")
         self._pending_requests[request_id] = request
         if plan is not None:
             self._pending_workflows[request_id] = {
@@ -148,15 +162,6 @@ class ApprovalService:
                 "runtime_context": runtime_context or {},
                 "plan_id": plan_id,
             }
-        logger.info("创建审批请求: %s for %s.%s", request_id, node.tool_id, node.action)
-
-        # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）。
-        # 携带 plan 使持久化层能写入绑定 request_no 的可靠工作流快照，供重启后重建/续跑。
-        metadata = self._persist_request_to_db(request, runtime_context=runtime_context, plan=plan)
-        if metadata is None and require_persistence:
-            self._pending_requests.pop(request_id, None)
-            self._pending_workflows.pop(request_id, None)
-            raise RuntimeError("审批请求未能持久化，已阻止数据库写入")
         if metadata is not None:
             self._request_metadata[request_id] = metadata
         return request
@@ -167,6 +172,7 @@ class ApprovalService:
         runtime_context: dict[str, Any] | None = None,
         *,
         plan: PlanGraph | None = None,
+        title: str | None = None,
     ) -> dict[str, Any] | None:
         """将内存审批请求写入 DB approval_requests 表（幂等且外键完整）。
 
@@ -180,6 +186,7 @@ class ApprovalService:
             runtime_context,
             flow_key=self._AI_WORKFLOW_FLOW_KEY,
             plan=plan,
+            title=title,
         )
 
     def get_request_metadata(self, request_id: str) -> dict[str, Any] | None:
@@ -210,19 +217,29 @@ class ApprovalService:
         pending = self._pending_workflows.get(request_id)
         if pending is None:
             return False
+        from app.application.workflow.approval_persistence import persist_agent_run_link
+
+        if not persist_agent_run_link(
+            request_id, agent_run_id=agent_run_id, approved_step_id=approved_step_id
+        ):
+            return False
         pending["agent_run_id"] = str(agent_run_id or "").strip()
         pending["approved_step_id"] = str(approved_step_id or "").strip()
         metadata = self._request_metadata.get(request_id)
         if metadata is not None:
             metadata["agent_run_id"] = str(agent_run_id or "").strip()
-        from app.application.workflow.approval_persistence import persist_agent_run_link
-
-        persist_agent_run_link(
-            request_id,
-            agent_run_id=agent_run_id,
-            approved_step_id=approved_step_id,
-        )
         return True
+
+    def note_observed_legacy_run(self, request_id: str, run_id: str) -> None:
+        """Remember the chat trace that is waiting. Do not treat it as the executable run."""
+        pending = self._pending_workflows.get(str(request_id or "").strip())
+        observed = str(run_id or "").strip()
+        if not isinstance(pending, dict) or not observed or pending.get("agent_run_id"):
+            return
+        pending["observed_run_id"] = observed
+        from app.application.workflow.approval_persistence import persist_observed_run_link
+
+        persist_observed_run_link(str(request_id or "").strip(), observed_run_id=observed)
 
     def remove_pending_workflow(self, request_id: str) -> dict[str, Any] | None:
         return self._pending_workflows.pop(request_id, None)
@@ -339,6 +356,7 @@ def process_approval_timeouts() -> dict[str, Any]:
     """
     results: list[dict] = []
     try:
+        from datetime import UTC
         from datetime import datetime as _dt
 
         from sqlalchemy import and_
@@ -346,7 +364,7 @@ def process_approval_timeouts() -> dict[str, Any]:
         from app.db.models.approval import ApprovalFlow, ApprovalRequest, ApprovalStatus
         from app.db.session import get_db
 
-        now = _dt.utcnow()
+        now = _dt.now(UTC).replace(tzinfo=None)
         with get_db() as db:
             expired = (
                 db.query(ApprovalRequest)

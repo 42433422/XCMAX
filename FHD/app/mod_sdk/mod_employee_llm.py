@@ -364,20 +364,31 @@ async def mod_employee_complete(
         if messages_have_image_parts(messages):
             route = resolve_vlm_route()
             if route.get("ok"):
-                kwargs["provider"] = route.get("provider")
+                route_provider = str(route.get("provider") or "")
+                if route_provider and route_provider != str(
+                    getattr(active_provider, "provider_id", "")
+                ):
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": "视觉模型提供方不可用，请检查配置",
+                    }
                 kwargs["model"] = route.get("model")
     except RECOVERABLE_ERRORS:
         pass
 
     try:
-        deepseek_raw: dict[str, Any] | None = await svc.call_deepseek_api(
+        from app.infrastructure.llm.invoke import chat_completion_openai_format
+
+        deepseek_raw = await chat_completion_openai_format(
             messages,
+            provider=active_provider,
             temperature=float(temperature),
             max_tokens=int(max_tokens),
             **kwargs,
         )
     except RECOVERABLE_ERRORS:
-        logger.exception("mod_employee_complete: call_deepseek_api 异常")
+        logger.exception("mod_employee_complete: host provider call failed")
         return {"success": False, "content": "", "error": "LLM service unavailable"}
 
     if not deepseek_raw:

@@ -36,6 +36,25 @@ def discard_stored_upload(path: Path) -> None:
     path.unlink(missing_ok=True)
 
 
+def register_chat_upload(user, filename: str, content_type: str | None, stream: BinaryIO):
+    """Create an owned immutable copy from an authenticated upload, never a client path."""
+    from app.application.elt import get_elt_service
+    from app.db.session import get_db
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    owner, tenant = getattr(user, "id", None), getattr(user, "tenant_id", None)
+    if not owner or not tenant:
+        raise EltError("ELT_USER_REQUIRED", "需要登录并具有租户上下文", status_code=401)
+    with tenant_scope(int(tenant)), get_db() as db:
+        return get_elt_service().save_upload(
+            db,
+            owner_user_id=int(owner),
+            file_name=filename,
+            content_type=content_type,
+            stream=stream,
+        )
+
+
 class UploadServiceMixin:
     def save_upload(
         self,

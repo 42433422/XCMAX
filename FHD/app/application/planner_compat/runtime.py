@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, TypeVar
 
@@ -41,30 +40,6 @@ async def await_with_timeout(awaitable: Awaitable[T], *, timeout: float) -> T:
         raise
 
 
-def env_truthy(name: str) -> bool:
-    return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def use_mainline(context: Context | None, truthy: Callable[[str], bool]) -> bool:
-    context = context if isinstance(context, dict) else {}
-    if context.get("use_legacy_chat_adapter") is True:
-        return False
-    if context.get("use_ai_chat_mainline") is True:
-        return True
-    if truthy("XCAGI_USE_LEGACY_CHAT_ADAPTER"):
-        return False
-    return not bool(os.environ.get("PYTEST_CURRENT_TEST"))
-
-
-def allow_legacy_fallback(context: Context | None, truthy: Callable[[str], bool]) -> bool:
-    context = context if isinstance(context, dict) else {}
-    return bool(
-        context.get("allow_legacy_chat_adapter") is True
-        or truthy("XCAGI_ALLOW_LEGACY_CHAT_FALLBACK")
-        or os.environ.get("PYTEST_CURRENT_TEST")
-    )
-
-
 def merge_kitten_attachments(payload: Payload, kitten_extra: Payload | None) -> Payload:
     if not kitten_extra:
         return payload
@@ -77,6 +52,13 @@ def merge_kitten_attachments(payload: Payload, kitten_extra: Payload | None) -> 
     return enriched
 
 
+def resolve_file_context(runtime_context: Context) -> Context:
+    file_context = runtime_context.get("file_context")
+    if not isinstance(file_context, dict):
+        file_context = runtime_context.get("file_analysis")
+    return file_context if isinstance(file_context, dict) else {}
+
+
 async def execute_mainline(
     service: MainlineService,
     body: ChatBody,
@@ -87,11 +69,7 @@ async def execute_mainline(
     reply: ReplyFormatter,
     merge_attachments: Callable[[Payload, Payload | None], Payload],
 ) -> Payload:
-    file_context = runtime_context.get("file_context")
-    if not isinstance(file_context, dict):
-        file_context = runtime_context.get("file_analysis")
-    if not isinstance(file_context, dict):
-        file_context = {}
+    file_context = resolve_file_context(runtime_context)
     payload = await asyncio.to_thread(
         service.process_chat,
         user_id=str(body.user_id or "default"),
@@ -103,29 +81,3 @@ async def execute_mainline(
     if not isinstance(payload, dict):
         payload = reply(str(payload))
     return merge_attachments(payload, kitten_extra)
-
-
-def legacy_requires_token_payload(parsed: Payload) -> Payload:
-    records = parsed.get("legacy_tool_records")
-    data = {
-        "requires_token": True,
-        "token_name": parsed.get("token_name"),
-        "token_description": parsed.get("token_description"),
-    }
-    if isinstance(records, list) and records:
-        data["legacy_tool_records"] = records
-    return {
-        "success": True,
-        "requires_token": True,
-        "token_name": parsed.get("token_name"),
-        "token_description": parsed.get("token_description"),
-        "message": parsed.get("message"),
-        "response": parsed.get("message"),
-        "data": data,
-    }
-
-
-def reply_has_legacy_tool_records(reply: Any) -> bool:
-    return isinstance(reply, dict) and isinstance(
-        reply.get("legacy_tool_records") or reply.get("_tool_records"), list
-    )

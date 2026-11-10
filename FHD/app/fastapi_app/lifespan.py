@@ -26,7 +26,6 @@ from app.db.init_db import (
     initialize_databases,
 )
 from app.db.init_tutorial import init_tutorial_v2_tables
-from app.di.registry import get_service_registry
 from app.fastapi_app.asset_install_lifecycle import (
     start_paid_asset_installs,
     stop_paid_asset_installs,
@@ -140,7 +139,6 @@ async def lifespan(app: FastAPI):
 
     mark_startup("lifespan_db_done")
 
-    _wire_workflow_runtime(app)
     _start_agent_tasks(app)
 
     start_paid_asset_installs()
@@ -222,7 +220,6 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(wait_for_background_mod_load, app)
         _stop_agent_tasks(app)
         await stop_paid_asset_installs()
-        _close_workflow_resources(app)
         from app.fastapi_app.resource_cleanup import close_llm_http_clients
 
         await close_llm_http_clients()
@@ -542,31 +539,3 @@ async def _init_mods_async(app: FastAPI):
         logger.info("✅ Mod 扩展分阶段加载已启动（lifespan 补偿路径）")
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ Mod 扩展初始化失败: %s", e)
-
-
-def _wire_workflow_runtime(app: FastAPI) -> None:
-    """Wire LangGraph workflow runtime/checkpointer onto app.state (LG-W1-T9-D).
-
-    在数据库初始化之后、lifespan ready/yield 之前执行。fail-closed：vendored
-    source 校验与运行时装配任一失败即中止启动，绝不静默回退。
-    """
-    from app.infrastructure.workflow.langgraph_assert import assert_vendored_sources
-
-    assert_vendored_sources()
-
-    registry = get_service_registry()
-    app.state.workflow_runtime = registry.reload_workflow_runtime()
-    app.state.workflow_checkpointer = registry.workflow_checkpointer
-
-
-def _close_workflow_resources(app: FastAPI) -> None:
-    """Close workflow resources exactly once and clear the app.state wiring.
-
-    由 lifespan 的 ``try/finally`` 守护：正常关闭与 yield 后抛入异常两种路径
-    都会且仅会执行一次。
-    """
-    get_service_registry().close_workflow_resources()
-    if hasattr(app.state, "workflow_runtime"):
-        del app.state.workflow_runtime
-    if hasattr(app.state, "workflow_checkpointer"):
-        del app.state.workflow_checkpointer

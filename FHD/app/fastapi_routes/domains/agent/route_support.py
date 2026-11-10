@@ -30,6 +30,7 @@ def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
     """Discard caller identity fields before resolving any server principal."""
     context = dict(raw)
     for key in (
+        "workspace_root",
         "tenant_id",
         "user_id",
         "actor_id",
@@ -37,6 +38,9 @@ def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
         "authenticated_local_user_id",
         "_mod_authorization",
         "_actor_authorization",
+        "_bulk_preview_scope",
+        "_bulk_preview_scopes",
+        "mutation_policy",
         "mod_id",
         "active_mod_id",
         "authenticated_username",
@@ -49,7 +53,10 @@ def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def authenticated_runtime_context(raw: dict[str, Any], principal: AgentPrincipal) -> dict[str, Any]:
+    from app.infrastructure.workspace import workspace_root
+
     context = without_runtime_identity(raw)
+    context["workspace_root"] = str(workspace_root())
     context.update(user_id=principal.user_id, actor_id=principal.user_id)
     if principal.tenant_id:
         context["tenant_id"] = principal.tenant_id

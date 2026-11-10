@@ -42,7 +42,7 @@ vi.mock('@/composables/useXcmaxSync', () => ({ useXcmaxSync: () => state.sync })
 vi.mock('@/utils/adminConsoleUrl', () => ({ isAdminConsoleSpa: () => false }))
 
 import { useAppBoot } from './useAppBoot'
-import { STARTUP_READY_TIMEOUT_MS, startupPageReadyKey } from './useStartupSplash'
+import { startupPageReadyKey } from './useStartupSplash'
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -139,7 +139,7 @@ describe('workspace startup readiness', () => {
     expect(boot.appReady.value).toBe(true)
   })
 
-  it('reports an unreachable session check instead of asking to log in again', async () => {
+  it('keeps retrying an unreachable session without claiming readiness', async () => {
     state.ensureAuth.mockResolvedValue({ ok: false, entitledModIds: [], unavailable: true })
     const boot = mountBoot()
     await settle()
@@ -147,8 +147,9 @@ describe('workspace startup readiness', () => {
     await settle()
     expect(state.ensureAuth).toHaveBeenCalledTimes(3)
     expect(boot.appReady.value).toBe(false)
-    expect(boot.startupError.value).toContain('本地服务响应超时')
-    expect(boot.startupError.value).not.toContain('请返回登录')
+    expect(boot.startupError.value).toBe('')
+    await boot.cancelStartup()
+    expect(boot.startupError.value).toContain('工作台准备已取消')
   })
 
   it('still sends a signed-out session back to login without retrying', async () => {
@@ -206,8 +207,9 @@ describe('workspace startup readiness', () => {
     if (outcome === 'unavailable') await vi.advanceTimersByTimeAsync(2_000)
     expect(boot.appReady.value).toBe(outcome === 'ready')
     if (outcome === 'unavailable') {
-      expect(boot.startupError.value).toContain('登录状态无法确认，请重试登录')
-      expect(boot.startupError.value).not.toContain('工作空间资料未就绪')
+      expect(boot.startupError.value).toBe('')
+      await boot.cancelStartup()
+      expect(boot.startupError.value).toContain('工作台准备已取消')
     } else expect(boot.startupError.value).toBe('')
   })
 
@@ -244,7 +246,7 @@ describe('workspace startup readiness', () => {
     expect(boot.startupError.value).toContain('current page data failed')
   })
 
-  it('reports a swallowed session check failure while waiting for hydration', async () => {
+  it('keeps waiting after swallowed session check failures', async () => {
     state.account.workspaceReady = false
     const boot = mountBoot()
     await settle()
@@ -252,9 +254,10 @@ describe('workspace startup readiness', () => {
     await settle()
     await vi.advanceTimersByTimeAsync(2_000)
     expect(boot.appReady.value).toBe(false)
-    expect(boot.startupError.value).toContain('登录状态无法确认，请重试登录')
-    expect(boot.startupError.value).not.toContain('工作空间资料未就绪')
+    expect(boot.startupError.value).toBe('')
     expect(state.mods.initialize).not.toHaveBeenCalled()
+    await boot.cancelStartup()
+    expect(boot.startupError.value).toContain('工作台准备已取消')
   })
 
   it('retries a session check and enters once the workspace hydrates', async () => {
@@ -267,6 +270,8 @@ describe('workspace startup readiness', () => {
       state.account.workspaceHydrationReady = true
     })
     const boot = mountBoot()
+    await settle()
+    await vi.advanceTimersByTimeAsync(500)
     await settle()
     expect(state.account.refreshFromServer).toHaveBeenCalled()
     expect(boot.appReady.value).toBe(true)
@@ -281,12 +286,11 @@ describe('workspace startup readiness', () => {
     expect(boot.startupError.value).not.toContain('工作空间资料未就绪')
   })
 
-  it.each(['timeout', 'cancel'] as const)('retires pending hydration on %s and ignores its late readiness', async (action) => {
+  it('retires pending hydration on cancel and ignores its late readiness', async () => {
     state.account.workspaceReady = false
     const boot = mountBoot()
     await settle()
-    if (action === 'timeout') await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
-    else await boot.cancelStartup()
+    await boot.cancelStartup()
     expect(boot.startupError.value).toBeTruthy()
     state.account.workspaceReady = true
     await settle()
@@ -357,16 +361,14 @@ describe('workspace startup readiness', () => {
     expect(boot.appReady.value).toBe(true)
   })
 
-  it('does not release a timed out startup when its view resolves late', async () => {
+  it('keeps startup pending until its view resolves', async () => {
     const pending = ref(true)
     const boot = mountBoot(pending)
     await settle()
-    await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
-    expect(boot.startupError.value).toBeTruthy()
     pending.value = false
     await settle()
-    expect(boot.appReady.value).toBe(false)
-    expect(boot.startupError.value).toBeTruthy()
+    expect(boot.appReady.value).toBe(true)
+    expect(boot.startupError.value).toBe('')
   })
 
   it('retires the pending-view listener on cancel and waits again on retry', async () => {
@@ -402,13 +404,14 @@ describe('workspace startup readiness', () => {
     await settle()
     if (failure === 'workspace') {
       expect(boot.startupError.value).toBe('')
-      await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
     }
     if (failure === 'session') await vi.advanceTimersByTimeAsync(2_000)
     expect(boot.appReady.value).toBe(false)
     expect(boot.startupVisible.value).toBe(true)
-    expect(boot.startupError.value).toBeTruthy()
-    if (failure === 'session') expect(boot.startupError.value).not.toContain('工作空间资料未就绪')
+    if (failure === 'mods') expect(boot.startupError.value).toBeTruthy()
+    else expect(boot.startupError.value).toBe('')
+    await boot.cancelStartup()
+    expect(boot.startupError.value).toContain('工作台准备已取消')
   })
 
   it('shows an initialization error and retries the required work', async () => {
@@ -423,21 +426,18 @@ describe('workspace startup readiness', () => {
     expect(boot.appReady.value).toBe(true)
   })
 
-  it('keeps a timeout actionable when the old font request later completes', async () => {
+  it('waits for the critical font instead of timing out startup', async () => {
     const font = deferred<unknown[]>()
     state.loadFont.mockReturnValue(font.promise)
     const boot = mountBoot()
     await settle()
-    await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
-    expect(boot.startupError.value).toBeTruthy()
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(boot.startupError.value).toBe('')
     expect(boot.appReady.value).toBe(false)
     font.resolve([{ status: 'loaded' }])
     await settle()
-    expect(boot.startupError.value).toBeTruthy()
-    expect(boot.appReady.value).toBe(false)
-    state.loadFont.mockResolvedValue([{ status: 'loaded' }])
-    boot.retryStartup()
-    await settle()
+    expect(boot.startupError.value).toBe('')
+    expect(boot.appReady.value).toBe(true)
     expect(boot.appReady.value).toBe(true)
   })
 
@@ -576,7 +576,6 @@ describe('workspace startup readiness', () => {
     expect(state.bridge.installSwitchViewBridge).toHaveBeenCalledOnce()
     wrapper!.unmount(); wrapper = undefined
     font.resolve([{ status: 'loaded' }]); await settle()
-    await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
     expect(boot.appReady.value).toBe(false)
     expect(state.bridge.uninstall).toHaveBeenCalledOnce()
     expect(state.sync.stop).toHaveBeenCalled()

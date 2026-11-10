@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import update
 from starlette.concurrency import run_in_threadpool
 
@@ -20,7 +21,7 @@ from app.application.elt.archive_store import (
     read_original,
     recover_complete_pending,
 )
-from app.application.elt.errors import EltError, public_excel_error
+from app.application.elt.errors import EltError, ReviewedExcelError, public_excel_error
 from app.application.elt.service_support import dump_json, load_json, new_id
 from app.application.elt.service_uploads import UploadServiceMixin, discard_stored_upload
 from app.application.reviewed_excel_classification import observe_fragment_relationships
@@ -35,6 +36,7 @@ from app.db.models.elt_archive import EltArchiveAsset, EltArchiveQuota, EltArchi
 from app.db.session import get_db
 from app.fastapi_routes.reviewed_excel_template import (
     _CLASS_READY,
+    _SAVED,
     _archive_admin,
     _body,
     _expected_actor,
@@ -47,6 +49,7 @@ from app.fastapi_routes.reviewed_excel_template import (
 from app.infrastructure.tenant_scope import tenant_scope
 from app.middleware.error_handler import ReviewedExcelRoute
 from app.utils.operational_errors import BOUNDARY_ERRORS
+from app.utils.path_io.path_utils import get_app_data_dir
 
 router = APIRouter(route_class=ReviewedExcelRoute)
 
@@ -604,3 +607,68 @@ def classify_archive_version(
             )
     except (ArchivePolicyError, ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
+
+
+@router.get("/api/templates/reviewed-excel/classifications/{classification_id}/source")
+def archived_classification_source(classification_id: str, user=Depends(_read)):
+    tenant, owner = _identity(user)
+    with tenant_scope(tenant), get_db() as db:
+        run = _classification_run(db, classification_id, tenant, owner)
+        if not load_json(run.summary_json, {}).get("archive_version_id"):
+            raise HTTPException(status_code=404, detail="旧分类没有归档来源")
+        return Response(
+            content=_source(db, run, tenant, owner),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Cache-Control": "no-store"},
+        )
+
+
+@router.get("/api/templates/reviewed-excel/{template_id}/download")
+def reviewed_excel_download(template_id: int, user=Depends(_read)):
+    tenant, _owner = _identity(user)
+    from sqlalchemy import text
+
+    with tenant_scope(tenant), get_db() as db:
+        row = db.execute(
+            text(
+                "SELECT original_file_path, analyzed_data FROM templates WHERE id = :id AND tenant_id = :tenant AND (is_active IS NULL OR is_active = 1)"
+            ),
+            {"id": template_id, "tenant": tenant},
+        ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="模板不存在")
+    try:
+        metadata = json.loads(row.analyzed_data or "{}")
+        review_id = (metadata.get("preview_data") or {}).get("review_id")
+        with tenant_scope(tenant), get_db() as db:
+            run = (
+                db.query(EltRun)
+                .filter(
+                    EltRun.id == review_id,
+                    EltRun.tenant_id == tenant,
+                    EltRun.target_type == "template_review",
+                )
+                .first()
+            )
+            if run is None:
+                raise ReviewedExcelError("unavailable")
+            receipt = load_json(run.receipt_json, {})
+            if run.status != _SAVED or str(receipt.get("template_id")) != f"db:{template_id}":
+                raise ReviewedExcelError("unavailable")
+        root = (Path(get_app_data_dir()) / "templates" / "reviewed_excel" / str(tenant)).resolve()
+        raw = Path(row.original_file_path or "")
+        path = raw.resolve()
+        if (
+            metadata.get("source") != "reviewed_excel_cleanup"
+            or raw.is_symlink()
+            or root not in path.parents
+            or not path.is_file()
+        ):
+            raise ReviewedExcelError("unavailable")
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="模板文件不可用") from None
+    return FileResponse(
+        path,
+        filename="cleaned-template.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )

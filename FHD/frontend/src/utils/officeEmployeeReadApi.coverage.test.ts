@@ -82,7 +82,7 @@ describe('uploadChatOfficeFile', () => {
     mocks.apiFetch.mockResolvedValueOnce(
       jsonRes({
         success: true,
-        data: { file_path: '/path/to/file.xlsx', workspace_root: '/root', filename: 'custom.xlsx' },
+        data: { file_path: '/path/to/file.xlsx', workspace_root: '/root', filename: 'custom.xlsx', upload_id: 'trusted-upload' },
       }),
     )
 
@@ -92,6 +92,7 @@ describe('uploadChatOfficeFile', () => {
       file_path: '/path/to/file.xlsx',
       workspace_root: '/root',
       filename: 'custom.xlsx',
+      upload_id: 'trusted-upload',
     })
     expect(mocks.apiFetch).toHaveBeenCalledTimes(1)
   })

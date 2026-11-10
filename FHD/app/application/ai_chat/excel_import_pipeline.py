@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
-from app.application.ai_chat.excel_import_pipeline_agent_run import ExcelImportAgentRunMixin
 from app.application.ai_chat.excel_import_pipeline_columns_fallback import (
     ExcelImportColumnFallbackMixin,
 )
@@ -21,23 +20,12 @@ class AIChatExcelImportMixin(
     ExcelImportColumnFallbackMixin,
     ExcelImportColumnInferMixin,
     ExcelImportExtractMixin,
-    ExcelImportAgentRunMixin,
 ):
     if TYPE_CHECKING:
         _is_number_text: Any
         _merge_tool_runtime_context: Any
-        _pending_workflows: Any
         _row_values_look_like_table_headers: Any
         ai_service: Any
-
-        def _format_agent_run_response(
-            self,
-            plan: Any,
-            agent_run: Any,
-            thinking_steps: str = "",
-            user_message: str = "",
-        ) -> dict[str, Any]:
-            raise NotImplementedError
 
     _PACK_OR_MEASURE_RE = re.compile(
         r"^\s*\d+(\.\d+)?\s*[/／]\s*\d+(\.\d+)?\s*(kg|KG|公斤|g|G|桶|箱|组|套|升|L|l)?\s*$"

@@ -77,7 +77,7 @@ function inertApi(): Record<string, unknown> {
     pushCopied: ref(false), loadingProgressText: ref(''), excelAnalyzeUploading: ref(false), multimodalPendingCount: ref(0),
     excelSheetOptions: ref([]), linkedExcelSheet: ref(null), linkedExcelAllSheets: ref(false), taskTableColumns: ref([]),
     taskTableItems: ref([]), taskOrderNumber: ref(''), ttsEnabled: ref(false), chatMessagesRef: ref(null), excelAnalyzeInputRef: ref(null),
-    ...Object.fromEntries(['sendMessage', 'confirmWorkflowFromCard', 'cancelWorkflowFromCard', 'confirmTask', 'refetchTaskOrderNumber',
+    ...Object.fromEntries(['sendMessage', 'retryModelOnly', 'confirmDestructive', 'confirmWorkflowFromCard', 'cancelWorkflowFromCard', 'confirmTask', 'refetchTaskOrderNumber',
       'setCustomOrderNumber', 'cancelTask', 'showTaskConfirm', 'onExcelAnalyzeFileChange', 'bindExcelSheetToChat', 'bindAllExcelSheetsToChat',
       'setTaskFilter', 'jumpToTaskMessage', 'showHistoryPanel', 'clearHistorySessions', 'handleShipmentDownloadClick', 'startPrintFromTaskCard',
       'copyAssistantPushContent', 'openAssistantFloatFromTaskPanel', 'syncSessionMessages', 'handleAutoAction', 'setTtsEnabled',
@@ -143,10 +143,12 @@ describe('shipped chat Mod task navigation', () => {
         { role: 'ai', content: '处理失败：模型未返回正文', time: '12:00', turnId: 'test-turn', workflowAction: 'failed' },
       ]
       await flushPromises()
-      await button('重试本次请求（填入原文）').trigger('click')
-      expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toBe('仅回答测试')
+      await button('重试模型请求（不重复写入）').trigger('click')
+      expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toBe('')
       expect(chatApi.sendMessage).not.toHaveBeenCalled()
-      expect(wrapper!.get('[data-testid="chat-error-recovery"]').text()).toContain('已执行的业务操作不会撤销')
+      expect(chatApi.retryModelOnly).toHaveBeenCalledWith('仅回答测试', 'test-turn')
+      expect(wrapper!.get('[data-testid="chat-error-recovery"]').text()).toContain('原任务的写入状态未确认')
+      expect(wrapper!.text()).not.toContain('已执行的业务操作不会撤销')
       expect(wrapper!.text()).not.toContain('查看模型状态')
     },
   )

@@ -20,6 +20,7 @@ from app.fastapi_routes import purchase as purchase_routes
 from app.fastapi_routes import reports as report_routes
 from app.fastapi_routes.domains.customer import routes as customer_compat_router
 from app.fastapi_routes.domains.customer import routes as customer_routes
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # Global intent mocks (avoid Bert / unified recognizer hangs on import paths)
@@ -202,7 +203,11 @@ def ops_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 @pytest.fixture
-def customer_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def customer_client(monkeypatch: pytest.MonkeyPatch, request) -> TestClient:
+    actor = None
+    if "delete" in request.node.name:
+        actor = request.getfixturevalue("trusted_actor")(tenant_id=7, role="admin")
+        monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setattr(
         customer_routes,
         "_load_customers_rows",
@@ -230,7 +235,7 @@ def customer_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     )
     app = FastAPI()
     app.include_router(customer_compat_router.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, headers=actor.headers if actor else {}, raise_server_exceptions=False)
 
 
 @pytest.fixture
@@ -542,31 +547,43 @@ def test_customers_update_default_path(customer_client: TestClient, local_tools)
     assert r.json()["data"]["unit_name"] == "新名称"
 
 
-def test_customers_delete_default_path(customer_client: TestClient, local_tools) -> None:
+def test_customers_delete_default_path(
+    customer_client: TestClient, local_tools, trusted_actor
+) -> None:
+    actor = trusted_actor(tenant_id=7, role="admin")
+    customer_client.headers.update(actor.headers)
+    service = MagicMock()
+    service.batch_delete.return_value = {"success": True, "deleted_count": 1, "message": "已删除"}
     with (
         patch(
             "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
             return_value=False,
         ),
         patch.object(customer_routes, "_customers_write_raise"),
-        patch.object(customer_routes, "_customer_delete_unified"),
+        patch("app.application.get_customer_app_service", return_value=service),
     ):
         r = customer_client.delete("/customers/2")
     assert r.status_code == 200
     assert r.json()["message"] == "已删除"
 
 
-def test_customers_batch_delete_skips_invalid(customer_client: TestClient, local_tools) -> None:
+def test_customers_batch_delete_rejects_invalid_atomically(
+    customer_client: TestClient, local_tools, trusted_actor
+) -> None:
+    actor = trusted_actor(tenant_id=7, role="admin")
+    customer_client.headers.update(actor.headers)
+    service = MagicMock()
     with (
         patch.object(customer_routes, "_customers_write_raise"),
-        patch.object(customer_routes, "_customer_delete_unified"),
+        patch("app.application.get_customer_app_service", return_value=service),
     ):
         body = customer_client.post(
             "/customers/batch-delete",
             json={"ids": [1, "bad", 2]},
         ).json()
-    assert body["deleted"] == 2
-    assert "bad" in body["skipped"]
+    assert body["success"] is False
+    assert body.get("deleted_count", 0) == 0
+    service.batch_delete.assert_not_called()
 
 
 def test_customers_batch_delete_empty_ids_400(customer_client: TestClient) -> None:
