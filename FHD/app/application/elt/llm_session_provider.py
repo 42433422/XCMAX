@@ -72,10 +72,13 @@ class SessionMarketProvider:
         import httpx
 
         from app.application.elt_login_authorization import _platform_url
-        from app.application.reviewed_excel_audit import ModelRequestNotSent
+        from app.application.reviewed_excel_audit import ModelRequestNotSent, current_call_id
         from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         platform_url = _platform_url()
+        call_id = current_call_id()
+        if call_id:
+            kwargs.setdefault("client_request_id", call_id)
         timeout = self._timeout_seconds
         headers = {"Authorization": f"Bearer {self._token}"}
         for attempt in range(3):
@@ -142,26 +145,38 @@ class SessionMarketProvider:
                 adapter._account_default = None
 
         async def _chat(options: dict[str, Any]) -> dict[str, Any] | None:
+            import asyncio
+
+            from app.application.elt.errors import never_connected
             from app.infrastructure.llm.model_admission import (
                 admit_model_call,
                 model_call_slot,
                 model_rate_limit_scope,
             )
 
-            with (
-                model_rate_limit_scope({"local_user_id": self.owner_user_id}),
-                model_call_slot(self, profile="elt_session"),
-            ):
-                admit_model_call(self, profile="elt_session")
-                return cast(
-                    "dict[str, Any] | None",
-                    await adapter.chat_completion(
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        **options,
-                    ),
-                )
+            for attempt in range(3):
+                try:
+                    with (
+                        model_rate_limit_scope({"local_user_id": self.owner_user_id}),
+                        model_call_slot(self, profile="elt_session"),
+                    ):
+                        admit_model_call(self, profile="elt_session")
+                        return cast(
+                            "dict[str, Any] | None",
+                            await adapter.chat_completion(
+                                messages=messages,
+                                temperature=temperature,
+                                max_tokens=max_tokens,
+                                **options,
+                            ),
+                        )
+                except httpx.TransportError as exc:
+                    # The pinned route has exactly one stream. Only connection
+                    # establishment failure proves no model request was sent.
+                    if options.get("allow_failover") is not False or not never_connected(exc) or attempt == 2:
+                        raise
+                    await asyncio.sleep(0.5 * (attempt + 1))
+            raise RuntimeError("unreachable model connection retry")
 
         try:
             try:

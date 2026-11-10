@@ -4,7 +4,7 @@ import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 import type { useReviewedDocuments } from '@/composables/useReviewedDocuments'
 
-const api = vi.hoisted(() => ({ archiveClassifyExcel: vi.fn(), reviewedExcelIdentity: vi.fn(), analyzeClassification: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), recentClassifications: vi.fn(), saveReviewedExcel: vi.fn(), previewReviewedIntake: vi.fn() }))
+const api = vi.hoisted(() => ({ archiveClassifyExcel: vi.fn(), reviewedExcelIdentity: vi.fn(), analyzeClassification: vi.fn(), autoSlices: vi.fn(), templateFamilies: vi.fn(), reviewExcel: vi.fn(), recentClassifications: vi.fn(), saveReviewedExcel: vi.fn(), previewReviewedIntake: vi.fn() }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 vi.mock('@/api/xcmaxMarketProxy', () => ({ default: { llmResolveChatDefault: vi.fn() } }))
 const sheet = { sheet: 'Sheet1', sheet_state: 'visible', processable: true, labels: ['template'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:B2', labels: ['template'], checked_cells: 1, evidence: [], parent_heading: '', dependency_status: 'ready', needs_confirmation: false, header_cells: [], merged_ranges: [], possible_shared_context: [] }] }
@@ -32,6 +32,7 @@ beforeEach(() => {
   api.archiveClassifyExcel.mockImplementation(async (form: FormData) => { const name = (form.get('file') as File).name; return { name, sha256: `sha-${name}`, status: 'classified', classification_id: name, version: 'v1', sheets: [sheet] } })
   api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   api.analyzeClassification.mockImplementation(async () => modelResult())
+  api.templateFamilies.mockResolvedValue({ families: [{ members: [0], reason: '独立' }, { members: [1], reason: '独立' }] })
   api.autoSlices.mockResolvedValue({ slices: [slice()] }); api.reviewExcel.mockResolvedValue(review())
   api.recentClassifications.mockImplementation(async () => ({ files: sourceNames.map(name => ({ classification_id: name, sha256: `sha-${name}`, checkpoint: checkpoint(), latest: { version: 'v1' } })) }))
   wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })

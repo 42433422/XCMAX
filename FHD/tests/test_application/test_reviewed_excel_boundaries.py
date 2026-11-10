@@ -395,7 +395,7 @@ def test_range_schema_fingerprint_and_boolean_dimension_drift():
         "schema"
     ]
     hashes = verify_contract(IDENTIFY_PROMPT, schema, "identify")
-    assert hashes["version"] == "independent-excel-v11-document-ranges"
+    assert hashes["version"] == "independent-excel-v12-document-ranges"
     assert (
         hashes["schema_template_sha256"]
         == "b1455573350323b3d7d3317c5202954d06e01f6675597532586facc2bdbc2b85"

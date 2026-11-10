@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch, type CSSProperties } from 'vue'
 import { useDialogFocus, useDialogScrollLock } from '@/composables/useDialogFocus'
-import { useReviewedDocuments, type ReviewedDocument, type DocumentSlice } from '@/composables/useReviewedDocuments'
+import { sliceIdentity, useReviewedDocuments, type ReviewedDocument, type DocumentSlice } from '@/composables/useReviewedDocuments'
 import { captureAuthSession, getAuthSessionEpoch } from '@/utils/authSessionCache'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import templatePreviewApi from '@/api/templatePreview'
@@ -25,7 +25,8 @@ type ClassificationSheet = { sheet: string; sheet_state?: string; processable?: 
 type FragmentLinks = { items: { sheet: string; first: string; second: string; shared_dependencies: { sheet: string; cell: string }[]; repeated_header_observed: boolean; model_group_suggested?: boolean; status: string; selected?: boolean }[]; omitted: number }
 type LogicalDocument = { logical_document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type SuggestedDocument = { document_id: string; fragments: { sheet: string; range: string }[]; status: string }
-type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; type_label?: string; fragments: { sheet: string; range: string }[] }
+type AutoSlice = DocumentSlice
+type TemplateFamily = { members: number[]; reason: string }
 type Checkpoint = { phase: 'ready' | 'paused' | 'inflight' | 'failed'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; repair_rounds?: number; remaining_in_round?: number; message: string }
 type ConversionReceipt = { converter: string; source_sha256: string; derived_sha256: string; purpose?: string; print_layout_verified?: boolean; warnings?: string[] }
 type Classification = { usage_restrictions?: string[]; original_sha256?: string; conversion_receipt?: ConversionReceipt | null; template_write_state?: string; independent_confirmed?: boolean; confirmed_document_count?: number | null; document_count_status?: string; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; read_only_print_areas?: { sheet: string; value: string }[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; checkpoint?: Checkpoint | null; name: string; status: string; sha256?: string; message?: string; classification_id?: string; version?: string; confirmed?: boolean; model_status?: string; budget?: { calls: number; max_calls: number; unread: number }; input_messages?: unknown[]; input_summaries?: unknown[]; coverage?: { sheet: string; total: number; sent: number; unread: string[]; unassigned: string[]; model_unassigned?: string[]; value_truncated: string[]; deferred_large_values?: string[]; deferred_oversized_rows?: string[]; merged_sent: number; merged_omitted: number }[]; sheets: ClassificationSheet[] }
@@ -89,6 +90,7 @@ const analysisProgress = ref('')
 const classificationNotice = ref('')
 const analysisErrors = ref<Record<string, string>>({})
 const autoSlices = ref<Record<string, { version: string; slices: AutoSlice[] }>>({})
+const templateFamilies = ref<Record<string, { version: string; families: TemplateFamily[] }>>({})
 const recentClassifications = ref<RecentClassification[]>([])
 const selectedRegion = ref('')
 const selectedRegionCoordinates = ref<{ sheet: string; range: string } | null>(null)
@@ -156,15 +158,45 @@ function modelOutcomeUnknown(err: unknown) {
 }
 const savedId = ref('')
 const savedModelStatus = ref('')
-const documentWorkspace = useReviewedDocuments({ capture: captureFileOperation, outcomeUnknown: modelOutcomeUnknown, saved: () => emit('saved') })
+let resumePipelineRunning = false
+let resumePipelineRequested = false
+let resumePipelineDocument: ReviewedDocument | null = null
+async function resumeRecoveredDocuments(doc: ReviewedDocument) {
+  if (cancelAnalysis.value || currentClassification.value?.classification_id !== doc.classificationId || currentClassification.value?.version !== doc.classificationVersion) return
+  resumePipelineDocument = doc
+  resumePipelineRequested = true
+  if (resumePipelineRunning) return
+  resumePipelineRunning = true
+  try {
+    while (resumePipelineRequested && !cancelAnalysis.value && !busy.value) {
+      resumePipelineRequested = false
+      await runModelPipeline()
+    }
+  } finally { resumePipelineRunning = false }
+}
+watch(busy, value => { if (!value && resumePipelineRequested && resumePipelineDocument) void resumeRecoveredDocuments(resumePipelineDocument) })
+const documentWorkspace = useReviewedDocuments({
+  capture: captureFileOperation, outcomeUnknown: modelOutcomeUnknown, saved: () => emit('saved'),
+  recovered: doc => { void resumeRecoveredDocuments(doc) },
+})
 const activeDocumentKey = ref('')
 const activeDocument = computed(() => documentWorkspace.records.value[activeDocumentKey.value])
 const activeDocumentProposal = computed(() => activeDocument.value && documentWorkspace.proposal(activeDocument.value))
 const documentOriginalPreview = ref(false)
 const documentWorkPending = computed(() => documentWorkspace.documents.value.some(doc => !!doc.phase))
 const documentWorkLabel = computed(() => { const doc = documentWorkspace.documents.value.find(item => !!item.phase && item.phase !== 'saving'); return doc ? `${doc.displayName}：${documentPhase(doc)}` : '' })
+function relatedDocuments(doc: ReviewedDocument): ReviewedDocument[] {
+  const stored = templateFamilies.value[doc.classificationId]
+  if (!stored || stored.version !== doc.classificationVersion) return [doc]
+  const family = stored.families.find(item => item.members.includes(doc.slice.index))
+  if (!family) return [doc]
+  return family.members.map(index => documentWorkspace.documents.value.find(item => item.classificationId === doc.classificationId && item.classificationVersion === doc.classificationVersion && item.slice.index === index)).filter((item): item is ReviewedDocument => !!item)
+}
+function isFamilyRepresentative(doc: ReviewedDocument) { return relatedDocuments(doc)[0] === doc }
 function openDocument(doc: ReviewedDocument) {
   activeDocumentKey.value = doc.key; expandedCandidateIndex.value = null; documentOriginalPreview.value = false; templatePickerOpen.value = true
+  if (doc.unknown && !doc.review) void documentWorkspace.recoverCandidate(doc)
+  else if (!doc.review && !doc.phase && !doc.error) void documentWorkspace.generate(doc)
 }
 function selectDocumentCandidate(index: number) {
   const doc = activeDocument.value
@@ -372,7 +404,7 @@ function openCandidatePreview(index: number) {
   if (proposal.value?.candidates[index]) expandedCandidateIndex.value = index
 }
 function candidateSliceBlocked(item: Classification | undefined, slice: AutoSlice) {
-  return props.archiveOnSelect && blockedCandidateKeys.value.includes(JSON.stringify([item?.classification_id, item?.version, slice.index, slice.sha256]))
+  return props.archiveOnSelect && blockedCandidateKeys.value.includes(JSON.stringify([item?.classification_id, item?.version, slice.index, sliceIdentity(slice)]))
 }
 function selectExpandedCandidate() {
   if (expandedCandidateIndex.value === null || busy.value) return
@@ -930,8 +962,9 @@ async function loadAutoSlices(item: Classification, current: () => boolean) {
   if (!id || !version || !current()) return
   delete autoSlices.value[id]
   try {
-    const generated = await templatePreviewApi.autoSlices(id, version) as { slices: AutoSlice[] }
+    const generated = await templatePreviewApi.autoSlices(id, version, true) as { slices: AutoSlice[] }
     if (!current()) return
+    if (!Array.isArray(generated.slices) || generated.slices.some(slice => !sliceIdentity(slice))) throw new Error('切片清单缺少来源标识')
     autoSlices.value[id] = { version, slices: generated.slices }
     delete analysisErrors.value[id]
   } catch (err) {
@@ -951,7 +984,7 @@ async function previewAutoSlice(index: number, slice: AutoSlice) {
   if (!source || !processableSlice(source, slice)) { error.value = '此切片包含隐藏或不可处理的工作表，或模型尚未确定完整关系；原件不变。'; return }
   if (file.value !== files.value[index]) selectFile(index)
   const item = classifications.value[index]
-  const key = JSON.stringify([item?.classification_id, item?.version, slice.index, slice.sha256])
+  const key = JSON.stringify([item?.classification_id, item?.version, slice.index, sliceIdentity(slice)])
   if (selectedSliceKey.value !== key) { selectedSliceKey.value = key }
   name.value = slice.filename.replace(/\.xlsx$/i, '')
   await preview(slice)
@@ -985,14 +1018,33 @@ async function runModelPipeline(extendBudget = false) {
   const slices = stored?.version === item.version ? stored.slices.filter(slice => processableSlice(item, slice)) : []
   documentWorkspace.prune(item.classification_id, item.version!, slices)
   const documents = slices.map(slice => documentWorkspace.register(item.classification_id!, item.version!, slice as DocumentSlice, source))
-  for (const doc of documents) {
+  let representatives = documents
+  if (documents.length > 1) {
+    archiveProgress.value = '正在识别可复用模板，原始单据均会保留。'
+    try {
+      const result = await templatePreviewApi.templateFamilies(item.classification_id, item.version!) as { families: TemplateFamily[] }
+      if (!current() || cancelAnalysis.value) return
+      const indexes = stored?.slices.map(slice => slice.index) || []
+      const members = result.families.flatMap(family => family.members)
+      if (members.length !== indexes.length || new Set(members).size !== indexes.length || members.some(index => !indexes.includes(index))) throw new Error('模板复用结果不完整')
+      templateFamilies.value[item.classification_id] = { version: item.version!, families: result.families }
+      representatives = result.families.map(family => documents.find(doc => family.members.includes(doc.slice.index))).filter((doc): doc is ReviewedDocument => !!doc)
+    } catch {
+      if (!current() || cancelAnalysis.value) return
+      delete templateFamilies.value[item.classification_id]
+      archiveProgress.value = '模板复用分析未完成；可选择单份文档生成，原始单据均已保留。'
+      return
+    }
+  }
+  for (const doc of representatives) {
     if (!current() || cancelAnalysis.value) return
     archiveProgress.value = `正在生成：${doc.displayName}`
     await documentWorkspace.generate(doc)
     if (current() && doc.review) emit('stage', 'template')
+    if (doc.error || doc.unknown) break
   }
   if (current() && cancelAnalysis.value) { archiveProgress.value = '已停止后续处理。'; return }
-  if (current()) archiveProgress.value = documents.some(doc => !doc.review || !!doc.error || doc.unknown) ? '部分模板未完成，请核对。' : documents.length ? '模板已生成。' : '未识别到可处理模板。'
+  if (current()) archiveProgress.value = representatives.some(doc => !doc.review || !!doc.error || doc.unknown) ? '部分模板未完成，请核对。' : representatives.length ? '模板已生成。' : '未识别到可处理模板。'
 }
 async function downloadAutoSlice(item: Classification, slice: AutoSlice) {
   const current = captureFileOperation()
@@ -1113,7 +1165,7 @@ async function preview(slice?: AutoSlice) {
     }
     if (slice) {
       const available = selectedFile?.classification_id && selectedFile.version && autoSlices.value[selectedFile.classification_id]
-      if (!available || available.version !== selectedFile.version || !available.slices.some(item => item.index === slice.index && item.sha256 === slice.sha256)) throw new Error('裁切结果已变化，请重新选择')
+      if (!available || available.version !== selectedFile.version || !available.slices.some(item => item.index === slice.index && sliceIdentity(item) === sliceIdentity(slice))) throw new Error('裁切结果已变化，请重新选择')
       form.append('classification_id', selectedFile.classification_id!); form.append('classification_version', selectedFile.version!)
       form.append('auto_slice_index', String(slice.index))
     } else if (selectedFile?.classification_id && selectedFile.version && selectedRegionCoordinates.value) {
@@ -1306,7 +1358,10 @@ async function downloadCandidate(index: number) {
             <div class="workbook-node__body">
               <p v-if="workbookReports.length" class="workbook-node__who">模板导入员</p>
               <div class="reviewed-documents">
-                <button v-for="doc in documentWorkspace.documents.value" :key="doc.key" type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${doc.typeLabel ? '，' + doc.typeLabel : ''}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="doc.typeLabel">{{ doc.typeLabel }}</small><small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
+                <template v-for="doc in documentWorkspace.documents.value.filter(isFamilyRepresentative)" :key="doc.key">
+                  <button type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${doc.typeLabel ? '，' + doc.typeLabel : ''}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="doc.typeLabel">{{ doc.typeLabel }}</small><small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
+                  <details v-if="relatedDocuments(doc).length > 1"><summary>建议复用 · {{ relatedDocuments(doc).length }} 份原单据</summary><button v-for="related in relatedDocuments(doc)" :key="related.key" type="button" @click="openDocument(related)">{{ related.displayName }}（{{ related.slice.fragments.map(part => `${part.sheet} ${part.range}`).join('、') }}）</button></details>
+                </template>
               </div>
             </div>
           </div>
@@ -1317,8 +1372,13 @@ async function downloadCandidate(index: number) {
             <header class="elt-template-picker__bar"><h3>{{ activeDocument.displayName }}</h3><button type="button" data-dialog-initial-focus aria-label="关闭可选模板" @click="closeCandidatePicker">关闭</button></header>
             <p v-if="documentPhase(activeDocument)" role="status">{{ documentPhase(activeDocument) }}…</p>
             <p v-if="activeDocument.error" role="alert">{{ activeDocument.error }}</p>
+            <button v-if="activeDocument.unknown && !activeDocument.review" type="button" :disabled="!!activeDocument.phase" @click="documentWorkspace.recoverCandidate(activeDocument)">核对候选结果</button>
+            <button v-if="activeDocument.error && !activeDocument.unknown && !activeDocument.review" type="button" :disabled="!!activeDocument.phase" @click="documentWorkspace.generate(activeDocument)">重新生成候选</button>
             <template v-if="activeDocument.review && activeDocumentProposal">
               <p v-if="activeDocument.review.usage_restrictions?.length" role="alert">仅数据/模板测试，打印版式未验证。</p>
+              <p v-if="activeDocumentProposal.model.truncated || activeDocumentProposal.model.values_truncated" role="alert">模型只检查了部分内容，未检查的单元格可能保留原始数据；保存前请核对候选。</p>
+              <p v-if="activeDocumentProposal.model.audit_degraded" role="alert">模型复核未完成，候选可能残留业务数据；保存前请逐项核对。</p>
+              <p v-if="activeDocumentProposal.model.batches">已分 {{ activeDocumentProposal.model.batches }} 批分析；请核对候选中的业务内容。</p>
               <div class="reviewed-document-picker__options" role="list" aria-label="三个候选与只读原件">
                 <article v-for="index in [-1, 0, 1, 2]" :key="index < 0 ? 'source' : activeDocumentProposal.candidates[index].id" class="reviewed-template__preview reviewed-template__preview--a4" :class="{ 'reviewed-template__preview--selected': index >= 0 && activeDocument.candidateIndex === index, 'reviewed-document-picker__original': index < 0 }" role="listitem" @click="documentOriginalPreview = index < 0; expandedCandidateIndex = index">
                   <button type="button" class="reviewed-template__a4-open" aria-haspopup="dialog" @click.stop="documentOriginalPreview = index < 0; expandedCandidateIndex = index"><span>{{ index < 0 ? '原件（只读）' : activeDocumentProposal.candidates[index].label }}</span><small>放大预览</small></button>
@@ -1328,6 +1388,10 @@ async function downloadCandidate(index: number) {
               </div>
               <p v-if="activeDocument.intakePending" role="status">模板已保存，后台正在核对入库范围…</p>
               <p v-if="activeDocument.intakeError" role="alert">{{ activeDocument.intakeError }}</p>
+              <template v-if="activeDocument.intakeUnknown && documentWorkspace.saved(activeDocument)">
+                <p>原模型请求的结果无法确认。重新预演可能再次消耗模型额度，不会直接入库。</p>
+                <button type="button" :disabled="activeDocument.intakePending" @click="documentWorkspace.retryIntake(activeDocument)">重新预演</button>
+              </template>
               <p v-if="activeDocument.intake && !activeDocument.intakePending">知识库 {{ activeDocument.intake.knowledge.documents }} 份 · {{ targetLabel(activeDocument.intake.business.target_type) }}：新增 {{ activeDocument.intake.business.summary.new }}，更新 {{ activeDocument.intake.business.summary.update }}，跳过 {{ activeDocument.intake.business.summary.skip }}<span v-if="activeDocument.intake.business.summary.error">，{{ activeDocument.intake.business.summary.error }} 行错误，入库需核对</span></p>
               <button type="button" :disabled="!documentWorkspace.canSave(activeDocument)" @click="saveActiveDocument">{{ documentWorkspace.saved(activeDocument) ? '已保存' : '保存模板' }}</button>
             </template>

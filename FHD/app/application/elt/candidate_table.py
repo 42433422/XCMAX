@@ -321,13 +321,9 @@ def dataset_from_business_rows(items: list[dict]) -> ParsedDataset | None:
         unit = _cell_text(item.get("purchase_unit")) or _cell_text(item.get("customer_name"))
         product = _cell_text(item.get("product_name"))
         quantity = item.get("quantity")
-        if (
-            not unit
-            or not product
-            or is_column_header_label(unit)
-            or is_column_header_label(product)
-            or not _is_quantity(quantity)
-        ):
+        if is_column_header_label(unit) or is_column_header_label(product):
+            continue
+        if not (unit or product or _cell_text(quantity)):
             continue
         values = {"购买单位": unit, "产品名称": product, "数量": quantity}
         for source_key, target in (("unit_price", "单价"), ("amount", "金额"), ("model", "型号")):
@@ -350,6 +346,13 @@ def dataset_from_business_rows(items: list[dict]) -> ParsedDataset | None:
         if located and cited_range:
             provenance["source_range"] = cited_range[:40]
         issues = []
+        for invalid, field, message in (
+            (not unit, "purchase_unit", "原表中未确认购买单位"),
+            (not product, "product_name", "原表中未确认产品名称"),
+            (not _is_quantity(quantity), "quantity", "原表中未确认有效数量"),
+        ):
+            if invalid:
+                issues.append({"code": "ELT_REQUIRED_FIELD_MISSING", "field": field, "severity": "error", "message": message})
         if not located:
             issues.append(dict(_UNLOCATED_ISSUE))
         if _cell_text(item.get("unit_in_source")) == "0":

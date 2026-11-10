@@ -305,6 +305,20 @@ async def test_each_call_resolves_current_account_route_without_login_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_intake_call_id_reaches_platform_adapter(monkeypatch, route_http):
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.application.reviewed_excel_audit import call_key
+    from app.domain.shared_services.conversation import modstore_adapter
+
+    route_http({'ok': True, 'provider': 'xiaomi', 'model': 'synthetic-model'})
+    adapter = SimpleNamespace(chat_completion=AsyncMock(return_value={}), close=AsyncMock())
+    monkeypatch.setattr(modstore_adapter, 'ModstorePlatformAdapter', Mock(return_value=adapter))
+    with call_key('synthetic-call-123'):
+        await SessionMarketProvider(7, 'synthetic-token', timeout_seconds=1).chat_completion([])
+    assert adapter.chat_completion.await_args.kwargs['client_request_id'] == 'synthetic-call-123'
+
+
+@pytest.mark.asyncio
 async def test_older_platform_metadata_cannot_inherit_caller_snapshot(monkeypatch, route_http):
     from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.domain.shared_services.conversation import modstore_adapter
@@ -450,3 +464,24 @@ async def test_transient_route_connection_failure_retries_only_route_get(monkeyp
     await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).chat_completion([])
     assert seen == ["GET", "GET"]
     assert adapter.chat_completion.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure, expected_calls', [
+    (httpx.ConnectError('no connection'), 2),
+    (httpx.ReadTimeout('result unknown'), 1),
+])
+async def test_intake_retries_only_definitely_unsent_model_calls(monkeypatch, route_http, failure, expected_calls):
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.domain.shared_services.conversation import modstore_adapter
+
+    route_http({'ok': True, 'provider': 'synthetic', 'model': 'model'})
+    adapter = SimpleNamespace(chat_completion=AsyncMock(side_effect=[failure, {'choices': []}]), close=AsyncMock())
+    monkeypatch.setattr(modstore_adapter, 'ModstorePlatformAdapter', lambda **kwargs: adapter)
+    monkeypatch.setattr('asyncio.sleep', AsyncMock())
+    if expected_calls == 1:
+        with pytest.raises(httpx.ReadTimeout):
+            await SessionMarketProvider(7, 'synthetic-token', timeout_seconds=1).chat_completion([])
+    else:
+        await SessionMarketProvider(7, 'synthetic-token', timeout_seconds=1).chat_completion([])
+    assert adapter.chat_completion.await_count == expected_calls

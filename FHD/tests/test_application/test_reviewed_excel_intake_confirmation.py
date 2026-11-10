@@ -50,14 +50,15 @@ def intake_store(review_store, rag_service, monkeypatch, account_session_client)
     store.actor.update(execute=True, mod="erp-test")
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
+    def candidate_model(messages, *_args, **_kwargs):
+        data = ({"clear": [], "reason": "synthetic audit"}
+                if messages[0]["content"].startswith("Independently audit")
+                else {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]})
+        return LlmAssistResult(used_llm=True, provider="platform", model="mimo-v2.6-flash", data=data)
+
     monkeypatch.setattr(
         "app.application.reviewed_excel_template._template_llm_complete",
-        lambda *_args, **_kwargs: LlmAssistResult(
-            used_llm=True,
-            provider="platform",
-            model="mimo-v2.6-flash",
-            data={"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]},
-        ),
+        candidate_model,
     )
     monkeypatch.setenv("FHD_ETL_LLM", "off")
 
@@ -290,11 +291,11 @@ def test_selected_candidate_clears_are_not_recovered_from_original(intake_store,
     store = intake_store
     monkeypatch.setattr(
         "app.application.reviewed_excel_template._template_llm_complete",
-        lambda *_args, **_kwargs: LlmAssistResult(
+        lambda messages, *_args, **_kwargs: LlmAssistResult(
             used_llm=True,
             provider="platform",
             model="synthetic",
-            data={
+            data={"clear": [], "reason": "synthetic audit"} if messages[0]["content"].startswith("Independently audit") else {
                 "candidates": [
                     {
                         "clear": [{"sheet": "客户", "cell": cell} for cell in ("B2", "A3", "B3")],
@@ -821,6 +822,40 @@ def test_import_lanes_do_not_share_a_circuit(monkeypatch):
         assert llm_assist._circuit_key("template") == "owner:7:template"
 
 
+def test_database_model_rows_keep_incomplete_rows_for_review():
+    from app.application.elt.candidate_table import dataset_from_business_rows
+
+    dataset = dataset_from_business_rows([
+        {"product_name": "合成货品甲", "quantity": "2", "source_sheet": "表", "source_row": "2"},
+        {"purchase_unit": "合成客户", "product_name": "合成货品乙", "quantity": "", "source_sheet": "表", "source_row": "3"},
+        {"purchase_unit": "合成客户", "quantity": "4", "source_sheet": "表", "source_row": "4"},
+    ])
+    assert dataset is not None and [row.row_number for row in dataset.rows] == [2, 3, 4]
+    assert [row.provenance['validation_issues'][0]['field'] for row in dataset.rows] == ['purchase_unit', 'quantity', 'product_name']
+    assert all(row.provenance['validation_issues'][0]['severity'] == 'error' for row in dataset.rows)
+
+
+def test_incomplete_model_rows_are_visible_as_errors_in_preview(intake_store):
+    from app.application.elt.candidate_table import dataset_from_business_rows
+
+    dataset = dataset_from_business_rows([
+        {"product_name": "合成货品甲", "quantity": "2", "source_sheet": "表", "source_row": "2"},
+        {"purchase_unit": "合成客户", "product_name": "合成货品乙", "quantity": "3", "source_sheet": "表", "source_row": "3"},
+    ])
+    store = intake_store
+    with tenant_scope(1), store.factory() as db:
+        upload = store.service.save_upload(db, owner_user_id=7, file_name='合成.xlsx', content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', stream=BytesIO(_delivery_note_bytes()))
+        db.commit()
+        preview = store.service.create_preview(db, owner_user_id=7, upload_id=upload['upload_id'], target_type='shipment_records', source_dataset=dataset)
+    store.executor.futures[-1].result(timeout=10)
+    with tenant_scope(1), store.factory() as db:
+        result = store.service.get_run(db, run_id=preview['id'], owner_user_id=7)
+    assert result['status'] == 'preview_ready'
+    assert result['total_rows'] == 2
+    assert result['summary']['error'] == 1 and result['summary']['new'] == 1
+    assert result['summary']['executed'] == 0
+
+
 def test_database_model_rows_drop_header_labels():
     from app.application.elt.candidate_table import dataset_from_business_rows
 
@@ -944,6 +979,14 @@ def test_template_save_does_not_wait_for_intake_and_saved_selection_can_preview(
         assert db.query(PurchaseUnit).count() == 0
     result = store.client.post(f"{BASE}/intake-preview", data=data)
     assert result.status_code == 200, result.text
+    status = store.client.get(f"{BASE}/reviews/{data['review_id']}/intake-status")
+    assert status.status_code == 200, status.text
+    assert status.json()['status'] == 'created'
+    assert status.json()['intake']['run_id'] == result.json()['intake']['run_id']
+    repeated = store.client.post(f"{BASE}/intake-preview", data=data)
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["replayed"] is True
+    assert repeated.json()["intake"]["run_id"] == result.json()["intake"]["run_id"]
     stale = store.client.post(
         f"{BASE}/intake-preview",
         data={
@@ -951,4 +994,115 @@ def test_template_save_does_not_wait_for_intake_and_saved_selection_can_preview(
             "selections": "[]" if data["selections"] != "[]" else '[{"sheet":"客户","cell":"A1"}]',
         },
     )
+
     assert stale.status_code == 409
+
+
+def test_intake_releases_upload_writer_before_reading_archived_workbook(intake_store, monkeypatch):
+    store = intake_store
+    data = review(store)
+    original = ais.workbook_text
+    writes = []
+
+    def read_after_other_writer(body):
+        # A different preview can write while this worker prepares model input.
+        # A flushed but uncommitted upload would hold SQLite's only writer.
+        with store.factory() as db:
+            db.execute(text('UPDATE etl_uploads SET file_name = file_name WHERE owner_user_id = 7'))
+            db.commit()
+        writes.append(True)
+        return original(body)
+
+    monkeypatch.setattr(ais, 'workbook_text', read_after_other_writer)
+    response = store.client.post(f'{BASE}/intake-preview', data=data)
+    assert response.status_code == 200, response.text
+    assert writes
+
+
+def test_inflight_intake_claim_prevents_duplicate_preview(intake_store):
+    from app.application.elt.service_support import dump_json, load_json, utcnow
+    from app.application.reviewed_excel_review_store import _run
+
+    store = intake_store
+    data = review(store)
+    with tenant_scope(1), store.factory() as db:
+        run = _run(db, data['review_id'], 1, 7)
+        state = load_json(run.draft_json, {})
+        state['intake_attempt'] = {'id': 'other-worker', 'status': 'running', 'started_at': utcnow().isoformat()}
+        run.draft_json = dump_json(state)
+        db.commit()
+    response = store.client.post(f'{BASE}/intake-preview', data=data)
+    assert response.status_code == 409
+    assert '请勿重复提交' in response.text
+    status = store.client.get(f"{BASE}/reviews/{data['review_id']}/intake-status")
+    assert status.status_code == 200 and status.json()['status'] == 'running'
+    assert store.client.post(f"{BASE}/reviews/{data['review_id']}/intake-retry").status_code == 409
+    with tenant_scope(1), store.factory() as db:
+        run = _run(db, data['review_id'], 1, 7)
+        assert load_json(run.draft_json, {})['intake_attempt']['id'] == 'other-worker'
+
+
+def test_intake_persists_model_request_before_call(intake_store, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.application.elt import llm_assist
+    from app.application.elt.service_support import load_json
+    from app.application.reviewed_excel_audit import current_call_id
+    from app.application.reviewed_excel_review_store import _run
+    from app.infrastructure.llm import structured_output
+
+    store = intake_store
+    data = review(store)
+    seen = []
+    monkeypatch.setenv('FHD_ETL_LLM', 'on')
+    monkeypatch.setattr(llm_assist, 'etl_llm_enabled', lambda: True)
+    monkeypatch.setattr(llm_assist, '_active_software_llm', lambda *_: (True, None, object()))
+    monkeypatch.setattr(llm_assist, 'advise_knowledge_import', lambda *_: llm_assist.LlmAssistResult())
+
+    def complete(*args, **kwargs):
+        with tenant_scope(1), store.factory() as db:
+            state = load_json(_run(db, data['review_id'], 1, 7).draft_json, {})
+            seen.append((current_call_id(), state['intake_attempt']['model_calls'][-1]))
+        return SimpleNamespace(model='synthetic', billing={}, data={'rows': []})
+
+    monkeypatch.setattr(structured_output, 'complete_structured_sync', complete)
+    result = store.client.post(f'{BASE}/intake-preview', data=data)
+    assert result.status_code == 200, result.text
+    assert seen and seen[0][0] == seen[0][1]['call_id']
+    assert seen[0][1]['status'] == 'sent'
+    assert result.json()['intake']['model_calls'][0]['status'] == 'answered'
+
+
+def test_long_batched_intake_is_not_marked_unknown_after_ten_minutes():
+    from datetime import timedelta
+
+    from app.application.elt.service_support import utcnow
+
+    started = (utcnow() - timedelta(minutes=11)).isoformat()
+    assert routes._intake_attempt_status({'status': 'running', 'started_at': started}) == 'outcome_unknown'
+    assert routes._intake_attempt_status({'status': 'running', 'started_at': started, 'max_duration_seconds': 1800}) == 'running'
+
+
+def test_old_intake_claim_is_unknown_without_resubmitting(intake_store):
+    from datetime import timedelta
+
+    from app.application.elt.service_support import dump_json, load_json, utcnow
+    from app.application.reviewed_excel_review_store import _run
+
+    store = intake_store
+    data = review(store)
+    with tenant_scope(1), store.factory() as db:
+        run = _run(db, data['review_id'], 1, 7)
+        state = load_json(run.draft_json, {})
+        state['intake_attempt'] = {'id': 'old', 'status': 'running', 'started_at': (utcnow() - timedelta(minutes=11)).isoformat()}
+        run.draft_json = dump_json(state)
+        db.commit()
+    status = store.client.get(f"{BASE}/reviews/{data['review_id']}/intake-status")
+    assert status.status_code == 200 and status.json()['status'] == 'outcome_unknown'
+    assert store.client.post(f'{BASE}/intake-preview', data=data).status_code == 409
+    response = store.client.post(f"{BASE}/reviews/{data['review_id']}/intake-retry")
+    assert response.status_code == 200
+    with tenant_scope(1), store.factory() as db:
+        state = load_json(_run(db, data['review_id'], 1, 7).draft_json, {})
+        assert 'intake_attempt' not in state
+        assert state['intake_attempt_history'][-1]['id'] == 'old'

@@ -593,8 +593,10 @@ def test_a_connection_that_never_opened_is_not_sent(monkeypatch, connected):
 
     monkeypatch.setenv("FHD_ETL_LLM", "on")
     failure = httpx.ReadTimeout("synthetic") if connected else httpx.ConnectTimeout("synthetic")
+    calls = []
 
     async def fail(*_args, **_kwargs):
+        calls.append(1)
         raise failure
 
     monkeypatch.setattr(
@@ -605,6 +607,7 @@ def test_a_connection_that_never_opened_is_not_sent(monkeypatch, connected):
     with pytest.raises(ReviewedExcelError) as error:
         _template_platform_complete([], {}, 20, owner_id=7)
     assert isinstance(error.value, ModelRequestNotSent) is not connected
+    assert len(calls) == (1 if connected else 3)
 
 
 def test_first_byte_deadline_defaults_to_the_template_timeout(monkeypatch):
@@ -615,6 +618,32 @@ def test_first_byte_deadline_defaults_to_the_template_timeout(monkeypatch):
     assert template_first_byte_seconds() == 150
     monkeypatch.setenv("FHD_TEMPLATE_LLM_FIRST_BYTE_SECONDS", "30")
     assert template_first_byte_seconds() == 30
+
+
+def test_model_reconnect_retries_only_before_dispatch(monkeypatch):
+    from types import SimpleNamespace
+
+    import httpx
+
+    from app.application.elt import llm_session_provider as sessions
+    from app.application.reviewed_excel_template import _template_platform_complete
+
+    monkeypatch.setenv('FHD_ETL_LLM', 'on')
+    calls = []
+
+    async def chat(*args, **kwargs):
+        calls.append(1)
+        if len(calls) < 3:
+            raise httpx.ConnectError('synthetic connection failure')
+        return {'choices': [{'message': {'content': '{}'}, 'finish_reason': 'stop'}]}
+
+    async def fast_sleep(*args):
+        return None
+
+    monkeypatch.setattr(sessions, 'current_owner_market_provider', lambda **_: SimpleNamespace(is_configured=True, chat_completion=chat))
+    monkeypatch.setattr('asyncio.sleep', fast_sleep)
+    result = _template_platform_complete([], {'type': 'object'}, 20, owner_id=7)
+    assert result.used_llm and len(calls) == 3
 
 
 def test_schema_rejection_names_each_failing_field():

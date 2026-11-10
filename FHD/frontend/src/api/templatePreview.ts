@@ -3,24 +3,9 @@ import type { RequestOptions } from './core'
 import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
 import { captureAuthSession } from '@/utils/authSessionCache'
 
-// 预览和优化需要等待平台模型；入库预演还要等待数据库和知识两条整表导入。
-// 整本分析单独等到 180 秒。卡住的调用仍会停。
-export const MODEL_BACKED_ELT_TIMEOUT_MS = 180_000
-export const MODEL_INTAKE_TIMEOUT_MS = 360_000
-export const MODEL_ANALYZE_TIMEOUT_MS = 180_000
-
-function modelBackedEltOptions(path: string): RequestOptions {
-  if (path.endsWith('/analyze')) return { timeoutMs: MODEL_ANALYZE_TIMEOUT_MS }
-  if (path.endsWith('/intake-preview')) return { timeoutMs: MODEL_INTAKE_TIMEOUT_MS }
-  if (path.endsWith('/preview') || path.endsWith('/refine')) {
-    return { timeoutMs: MODEL_BACKED_ELT_TIMEOUT_MS }
-  }
-  return {}
-}
-
 // A rejected CSRF request never reaches the handler. Concurrent initial GETs can
 // replace the cookie after a POST reads it, so retry only that explicit rejection.
-async function reviewedExcelPost(path: string, form: FormData) {
+async function reviewedExcelPost(path: string, form: FormData, options: RequestOptions = {}) {
   const sessionCurrent = captureAuthSession()
   const requireCurrentSession = () => {
     if (!sessionCurrent()) throw Object.assign(new Error('登录身份已变化，已停止后续原件处理；已发出的请求请在原账号核对'), { name: 'ReviewedExcelSessionChangedError' })
@@ -38,7 +23,9 @@ async function reviewedExcelPost(path: string, form: FormData) {
     for (let attempt = 0; ; attempt++) {
       requireCurrentSession()
       try {
-        const result = await api.post(path, form, modelBackedEltOptions(path))
+        // Model operations can contain multiple bounded server calls; let the
+        // server finish rather than imposing a second, shorter browser timer.
+        const result = await api.post(path, form, options)
         requireCurrentSession()
         return result
       } catch (error) {
@@ -142,8 +129,12 @@ export const templatePreviewApi = {
     return reviewedExcelPost(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/recover-answer`, formData)
   },
 
-  autoSlices(id: string, version: string) {
-    return api.get(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/auto-slices/${encodeURIComponent(version)}`)
+  autoSlices(id: string, version: string, manifest = false) {
+    return api.get(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/auto-slices/${encodeURIComponent(version)}${manifest ? '?manifest=true' : ''}`)
+  },
+
+  templateFamilies(id: string, version: string) {
+    return reviewedExcelPost(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/template-families/${encodeURIComponent(version)}`, new FormData())
   },
 
   downloadAutoSlice(id: string, version: string, index: number) {
@@ -162,8 +153,8 @@ export const templatePreviewApi = {
     return api.download(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/source`)
   },
 
-  reviewExcel(formData: FormData) {
-    return reviewedExcelPost('/api/templates/reviewed-excel/preview', formData)
+  reviewExcel(formData: FormData, options: RequestOptions = {}) {
+    return reviewedExcelPost('/api/templates/reviewed-excel/preview', formData, options)
   },
 
   refineReviewedExcel(formData: FormData) {
@@ -174,12 +165,24 @@ export const templatePreviewApi = {
     return api.get(`/api/templates/reviewed-excel/reviews/${encodeURIComponent(id)}`)
   },
 
+  reviewedCandidateResult(id: string, version: string, index: number) {
+    return api.get(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/candidate-result/${encodeURIComponent(version)}/${index}`)
+  },
+
   downloadReviewedCandidate(id: string, version: string, candidate: string) {
     return api.download(`/api/templates/reviewed-excel/reviews/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/candidates/${encodeURIComponent(candidate)}/download`)
   },
 
   previewReviewedIntake(formData: FormData) {
     return reviewedExcelPost('/api/templates/reviewed-excel/intake-preview', formData)
+  },
+
+  reviewedIntakeStatus(id: string) {
+    return api.get(`/api/templates/reviewed-excel/reviews/${encodeURIComponent(id)}/intake-status`)
+  },
+
+  retryReviewedIntake(id: string) {
+    return reviewedExcelPost(`/api/templates/reviewed-excel/reviews/${encodeURIComponent(id)}/intake-retry`, new FormData())
   },
 
   saveReviewedExcel(formData: FormData) {
