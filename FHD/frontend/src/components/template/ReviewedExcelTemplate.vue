@@ -161,7 +161,7 @@ const activeDocument = computed(() => documentWorkspace.records.value[activeDocu
 const activeDocumentProposal = computed(() => activeDocument.value && documentWorkspace.proposal(activeDocument.value))
 const documentOriginalPreview = ref(false)
 const documentWorkPending = computed(() => documentWorkspace.documents.value.some(doc => !!doc.phase))
-const documentWorkLabel = computed(() => { const doc = documentWorkspace.documents.value.find(item => !!item.phase); return doc ? `${doc.displayName}：${documentPhase(doc)}` : '' })
+const documentWorkLabel = computed(() => { const doc = documentWorkspace.documents.value.find(item => !!item.phase && item.phase !== 'saving'); return doc ? `${doc.displayName}：${documentPhase(doc)}` : '' })
 function openDocument(doc: ReviewedDocument) {
   activeDocumentKey.value = doc.key; expandedCandidateIndex.value = null; documentOriginalPreview.value = false; templatePickerOpen.value = true
 }
@@ -198,12 +198,13 @@ function bindA4Scale(el: Element | { $el?: unknown } | null, index: number) {
 }
 async function saveActiveDocument() {
   const doc = activeDocument.value
-  if (!doc) return
-  await documentWorkspace.save(doc)
-  if (activeDocument.value === doc && documentWorkspace.saved(doc)) closeCandidatePicker()
+  if (!doc || !documentWorkspace.canSave(doc)) return
+  const saving = documentWorkspace.save(doc)
+  closeCandidatePicker()
+  await saving
 }
 function documentPhase(doc: ReviewedDocument) {
-  return doc.phase === 'generating' ? '生成中' : doc.phase === 'refining' ? '整理中' : doc.phase === 'saving' ? '保存中' : doc.unknown ? '待核对' : doc.error ? '未完成' : ''
+  return doc.phase === 'generating' ? '生成中' : doc.phase === 'refining' ? '整理中' : doc.phase === 'saving' ? '保存中' : doc.unknown ? '待核对' : doc.error ? '未完成' : doc.intakePending ? (documentWorkspace.saved(doc) ? '已保存·后台核对中' : '后台核对中') : doc.intakeError ? (documentWorkspace.saved(doc) ? '已保存·入库待核对' : '入库待核对') : documentWorkspace.saved(doc) ? '已保存' : ''
 }
 function selectExpandedDocumentCandidate() { if (expandedCandidateIndex.value !== null && expandedCandidateIndex.value >= 0) selectDocumentCandidate(expandedCandidateIndex.value) }
 async function submitDocumentRequirement(note: string) {
@@ -1282,7 +1283,7 @@ async function downloadCandidate(index: number) {
       <div v-for="(note, noteIndex) in requirementNotes" :key="`req-${noteIndex}`" class="elt-bubble elt-bubble--user">
         整理要求：{{ note }}
       </div>
-      <div v-if="archiveProgress || documentWorkPending" class="elt-bubble elt-bubble--system elt-processing-feedback" :class="{ 'elt-processing-feedback--busy': busy || documentWorkPending }" role="status" :aria-busy="busy || documentWorkPending"><span v-if="busy || documentWorkPending" class="elt-processing-feedback__spinner" aria-hidden="true"></span><span>{{ documentWorkLabel || archiveProgress }}</span></div>
+      <div v-if="archiveProgress || documentWorkLabel" class="elt-bubble elt-bubble--system elt-processing-feedback" :class="{ 'elt-processing-feedback--busy': busy || !!documentWorkLabel }" role="status" :aria-busy="busy || !!documentWorkLabel"><span v-if="busy || documentWorkLabel" class="elt-processing-feedback__spinner" aria-hidden="true"></span><span>{{ documentWorkLabel || archiveProgress }}</span></div>
       <div v-if="archiveOnSelect" class="classification-results" data-table-structure>
         <template v-for="(item, i) in classifications" :key="`structure-${i}`">
           <section v-for="sheet in item.sheets" :key="`${i}-${sheet.sheet}`">
