@@ -19,13 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 class WorkflowDispatchCallbacks(Protocol):
-    def _build_response(
-        self, ai_result: dict[str, Any], source: str | None, original_message: str = ""
-    ) -> dict[str, Any]: ...
     def _build_workflow_thinking_steps(self, plan: PlanGraph, decision_reason: str) -> str: ...
     def _format_agent_run_response(
         self, plan: PlanGraph, agent_run: AgentRun, thinking_steps: str = "", user_message: str = ""
     ) -> dict[str, Any]: ...
+    @staticmethod
     def _merge_tool_runtime_context(
         user_id: str, message: str, context: dict[str, Any] | None = None
     ) -> dict[str, Any]: ...

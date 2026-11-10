@@ -330,7 +330,7 @@ class AIChatApplicationService(
                     execution_result_wait_reason,
                 )
 
-                status = _payload_status(resp)
+                status: str = _payload_status(resp)
                 if status == "waiting_user":
                     status = (
                         "waiting_approval"
