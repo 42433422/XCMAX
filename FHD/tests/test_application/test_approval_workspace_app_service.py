@@ -93,7 +93,7 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
         with sessions() as db:
             db.add(
                 User(
-                    id=41, username="restore-probe", password="test", market_user_id=41, tenant_id=1
+                    id=41, username="restore-probe", password="test", market_user_id=41, tenant_id=1, role="admin"
                 )
             )
             db.add(ApprovalFlow(id=1, flow_key="restore-probe", flow_name="Restore probe"))
@@ -753,6 +753,7 @@ class TestListRequests:
             # current_node is None so the request is filtered out
             assert result["pagination"]["returned"] == 0
 
+    @patch("app.application.approval_workspace_app_service._can_review_ai_workflow_request", new=lambda db, req, actor: True)
     def test_list_requests_includes_pending_ai_workflow_for_approver(self):
         mock_db = MagicMock()
         mock_query = MagicMock()
@@ -1414,6 +1415,7 @@ class TestApproveRequest:
         assert result["data"]["workflow_execution"]["workflow_executed"] is True
         mock_resume.assert_called_once_with(request_no="req-ai-1", opinion="同意", approved_by="1")
 
+    @patch("app.application.approval_workspace_app_service._can_review_ai_workflow_request", new=lambda db, req, actor: True)
     def test_approve_ai_workflow_without_current_node_resumes_execution(self):
         request = Mock()
         mock_db = MagicMock()
@@ -1478,6 +1480,7 @@ class TestApproveRequest:
         mock_db.add.assert_called_once()
         assert persistence_events == ["commit", "notify"]
 
+    @patch("app.application.approval_workspace_app_service._can_review_ai_workflow_request", new=lambda db, req, actor: True)
     def test_approve_ai_workflow_secret_recovery_hint_absent_from_response_and_persisted(
         self,
     ):
@@ -1896,6 +1899,7 @@ class TestRejectRequest:
             result = reject_request(1, request, body={"opinion": "不同意"})
             assert result["success"] is True
 
+    @patch("app.application.approval_workspace_app_service._can_review_ai_workflow_request", new=lambda db, req, actor: True)
     def test_reject_ai_workflow_without_current_node_clears_pending_workflow(self):
         request = Mock()
         mock_db = MagicMock()
@@ -1941,6 +1945,7 @@ class TestRejectRequest:
         mock_drop.assert_called_once_with(request_no="req-ai-1", reason="不执行")
         mock_db.add.assert_called_once()
 
+    @patch("app.application.approval_workspace_app_service._can_review_ai_workflow_request", new=lambda db, req, actor: True)
     def test_reject_expired_ai_workflow_persists_without_execution(self):
         request = Mock()
         mock_db = MagicMock()
