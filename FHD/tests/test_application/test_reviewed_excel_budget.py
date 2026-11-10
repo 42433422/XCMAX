@@ -628,21 +628,25 @@ def test_model_reconnect_retries_only_before_dispatch(monkeypatch):
     from app.application.elt import llm_session_provider as sessions
     from app.application.reviewed_excel_template import _template_platform_complete
 
-    monkeypatch.setenv('FHD_ETL_LLM', 'on')
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
     calls = []
 
     async def chat(*args, **kwargs):
         calls.append(1)
         if len(calls) < 3:
-            raise httpx.ConnectError('synthetic connection failure')
-        return {'choices': [{'message': {'content': '{}'}, 'finish_reason': 'stop'}]}
+            raise httpx.ConnectError("synthetic connection failure")
+        return {"choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}]}
 
     async def fast_sleep(*args):
         return None
 
-    monkeypatch.setattr(sessions, 'current_owner_market_provider', lambda **_: SimpleNamespace(is_configured=True, chat_completion=chat))
-    monkeypatch.setattr('asyncio.sleep', fast_sleep)
-    result = _template_platform_complete([], {'type': 'object'}, 20, owner_id=7)
+    monkeypatch.setattr(
+        sessions,
+        "current_owner_market_provider",
+        lambda **_: SimpleNamespace(is_configured=True, chat_completion=chat),
+    )
+    monkeypatch.setattr("asyncio.sleep", fast_sleep)
+    result = _template_platform_complete([], {"type": "object"}, 20, owner_id=7)
     assert result.used_llm and len(calls) == 3
 
 

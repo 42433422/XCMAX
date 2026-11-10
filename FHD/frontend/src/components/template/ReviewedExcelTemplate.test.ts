@@ -1,7 +1,7 @@
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const api = vi.hoisted(() => ({ reviewedExcelIdentity: vi.fn().mockResolvedValue({ actor: "1:7" }), classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), classifyArchiveVersion: vi.fn(), downloadArchiveVersion: vi.fn(), downloadClassificationSource: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recoverClassificationAnswer: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), previewReviewedIntake: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
+const api = vi.hoisted(() => ({ reviewedExcelIdentity: vi.fn().mockResolvedValue({ actor: "1:7" }), classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), classifyArchiveVersion: vi.fn(), downloadArchiveVersion: vi.fn(), downloadClassificationSource: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recoverClassificationAnswer: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), previewReviewedIntake: vi.fn(), reviewedIntakeStatus: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
 const etl = vi.hoisted(() => ({ run: vi.fn(), autoIngestProgress: vi.fn(), autoIngestBatches: vi.fn(), withdrawAutoIngestBatch: vi.fn() }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 vi.mock('@/api/elt', () => ({ eltApi: etl }))
@@ -60,6 +60,7 @@ async function mountIntakeCandidate() {
 describe('reviewed Excel template', () => {
   beforeEach(() => {
     api.saveReviewedExcel.mockClear()
+    api.reviewedIntakeStatus.mockReset()
     api.previewReviewedIntake.mockReset().mockImplementation(async () => intakeResult())
     api.archiveClassifyExcel.mockReset().mockImplementation(async (form: FormData) => {
       const response = await api.classifyExcel(form)
@@ -174,6 +175,7 @@ describe('reviewed Excel template', () => {
     state.review = { review_id: 'r1', sheets: [], cells: [], proposal: proposal('v1') }
     state.proposals = [proposal('v1')]; state.name = 'test-only'; state.publishToTenant = true
     api.saveReviewedExcel.mockClear()
+    api.reviewedIntakeStatus.mockReset()
     await flushPromises()
     expect(wrapper.text()).toContain('打印版式未验证')
     expect(wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes('确认发布'))!.attributes('disabled')).toBeDefined()
@@ -718,7 +720,7 @@ describe('reviewed Excel template', () => {
       await input.trigger('change')
       await wrapper.findAll('button').find(b => b.text().includes('查看已保存分类'))!.trigger('click'); await flushPromises()
       await wrapper.findAll('button').find(b => b.text() === '恢复此分类并继续')!.trigger('click'); await flushPromises()
-      expect(api.autoSlices).toHaveBeenCalledWith('restored', 'current-version')
+      expect(api.autoSlices).toHaveBeenCalledWith('restored', 'current-version', true)
       expect(api.analyzeClassification).not.toHaveBeenCalled()
       expect(wrapper.findAll('button').filter(b => b.text() === '用此单据生成模板')).toHaveLength(fails ? 0 : 2)
       if (fails) expect(wrapper.text()).toContain('裁切失败：分类版本已改变')
@@ -979,6 +981,11 @@ describe('reviewed Excel template', () => {
     const { wrapper, doc, save } = await mountIntakeCandidate()
     await save().trigger('click'); await flushPromises()
     expect(doc.intakeError).toContain(failure === 'wrong-mod' ? '范围无法核实' : '预演未完成')
+    if (failure === 'wrong-mod') {
+      expect(doc.intake).toBeNull()
+      expect(doc.intakePending).toBe(false)
+      expect(api.reviewedIntakeStatus).not.toHaveBeenCalled()
+    }
     expect((api.saveReviewedExcel.mock.calls[0][0] as FormData).get('template_only')).toBe('true')
     wrapper.unmount()
   })

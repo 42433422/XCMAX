@@ -374,9 +374,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             },
         )
         try:
-            self._apply_plan(run, plan)
-            for step in run.steps:
-                step.step_id = f"step_{canonical_hash([run_id, step.node_id])[:32]}"
+            self._apply_plan(run, plan, stable_step_ids=True)
             apply_ai_budget_metadata(run, dict(plan.metadata or {}), dict(runtime_context or {}))
             self._repo.save(run)
             if auto_execute:
@@ -775,7 +773,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]:
         return cast("list[RunEvent]", self._repo.list_events(run_id, after_event_id=after_event_id))
 
-    def _apply_plan(self, run: AgentRun, plan: PlanGraph) -> None:
+    def _apply_plan(self, run: AgentRun, plan: PlanGraph, *, stable_step_ids: bool = False) -> None:
         self._apply_approval_risk_policy(plan)
         run.plan_id = plan.plan_id
         run.intent = plan.intent
@@ -786,6 +784,11 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
 
         nodes, graph_error = step_plan_nodes(plan)
         run.steps = [self._step_from_node(node) for node in nodes]
+        if stable_step_ids:
+            from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+            for step in run.steps:
+                step.step_id = f"step_{canonical_hash([run.run_id, step.node_id])[:32]}"
         required_approvals = plan_metadata.get("approval_required_node_ids")
         if isinstance(required_approvals, list):
             required_ids = {str(value) for value in required_approvals}
@@ -915,10 +918,14 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
                 self._repo.save(run)
                 return
+        from app.application.agent_orchestrator.reply_plan import execute_reply_plan
         from app.application.workflow.planning_graph_policy import validate_required_params
         from app.application.workflow.workflow_types import validate_plan_graph
         from app.application.workflow_registry_app import get_workflow_tool_registry
 
+        if execute_reply_plan(run, plan, runtime_context):
+            self._repo.save(run)
+            return
         registry = get_workflow_tool_registry()
         plan_error = validate_plan_graph(plan) or validate_required_params(plan, registry)
         if plan_error:
@@ -1253,7 +1260,8 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                             "outcome": "unknown",
                             "message": step.error or "结果需要人工核对",
                         }
-                    step.output = dict(terminal)
+                    # Readback is a current projection, not a rewrite of the
+                    # immutable execution fact shared with the tool-call audit.
                     return {"success": True, "business_outcome": dict(terminal)}
                 if self._apply_requested_control(run):
                     stopped_for_interaction = True

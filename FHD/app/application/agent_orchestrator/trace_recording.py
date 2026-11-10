@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from typing import Any
 
 from .run_models import (
@@ -32,13 +31,8 @@ logger = logging.getLogger(__name__)
 
 
 class TraceRecorder:
-    def __init__(
-        self,
-        model_usage: ModelUsageRecorder,
-        ingest_artifact: Callable[[AgentRun, AgentArtifact], dict[str, Any] | None],
-    ) -> None:
+    def __init__(self, model_usage: ModelUsageRecorder) -> None:
         self.model_usage = model_usage
-        self.ingest_artifact = ingest_artifact
 
     def enrich(self, run: AgentRun, payload: dict[str, Any], *, query: str) -> None:
         self.model_usage.append(run, _extract_llm_calls(payload))
@@ -59,6 +53,8 @@ class TraceRecorder:
             if signature in existing:
                 continue
             existing.add(signature)
+            # A response-side artifact is evidence, not an execution grant.
+            artifact.metadata = {**artifact.metadata, "skip_dataset_ingest": True}
             run.artifacts.append(artifact)
             logger.info(
                 "agent artifact recorded: run_id=%s artifact_id=%s artifact_type=%s name=%s uri=%s",
@@ -79,6 +75,5 @@ class TraceRecorder:
                     "uri": artifact.uri,
                 },
             )
-            self.ingest_artifact(run, artifact)
         if run.artifacts:
             _refresh_artifact_metadata(run)

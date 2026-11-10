@@ -136,10 +136,14 @@ def _classify_and_submit_client_issue(
 
 def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
     """Execute every online stream through the LangGraph-backed chat service."""
-    from app.application.planner_compat.offline import is_offline, offline_unavailable_payload
+    from app.application.planner_compat.offline import is_offline
 
     if is_offline(body.mode):
-        payload = offline_unavailable_payload()
+        from app.application.planner_compat_service import execute_compat_chat
+
+        # The sync producer runs in its owned worker. Reuse JSON admission,
+        # authorization, local handlers and receipts rather than a second lane.
+        payload = asyncio.run(execute_compat_chat(request, body))
         yield _facade()._sse_event_line({"type": "token", "text": payload["response"]})
         yield _facade()._sse_event_line({"type": "done", "result": payload})
         return

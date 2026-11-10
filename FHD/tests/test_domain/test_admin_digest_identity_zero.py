@@ -16,7 +16,6 @@ from app.domain.admin_digest_identity import (
 class TestDailyDigestIdentityCode:
     """Tests for daily_digest_identity_code."""
 
-
     def test_returns_uppercase(self) -> None:
         code = daily_digest_identity_code()
         assert code == code.upper()
@@ -51,23 +50,15 @@ class TestDailyDigestIdentityCode:
 class TestVerifyDigestIdentityCode:
     """Tests for verify_digest_identity_code."""
 
-
-
     def test_wrong_code_returns_false(self) -> None:
         assert verify_digest_identity_code("000000") is False
-
-
-
 
     def test_long_code_returns_false(self) -> None:
         assert verify_digest_identity_code("ABCDEF1") is False
 
 
-
-
 class TestDigestIdentityPayload:
     """Tests for digest_identity_payload."""
-
 
     def test_data_contains_code(self) -> None:
         result = digest_identity_payload()
@@ -79,7 +70,6 @@ class TestDigestIdentityPayload:
         result = digest_identity_payload()
         data = result["data"]
         assert "expires_at" in data
-
 
     def test_custom_digest_api_base(self) -> None:
         result = digest_identity_payload(digest_api_base="https://api.test.com")

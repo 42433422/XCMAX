@@ -173,7 +173,11 @@ class SessionMarketProvider:
                 except httpx.TransportError as exc:
                     # The pinned route has exactly one stream. Only connection
                     # establishment failure proves no model request was sent.
-                    if options.get("allow_failover") is not False or not never_connected(exc) or attempt == 2:
+                    if (
+                        options.get("allow_failover") is not False
+                        or not never_connected(exc)
+                        or attempt == 2
+                    ):
                         raise
                     await asyncio.sleep(0.5 * (attempt + 1))
             raise RuntimeError("unreachable model connection retry")

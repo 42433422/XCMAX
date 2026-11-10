@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-import os
+import json
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def test_seed_demo_is_idempotent_and_visible_to_business_tools(tmp_path, monkeypatch) -> None:
@@ -56,135 +58,140 @@ def test_seed_demo_is_idempotent_and_visible_to_business_tools(tmp_path, monkeyp
     ("source", "profile"), [(None, "normal"), (None, "pro_default"), ("pro", "pro_default")]
 )
 def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirmation(
-    tmp_path, monkeypatch, source, profile
+    tmp_path, monkeypatch, trusted_actor, source, profile
 ) -> None:
-    """Exercise the real chat entry, safety guard, planner and business tools."""
-    db_file = tmp_path / "onboarding-first-order.sqlite3"
-    previous_database_url = os.environ.get("DATABASE_URL")
-    monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{db_file}")
-
-    import app.db as db_mod
-    from app.application import chat_business_safety
+    """Real model-plan parsing, authenticated tools, confirmation and durable shipment."""
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.onboarding_seed_app_service import seed_onboarding_demo_data
     from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.application.workflow.risk_gate import HybridRiskGate
-    from app.db.db_base import Base
-    from app.db.models.product import Product, UomCategory, UomUnit
-    from app.db.models.purchase_unit import PurchaseUnit
     from app.db.models.shipment import ShipmentRecord
-    from app.db.session import get_db
+    from app.infrastructure.tenant_scope import tenant_scope
 
-    tables = [
-        PurchaseUnit.__table__,
-        UomCategory.__table__,
-        UomUnit.__table__,
-        Product.__table__,
-        ShipmentRecord.__table__,
-    ]
-    db_mod.dispose_and_recreate_engine()
-    Base.metadata.create_all(db_mod.engine, tables=tables)
-    try:
+    actor = trusted_actor(tenant_id=1, role="admin")
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    repository = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository._agent_run_repository", repository
+    )
+    with tenant_scope(1):
         seeded = seed_onboarding_demo_data(tenant_id=1, industry_id="通用")
-        customer = seeded["customer"]["name"]
-        product = seeded["product"]["name"]
-        prompt = (
-            "这是我的新手第一单，请你作为 AI 业务员工按顺序执行：\n"
-            f"1. 查询客户「{customer}」；\n"
-            f"2. 查询商品「{product}」并确认可用数量；\n"
-            "3. 根据查询结果创建一张数量为 1 的演示出货单。\n"
-            "涉及写入时先展示计划并让我确认，完成后告诉我每一步调用的工具和业务结果。"
-        )
-        planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
-        external_planner = Mock(side_effect=AssertionError("onboarding must not call a model"))
-        monkeypatch.setattr(planner, "_plan_with_llm", external_planner)
-        monkeypatch.setattr(
-            "app.application.get_user_memory_rag_app_service",
-            lambda: SimpleNamespace(query=lambda **_kw: {"hits": []}),
-        )
-        monkeypatch.setattr(
-            "app.domain.shared_services.user_memory_service.get_user_memory_service",
-            lambda: SimpleNamespace(format_memory_v2_for_prompt=lambda **_kw: "无已确认记忆"),
-        )
-        repository = InMemoryAgentRunRepository()
-        monkeypatch.setattr(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            lambda: repository,
-        )
-        # Keep unrelated chat/memory persistence and callbacks out of the local
-        # business acceptance database. The business path itself is not mocked.
-        chat = AIChatApplicationService.__new__(AIChatApplicationService)
-        chat.workflow_planner = planner
-        chat.risk_gate = HybridRiskGate()
-        chat.approval_service = Mock()
-        chat.approval_service.get_approval_required_nodes.return_value = []
-        chat._pending_workflows = {}
-        chat.ai_service = SimpleNamespace(
-            chat=AsyncMock(side_effect=AssertionError("onboarding must not call a model"))
-        )
-        monkeypatch.setattr(chat, "_inject_excel_vector_context", lambda **kw: kw["context"])
-        for method in (
-            "_persist_chat_turn",
-            "_persist_recallable_chat_turn",
-            "_persist_plan_state",
-        ):
-            monkeypatch.setattr(chat, method, Mock())
-        for event in ("neuro_notify_chat_received", "neuro_notify_chat_completed"):
-            monkeypatch.setattr(f"app.neuro_bus.application_neuro_bridge.{event}", Mock())
-        monkeypatch.setattr(chat_business_safety, "_db_path", lambda: tmp_path / "no-personnel.db")
+    customer, product = seeded["customer"]["name"], seeded["product"]["name"]
+    plan = {
+        "plan_id": "onboarding-first-order",
+        "intent": "onboarding_first_order",
+        "todo_steps": ["查询客户", "查询产品", "确认后创建出货单"],
+        "risk_level": "medium",
+        "nodes": [
+            {
+                "node_id": "customer",
+                "tool_id": "customers",
+                "action": "query",
+                "risk": "low",
+                "idempotent": True,
+                "params": {"keyword": customer},
+            },
+            {
+                "node_id": "product",
+                "tool_id": "products",
+                "action": "query",
+                "risk": "low",
+                "idempotent": True,
+                "params": {"keyword": product},
+                "depends_on": ["customer"],
+            },
+            {
+                "node_id": "shipment",
+                "tool_id": "shipment_records",
+                "action": "create",
+                "risk": "medium",
+                "idempotent": True,
+                "depends_on": ["product"],
+                "params": {
+                    "unit_name": customer,
+                    "products": [
+                        {
+                            "product_name": product,
+                            "quantity_tins": 1,
+                            "tin_spec": 1,
+                            "unit_price": 99,
+                            "amount": 99,
+                        }
+                    ],
+                },
+            },
+        ],
+    }
+    completion = Mock(
+        return_value={"choices": [{"message": {"content": json.dumps(plan, ensure_ascii=False)}}]}
+    )
+    conversation = Mock(get_context=Mock(return_value=None))
+    with patch(
+        "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=conversation
+    ):
+        chat = AIChatApplicationService()
+    chat.workflow_planner = LLMWorkflowPlanner(ai_service=conversation, completion=completion)
+    for method in ("_persist_chat_turn", "_persist_recallable_chat_turn", "_persist_plan_state"):
+        monkeypatch.setattr(chat, method, Mock())
+    monkeypatch.setattr(
+        "app.application.ai_chat.dialogue_memory.prepare_chat_turn", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        "app.application.ai_chat.dialogue_memory.settle_chat_turn", lambda *a, **kw: None
+    )
+    context = {**actor.context, "tool_execution_profile": profile, "memory_capture_enabled": False}
+    prompt = f"查询客户{customer}和商品{product}，创建数量为1的演示出货单；涉及写入先让我确认。"
+    with tenant_scope(1):
         waiting_payload = chat.process_chat(
-            user_id="onboarding-acceptance",
-            message=prompt,
-            source=source,
-            context={"tool_execution_profile": profile, "memory_capture_enabled": False},
+            str(actor.user_id), prompt, source=source, context=context
         )
         assert waiting_payload["data"]["action"] == "workflow_confirmation_required", (
             waiting_payload
         )
-        assert waiting_payload["data"]["data"]["intent"] == "onboarding_first_order"
-        assert "business_receipt" not in waiting_payload
-        waiting = repository.get(waiting_payload["run_id"])
-        assert waiting is not None
-        assert waiting.status == "waiting_user"
-        assert waiting.steps[-1].params["payload"]["products"][0]["tin_spec"] == 1
-        assert waiting.steps[-1].params["payload"]["products"][0]["unit_price"] == 99
-        assert [call.status for call in waiting.tool_calls] == ["completed", "completed"]
-        with get_db() as db:
+        assert waiting_payload["execution_state"] == "waiting_user"
+        assert waiting_payload["execution_started"] is False
+        assert len(repository.list_recent(limit=10)) == 1
+        trace = repository.get(waiting_payload["run_id"])
+        assert trace.status == "waiting_user"
+        assert not trace.tool_calls
+        with actor.factory() as db:
             assert db.query(ShipmentRecord).count() == 0
-
         completed_payload = chat.process_chat(
-            "onboarding-acceptance",
-            "确认",
-            source=source,
-            context={"tool_execution_profile": profile, "memory_capture_enabled": False},
+            str(actor.user_id), "确认", source=source, context=context
         )
-        assert completed_payload["success"] is True
-        assert completed_payload["run_id"] == waiting.run_id
-        completed = repository.get(waiting.run_id)
-        assert completed is not None
+        assert completed_payload["data"]["action"] == "approval_pending", completed_payload
+        inner = completed_payload["data"]["data"]
+        run_id = inner["agent_run_id"]
+        waiting = repository.get(run_id)
+        assert waiting.status == "waiting_user"
+        assert [call.status for call in waiting.tool_calls] == ["completed", "completed"]
+        assert waiting.steps[-1].params["products"][0]["tin_spec"] == 1
+        with actor.factory() as db:
+            assert db.query(ShipmentRecord).count() == 0
+        from app.application.approval_workspace_app_service import approve_request
+
+        monkeypatch.setattr(
+            "app.application.approval_workspace_app_service.notify_mobile_user",
+            lambda *a, **kw: None,
+        )
+        approved = approve_request(
+            inner["approval_requests"][0]["id"], actor.request, body={"opinion": "同意"}
+        )
+        assert isinstance(approved, dict), getattr(approved, "body", b"{}").decode()
+        assert approved["success"] is True, approved
+        completed = repository.get(run_id)
         assert completed.status == "completed", completed.error
         assert len(completed.tool_calls) == 3
-        external_planner.assert_not_called()
-        chat.ai_service.chat.assert_not_called()
-
-        with get_db() as db:
+        completion.assert_called_once()
+        conversation.chat.assert_not_called()
+        with actor.factory() as db:
             shipment = (
                 db.query(ShipmentRecord).filter(ShipmentRecord.purchase_unit == customer).one()
             )
             assert shipment.product_name == product
-            assert shipment.quantity_tins == 1
-            assert shipment.tin_spec == 1
-            assert shipment.unit_price == 99
-            assert shipment.amount == 99
+            assert shipment.quantity_tins == shipment.tin_spec == 1
+            assert shipment.unit_price == shipment.amount == 99
             assert shipment.tenant_id == 1
-    finally:
-        Base.metadata.drop_all(db_mod.engine, tables=list(reversed(tables)))
-        if previous_database_url is None:
-            monkeypatch.delenv("DATABASE_URL", raising=False)
-        else:
-            monkeypatch.setenv("DATABASE_URL", previous_database_url)
-        db_mod.dispose_and_recreate_engine()
 
 
 @pytest.mark.parametrize("industry", ["考勤", "考勤排班", "attendance", "attendance-industry"])
@@ -207,3 +214,25 @@ def test_attendance_onboarding_never_reads_or_writes_erp_or_private_roster(monke
     database.assert_not_called()
     customer.assert_not_called()
     product.assert_not_called()
+
+
+def test_confirmation_action_string_without_real_wait_state_does_not_claim_execution(monkeypatch):
+    from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+
+    repository = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository._agent_run_repository", repository
+    )
+    result = attach_chat_trace_run(
+        {
+            "success": True,
+            "response": "已创建销售订单",
+            "data": {"action": "workflow_confirmation_required"},
+        },
+        message="创建销售订单",
+        user_id="spoof-test",
+    )
+    assert result["success"] is False
+    assert result["data"]["action"] == "business_action_not_executed"
+    assert repository.get(result["run_id"]).status == "failed"

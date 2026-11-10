@@ -275,17 +275,17 @@ def test_template_platform_uses_account_provider_once_and_never_retries(monkeypa
 
     async def fake(self, messages, **kwargs):
         calls.append(kwargs)
-        response = ({"clear": [], "reason": "synthetic audit"}
-                    if messages[0]["content"].startswith("Independently audit")
-                    else {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]})
+        response = (
+            {"clear": [], "reason": "synthetic audit"}
+            if messages[0]["content"].startswith("Independently audit")
+            else {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
+        )
         return {
             "model": "account-default",
             "choices": [
                 {
                     "finish_reason": "stop",
-                    "message": {
-                        "content": json.dumps(response)
-                    },
+                    "message": {"content": json.dumps(response)},
                 }
             ],
         }
@@ -395,17 +395,17 @@ def test_template_platform_keeps_the_same_call_while_status_arrives(monkeypatch)
             calls.append("once")
             kwargs["_processing_status"]()
             await asyncio.sleep(0.08)
-            response = ({"clear": [], "reason": "synthetic audit"}
-                        if args[0][0]["content"].startswith("Independently audit")
-                        else {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]})
+            response = (
+                {"clear": [], "reason": "synthetic audit"}
+                if args[0][0]["content"].startswith("Independently audit")
+                else {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
+            )
             return {
                 "model": "account-default",
                 "choices": [
                     {
                         "finish_reason": "stop",
-                        "message": {
-                            "content": json.dumps(response)
-                        },
+                        "message": {"content": json.dumps(response)},
                     }
                 ],
             }
@@ -466,7 +466,14 @@ def test_platform_fenced_three_plans_and_strict_nested_contract(monkeypatch):
     async def fake(self, messages, **kwargs):
         seen.append(messages)
         if messages[0]["content"].startswith("Independently audit"):
-            return {"choices": [{"finish_reason": "stop", "message": {"content": '{"clear": [], "reason": "synthetic audit"}'}}]}
+            return {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"content": '{"clear": [], "reason": "synthetic audit"}'},
+                    }
+                ]
+            }
         return {"choices": [{"finish_reason": "stop", "message": {"content": responses.pop(0)}}]}
 
     monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
@@ -580,6 +587,7 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(template_scope, "ensure_templates_tenant_column", lambda: None)
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(routes, "get_app_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(archive_routes, "get_app_data_dir", lambda: str(tmp_path))
 
     from app.application import reviewed_excel_review_store
 
@@ -633,7 +641,8 @@ def review_store(tmp_path, monkeypatch):
         # Classification tests may replace that response independently of the candidate model.
         complete = (
             model_answer
-            if "candidates" in schema["properties"] or messages[0]["content"].startswith("Independently audit")
+            if "candidates" in schema["properties"]
+            or messages[0]["content"].startswith("Independently audit")
             else model_service._template_platform_complete
         )
         return complete(messages, schema, *args, **kwargs)
@@ -2700,8 +2709,13 @@ def test_account_session_calls_classification_candidates_and_feedback_without_ex
     assert slices.status_code == 200, slices.text
     manifest = client.get(path + f"/auto-slices/{analyzed['version']}?manifest=true")
     assert manifest.status_code == 200, manifest.text
-    assert [item['fragments'] for item in manifest.json()['slices']] == [item['fragments'] for item in slices.json()['slices']]
-    assert all(len(item['selection_id']) == 64 and 'sha256' not in item for item in manifest.json()['slices'])
+    assert [item["fragments"] for item in manifest.json()["slices"]] == [
+        item["fragments"] for item in slices.json()["slices"]
+    ]
+    assert all(
+        len(item["selection_id"]) == 64 and "sha256" not in item
+        for item in manifest.json()["slices"]
+    )
     assert slices.json()["slices"][0]["basis"] == "model_group"
     assert (
         slices.json()["slices"][0]["display_name"]
@@ -4619,10 +4633,15 @@ def test_concurrent_workbook_warnings_stay_with_their_source():
     from app.application.reviewed_excel_template import derive_document_workbook
 
     original = _workbook_with_print_area("报价!$1:$19")
-    derived = derive_document_workbook(original, [{"sheet": "报价", "range": "A1:A1"}], print_area_mode="selected")
+    derived = derive_document_workbook(
+        original, [{"sheet": "报价", "range": "A1:A1"}], print_area_mode="selected"
+    )
     with ThreadPoolExecutor(max_workers=4) as executor:
         results = list(executor.map(inspect_workbook, [original, derived] * 8))
-    assert all(bool(result['read_only_print_areas']) == (index % 2 == 0) for index, result in enumerate(results))
+    assert all(
+        bool(result["read_only_print_areas"]) == (index % 2 == 0)
+        for index, result in enumerate(results)
+    )
 
 
 def test_multi_area_maps_each_selected_fragment_without_expansion():
@@ -6560,9 +6579,11 @@ def synthetic_candidate_result(*_args, **_kwargs):
         used_llm=True,
         provider="platform",
         model="mimo-v2.6-flash",
-        data=({"clear": [], "reason": "synthetic audit"}
-              if _args and _args[0][0]["content"].startswith("Independently audit")
-              else {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}),
+        data=(
+            {"clear": [], "reason": "synthetic audit"}
+            if _args and _args[0][0]["content"].startswith("Independently audit")
+            else {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
+        ),
     )
 
 
@@ -6995,7 +7016,10 @@ def test_initial_model_can_clear_business_notes_without_clearing_formulas(monkey
         {"sheet": "出货", "cell": "C1", "value": "=1+1", "kind": "formula"},
     ]
     review = {"sha256": "a" * 64, "sheets": ["出货"], "cells": cells, "sheet_overview": []}
-    plan = {"clear": [{"sheet": "出货", "cell": "B1"}, {"sheet": "出货", "cell": "C1"}], "reason": "清理实例"}
+    plan = {
+        "clear": [{"sheet": "出货", "cell": "B1"}, {"sheet": "出货", "cell": "C1"}],
+        "reason": "清理实例",
+    }
 
     def model(messages, *_args, **_kwargs):
         if messages[0]["content"].startswith("Independently audit"):
@@ -7003,7 +7027,9 @@ def test_initial_model_can_clear_business_notes_without_clearing_formulas(monkey
         return LlmAssistResult(used_llm=True, data={"candidates": [plan, plan, plan]})
 
     monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
-    result = refine_proposal(review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True)
+    result = refine_proposal(
+        review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
+    )
     assert result["candidates"][0]["clear"] == [{"sheet": "出货", "cell": "B1"}]
     assert result["protected"] == [{"sheet": "出货", "cell": "C1"}]
 
@@ -7191,7 +7217,10 @@ def test_unknown_preview_claim_locks_until_the_user_abandons_it(review_store, mo
     assert send().status_code == 503 and len(keys) == 2 and keys[0] != keys[1]
 
 
-@pytest.mark.parametrize('second_status, expected', [('not_sent', 'retryable'), ('unknown', 'unknown'), ('sent', 'unknown')])
+@pytest.mark.parametrize(
+    "second_status, expected",
+    [("not_sent", "retryable"), ("unknown", "unknown"), ("sent", "unknown")],
+)
 def test_candidate_batch_claim_preserves_completed_work(review_store, second_status, expected):
     from sqlalchemy.orm import sessionmaker
 
@@ -7201,25 +7230,37 @@ def test_candidate_batch_claim_preserves_completed_work(review_store, second_sta
     from app.infrastructure.tenant_scope import tenant_scope
 
     item = review_store.client.post(
-        '/api/templates/reviewed-excel/classify', data={'expected_actor': '1:7'},
-        files={'files': ('synthetic.xlsx', sample())},
-    ).json()['files'][0]
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("synthetic.xlsx", sample())},
+    ).json()["files"][0]
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        run = _classification_run(db, item['classification_id'], 1, 7)
+        run = _classification_run(db, item["classification_id"], 1, 7)
         state = load_json(run.draft_json, {})
-        state['template_candidate_requests'] = {'key': {'state': 'sent', 'call_id': 'call', 'batches': {
-            '0': {'status': 'complete', 'result': {'synthetic': True}}, '1': {'status': second_status},
-        }}}
+        state["template_candidate_requests"] = {
+            "key": {
+                "state": "sent",
+                "call_id": "call",
+                "batches": {
+                    "0": {"status": "complete", "result": {"synthetic": True}},
+                    "1": {"status": second_status},
+                },
+            }
+        }
         run.draft_json = dump_json(state)
         db.commit()
-        _update_candidate_claim(db, item['classification_id'], 'key', 1, 7, unknown=False)
+        _update_candidate_claim(db, item["classification_id"], "key", 1, 7, unknown=False)
         db.expire_all()
-        saved = load_json(_classification_run(db, item['classification_id'], 1, 7).draft_json, {})['template_candidate_requests']['key']
-        assert saved['state'] == expected and saved['batches']['0']['result'] == {'synthetic': True}
+        saved = load_json(_classification_run(db, item["classification_id"], 1, 7).draft_json, {})[
+            "template_candidate_requests"
+        ]["key"]
+        assert saved["state"] == expected and saved["batches"]["0"]["result"] == {"synthetic": True}
 
 
-@pytest.mark.parametrize('recover_immediately', [True, False])
-def test_preview_retries_only_unsent_batches_after_checkpoint(account_session_client, review_store, monkeypatch, recover_immediately):
+@pytest.mark.parametrize("recover_immediately", [True, False])
+def test_preview_retries_only_unsent_batches_after_checkpoint(
+    account_session_client, review_store, monkeypatch, recover_immediately
+):
     import time
 
     from app.application.elt.llm_assist_runtime import LlmAssistResult
@@ -7228,7 +7269,7 @@ def test_preview_retries_only_unsent_batches_after_checkpoint(account_session_cl
     client, _, _ = account_session_client
     workbook = Workbook()
     for row in range(1, 182):
-        workbook.active.cell(row, 1, f'合成商品{row}')
+        workbook.active.cell(row, 1, f"合成商品{row}")
     output = BytesIO()
     workbook.save(output)
     workbook.close()
@@ -7240,42 +7281,61 @@ def test_preview_retries_only_unsent_batches_after_checkpoint(account_session_cl
     def model(messages, *_args, **_kwargs):
         key = current_call_id()
         keys.append(key)
-        if '-b2-' in key and failures_remaining[0]:
+        if "-b2-" in key and failures_remaining[0]:
             failures_remaining[0] -= 1
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
                 with review_store.engine.connect() as db:
-                    raw = db.execute(text('SELECT draft_json FROM etl_runs WHERE id=:id'), {'id': form['classification_id']}).scalar_one()
-                claims = json.loads(raw).get('template_candidate_requests', {})
-                if any(claim.get('batches', {}).get('0', {}).get('status') == 'complete' for claim in claims.values()):
+                    raw = db.execute(
+                        text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                        {"id": form["classification_id"]},
+                    ).scalar_one()
+                claims = json.loads(raw).get("template_candidate_requests", {})
+                if any(
+                    claim.get("batches", {}).get("0", {}).get("status") == "complete"
+                    for claim in claims.values()
+                ):
                     break
                 time.sleep(0.02)
             else:
-                raise AssertionError('first batch was not checkpointed')
-            raise ModelRequestNotSent('连接未建立')
-        cells = json.loads(messages[1]['content'])['cells']
-        clear = [{'sheet': c['sheet'], 'cell': c['cell']} for c in cells]
-        return LlmAssistResult(used_llm=True, data={'candidates': [{'clear': clear, 'reason': '实例'} for _ in range(3)]})
+                raise AssertionError("first batch was not checkpointed")
+            raise ModelRequestNotSent("连接未建立")
+        cells = json.loads(messages[1]["content"])["cells"]
+        clear = [{"sheet": c["sheet"], "cell": c["cell"]} for c in cells]
+        return LlmAssistResult(
+            used_llm=True,
+            data={"candidates": [{"clear": clear, "reason": "实例"} for _ in range(3)]},
+        )
 
-    monkeypatch.setattr('app.application.reviewed_excel_template._template_llm_complete', model)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
+
     def send():
-        return client.post('/api/templates/reviewed-excel/preview', data=form, files={'file': ('synthetic.xlsx', body)})
+        return client.post(
+            "/api/templates/reviewed-excel/preview",
+            data=form,
+            files={"file": ("synthetic.xlsx", body)},
+        )
 
     first = send()
     if recover_immediately:
         assert first.status_code == 200, first.text
-        assert len(keys) == 3 and sum('-b1-' in key for key in keys) == 1
-        assert any('-r2-b2-' in key for key in keys)
+        assert len(keys) == 3 and sum("-b1-" in key for key in keys) == 1
+        assert any("-r2-b2-" in key for key in keys)
         return
     assert first.status_code == 503, first.text
     with review_store.engine.connect() as db:
-        state = json.loads(db.execute(text('SELECT draft_json FROM etl_runs WHERE id=:id'), {'id': form['classification_id']}).scalar_one())
-    claim = next(iter(state['template_candidate_requests'].values()))
-    assert claim['state'] == 'retryable' and claim['batches']['0']['status'] == 'complete'
+        state = json.loads(
+            db.execute(
+                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                {"id": form["classification_id"]},
+            ).scalar_one()
+        )
+    claim = next(iter(state["template_candidate_requests"].values()))
+    assert claim["state"] == "retryable" and claim["batches"]["0"]["status"] == "complete"
     keys.clear()
     second = send()
     assert second.status_code == 200, second.text
-    assert len(keys) == 1 and '-r4-b2-' in keys[0]
+    assert len(keys) == 1 and "-r4-b2-" in keys[0]
 
 
 def test_preview_retries_when_all_first_batches_were_not_sent(account_session_client, monkeypatch):
@@ -7285,7 +7345,7 @@ def test_preview_retries_when_all_first_batches_were_not_sent(account_session_cl
     client, _, _ = account_session_client
     workbook = Workbook()
     for row in range(1, 182):
-        workbook.active.cell(row, 1, f'合成商品{row}')
+        workbook.active.cell(row, 1, f"合成商品{row}")
     output = BytesIO()
     workbook.save(output)
     workbook.close()
@@ -7296,13 +7356,18 @@ def test_preview_retries_when_all_first_batches_were_not_sent(account_session_cl
     def model(messages, *_args, **_kwargs):
         key = current_call_id()
         keys.append(key)
-        if '-r1-' in key:
-            raise ModelRequestNotSent('连接未建立')
-        cells = json.loads(messages[1]['content'])['cells']
-        clear = [{'sheet': c['sheet'], 'cell': c['cell']} for c in cells]
-        return LlmAssistResult(used_llm=True, data={'candidates': [{'clear': clear, 'reason': '实例'} for _ in range(3)]})
+        if "-r1-" in key:
+            raise ModelRequestNotSent("连接未建立")
+        cells = json.loads(messages[1]["content"])["cells"]
+        clear = [{"sheet": c["sheet"], "cell": c["cell"]} for c in cells]
+        return LlmAssistResult(
+            used_llm=True,
+            data={"candidates": [{"clear": clear, "reason": "实例"} for _ in range(3)]},
+        )
 
-    monkeypatch.setattr('app.application.reviewed_excel_template._template_llm_complete', model)
-    result = client.post('/api/templates/reviewed-excel/preview', data=form, files={'file': ('synthetic.xlsx', body)})
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
+    result = client.post(
+        "/api/templates/reviewed-excel/preview", data=form, files={"file": ("synthetic.xlsx", body)}
+    )
     assert result.status_code == 200, result.text
-    assert any('-r1-' in key for key in keys) and any('-r2-' in key for key in keys)
+    assert any("-r1-" in key for key in keys) and any("-r2-" in key for key in keys)

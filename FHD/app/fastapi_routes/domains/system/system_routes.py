@@ -359,7 +359,14 @@ def templates_delete(request: Request, body: dict = Body(default_factory=dict)):
     if not data.get("id") and request.query_params.get("id"):
         data["id"] = request.query_params.get("id")
     if not str(data.get("id") or "").strip():
-        return JSONResponse({"success": False, "message": "模板 ID 不能为空"}, status_code=400)
+        return JSONResponse(
+            {
+                "success": False,
+                "error_code": "schema_validation_failed",
+                "message": "模板 ID 不能为空",
+            },
+            status_code=400,
+        )
     payload, code = _run_document_template_agent(
         request=request,
         body=data,

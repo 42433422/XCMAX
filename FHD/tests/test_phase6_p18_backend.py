@@ -1371,23 +1371,8 @@ class TestMobileExtEnsureMobileDeviceTable:
         mock_warning.assert_called_once()
 
 
-
-
-
-
 class TestMobileExtUnauthorizedRoutes:
     """Cover unauthorized route branches."""
-
-
-
-
-
-
-
-
-
-
-
 
     @pytest.mark.asyncio
     async def test_cs_post_message_unauthorized(self, ext_mod):
@@ -1399,7 +1384,6 @@ class TestMobileExtUnauthorizedRoutes:
             user=None,
         )
         assert result.status_code == 401
-
 
 
 class TestMobileExtMobileModItems:
@@ -1692,8 +1676,6 @@ class TestMobileExtCsRoutes:
             data = result
         assert data.get("success") is True
         assert data["data"]["messages"] == []
-
-
 
 
 # ===========================================================================

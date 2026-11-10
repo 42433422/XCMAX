@@ -31,8 +31,11 @@ def test_unavailable_model_never_synthesizes_a_business_tool_plan():
             {},
         )
 
-    assert plan.nodes == []
+    assert [(node.tool_id, node.action) for node in plan.nodes] == [("clarify", "ask")]
+    assert plan.nodes[0].params["planning_rejected"] is True
+    assert plan.nodes[0].params["target_node_id"] == ""
     assert plan.metadata["planning_rejected"] is True
+    assert plan.metadata["planning_unavailable"] is True
 
 
 def test_raw_sql_policy_does_not_misclassify_business_requests():

@@ -232,8 +232,10 @@ def test_knowledge_repair_only_after_a_definite_invalid_answer(monkeypatch):
         calls.append((messages, kwargs))
         if len(calls) == 1:
             return llm_assist.LlmAssistResult(
-                used_llm=True, degraded=True,
-                degradation_code="ELT_LLM_OUTPUT_INVALID", answer="not JSON",
+                used_llm=True,
+                degraded=True,
+                degradation_code="ELT_LLM_OUTPUT_INVALID",
+                answer="not JSON",
             )
         return llm_assist.LlmAssistResult(used_llm=True, data={"title": "表", "content": "数据"})
 
@@ -249,9 +251,12 @@ def test_knowledge_does_not_retry_unknown_model_outcome(monkeypatch):
     from app.application.elt import llm_assist
 
     calls = []
+
     def complete(*args, **kwargs):
         calls.append(1)
-        return llm_assist.LlmAssistResult(used_llm=True, degraded=True, degradation_code="ELT_LLM_TIMEOUT")
+        return llm_assist.LlmAssistResult(
+            used_llm=True, degraded=True, degradation_code="ELT_LLM_TIMEOUT"
+        )
 
     monkeypatch.setattr(llm_assist, "_complete", complete)
     result = llm_assist.advise_knowledge_import("表格")
@@ -266,20 +271,22 @@ def test_invalid_knowledge_answer_is_audited_and_repaired_with_new_call(monkeypa
 
     events = []
     completions = []
-    monkeypatch.setenv('FHD_ETL_LLM', 'true')
-    monkeypatch.setattr(llm_assist, '_active_software_llm', lambda *_: (True, object(), object()))
+    monkeypatch.setenv("FHD_ETL_LLM", "true")
+    monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, object(), object()))
 
     def complete(*args, **kwargs):
         completions.append(1)
         if len(completions) == 1:
-            raise StructuredOutputError(1, ['invalid JSON'], 'malformed')
-        return SimpleNamespace(model='test', billing={}, data={'title': '表', 'content': '内容'})
+            raise StructuredOutputError(1, ["invalid JSON"], "malformed")
+        return SimpleNamespace(model="test", billing={}, data={"title": "表", "content": "内容"})
 
-    monkeypatch.setattr(llm_assist, '_bounded_structured_completion', complete)
-    with llm_assist.audit_intake_calls(lambda call_id, lane, status: events.append((call_id, lane, status))):
-        result = llm_assist.advise_knowledge_import('表格')
-    assert not result.degraded and result.data['content'] == '内容'
-    assert [event[2] for event in events] == ['sent', 'answered_invalid', 'sent', 'answered']
+    monkeypatch.setattr(llm_assist, "_bounded_structured_completion", complete)
+    with llm_assist.audit_intake_calls(
+        lambda call_id, lane, status: events.append((call_id, lane, status))
+    ):
+        result = llm_assist.advise_knowledge_import("表格")
+    assert not result.degraded and result.data["content"] == "内容"
+    assert [event[2] for event in events] == ["sent", "answered_invalid", "sent", "answered"]
     assert events[0][0] == events[1][0] != events[2][0] == events[3][0]
 
 
@@ -288,12 +295,14 @@ def test_audit_database_failure_is_not_reported_as_model_outage(monkeypatch):
 
     from app.application.elt import llm_assist
 
-    monkeypatch.setenv('FHD_ETL_LLM', 'true')
-    monkeypatch.setattr(llm_assist, '_active_software_llm', lambda *_: (True, object(), object()))
+    monkeypatch.setenv("FHD_ETL_LLM", "true")
+    monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, object(), object()))
+
     def fail_audit(*_):
-        raise OperationalError('write', {}, Exception('database locked'))
+        raise OperationalError("write", {}, Exception("database locked"))
+
     with llm_assist.audit_intake_calls(fail_audit), pytest.raises(OperationalError):
-        llm_assist.advise_knowledge_import('表格')
+        llm_assist.advise_knowledge_import("表格")
 
 
 def test_business_import_asks_again_only_for_a_stored_row_without_coordinates(monkeypatch):
@@ -386,13 +395,17 @@ def test_business_import_asks_again_when_purchase_unit_is_off_sheet(monkeypatch)
 def test_failed_business_repair_does_not_return_unverified_rows(monkeypatch):
     from app.application.elt import llm_assist
 
-    responses = iter([
-        llm_assist.LlmAssistResult(used_llm=True, data={'rows': [{'product_name': '螺母'}]}),
-        llm_assist.LlmAssistResult(used_llm=True, degraded=True, degradation_code='ELT_LLM_UNAVAILABLE'),
-    ])
-    monkeypatch.setattr(llm_assist, '_complete', lambda *args, **kwargs: next(responses))
-    result = llm_assist.advise_business_import('# sheet:送货\nR2 | 螺母 | 5')
-    assert result.degraded and result.degradation_code == 'ELT_LLM_UNAVAILABLE'
+    responses = iter(
+        [
+            llm_assist.LlmAssistResult(used_llm=True, data={"rows": [{"product_name": "螺母"}]}),
+            llm_assist.LlmAssistResult(
+                used_llm=True, degraded=True, degradation_code="ELT_LLM_UNAVAILABLE"
+            ),
+        ]
+    )
+    monkeypatch.setattr(llm_assist, "_complete", lambda *args, **kwargs: next(responses))
+    result = llm_assist.advise_business_import("# sheet:送货\nR2 | 螺母 | 5")
+    assert result.degraded and result.degradation_code == "ELT_LLM_UNAVAILABLE"
     assert not result.data
 
 
@@ -2717,11 +2730,11 @@ def test_webhook_adapter_connectivity_test(monkeypatch):
 def test_saved_documents_have_bounded_parallel_model_slots():
     from app.application.elt.llm_assist_runtime import owner_call_lock
 
-    slots = owner_call_lock('synthetic-owner:knowledge-parallel-test')
+    slots = owner_call_lock("synthetic-owner:knowledge-parallel-test")
     assert all(slots.acquire(blocking=False) for _ in range(3))
     try:
         assert not slots.acquire(blocking=False)
-        other = owner_call_lock('synthetic-other-owner:knowledge-parallel-test')
+        other = owner_call_lock("synthetic-other-owner:knowledge-parallel-test")
         assert other.acquire(blocking=False)
         other.release()
     finally:
@@ -2737,18 +2750,27 @@ def test_three_saved_document_calls_can_reach_model_concurrently(monkeypatch):
     from app.application.elt import llm_assist
 
     ready = threading.Barrier(3, timeout=3)
-    monkeypatch.setattr(llm_assist, 'etl_llm_mode', lambda: 'on')
-    monkeypatch.setattr(llm_assist, '_circuit_key', lambda lane: 'synthetic-owner:parallel-integration')
-    monkeypatch.setattr(llm_assist, '_circuit_degradation', lambda key: '')
-    monkeypatch.setattr(llm_assist, '_active_software_llm', lambda *_: (True, None, object()))
+    monkeypatch.setattr(llm_assist, "etl_llm_mode", lambda: "on")
+    monkeypatch.setattr(
+        llm_assist, "_circuit_key", lambda lane: "synthetic-owner:parallel-integration"
+    )
+    monkeypatch.setattr(llm_assist, "_circuit_degradation", lambda key: "")
+    monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, None, object()))
 
     def model(*args, **kwargs):
         ready.wait()
-        return SimpleNamespace(model='test', billing={}, data={})
+        return SimpleNamespace(model="test", billing={}, data={})
 
-    monkeypatch.setattr(llm_assist, '_bounded_structured_completion', model)
+    monkeypatch.setattr(llm_assist, "_bounded_structured_completion", model)
     with ThreadPoolExecutor(max_workers=3) as pool:
-        replies = list(pool.map(lambda _: llm_assist._complete([], schema={}, max_tokens=1, lane='knowledge', timeout_seconds=5), range(3)))
+        replies = list(
+            pool.map(
+                lambda _: llm_assist._complete(
+                    [], schema={}, max_tokens=1, lane="knowledge", timeout_seconds=5
+                ),
+                range(3),
+            )
+        )
     assert all(result.used_llm and not result.degraded for result in replies)
 
 
@@ -2760,17 +2782,17 @@ def test_queue_timeout_does_not_start_or_repeat_model_call(monkeypatch):
     lock = threading.Lock()
     lock.acquire()
     calls = []
-    monkeypatch.setattr(llm_assist, 'etl_llm_mode', lambda: 'on')
-    monkeypatch.setattr(llm_assist, '_circuit_degradation', lambda key: '')
-    monkeypatch.setattr(llm_assist, '_owner_call_lock', lambda key: lock)
-    monkeypatch.setattr(llm_assist, '_active_software_llm', lambda *_: calls.append(True))
+    monkeypatch.setattr(llm_assist, "etl_llm_mode", lambda: "on")
+    monkeypatch.setattr(llm_assist, "_circuit_degradation", lambda key: "")
+    monkeypatch.setattr(llm_assist, "_owner_call_lock", lambda key: lock)
+    monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: calls.append(True))
     try:
         result = llm_assist._complete([], schema={}, max_tokens=1, timeout_seconds=0.01)
     finally:
         lock.release()
     assert result.degraded is True
     assert result.used_llm is False
-    assert result.degradation_code == 'ELT_LLM_QUEUE_TIMEOUT'
+    assert result.degradation_code == "ELT_LLM_QUEUE_TIMEOUT"
     assert calls == []
 
 
@@ -2781,20 +2803,25 @@ def test_structured_completion_preserves_request_context(monkeypatch):
     from app.application.elt import llm_assist
     from app.infrastructure.llm import structured_output
 
-    account = ContextVar('test_etl_account', default=None)
-    token = account.set('owner-4')
+    account = ContextVar("test_etl_account", default=None)
+    token = account.set("owner-4")
     monkeypatch.setattr(
-        structured_output, 'complete_structured_sync',
-        lambda *args, **kwargs: SimpleNamespace(data={'owner': account.get()}),
+        structured_output,
+        "complete_structured_sync",
+        lambda *args, **kwargs: SimpleNamespace(data={"owner": account.get()}),
     )
     try:
         result = llm_assist._bounded_structured_completion(
-            [], schema={}, max_tokens=1, timeout_seconds=1,
-            conversation_service=None, provider=None,
+            [],
+            schema={},
+            max_tokens=1,
+            timeout_seconds=1,
+            conversation_service=None,
+            provider=None,
         )
     finally:
         account.reset(token)
-    assert result.data == {'owner': 'owner-4'}
+    assert result.data == {"owner": "owner-4"}
 
 
 def test_intake_records_call_id_before_provider_invocation(monkeypatch):
@@ -2805,18 +2832,22 @@ def test_intake_records_call_id_before_provider_invocation(monkeypatch):
     from app.infrastructure.llm import structured_output
 
     events = []
-    monkeypatch.setattr(llm_assist, 'etl_llm_mode', lambda: 'on')
-    monkeypatch.setattr(llm_assist, '_active_software_llm', lambda *_: (True, None, object()))
+    monkeypatch.setattr(llm_assist, "etl_llm_mode", lambda: "on")
+    monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, None, object()))
 
     def call(*args, **kwargs):
-        events.append(('provider', current_call_id()))
-        return SimpleNamespace(model='test', billing={}, data={})
+        events.append(("provider", current_call_id()))
+        return SimpleNamespace(model="test", billing={}, data={})
 
-    monkeypatch.setattr(structured_output, 'complete_structured_sync', call)
-    with llm_assist.audit_intake_calls(lambda call_id, lane, status: events.append((status, call_id))):
-        result = llm_assist._complete([], schema={}, max_tokens=1, timeout_seconds=1, lane='database')
+    monkeypatch.setattr(structured_output, "complete_structured_sync", call)
+    with llm_assist.audit_intake_calls(
+        lambda call_id, lane, status: events.append((status, call_id))
+    ):
+        result = llm_assist._complete(
+            [], schema={}, max_tokens=1, timeout_seconds=1, lane="database"
+        )
     assert not result.degraded
-    assert [event[0] for event in events] == ['sent', 'provider', 'answered']
+    assert [event[0] for event in events] == ["sent", "provider", "answered"]
     assert len({event[1] for event in events}) == 1 and events[0][1]
 
 
@@ -2825,26 +2856,33 @@ def test_intake_does_not_invoke_provider_if_call_record_fails(monkeypatch):
     from app.infrastructure.llm import structured_output
 
     calls = []
-    monkeypatch.setattr(llm_assist, 'etl_llm_mode', lambda: 'on')
-    monkeypatch.setattr(llm_assist, '_active_software_llm', lambda *_: (True, None, object()))
-    monkeypatch.setattr(structured_output, 'complete_structured_sync', lambda *a, **kw: calls.append(True))
+    monkeypatch.setattr(llm_assist, "etl_llm_mode", lambda: "on")
+    monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, None, object()))
+    monkeypatch.setattr(
+        structured_output, "complete_structured_sync", lambda *a, **kw: calls.append(True)
+    )
 
     def failed_record(*args):
-        raise RuntimeError('synthetic persistence failure')
+        raise RuntimeError("synthetic persistence failure")
 
     with llm_assist.audit_intake_calls(failed_record):
         result = llm_assist._complete([], schema={}, max_tokens=1, timeout_seconds=1)
     assert result.degraded and not calls
 
 
-@pytest.mark.parametrize('rows', [162, 480])
+@pytest.mark.parametrize("rows", [162, 480])
 def test_business_units_limit_model_output_without_losing_source_rows(rows):
     from app.application.elt.llm_assist import MAX_BUSINESS_UNITS, business_units
 
-    source = '# sheet:合成\n' + '\n'.join(f'R{i} | 合成货品{i}' for i in range(1, rows + 1))
+    source = "# sheet:合成\n" + "\n".join(f"R{i} | 合成货品{i}" for i in range(1, rows + 1))
     units = business_units(source)
     assert len(units) <= MAX_BUSINESS_UNITS
-    assert {line.split(' | ', 1)[0] for unit in units for line in unit.splitlines() if line.startswith('R')} == {f'R{i}' for i in range(1, rows + 1)}
+    assert {
+        line.split(" | ", 1)[0]
+        for unit in units
+        for line in unit.splitlines()
+        if line.startswith("R")
+    } == {f"R{i}" for i in range(1, rows + 1)}
     if rows == 162:
         assert len(units) == 6
 
@@ -2854,19 +2892,21 @@ def test_business_units_have_separate_bounded_deadlines(monkeypatch):
 
     clock = [100.0]
     calls = []
-    monkeypatch.setattr(llm_assist.time, 'monotonic', lambda: clock[0])
-    monkeypatch.setattr(llm_assist, 'etl_llm_timeout_seconds', lambda **kwargs: 5.0)
-    monkeypatch.setattr(llm_assist, 'business_units', lambda source: ['first', 'second'])
+    monkeypatch.setattr(llm_assist.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(llm_assist, "etl_llm_timeout_seconds", lambda **kwargs: 5.0)
+    monkeypatch.setattr(llm_assist, "business_units", lambda source: ["first", "second"])
 
     def unit(source):
         calls.append(source)
         clock[0] += 5.0
-        return llm_assist.LlmAssistResult(used_llm=True, data={'rows': [{'product_name': 'partial'}]})
+        return llm_assist.LlmAssistResult(
+            used_llm=True, data={"rows": [{"product_name": "partial"}]}
+        )
 
-    monkeypatch.setattr(llm_assist, '_advise_business_unit', unit)
-    result = llm_assist.advise_business_import('source')
-    assert calls == ['first', 'second']
-    assert not result.degraded and result.data['units'] == 2
+    monkeypatch.setattr(llm_assist, "_advise_business_unit", unit)
+    result = llm_assist.advise_business_import("source")
+    assert calls == ["first", "second"]
+    assert not result.degraded and result.data["units"] == 2
     assert llm_assist._BUSINESS_DEADLINE.get() is None
 
 
@@ -2887,17 +2927,17 @@ def test_timed_out_provider_keeps_account_lock_until_worker_exits(monkeypatch):
         finish.wait(2)
         return None
 
-    monkeypatch.setattr(llm_assist, 'etl_llm_mode', lambda: 'on')
-    monkeypatch.setattr(llm_assist, '_circuit_degradation', lambda key: '')
-    monkeypatch.setattr(llm_assist, '_open_circuit', lambda *args: None)
-    monkeypatch.setattr(llm_assist, '_owner_call_lock', lambda key: lock)
-    monkeypatch.setattr(llm_assist, '_active_software_llm', lambda *_: (True, None, object()))
-    monkeypatch.setattr(structured_output, 'complete_structured_sync', slow)
+    monkeypatch.setattr(llm_assist, "etl_llm_mode", lambda: "on")
+    monkeypatch.setattr(llm_assist, "_circuit_degradation", lambda key: "")
+    monkeypatch.setattr(llm_assist, "_open_circuit", lambda *args: None)
+    monkeypatch.setattr(llm_assist, "_owner_call_lock", lambda key: lock)
+    monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, None, object()))
+    monkeypatch.setattr(structured_output, "complete_structured_sync", slow)
     try:
         first = llm_assist._complete([], schema={}, max_tokens=1, timeout_seconds=0.03)
         assert started.is_set() and first.degraded
         second = llm_assist._complete([], schema={}, max_tokens=1, timeout_seconds=0.03)
-        assert second.degradation_code == 'ELT_LLM_QUEUE_TIMEOUT'
+        assert second.degradation_code == "ELT_LLM_QUEUE_TIMEOUT"
         assert len(calls) == 1
     finally:
         finish.set()

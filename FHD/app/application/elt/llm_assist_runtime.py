@@ -86,7 +86,11 @@ def degradation_code(exc: BaseException) -> str:
     message = str(exc).lower()
     if "quota exhausted" in message or "额度" in message or "429" in message:
         return "ELT_LLM_QUOTA_EXHAUSTED"
-    if isinstance(exc, TimeoutError) or "structured completion timeout" in message or "sync bridge timeout" in message:
+    if (
+        isinstance(exc, TimeoutError)
+        or "structured completion timeout" in message
+        or "sync bridge timeout" in message
+    ):
         return "ELT_LLM_TIMEOUT"
     return "ELT_LLM_UNAVAILABLE"
 

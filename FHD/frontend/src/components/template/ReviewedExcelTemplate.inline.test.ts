@@ -6,7 +6,7 @@ import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 const api = vi.hoisted(() => ({
   archiveClassifyExcel: vi.fn(), confirmClassification: vi.fn(), reviewExcel: vi.fn(),
   refineReviewedExcel: vi.fn(), previewReviewedIntake: vi.fn(), reviewedExcelIdentity: vi.fn(),
-  analyzeClassification: vi.fn(), autoSlices: vi.fn(), recentClassifications: vi.fn(),
+  reviewedCandidateResult: vi.fn(), templateFamilies: vi.fn(), analyzeClassification: vi.fn(), autoSlices: vi.fn(), recentClassifications: vi.fn(),
 }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 vi.mock('@/api/xcmaxMarketProxy', () => ({ default: { llmResolveChatDefault: vi.fn() } }))
@@ -50,6 +50,8 @@ function enableModelPipeline(slices = [modelSlice()]) {
   api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   api.analyzeClassification.mockResolvedValue({ version: 'model-v2', model_status: 'returned', sheets: classified().sheets })
   api.autoSlices.mockResolvedValue({ slices })
+  api.templateFamilies.mockResolvedValue({ families: slices.map(slice => ({ members: [slice.index], reason: 'distinct source document' })) })
+  api.reviewedCandidateResult.mockResolvedValue({ status: 'outcome_unknown' })
   api.reviewExcel.mockResolvedValue(reviewed())
   api.refineReviewedExcel.mockResolvedValue({ review_id: 'model-review', proposal: { ...reviewed().proposal, version: 'refined-v2', parent_version: 'v1' } })
 }
@@ -132,7 +134,9 @@ describe('model-required inline ELT processing', () => {
 
   it.each(['not_called', 'unavailable'])('rejects a server %s proposal instead of presenting success', async status => {
     const result = reviewed()
-    api.reviewExcel.mockResolvedValue({ ...result, proposal: { ...result.proposal, model: { status } } })
+    const incomplete = { ...result, proposal: { ...result.proposal, model: { status } } }
+    api.reviewExcel.mockResolvedValue(incomplete)
+    api.reviewedCandidateResult.mockResolvedValue({ status: 'complete', review: incomplete })
     await stageFile(); await start()
     await openDocument()
     expect(wrapper.get('[role=alert]').text()).toContain('模型候选或原件预览不完整')
@@ -164,7 +168,8 @@ describe('model-required inline ELT processing', () => {
     expect(workspace.documents.value[0].unknown).toBe(true)
     await workspace.generate(workspace.documents.value[0]); await flushPromises()
     expect(api.reviewExcel).toHaveBeenCalledTimes(1)
-    expect(wrapper.get('[role=alert]').text()).toContain('未知')
+    expect(api.reviewedCandidateResult).toHaveBeenCalledWith('synthetic.xlsx', 'model-v2', 0)
+    expect(wrapper.get('[role=alert]').text()).toContain('结果尚未确认')
   })
 
   it('does not depend on a separate notice identity lookup for a normal session', async () => {

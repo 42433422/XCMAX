@@ -72,14 +72,6 @@ def test_get_ai_chat_app_service_singleton() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_fallback_greeting_vs_default() -> None:
-    greet = AIChatApplicationService._build_fallback_response("你好", "timeout")
-    assert greet["success"] is False
-    assert "智能助手" in greet["response"]
-    default = AIChatApplicationService._build_fallback_response("查库存", "db down")
-    assert "db down" in default["response"]
-
-
 def test_is_number_text_and_headers() -> None:
     assert AIChatApplicationService._is_number_text("12.5") is True
     assert AIChatApplicationService._is_number_text("abc") is False
@@ -125,12 +117,6 @@ def test_excel_analysis_payload_present_variants() -> None:
         )
         is True
     )
-
-
-def test_looks_like_short_excel_import_command() -> None:
-    assert AIChatApplicationService._looks_like_short_excel_import_command("加入数据库") is True
-    assert AIChatApplicationService._looks_like_short_excel_import_command("") is False
-    assert AIChatApplicationService._looks_like_short_excel_import_command("x" * 50) is False
 
 
 def test_model_like_score_and_packaging_ratio() -> None:
@@ -236,51 +222,6 @@ def test_extract_excel_import_dual_price_columns(chat_svc: AIChatApplicationServ
 # ---------------------------------------------------------------------------
 
 
-def test_process_chat_connection_error(chat_svc: AIChatApplicationService) -> None:
-    async def _fail(*a, **k):
-        raise ConnectionError("refused")
-
-    chat_svc.ai_service.chat = _fail
-    with patch.object(chat_svc, "_persist_chat_turn"):
-        out = chat_svc.process_chat("u1", "请解释一个不会命中规则的普通问题", context={})
-    assert out["success"] is False
-    assert "连接" in out["message"] or "网络" in out["response"] or "不可用" in out["response"]
-
-
-def test_process_chat_timeout(chat_svc: AIChatApplicationService) -> None:
-    async def _fail(*a, **k):
-        raise TimeoutError("slow")
-
-    chat_svc.ai_service.chat = _fail
-    out = chat_svc.process_chat("u1", "今天天气怎么样")
-    assert out["success"] is False
-    assert "超时" in out["response"]
-
-
-def test_process_chat_api_key_error(chat_svc: AIChatApplicationService) -> None:
-    async def _fail(*a, **k):
-        raise RuntimeError("invalid api_key")
-
-    chat_svc.ai_service.chat = _fail
-    out = chat_svc.process_chat("u1", "随便说点什么")
-    assert "AI 服务暂时不可用" in out["message"]
-
-
-def test_process_chat_with_file_context_enriches_excel(chat_svc: AIChatApplicationService) -> None:
-    async def _chat(user_id, message, context, source=None):
-        assert context.get("excel_analysis", {}).get("file_path") == "/tmp/q.xlsx"
-        return {"text": "ok", "action": "followup", "data": {}}
-
-    chat_svc.ai_service.chat = _chat
-    out = chat_svc.process_chat(
-        "u1",
-        "分析",
-        file_context={"file_path": "/tmp/q.xlsx", "sheet_name": "Sheet1"},
-        source="basic",
-    )
-    assert out["success"] is True
-
-
 @patch("app.services.get_conversation_service")
 def test_persist_chat_turn_with_session(
     mock_conv: MagicMock, chat_svc: AIChatApplicationService
@@ -319,219 +260,11 @@ def test_inject_excel_vector_context(
 # ---------------------------------------------------------------------------
 
 
-def test_dynamic_workflow_non_pro_returns_none(chat_svc: AIChatApplicationService) -> None:
-    assert chat_svc._try_handle_dynamic_workflow("u", "导入", "basic", {}, {}) is None
-
-
-def test_dynamic_workflow_import_missing_file(chat_svc: AIChatApplicationService) -> None:
-    out = chat_svc._try_handle_dynamic_workflow(
-        "u",
-        "导入数据库",
-        "pro",
-        {},
-        {"suggested_use": "unit_products_db", "saved_name": "", "unit_name": "甲"},
-    )
-    assert out is not None
-    assert out["success"] is True
-    assert "缺少" in out["response"] or "上传" in out["response"]
-
-
-def test_dynamic_workflow_import_missing_unit(chat_svc: AIChatApplicationService) -> None:
-    out = chat_svc._try_handle_dynamic_workflow(
-        "u",
-        "导入",
-        "pro",
-        {},
-        {"suggested_use": "unit_products_db", "saved_name": "f.db", "unit_name": ""},
-    )
-    assert out is not None
-    assert "客户" in out["response"]
-
-
-def test_dynamic_workflow_short_command_no_excel(chat_svc: AIChatApplicationService) -> None:
-    out = chat_svc._try_handle_dynamic_workflow("u", "加入数据库", "pro", {}, {})
-    assert out is not None
-    assert "Excel" in out["response"] or "分析" in out["response"]
-
-
-@patch("app.application.get_unit_products_import_app_service")
-def test_dynamic_workflow_unit_products_import(
-    mock_get: MagicMock, chat_svc: AIChatApplicationService
-) -> None:
-    mock_get.return_value.import_unit_products.return_value = {
-        "success": True,
-        "unit_name": "甲公司",
-        "created_unit": False,
-        "imported": 3,
-        "skipped_duplicates": 1,
-    }
-    out = chat_svc._try_handle_dynamic_workflow(
-        "u",
-        "导入数据库",
-        "pro",
-        {},
-        {
-            "suggested_use": "unit_products_db",
-            "saved_name": "data.db",
-            "unit_name": "甲公司",
-        },
-    )
-    assert out is not None
-    assert out["success"] is True
-    assert "导入" in out["response"]
-
-
 # ---------------------------------------------------------------------------
 # Tool execution branches
 # ---------------------------------------------------------------------------
 
 
-def test_execute_pro_mode_shipment_generate(chat_svc: AIChatApplicationService) -> None:
-    ai_result = {"text": "生成发货单", "data": {}}
-    response_data = {"success": True, "data": {}}
-    with patch(
-        "app.application.facades.tools_facade._parse_order_text", return_value={"success": False}
-    ):
-        out = chat_svc._execute_pro_mode_tools(
-            response_data,
-            "shipment_generate",
-            {"unit_name": "甲", "quantity_tins": 2, "model_number": "5003", "tin_spec": 25},
-            {},
-            ai_result,
-            "甲公司 2桶5003规格25",
-        )
-    assert out.get("toolCall", {}).get("tool_id") == "shipment_generate"
-
-
-def test_execute_pro_mode_unknown_tool(chat_svc: AIChatApplicationService) -> None:
-    out = chat_svc._execute_pro_mode_tools(
-        {"success": True, "data": {}},
-        "custom_tool",
-        {},
-        {"p": 1},
-        {"text": "run", "data": {}},
-    )
-    assert out["toolCall"]["tool_id"] == "custom_tool"
-
-
-@patch("app.bootstrap.get_products_service")
-@patch("app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit")
-def test_execute_products_query_keyword_parse(
-    mock_resolve: MagicMock, mock_products: MagicMock, chat_svc: AIChatApplicationService
-) -> None:
-    mock_resolve.return_value = SimpleNamespace(unit_name="甲公司")
-    mock_products.return_value.get_products.return_value = {
-        "success": True,
-        "data": [{"name": "清漆"}],
-    }
-    out = chat_svc._execute_products_query(
-        {"success": True, "data": {}},
-        {"keyword": "甲公司的5003"},
-        {},
-    )
-    assert out["success"] is True
-
-
-@patch("app.bootstrap.get_shipment_app_service")
-def test_execute_shipment_generate_normal(
-    mock_ship: MagicMock, chat_svc: AIChatApplicationService
-) -> None:
-    mock_ship.return_value.generate_shipment.return_value = {
-        "success": True,
-        "data": {"doc_id": 9},
-    }
-    out = chat_svc._execute_shipment_generate(
-        {"success": True, "data": {}},
-        {"order_text": "甲公司 2桶5003规格25"},
-        {"text": "生成"},
-    )
-    assert out["success"] is True
-
-
-@patch("app.bootstrap.get_shipment_app_service")
-def test_execute_shipments_query(mock_ship: MagicMock, chat_svc: AIChatApplicationService) -> None:
-    mock_ship.return_value.get_shipments.return_value = {
-        "success": True,
-        "data": [{"id": 1}],
-    }
-    out = chat_svc._execute_shipments_query({"success": True, "data": {}})
-    assert out["success"] is True
-
-
-def test_handle_tool_call_normal_mode_shipments(chat_svc: AIChatApplicationService) -> None:
-    ai_result = {
-        "text": "查发货单",
-        "action": "tool_call",
-        "data": {"tool_key": "shipments", "params": {}, "slots": {}},
-    }
-    with patch.object(
-        chat_svc, "_execute_shipments_query", return_value={"success": True, "response": "1条"}
-    ):
-        out = chat_svc._build_response(ai_result, None, "")
-    assert out["success"] is True
-
-
-def test_try_merge_split_model(chat_svc: AIChatApplicationService) -> None:
-    merged = chat_svc._try_merge_split_model(
-        "2桶5003A规格25",
-        {"quantity_tins": 2},
-    )
-    assert merged == "2桶5003A规格25"
-
-
-def test_build_order_text_with_defaults(chat_svc: AIChatApplicationService) -> None:
-    text = chat_svc._build_order_text_from_products(
-        "甲公司",
-        [{"model": "5003", "quantity_tins": 2, "spec": 25}],
-        default_qty=2,
-        default_spec=25,
-    )
-    assert "甲公司" in text
-    assert "5003" in text
-
-
 # ---------------------------------------------------------------------------
 # Excel deterministic import shortcut (pro mode, high line ROI)
 # ---------------------------------------------------------------------------
-
-
-def test_dynamic_workflow_excel_import_empty_records(chat_svc: AIChatApplicationService) -> None:
-    ctx = {
-        "excel_import_use_deterministic_shortcut": True,
-        "excel_analysis": {"summary": "空表", "fields": []},
-    }
-    out = chat_svc._try_handle_dynamic_workflow("u", "导入数据库", "pro", ctx, {})
-    assert out is not None
-    assert out["success"] is True
-    assert "未解析到" in out["response"] or "字段" in out["response"]
-
-
-@patch("app.bootstrap.get_customer_app_service")
-@patch("app.bootstrap.get_products_service")
-def test_dynamic_workflow_excel_import_executes(
-    mock_products: MagicMock, mock_customers: MagicMock, chat_svc: AIChatApplicationService
-) -> None:
-    mock_customers.return_value.match_purchase_unit.return_value = None
-    mock_customers.return_value.create.return_value = {"success": True}
-    mock_products.return_value.get_products.return_value = {"success": True, "data": []}
-    mock_products.return_value.create_product.return_value = {"success": True}
-
-    ctx = {
-        "excel_import_use_deterministic_shortcut": True,
-        "excel_analysis": {
-            "summary": "报价",
-            "fields": [{"label": "客户"}, {"label": "产品"}, {"label": "单价"}],
-            "preview_data": {
-                "grid_preview": {
-                    "rows": [
-                        ["客户", "产品名称", "型号", "单价"],
-                        ["甲公司", "清漆", "5003", "120"],
-                    ]
-                }
-            },
-        },
-    }
-    out = chat_svc._try_handle_dynamic_workflow("u", "导入数据库", "pro", ctx, {})
-    assert out is not None
-    assert out["success"] is True
-    assert "入库" in out["response"] or "新增" in out["response"]

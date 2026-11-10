@@ -425,7 +425,12 @@ def _compatibility_revision(fragments, message, overview, owner_id, earlier, all
 
 
 def derive_classified_documents(
-    body: bytes, classification: dict, *, owner_id: int | None = None, only_index: int | None = None, metadata_only: bool = False
+    body: bytes,
+    classification: dict,
+    *,
+    owner_id: int | None = None,
+    only_index: int | None = None,
+    metadata_only: bool = False,
 ) -> list[dict]:
     """Export only documents with explicit model grouping, without inferring missing groups.
 
@@ -520,7 +525,19 @@ def derive_classified_documents(
             logger.info("skip hidden sheet %s", fragments[0]["sheet"])
             continue
         if metadata_only:
-            results.append({"print_area_mode": "source", "range_objects_receipt": {}, "fragments": fragments, "basis": basis, "confirmed": False, "source_sha256": source["sha256"], "filename": _slice_filename(fragments, source["cells"], used_names, reason=reason)})
+            results.append(
+                {
+                    "print_area_mode": "source",
+                    "range_objects_receipt": {},
+                    "fragments": fragments,
+                    "basis": basis,
+                    "confirmed": False,
+                    "source_sha256": source["sha256"],
+                    "filename": _slice_filename(
+                        fragments, source["cells"], used_names, reason=reason
+                    ),
+                }
+            )
             continue
         print_area_mode = "source"
         # A print area that crosses this fragment continues as the fragment.

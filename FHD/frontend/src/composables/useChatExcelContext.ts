@@ -61,6 +61,8 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   function injectExcelContextPayload(contextPayload: Record<string, unknown>, contextParts: string[]): boolean {
     const excelCtx = resolveExcelAnalysisContextForRequest()
     if (!excelCtx) return false
+    const uploadId = typeof excelCtx.upload_id === 'string' ? excelCtx.upload_id.trim() : ''
+    if (uploadId) contextPayload.attachment_upload_ids = [uploadId]
     contextPayload.excel_analysis = excelCtx
     contextParts.push('Excel上下文 1 份')
     const fp = resolveExcelFilePathFromAnalysis(excelCtx)

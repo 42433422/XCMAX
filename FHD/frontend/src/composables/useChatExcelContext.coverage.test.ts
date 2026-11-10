@@ -187,6 +187,15 @@ describe('useChatExcelContext — coverage ramp', () => {
       const parts: string[] = []
       ctx.injectExcelContextPayload(payload, parts)
       expect(payload.excel_file_path).toBe('/path/to/file.xlsx')
+      expect(payload.attachment_upload_ids).toBeUndefined()
+    })
+
+    it('仅转发服务端上传回执，不从文件路径制造附件凭证', () => {
+      const ctx = useChatExcelContext(makeDeps())
+      ctx.lastExcelAnalysisContext.value = { upload_id: ' upload-123 ', file_path: '/not-an-id.xlsx' }
+      const payload: Record<string, unknown> = {}
+      ctx.injectExcelContextPayload(payload, [])
+      expect(payload.attachment_upload_ids).toEqual(['upload-123'])
     })
 
     it('全部工作表模式且有预览时注入预览列表', () => {

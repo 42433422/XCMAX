@@ -45,9 +45,9 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
 
 _PRODUCT_READ_ACTIONS = frozenset({("products", "exists"), ("products", "query")})
 _CUSTOMER_READ_ACTIONS = frozenset({("customers", "query")})
-_REVIEWED_QUERY_ACTIONS = (
-    frozenset({("finance", "ledger_query")}) | _PRODUCT_READ_ACTIONS | _CUSTOMER_READ_ACTIONS
-)
+_SHIPMENT_READ_ACTIONS = frozenset({("shipment_records", "query"), ("shipment_records", "list")})
+_OWNED_READ_ACTIONS = _PRODUCT_READ_ACTIONS | _CUSTOMER_READ_ACTIONS | _SHIPMENT_READ_ACTIONS
+_REVIEWED_QUERY_ACTIONS = frozenset({("finance", "ledger_query")}) | _OWNED_READ_ACTIONS
 _QUERY_IDENTITY_FIELDS = frozenset(
     {
         "tenant_id",
@@ -77,7 +77,7 @@ def _query_failure(code: str) -> dict[str, Any]:
 def _reviewed_query_tenant(
     spec: ToolActionSpecV2 | None, params: dict[str, Any], context: dict[str, Any]
 ) -> tuple[int | None, dict[str, Any] | None]:
-    """Two audited action policies, not a generic read-only authorization lane."""
+    """Explicit audited action policies, not a generic read-only authorization lane."""
     from fastapi import HTTPException
 
     from app.domain.shared_services.auth_service import get_auth_service
@@ -92,7 +92,7 @@ def _reviewed_query_tenant(
         return None, _query_failure("tool_identity_override")
     if spec is None:
         return None, _query_failure("tool_contract_unavailable")
-    if (spec.tool_id, spec.action) in _PRODUCT_READ_ACTIONS | _CUSTOMER_READ_ACTIONS or (
+    if (spec.tool_id, spec.action) in _OWNED_READ_ACTIONS or (
         (spec.tool_id, spec.action) == ("business_db", "read")
         and params.get("entity") == "products"
     ):
@@ -100,6 +100,8 @@ def _reviewed_query_tenant(
             permission = (
                 "customer.view"
                 if (spec.tool_id, spec.action) in _CUSTOMER_READ_ACTIONS
+                else "shipment.view"
+                if (spec.tool_id, spec.action) in _SHIPMENT_READ_ACTIONS
                 else "product.view"
             )
             tenant = check_owned_business_permission(actor, permission)
@@ -396,7 +398,7 @@ class AgentToolExecutor:
         if (
             validation.tool_id,
             validation.action,
-        ) in _PRODUCT_READ_ACTIONS | _CUSTOMER_READ_ACTIONS or product_db_read:
+        ) in _OWNED_READ_ACTIONS or product_db_read:
             for hint in ("service_source", "route_module"):
                 params["_runtime_context"].pop(hint, None)
         action = validation.action or step.action
@@ -435,10 +437,7 @@ class AgentToolExecutor:
             # string tenant keys and must not be coerced here.
             scope = (
                 owned_tenant_scope(runtime_tenant_id)
-                if (
-                    (validation.tool_id, action) in _PRODUCT_READ_ACTIONS | _CUSTOMER_READ_ACTIONS
-                    or product_db_read
-                )
+                if ((validation.tool_id, action) in _OWNED_READ_ACTIONS or product_db_read)
                 and isinstance(runtime_tenant_id, int)
                 else tenant_scope(runtime_tenant_id)
             )

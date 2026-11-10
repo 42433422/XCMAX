@@ -51,6 +51,7 @@ def audit_intake_calls(callback):
     finally:
         _CALL_AUDITOR.reset(token)
 
+
 # ETL assistance is advisory.  A provider outage must never turn a preview
 # into a sequence of long, duplicate calls (especially when an auto-detected
 # delivery workbook creates the linked customer/product preview at the same
@@ -187,16 +188,24 @@ def _complete(
         )
 
     # Include account queueing in the same deadline as the provider call.
-    budget = timeout_seconds if timeout_seconds is not None else etl_llm_timeout_seconds() * (1 + max(0, max_repairs))
+    budget = (
+        timeout_seconds
+        if timeout_seconds is not None
+        else etl_llm_timeout_seconds() * (1 + max(0, max_repairs))
+    )
     business_deadline = _BUSINESS_DEADLINE.get()
     if business_deadline is not None:
         budget = min(budget, business_deadline - time.monotonic())
         if budget <= 0:
-            return LlmAssistResult(used_llm=False, degraded=True, degradation_code="ELT_LLM_BUDGET_EXHAUSTED")
+            return LlmAssistResult(
+                used_llm=False, degraded=True, degradation_code="ELT_LLM_BUDGET_EXHAUSTED"
+            )
     deadline = time.monotonic() + max(0.0, budget)
     lock = _owner_call_lock(circuit_key)
     if not lock.acquire(timeout=max(0.0, budget)):
-        return LlmAssistResult(used_llm=False, degraded=True, degradation_code="ELT_LLM_QUEUE_TIMEOUT")
+        return LlmAssistResult(
+            used_llm=False, degraded=True, degradation_code="ELT_LLM_QUEUE_TIMEOUT"
+        )
     release_on_exit = True
     try:
         circuit_degradation = _circuit_degradation(circuit_key)
@@ -208,7 +217,9 @@ def _complete(
             )
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            return LlmAssistResult(used_llm=False, degraded=True, degradation_code="ELT_LLM_QUEUE_TIMEOUT")
+            return LlmAssistResult(
+                used_llm=False, degraded=True, degradation_code="ELT_LLM_QUEUE_TIMEOUT"
+            )
         configured, conversation_service, provider = _active_software_llm(remaining)
         if not configured:
             return LlmAssistResult(
@@ -218,7 +229,9 @@ def _complete(
             )
         budget = deadline - time.monotonic()
         if budget <= 0:
-            return LlmAssistResult(used_llm=False, degraded=True, degradation_code="ELT_LLM_QUEUE_TIMEOUT")
+            return LlmAssistResult(
+                used_llm=False, degraded=True, degradation_code="ELT_LLM_QUEUE_TIMEOUT"
+            )
         called = False
         try:
             from app.application.reviewed_excel_audit import call_key
@@ -258,18 +271,23 @@ def _complete(
                 if auditor:
                     auditor(call_id, lane, "answered_invalid")
                 return LlmAssistResult(
-                    used_llm=True, degraded=True,
-                    degradation_code="ELT_LLM_OUTPUT_INVALID", answer=exc.last_raw,
+                    used_llm=True,
+                    degraded=True,
+                    degradation_code="ELT_LLM_OUTPUT_INVALID",
+                    answer=exc.last_raw,
                 )
             degradation_code = _degradation_code(exc)
             _open_circuit(circuit_key, degradation_code)
             worker = getattr(exc, "worker", None)
             if isinstance(worker, threading.Thread):
+
                 def release_after_worker() -> None:
                     worker.join()
                     lock.release()
 
-                threading.Thread(target=release_after_worker, name="etl-llm-lock-release", daemon=True).start()
+                threading.Thread(
+                    target=release_after_worker, name="etl-llm-lock-release", daemon=True
+                ).start()
                 release_on_exit = False
             _runtime.log_etl_llm_degradation(logger, code=degradation_code, lane=lane, exc=exc)
             return LlmAssistResult(
@@ -682,7 +700,10 @@ def business_units(source: str) -> list[str]:
     # Smaller units bound the model's response, while retaining the previous
     # eight-unit capacity for larger workbooks instead of rejecting them early.
     row_count = sum(1 for line in source.splitlines() if not line.startswith("# sheet:"))
-    target_rows = min(_UNIT_ROWS, max(_PREFERRED_UNIT_ROWS, (row_count + MAX_BUSINESS_UNITS - 1) // MAX_BUSINESS_UNITS))
+    target_rows = min(
+        _UNIT_ROWS,
+        max(_PREFERRED_UNIT_ROWS, (row_count + MAX_BUSINESS_UNITS - 1) // MAX_BUSINESS_UNITS),
+    )
     current: list[str] = []
     size = 0
     fresh = 0
@@ -725,7 +746,9 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
     for unit in units:
         # Repairs share this unit's budget; earlier units must not consume the
         # entire deadline before later parts of the same workbook are sent.
-        deadline_token = _BUSINESS_DEADLINE.set(time.monotonic() + etl_llm_timeout_seconds(full_sheet=True))
+        deadline_token = _BUSINESS_DEADLINE.set(
+            time.monotonic() + etl_llm_timeout_seconds(full_sheet=True)
+        )
         try:
             result = _advise_business_unit(unit)
         finally:
@@ -852,17 +875,34 @@ def advise_knowledge_import(document_text: str) -> LlmAssistResult:
     ]
     deadline = time.monotonic() + etl_llm_timeout_seconds(full_sheet=True)
     result = _complete(
-        messages, schema=_KNOWLEDGE_IMPORT_SCHEMA, max_tokens=2048,
-        lane="knowledge", max_repairs=0, timeout_seconds=deadline - time.monotonic(),
+        messages,
+        schema=_KNOWLEDGE_IMPORT_SCHEMA,
+        max_tokens=2048,
+        lane="knowledge",
+        max_repairs=0,
+        timeout_seconds=deadline - time.monotonic(),
     )
-    if result.degradation_code == "ELT_LLM_OUTPUT_INVALID" and result.answer and time.monotonic() < deadline:
+    if (
+        result.degradation_code == "ELT_LLM_OUTPUT_INVALID"
+        and result.answer
+        and time.monotonic() < deadline
+    ):
         # A complete but malformed answer is a definite response, so one new
         # independently audited repair call is safe. Never retry unknown output.
         result = _complete(
-            [*messages, {"role": "assistant", "content": result.answer[:4000]},
-             {"role": "user", "content": "上次回答不是有效 JSON。请只返回一个对象，包含字符串 title 和 content，不要输出解释或 Markdown。"}],
-            schema=_KNOWLEDGE_IMPORT_SCHEMA, max_tokens=2048,
-            lane="knowledge", max_repairs=0, timeout_seconds=max(0.0, deadline - time.monotonic()),
+            [
+                *messages,
+                {"role": "assistant", "content": result.answer[:4000]},
+                {
+                    "role": "user",
+                    "content": "上次回答不是有效 JSON。请只返回一个对象，包含字符串 title 和 content，不要输出解释或 Markdown。",
+                },
+            ],
+            schema=_KNOWLEDGE_IMPORT_SCHEMA,
+            max_tokens=2048,
+            lane="knowledge",
+            max_repairs=0,
+            timeout_seconds=max(0.0, deadline - time.monotonic()),
         )
     result.data = {
         "title": _cell(result.data.get("title")),

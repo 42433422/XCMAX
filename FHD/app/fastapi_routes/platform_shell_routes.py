@@ -140,7 +140,7 @@ def _office_upload_suffixes() -> set[str]:
     return set(OFFICE_UPLOAD_SUFFIXES)
 
 
-async def _save_workspace_upload(file: UploadFile, *, subdir: str) -> dict[str, str]:
+async def _save_workspace_upload(file: UploadFile, *, subdir: str, user) -> dict[str, str]:
     import os
     import uuid
     from pathlib import Path
@@ -164,12 +164,33 @@ async def _save_workspace_upload(file: UploadFile, *, subdir: str) -> dict[str, 
     if not safe.lower().endswith(suffix):
         safe = f"{safe}{suffix}"
     dest = upload_dir / f"{uuid.uuid4().hex[:12]}-{safe}"
-    dest.write_bytes(await file.read())
+    from io import BytesIO
+
+    from app.application.elt.errors import EltError
+    from app.application.elt.parsers import SUPPORTED_SUFFIXES
+    from app.application.elt.service_uploads import register_chat_upload
+
+    raw = await file.read()
+    attachment = {
+        "attachment_warning": "此格式未取得可信附件凭证，请另存为 .xlsx 后重新上传用于智能对话。"
+    }
+    if suffix in SUPPORTED_SUFFIXES:
+        try:
+            receipt = register_chat_upload(user, name, file.content_type, BytesIO(raw))
+            attachment = {"upload_id": receipt["upload_id"]}
+        except EltError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    dest.write_bytes(raw)
     try:
         rel = dest.relative_to(workspace_root).as_posix()
     except ValueError:
         rel = str(dest)
-    return {"file_path": rel, "filename": name, "workspace_root": str(workspace_root)}
+    return {
+        "file_path": rel,
+        "filename": name,
+        "workspace_root": str(workspace_root),
+        **attachment,
+    }
 
 
 @router.post("/workspace-read-files", response_model=dict[str, object])
@@ -332,7 +353,7 @@ async def platform_shell_office_sample_upload(
     user = resolve_session_user(request)
     if user is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    data = await _save_workspace_upload(file, subdir="tutorial")
+    data = await _save_workspace_upload(file, subdir="tutorial", user=user)
     return {"success": True, "data": data}
 
 
@@ -356,7 +377,7 @@ async def platform_shell_chat_office_file_upload(
     user = resolve_session_user(request)
     if user is None:
         raise HTTPException(status_code=401, detail="请先登录")
-    data = await _save_workspace_upload(file, subdir="chat")
+    data = await _save_workspace_upload(file, subdir="chat", user=user)
     return {"success": True, "data": data}
 
 

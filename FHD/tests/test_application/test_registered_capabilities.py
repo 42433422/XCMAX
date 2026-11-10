@@ -72,19 +72,18 @@ def test_workflow_registry_and_dispatch_include_capability_tool(monkeypatch) -> 
     names = {item["function"]["name"] for item in workflow.get_workflow_tool_registry()}
     assert ERP_CAPABILITY_TOOL_NAME in names
 
-    monkeypatch.setattr(
-        "app.application.tools.registered_capabilities.execute_registered_capability",
-        lambda args, *, workspace_root=None: json.dumps(
-            {"success": True, "args": args, "workspace_root": workspace_root},
-            ensure_ascii=False,
-        ),
-    )
+    execute = Mock(return_value=json.dumps({"success": True}))
+    monkeypatch.setattr(workflow, "execute_registered_capability", execute)
+    args = {"tool_id": "print", "action": "list", "params": {}}
+    context = {"session_id": "test-context"}
     raw = workflow.execute_workflow_tool(
         ERP_CAPABILITY_TOOL_NAME,
-        {"tool_id": "print", "action": "list", "params": {}},
+        args,
         workspace_root="/tmp/workspace",
+        runtime_context=context,
     )
     assert json.loads(raw)["success"] is True
+    execute.assert_called_once_with(args, workspace_root="/tmp/workspace", runtime_context=context)
 
 
 def test_business_read_keeps_decimal_price_serializable(monkeypatch):

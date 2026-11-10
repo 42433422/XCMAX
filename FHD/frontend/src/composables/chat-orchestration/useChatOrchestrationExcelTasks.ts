@@ -59,6 +59,7 @@ export function useChatOrchestrationExcelTasks(deps: ChatOrchestrationExcelTasks
           const persistedPath = resolveExcelFilePathFromAnalysis(result)
           const payload = {
             file_name: fileName,
+            ...(result.upload_id ? { upload_id: result.upload_id } : {}),
             ...(persistedPath ? { file_path: persistedPath } : {}),
             summary,
             fields: Array.isArray(result?.fields) ? result.fields : [],

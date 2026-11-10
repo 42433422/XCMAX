@@ -251,7 +251,7 @@ def prepare_chat_evidence(
                             or len(str(sheet["text"])) > 8000,
                         }
                     )
-            for item in response.get("chunks") or []:
+            for item in dataset_response.get("chunks") or []:
                 if isinstance(item, dict) and str(item.get("text") or "").strip():
                     raw_metadata = item.get("metadata")
                     metadata = raw_metadata if isinstance(raw_metadata, dict) else {}

@@ -322,9 +322,14 @@ def _update_candidate_claim(
             raise HTTPException(status_code=409, detail="模型候选请求状态已改变，请核对")
         if review_id:
             claims[key] = {"state": "completed", "review_id": review_id}
-        elif unknown or any(item.get("status") in {"sent", "unknown"} for item in (claims[key].get("batches") or {}).values()):
+        elif unknown or any(
+            item.get("status") in {"sent", "unknown"}
+            for item in (claims[key].get("batches") or {}).values()
+        ):
             claims[key]["state"] = "unknown"
-        elif any(item.get("status") == "complete" for item in (claims[key].get("batches") or {}).values()):
+        elif any(
+            item.get("status") == "complete" for item in (claims[key].get("batches") or {}).values()
+        ):
             # Model batches with known outcomes can resume without redoing them.
             claims[key]["state"] = "retryable"
         else:
@@ -352,7 +357,11 @@ def _stored_candidate_response(db, review_id, tenant, owner):
     if run.status == _SAVED:
         confirmation = state.get("confirmation") or {}
         receipt = load_json(run.receipt_json, {})
-        if receipt.get("template_id") and confirmation.get("version") and confirmation.get("candidate"):
+        if (
+            receipt.get("template_id")
+            and confirmation.get("version")
+            and confirmation.get("candidate")
+        ):
             saved = {
                 "review_id": run.id,
                 "proposal_version": confirmation["version"],

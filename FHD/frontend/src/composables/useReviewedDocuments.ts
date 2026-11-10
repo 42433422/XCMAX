@@ -204,7 +204,9 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
       form.append('selections', JSON.stringify(candidate.clear)); form.append('name', doc.displayName); form.append('composer_note', doc.requirements.join('\n').slice(0, 4000))
       const result = await templatePreviewApi.previewReviewedIntake(form) as { intake: Intake }
       if (!valid()) return
-      if (!result.intake?.run_id || result.intake.mod_id !== modId || result.intake.business?.id !== result.intake.run_id) throw new Error('入库范围无法核实，请重试。')
+      if (!result.intake?.run_id || result.intake.mod_id !== modId || result.intake.business?.id !== result.intake.run_id) {
+        doc.intakePending = false; doc.intakeError = '入库范围无法核实，请核对。'; return
+      }
       doc.intake = result.intake; accept(result.intake.business)
     } catch (error) {
       if (valid()) {

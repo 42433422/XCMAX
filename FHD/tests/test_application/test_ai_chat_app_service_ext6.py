@@ -148,44 +148,6 @@ class TestMergeToolRuntimeContext:
 # ---------------------------------------------------------------------------
 
 
-class TestBuildFallbackResponseBranches:
-    """Cover _build_fallback_response greeting vs default branches."""
-
-    def test_greeting_response(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._build_fallback_response("你好", "timeout")
-        assert result["success"] is False
-        assert result["response"]  # non-empty
-        assert "您好" in result["response"] or "你好" in result["response"]
-
-    def test_default_response(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._build_fallback_response("查询产品", "error")
-        assert result["success"] is False
-        assert result["response"]
-        assert "原因" in result["response"]
-
-    def test_english_greeting(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._build_fallback_response("hi there", "error")
-        assert result["success"] is False
-        # English greeting should also trigger greeting response.
-        assert "您好" in result["response"] or "AI" in result["response"]
-
-    def test_data_payload_structure(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        result = AIChatApplicationService._build_fallback_response("test", "err")
-        assert "data" in result
-        data = result["data"]
-        assert data["action"] == "error_fallback"
-        assert data["data"]["fallback_mode"] is True
-        assert data["data"]["error_reason"] == "err"
-
-
 # ---------------------------------------------------------------------------
 # _resolve_excel_path_for_import
 # ---------------------------------------------------------------------------

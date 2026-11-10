@@ -78,8 +78,8 @@ def test_selecting_one_slice_preserves_its_original_group():
     expected = derive_classified_documents(body, classification(body))
     selected = derive_classified_documents(body, classification(body), only_index=1)
     assert len(selected) == 1
-    assert selected[0]['fragments'] == expected[1]['fragments']
-    assert load_workbook(BytesIO(selected[0]['workbook']))['One']['A5'].value == '第二份'
+    assert selected[0]["fragments"] == expected[1]["fragments"]
+    assert load_workbook(BytesIO(selected[0]["workbook"]))["One"]["A5"].value == "第二份"
     assert derive_classified_documents(body, classification(body), only_index=99) == []
 
 
@@ -87,8 +87,8 @@ def test_slice_manifest_keeps_original_groups_without_generating_workbooks():
     body = workbook()
     full = derive_classified_documents(body, classification(body))
     manifest = derive_classified_documents(body, classification(body), metadata_only=True)
-    assert [item['fragments'] for item in manifest] == [item['fragments'] for item in full]
-    assert all('workbook' not in item for item in manifest)
+    assert [item["fragments"] for item in manifest] == [item["fragments"] for item in full]
+    assert all("workbook" not in item for item in manifest)
 
 
 def test_rejects_external_dependency_duplicate_group_and_source_mismatch():

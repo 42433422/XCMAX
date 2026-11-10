@@ -116,9 +116,11 @@ def _schema_from_required(required_params: list[str]) -> dict[str, Any]:
 def _special_permission(tool_id: str, action: str) -> str:
     if tool_id == "products" and action in {"exists", "query"}:
         return "product.view"
+    if tool_id == "shipment_records" and action in {"query", "list"}:
+        return "shipment.view"
     if (tool_id, action) == ("customers", "query"):
         return "customer.view"
-    if (tool_id, action) == ("customers", "ensure_exists"):
+    if tool_id == "customers" and action in {"ensure_exists", "delete", "batch_delete"}:
         return "customer.edit"
     if tool_id in PERMISSION_BARE_PREFIX_TOOLS:
         if (tool_id, action) == ("employee", "context"):

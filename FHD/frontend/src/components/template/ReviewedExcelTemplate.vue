@@ -257,7 +257,7 @@ const intakePlan = ref<IntakePlan | null>(null)
 const intakePending = ref(false)
 const intakeError = ref('')
 const workbookReports = computed(() => {
-  const ready = (doc?: { intake: unknown; intakePending: boolean; intakeError: string } | null) => !!doc?.intake && !doc.intakePending && !doc.intakeError
+  const ready = (doc?: { intake: unknown; intakePending: boolean } | null) => !!doc?.intake && !doc.intakePending
   if (props.archiveOnSelect) {
     if (ready(activeDocument.value)) return workbookEmployeeReports(activeDocument.value?.intake)
     const found = documentWorkspace.documents.value.find(doc => ready(doc))

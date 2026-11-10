@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, insert
 from sqlalchemy.engine import Engine
 
 from app.application.agent_orchestrator.business_action_ledger import BusinessActionLedger
@@ -128,8 +128,7 @@ def test_unbound_product_read_reports_denial_not_timeout(product_context):
     assert result["outcome"] == "unknown"
 
 
-def test_customer_product_receipt_checks_role_tenant_and_exact_customer(trusted_actor, monkeypatch):
-    from app.application.planner_compat_service import _customer_product_receipt
+def test_customer_product_query_checks_role_tenant_and_exact_customer(trusted_actor, monkeypatch):
     from app.db.models.shipment import ShipmentRecord
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
@@ -137,24 +136,59 @@ def test_customer_product_receipt_checks_role_tenant_and_exact_customer(trusted_
     denied = trusted_actor(role="no-shipment", permissions=[])
     for tenant, unit, product in (
         (7, "宗南", "白漆"),
+        (None, "宗南", "历史无主数据"),
         (8, "宗南", "其他租户"),
         (7, "中南", "其他客户"),
     ):
-        with tenant_scope(tenant), actor.factory.begin() as db:
-            db.add(
-                ShipmentRecord(
-                    tenant_id=tenant,
-                    purchase_unit=unit,
-                    product_name=product,
-                    quantity_kg=0,
-                    quantity_tins=1,
-                )
+        with actor.factory.kw["bind"].begin() as db:
+            db.execute(
+                insert(ShipmentRecord.__table__),
+                {
+                    "tenant_id": tenant,
+                    "purchase_unit": unit,
+                    "product_name": product,
+                    "quantity_kg": 0,
+                    "quantity_tins": 1,
+                },
             )
-    receipt = _customer_product_receipt("宗南产品有哪些", actor.context)
-    assert receipt is not None
-    assert [row["product_name"] for row in receipt["output"]["data"]] == ["白漆"]
-    assert _customer_product_receipt("宗南产品有哪些", denied.context) is None
-    assert _customer_product_receipt("宗南产品有哪些", {**actor.context, "tenant_id": "8"}) is None
+
+    def query(context, customer="宗南", action="query", **params):
+        return AgentToolExecutor().execute(
+            AgentStep(
+                node_id="customer-products",
+                tool_id="shipment_records",
+                action=action,
+                params={"unit_name": customer, **params},
+            ),
+            runtime_context=context,
+        )
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Read must neither claim a write nor select an adapter from client hints")
+
+    monkeypatch.setattr(BusinessActionLedger, "claim", forbidden)
+    monkeypatch.setattr("app.fastapi_routes.shipment_orders._svc", forbidden)
+    for action in ("query", "list"):
+        spec = get_tool_action_spec("shipment_records", action)
+        assert spec.permission == "shipment.view" and spec.read_only
+        receipt = query(
+            {
+                **actor.context,
+                "service_source": "fastapi_shipment_records_route",
+                "route_module": "untrusted.module",
+            },
+            action=action,
+        )
+        assert receipt["success"] is True
+        assert [row["product_name"] for row in receipt["data"]] == ["白漆"]
+        assert (
+            query(actor.context, action=action, tenant_id=8)["error_code"]
+            == "tool_identity_override"
+        )
+        assert query(actor.context, customer="不存在的客户", action=action)["data"] == []
+        assert query(denied.context, action=action)["success"] is False
+        assert query({**actor.context, "tenant_id": "8"}, action=action)["success"] is False
+        assert query({}, action=action)["success"] is False
 
 
 @pytest.mark.parametrize(

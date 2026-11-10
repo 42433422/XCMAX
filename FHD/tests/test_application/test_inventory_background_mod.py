@@ -151,7 +151,30 @@ def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
                 idempotent=False,
                 params={"model_number": "A100", "warehouse_name": "same warehouse", "quantity": 50},
             )
+            from app.application.workflow.workflow_types import (
+                PlanGraph,
+                WorkflowNode,
+                plan_to_dict,
+            )
+
             run.steps = [step]
+            run.metadata["plan"] = plan_to_dict(
+                PlanGraph(
+                    plan_id=run.run_id,
+                    intent="approved inventory inbound",
+                    nodes=[
+                        WorkflowNode(
+                            node_id=step.node_id,
+                            tool_id=step.tool_id,
+                            action=step.action,
+                            params=step.params,
+                            risk=step.risk,
+                            idempotent=step.idempotent,
+                        )
+                    ],
+                    metadata={"approval_required_node_ids": [step.node_id]},
+                )
+            )
             run.metadata["runtime_context"] = {"tenant_id": "1", "_mod_authorization": binding}
             apply_approved_step(run, step, approved_by="1")
             SQLAlchemyAgentRunRepository().save(run)

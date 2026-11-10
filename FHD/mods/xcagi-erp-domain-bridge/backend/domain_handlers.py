@@ -244,7 +244,13 @@ def _customers_delete(**kw: Any) -> Any:
     if _use_customers_service():
         from app.mod_sdk.erp_customers_facade import customers_delete as svc_delete
 
-        return _tag(svc_delete(kw.get("request"), int(kw.get("customer_id"))))
+        return _tag(
+            svc_delete(kw.get("request"), int(kw.get("customer_id")), bool(kw.get("cascade")))
+        )
+    if kw.pop("cascade", False):
+        from app.mod_sdk.erp_customers_facade import customers_delete as svc_delete
+
+        return _tag(svc_delete(kw.get("request"), int(kw.get("customer_id")), True))
     from app.mod_sdk.host_services import customers_delete
 
     return _tag(customers_delete(**kw))

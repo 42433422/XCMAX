@@ -133,6 +133,7 @@ class AIChatApplicationService(
                 if key in context and isinstance(context[key], dict):
                     runtime_ctx[key] = context[key]
             for key in (
+                "attachment_upload_ids",
                 "file_context",
                 "file_analysis",
                 "multimodal_attachments",

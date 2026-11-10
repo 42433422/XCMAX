@@ -35,8 +35,6 @@ class TestShipmentItem:
         assert item.unit_price == 99.9
         assert item.amount == 999.0
 
-
-
     def test_missing_required_fields(self) -> None:
         with pytest.raises(ValidationError):
             ShipmentItem()
@@ -44,7 +42,6 @@ class TestShipmentItem:
 
 class TestShipmentGenerateRequest:
     """Tests for ShipmentGenerateRequest schema."""
-
 
     def test_with_customer_name(self) -> None:
         req = ShipmentGenerateRequest(customer_name="测试客户")
@@ -63,13 +60,9 @@ class TestShipmentGenerateRequest:
 class TestShipmentPrintRequest:
     """Tests for ShipmentPrintRequest schema."""
 
-
     def test_custom_copies(self) -> None:
         req = ShipmentPrintRequest(shipment_id=1, copies=3)
         assert req.copies == 3
-
-
-
 
     def test_missing_shipment_id(self) -> None:
         with pytest.raises(ValidationError):

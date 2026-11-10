@@ -196,6 +196,46 @@
     }
   },
   "tools": {
+    "catalog_products_v1": {
+      "description": "Reviewed protected mixed-source price edit with independent receipt verification",
+      "availability": "shared",
+      "actions": {
+        "append_price": {
+          "risk": "medium",
+          "idempotent": false,
+          "permission": "product.edit",
+          "read_only": false,
+          "required_params": [
+            "operation_id",
+            "product_id",
+            "revision",
+            "reason",
+            "price",
+            "action",
+            "confirmed"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "correct_price": {
+          "risk": "medium",
+          "idempotent": false,
+          "permission": "product.edit",
+          "read_only": false,
+          "required_params": [
+            "operation_id",
+            "product_id",
+            "revision",
+            "reason",
+            "price",
+            "action",
+            "confirmed"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        }
+      }
+    },
     "customers": {
       "description": "购买单位管理",
       "availability": "shared",
@@ -429,12 +469,14 @@
         "list": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
         "query": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },

@@ -24,8 +24,8 @@ export const customersApi = {
     return api.put<ApiResponse<Customer>>(`${erpBase()}/customers/${id}`, data)
   },
 
-  deleteCustomer(id: number | string): Promise<ApiResponse<void>> {
-    return api.delete<ApiResponse<void>>(`${erpBase()}/customers/${id}`)
+  deleteCustomer(id: number | string, cascade = false): Promise<ApiResponse<void>> {
+    return api.delete<ApiResponse<void>>(`${erpBase()}/customers/${id}${cascade ? "?cascade=true" : ""}`)
   },
 
   batchDeleteCustomers(customerIds: (number | string)[]): Promise<ApiResponse<void>> {

@@ -2,11 +2,12 @@
 
 验证 WorkflowEngine 在每步节点完成后（含成功与失败）都会回调
 ``{"type":"state.update","node_id","status","output_summary"}``，
-且 AIChatApplicationService 能把该事件列表收集并透传到响应体供前端消费。
+当前聊天通过统一 AgentRun 的 node_results 和持久化事件投影状态。
 """
 
-from unittest.mock import MagicMock
+import pytest
 
+from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from tests.test_application.ai_chat_test_helpers import _make_svc
@@ -138,34 +139,51 @@ class TestWorkflowStateUpdate:
         assert len(result.node_results) == 1
 
 
-class TestAiChatCollectsStateUpdates:
-    def test_workflow_response_attaches_state_updates(self):
-        state_updates = [
-            {"type": "state.update", "node_id": "n1", "status": "succeeded", "output_summary": "ok"}
-        ]
-        svc = _make_svc()
+class TestAiChatProjectsRunState:
+    @pytest.mark.parametrize("status", ["completed", "failed"])
+    def test_workflow_response_projects_authoritative_step_state(self, status):
         plan = _plan([_node("n1")])
-        run_result = MagicMock()
-        run_result.success = True
-        run_result.message = "完成"
-        run_result.node_results = []
-        run_result.final_context = {}
-        payload = svc._format_workflow_run_response(
-            plan,
-            run_result,
-            state_updates=state_updates,
-        )
-        assert payload["data"]["data"]["state_updates"] == state_updates
+        run = AgentRun(user_id="state-test", message="query", status=status)
+        run.steps = [
+            AgentStep(
+                node_id="n1",
+                tool_id="products",
+                action="query",
+                status=status,
+                output={"success": status == "completed", "data": []},
+                error="private failure" if status == "failed" else "",
+            )
+        ]
+        payload = _make_svc()._format_agent_run_response(plan, run)
+        projected = payload["data"]["data"]["node_results"]
+        assert projected[0]["node_id"] == "n1"
+        assert projected[0]["success"] is (status == "completed")
+        assert payload["data"]["data"]["agent_status"] == status
+        assert payload["run_id"] == run.run_id
+        assert "private failure" not in str(payload)
 
-    def test_run_workflow_with_state_updates_collects(self):
-        svc = _make_svc()
-        svc.workflow_checkpointer = None
-        engine = _engine({"success": True, "data": []})
-        svc.workflow_engine = engine
-        plan = _plan([_node("n1"), _node("n2", depends_on=["n1"])])
-        run_result, events = svc._run_workflow_with_state_updates(
-            plan=plan, runtime_context={}, max_retries=1
+    def test_unified_run_retains_completion_event_for_frontend(self):
+        from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+        from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+
+        repository = InMemoryAgentRunRepository()
+        orchestrator = AgentOrchestrator(repository=repository)
+        plan = _plan(
+            [
+                WorkflowNode(
+                    node_id="model_reply",
+                    tool_id="conversation",
+                    action="reply",
+                    params={"response": "说明"},
+                    idempotent=True,
+                )
+            ]
         )
-        assert run_result.success is True
-        assert [e["node_id"] for e in events] == ["n1", "n2"]
-        assert all(e["type"] == "state.update" for e in events)
+        plan.metadata = {"response_mode": "reply", "reply": "说明"}
+        run = orchestrator.start_run_from_plan(user_id="state-test", message="说明", plan=plan)
+        assert run.status == "completed", (run.error, run.final_output)
+        assert run.steps[0].status == "completed"
+        events = orchestrator.list_events(run.run_id)
+        assert events[-1].event_type == "run.completed"
+        assert all(event.run_id == run.run_id for event in events)
+        assert repository.get(run.run_id).final_output["response"] == "说明"

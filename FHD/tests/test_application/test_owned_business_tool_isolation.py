@@ -222,8 +222,7 @@ def test_scopes_nest_and_restore_on_failure(stores):
         assert current_tenant_id() == 99 and owned_tenant_id() is None
 
 
-def test_real_instant_customer_path_and_routing_hint_is_not_adapter_authority(stores):
-    from app.application.ai_chat_app_service import AIChatApplicationService
+def test_authenticated_customer_tool_routing_hint_is_not_adapter_authority(stores):
 
     actor, _, _, engine = stores
     ctx = {
@@ -231,20 +230,7 @@ def test_real_instant_customer_path_and_routing_hint_is_not_adapter_authority(st
         "service_source": "fastapi_customer_route",
         "route_module": "untrusted.module",
     }
-    app = object.__new__(AIChatApplicationService)
-    result = app._build_response(
-        {
-            "action": "tool_call",
-            "data": {
-                "tool_key": "customers",
-                "params": {"unit_name": "instant-owned"},
-                "slots": {},
-            },
-        },
-        "pro",
-        "新增单位 instant-owned",
-        runtime_context=ctx,
-    )
+    result = customer(actor, "instant-owned", context=ctx)
     assert result["success"] is True
     with engine.connect() as db:
         assert (

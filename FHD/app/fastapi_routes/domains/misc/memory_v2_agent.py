@@ -50,6 +50,7 @@ def run_memory_v2_agent(
     failure_status: int,
 ) -> JSONResponse:
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
     from app.application.memory_v2_facade import get_memory_v2_action_meta
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
@@ -60,6 +61,12 @@ def run_memory_v2_agent(
     if action_meta is None:
         return JSONResponse(
             {"success": False, "message": f"未注册的 Memory v2 动作: {action}"},
+            status_code=400,
+        )
+    validation = validate_tool_call("memory_v2", action, data)
+    if not validation.ok:
+        return JSONResponse(
+            {"success": False, "error_code": validation.error_code, "message": validation.message},
             status_code=400,
         )
     node_id = f"memory_v2_{action}"

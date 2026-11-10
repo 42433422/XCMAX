@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .artifact_ingestion import ingest_artifact_to_dataset
 from .budget import refresh_ai_budget_metadata
 from .run_models import AgentArtifact, AgentRun, LLMCall
 from .run_repository import AgentRunRepository, get_agent_run_repository
@@ -158,7 +158,7 @@ def _model_usage() -> ModelUsageRecorder:
 
 
 def _recording() -> TraceRecorder:
-    return TraceRecorder(_model_usage(), ingest_artifact_to_dataset)
+    return TraceRecorder(_model_usage())
 
 
 def _run_service(repository: AgentRunRepository | None = None) -> TraceRunService:
@@ -244,6 +244,10 @@ def attach_chat_trace_run(
         return payload
     from app.application.agent_orchestrator.business_harness import guard_unexecuted_payload
 
+    if run.error == "unplanned_tool_call_rejected":
+        # The trace service rejected and replaced this response. Do not return
+        # the original model payload after persisting a failed run.
+        payload = copy.deepcopy(run.final_output["chat_payload"])
     return _attach_run_id(guard_unexecuted_payload(run, payload), run.run_id)
 
 

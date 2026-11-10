@@ -30,7 +30,9 @@ def _registered_router_customers(
     if str(runtime_context.get("service_source") or "") == "fastapi_customer_route":
         from app.fastapi_routes.domains.customer import routes as customer_routes
 
-        return customer_routes._execute_customers_route_action(action, dict(params or {}))
+        return customer_routes._execute_customers_route_action(
+            action, dict(params or {}), runtime_context=runtime_context
+        )
     from app.application import get_customer_app_service
 
     svc = get_customer_app_service()
@@ -98,23 +100,26 @@ def _registered_router_customers(
         customer_id = int(params.get("id") or params.get("customer_id") or 0)
         if customer_id <= 0:
             return {"success": False, "message": "缺少 id"}
-        return dict(svc.delete(customer_id, force=bool(params.get("force", False))) or {})
+        return dict(
+            svc.delete(
+                customer_id,
+                force=bool(params.get("force", False)),
+                runtime_context=runtime_context,
+            )
+            or {}
+        )
     if action == "batch_delete":
         raw_ids = params.get("ids") or params.get("customer_ids") or []
         if not isinstance(raw_ids, list) or not raw_ids:
             return {"success": False, "message": "ids 须为非空数组"}
-        ids: list[int] = []
-        skipped: list[str] = []
-        for raw in raw_ids:
-            try:
-                ids.append(int(raw))
-            except (TypeError, ValueError):
-                skipped.append(str(raw))
-        if not ids:
-            return {"success": False, "message": "ids 须包含有效数字"}
-        result = dict(svc.batch_delete(ids, force=bool(params.get("force", False))) or {})
-        if skipped:
-            result["skipped"] = list(result.get("skipped") or []) + skipped
+        result = dict(
+            svc.batch_delete(
+                raw_ids,
+                force=bool(params.get("force", False)),
+                runtime_context=runtime_context,
+            )
+            or {}
+        )
         return result
     if action == "add_address":
         payload = dict(params or {})

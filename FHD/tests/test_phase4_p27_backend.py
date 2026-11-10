@@ -208,11 +208,14 @@ async def test_notify_offline_im_members_skips_when_all_online() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_is_pro_source_normalizes_variants() -> None:
-    assert AIChatApplicationService._is_pro_source("xcagi-pro") is True
-    assert AIChatApplicationService._is_pro_source("PRO_MODE") is True
-    assert AIChatApplicationService._is_pro_source("professional") is True
-    assert AIChatApplicationService._is_pro_source("") is False
+@pytest.mark.parametrize("source", ["xcagi-pro", "PRO_MODE", "professional", "basic", ""])
+def test_source_labels_do_not_bypass_model_selection(source):
+    svc = _chat_svc()
+    svc.workflow_planner.plan.return_value = None
+    result = svc._try_handle_dynamic_workflow("u", "解释库存", source, {}, {})
+    svc.workflow_planner.plan.assert_called_once()
+    assert result["success"] is False
+    assert result["data"]["execution_started"] is False
 
 
 def test_excel_cell_looks_like_product_measure_unit() -> None:
@@ -236,8 +239,14 @@ def test_dynamic_workflow_ambiguous_price_columns(
     }
     out = svc._try_handle_dynamic_workflow("u", "导入数据库", "pro", ctx, {})
     assert out is not None
-    assert out["success"] is True
-    assert "调价" in out["response"]
+    assert out["success"] is False
+    assert out["data"]["execution_started"] is False
+    mock_extract.assert_not_called()
+    svc.workflow_planner.plan.assert_called_once()
+    assert (
+        svc.workflow_planner.plan.call_args.kwargs["context"]["excel_analysis"]
+        == ctx["excel_analysis"]
+    )
 
 
 @patch("app.application.get_unit_products_import_app_service")

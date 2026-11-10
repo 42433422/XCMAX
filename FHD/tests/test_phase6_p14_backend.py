@@ -614,24 +614,16 @@ class TestChatErrorPath:
     async def test_chat_handles_recoverable_error(
         self, conversation_service: _ConversationHost
     ) -> None:
-        with patch.object(
-            conversation_service,
-            "_get_or_create_context_async",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("boom"),
-        ):
+        with patch("app.application.get_ai_chat_app_service") as application:
+            application.return_value.process_chat.side_effect = RuntimeError("boom")
             result = await conversation_service.chat("u1", "hello")
             assert result["action"] == "error"
             assert "boom" in result["text"]
 
     @pytest.mark.asyncio
     async def test_chat_handles_value_error(self, conversation_service: _ConversationHost) -> None:
-        with patch.object(
-            conversation_service,
-            "_get_or_create_context_async",
-            new_callable=AsyncMock,
-            side_effect=ValueError("bad input"),
-        ):
+        with patch("app.application.get_ai_chat_app_service") as application:
+            application.return_value.process_chat.side_effect = ValueError("bad input")
             result = await conversation_service.chat("u1", "hello")
             assert result["action"] == "error"
 

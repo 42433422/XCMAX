@@ -75,6 +75,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     try {
       const upload = await uploadChatOfficeFile(file)
       item.upload = upload
+      if (upload.attachment_warning) item.warnings.push(upload.attachment_warning)
       const body = asRecord(await api.post('/api/platform-shell/office/confirm', {
         intent: 'elt_parse',
         file_path: upload.file_path,
@@ -102,6 +103,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       }))
       deps.stageExcelAnalysisContext({
         file_name: file.name,
+        ...(upload.upload_id ? { upload_id: upload.upload_id } : {}),
         file_path: upload.file_path,
         summary: item.summary,
         fields: item.fieldNames,

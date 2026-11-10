@@ -232,6 +232,34 @@ class CustomerCrudMixin:
                 if not unit:
                     return {"success": False, "message": "客户不存在"}
 
+                old_name, unit_tenant = unit.unit_name, unit.tenant_id
+                new_name = data.get("customer_name", old_name)
+
+                def rename_children() -> None:
+                    if not new_name or new_name == old_name:
+                        return
+                    from sqlalchemy import inspect, or_
+
+                    from app.db.models.product import Product
+                    from app.db.models.shipment import ShipmentRecord
+
+                    inspector = inspect(session.connection())
+                    if inspector.has_table(Product.__tablename__):
+                        session.query(Product).filter(
+                            Product.tenant_id == unit_tenant, Product.unit == old_name
+                        ).update({Product.unit: new_name}, synchronize_session=False)
+                    if inspector.has_table(ShipmentRecord.__tablename__):
+                        session.query(ShipmentRecord).filter(
+                            ShipmentRecord.tenant_id == unit_tenant,
+                            ShipmentRecord.purchase_unit == old_name,
+                            or_(
+                                ShipmentRecord.unit_id == customer_id,
+                                ShipmentRecord.unit_id.is_(None),
+                            ),
+                        ).update(
+                            {ShipmentRecord.purchase_unit: new_name}, synchronize_session=False
+                        )
+
                 expected_version, version_invalid = _explicit_version(data)
                 if version_invalid:
                     return {
@@ -264,6 +292,7 @@ class CustomerCrudMixin:
                             "error_code": "version_conflict",
                             "message": "客户版本已变化，本次修改没有写入",
                         }
+                    rename_children()
                     session.commit()
                     unit = (
                         _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
@@ -282,6 +311,7 @@ class CustomerCrudMixin:
                     current_version = getattr(unit, "version", None)
                     if isinstance(current_version, int) and not isinstance(current_version, bool):
                         unit.version = current_version + 1
+                    rename_children()
                     session.commit()
                     session.refresh(unit)
 
@@ -362,140 +392,37 @@ class CustomerCrudMixin:
                 "message": "关联发货记录检查失败",
             }
 
-    def delete(self, customer_id: int, force: bool = False) -> dict[str, Any]:
-        """删除购买单位
+    def delete(
+        self, customer_id: int, force: bool = False, *, runtime_context=None
+    ) -> dict[str, Any]:
+        """删除客户；force 级联删除关联产品/发货，必须提供可信跨域授权。"""
+        return self.batch_delete([customer_id], force=force, runtime_context=runtime_context)
 
-        Args:
-            customer_id: 客户ID
-            force: 是否强制删除（忽略关联检查）
+    def batch_delete(
+        self, ids: list[int], force: bool = False, *, runtime_context=None
+    ) -> dict[str, Any]:
+        """全量校验后原子删除；force 不是跳过校验，而是授权的级联删除。"""
+        from app.application.customer_deletion import delete_customers
+        from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 
-        Returns:
-            删除结果，包含关联检查信息
-        """
+        session = None
         try:
             session = self._get_session()
-            try:
-                from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
-
-                unit = (
-                    _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
-                    .filter(PurchaseUnitModel.id == customer_id)
-                    .first()
-                )
-
-                if not unit:
-                    return {"success": False, "message": "客户不存在", "deleted_count": 0}
-
-                unit_name = unit.unit_name
-
-                association_check = self._check_shipment_associations(unit_name)
-
-                if association_check.get("has_associations") is None:
-                    return {
-                        "success": False,
-                        "message": "关联发货记录检查失败，未删除客户",
-                        "deleted_count": 0,
-                    }
-
-                if association_check.get("has_associations") and not force:
-                    return {
-                        "success": False,
-                        "message": f"无法删除客户「{unit_name}」，存在 {association_check['shipment_count']} 条关联发货记录",
-                        "deleted_count": 0,
-                        "has_associations": True,
-                        "association_details": {
-                            "shipment_count": association_check["shipment_count"],
-                            "sample_records": association_check["sample_records"],
-                        },
-                        "suggestion": "请先删除关联的发货记录，或使用 force=True 强制删除",
-                    }
-
-                session.delete(unit)
-                session.commit()
-
-                try:
-                    from app.neuro_bus.application_neuro_bridge import (
-                        neuro_notify_customer_changed,
-                    )
-
-                    neuro_notify_customer_changed(
-                        "deleted", customer_id=customer_id, customer_name=unit.unit_name
-                    )
-                except RECOVERABLE_ERRORS:
-                    logger.debug("neuro_notify_customer_changed skipped", exc_info=True)
-
-                return {
-                    "success": True,
-                    "message": "客户删除成功",
-                    "deleted_count": 1,
-                    "has_associations": False,
-                }
-            finally:
-                session.close()
-
+            return delete_customers(session, ids, force=force, runtime_context=runtime_context)
+        except (PermissionError, AgentModAuthorizationError):
+            if session is not None:
+                session.rollback()
+            return {
+                "success": False,
+                "error_code": "cascade_permission_denied",
+                "message": "级联删除需要有效登录及产品、发货编辑权限，未删除任何数据",
+                "deleted_count": 0,
+            }
         except RECOVERABLE_ERRORS:
+            if session is not None:
+                session.rollback()
             logger.exception("删除客户失败")
             return {"success": False, "message": "删除客户失败", "deleted_count": 0}
-
-    def batch_delete(self, ids: list[int], force: bool = False) -> dict[str, Any]:
-        """批量删除购买单位；强制删除可跳过关联检查。"""
-        try:
-            session = self._get_session()
-            try:
-                from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
-
-                units = (
-                    _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
-                    .filter(PurchaseUnitModel.id.in_(ids))
-                    .all()
-                )
-
-                if not units:
-                    return {"success": False, "message": "未找到要删除的客户", "deleted_count": 0}
-
-                if not force:
-                    affected_units = []
-                    for unit in units:
-                        check = self._check_shipment_associations(unit.unit_name)
-                        if check.get("has_associations") is None:
-                            return {
-                                "success": False,
-                                "message": "关联发货记录检查失败，未删除客户",
-                                "deleted_count": 0,
-                            }
-                        if check.get("has_associations"):
-                            affected_units.append(
-                                {
-                                    "id": unit.id,
-                                    "unit_name": unit.unit_name,
-                                    "shipment_count": check["shipment_count"],
-                                    "sample_records": check["sample_records"],
-                                }
-                            )
-
-                    if affected_units:
-                        return {
-                            "success": False,
-                            "message": f"存在 {len(affected_units)} 个客户关联发货记录，无法批量删除",
-                            "deleted_count": 0,
-                            "has_associations": True,
-                            "affected_units": affected_units,
-                            "suggestion": "请先删除关联的发货记录，或使用 force=True 强制删除",
-                        }
-
-                for unit in units:
-                    session.delete(unit)
-
-                session.commit()
-
-                return {
-                    "success": True,
-                    "message": f"成功删除 {len(units)} 条记录",
-                    "deleted_count": len(units),
-                }
-            finally:
+        finally:
+            if session is not None:
                 session.close()
-
-        except RECOVERABLE_ERRORS:
-            logger.exception("批量删除失败")
-            return {"success": False, "message": "批量删除失败", "deleted_count": 0}

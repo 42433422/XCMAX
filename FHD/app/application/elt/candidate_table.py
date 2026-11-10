@@ -352,7 +352,14 @@ def dataset_from_business_rows(items: list[dict]) -> ParsedDataset | None:
             (not _is_quantity(quantity), "quantity", "原表中未确认有效数量"),
         ):
             if invalid:
-                issues.append({"code": "ELT_REQUIRED_FIELD_MISSING", "field": field, "severity": "error", "message": message})
+                issues.append(
+                    {
+                        "code": "ELT_REQUIRED_FIELD_MISSING",
+                        "field": field,
+                        "severity": "error",
+                        "message": message,
+                    }
+                )
         if not located:
             issues.append(dict(_UNLOCATED_ISSUE))
         if _cell_text(item.get("unit_in_source")) == "0":

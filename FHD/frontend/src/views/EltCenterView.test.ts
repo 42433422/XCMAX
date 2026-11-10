@@ -90,7 +90,7 @@ describe('data docking user-only intake', () => {
     const source = await choose()
     expect(archive.archiveClassifyExcel).toHaveBeenCalledTimes(1)
     expect(archive.analyzeClassification).toHaveBeenCalledTimes(1)
-    expect(archive.autoSlices).toHaveBeenCalledWith('production', 'model-v2')
+    expect(archive.autoSlices).toHaveBeenCalledWith('production', 'model-v2', true)
     expect(archive.confirmClassification).not.toHaveBeenCalled()
     expect(archive.reviewExcel).toHaveBeenCalledTimes(1)
     const form = archive.reviewExcel.mock.calls[0][0] as FormData

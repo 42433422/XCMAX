@@ -121,7 +121,7 @@ class PlannedWorkflowDispatch:
                 },
             }
         outputs = result.final_context.get("node_outputs")
-        reply = outputs.get("model_reply") if isinstance(outputs, dict) else None
+        reply = outputs.get(plan.nodes[0].node_id) if isinstance(outputs, dict) else None
         text = str(reply.get("response") or "").strip() if isinstance(reply, dict) else ""
         if not text:
             return {
@@ -152,6 +152,21 @@ class PlannedWorkflowDispatch:
         context: dict[str, Any],
         text: str,
     ) -> dict[str, Any] | None:
+        from app.application.agent_orchestrator.attachment_inputs import (
+            AttachmentInputError,
+            resolve_attachment_context,
+        )
+
+        try:
+            context, attachments = resolve_attachment_context(context)
+        except AttachmentInputError as exc:
+            return {
+                "success": False,
+                "execution_state": "blocked",
+                "message": str(exc),
+                "response": str(exc),
+                "data": {"error_code": "attachment_reupload_required", "execution_started": False},
+            }
         pending_handled, pending_result = self.callbacks._resume_pending_dynamic_workflow(
             user_id, message, text, context
         )
@@ -219,6 +234,8 @@ class PlannedWorkflowDispatch:
                     "execution_started": False,
                 },
             }
+        if attachments:
+            plan.metadata["artifacts"] = attachments
         if (plan.metadata or {}).get("planning_rejected") is True:
             reason = str((plan.metadata or {}).get("rejection_reason") or "").strip()
             unavailable = (plan.metadata or {}).get("planning_unavailable") is True
@@ -243,7 +260,10 @@ class PlannedWorkflowDispatch:
                 },
             }
         if (plan.metadata or {}).get("response_mode") == "reply":
-            return self._execute_reply_plan(plan, context)
+            result = self._execute_reply_plan(plan, context)
+            if attachments and result.get("success"):
+                result["data"]["artifacts"] = attachments
+            return result
         from app.domain.autonomy.autonomy_guard import ProhibitedActionError
 
         try:
@@ -371,6 +391,8 @@ class PlannedWorkflowDispatch:
         return {
             "success": True,
             "message": "等待确认",
+            "execution_state": "waiting_user",
+            "execution_started": False,
             "response": response_text,
             "data": {
                 "text": response_text,

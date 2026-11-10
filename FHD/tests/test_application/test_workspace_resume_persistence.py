@@ -1,5 +1,6 @@
 """Legacy persisted workspace hints cannot survive real run resumption."""
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -7,9 +8,15 @@ from app.application.agent_orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.employee_runtime.task_continuity import ledger_path, load_employee_task_ledger
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def test_sqlite_legacy_run_resume_uses_server_workspace(tmp_path, monkeypatch):
+@pytest.mark.parametrize("has_plan", [False, True])
+def test_sqlite_legacy_run_resume_uses_server_workspace(
+    tmp_path, monkeypatch, trusted_actor, has_plan
+):
+    actor = trusted_actor(user_id=17, role="admin")
     server = tmp_path / "server"
     outside = tmp_path / "outside"
     server.mkdir()
@@ -42,8 +49,28 @@ def test_sqlite_legacy_run_resume_uses_server_workspace(tmp_path, monkeypatch):
                 },
             )
         ],
-        metadata={"runtime_context": {"user_id": "17", "workspace_root": str(outside)}},
+        metadata={"runtime_context": {**actor.context, "workspace_root": str(outside)}},
     )
+    if has_plan:
+        step = run.steps[0]
+        plan = PlanGraph(
+            plan_id="legacy-workspace-plan",
+            intent="employee",
+            todo_steps=[],
+            nodes=[
+                WorkflowNode(
+                    node_id=step.node_id,
+                    tool_id=step.tool_id,
+                    action=step.action,
+                    params=step.params,
+                    risk=step.risk,
+                    idempotent=step.idempotent,
+                )
+            ],
+        )
+        AgentOrchestrator(repository=repository)._apply_plan(run, plan)
+        run.status = "waiting_user"
+        run.steps[0].status = "waiting_user"
     repository.save(run)
     engine.dispose()
     # Reopen the database: this is not a reference to a previously mutated run.
@@ -58,6 +85,12 @@ def test_sqlite_legacy_run_resume_uses_server_workspace(tmp_path, monkeypatch):
         finished = AgentOrchestrator(repository=fresh).continue_run(
             run.run_id, approved_by="17", runtime_context={"workspace_root": str(outside)}
         )
+        if not has_plan:
+            assert finished.status == "blocked"
+            assert not finished.tool_calls
+            assert not ledger_path(server).exists()
+            assert list(outside.iterdir()) == []
+            return
         assert finished.status == "completed", finished.to_dict()
         assert finished.tool_calls and finished.tool_calls[0].output["success"]
         assert ledger_path(server).is_file()

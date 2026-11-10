@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -340,16 +340,16 @@ def test_attach_chat_trace_run_records_user_memory_reference() -> None:
 
 def test_attach_chat_trace_run_records_ocr_artifact(tmp_path, monkeypatch) -> None:
     from app.application.dataset_rag_app_service import (
-        get_dataset_rag_app_service,
         reset_dataset_rag_app_service_for_tests,
     )
 
     monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "dataset_store.json"))
-    # 关闭 persy-knowledge mirror：让 _resolve_dataset_id 回退到 user_{user_id}，
-    # 保持本测试的原意图（ingest 到 user_u1 dataset，再从 user_u1 查询）。
-    # 默认行为（mirror=1）会将 artifact ingest 到 persy-knowledge 共享空间。
-    monkeypatch.setenv("XCAGI_KNOWLEDGE_MIRROR_ARTIFACTS_TO_PERSY", "0")
     reset_dataset_rag_app_service_for_tests()
+    service = Mock()
+    service.ingest_document.side_effect = AssertionError("trace is display-only")
+    monkeypatch.setattr(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service", lambda: service
+    )
     repo = InMemoryAgentRunRepository()
     payload = {
         "success": True,
@@ -392,29 +392,22 @@ def test_attach_chat_trace_run_records_ocr_artifact(tmp_path, monkeypatch) -> No
     assert run.artifacts[0].preview["confidence"] == 0.93
     assert run.metadata["artifact_count"] == 1
     assert run.metadata["artifact_types"] == ["ocr_text"]
-    assert run.metadata["dataset_ingest_count"] == 1
-    assert run.metadata["dataset_ids"] == ["user_u1"]
+    assert run.artifacts[0].metadata["skip_dataset_ingest"] is True
     assert run.final_output["artifacts"][0]["artifact_type"] == "ocr_text"
-    assert run.final_output["dataset_ingest_count"] == 1
-    answer = get_dataset_rag_app_service().answer(
-        dataset_id="user_u1",
-        query="购货单位",
-        top_k=1,
-    )
-    assert answer["success"] is True
-    assert "星光贸易" in answer["answer"]
+    assert not run.metadata.get("dataset_ingest_count")
+    service.ingest_document.assert_not_called()
     assert [event.event_type for event in run.events] == [
         "run.created",
         "artifact.attached",
-        "dataset.ingested",
         "run.completed",
     ]
     reset_dataset_rag_app_service_for_tests()
 
 
-def test_attach_chat_trace_run_ingests_pdf_file_analysis_artifact(tmp_path, monkeypatch) -> None:
+def test_attach_chat_trace_run_displays_pdf_without_implicit_ingestion(
+    tmp_path, monkeypatch
+) -> None:
     from app.application.dataset_rag_app_service import (
-        get_dataset_rag_app_service,
         reset_dataset_rag_app_service_for_tests,
     )
     from evals.run_agent_eval import _minimal_pdf_bytes
@@ -422,6 +415,11 @@ def test_attach_chat_trace_run_ingests_pdf_file_analysis_artifact(tmp_path, monk
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "dataset_store.json"))
     reset_dataset_rag_app_service_for_tests()
+    service = Mock()
+    service.ingest_document.side_effect = AssertionError("trace is display-only")
+    monkeypatch.setattr(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service", lambda: service
+    )
     repo = InMemoryAgentRunRepository()
     pdf_path = tmp_path / "xcauto_policy.pdf"
     pdf_path.write_bytes(
@@ -464,45 +462,32 @@ def test_attach_chat_trace_run_ingests_pdf_file_analysis_artifact(tmp_path, monk
     assert run is not None
     assert run.status == "completed"
     assert run.artifacts[0].artifact_type == "pdf_document"
-    assert run.metadata["dataset_ingest_count"] == 1
-    assert run.metadata["dataset_ids"] == ["platform-docs"]
-    ingest = run.metadata["dataset_ingests"][0]
-    assert ingest["success"] is True
-    assert ingest["parser"] == "pdfplumber"
-    assert ingest["source"] == "xcauto_policy.pdf"
-    assert "dataset.ingested" in [event.event_type for event in run.events]
-
-    answer = get_dataset_rag_app_service().answer(
-        dataset_id="platform-docs",
-        query="Which model should AI routes use?",
-        top_k=2,
-    )
-    assert answer["success"] is True
-    assert "XCauto" in answer["answer"]
-    assert answer["citations"]
-
-    reset_dataset_rag_app_service_for_tests()
-    reload_answer = get_dataset_rag_app_service().answer(
-        dataset_id="platform-docs",
-        query="Which model should AI routes use?",
-        top_k=2,
-    )
-    assert reload_answer["success"] is True
-    assert "XCauto" in reload_answer["answer"]
+    assert run.artifacts[0].metadata["skip_dataset_ingest"] is True
+    assert run.artifacts[0].metadata["parser_used"] == "pdfplumber"
+    assert not run.metadata.get("dataset_ingest_count")
+    assert "dataset.ingested" not in [event.event_type for event in run.events]
+    service.ingest_document.assert_not_called()
+    assert not (tmp_path / "dataset_store.json").exists()
     reset_dataset_rag_app_service_for_tests()
 
 
-def test_attach_chat_trace_run_ingests_office_file_analysis_artifact(tmp_path, monkeypatch) -> None:
+def test_attach_chat_trace_run_displays_office_without_implicit_ingestion(
+    tmp_path, monkeypatch
+) -> None:
     from docx import Document
 
     from app.application.dataset_rag_app_service import (
-        get_dataset_rag_app_service,
         reset_dataset_rag_app_service_for_tests,
     )
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "dataset_store.json"))
     reset_dataset_rag_app_service_for_tests()
+    service = Mock()
+    service.ingest_document.side_effect = AssertionError("trace is display-only")
+    monkeypatch.setattr(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service", lambda: service
+    )
     repo = InMemoryAgentRunRepository()
     docx_path = tmp_path / "platform_notes.docx"
     doc = Document()
@@ -542,15 +527,11 @@ def test_attach_chat_trace_run_ingests_office_file_analysis_artifact(tmp_path, m
     run = repo.get(result["run_id"])
     assert run is not None
     assert run.artifacts[0].artifact_type == "office_document"
-    assert run.metadata["dataset_ingest_count"] == 1
-    assert run.metadata["dataset_ingests"][0]["parser"] == "python-docx"
-    answer = get_dataset_rag_app_service().answer(
-        dataset_id="office-docs",
-        query="Which model should Office artifacts mention?",
-        top_k=2,
-    )
-    assert answer["success"] is True
-    assert "XCauto" in answer["answer"]
+    assert run.artifacts[0].metadata["skip_dataset_ingest"] is True
+    assert run.artifacts[0].metadata["parser_used"] == "python-docx"
+    assert not run.metadata.get("dataset_ingest_count")
+    service.ingest_document.assert_not_called()
+    assert not (tmp_path / "dataset_store.json").exists()
     reset_dataset_rag_app_service_for_tests()
 
 
@@ -647,6 +628,11 @@ def test_attach_chat_trace_run_rejects_unplanned_tool_payloads(payload) -> None:
     run = repo.get(result["run_id"])
     assert run is not None and run.status == "failed" and run.tool_calls == []
     assert "未经计划校验" in result["response"]
+    assert run.final_output["chat_payload"]["success"] is False
+    assert "toolCall" not in result
+    assert "legacy_tool_records" not in result["data"]
+    assert "tool_key" not in result["data"]
+    assert payload["success"] is True  # The caller's model output is not mutated.
 
 
 def test_attach_chat_trace_run_skips_existing_run_id() -> None:

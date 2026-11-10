@@ -46,6 +46,7 @@ def _prepare(db_path: Path):
     import app.db as database
     import app.db.session as session_module
 
+    database.HostSessionLocal = factory
     database.SessionLocal = factory
     session_module.SessionLocal = factory
     from app.application.agent_orchestrator.run_repository import (
@@ -107,35 +108,138 @@ def _seed(factory) -> int:
 
 
 def _chat_service():
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import Mock, patch
 
     from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.workflow.planner import LLMWorkflowPlanner
 
+    payload = {
+        "idempotency_key": "sales-restart-contract",
+        "order": {
+            "customer_name": "测试客户 A",
+            "customer_resolution": "current_tenant_exact_name",
+            "currency": "CNY",
+            "items": [
+                {
+                    "product_name": "产品 B",
+                    "product_resolution": "current_tenant_exact_name",
+                    "quantity": 10,
+                    "unit": "件",
+                    "unit_price": 100,
+                    "line_total": 1000,
+                }
+            ],
+            "total_amount": 1000,
+        },
+        "fulfillment": {
+            "requested": True,
+            "quantity": 10,
+            "unit": "件",
+            "warehouse_resolution": "current_tenant_default",
+        },
+        "invoice": {"requested": True, "amount": 1000, "currency": "CNY"},
+        "payment_allocation": {
+            "requested": False,
+            "amount": 1000,
+            "currency": "CNY",
+            "receipt_voucher": None,
+        },
+    }
+    plan = {
+        "mode": "workflow",
+        "intent": "sales_write",
+        "risk_level": "high",
+        "nodes": [
+            {
+                "node_id": "sales_execute_closed_loop",
+                "tool_id": "sales",
+                "action": "execute_closed_loop",
+                "params": {"payload": payload},
+                "risk": "high",
+                "idempotent": True,
+            },
+            {
+                "node_id": "verify_sales_result",
+                "tool_id": "sales",
+                "action": "verify_closed_loop",
+                "params": {"payload": payload},
+                "risk": "low",
+                "idempotent": True,
+                "depends_on": ["sales_execute_closed_loop"],
+            },
+            {
+                "node_id": "export_sales",
+                "tool_id": "reports",
+                "action": "export",
+                "params": {"report_type": "sales"},
+                "risk": "low",
+                "idempotent": True,
+                "depends_on": ["verify_sales_result"],
+            },
+        ],
+    }
+    conversation = Mock(get_context=Mock(return_value=None))
     with patch(
-        "app.application.ai_chat_app_service.get_ai_conversation_service",
-        return_value=MagicMock(),
+        "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=conversation
     ):
         service = AIChatApplicationService()
-    service.workflow_planner._ai_service = MagicMock()
+    service.workflow_planner = LLMWorkflowPlanner(
+        ai_service=conversation,
+        completion=lambda **_: {
+            "choices": [{"message": {"content": json.dumps(plan, ensure_ascii=False)}}]
+        },
+    )
     return service
+
+
+def _actor(factory, user_id):
+    from datetime import timedelta
+
+    from starlette.requests import Request
+
+    from app.db.models.permission import DEFAULT_ROLES, Permission, Role
+    from app.db.models.user import Session as UserSession
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+    from app.utils.time import utc_now_naive
+
+    session_id = "sales-restart-session"
+    with factory.begin() as db:
+        if db.query(UserSession).filter_by(session_id=session_id).first() is None:
+            db.add(
+                UserSession(
+                    session_id=session_id,
+                    user_id=user_id,
+                    expires_at=utc_now_naive() + timedelta(hours=1),
+                )
+            )
+            role = Role(name="admin")
+            for code in next(r["permissions"] for r in DEFAULT_ROLES if r["name"] == "admin"):
+                role.permissions.append(Permission(code=code, name=code))
+            db.add(role)
+    request = Request(
+        {"type": "http", "method": "POST", "headers": [(b"x-session-id", session_id.encode())]}
+    )
+    return authenticated_runtime_context({}, require_agent_principal(request, x_user_id=None))
 
 
 def confirm_phase(db_path: Path, marker: Path) -> None:
     factory = _prepare(db_path)
     user_id = _seed(factory)
     service = _chat_service()
+    context = _actor(factory, user_id)
     with tenant_scope(1):
         first = service.process_chat(
             user_id=str(user_id),
             message=SENTENCE,
-            context={"local_user_id": str(user_id)},
+            context=context,
             source="pro",
         )
         assert first["data"]["action"] == "workflow_confirmation_required", first
         second = service.process_chat(
             user_id=str(user_id),
             message="确认",
-            context={"local_user_id": str(user_id)},
+            context=context,
             source="pro",
         )
     assert second["data"]["action"] == "approval_pending", second
@@ -237,7 +341,9 @@ def _spawn(
     env["SALES_MARKER"] = str(marker)
     env["SALES_RESULT"] = str(result_path)
     env["WAIT"] = "1" if wait else "0"
-    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(Path(__file__).resolve().parents[2]), os.environ.get("PYTHONPATH", "")]
+    )
     log = db_path.with_name(f"{phase}.log").open("w", encoding="utf-8")
     process = subprocess.Popen(
         [sys.executable, __file__, phase],
@@ -256,7 +362,10 @@ def _wait_for(path: Path, proc: subprocess.Popen, timeout: float = 60) -> None:
         if path.exists():
             return
         if proc.poll() is not None:
-            raise AssertionError(f"worker exited {proc.returncode} before writing {path.name}")
+            raise AssertionError(
+                f"worker exited {proc.returncode} before writing {path.name}: "
+                + Path(proc.log_handle.name).read_text(encoding="utf-8")[-6000:]
+            )
         time.sleep(0.2)
     raise AssertionError(f"timed out waiting for {path.name}")
 

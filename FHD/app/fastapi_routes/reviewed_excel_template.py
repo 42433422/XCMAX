@@ -19,7 +19,7 @@ from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import JSONResponse, Response
 from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy import update
 from starlette.concurrency import run_in_threadpool
@@ -107,7 +107,10 @@ _SLICE_METADATA: OrderedDict[tuple, tuple[float, list[dict]]] = OrderedDict()
 
 
 def _remember_slice_metadata(key, slices):
-    metadata = [{"fragments": item["fragments"], "type_label": item.get("type_label", "")} for item in slices]
+    metadata = [
+        {"fragments": item["fragments"], "type_label": item.get("type_label", "")}
+        for item in slices
+    ]
     with _SLICE_METADATA_LOCK:
         _SLICE_METADATA[key] = (time.monotonic(), metadata)
         _SLICE_METADATA.move_to_end(key)
@@ -406,20 +409,6 @@ def reviewed_excel_recent_classifications(user=Depends(_read)):
         return {"files": result}
 
 
-@router.get("/api/templates/reviewed-excel/classifications/{classification_id}/source")
-def archived_classification_source(classification_id: str, user=Depends(_read)):
-    tenant, owner = _identity(user)
-    with tenant_scope(tenant), get_db() as db:
-        run = _classification_run(db, classification_id, tenant, owner)
-        if not load_json(run.summary_json, {}).get("archive_version_id"):
-            raise HTTPException(status_code=404, detail="旧分类没有归档来源")
-        return Response(
-            content=_source(db, run, tenant, owner),
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Cache-Control": "no-store"},
-        )
-
-
 @router.get("/api/templates/reviewed-excel/classifications/{classification_id}")
 def reviewed_excel_classification_history(classification_id: str, user=Depends(_read)):
     tenant, owner = _identity(user)
@@ -464,7 +453,16 @@ def _model_allows_unassigned_slice(latest: dict) -> bool:
     return allowed
 
 
-def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False, only_index=None, metadata_only=False):
+def _auto_slices(
+    db,
+    classification_id,
+    version,
+    tenant,
+    owner,
+    with_rows=False,
+    only_index=None,
+    metadata_only=False,
+):
     from app.application.reviewed_excel_auto_slice import derive_classified_documents
 
     run = _classification_run(db, classification_id, tenant, owner)
@@ -546,12 +544,18 @@ def _auto_slices(db, classification_id, version, tenant, owner, with_rows=False,
 
     annotate_slice_titles(slices, latest.get("sheets") or [])
     if with_rows:
-        _remember_slice_metadata((tenant, owner, classification_id, version, run.file_sha256), slices)
+        _remember_slice_metadata(
+            (tenant, owner, classification_id, version, run.file_sha256), slices
+        )
     return slices, latest.get("coverage", []), []
 
 
-@router.get("/api/templates/reviewed-excel/classifications/{classification_id}/candidate-result/{version}/{slice_index}")
-def reviewed_excel_candidate_result(classification_id: str, version: str, slice_index: int, user=Depends(_read)):
+@router.get(
+    "/api/templates/reviewed-excel/classifications/{classification_id}/candidate-result/{version}/{slice_index}"
+)
+def reviewed_excel_candidate_result(
+    classification_id: str, version: str, slice_index: int, user=Depends(_read)
+):
     """Read a completed candidate after a client timeout without another model call."""
     from app.application.reviewed_excel_audit import is_live
 
@@ -559,29 +563,56 @@ def reviewed_excel_candidate_result(classification_id: str, version: str, slice_
     with tenant_scope(tenant), get_db() as db:
         classification = _classification_run(db, classification_id, tenant, owner)
         state = load_json(classification.draft_json, {})
-        versions = state.get('versions') or []
-        if not versions or versions[-1].get('version') != version:
-            raise HTTPException(status_code=409, detail='分类版本已变化，请刷新')
+        versions = state.get("versions") or []
+        if not versions or versions[-1].get("version") != version:
+            raise HTTPException(status_code=409, detail="分类版本已变化，请刷新")
         matched = []
         pending = []
-        for key, claim in (state.get('template_candidate_requests') or {}).items():
-            if claim.get('version') == version and claim.get('slice_index') == slice_index and claim.get('state') != 'completed':
-                pending.append('retryable' if claim.get('state') == 'retryable' else 'pending' if is_live(key) else 'unknown')
-            if claim.get('state') != 'completed' or not claim.get('review_id'):
+        for key, claim in (state.get("template_candidate_requests") or {}).items():
+            if (
+                claim.get("version") == version
+                and claim.get("slice_index") == slice_index
+                and claim.get("state") != "completed"
+            ):
+                pending.append(
+                    "retryable"
+                    if claim.get("state") == "retryable"
+                    else "pending"
+                    if is_live(key)
+                    else "unknown"
+                )
+            if claim.get("state") != "completed" or not claim.get("review_id"):
                 continue
-            review = _run(db, claim['review_id'], tenant, owner)
-            scope = load_json(review.summary_json, {}).get('selected_region') or {}
-            if scope.get('classification_id') == classification_id and scope.get('version') == version and scope.get('auto_slice_index') == slice_index:
+            review = _run(db, claim["review_id"], tenant, owner)
+            scope = load_json(review.summary_json, {}).get("selected_region") or {}
+            if (
+                scope.get("classification_id") == classification_id
+                and scope.get("version") == version
+                and scope.get("auto_slice_index") == slice_index
+            ):
                 matched.append(review.id)
         if len(matched) > 1:
-            raise HTTPException(status_code=409, detail='存在多份候选结果，请人工核对')
+            raise HTTPException(status_code=409, detail="存在多份候选结果，请人工核对")
         if not matched:
-            return {'status': 'unknown' if 'unknown' in pending else 'retryable' if 'retryable' in pending else 'pending'}
-        return {'status': 'complete', 'review': _stored_candidate_response(db, matched[0], tenant, owner)}
+            return {
+                "status": "unknown"
+                if "unknown" in pending
+                else "retryable"
+                if "retryable" in pending
+                else "pending"
+            }
+        return {
+            "status": "complete",
+            "review": _stored_candidate_response(db, matched[0], tenant, owner),
+        }
 
 
-@router.post("/api/templates/reviewed-excel/classifications/{classification_id}/template-families/{version}")
-def reviewed_excel_template_families(classification_id: str, version: str, request: Request, user=Depends(_manage)):
+@router.post(
+    "/api/templates/reviewed-excel/classifications/{classification_id}/template-families/{version}"
+)
+def reviewed_excel_template_families(
+    classification_id: str, version: str, request: Request, user=Depends(_manage)
+):
     """Record model-proposed template reuse without merging source documents."""
     from app.application.reviewed_excel_audit import call_key
     from app.application.reviewed_excel_template_families import suggest_template_families
@@ -597,8 +628,13 @@ def reviewed_excel_template_families(classification_id: str, version: str, reque
         saved = state.get("template_families") or {}
         if saved.get("version") == version and saved.get("status") == "complete":
             return {"status": "complete", "families": saved["families"], "replayed": True}
-        if saved.get("version") == version and saved.get("status") in {"running", "outcome_unknown"}:
-            raise HTTPException(status_code=409, detail="模板复用分析正在处理或结果待核对，请勿重复提交")
+        if saved.get("version") == version and saved.get("status") in {
+            "running",
+            "outcome_unknown",
+        }:
+            raise HTTPException(
+                status_code=409, detail="模板复用分析正在处理或结果待核对，请勿重复提交"
+            )
         old = run.draft_json
         call_id = uuid4().hex
         state["template_families"] = {"version": version, "status": "running", "call_id": call_id}
@@ -625,7 +661,11 @@ def reviewed_excel_template_families(classification_id: str, version: str, reque
                 latest = load_json(old_draft, {})
                 claim = latest.get("template_families") or {}
                 versions = latest.get("versions") or []
-                if not versions or versions[-1].get("version") != version or claim.get("call_id") != call_id:
+                if (
+                    not versions
+                    or versions[-1].get("version") != version
+                    or claim.get("call_id") != call_id
+                ):
                     raise HTTPException(status_code=409, detail="分类或模板复用任务已变化，请刷新")
                 latest["template_families"] = result
                 try:
@@ -637,19 +677,39 @@ def reviewed_excel_template_families(classification_id: str, version: str, reque
             raise HTTPException(status_code=409, detail="分类正在更新，请稍后核对模板复用结果")
 
         try:
-            slices = _cached_slice_metadata((tenant, owner, classification_id, version, run.file_sha256))
+            slices = _cached_slice_metadata(
+                (tenant, owner, classification_id, version, run.file_sha256)
+            )
             if slices is None:
-                slices, _coverage, _rows = _auto_slices(db, classification_id, version, tenant, owner)
+                slices, _coverage, _rows = _auto_slices(
+                    db, classification_id, version, tenant, owner
+                )
             source_body = _source(db, run, tenant, owner)
             review = inspect_workbook(source_body)
             with bind_model_session(model_session), call_key(call_id):
-                families = suggest_template_families(slices, review["cells"], owner_id=owner, source_body=source_body, on_dispatch=mark_sent, on_answer=mark_answered)
+                families = suggest_template_families(
+                    slices,
+                    review["cells"],
+                    owner_id=owner,
+                    source_body=source_body,
+                    on_dispatch=mark_sent,
+                    on_answer=mark_answered,
+                )
             _recheck(request, (tenant, owner))
-            settle_family({"version": version, "status": "complete", "call_id": call_id, "families": families})
+            settle_family(
+                {"version": version, "status": "complete", "call_id": call_id, "families": families}
+            )
             return {"status": "complete", "families": families}
         except BOUNDARY_ERRORS as exc:
             try:
-                settle_family({"version": version, "call_id": call_id, "status": "outcome_unknown" if sent and not answered else "failed", "reason": public_excel_error(exc)})
+                settle_family(
+                    {
+                        "version": version,
+                        "call_id": call_id,
+                        "status": "outcome_unknown" if sent and not answered else "failed",
+                        "reason": public_excel_error(exc),
+                    }
+                )
             except BOUNDARY_ERRORS:
                 logger.exception("Could not persist template-family outcome")
             raise
@@ -658,12 +718,20 @@ def reviewed_excel_template_families(classification_id: str, version: str, reque
 @router.get(
     "/api/templates/reviewed-excel/classifications/{classification_id}/auto-slices/{version}"
 )
-def reviewed_excel_auto_slices(classification_id: str, version: str, manifest: bool = False, user=Depends(_read)):
+def reviewed_excel_auto_slices(
+    classification_id: str, version: str, manifest: bool = False, user=Depends(_read)
+):
     tenant, owner = _identity(user)
     try:
         with tenant_scope(tenant), get_db() as db:
             slices, coverage, rows = _auto_slices(
-                db, classification_id, version, tenant, owner, with_rows=True, metadata_only=manifest
+                db,
+                classification_id,
+                version,
+                tenant,
+                owner,
+                with_rows=True,
+                metadata_only=manifest,
             )
         return {
             "classification_id": classification_id,
@@ -676,8 +744,28 @@ def reviewed_excel_auto_slices(classification_id: str, version: str, manifest: b
                     "index": index,
                     "display_name": item.get("display_name") or Path(item["filename"]).stem,
                     "type_label": item.get("type_label") or "",
-                    **({"sha256": hashlib.sha256(item["workbook"]).hexdigest()} if "workbook" in item else {}),
-                    **({"selection_id": hashlib.sha256(dump_json({"classification": classification_id, "version": version, "source": item["source_sha256"], "index": index, "fragments": item["fragments"]}).encode()).hexdigest()} if manifest else {}),
+                    **(
+                        {"sha256": hashlib.sha256(item["workbook"]).hexdigest()}
+                        if "workbook" in item
+                        else {}
+                    ),
+                    **(
+                        {
+                            "selection_id": hashlib.sha256(
+                                dump_json(
+                                    {
+                                        "classification": classification_id,
+                                        "version": version,
+                                        "source": item["source_sha256"],
+                                        "index": index,
+                                        "fragments": item["fragments"],
+                                    }
+                                ).encode()
+                            ).hexdigest()
+                        }
+                        if manifest
+                        else {}
+                    ),
                 }
                 for index, item in enumerate(slices)
             ],
@@ -1599,15 +1687,25 @@ async def reviewed_excel_preview(
         if auto_slice_index >= 0:
             if not classification_id or not classification_version or region_sheet or region_range:
                 raise ReviewedExcelError("自动切片选择无效")
+
             def select_slice():
                 with tenant_scope(tenant), get_db() as db:
                     classification = _classification_run(db, classification_id, tenant, owner)
                     if classification.file_sha256 != review["sha256"]:
                         raise HTTPException(status_code=409, detail="分类来源已改变，请重新选择")
-                    archive_version_id = load_json(classification.summary_json, {}).get("archive_version_id")
+                    archive_version_id = load_json(classification.summary_json, {}).get(
+                        "archive_version_id"
+                    )
                     if not archive_version_id:
                         raise ReviewedExcelError("自动切片须先归档原件")
-                    slices, _coverage, _rows = _auto_slices(db, classification_id, classification_version, tenant, owner, only_index=auto_slice_index)
+                    slices, _coverage, _rows = _auto_slices(
+                        db,
+                        classification_id,
+                        classification_version,
+                        tenant,
+                        owner,
+                        only_index=auto_slice_index,
+                    )
                     if not slices:
                         raise HTTPException(status_code=404, detail="切片不存在")
                     selected = slices[0]
@@ -1615,7 +1713,9 @@ async def reviewed_excel_preview(
                         raise ReviewedExcelError("模型尚未确定此单据的完整关系")
                     return selected, archive_version_id, classification.file_sha256
 
-            selected_slice, archive_version_id, source_sha256 = await run_in_threadpool(select_slice)
+            selected_slice, archive_version_id, source_sha256 = await run_in_threadpool(
+                select_slice
+            )
             body = selected_slice["workbook"]
             review = await run_in_threadpool(inspect_workbook, body)
             fragments = selected_slice["fragments"]
@@ -1792,7 +1892,9 @@ async def reviewed_excel_preview(
                     "owner": owner_stamp(),
                     "attempts": 1,
                 }
-                claims[candidate_key].update({"version": classification_version, "slice_index": auto_slice_index})
+                claims[candidate_key].update(
+                    {"version": classification_version, "slice_index": auto_slice_index}
+                )
                 candidate_call_id = claims[candidate_key]["call_id"]
                 candidate_attempt = int(claims[candidate_key].get("attempts") or 1)
                 completed_batches = claims[candidate_key].get("batches") or {}
@@ -1808,12 +1910,21 @@ async def reviewed_excel_preview(
             # and unrelated changes to the same classification.
             for _ in range(5):
                 with tenant_scope(tenant), get_db() as checkpoint_db:
-                    classification = _classification_run(checkpoint_db, classification_id, tenant, owner)
+                    classification = _classification_run(
+                        checkpoint_db, classification_id, tenant, owner
+                    )
                     old = classification.draft_json
                     current = load_json(old, {})
                     versions_now = current.get("versions") or []
-                    claim = (current.get("template_candidate_requests") or {}).get(candidate_key) or {}
-                    if not versions_now or versions_now[-1].get("version") != classification_version or claim.get("call_id") != candidate_call_id or claim.get("state") != "sent":
+                    claim = (current.get("template_candidate_requests") or {}).get(
+                        candidate_key
+                    ) or {}
+                    if (
+                        not versions_now
+                        or versions_now[-1].get("version") != classification_version
+                        or claim.get("call_id") != candidate_call_id
+                        or claim.get("state") != "sent"
+                    ):
                         raise HTTPException(status_code=409, detail="候选任务已变化，请核对状态")
                     entry = {"digest": digest, "status": batch_status}
                     if result is not None:
@@ -1857,15 +1968,24 @@ async def reviewed_excel_preview(
                         if retry == 2 or not candidate_key:
                             raise
                         with tenant_scope(tenant), get_db() as retry_db:
-                            classification = _classification_run(retry_db, classification_id, tenant, owner)
+                            classification = _classification_run(
+                                retry_db, classification_id, tenant, owner
+                            )
                             old = classification.draft_json
                             state = load_json(old, {})
-                            claim = (state.get("template_candidate_requests") or {}).get(candidate_key) or {}
+                            claim = (state.get("template_candidate_requests") or {}).get(
+                                candidate_key
+                            ) or {}
                             batches = claim.get("batches") or {}
                             statuses = [item.get("status") for item in batches.values()]
-                            if (claim.get("call_id") != candidate_call_id or claim.get("state") != "sent"
+                            if (
+                                claim.get("call_id") != candidate_call_id
+                                or claim.get("state") != "sent"
                                 or "not_sent" not in statuses
-                                or any(status not in {"complete", "not_sent"} for status in statuses)):
+                                or any(
+                                    status not in {"complete", "not_sent"} for status in statuses
+                                )
+                            ):
                                 raise
                             candidate_attempt += 1
                             claim["attempts"] = candidate_attempt
@@ -1907,7 +2027,9 @@ async def reviewed_excel_preview(
                 claims = state.get("template_candidate_requests") or {}
                 claim = claims.get(candidate_key) or {}
                 if claim.get("call_id") == candidate_call_id and claim.get("state") == "sent":
-                    state.setdefault("candidate_render_failures", []).append({**claim, "candidate_key": candidate_key, "state": "answered_render_failed"})
+                    state.setdefault("candidate_render_failures", []).append(
+                        {**claim, "candidate_key": candidate_key, "state": "answered_render_failed"}
+                    )
                     claims.pop(candidate_key)
                     _classification_cas(db, classification, old, state)
             raise
@@ -2160,7 +2282,9 @@ def _intake_attempt_status(attempt):
             # New previews allow eight bounded database units plus knowledge.
             # Legacy claims retain the original expiry for compatibility.
             lifetime = min(1800, max(600, int(attempt.get("max_duration_seconds", 600))))
-            if (utcnow() - datetime.fromisoformat(attempt["started_at"])).total_seconds() > lifetime:
+            if (
+                utcnow() - datetime.fromisoformat(attempt["started_at"])
+            ).total_seconds() > lifetime:
                 return "outcome_unknown"
         except (KeyError, TypeError, ValueError):
             return "outcome_unknown"
@@ -2272,11 +2396,23 @@ def reviewed_excel_intake_preview(
                 business = get_elt_service().get_run(
                     db, run_id=previous["run_id"], owner_user_id=owner
                 )
-                return {"success": True, "intake": {**previous, "business": business}, "replayed": True}
+                return {
+                    "success": True,
+                    "intake": {**previous, "business": business},
+                    "replayed": True,
+                }
             if state.get("intake_attempt"):
-                raise HTTPException(status_code=409, detail="后台预演正在处理或结果待核对，请勿重复提交")
+                raise HTTPException(
+                    status_code=409, detail="后台预演正在处理或结果待核对，请勿重复提交"
+                )
             attempt_id = uuid4().hex
-            state["intake_attempt"] = {"id": attempt_id, "selection_key": key, "status": "running", "started_at": utcnow().isoformat(), "max_duration_seconds": 1800}
+            state["intake_attempt"] = {
+                "id": attempt_id,
+                "selection_key": key,
+                "status": "running",
+                "started_at": utcnow().isoformat(),
+                "max_duration_seconds": 1800,
+            }
             claimed_draft = dump_json(state)
             _cas(db, review, old_draft, expected_status=expected_status, draft_json=claimed_draft)
             old_draft = claimed_draft
@@ -2393,7 +2529,10 @@ def reviewed_excel_intake_preview(
                         else 0,
                         "coverage": row_coverage(
                             original_text,
-                            [{"source_sheet": row.sheet, "source_row": row.row_number} for row in ai_table.rows]
+                            [
+                                {"source_sheet": row.sheet, "source_row": row.row_number}
+                                for row in ai_table.rows
+                            ]
                             if ai_table is not None
                             else [],
                         ),
@@ -2460,7 +2599,13 @@ def reviewed_excel_intake_preview(
                             attempt["status"] = "outcome_unknown"
                         else:
                             current.pop("intake_attempt", None)
-                        _cas(db, review, old, expected_status=review.status, draft_json=dump_json(current))
+                        _cas(
+                            db,
+                            review,
+                            old,
+                            expected_status=review.status,
+                            draft_json=dump_json(current),
+                        )
             except BOUNDARY_ERRORS:
                 logger.exception("Could not reconcile intake preview claim")
 
@@ -2829,54 +2974,3 @@ async def reviewed_excel_save(
         raise HTTPException(
             status_code=getattr(exc, "status_code", 400), detail=public_excel_error(exc)
         ) from None
-
-
-@router.get("/api/templates/reviewed-excel/{template_id}/download")
-def reviewed_excel_download(template_id: int, user=Depends(_read)):
-    tenant, _owner = _identity(user)
-    from sqlalchemy import text
-
-    with tenant_scope(tenant), get_db() as db:
-        row = db.execute(
-            text(
-                "SELECT original_file_path, analyzed_data FROM templates WHERE id = :id AND tenant_id = :tenant AND (is_active IS NULL OR is_active = 1)"
-            ),
-            {"id": template_id, "tenant": tenant},
-        ).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="模板不存在")
-    try:
-        metadata = json.loads(row.analyzed_data or "{}")
-        review_id = (metadata.get("preview_data") or {}).get("review_id")
-        with tenant_scope(tenant), get_db() as db:
-            run = (
-                db.query(EltRun)
-                .filter(
-                    EltRun.id == review_id,
-                    EltRun.tenant_id == tenant,
-                    EltRun.target_type == "template_review",
-                )
-                .first()
-            )
-            if run is None:
-                raise ReviewedExcelError("unavailable")
-            receipt = load_json(run.receipt_json, {})
-            if run.status != _SAVED or str(receipt.get("template_id")) != f"db:{template_id}":
-                raise ReviewedExcelError("unavailable")
-        root = (Path(get_app_data_dir()) / "templates" / "reviewed_excel" / str(tenant)).resolve()
-        raw = Path(row.original_file_path or "")
-        path = raw.resolve()
-        if (
-            metadata.get("source") != "reviewed_excel_cleanup"
-            or raw.is_symlink()
-            or root not in path.parents
-            or not path.is_file()
-        ):
-            raise ReviewedExcelError("unavailable")
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=404, detail="模板文件不可用") from None
-    return FileResponse(
-        path,
-        filename="cleaned-template.xlsx",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )

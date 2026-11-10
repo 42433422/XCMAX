@@ -173,12 +173,31 @@ def customers_update(request: Request, customer_id: int, body: dict[str, Any]) -
     return _stamp({"success": True, "data": result.get("data")})
 
 
-def customers_delete(request: Request, customer_id: int) -> dict[str, Any]:
+def customers_delete(request: Request, customer_id: int, cascade: bool = False) -> dict[str, Any]:
     _write_gate(request)
-    result = _service().delete(customer_id, force=False)
+    if cascade:
+        from app.infrastructure.auth.dependencies import require_permission
+
+        require_permission("shipment.edit")(request)
+        require_permission("product.edit")(request)
+    context = {}
+    if request is not None:
+        from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+        from app.infrastructure.auth.agent_principal import require_agent_principal
+
+        context = authenticated_runtime_context(
+            {}, require_agent_principal(request, x_user_id=None)
+        )
+    result = _service().delete(
+        customer_id, force=cascade, **({"runtime_context": context} if context else {})
+    )
     if not result.get("success"):
         msg = str(result.get("message") or "删除失败")
-        status = 404 if "不存在" in msg else 400
+        status = (
+            403
+            if result.get("error_code") == "cascade_permission_denied"
+            else (404 if "不存在" in msg else 400)
+        )
         raise HTTPException(status_code=status, detail=msg)
     return _stamp({"success": True, "message": result.get("message") or "已删除"})
 

@@ -57,7 +57,16 @@ def system_client(trusted_actor) -> TestClient:
 
     app = FastAPI()
     app.include_router(system_routes.router)
-    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
+    return TestClient(
+        app, raise_server_exceptions=False, headers=trusted_actor(role="admin").headers
+    )
+
+
+def test_system_startup_rejects_unprivileged_session(system_client, trusted_actor) -> None:
+    with patch("app.application.facades.session_facade.get_system_service") as get_service:
+        response = system_client.post("/api/system/startup", headers=trusted_actor().headers)
+    assert response.status_code == 403
+    get_service.assert_not_called()
 
 
 @patch("app.application.facades.session_facade.get_system_service")
@@ -88,7 +97,8 @@ def test_database_backup_delete(
 ) -> None:
     mock_get.return_value.delete_backup.return_value = {"success": True}
     r = system_client.delete("/api/database/backup/2026-01-01.db")
-    assert r.status_code == 200
+    assert r.status_code == 202
+    mock_get.return_value.delete_backup.assert_not_called()
 
 
 @patch("app.fastapi_routes.domains.system.system_routes.get_template_analysis_progress")

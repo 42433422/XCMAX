@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 from pathlib import Path
@@ -488,7 +489,7 @@ def test_print_reports_submitted_only_after_backend_accepts_job(
 
 
 @pytest.mark.parametrize("prefix", ["", "请你作为 AI 业务员工，"])
-def test_stream_path_preempts_legacy_planner_and_returns_same_receipt(
+def test_offline_stream_and_json_share_verified_receipt_without_model_or_writes(
     business_db: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, prefix: str
 ) -> None:
     def fail_if_called(*_args: Any, **_kwargs: Any):
@@ -515,7 +516,7 @@ def test_stream_path_preempts_legacy_planner_and_returns_same_receipt(
         }
     )
     body = chat_helpers.XcagiCompatChatBody(
-        message=f"{prefix}我2026年7月13日有没有迟到？", user_id="u-1001"
+        message=f"{prefix}我2026年7月13日有没有迟到？", user_id="u-1001", mode="offline"
     )
     raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(request, body, ai_tier="P0"))
     events = [
@@ -526,21 +527,24 @@ def test_stream_path_preempts_legacy_planner_and_returns_same_receipt(
     assert [event["type"] for event in events] == ["token", "done"]
     result = events[-1]["result"]
     assert result["business_receipt"]["verified"] is True
-    assert "run_id" not in result
+    assert result.get("run_id")
+    json_result = asyncio.run(planner_compat.execute_compat_chat(request, body))
+    assert {k: v for k, v in json_result["business_receipt"].items() if k != "receipt_id"} == {
+        k: v for k, v in result["business_receipt"].items() if k != "receipt_id"
+    }
+    assert json_result["response"] == result["response"]
+    with sqlite3.connect(str(business_db[0])) as db:
+        assert db.execute("SELECT count(*) FROM attendance_daily_records").fetchone()[0] == 2
+        assert db.execute("SELECT count(*) FROM attendance_employees").fetchone()[0] == 1
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("prefix", ["", "请你作为 AI 业务员工，"])
-async def test_json_path_preempts_both_mainline_and_legacy_chat(
+async def test_offline_json_preempts_model_and_returns_verified_receipt(
     business_db: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, prefix: str
 ) -> None:
     monkeypatch.setattr(planner_compat, "assert_p2_elevated_claim_or_raise", lambda _request: None)
     monkeypatch.setattr(planner_compat, "resolve_ai_tier", lambda _request: "P0")
-    monkeypatch.setattr(
-        planner_compat,
-        "run_agent_chat",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("legacy chat must not run")),
-    )
     monkeypatch.setattr(
         planner_compat,
         "_execute_ai_chat_mainline",
@@ -556,7 +560,7 @@ async def test_json_path_preempts_both_mainline_and_legacy_chat(
         }
     )
     body = chat_helpers.XcagiCompatChatBody(
-        message=f"{prefix}1001号员工叫什么名字？", user_id="u-1001"
+        message=f"{prefix}1001号员工叫什么名字？", user_id="u-1001", mode="offline"
     )
     result = await planner_compat.execute_compat_chat(request, body)
     assert result["business_receipt"]["operation"] == "personnel_read"
@@ -574,11 +578,6 @@ async def test_batch_path_applies_receipt_policy_to_every_protected_message(
         "app.infrastructure.auth.dependencies.resolve_session_user",
         lambda _request: SimpleNamespace(id=77, username="1001", display_name="李四"),
     )
-    monkeypatch.setattr(
-        planner_compat,
-        "run_agent_chat",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("legacy chat must not run")),
-    )
     request = Request(
         {
             "type": "http",
@@ -594,6 +593,7 @@ async def test_batch_path_applies_receipt_policy_to_every_protected_message(
             "我2026年7月13日有没有迟到？",
         ],
         user_id="u-1001",
+        mode="offline",
     )
     result = await planner_compat.execute_compat_chat_batch(request, body)
     assert result["success"] is False

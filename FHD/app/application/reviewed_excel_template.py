@@ -1456,7 +1456,8 @@ def refine_proposal(
         # neighbour can contain this document's customer or order data.
         base["protected"] = [
             {"sheet": cell["sheet"], "cell": cell["cell"]}
-            for cell in review["cells"] if cell["kind"] == "formula"
+            for cell in review["cells"]
+            if cell["kind"] == "formula"
         ]
     protected_keys = {(c["sheet"], c["cell"]) for c in base["protected"]}
     actionable = [cell for cell in review["cells"] if cell["kind"] != "formula"]
@@ -1468,40 +1469,68 @@ def refine_proposal(
 
         from app.application.reviewed_excel_audit import call_key, current_call_id
 
-        context = [
-            cell for cell in actionable if (cell["sheet"], cell["cell"]) in hint_keys
-        ][:20]
+        context = [cell for cell in actionable if (cell["sheet"], cell["cell"]) in hint_keys][:20]
         context_keys = {(cell["sheet"], cell["cell"]) for cell in context}
-        remaining = [cell for cell in actionable if (cell["sheet"], cell["cell"]) not in context_keys]
-        batches = [remaining[i:i + 130] for i in range(0, len(remaining), 130)]
+        remaining = [
+            cell for cell in actionable if (cell["sheet"], cell["cell"]) not in context_keys
+        ]
+        batches = [remaining[i : i + 130] for i in range(0, len(remaining), 130)]
         if len(batches) > 50:
             raise ReviewedExcelError("模板内容过多，请分批处理")
         call_id = current_call_id()
         combined = [
-            {"id": f"model_initial_{i}", "label": f"模型候选 {i}", "clear": [], "explanation": "模型逐批识别，保存前请核对"}
+            {
+                "id": f"model_initial_{i}",
+                "label": f"模型候选 {i}",
+                "clear": [],
+                "explanation": "模型逐批识别，保存前请核对",
+            }
             for i in range(1, 4)
         ]
         summaries = []
         values_truncated = False
         audit_degraded = False
+
         def analyze_batch(index, batch):
             partial = {**review, "cells": context + batch}
-            digest = hashlib.sha256(json.dumps(
-                {"contract": "candidate-batch-audit-v2", "source": review["sha256"], "feedback": feedback, "cells": partial["cells"]},
-                ensure_ascii=False, sort_keys=True, separators=(",", ":"),
-            ).encode()).hexdigest()
+            digest = hashlib.sha256(
+                json.dumps(
+                    {
+                        "contract": "candidate-batch-audit-v2",
+                        "source": review["sha256"],
+                        "feedback": feedback,
+                        "cells": partial["cells"],
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
             cached = (cached_batches or {}).get(str(index)) or {}
             if cached.get("status") == "complete" and cached.get("digest") == digest:
                 part = cached.get("result") or {}
-                available = {(cell["sheet"], cell["cell"]) for cell in partial["cells"] if cell["kind"] != "formula"}
+                available = {
+                    (cell["sheet"], cell["cell"])
+                    for cell in partial["cells"]
+                    if cell["kind"] != "formula"
+                }
                 candidates = part.get("candidates") or []
-                if (len(candidates) == 3 and (part.get("model") or {}).get("status") == "returned"
+                if (
+                    len(candidates) == 3
+                    and (part.get("model") or {}).get("status") == "returned"
                     and isinstance((part.get("model") or {}).get("input_summary"), dict)
-                    and all(isinstance(candidate, dict) and isinstance(candidate.get("clear"), list) and all(
-                        isinstance(cell, dict) and set(cell) == {"sheet", "cell"}
-                        and (cell["sheet"], cell["cell"]) in available
-                        for cell in candidate["clear"]
-                    ) for candidate in candidates)):
+                    and all(
+                        isinstance(candidate, dict)
+                        and isinstance(candidate.get("clear"), list)
+                        and all(
+                            isinstance(cell, dict)
+                            and set(cell) == {"sheet", "cell"}
+                            and (cell["sheet"], cell["cell"]) in available
+                            for cell in candidate["clear"]
+                        )
+                        for candidate in candidates
+                    )
+                ):
                     return part
             partial_version = make_proposals(partial)["version"]
             if batch_checkpoint:
@@ -1509,17 +1538,31 @@ def refine_proposal(
             try:
                 with call_key(f"{call_id}-r{batch_attempt}-b{index + 1}" if call_id else None):
                     part = refine_proposal(
-                        partial, partial_version, feedback, owner_id=owner_id, initial=True,
-                        _cell_batch=True, before_model_call=before_model_call,
+                        partial,
+                        partial_version,
+                        feedback,
+                        owner_id=owner_id,
+                        initial=True,
+                        _cell_batch=True,
+                        before_model_call=before_model_call,
                     )
-            except Exception as exc:
+            except BOUNDARY_ERRORS as exc:
+                # Batch task boundary: persist uncertain provider outcome, then
+                # propagate the original failure; never retry an unknown call.
                 if batch_checkpoint:
                     from app.application.elt.errors import model_call_outcome
+
                     batch_checkpoint(index, digest, model_call_outcome(exc), None)
                 raise
             if batch_checkpoint:
-                batch_checkpoint(index, digest, "complete", {"candidates": part["candidates"], "model": part["model"]})
+                batch_checkpoint(
+                    index,
+                    digest,
+                    "complete",
+                    {"candidates": part["candidates"], "model": part["model"]},
+                )
             return part
+
         parts = {}
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix="template-model-batch") as pool:
             pending = {}
@@ -1542,7 +1585,8 @@ def refine_proposal(
             audit_degraded |= bool(part["model"].get("audit_degraded"))
             for target, candidate in zip(combined, part["candidates"], strict=True):
                 target["clear"].extend(
-                    cell for cell in candidate["clear"]
+                    cell
+                    for cell in candidate["clear"]
                     if (cell["sheet"], cell["cell"]) not in protected_keys
                 )
         for candidate in combined:
@@ -1556,15 +1600,29 @@ def refine_proposal(
             candidate["clear"] = unique
         base["candidates"] = combined
         base["parent_version"] = parent_version
-        base["version"] = hashlib.sha256(json.dumps(
-            {"source": review["sha256"], "parent": parent_version, "feedback": feedback, "candidates": combined},
-            ensure_ascii=False, sort_keys=True,
-        ).encode()).hexdigest()
+        base["version"] = hashlib.sha256(
+            json.dumps(
+                {
+                    "source": review["sha256"],
+                    "parent": parent_version,
+                    "feedback": feedback,
+                    "candidates": combined,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
         base["model"] = {
-            "status": "returned", "adopted": False, "cells_sent": len(actionable),
-            "cells_total": len(review["cells"]), "truncated": False,
-            "values_truncated": values_truncated, "max_value_chars": 160,
-            "audit_degraded": audit_degraded, "input_summaries": summaries, "batches": len(batches),
+            "status": "returned",
+            "adopted": False,
+            "cells_sent": len(actionable),
+            "cells_total": len(review["cells"]),
+            "truncated": False,
+            "values_truncated": values_truncated,
+            "max_value_chars": 160,
+            "audit_degraded": audit_degraded,
+            "input_summaries": summaries,
+            "batches": len(batches),
         }
         return base
     by_sheet = {
@@ -1572,7 +1630,11 @@ def refine_proposal(
     }
     # Formulas are protected by the validator and do not need to consume the
     # model's bounded sample before it sees the actual business values.
-    prioritized = [c for c in review["cells"] if (c["sheet"], c["cell"]) in protected_keys and c["kind"] != "formula"]
+    prioritized = [
+        c
+        for c in review["cells"]
+        if (c["sheet"], c["cell"]) in protected_keys and c["kind"] != "formula"
+    ]
     sample = [cell for items in by_sheet.values() if items for cell in (items[0], items[-1])]
     sample_limit = 150 if _cell_batch else 100
     for index in range(sample_limit):
@@ -1767,26 +1829,50 @@ def refine_proposal(
         audit_cells = []
         audit_degraded = False
         if initial:
-            candidate_sets = [{(c["sheet"], c["cell"]) for c in item["clear"]} for item in validated]
+            candidate_sets = [
+                {(c["sheet"], c["cell"]) for c in item["clear"]} for item in validated
+            ]
             audit_cells = [
-                cell for cell in bounded
+                cell
+                for cell in bounded
                 if (cell["sheet"], cell["cell"]) in allowed - protected
-                and any((cell["sheet"], cell["cell"]) not in selected for selected in candidate_sets)
+                and any(
+                    (cell["sheet"], cell["cell"]) not in selected for selected in candidate_sets
+                )
             ]
             if audit_cells:
                 audit_schema = {
-                    "type": "object", "required": ["clear", "reason"], "additionalProperties": False,
+                    "type": "object",
+                    "required": ["clear", "reason"],
+                    "additionalProperties": False,
                     "properties": {
-                        "clear": {"type": "array", "items": {
-                            "type": "object", "required": ["sheet", "cell"], "additionalProperties": False,
-                            "properties": {"sheet": {"type": "string"}, "cell": {"type": "string"}},
-                        }},
+                        "clear": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["sheet", "cell"],
+                                "additionalProperties": False,
+                                "properties": {
+                                    "sheet": {"type": "string"},
+                                    "cell": {"type": "string"},
+                                },
+                            },
+                        },
                         "reason": {"type": "string"},
                     },
                 }
                 audit_messages = [
-                    {"role": "system", "content": "Independently audit cells omitted from one or more proposed blank templates. Return all real business-instance cells that must be cleared in every template, including product, customer, date, order, quantity, price and notes, even in the first row or outside the main table. Keep only genuine fixed headings or instructions. Return exact supplied coordinates in clear; never invent cells. Return JSON matching output_schema."},
-                    {"role": "user", "content": json.dumps({"cells": audit_cells, "output_schema": audit_schema}, ensure_ascii=False)},
+                    {
+                        "role": "system",
+                        "content": "Independently audit cells omitted from one or more proposed blank templates. Return all real business-instance cells that must be cleared in every template, including product, customer, date, order, quantity, price and notes, even in the first row or outside the main table. Keep only genuine fixed headings or instructions. Return exact supplied coordinates in clear; never invent cells. Return JSON matching output_schema.",
+                    },
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {"cells": audit_cells, "output_schema": audit_schema},
+                            ensure_ascii=False,
+                        ),
+                    },
                 ]
                 audit_allowed = {(cell["sheet"], cell["cell"]) for cell in audit_cells}
                 audit_attempts = 0
@@ -1797,7 +1883,12 @@ def refine_proposal(
                     if before_model_call:
                         before_model_call()
                     with call_key(f"{base_key}-verify{audit_attempts}" if base_key else None):
-                        answer = _template_llm_complete(turn, audit_schema, min(MAX_OUTPUT_TOKENS, max(1400, len(audit_cells) * 35 + 600)), owner_id=owner_id)
+                        answer = _template_llm_complete(
+                            turn,
+                            audit_schema,
+                            min(MAX_OUTPUT_TOKENS, max(1400, len(audit_cells) * 35 + 600)),
+                            owner_id=owner_id,
+                        )
                     if not answer.used_llm or answer.degraded:
                         raise ReviewedExcelError("模板清理复核未完成，请核对处理状态")
                     return answer
@@ -1807,7 +1898,9 @@ def refine_proposal(
                     if not _validate_template_schema(audit_schema, data):
                         raise ReviewedExcelError("模板清理复核格式无效")
                     pairs = [(cell["sheet"], cell["cell"]) for cell in data["clear"]]
-                    if len(set(pairs)) != len(pairs) or any(pair not in audit_allowed for pair in pairs):
+                    if len(set(pairs)) != len(pairs) or any(
+                        pair not in audit_allowed for pair in pairs
+                    ):
                         raise ReviewedExcelError("模板清理复核包含范围外或重复单元格")
                     return pairs
 
@@ -1815,7 +1908,11 @@ def refine_proposal(
                     missing = ask_until_valid(audit_ask, audit_messages, audit_judge)
                     for candidate in validated:
                         present = {(cell["sheet"], cell["cell"]) for cell in candidate["clear"]}
-                        candidate["clear"].extend({"sheet": sheet, "cell": cell} for sheet, cell in missing if (sheet, cell) not in present)
+                        candidate["clear"].extend(
+                            {"sheet": sheet, "cell": cell}
+                            for sheet, cell in missing
+                            if (sheet, cell) not in present
+                        )
                 except RECOVERABLE_ERRORS:
                     # Keep the already returned candidate; do not retry an
                     # unknown call or imply that its audit succeeded.
@@ -1864,8 +1961,11 @@ def refine_proposal(
     }
     if audit_messages:
         base["model"]["audit_summary"] = summarize_model_input(
-            audit_messages, audit_cells, source_sha256=review["sha256"],
-            provider=configured_template_llm_provider(), model=str(budget["model"]),
+            audit_messages,
+            audit_cells,
+            source_sha256=review["sha256"],
+            provider=configured_template_llm_provider(),
+            model=str(budget["model"]),
             max_output_tokens=min(MAX_OUTPUT_TOKENS, max(1400, len(audit_cells) * 35 + 600)),
         )
     return base

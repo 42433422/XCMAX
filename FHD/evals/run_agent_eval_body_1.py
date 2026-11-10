@@ -167,6 +167,7 @@ def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user"):
         try:
             with (
                 patch.object(host_db, "HostSessionLocal", factory),
+                patch("app.db.session.SessionLocal", factory),
                 patch("app.application.facades.session_facade.get_session_service", SessionService),
             ):
                 yield
@@ -293,7 +294,14 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
         with ExitStack() as stack:
             fixture_client = SimpleNamespace(headers={})
             stack.enter_context(_authenticated_route_fixture(fixture_client, role_name="admin"))
-            request = Request({"type": "http", "method": "POST", "path": "/api/agent/run", "headers": [(b"x-session-id", fixture_client.headers["X-Session-ID"].encode())]})
+            request = Request(
+                {
+                    "type": "http",
+                    "method": "POST",
+                    "path": "/api/agent/run",
+                    "headers": [(b"x-session-id", fixture_client.headers["X-Session-ID"].encode())],
+                }
+            )
             principal = require_agent_principal(request, x_user_id=None)
             actor_id = principal.user_id
             wallet_backend = str(task.get("wallet_backend") or "audit").strip().lower() or "audit"
@@ -362,7 +370,9 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
                 user_id=actor_id,
                 message=str(task.get("message") or task.get("id") or ""),
                 plan=_build_plan(task),
-                runtime_context=authenticated_runtime_context({"source": "agent_eval", "task_id": str(task.get("id") or "")}, principal),
+                runtime_context=authenticated_runtime_context(
+                    {"source": "agent_eval", "task_id": str(task.get("id") or "")}, principal
+                ),
             )
             initial_status = run.status
             dispatch_before_approval = len(dispatches)
@@ -381,7 +391,9 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
     )
     _check_equal(checks, "final_status", run.status, expected.get("final_status"))
     if expected.get("run_error_contains"):
-        _check_equal(checks, "run_error_contains", str(expected["run_error_contains"]) in run.error, True)
+        _check_equal(
+            checks, "run_error_contains", str(expected["run_error_contains"]) in run.error, True
+        )
     _check_equal(
         checks,
         "dispatch_before_approval",
@@ -2027,11 +2039,18 @@ def _run_agent_run_artifact_trace_task(task: dict[str, Any]) -> dict[str, Any]:
             stack.enter_context(
                 patch.dict(
                     os.environ,
-                    {"DATASET_RAG_STORE_PATH": str(storage_path)},
+                    {
+                        "DATASET_RAG_STORE_PATH": str(storage_path),
+                        "DATASET_RAG_VECTOR_INDEX_PATH": str(tmp_path / "vectors.sqlite3"),
+                    },
                     clear=False,
                 )
             )
             reset_dataset_rag_app_service_for_tests()
+            dataset = get_dataset_rag_app_service()
+            ingest = stack.enter_context(
+                patch.object(dataset, "ingest_document", wraps=dataset.ingest_document)
+            )
             stack.enter_context(
                 patch(
                     "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
@@ -2050,6 +2069,8 @@ def _run_agent_run_artifact_trace_task(task: dict[str, Any]) -> dict[str, Any]:
                 source="agent_eval",
                 channel="eval_chat",
             )
+            trace_ingest_calls = ingest.call_count
+            trace_store_exists = storage_path.exists()
             if expected.get("dataset_query"):
                 answer_result = get_dataset_rag_app_service().answer(
                     dataset_id=str(expected.get("dataset_id") or "user_eval-user"),
@@ -2070,6 +2091,16 @@ def _run_agent_run_artifact_trace_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is None:
         return _result(task, checks, {"payload": result})
 
+    if expected.get("display_only"):
+        _check_equal(checks, "trace_sink_calls", trace_ingest_calls, 0)
+        _check_equal(checks, "trace_store_created", trace_store_exists, False)
+        _check_equal(
+            checks,
+            "trace_has_no_ingest_event",
+            any(event.event_type == "dataset.ingested" for event in run.events),
+            False,
+        )
+        _check_equal(checks, "trace_ingest_count", run.metadata.get("dataset_ingest_count", 0), 0)
     _check_equal(checks, "artifact_count", len(run.artifacts), expected.get("artifact_count"))
     _check_equal(
         checks,
@@ -2153,182 +2184,9 @@ def _run_agent_run_artifact_trace_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_multimodal_autonomous_plan_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
-    from app.application.dataset_rag_app_service import (
-        get_dataset_rag_app_service,
-        reset_dataset_rag_app_service_for_tests,
-    )
+    from evals.owned_attachment_eval import run_owned_attachment_task
 
-    expected = dict(task.get("expected") or {})
-    runtime_context = copy.deepcopy(dict(task.get("runtime_context") or {}))
-    answer_result: dict[str, Any] = {}
-    reload_answer_result: dict[str, Any] = {}
-    repo = InMemoryAgentRunRepository()
-    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
-        tmp_path = Path(tmp_dir)
-        with ExitStack() as stack:
-            stack.enter_context(
-                patch.dict(
-                    os.environ,
-                    {
-                        "DATASET_RAG_STORE_PATH": str(tmp_path / "dataset_store.json"),
-                        "DATASET_RAG_VECTOR_INDEX_PATH": str(tmp_path / "dataset_vectors.sqlite3"),
-                        "MODEL_USAGE_LEDGER_PATH": str(tmp_path / "model_usage_ledger.json"),
-                        "MODEL_USAGE_WALLET_BACKEND": "audit",
-                    },
-                    clear=False,
-                )
-            )
-            os.environ.pop("MODEL_USAGE_WALLET_REQUIRED", None)
-            reset_dataset_rag_app_service_for_tests()
-            mock_office_document = dict(task.get("mock_office_document") or {})
-            if mock_office_document:
-                file_name = str(mock_office_document.get("file_name") or "agent-eval.docx")
-                pickup_token = str(mock_office_document.get("pickup_token") or "agent-eval-doc")
-                content = str(mock_office_document.get("content") or "agent eval document").encode(
-                    "utf-8"
-                )
-                stack.enter_context(
-                    patch(
-                        "app.services.kitten_ai_document.generate.generate_office_file",
-                        return_value=(content, file_name),
-                    )
-                )
-                stack.enter_context(
-                    patch(
-                        "app.services.kitten_ai_document.pickup.store_document_pickup",
-                        return_value=pickup_token,
-                    )
-                )
-            run = AgentOrchestrator(repository=repo).start_run(
-                user_id=str(task.get("user_id") or "eval-user"),
-                message=str(task.get("message") or task.get("id") or ""),
-                runtime_context=runtime_context,
-            )
-            initial_status = run.status
-            if expected.get("continue_after_approval"):
-                products_service = Mock()
-                products_service.get_products.return_value = {"success": True, "data": []}
-                products_service.create_product.return_value = {"success": True}
-                customer_service = Mock()
-                customer_service.match_purchase_unit.return_value = None
-                customer_service.create.return_value = {"success": True}
-                with (
-                    patch("app.bootstrap.get_products_service", return_value=products_service),
-                    patch("app.bootstrap.get_customer_app_service", return_value=customer_service),
-                ):
-                    continued = AgentOrchestrator(repository=repo).continue_run(
-                        run.run_id,
-                        approved_by="agent-eval",
-                    )
-                if continued is not None:
-                    run = continued
-            if expected.get("dataset_query"):
-                answer_result = get_dataset_rag_app_service().answer(
-                    dataset_id=str(
-                        expected.get("dataset_id") or runtime_context.get("dataset_id") or ""
-                    ),
-                    query=str(expected.get("dataset_query") or ""),
-                    top_k=int(expected.get("dataset_top_k") or 5),
-                    tenant_id=str(
-                        expected.get("tenant_id") or runtime_context.get("tenant_id") or ""
-                    ),
-                )
-                reset_dataset_rag_app_service_for_tests()
-                reload_answer_result = get_dataset_rag_app_service().answer(
-                    dataset_id=str(
-                        expected.get("dataset_id") or runtime_context.get("dataset_id") or ""
-                    ),
-                    query=str(expected.get("dataset_query") or ""),
-                    top_k=int(expected.get("dataset_top_k") or 5),
-                    tenant_id=str(
-                        expected.get("tenant_id") or runtime_context.get("tenant_id") or ""
-                    ),
-                )
-            reset_dataset_rag_app_service_for_tests()
-
-    checks: list[dict[str, Any]] = []
-    _check_equal(
-        checks,
-        "initial_status",
-        initial_status,
-        expected.get("initial_status"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "final_status", run.status, expected.get("final_status"))
-    _check_equal(checks, "intent", run.intent, expected.get("intent"))
-    _check_equal(
-        checks,
-        "plan_metadata.source",
-        dict(run.metadata.get("plan") or {}).get("metadata", {}).get("source"),
-        expected.get("plan_source"),
-    )
-    _check_equal(checks, "artifact_count", len(run.artifacts), expected.get("artifact_count"))
-    _check_equal(
-        checks,
-        "metadata.dataset_ingest_count",
-        run.metadata.get("dataset_ingest_count"),
-        expected.get("dataset_ingest_count"),
-    )
-    _check_equal(
-        checks,
-        "metadata.dataset_ids",
-        run.metadata.get("dataset_ids"),
-        expected.get("dataset_ids"),
-    )
-    _check_equal(
-        checks,
-        "plan_metadata.excel_import_record_count",
-        dict(run.metadata.get("plan") or {}).get("metadata", {}).get("excel_import_record_count"),
-        expected.get("excel_import_record_count"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
-    _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-    _check_final_step_params(checks, run.steps, dict(expected.get("final_step_params") or {}))
-    _check_final_node_outputs(
-        checks, run.final_output, dict(expected.get("final_node_outputs") or {})
-    )
-    if "tool_answer_contains" in expected:
-        answer = str((run.tool_calls[0].output if run.tool_calls else {}).get("answer") or "")
-        checks.append(
-            {
-                "name": "tool_answer_contains",
-                "passed": str(expected.get("tool_answer_contains") or "") in answer,
-                "actual": answer,
-                "expected": expected.get("tool_answer_contains"),
-            }
-        )
-    if "dataset_answer_contains" in expected:
-        checks.append(
-            {
-                "name": "dataset_answer_contains",
-                "passed": str(expected.get("dataset_answer_contains") or "")
-                in str(answer_result.get("answer") or ""),
-                "actual": answer_result.get("answer"),
-                "expected": expected.get("dataset_answer_contains"),
-            }
-        )
-    if "dataset_reload_answer_contains" in expected:
-        checks.append(
-            {
-                "name": "dataset_reload_answer_contains",
-                "passed": str(expected.get("dataset_reload_answer_contains") or "")
-                in str(reload_answer_result.get("answer") or ""),
-                "actual": reload_answer_result.get("answer"),
-                "expected": expected.get("dataset_reload_answer_contains"),
-            }
-        )
-    _check_event_types(checks, run.events, list(expected.get("event_types") or []))
-    return _result(
-        task,
-        checks,
-        {
-            "run": run.to_dict(),
-            "dataset_answer": answer_result,
-            "dataset_reload_answer": reload_answer_result,
-        },
-    )
+    return run_owned_attachment_task(task)
 
 
 def _run_excel_vector_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:

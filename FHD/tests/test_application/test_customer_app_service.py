@@ -217,6 +217,8 @@ class TestUpdate:
         mock_session.query.return_value.filter.side_effect = [
             MagicMock(first=MagicMock(return_value=mock_unit)),  # get by id
             MagicMock(first=MagicMock(return_value=None)),  # duplicate check
+            MagicMock(),  # scoped product rename
+            MagicMock(),  # scoped shipment rename
         ]
 
         with patch.object(svc, "_get_session", return_value=mock_session):
@@ -256,132 +258,58 @@ class TestUpdate:
 
 
 class TestDelete:
-    def test_success(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_unit = MagicMock()
-        mock_unit.unit_name = "TestCo"
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_unit
-
+    @pytest.mark.parametrize("force", [False, True])
+    def test_single_delete_uses_shared_policy_and_preserves_actor(self, force):
+        service = CustomerApplicationService()
+        session = MagicMock()
+        context = {"caller": "test-context-not-authority"}
+        outcome = {"success": False, "deleted_count": 0, "has_associations": True}
         with (
-            patch.object(svc, "_get_session", return_value=mock_session),
-            patch.object(
-                svc, "_check_shipment_associations", return_value={"has_associations": False}
-            ),
+            patch.object(service, "_get_session", return_value=session),
+            patch(
+                "app.application.customer_deletion.delete_customers", return_value=outcome
+            ) as policy,
         ):
-            result = svc.delete(1)
-            assert result["success"] is True
-
-    def test_not_found(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_session.query.return_value.filter.return_value.first.return_value = None
-
-        with patch.object(svc, "_get_session", return_value=mock_session):
-            result = svc.delete(999)
-            assert result["success"] is False
-
-    def test_has_associations_no_force(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_unit = MagicMock()
-        mock_unit.unit_name = "LinkedCo"
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_unit
-
-        with (
-            patch.object(svc, "_get_session", return_value=mock_session),
-            patch.object(
-                svc,
-                "_check_shipment_associations",
-                return_value={
-                    "has_associations": True,
-                    "shipment_count": 3,
-                    "sample_records": [],
-                },
-            ),
-        ):
-            result = svc.delete(1, force=False)
-            assert result["success"] is False
-            assert result["has_associations"] is True
-
-    def test_force_delete_with_associations(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_unit = MagicMock()
-        mock_unit.unit_name = "LinkedCo"
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_unit
-
-        with (
-            patch.object(svc, "_get_session", return_value=mock_session),
-            patch.object(
-                svc,
-                "_check_shipment_associations",
-                return_value={
-                    "has_associations": True,
-                    "shipment_count": 3,
-                    "sample_records": [],
-                },
-            ),
-        ):
-            result = svc.delete(1, force=True)
-            assert result["success"] is True
-
-
-# ---------------------------------------------------------------------------
-# CustomerApplicationService — batch_delete
-# ---------------------------------------------------------------------------
+            assert service.delete(1, force=force, runtime_context=context) == outcome
+        policy.assert_called_once_with(session, [1], force=force, runtime_context=context)
+        session.close.assert_called_once()
+        session.commit.assert_not_called()
 
 
 class TestBatchDelete:
-    def test_no_units_found(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_session.query.return_value.filter.return_value.all.return_value = []
-
-        with patch.object(svc, "_get_session", return_value=mock_session):
-            result = svc.batch_delete([1, 2])
-            assert result["success"] is False
-
-    def test_success(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_unit = MagicMock()
-        mock_unit.unit_name = "Co1"
-        mock_session.query.return_value.filter.return_value.all.return_value = [mock_unit]
-
+    @pytest.mark.parametrize(
+        "outcome",
+        [
+            {"success": True, "deleted_count": 2},
+            {"success": False, "deleted_count": 0, "has_associations": True},
+            {"success": False, "deleted_count": 0, "message": "missing"},
+        ],
+    )
+    def test_batch_preserves_atomic_policy_result(self, outcome):
+        service, session = CustomerApplicationService(), MagicMock()
         with (
-            patch.object(svc, "_get_session", return_value=mock_session),
-            patch.object(
-                svc, "_check_shipment_associations", return_value={"has_associations": False}
-            ),
+            patch.object(service, "_get_session", return_value=session),
+            patch(
+                "app.application.customer_deletion.delete_customers", return_value=outcome
+            ) as policy,
         ):
-            result = svc.batch_delete([1])
-            assert result["success"] is True
-            assert result["deleted_count"] == 1
+            assert service.batch_delete([1, 2]) == outcome
+        policy.assert_called_once_with(session, [1, 2], force=False, runtime_context=None)
+        session.close.assert_called_once()
 
-    def test_associations_block(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_unit = MagicMock()
-        mock_unit.id = 1
-        mock_unit.unit_name = "Co1"
-        mock_session.query.return_value.filter.return_value.all.return_value = [mock_unit]
-
+    @pytest.mark.parametrize("error", [RuntimeError("storage failed"), PermissionError("denied")])
+    def test_failed_policy_rolls_back_without_claiming_deletion(self, error):
+        service, session = CustomerApplicationService(), MagicMock()
         with (
-            patch.object(svc, "_get_session", return_value=mock_session),
-            patch.object(
-                svc,
-                "_check_shipment_associations",
-                return_value={
-                    "has_associations": True,
-                    "shipment_count": 2,
-                    "sample_records": [],
-                },
-            ),
+            patch.object(service, "_get_session", return_value=session),
+            patch("app.application.customer_deletion.delete_customers", side_effect=error),
         ):
-            result = svc.batch_delete([1], force=False)
-            assert result["success"] is False
-            assert result["has_associations"] is True
+            result = service.batch_delete([1, 2], force=True)
+        assert result["success"] is False
+        assert result["deleted_count"] == 0
+        session.rollback.assert_called_once()
+        session.close.assert_called_once()
+        session.commit.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
