@@ -26,8 +26,6 @@ def register_lan_routes(app: FastAPI) -> None:
     except RECOVERABLE_ERRORS as e:
         logger.warning("LAN admin routes skipped: %s", e)
 
-    try:
-        _import_and_mount(app, "app.fastapi_routes.lan_settings_routes", "router", "")
-        logger.info("Registered LAN settings routes (/api/lan/admin/settings)")
-    except RECOVERABLE_ERRORS as e:
-        logger.warning("LAN settings routes skipped: %s", e)
+    # Settings are served by lan_admin_routes, preserving the existing
+    # host-only authority and response contract. The alternative settings
+    # module remains available to SDK callers, but is not mounted twice.

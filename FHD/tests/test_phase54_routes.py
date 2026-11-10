@@ -241,6 +241,9 @@ def customer_client(monkeypatch: pytest.MonkeyPatch, request) -> TestClient:
 @pytest.fixture
 def ai_client() -> TestClient:
     app = FastAPI()
+    from app.fastapi_routes.mounts.health import register_health_routes
+
+    register_health_routes(app)
     app.include_router(ai_routes_mod.router)
     return TestClient(app, raise_server_exceptions=False)
 
@@ -799,11 +802,25 @@ def test_report_export_returns_xlsx_download(
 
 
 def test_ai_compat_health_root_and_api(ai_client: TestClient) -> None:
-    for path in ("/health", "/api/health"):
-        body = ai_client.get(path).json()
-        assert body["success"] is True
-        assert body["data"]["status"] == "ok"
-        assert body["build"] == body["data"]["build"]
+    compat = ai_client.get("/health")
+    assert compat.status_code == 200
+    body = compat.json()
+    assert body["success"] is True
+    assert body["data"]["status"] == "ok"
+    assert body["build"] == body["data"]["build"]
+    canonical = ai_client.get("/api/health?lite=true")
+    assert canonical.status_code == 200
+    health = canonical.json()
+    assert health["service"] == "xcagi-fastapi"
+    assert health["status"] == health["runtime"]["status"]
+    assert health["git_sha"] == health["build"]["git_sha"]
+    assert health["release_id"] == health["build"]["release_id"]
+    assert "no-store" in canonical.headers["cache-control"]
+    from app.legacy.routes.openapi_route_compat import iter_effective_routes
+
+    paths = [r.path for r in iter_effective_routes(ai_client.app.routes)]
+    assert paths.count("/api/health") == 1
+    assert paths.count("/health") == 1
 
 
 def test_ai_generate_with_template_name(

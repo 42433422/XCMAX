@@ -1,11 +1,11 @@
-import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, readonly, ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useModsStore } from '@/stores/mods'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { useStartupAuth } from '@/composables/useStartupAuth'
-import { startupPageReadyKey, useStartupSplash, waitForCriticalFonts } from '@/composables/useStartupSplash'
+import { startupReadyKey, startupPageReadyKey, useStartupSplash, waitForCriticalFonts } from '@/composables/useStartupSplash'
 import { useAppShellBridge } from '@/composables/useAppShellBridge'
 import { useXcmaxSync } from '@/composables/useXcmaxSync'
 import { getAuthSessionEpoch } from '@/utils/authSessionCache'
@@ -20,6 +20,7 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
   const publicEntry = computed(() => route.meta?.publicAccess === true || hideChrome.value ||
     ['login', 'lan-gate', 'product-onboarding'].includes(String(route.name || '')))
   const splash = useStartupSplash()
+  provide(startupReadyKey, readonly(splash.appReady))
   const pagePreparations = new Set<(signal: AbortSignal) => Promise<void>>()
   provide(startupPageReadyKey, prepare => {
     const owner = String(route.name || route.path)

@@ -273,13 +273,13 @@ class TestAiWorkflowAuthorization:
         db.query.side_effect = query
         return db
 
-    def test_applicant_can_approve_when_no_reviewers_are_configured(self):
+    def test_unconfigured_flow_does_not_grant_applicant_review_authority(self):
         user = SimpleNamespace(id=7, role="user", tenant_id=1, is_active=True)
         db = self._flow_db(user, [SimpleNamespace(approver_ids=None)])
         req = SimpleNamespace(
             applicant_id=7, tenant_id=1, flow_id=3, tool_id="data_docking", action="auto_ingest"
         )
-        assert _can_review_ai_workflow_request(db, req, 7) is True
+        assert _can_review_ai_workflow_request(db, req, 7) is False
 
     def test_other_user_cannot_approve_unconfigured_flow(self):
         user = SimpleNamespace(id=8, role="user", tenant_id=1, is_active=True)
@@ -297,13 +297,13 @@ class TestAiWorkflowAuthorization:
         )
         assert _can_review_ai_workflow_request(db, req, 7) is False
 
-    def test_designated_reviewer_can_approve_without_admin_role(self):
+    def test_flow_assignment_alone_does_not_grant_workflow_review_authority(self):
         user = SimpleNamespace(id=8, role="user", tenant_id=1, is_active=True)
         db = self._flow_db(user, [SimpleNamespace(approver_ids=[8, 9])])
         req = SimpleNamespace(
             applicant_id=7, tenant_id=1, flow_id=3, tool_id="sales", action="execute_closed_loop"
         )
-        assert _can_review_ai_workflow_request(db, req, 8) is True
+        assert _can_review_ai_workflow_request(db, req, 8) is False
 
 
 class TestNodeQueryForUser:
