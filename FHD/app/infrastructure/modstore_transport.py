@@ -106,7 +106,7 @@ def iter_market_transport_plans() -> Iterator[tuple[str | None, int, int]]:
 def httpx_sync_client(**kwargs: Any) -> httpx.Client:
     """Ignore inherited proxies; an explicit fallback proxy remains supported."""
     kwargs.setdefault("trust_env", False)
-    proxy = kwargs.pop("proxy", None)
+    proxy = kwargs.pop("proxy", None) or (os.environ.get("XCAGI_MARKET_PROXY") or "").strip()
     if proxy:
         kwargs["proxy"] = proxy
     return httpx.Client(**kwargs)

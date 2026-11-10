@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from contextvars import ContextVar, Token
 from typing import Any, cast
 
@@ -40,6 +41,8 @@ class SessionMarketProvider:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(15.0, connect=10.0),
                 headers={"Authorization": f"Bearer {self._token}"},
+                trust_env=not bool((os.environ.get("XCAGI_MARKET_PROXY") or "").strip()),
+                proxy=(os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None,
             ) as client:
                 response = await client.get(f"{_platform_url()}/api/llm/chat/requests/{call_id}")
         except httpx.HTTPError:
@@ -78,6 +81,8 @@ class SessionMarketProvider:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(timeout, connect=min(10.0, timeout)),
                 headers=headers,
+                trust_env=not bool((os.environ.get("XCAGI_MARKET_PROXY") or "").strip()),
+                proxy=(os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None,
             ) as client:
                 response = await client.get(f"{platform_url}/api/llm/resolve-chat-default")
                 response.raise_for_status()

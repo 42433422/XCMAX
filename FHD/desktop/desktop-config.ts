@@ -152,7 +152,7 @@ export function backendEditionEnv(): Record<string, string> {
     FHD_ETL_CENTER_ENABLED:
       process.env.FHD_ETL_CENTER_ENABLED || (sku === 'enterprise' ? '1' : '0')
   }
-  if (app.isPackaged && sku === 'enterprise') {
+  if (sku === 'enterprise') {
     env.XCAGI_MARKET_BASE_URL = process.env.XCAGI_MARKET_BASE_URL?.trim() || 'https://xiu-ci.com'
   }
   if (edition === 'minimal') {

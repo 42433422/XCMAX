@@ -475,6 +475,7 @@ describe('main — backendEditionEnv', () => {
     expect(env.XCAGI_PLATFORM_SHELL).toBe('0')
     expect(env.XCAGI_DEFAULT_EDITION).toBe('full')
     expect(env.XCAGI_EDITION).toBe('full')
+    expect(env.XCAGI_MARKET_BASE_URL).toBe(process.env.XCAGI_MARKET_BASE_URL?.trim() || 'https://xiu-ci.com')
   })
 
   it('returns minimal edition env for personal SKU', async () => {

@@ -393,3 +393,25 @@ async def test_dispatch_failure_is_propagated_and_adapter_is_closed(monkeypatch,
         await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).chat_completion([])
     adapter.chat_completion.assert_awaited_once()
     adapter.close.assert_awaited_once()
+
+@pytest.mark.asyncio
+async def test_elt_recovery_uses_explicit_market_proxy(monkeypatch):
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+
+    monkeypatch.setenv("XCAGI_MARKET_PROXY", "http://127.0.0.1:7890")
+    client_factory = httpx.AsyncClient
+    options = []
+
+    def client(**kwargs):
+        options.append(kwargs.copy())
+        kwargs.pop("proxy")
+        return client_factory(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"state": "completed"})),
+            **kwargs,
+        )
+
+    monkeypatch.setattr(httpx, "AsyncClient", client)
+    result = await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).lookup_call("attempt-123")
+    assert result == {"supported": True, "state": "completed"}
+    assert options[0]["proxy"] == "http://127.0.0.1:7890"
+    assert options[0]["trust_env"] is False
