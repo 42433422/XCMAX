@@ -1,8 +1,8 @@
-import { getCurrentInstance, onMounted, onBeforeUnmount, onActivated, onDeactivated, type Ref } from 'vue'
+import { getCurrentInstance, inject, onMounted, onBeforeUnmount, onActivated, onDeactivated, type Ref } from 'vue'
 import type { useModsStore } from '@/stores/mods'
 import { asRecord } from '@/utils/typeGuards'
 import { consumeFirstAiTaskPrompt } from '@/constants/productFlow'
-import { useStartupPageReady } from '@/composables/useStartupSplash'
+import { startupReadyKey, useStartupPageReady } from '@/composables/useStartupSplash'
 
 const CHAT_RIGHT_PANE_MQ = '(max-width: 1023px)'
 const AUTO_REFRESH_STARRED_WECHAT_KEY = 'xcagi_auto_refresh_starred_wechat'
@@ -26,6 +26,7 @@ export interface UseChatViewHostDeps {
 
 export function useChatViewHost(deps: UseChatViewHostDeps) {
   const inSetup = !!getCurrentInstance()
+  const shellReady = inSetup ? inject(startupReadyKey, null) : null
   const {
     modsStore,
     modsFromStore,
@@ -74,7 +75,11 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
     })
     onActivated(() => {
       emitChatViewActive(true)
-      if (returningToChat) void syncSessionMessages().catch(() => {})
+      // The startup gate owns the required read. A parallel activation read can
+      // replace its captured message revision and falsely fail that same account.
+      if (returningToChat && shellReady?.value !== false) {
+        void syncSessionMessages().catch(() => {})
+      }
       returningToChat = false
     })
   }

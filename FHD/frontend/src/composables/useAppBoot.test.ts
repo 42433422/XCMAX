@@ -42,7 +42,7 @@ vi.mock('@/composables/useXcmaxSync', () => ({ useXcmaxSync: () => state.sync })
 vi.mock('@/utils/adminConsoleUrl', () => ({ isAdminConsoleSpa: () => false }))
 
 import { useAppBoot } from './useAppBoot'
-import { startupPageReadyKey } from './useStartupSplash'
+import { startupPageReadyKey, startupReadyKey } from './useStartupSplash'
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -619,4 +619,24 @@ describe('workspace startup readiness', () => {
     expect(state.loadFont.mock.calls.length).toBeGreaterThan(before)
     font.resolve([{ status: 'loaded' }]); await settle()
   })
+})
+
+
+it('provides authoritative readiness before a DOM mirror exists and synchronously retires it on account restart', async () => {
+  let boot!: ReturnType<typeof useAppBoot>
+  let ready!: Readonly<Ref<boolean>>
+  const Page = defineComponent({ setup() {
+    ready = inject(startupReadyKey)!
+    expect(ready.value).toBe(false)
+    return () => h('section')
+  } })
+  wrapper = mount(defineComponent({ setup() { boot = useAppBoot(); return () => h(Page) } }))
+  await settle()
+  expect(ready.value).toBe(true)
+  expect(boot.appReady.value).toBe(true)
+  state.ensureAuth.mockReturnValue(new Promise(() => {}))
+  state.authEpoch.value++
+  // No nextTick: consumers cannot observe the previous account as ready.
+  expect(ready.value).toBe(false)
+  expect(boot.appReady.value).toBe(false)
 })

@@ -831,3 +831,69 @@ it('retires only cached streaming placeholders after refresh while preserving un
   invalidateEnterpriseSessionCache()
   expect(lastChatModelRoute('refresh-stream')).toBeNull()
 })
+
+it.each([false, true])('cached chat startup owns its read without a DOM readiness flag (previously ready: %s)', async previouslyReady => {
+  const { defineComponent, h, KeepAlive, provide } = await import('vue')
+  const { mount, flushPromises } = await import('@vue/test-utils')
+  const { useChatViewHost } = await import('./useChatViewHost')
+  const { startupPageReadyKey, startupReadyKey, useStartupSplash } = await import('./useStartupSplash')
+  const api = (await import('@/api/chat')).default
+  setActivePinia(createPinia()); localStorage.clear(); vi.clearAllMocks()
+  activeModIdRef.value = ''
+  const root = document.createElement('div'); root.id = 'app'
+  const splash = useStartupSplash()
+  document.body.appendChild(root)
+  const active = ref(true), registry = new Set<(signal: AbortSignal) => Promise<void>>()
+  const responses: Array<(value: never) => void> = []
+  vi.mocked(api.getConversation).mockImplementation(() => new Promise(resolve => { responses.push(resolve) }))
+  let chat!: ReturnType<typeof useChatMessages>
+  const Host = defineComponent({ setup() {
+    chat = useChatMessages(ref('new-account-session'))
+    useChatViewHost({
+      modsStore: { initialize: vi.fn().mockResolvedValue(undefined), isLoaded: true } as never,
+      modsFromStore: ref([{ id: 'mod' }]), autoRefreshStarredWechat: ref(false),
+      isTaskPaneResizable: ref(false), messageInput: ref(''), latestAssistantPush: ref(null),
+      syncSessionMessages: async options => { await chat.syncFromServer(options) },
+      pageScopeKey: () => 'new-account-session', chatHandleAutoAction: vi.fn(),
+      sendMessage: vi.fn().mockResolvedValue(undefined), batchCalculateHeights: vi.fn(),
+      stopMessageTts: vi.fn(), cleanupVoiceInput: vi.fn(), stopTaskPaneResize: vi.fn(),
+    })
+    return () => h('section', chat.messages.value.map(row => row.content).join(' '))
+  } })
+  const wrapper = mount(defineComponent({ setup() {
+    provide(startupReadyKey, splash.appReady)
+    provide(startupPageReadyKey, prepare => { registry.add(prepare); return () => registry.delete(prepare) })
+    return () => h(KeepAlive, null, { default: () => active.value ? h(Host) : null })
+  } }))
+  const response = (text: string) => ({ success: true, id: 'new-account-session', messages: [{ role: 'user', content: text }] })
+  try {
+    await flushPromises()
+    responses.shift()!(response('initial') as never)
+    await flushPromises()
+    await registry.values().next().value!(new AbortController().signal)
+    active.value = false; await nextTick()
+    if (previouslyReady) await splash.runStartup(async () => {})
+    let activate!: () => void
+    const activation = new Promise<void>(resolve => { activate = resolve })
+    const required = splash.runStartup(async (_current, _stage, signal) => {
+      await activation
+      await registry.values().next().value!(signal)
+    })
+    expect(splash.appReady.value).toBe(false)
+    expect(root.hasAttribute('data-startup-ready')).toBe(false)
+    active.value = true; await nextTick(); activate()
+    const verified = expect(required).resolves.toBeUndefined()
+    await flushPromises()
+    for (const resolve of responses.splice(0)) resolve(response('new account server conversation') as never)
+    await verified
+    expect(api.getConversation).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('new account server conversation')
+    expect(splash.appReady.value).toBe(true)
+    active.value = false; await nextTick()
+    active.value = true; await flushPromises()
+    expect(api.getConversation).toHaveBeenCalledTimes(3)
+    responses.shift()!(response('ready navigation refresh') as never)
+    await flushPromises()
+    expect(wrapper.text()).toContain('ready navigation refresh')
+  } finally { wrapper.unmount(); root.remove(); splash.teardownOnUnmount() }
+})
