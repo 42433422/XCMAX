@@ -101,36 +101,39 @@ def is_bulk_destructive(message: str) -> bool:
 
 
 def _tenant(ctx: dict[str, Any]) -> str:
-    for key in ("tenant_id", "account_id", "enterprise_id"):
-        value = str(ctx.get(key) or "").strip()
-        if value:
-            return value
-    return "当前登录企业"
-
-
-def _optional_count(value: Any) -> int | None:
-    if value is None or value == "":
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+    return str(ctx.get("tenant_id") or "未确认")
 
 
 def scope_counts(ctx: dict[str, Any]) -> tuple[int | None, int | None]:
-    supplied = ctx.get("scope_counts")
-    if isinstance(supplied, dict):
-        return _optional_count(supplied.get("customers")), _optional_count(supplied.get("products"))
+    """Count the same tenant-scoped entities the batch-delete tools operate on."""
     try:
         from sqlalchemy import func
 
-        from app.db.models import Customer, Product
+        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+        from app.db.models import Product
+        from app.db.models.purchase_unit import PurchaseUnit
         from app.db.session import get_db
+        from app.infrastructure.auth.agent_mod_scope import _bound_actor
 
+        _bound_actor(ctx)
+        tenant = int(ctx.get("tenant_id") or 0)
+        if tenant <= 0:
+            return None, None
         with get_db() as db:
-            customers = db.query(func.count(Customer.id)).scalar()
-            products = db.query(func.count(Product.id)).scalar()
-        return int(customers or 0), int(products or 0)
+            counts: list[int | None] = []
+            for tool, model in (("customers", PurchaseUnit), ("products", Product)):
+                if actor_tool_denial(tool, "query", ctx) is not None:
+                    counts.append(None)
+                else:
+                    counts.append(
+                        int(
+                            db.query(func.count(model.id))
+                            .filter(model.tenant_id == tenant)
+                            .scalar()
+                            or 0
+                        )
+                    )
+        return counts[0], counts[1]
     except SQLAlchemyError:
         return None, None
     except RECOVERABLE_ERRORS:
@@ -141,13 +144,17 @@ def _count_phrase(count: int | None) -> str:
     return f"{count} 条" if count is not None else "数量未能读取"
 
 
-def preview_message(ctx: dict[str, Any], *, customers: int | None, products: int | None) -> str:
-    return (
-        "这是删除预览，尚未写入。\n"
-        f"租户：{_tenant(ctx)}。\n"
-        f"范围：全部客户和产品。客户 {_count_phrase(customers)}，产品 {_count_phrase(products)}。\n"
-        "未确认前不会删除或写入。"
-    )
+def preview_message(
+    ctx: dict[str, Any], message: str, *, customers: int | None, products: int | None
+) -> str:
+    scopes = []
+    if "客户" in message:
+        scopes.append(f"客户 {_count_phrase(customers)}")
+    if "产品" in message:
+        scopes.append(f"产品 {_count_phrase(products)}")
+    scope = "，".join(scopes) or "尚未确定，请明确客户或产品"
+    tenant = _tenant(ctx) if customers is not None or products is not None else "未核验"
+    return f"这是删除预览，尚未写入。\n租户：{tenant}。\n范围：{scope}。\n未确认前不会删除或写入。"
 
 
 def execution_payload(record: TurnRecord) -> dict[str, Any]:
@@ -202,7 +209,7 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
         return _remember(existing)
     if bulk and not confirmed:
         customers, products = scope_counts(ctx)
-        text = preview_message(ctx, customers=customers, products=products)
+        text = preview_message(ctx, message, customers=customers, products=products)
         record = TurnRecord(
             key, "bulk_destructive", False, "preview", text, _tenant(ctx), customers, products
         )

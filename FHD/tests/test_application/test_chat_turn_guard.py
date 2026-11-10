@@ -50,7 +50,8 @@ def test_keeps_displayable_text_and_rejects_whitespace_or_reasoning():
     assert chunk_display_text(reasoning_only) == ""
 
 
-def test_bulk_preview_names_scope_and_does_not_call_the_model():
+def test_bulk_preview_names_scope_and_does_not_call_the_model(monkeypatch):
+    monkeypatch.setattr("app.application.chat_turn_guard.scope_counts", lambda ctx: (4, 9))
     client = MagicMock()
     result = chat(
         "清理全部客户和产品",
@@ -232,3 +233,57 @@ def test_retry_cannot_supply_its_own_mutation_policy(monkeypatch):
         )
     )
     assert executed == []
+
+
+def test_preview_uses_authorized_tenant_rows_not_caller_counts(monkeypatch):
+    from contextlib import contextmanager
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.application.chat_turn_guard import preview_message, scope_counts
+    from app.db.db_base import Base
+    from app.db.models import Product
+    from app.db.models.purchase_unit import PurchaseUnit
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        db.add_all(
+            [
+                PurchaseUnit(tenant_id=1, unit_name="A"),
+                PurchaseUnit(tenant_id=2, unit_name="B"),
+                Product(tenant_id=1, name="P"),
+            ]
+        )
+        db.commit()
+
+    @contextmanager
+    def session():
+        with Session(engine) as db:
+            yield db
+
+    monkeypatch.setattr("app.db.session.get_db", session)
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_mod_scope._bound_actor", lambda ctx: object()
+    )
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.tool_permission.actor_tool_denial", lambda *args: None
+    )
+    ctx = {"tenant_id": 1, "scope_counts": {"customers": 999, "products": 999}}
+    customers, products = scope_counts(ctx)
+    assert (customers, products) == (1, 1)
+    text = preview_message(ctx, "清空所有产品", customers=customers, products=products)
+    assert "产品 1 条" in text and "客户" not in text and "999" not in text
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.tool_permission.actor_tool_denial",
+        lambda tool, *_: {} if tool == "customers" else None,
+    )
+    assert scope_counts(ctx) == (None, 1)
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_mod_scope._bound_actor",
+        lambda ctx: (_ for _ in ()).throw(ValueError("invalid session")),
+    )
+    assert scope_counts(ctx) == (None, None)
+    assert "租户：未核验" in preview_message(ctx, "清空所有产品", customers=None, products=None)
+    engine.dispose()

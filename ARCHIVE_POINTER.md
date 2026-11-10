@@ -1,5 +1,7 @@
 # XCMAX 历史与大文件归档指针
 
+2026-11-10 旧 LangGraph 基准记录外置：`FHD/docs/architecture/langgraph-absorption/09-baseline.md` 的原文和 SHA256 在 `~/XCMAX-archives/langgraph-baseline-20261110/`；亦可从提交 `d79eff902e` 恢复。该记录是历史测量，不代表当前性能；基准脚本仍可显式生成新的结果。
+
 2026-11-10 历史方案收敛：旧 XCAGI v6 架构副本 `docs/modstore/ddd.md` 与 2026-06 的 `FHD/docs/reports/TO_9_PROGRAM.md` 原样外置至 `~/XCMAX-archives/superseded-plans-20261110/`；原始路径及 SHA256 见 `MANIFEST.json`，亦可从提交 `8f9d6bdb39` 恢复。现行架构以 `FHD/docs/ARCHITECTURE.md` 为准，审计评分以 `FHD/config/audit_benchmark_ssot.json` 为准；历史评估不得当作当前审计结果。
 
 2026-11-10 支付文档整理：未登记的 Java 支付早期设计、SQLite 迁移和压测方案三份快照外置至 `~/XCMAX-archives/payment-plans-20261110/`；逐文件 SHA256 见该目录 `MANIFEST.json`，也可从提交 `8f9d6bdb39` 恢复。现行配置和迁移入口见 `成都修茈科技有限公司/MODstore_deploy/java_payment_service/README.md`，压测方案归档不代表压测已执行。
