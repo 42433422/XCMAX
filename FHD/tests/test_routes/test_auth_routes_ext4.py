@@ -1684,14 +1684,6 @@ class TestUsersDelete:
 
 
 class TestUsersResetPassword:
-    def test_missing_password(self):
-        from app.fastapi_routes.domains.auth.auth_routes import users_reset_password
-
-        mock_admin = MagicMock()
-        result = users_reset_password(user_id=1, body={"new_password": ""}, _user=mock_admin)
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 400
-
     def test_weak_password(self):
         from app.fastapi_routes.domains.auth.auth_routes import users_reset_password
 

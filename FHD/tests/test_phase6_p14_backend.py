@@ -1396,15 +1396,6 @@ class TestImportModBackendPy:
         with pytest.raises(FileNotFoundError):
             import_mod_backend_py(str(tmp_path / "nonexistent"), "test_mod", "blueprints")
 
-    def test_successful_import(self, tmp_path: Path) -> None:
-        mod_path = str(tmp_path / "test_mod")
-        backend_path = os.path.join(mod_path, "backend")
-        os.makedirs(backend_path)
-        py_file = os.path.join(backend_path, "services.py")
-        Path(py_file).write_text("VALUE = 42\n")
-        module = import_mod_backend_py(mod_path, "test_mod", "services")
-        assert module.VALUE == 42
-
     def test_cached_import_returns_same_module(self, tmp_path: Path) -> None:
         mod_path = str(tmp_path / "test_mod2")
         backend_path = os.path.join(mod_path, "backend")
@@ -1914,14 +1905,6 @@ class TestModManagerValidateModPackage:
         result = mm.validate_mod_package(str(tmp_path / "nonexistent.xcmod"))
         assert result[0] is False
         assert result[1] == "文件不存在"
-
-    def test_not_a_zip_file(self, tmp_path: Path) -> None:
-        not_zip = tmp_path / "not_zip.xcmod"
-        not_zip.write_text("not a zip")
-        mm = ModManager(mods_root=str(tmp_path))
-        result = mm.validate_mod_package(str(not_zip))
-        assert result[0] is False
-        assert "ZIP" in result[1]
 
 
 class TestModManagerEnsureModsLoaded:

@@ -100,7 +100,14 @@ def named_tool_timeout_seconds(name: str) -> float | None:
 class TaskContinuityRuntime:
     """Process runtime with a JSON ledger. Restart drops memory and reloads the file."""
 
-    def __init__(self, path: str | Path, *, workspace: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        workspace: str | Path | None = None,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> None:
+        self._trusted_context = dict(runtime_context or {})
         self.path = Path(path)
         self.workspace = Path(workspace) if workspace is not None else self.path.parent
         self.path = Path(os.path.abspath(self.path))
@@ -1084,6 +1091,7 @@ class TaskContinuityRuntime:
                 },
                 task["task_id"],
                 runtime_context={
+                    **self._trusted_context,
                     "tenant_id": task["tenant_id"],
                     "user_id": task["user_id"],
                     "employee_id": source,
@@ -1256,7 +1264,18 @@ class TaskContinuityRuntime:
         step["status"] = "running"
         self.state["tool_calls"][call_id] = call
         self._write()
-        result = self._execute_named_tool(step["tool"], _clone(step["params"]), task["task_id"])
+        result = self._execute_named_tool(
+            step["tool"],
+            _clone(step["params"]),
+            task["task_id"],
+            runtime_context={
+                **self._trusted_context,
+                "tenant_id": task["tenant_id"],
+                "user_id": task["user_id"],
+                "employee_id": actor,
+                "task_id": task["task_id"],
+            },
+        )
         if not isinstance(result, dict) or result.get("ok") is False:
             call["status"] = "failed"
             call["error_code"] = str((result or {}).get("error_code") or "tool_failed")
@@ -1957,9 +1976,13 @@ def maybe_continue_employee_task(
     user_id: Any = "",
     session_id: str | None = None,
     workspace_root: str | Path | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Entry used by EmployeeAgent.run. Ordinary chat returns None."""
     body = dict(payload or {})
+    trusted = dict(runtime_context or {})
+    if isinstance(trusted.get("_actor_authorization"), dict):
+        body.update(user_id=trusted.get("user_id"), tenant_id=trusted.get("tenant_id"))
     action = str(body.get("continuity_action") or "").strip()
     text = str(task or "").strip()
     if not action and "steps" not in body and text != CONTINUE_TEXT:
@@ -1986,5 +2009,7 @@ def maybe_continue_employee_task(
             "evidence": _blank_evidence(),
         }
     body["op"] = action
-    runtime = TaskContinuityRuntime(ledger_path(workspace), workspace=workspace)
+    runtime = TaskContinuityRuntime(
+        ledger_path(workspace), workspace=workspace, runtime_context=trusted
+    )
     return runtime.dispatch(employee_id, text or task, body, user_id=user_id, session_id=session_id)

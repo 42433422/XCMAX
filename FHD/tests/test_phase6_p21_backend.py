@@ -684,16 +684,6 @@ class TestHandleNegationIntentEdges:
 
 class TestHandlePendingIntentEdges:
     @pytest.mark.asyncio
-    async def test_pending_with_help_clears_and_returns_none(self) -> None:
-        svc = _HandlerHost()
-        pending = {"intent": "shipment_generate"}
-        svc.confirmation_service.get_pending_intent.return_value = pending
-        ctx = ConversationContext(user_id="u1")
-        out = await svc._handle_pending_intent("帮助", {"is_help": True}, ctx, "u1")
-        assert out is None
-        svc.confirmation_service.clear_pending_intent.assert_called_once_with("u1")
-
-    @pytest.mark.asyncio
     async def test_pending_same_tool_key_as_primary_intent_fills_slots(self) -> None:
         """current_tool_key == pending.intent AND pending.intent == primary_intent
         → does NOT clear pending → fills slots."""

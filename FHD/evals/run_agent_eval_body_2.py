@@ -2285,7 +2285,7 @@ def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
+    from app.application.workflow.planner import LLMWorkflowPlanner
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     from starlette.requests import Request
@@ -2331,7 +2331,7 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
         patch("app.application.workflow.planner.get_ai_conversation_service"),
         patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
         patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+            "app.application.workflow.planner.resolve_tool_execution_profile",
             return_value="full",
         ),
         patch(
@@ -2348,11 +2348,11 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
         )
         namespace = scoped_conversation_user_id(principal.user_id, context)
         planner = LLMWorkflowPlanner()
-        with patch.object(planner, "_plan_with_react_multiagent", side_effect=fake_react):
+        with patch.object(planner, "_plan_with_llm", side_effect=fake_react):
             plan = planner.plan(
                 namespace,
                 str(task.get("message") or "query product"),
-                get_tool_registry(),
+                {"products": {"actions": {"query": {"risk": "low", "idempotent": True}}}},
                 context,
             )
 

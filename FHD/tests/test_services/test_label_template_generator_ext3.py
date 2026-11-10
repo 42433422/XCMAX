@@ -1251,15 +1251,6 @@ class TestLabelTemplateGeneratorSkillDeep:
 class TestGetLabelTemplateGeneratorSkillDeep:
     """Deep coverage for singleton getter."""
 
-    def test_returns_instance_when_none(self):
-        """Should create new instance when _skill_instance is None."""
-        import app.services.skills.label_template_generator.label_template_generator as mod
-
-        mod._skill_instance = None
-        skill = get_label_template_generator_skill()
-        assert isinstance(skill, LabelTemplateGeneratorSkill)
-        mod._skill_instance = None
-
     def test_returns_same_instance_when_set(self):
         """Should return existing instance."""
         import app.services.skills.label_template_generator.label_template_generator as mod

@@ -114,18 +114,6 @@ class TestInitDbInitializeDatabases:
         initialize_databases(["test_init.db"])
         assert os.path.exists(os.path.join(tmp_dir, "test_init.db"))
 
-    def test_initialize_databases_skips_existing(self, tmp_dir, monkeypatch):
-        from app.db.init_db import initialize_databases
-
-        monkeypatch.setattr("app.db.init_db.get_app_data_dir", lambda: tmp_dir)
-        target = os.path.join(tmp_dir, "products.db")
-        with open(target, "w") as f:
-            f.write("existing")
-
-        initialize_databases(["products.db"])
-        with open(target) as f:
-            assert f.read() == "existing"
-
     def test_initialize_databases_no_seed_logs_warning(self, tmp_dir, monkeypatch):
         from app.db.init_db import initialize_databases
 

@@ -78,10 +78,26 @@ def customers_db(tmp_path, monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "employee-handoff-test-secret-32bytes")
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "idempotency.sqlite"))
     session = factory()
-    session.add(PurchaseUnit(unit_name=CUSTOMER, tenant_id=11, is_active=True))
+    session.add(PurchaseUnit(id=42, unit_name=CUSTOMER, tenant_id=11, is_active=True))
     session.commit()
     session.close()
     return engine
+
+
+@pytest.fixture
+def signed_handoff_actor(customers_db, monkeypatch):
+    from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope
+    from tests.fixtures.employee_test_identity import seed_employee_identity
+
+    factory = seed_employee_identity(
+        customers_db, session_id="handoff-session", username="handoff-actor"
+    )
+    monkeypatch.setattr("app.db.HostSessionLocal", factory)
+    monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    monkeypatch.setenv("DATABASE_URL", str(customers_db.url))
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    binding = bind_agent_actor_scope(session_id="handoff-session", user_id="11")
+    return {"tenant_id": "11", "user_id": "11", "actor_id": "11", "_actor_authorization": binding}
 
 
 def _card(
@@ -117,7 +133,7 @@ def _start(workspace: Path) -> dict:
     )
 
 
-def _handoff(workspace: Path, task_id: str, **extra) -> dict:
+def _handoff(workspace: Path, task_id: str, *, runtime_context=None, **extra) -> dict:
     payload = {
         "continuity_action": "handoff",
         "workspace_root": str(workspace),
@@ -141,7 +157,9 @@ def _handoff(workspace: Path, task_id: str, **extra) -> dict:
         "employee-a",
         "交给员工乙",
         payload,
+        user_id=11,
         workspace_root=str(workspace),
+        runtime_context=runtime_context,
     )
 
 
@@ -150,14 +168,16 @@ def _children(workspace: Path, parent_id: str) -> list[dict]:
     return [task for task in state["tasks"].values() if task.get("parent_task_id") == parent_id]
 
 
-def test_employee_a_hands_off_to_employee_b(customers_db, tmp_path: Path) -> None:
+def test_employee_a_hands_off_to_employee_b(
+    customers_db, tmp_path: Path, signed_handoff_actor
+) -> None:
     workspace = tmp_path / "handoff"
     workspace.mkdir()
     _card(workspace, "employee-a")
     _card(workspace, "employee-b")
     started = _start(workspace)
     parent_id = str(started["task_id"])
-    handed = _handoff(workspace, parent_id)
+    handed = _handoff(workspace, parent_id, runtime_context=signed_handoff_actor)
     handoff = handed["handoff"]
     assert handoff["status"] == "succeeded", (
         handoff.get("error_code"),
@@ -282,29 +302,33 @@ def test_missing_handoff_context_is_rejected(tmp_path: Path) -> None:
     assert not raw.get("child_task_id")
 
 
-def test_repeated_handoff_does_not_create_a_second_child(customers_db, tmp_path: Path) -> None:
+def test_repeated_handoff_does_not_create_a_second_child(
+    customers_db, tmp_path: Path, signed_handoff_actor
+) -> None:
     workspace = tmp_path / "repeat"
     workspace.mkdir()
     _card(workspace, "employee-a")
     _card(workspace, "employee-b")
     started = _start(workspace)
     parent_id = started["task_id"]
-    first = _handoff(workspace, parent_id)
-    second = _handoff(workspace, parent_id)
+    first = _handoff(workspace, parent_id, runtime_context=signed_handoff_actor)
+    second = _handoff(workspace, parent_id, runtime_context=signed_handoff_actor)
     child_id = first["handoff"]["result_payload"]["child_task_id"]
     assert second["handoff"]["duplicate_prevented"] is True
     assert second["handoff"]["result_payload"]["child_task_id"] == child_id
     assert len(_children(workspace, parent_id)) == 1
 
 
-def test_handoff_record_survives_process_reentry(customers_db, tmp_path: Path) -> None:
+def test_handoff_record_survives_process_reentry(
+    customers_db, tmp_path: Path, signed_handoff_actor
+) -> None:
     workspace = tmp_path / "restart"
     workspace.mkdir()
     _card(workspace, "employee-a")
     _card(workspace, "employee-b")
     started = _start(workspace)
     parent_id = started["task_id"]
-    handed = _handoff(workspace, parent_id)
+    handed = _handoff(workspace, parent_id, runtime_context=signed_handoff_actor)
     child_id = handed["handoff"]["result_payload"]["child_task_id"]
     reloaded = TaskContinuityRuntime(ledger_path(workspace), workspace=workspace)
     reloaded._read()
@@ -444,7 +468,9 @@ def test_forged_handoff_identity_is_rejected(customers_db, tmp_path: Path) -> No
     assert _children(workspace, first["task_id"]) == []
 
 
-def test_permission_order_does_not_change_the_delegated_call(customers_db, tmp_path: Path) -> None:
+def test_permission_order_does_not_change_the_delegated_call(
+    customers_db, tmp_path: Path, signed_handoff_actor
+) -> None:
     params = {
         "keyword": CUSTOMER,
         "customer_id": 42,
@@ -464,6 +490,7 @@ def test_permission_order_does_not_change_the_delegated_call(customers_db, tmp_p
         handed = _handoff(
             workspace,
             started["task_id"],
+            runtime_context=signed_handoff_actor,
             permissions=permissions,
             delegated_params=params,
         )

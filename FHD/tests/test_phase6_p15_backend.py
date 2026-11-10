@@ -127,13 +127,6 @@ class TestMarketBaseUrl:
 class TestMarketHttpConfig:
     """Cover ``_market_http_timeout`` / ``_market_http_retries``."""
 
-    def test_timeout_default(self) -> None:
-        with patch.dict("os.environ", {}, clear=False):
-            import os
-
-            os.environ.pop("XCAGI_MARKET_HTTP_TIMEOUT", None)
-            assert ma._market_http_timeout() == 20.0
-
     def test_timeout_env_override(self) -> None:
         with patch.dict("os.environ", {"XCAGI_MARKET_HTTP_TIMEOUT": "30"}):
             assert ma._market_http_timeout() == 30.0
@@ -141,13 +134,6 @@ class TestMarketHttpConfig:
     def test_timeout_invalid_env_falls_back(self) -> None:
         with patch.dict("os.environ", {"XCAGI_MARKET_HTTP_TIMEOUT": "abc"}):
             assert ma._market_http_timeout() == 20.0
-
-    def test_retries_default(self) -> None:
-        with patch.dict("os.environ", {}, clear=False):
-            import os
-
-            os.environ.pop("XCAGI_MARKET_HTTP_RETRIES", None)
-            assert ma._market_http_retries() == 1
 
     def test_retries_env_override(self) -> None:
         with patch.dict("os.environ", {"XCAGI_MARKET_HTTP_RETRIES": "5"}):

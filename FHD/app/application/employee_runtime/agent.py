@@ -268,6 +268,7 @@ class EmployeeAgent:
             user_id=user_id,
             session_id=session_id,
             workspace_root=workspace_root,
+            runtime_context=trusted_context,
         )
         if routed is not None:
             return routed

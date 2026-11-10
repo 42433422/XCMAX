@@ -7,7 +7,8 @@ import json
 import multiprocessing
 import os
 from contextlib import ExitStack, contextmanager
-from datetime import datetime
+from contextvars import ContextVar
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -26,6 +27,7 @@ from app.db.models.task_lifecycle import TaskLifecycleRecord
 
 EMPLOYEES = [f"employee-{name}" for name in "abcd"]
 CUSTOMER = "四人员工链客户甲"
+_ACTOR = ContextVar("business_chain_test_actor", default=None)
 
 
 def invoke(workspace: Path, action: str, **payload) -> dict:
@@ -39,7 +41,9 @@ def invoke(workspace: Path, action: str, **payload) -> dict:
             "user_id": "11",
             **payload,
         },
+        user_id=11,
         workspace_root=str(workspace),
+        runtime_context=_ACTOR.get() or {},
     )
 
 
@@ -91,9 +95,10 @@ def business_workspace(workspace: Path):
     children_before = {child.pid for child in multiprocessing.active_children()}
     workspace.mkdir(parents=True)
     engine = create_engine(f"sqlite:///{workspace / 'business.sqlite'}")
-    for model in (PurchaseUnit, Customer, Product, SalesOrder, SalesOrderItem, TaskLifecycleRecord):
-        model.__table__.create(engine)
-    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope
+    from tests.fixtures.employee_test_identity import seed_employee_identity
+
+    factory = seed_employee_identity(engine, session_id="chain-session", username="chain-actor")
 
     @contextmanager
     def sessions():
@@ -145,6 +150,8 @@ def business_workspace(workspace: Path):
         )
     try:
         with ExitStack() as stack:
+            stack.enter_context(patch("app.db.HostSessionLocal", factory))
+            stack.enter_context(patch("app.db.session.SessionLocal", factory))
             stack.enter_context(
                 patch("app.application.customer_app_service.get_customers_session", factory)
             )
@@ -155,12 +162,27 @@ def business_workspace(workspace: Path):
                     os.environ,
                     {
                         "XCAGI_DATA_DIR": str(workspace / "data"),
+                        "DATABASE_URL": str(engine.url),
+                        "XCAGI_PRODUCT_SKU": "enterprise",
+                        "SECRET_KEY": "employee-chain-isolated-secret-32bytes",
                         "AUDIT_LOG_PATH": str(workspace / "audit.jsonl"),
                         "XCAGI_TOOL_IDEMPOTENCY_PATH": str(workspace / "idempotency.sqlite"),
                     },
                 )
             )
-            yield
+            binding = bind_agent_actor_scope(session_id="chain-session", user_id="11")
+            token = _ACTOR.set(
+                {
+                    "tenant_id": "11",
+                    "user_id": "11",
+                    "actor_id": "11",
+                    "_actor_authorization": binding,
+                }
+            )
+            try:
+                yield
+            finally:
+                _ACTOR.reset(token)
     finally:
         # Preserve the observed product failure; reclaim only this fixture's
         # surviving workers so a failed cleanup cannot hang pytest shutdown.
