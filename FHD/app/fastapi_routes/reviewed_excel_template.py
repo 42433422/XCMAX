@@ -1961,7 +1961,7 @@ def reviewed_excel_intake_preview(
             review = _run(db, review_id, tenant, owner)
             _review_source_version(db, review, tenant, owner)
             state, versions = _proposals(review)
-            if review.status != _READY or versions[-1]["version"] != proposal_version:
+            if review.status not in {_READY, _SAVED} or versions[-1]["version"] != proposal_version:
                 raise HTTPException(status_code=409, detail="审阅版本已变化，请重新选择候选")
             _require_private_model(request, versions[-1], tenant, owner)
             candidate = next(
@@ -1969,6 +1969,11 @@ def reviewed_excel_intake_preview(
             )
             if candidate is None:
                 raise HTTPException(status_code=409, detail="候选不属于该审阅版本")
+            if review.status == _SAVED:
+                confirmation = state.get("confirmation") or {}
+                if (confirmation.get("version"), confirmation.get("candidate"), confirmation.get("selected")) != (proposal_version, candidate_id, selected):
+                    raise HTTPException(status_code=409, detail="后台预演必须使用已保存的候选与清理范围")
+            expected_status = review.status
             old_draft = review.draft_json
             key = _intake_selection_key(
                 review, proposal_version, candidate_id, selected, name, composer_note
@@ -2104,7 +2109,7 @@ def reviewed_excel_intake_preview(
             _recheck(request, (tenant, owner))
             _review_source_version(db, review, tenant, owner)
             state["intake_preview"] = plan
-            _cas(db, review, old_draft, draft_json=dump_json(state))
+            _cas(db, review, old_draft, expected_status=expected_status, draft_json=dump_json(state))
             return {"success": True, "intake": {**plan, "business": business}}
     except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(
@@ -2125,6 +2130,7 @@ async def reviewed_excel_save(
     name: str = Form(..., max_length=160),
     publish_to_tenant: bool = Form(False),
     private_intake: bool = Form(False),
+    template_only: bool = Form(False),
     intake_run_id: str = Form("", max_length=36),
     preview_revision: str = Form("", max_length=64),
     valid_rows_only: bool = Form(False),
@@ -2166,6 +2172,7 @@ async def reviewed_excel_save(
                         "candidate": candidate_id,
                         "selections": selected,
                         "name": name.strip(),
+                        **({"template_only": True} if template_only else {}),
                         **(
                             {
                                 "intake_run_id": intake_run_id,
@@ -2203,7 +2210,7 @@ async def reviewed_excel_save(
             if candidate is None:
                 raise HTTPException(status_code=409, detail="候选不属于该审阅版本")
             body = _source(db, run, tenant, owner)
-            if private_intake and not intake_run_id:
+            if private_intake and not intake_run_id and not template_only:
                 raise HTTPException(
                     status_code=409, detail="请先核对入库目标和记录数量，再确认入库"
                 )

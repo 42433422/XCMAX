@@ -89,11 +89,11 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
   }
   function canPrepare(doc: ReviewedDocument) {
     const p = proposal(doc)
-    return owned(doc) && !!doc.review && !doc.phase && !doc.unknown && !saved(doc) && !!p?.candidates[doc.candidateIndex]
+    return owned(doc) && !!doc.review && !doc.phase && !doc.unknown && !!p?.candidates[doc.candidateIndex]
       && p.model.status === 'returned' && p.result_previews?.length === 3 && doc.selectedVersion === doc.proposals.length - 1
   }
   async function prepare(doc: ReviewedDocument) {
-    if (!canPrepare(doc)) return
+    if (!canPrepare(doc) || doc.intakePending || doc.intakeKey === intakeSelection(doc)) return
     const session = options.capture()
     if (!session()) return
     clearIntake(doc)
@@ -124,13 +124,10 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
   }
   function choose(doc: ReviewedDocument, index: number) {
     if (!owned(doc) || doc.phase || doc.unknown || saved(doc) || !Number.isInteger(index) || !proposal(doc)?.candidates[index]) return
-    doc.candidateIndex = index; void prepare(doc)
+    doc.candidateIndex = index; clearIntake(doc)
   }
   function canSave(doc: ReviewedDocument) {
-    const run = doc.intake?.business
-    return canPrepare(doc) && !doc.intakePending && !doc.intakeError && doc.intakeKey === intakeSelection(doc)
-      && doc.intake?.mod_id === readActiveExtensionModIdFromStorage() && run?.status === 'preview_ready' && !!run.preview_revision
-      && [run.summary.new, run.summary.update, run.summary.skip, run.summary.error].every(value => Number.isFinite(value) && value >= 0) && run.summary.error === 0
+    return canPrepare(doc) && !saved(doc)
   }
   async function save(doc: ReviewedDocument) {
     if (!canSave(doc)) return
@@ -142,16 +139,21 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
     try {
       const form = new FormData(); form.append('review_id', reviewId); form.append('proposal_version', p.version); form.append('candidate_id', candidate.id)
       form.append('selections', JSON.stringify(candidate.clear)); form.append('name', doc.displayName); form.append('private_intake', 'true'); form.append('publish_to_tenant', 'false')
-      form.append('intake_run_id', doc.intake!.run_id); form.append('preview_revision', doc.intake!.business.preview_revision!); form.append('valid_rows_only', 'false')
+      form.append('template_only', 'true')
       form.append('composer_note', doc.requirements.join('\n').slice(0, 4000))
       const result = await templatePreviewApi.saveReviewedExcel(form) as { template_id?: string; auto_ingest?: { success?: boolean; error?: string } }
       if (!current(doc, session, generation) || intakeSelection(doc) !== selection) return
       if (!result.template_id?.trim()) { doc.unknown = true; throw new Error('保存回执待核对，勿重复提交。') }
       doc.receipts.push({ review_id: reviewId, proposal_version: p.version, template_id: result.template_id, candidate_id: candidate.id }); doc.dirty = false
-      if (result.auto_ingest?.success === false) doc.error = '模板已保存，入库状态请核对。'
+      if (result.auto_ingest?.success === false && result.auto_ingest.error !== 'confirmation_required') doc.error = '模板已保存，入库状态请核对。'
       options.saved()
     } catch (error) { if (current(doc, session, generation)) { doc.unknown ||= options.outcomeUnknown(error); doc.error = message(error, '保存结果待核对，勿重复提交。') } }
-    finally { if (current(doc, session, generation)) doc.phase = '' }
+    finally {
+      if (current(doc, session, generation)) {
+        doc.phase = ''
+        if (saved(doc)) void prepare(doc)
+      }
+    }
   }
   async function refine(doc: ReviewedDocument, feedback: string) {
     if (!owned(doc) || !doc.review || !feedback.trim() || doc.phase || doc.unknown) return false
