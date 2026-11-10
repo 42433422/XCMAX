@@ -329,7 +329,7 @@ def parse_office_file_elt(file_path: str) -> dict[str, Any]:
 
 def _preview_ready(run: dict[str, Any] | None) -> bool:
     return (
-        bool(run)
+        run is not None
         and str(run.get("status") or "") == _PREVIEW_READY
         and bool(run.get("preview_revision"))
     )
@@ -496,7 +496,7 @@ def _office_actor(runtime_context: dict[str, Any] | None) -> tuple[int, int] | N
     ctx = runtime_context or {}
     owner = ctx.get("local_user_id", ctx.get("user_id"))
     tenant = ctx.get("tenant_id")
-    if isinstance(owner, bool) or isinstance(tenant, bool):
+    if owner is None or tenant is None or isinstance(owner, bool) or isinstance(tenant, bool):
         return None
     try:
         owner_i = int(owner)

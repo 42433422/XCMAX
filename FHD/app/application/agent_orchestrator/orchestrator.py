@@ -109,7 +109,7 @@ def _queue_next_approval(run: AgentRun) -> None:
             agent_run_id=run.run_id,
             approved_step_id=step.node_id,
         )
-    except (RECOVERABLE_ERRORS, RuntimeError):
+    except RECOVERABLE_ERRORS:
         logger.warning("follow-up approval was not persisted run_id=%s", run.run_id)
 
 

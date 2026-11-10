@@ -131,7 +131,9 @@ def scope_counts(ctx: dict[str, Any]) -> tuple[int | None, int | None]:
             customers = db.query(func.count(Customer.id)).scalar()
             products = db.query(func.count(Product.id)).scalar()
         return int(customers or 0), int(products or 0)
-    except (SQLAlchemyError, *RECOVERABLE_ERRORS):
+    except SQLAlchemyError:
+        return None, None
+    except RECOVERABLE_ERRORS:
         return None, None
 
 

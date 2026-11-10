@@ -57,6 +57,8 @@ _WORKFLOW_REVIEW_ROLES = frozenset({"admin", "superadmin", "super_admin", "owner
 
 def _request_tenant(req: ApprovalRequest) -> int | None:
     raw = getattr(req, "tenant_id", None)
+    if raw is None:
+        return None
     try:
         value = int(raw)
     except (TypeError, ValueError):
@@ -66,6 +68,8 @@ def _request_tenant(req: ApprovalRequest) -> int | None:
 
 def _user_tenant(user: User) -> int | None:
     raw = getattr(user, "tenant_id", None)
+    if raw is None:
+        return None
     try:
         value = int(raw)
     except (TypeError, ValueError):
