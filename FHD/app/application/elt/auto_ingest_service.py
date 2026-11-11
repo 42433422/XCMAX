@@ -1190,8 +1190,14 @@ class AutoIngestService:
                     status_code=400,
                 )
 
-        kb_rollback = self._withdraw_knowledge(batch)
-        biz_rollback = self._withdraw_business(db, batch=batch, owner_user_id=owner_user_id)
+        if batch.get("status") == "completed_empty":
+            # Verify the owned receipt before removing knowledge. Empty writes
+            # have nothing for the row rollback service to undo.
+            biz_rollback = self._withdraw_business(db, batch=batch, owner_user_id=owner_user_id)
+            kb_rollback = self._withdraw_knowledge(batch)
+        else:
+            kb_rollback = self._withdraw_knowledge(batch)
+            biz_rollback = self._withdraw_business(db, batch=batch, owner_user_id=owner_user_id)
 
         with _LOCK:
             ledger = _load_ledger(tenant_id)
@@ -1394,6 +1400,9 @@ class AutoIngestService:
             valid_rows_only=bool(prepared_plan.get("valid_rows_only")) if prepared_plan else True,
             preview_revision=str(preview_revision or ""),
         )
+        # execute commits the write claim before returning its read-only receipt.
+        # Release that read transaction before waiting for the worker.
+        db.rollback()
         deadline = time.monotonic() + max(0.0, float(poll_seconds))
         while (
             isinstance(executed, dict)
@@ -1404,12 +1413,12 @@ class AutoIngestService:
             if remaining <= 0:
                 break
             time.sleep(min(0.25, remaining))
-            db.expire_all()
             try:
+                executed = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
+            finally:
+                # Includes terminal receipts and failed/cancelled reads. A failed
+                # release must stop this poll, not sleep with a checked-out connection.
                 db.rollback()
-            except RECOVERABLE_ERRORS:
-                logger.debug("auto-ingest release read lock failed", exc_info=True)
-            executed = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
         return {
             "target_type": confirmed,
             "upload_id": upload_id,
@@ -1434,9 +1443,42 @@ class AutoIngestService:
 
         business = batch.get("business") or {}
         run_id = str(business.get("run_id") or "")
+        empty_batch = batch.get("status") == "completed_empty"
         if not run_id or business.get("skipped"):
+            if empty_batch:
+                raise EltError(
+                    "ELT_EMPTY_RECEIPT_UNVERIFIED", "缺少可核实的业务回执，未撤回", status_code=409
+                )
             return {"skipped": True, "reason": "no_business_run"}
-        rolled = get_elt_service().rollback(db, run_id=run_id, owner_user_id=owner_user_id)
+        service = get_elt_service()
+        if empty_batch:
+            current = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
+            summary = current.get("summary")
+            receipt = current.get("receipt")
+            if (
+                current.get("id") != run_id
+                or current.get("status") != "completed"
+                or current.get("rollback_status") is not None
+                or not isinstance(summary, dict)
+                or not all(
+                    type(summary.get(key)) is int and summary[key] >= 0
+                    for key in ("executed", "new", "update")
+                )
+                or not isinstance(receipt, dict)
+                or type(receipt.get("rows_written", 0)) is not int
+                or receipt.get("rows_written", 0) < 0
+            ):
+                raise EltError(
+                    "ELT_EMPTY_RECEIPT_UNVERIFIED",
+                    "业务回执不足或撤回状态异常，未撤回",
+                    status_code=409,
+                )
+            if (
+                all(summary[key] == 0 for key in ("executed", "new", "update"))
+                and receipt.get("rows_written", 0) == 0
+            ):
+                return {"skipped": True, "reason": "no_business_writes", "run_id": run_id}
+        rolled = service.rollback(db, run_id=run_id, owner_user_id=owner_user_id)
         return {
             "rolled_back": True,
             "run_id": run_id,

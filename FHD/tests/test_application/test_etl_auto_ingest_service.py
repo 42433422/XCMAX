@@ -212,7 +212,11 @@ def test_auto_ingest_withdraw_rolls_back_kb_and_business(
         "status": "preview_ready",
         "preview_revision": "rev-2",
     }
-    fake_etl.execute.return_value = {"id": "run-2", "status": "completed", "summary": {}}
+    fake_etl.execute.return_value = {
+        "id": "run-2",
+        "status": "completed",
+        "summary": {"executed": 1, "new": 1, "update": 0},
+    }
     fake_etl.rollback.return_value = {"id": "run-2", "rollback_status": "completed"}
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake_etl)
 
