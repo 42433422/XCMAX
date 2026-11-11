@@ -67,7 +67,7 @@
 
 3.2 企业版用户可访问许可方官方认证 Mod 集（OAC，Official Authorized Catalog），OAC 中的 Mod 由许可方进行安全审计与兼容性测试；许可方对 OAC Mod 提供有限的瑕疵担保（详见 EULA 附件 B）。
 
-3.3 被许可方使用 Mod 商店所产生的 Token 消耗按 [`BUSINESS_MODEL.md`](../XCAGI/BUSINESS_MODEL.md) 公示的 Token 套餐计费；详细计费规则以 EULA 附件 A（订单）为准。
+3.3 被许可方使用 Mod 商店所产生的 Token 消耗按现行市场套餐计费；套餐与额度来源见 [`docs/account_system_ssot.md`](docs/account_system_ssot.md) §2.4，详细计费规则以 EULA 附件 A（订单）为准。
 
 ## 4. Token 网关与云端 AI 核心
 
