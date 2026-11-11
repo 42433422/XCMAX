@@ -162,7 +162,11 @@ class CustomerCrudMixin:
                 )
 
                 if existing:
-                    return {"success": False, "message": "客户名称已存在"}
+                    return {
+                        "success": False,
+                        "message": "客户名称已存在",
+                        "error_code": "customer_name_exists",
+                    }
 
                 stamped = owned_tenant_id()
                 if stamped is None:

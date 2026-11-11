@@ -86,6 +86,8 @@ def seed_rbac(real_engine: Engine, *, logger: Logger) -> None:
                 )
                 session.add(role)
                 role_by_name[role.name] = role
+            if not role.is_system:
+                continue
             assigned = {permission.code for permission in role.permissions}
             for code in role_row.get("permissions", []):
                 perm = perm_by_code.get(code)
