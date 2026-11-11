@@ -197,7 +197,7 @@ def _create_template_with_payload_inner(payload: dict):
             analyzed_data["preview_data"] = preview_data
 
         with get_db() as db:
-            if fingerprint:
+            if fingerprint and not preview_data.get("revision_parent"):
                 reused = _reused_reviewed_template(db, tenant_id, fingerprint)
                 if reused is not None:
                     return _j(

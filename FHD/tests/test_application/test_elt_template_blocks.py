@@ -287,8 +287,53 @@ def test_saving_the_same_reviewed_layout_reuses_the_template(template_store):
     assert body["template"]["id"] == reused["template"]["id"]
     assert reused["reused"] is True
     assert reused["template"]["file_path"] == str(first)
+    revision = _template_payload(second)
+    revision["name"] = "送货单修订"
+    revision["preview_data"] = {"reviewed_excel": True, "revision_parent": {"review_id": 9}}
+    with tenant_scope(1):
+        forked = crud.create_template_with_payload(revision)
+    assert forked.status_code == 200
+    forked_body = forked.get_json()
+    assert forked_body.get("reused") is not True
+    assert forked_body["template"]["id"] != body["template"]["id"]
+    assert forked_body["template"]["file_path"] == str(second)
+    assert (
+        forked_body["template"]["preview_data"]["content_fingerprint"]
+        == body["template"]["preview_data"]["content_fingerprint"]
+    )
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
+        assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 2
+    with tenant_scope(1):
+        cards = [body["template"], forked_body["template"]]
+        assert collapse_listed_templates(cards) == cards
+
+
+def test_print_area_keeps_the_outside_piece_as_its_own_slice():
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "表"
+    sheet["A1"] = "考勤表"
+    sheet["A2"] = "姓名"
+    sheet["B2"] = "日期"
+    sheet["A4"] = "末尾"
+    sheet.print_area = "A1:B2"
+    body = _save(book)
+    slices = derive_classified_documents(body, _classify(body, [("表", "A1:B2"), ("表", "A3:B4")]))
+    assert [item["fragments"][0]["range"] for item in slices] == ["A1:B2", "A3:B4"]
+
+
+def test_distinct_print_areas_keep_adjacent_pieces_separate():
+    book = Workbook()
+    sheet = book.active
+    sheet["A1"] = "姓名"
+    sheet["B1"] = "日期"
+    sheet["A3"] = "内容"
+    sheet["B3"] = "数量"
+    sheet.print_area = ["A1:B2", "A3:B4"]
+    groups = [
+        ([{"sheet": "Sheet", "range": area}], "model", "separate") for area in ("A1:B2", "A3:B4")
+    ]
+    assert join_split_template_blocks(_save(book), groups) == groups
 
 
 @pytest.mark.parametrize("title", ["送货单", "退货单", "发货单", "出库单"])

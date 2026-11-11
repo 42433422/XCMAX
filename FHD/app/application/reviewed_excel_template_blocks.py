@@ -389,6 +389,9 @@ def _listed_identity(template: dict) -> tuple[str, bool]:
     preview = template.get("preview_data")
     if not isinstance(preview, dict) or preview.get("reviewed_excel") is not True:
         return "", False
+    # A saved revision keeps its own card even when its workbook is unchanged.
+    if preview.get("revision_parent"):
+        return "", False
     stored = str(preview.get("content_fingerprint") or "").strip()
     path = str(template.get("path") or template.get("file_path") or "")
     actual = template_file_fingerprint(path)
