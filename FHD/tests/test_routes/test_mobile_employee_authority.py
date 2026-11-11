@@ -117,14 +117,18 @@ async def test_group_post_binds_request_not_body(trusted_actor, monkeypatch, tmp
 
 
 def test_group_office_upload_requires_actual_owner(trusted_actor, monkeypatch, tmp_path):
+    from contextlib import contextmanager
     from io import BytesIO
 
     from app.application.elt.service import get_elt_service
     from app.application.employee_runtime.agent import EmployeeAgent
     from app.application.group_chat.employee_registry import _default_employee_executor
     from app.infrastructure.tenant_scope import tenant_scope
+    from app.request_active_mod_ctx import set_request_active_mod_id
 
+    set_request_active_mod_id(None)
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("XCAGI_MOD_ISOLATED_DATABASES", raising=False)
     owner, other = trusted_actor(), trusted_actor()
     with tenant_scope(owner.tenant_id), owner.factory.begin() as db:
         upload = get_elt_service().save_upload(
@@ -134,6 +138,19 @@ def test_group_office_upload_requires_actual_owner(trusted_actor, monkeypatch, t
             content_type="text/csv",
             stream=BytesIO(b"amount\n20\n"),
         )
+    @contextmanager
+    def same_database():
+        db = owner.factory()
+        try:
+            yield db
+            db.commit()
+        finally:
+            db.close()
+
+    monkeypatch.setattr(
+        "app.application.tools.workflow_spreadsheet_scope.get_db",
+        same_database,
+    )
     seen = []
 
     def run(self, task, payload, **kwargs):
