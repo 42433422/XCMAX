@@ -11,9 +11,7 @@
       "allowed": ["同一来源行保存为 slice 0 和 slice 1", "备注不入库"],
       "forbidden_effects": ["第二条产品因为来源行重复而整次预演失败", "备注变成客户"],
       "oracle": "第 2 行 slice 0 是左客户/L-1，slice 1 是右客户/R-1；排除清单只有第 3 行 note",
-      "tests": [
-        "tests/test_application/test_etl_preview_task_boundaries.py::test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out"
-      ],
+      "tests": ["tests/test_application/test_etl_preview_task_boundaries.py::test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out"],
       "boundary": {
         "real": ["sqlite", "xlsx", "ELT preview", "ELT execute"],
         "doubles": [],
@@ -36,9 +34,7 @@
       "allowed": ["一个客户", "两行产品按型号、名称和价格落库"],
       "forbidden_effects": ["表头、空行或合计变成业务记录", "少一行产品"],
       "oracle": "断言中的客户名和两行产品元组",
-      "tests": [
-        "tests/test_application/test_etl_preview_task_boundaries.py::test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate"
-      ],
+      "tests": ["tests/test_application/test_etl_preview_task_boundaries.py::test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate"],
       "boundary": {
         "real": ["sqlite", "ELT preview", "ELT execute"],
         "doubles": [],
@@ -61,9 +57,7 @@
       "allowed": ["状态仍是 preview_ready", "诊断码 ELT_PREVIEW_EMPTY 和 ELT_NO_DATA_ROWS", "确认执行被拒绝"],
       "forbidden_effects": ["零行预演仍能确认入库"],
       "oracle": "预演快照里的 total_rows 和 empty_preview 诊断，而不是再解析一遍文件",
-      "tests": [
-        "tests/test_application/test_etl_preview_task_boundaries.py::test_empty_preview_is_not_confirmable"
-      ],
+      "tests": ["tests/test_application/test_etl_preview_task_boundaries.py::test_empty_preview_is_not_confirmable"],
       "boundary": {
         "real": ["sqlite", "ELT preview worker", "ELT execute"],
         "doubles": [],
@@ -86,9 +80,7 @@
       "allowed": ["写入内容与确认内容一致", "同键重复提交读回原结果"],
       "forbidden_effects": ["过期预演写入", "重复副作用"],
       "oracle": "确认单上的版本和范围，对照落库行",
-      "tests": [
-        "tests/test_application/test_etl_preview_confirmation.py::test_missing_or_wrong_approval_does_not_write_or_claim_run[None]"
-      ],
+      "tests": ["tests/test_application/test_etl_preview_confirmation.py::test_missing_or_wrong_approval_does_not_write_or_claim_run[None]"],
       "boundary": {
         "real": ["sqlite", "ELT execute", "preview revision"],
         "doubles": [],
@@ -111,9 +103,7 @@
       "allowed": ["读回第一次的客户名", "错误码 ELT_PREVIEW_REQUIRED"],
       "forbidden_effects": ["第二次确认再插入一批业务行"],
       "oracle": "第一次确认后的客户名清单",
-      "tests": [
-        "tests/test_application/test_etl_preview_confirmation.py::test_repeat_confirm_does_not_write_the_customers_again"
-      ],
+      "tests": ["tests/test_application/test_etl_preview_confirmation.py::test_repeat_confirm_does_not_write_the_customers_again"],
       "boundary": {
         "real": ["sqlite", "ELT execute"],
         "doubles": [],
@@ -136,9 +126,7 @@
       "allowed": ["重新打开的文件与已提交明细一致"],
       "forbidden_effects": ["只凭 URL、HTTP 200 或 success 判定通过", "用重解析原件代替已提交数据"],
       "oracle": "提交时保存的明细和汇总",
-      "tests": [
-        "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"
-      ],
+      "tests": ["tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"],
       "boundary": {
         "real": ["sqlite", "xlsx file"],
         "doubles": ["fixed plan instead of a live model"],
@@ -161,9 +149,7 @@
       "allowed": ["单元格里能看到 2 和 500"],
       "forbidden_effects": ["只核对产品名称就宣布导出完成"],
       "oracle": "提交时保存的数量和金额",
-      "tests": [
-        "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"
-      ],
+      "tests": ["tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"],
       "boundary": {
         "real": ["sqlite", "xlsx file"],
         "doubles": ["fixed plan instead of a live model"],
@@ -186,9 +172,7 @@
       "allowed": ["合计行金额等于 500"],
       "forbidden_effects": ["没有汇总仍宣布导出完成"],
       "oracle": "提交时保存的金额 500",
-      "tests": [
-        "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"
-      ],
+      "tests": ["tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"],
       "boundary": {
         "real": ["sqlite", "xlsx file"],
         "doubles": ["fixed plan instead of a live model"],
@@ -211,9 +195,7 @@
       "allowed": ["库存变为 8", "出货记录写入", "导出文件含该产品", "重复同意不再次出库"],
       "forbidden_effects": ["只出库不出货或只出货不导出就宣布完成", "导出文件缺少已提交产品"],
       "oracle": "获批计划的三个节点，以及重新打开的 xlsx 单元格",
-      "tests": [
-        "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"
-      ],
+      "tests": ["tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"],
       "boundary": {
         "real": ["sqlite", "approval resume", "inventory ledger", "shipment rows", "xlsx file"],
         "doubles": ["fixed plan instead of a live model"],
@@ -236,9 +218,7 @@
       "allowed": ["拒绝，原因 approval_cancelled", "状态仍是 cancelled"],
       "forbidden_effects": ["取消后仍插入「闭环驳回不应写入」"],
       "oracle": "SQLite 客户名清单",
-      "tests": [
-        "tests/test_application/test_approval_executor_gate.py::test_cancelled_approval_does_not_insert_a_customer"
-      ],
+      "tests": ["tests/test_application/test_approval_executor_gate.py::test_cancelled_approval_does_not_insert_a_customer"],
       "boundary": {
         "real": ["sqlite customers"],
         "doubles": ["in-memory approval queue"],
@@ -261,9 +241,7 @@
       "allowed": ["拒绝，原因 approval_required", "状态仍是 waiting_approval"],
       "forbidden_effects": ["等待期间插入「闭环驳回不应写入」"],
       "oracle": "SQLite 客户名清单",
-      "tests": [
-        "tests/test_application/test_approval_executor_gate.py::test_waiting_approval_denies_before_write"
-      ],
+      "tests": ["tests/test_application/test_approval_executor_gate.py::test_waiting_approval_denies_before_write"],
       "boundary": {
         "real": ["sqlite customers"],
         "doubles": ["in-memory approval queue"],
@@ -286,9 +264,7 @@
       "allowed": ["两次都拒绝"],
       "forbidden_effects": ["驳回后插入「闭环驳回不应写入」"],
       "oracle": "SQLite 客户名清单",
-      "tests": [
-        "tests/test_application/test_approval_executor_gate.py::test_resubmit_after_reject_still_has_no_row"
-      ],
+      "tests": ["tests/test_application/test_approval_executor_gate.py::test_resubmit_after_reject_still_has_no_row"],
       "boundary": {
         "real": ["sqlite customers"],
         "doubles": ["in-memory approval queue"],
@@ -311,9 +287,7 @@
       "allowed": ["返回 idempotency_conflict", "库里仍只有原来那一行和原来的电话"],
       "forbidden_effects": ["同键异参返回原成功结果", "覆盖已保存的电话"],
       "oracle": "崩溃后、重试前读到的那一行客户电话",
-      "tests": [
-        "tests/test_application/test_idempotency_recovery_e23_e24.py::test_same_key_with_different_phone_does_not_reuse_the_row"
-      ],
+      "tests": ["tests/test_application/test_idempotency_recovery_e23_e24.py::test_same_key_with_different_phone_does_not_reuse_the_row"],
       "boundary": {
         "real": ["sqlite", "spawned process", "AgentToolExecutor"],
         "doubles": [],
@@ -336,9 +310,7 @@
       "allowed": ["恢复调用返回同一客户 id", "库里仍只有一行", "租户和电话与第一次提交一致"],
       "forbidden_effects": ["恢复时再插入一行客户"],
       "oracle": "崩溃进程退出后、恢复前读到的那一行客户",
-      "tests": [
-        "tests/test_application/test_idempotency_recovery_e23_e24.py::test_e23_kill_after_commit_returns_the_same_row"
-      ],
+      "tests": ["tests/test_application/test_idempotency_recovery_e23_e24.py::test_e23_kill_after_commit_returns_the_same_row"],
       "boundary": {
         "real": ["sqlite", "spawned process", "AgentToolExecutor.create customer"],
         "doubles": [],
@@ -361,9 +333,7 @@
       "allowed": ["最终一行", "至少一个成功", "另一个成功或 idempotency_in_progress", "回执里的 id 属于这一行或为空"],
       "forbidden_effects": ["两个恢复各自插入一行"],
       "oracle": "并发结束后按客户名读到的行数",
-      "tests": [
-        "tests/test_application/test_idempotency_recovery_e23_e24.py::test_e24_two_recoveries_leave_one_row"
-      ],
+      "tests": ["tests/test_application/test_idempotency_recovery_e23_e24.py::test_e24_two_recoveries_leave_one_row"],
       "boundary": {
         "real": ["sqlite", "two spawned processes", "barrier", "AgentToolExecutor"],
         "doubles": [],
@@ -416,9 +386,7 @@
       "allowed": ["两条产品入库", "备注角色为 note"],
       "forbidden_effects": ["有效记录没有来源行或切片号", "备注入库"],
       "oracle": "slice 0/1 的客户、型号、表号，以及排除清单 (3, note)",
-      "tests": [
-        "tests/test_application/test_etl_preview_task_boundaries.py::test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out"
-      ],
+      "tests": ["tests/test_application/test_etl_preview_task_boundaries.py::test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out"],
       "boundary": {
         "real": ["sqlite", "xlsx", "ELT preview", "ELT execute"],
         "doubles": [],
@@ -441,9 +409,7 @@
       "allowed": ["请求被拒绝"],
       "forbidden_effects": ["无权限造成库存、订单或审批状态写入"],
       "oracle": "操作前的业务行与审批状态",
-      "tests": [
-        "tests/test_application/test_approval_workspace.py::test_configured_restore_approval_restores_wal_and_retains_audit[False-denied]"
-      ],
+      "tests": ["tests/test_application/test_approval_workspace.py::test_configured_restore_approval_restores_wal_and_retains_audit[False-denied]"],
       "boundary": {
         "real": ["sqlite", "approval request", "approval record", "restore_probe.price"],
         "doubles": ["actor resolver returns user 41"],
@@ -466,9 +432,7 @@
       "allowed": ["审批通过", "价格回到 12.50"],
       "forbidden_effects": ["把自批一律禁止", "批准后价格仍是 13.50"],
       "oracle": "重新打开的 restore_probe.price 和审批状态",
-      "tests": [
-        "tests/test_application/test_approval_workspace.py::test_configured_restore_approval_restores_wal_and_retains_audit[False-success]"
-      ],
+      "tests": ["tests/test_application/test_approval_workspace.py::test_configured_restore_approval_restores_wal_and_retains_audit[False-success]"],
       "boundary": {
         "real": ["sqlite", "approval request", "DatabaseService.restore_database"],
         "doubles": ["actor resolver returns user 41", "workflow resume hook"],
@@ -491,9 +455,7 @@
       "allowed": ["第二次返回已处理", "库存保持 94", "出库流水 1 条"],
       "forbidden_effects": ["第二次再扣 6"],
       "oracle": "库存台账数量 94，以及该明细的出库流水条数",
-      "tests": [
-        "tests/test_services/test_fulfillment_service.py::TestIdempotency::test_duplicate_deliver_with_same_key_is_noop"
-      ],
+      "tests": ["tests/test_services/test_fulfillment_service.py::TestIdempotency::test_duplicate_deliver_with_same_key_is_noop"],
       "boundary": {
         "real": ["sqlite", "inventory ledger", "fulfillment"],
         "doubles": [],
@@ -516,9 +478,7 @@
       "allowed": ["回执是同一笔收款", "分录仍是一条"],
       "forbidden_effects": ["恢复再插入一套分录"],
       "oracle": "第一次付款的收款主键，以及 JournalEntry 条数 1",
-      "tests": [
-        "tests/test_services/test_payment_idempotency.py::test_retry_survives_new_session_and_full_payment"
-      ],
+      "tests": ["tests/test_services/test_payment_idempotency.py::test_retry_survives_new_session_and_full_payment"],
       "boundary": {
         "real": ["sqlite", "journal entry", "new database session"],
         "doubles": [],
@@ -566,9 +526,7 @@
       "allowed": ["拒绝，原因 approval_tenant_mismatch"],
       "forbidden_effects": ["写入「闭环驳回不应写入」"],
       "oracle": "SQLite 客户名清单里没有该名称",
-      "tests": [
-        "tests/test_application/test_approval_executor_gate.py::test_other_tenant_approval_does_not_authorize"
-      ],
+      "tests": ["tests/test_application/test_approval_executor_gate.py::test_other_tenant_approval_does_not_authorize"],
       "boundary": {
         "real": ["sqlite customers"],
         "doubles": ["in-memory approval queue"],
@@ -591,9 +549,7 @@
       "allowed": ["跨租户返回 404", "本租户变为 approved"],
       "forbidden_effects": ["改到另一租户的审批状态"],
       "oracle": "两张审批单的 status",
-      "tests": [
-        "tests/test_application/test_approval_workspace.py::test_other_tenant_cannot_change_a_persisted_approval"
-      ],
+      "tests": ["tests/test_application/test_approval_workspace.py::test_other_tenant_cannot_change_a_persisted_approval"],
       "boundary": {
         "real": ["sqlite", "approval request"],
         "doubles": ["actor resolver returns user 41"],
@@ -616,9 +572,7 @@
       "allowed": ["文件里有验收产品", "合计金额 500"],
       "forbidden_effects": ["导出含租户 7 的更新产品", "合计把两个租户加在一起"],
       "oracle": "重新打开的文件不含更新产品，合计等于租户 8 已提交的 500",
-      "tests": [
-        "tests/test_application/test_shipment_records_agent_routes.py::test_shipment_record_mutation_routes_execute_through_agent_orchestrator"
-      ],
+      "tests": ["tests/test_application/test_shipment_records_agent_routes.py::test_shipment_record_mutation_routes_execute_through_agent_orchestrator"],
       "boundary": {
         "real": ["sqlite", "xlsx file"],
         "doubles": [],
@@ -641,9 +595,7 @@
       "allowed": ["本租户客户和产品被撤销", "租户 2 的客户名不变"],
       "forbidden_effects": ["回滚删掉租户 2 的客户"],
       "oracle": "租户 1 的客户和产品为 0，租户 2 的 unit_name 仍是租户二原客户",
-      "tests": [
-        "tests/test_application/test_etl_preview_task_boundaries.py::test_rollback_repairs_current_tenant_and_leaves_the_other_tenant"
-      ],
+      "tests": ["tests/test_application/test_etl_preview_task_boundaries.py::test_rollback_repairs_current_tenant_and_leaves_the_other_tenant"],
       "boundary": {
         "real": ["sqlite", "ELT execute", "ELT rollback"],
         "doubles": [],

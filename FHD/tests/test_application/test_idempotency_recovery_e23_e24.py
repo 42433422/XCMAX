@@ -291,7 +291,9 @@ def test_e24_two_recoveries_leave_one_row():
         assert left.exitcode == 0 and right.exitcode == 0, observed
         assert len(rows) == 1, observed
         assert len(successes) >= 1, observed
-        assert all(item.get("id") in (None, rows[0]["id"]) for item in (left_result, right_result)), observed
+        assert all(
+            item.get("id") in (None, rows[0]["id"]) for item in (left_result, right_result)
+        ), observed
         assert all(
             item.get("success") is True or item.get("error_code") == "idempotency_in_progress"
             for item in (left_result, right_result)

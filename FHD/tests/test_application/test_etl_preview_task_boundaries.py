@@ -329,15 +329,25 @@ def test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate
     assert snapshot(store, run_id)["lease"] == (None, None, None)
 
 
-def test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out(
-    preview_store, monkeypatch
-):
+def test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out(preview_store, monkeypatch):
     store = preview_store
     monkeypatch.setenv("FHD_ETL_LLM", "off")
     book = Workbook()
     sheet = book.active
     sheet.title = "并列"
-    sheet.append(["客户名称", "产品型号", "产品名称", "价格", None, "客户名称", "产品型号", "产品名称", "价格"])
+    sheet.append(
+        [
+            "客户名称",
+            "产品型号",
+            "产品名称",
+            "价格",
+            None,
+            "客户名称",
+            "产品型号",
+            "产品名称",
+            "价格",
+        ]
+    )
     sheet.append(["左客户", "L-1", "左产品", 10, None, "右客户", "R-1", "右产品", 20])
     sheet.append(["备注：不要入库", None, None, None, None, None, None, None, None])
     payload = BytesIO()
@@ -399,10 +409,7 @@ def test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out(
 def test_rollback_repairs_current_tenant_and_leaves_the_other_tenant(preview_store, monkeypatch):
     store = preview_store
     monkeypatch.setenv("FHD_ETL_LLM", "off")
-    csv = (
-        "客户名称,产品型号,产品名称,价格\n"
-        "本租户客户,LOCAL-1,本租户产品,12.50\n"
-    ).encode()
+    csv = ("客户名称,产品型号,产品名称,价格\n本租户客户,LOCAL-1,本租户产品,12.50\n").encode()
     run_id = create_preview(store, target="customer_products", csv=csv)
     store.executor.futures[-1].result(timeout=10)
     preview = snapshot(store, run_id)
