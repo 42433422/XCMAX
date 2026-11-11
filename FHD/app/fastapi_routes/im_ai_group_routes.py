@@ -6,6 +6,7 @@ import importlib
 import logging
 
 from fastapi import APIRouter, Body, Depends, Query, Request
+from fastapi.responses import JSONResponse
 
 from app.infrastructure.auth.dependencies import CurrentUser, require_identified_user
 
@@ -117,17 +118,16 @@ async def admin_ai_group_post(
     from app.fastapi_routes.domains.agent.route_support import request_runtime_context
 
     runtime_context = request_runtime_context(request)
-    if str(runtime_context.get("user_id")) != str(_facade()._uid(user)):
-        return _facade().JSONResponse(
-            {"success": False, "message": "group actor mismatch"}, status_code=403
-        )
+    user_id = _facade()._uid(user)
+    if str(runtime_context.get("user_id")) != str(user_id):
+        return JSONResponse({"success": False, "message": "group actor mismatch"}, status_code=403)
     try:
         mentions = body.get("mentions")
         result = (
             await _facade()
             .AiGroupChatService(runtime_context=runtime_context)
             .post_message(
-                user_id=_facade()._uid(user),
+                user_id=user_id,
                 group_id=group_id,
                 text=str(body.get("message") or ""),
                 sender_name=str(body.get("sender_name") or "我"),

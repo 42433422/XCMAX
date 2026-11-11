@@ -37,8 +37,9 @@ def office_bytes(suffix):
         ("pptx", "ppt-generate-employee", "ppt-full-read-employee"),
     ],
 )
+@pytest.mark.parametrize("direct", [False, True])
 def test_generated_office_file_owned_handoff(
-    tmp_path, monkeypatch, trusted_actor, suffix, generator, reader
+    tmp_path, monkeypatch, trusted_actor, suffix, generator, reader, direct
 ):
     from app.application.agent_orchestrator.artifact_files import artifact_path
     from app.application.employee_runtime import executor
@@ -74,9 +75,22 @@ def test_generated_office_file_owned_handoff(
     monkeypatch.setattr(EmployeeAgent, "run", read_snapshot)
     context = {**owner.context, "run_id": "office-run"}
     with tenant_scope(owner.tenant_id):
-        exported = _registered_router_employee(
-            "execute", {"employee_id": generator, "task": "生成文件"}, context, "normal", ""
-        )
+        if direct:
+            from app.application.tools.workflow_tools.dispatch import (
+                execute_registered_workflow_tool,
+            )
+            from app.mod_sdk import employee_tool_registry
+
+            monkeypatch.setattr(
+                employee_tool_registry, "resolve_tool_to_pack_id", lambda name: generator
+            )
+            exported = execute_registered_workflow_tool(
+                generator, "execute", {"task": "生成文件", "_runtime_context": context}
+            )
+        else:
+            exported = _registered_router_employee(
+                "execute", {"employee_id": generator, "task": "生成文件"}, context, "normal", ""
+            )
         assert exported["success"]
         receipt = exported["artifacts"][0]
         assert receipt["artifact_id"].startswith(suffix + "_")
@@ -194,3 +208,57 @@ def test_legacy_spreadsheet_suffix_is_preserved(tmp_path, monkeypatch, suffix):
     receipt = store_spreadsheet("table-run", b"legacy bytes", name="source." + suffix)
     assert artifact_path("table-run", receipt["artifact_id"]).suffix == "." + suffix
     assert read_verified_spreadsheet("table-run", receipt) == b"legacy bytes"
+
+
+@pytest.mark.parametrize(
+    "suffix,generator", [("csv", "csv-generate-employee"), ("xlsx", "excel-generate-employee")]
+)
+def test_direct_employee_spreadsheet_handoff(
+    tmp_path, monkeypatch, trusted_actor, suffix, generator
+):
+    from openpyxl import Workbook
+
+    from app.application.employee_runtime import executor
+    from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
+    from app.application.tools.workflow_tools.dispatch import execute_registered_workflow_tool
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.mod_sdk import employee_tool_registry
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    owner = trusted_actor(user_id=7)
+    path = tmp_path / "outputs" / ("result." + suffix)
+    path.parent.mkdir()
+    if suffix == "csv":
+        path.write_text("code,amount\nROW00,200\n")
+    else:
+        workbook = Workbook()
+        workbook.active.append(["code", "amount"])
+        workbook.active.append(["ROW00", 200])
+        workbook.save(path)
+    content = path.read_bytes()
+    monkeypatch.setattr(employee_tool_registry, "resolve_tool_to_pack_id", lambda name: generator)
+    monkeypatch.setattr(
+        executor,
+        "execute_employee_task_local",
+        lambda *args, **kwargs: {
+            "success": True,
+            "result": {"outputs": [{"output_path": str(path)}]},
+        },
+    )
+    context = {**owner.context, "run_id": "direct-spreadsheet"}
+    with tenant_scope(owner.tenant_id):
+        exported = execute_registered_workflow_tool(
+            generator, "execute", {"task": "generate", "_runtime_context": context}
+        )
+        assert exported["success"] is True, exported
+        assert exported["artifact_postcondition"]["verified"] is True
+        assert len(exported["artifacts"]) == 1
+        context["node_outputs"] = {"generated": exported}
+        path.unlink()
+        for reference in (exported["data"]["file_path"], exported["artifacts"][0]["uri"]):
+            with workflow_file_snapshot(reference, context) as snapshot:
+                assert snapshot.suffix == "." + suffix
+                assert snapshot.read_bytes() == content
+            with pytest.raises((PermissionError, FileNotFoundError)):
+                with workflow_file_snapshot(reference, {**context, "run_id": "other-run"}):
+                    pytest.fail("cross-run output must not be readable")

@@ -301,6 +301,13 @@ def execute_employee_tool(
         "employee_id": pack_id,
         "output": result,
     }
+    if ok and runtime_context and runtime_context.get("run_id"):
+        from app.application.tools.workflow_spreadsheet_scope import publish_employee_outputs
+
+        payload["artifacts"] = publish_employee_outputs(
+            pack_id, result, runtime_context, workspace_root
+        )
+        payload["data"] = result
     if artifact is not None:
         payload["artifact_postcondition"] = artifact
         if not artifact.get("verified"):

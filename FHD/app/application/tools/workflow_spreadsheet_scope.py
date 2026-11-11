@@ -155,3 +155,26 @@ def store_employee_output(
         owner_user_id=owner,
         tenant_id=str(context.get("tenant_id") or ""),
     )
+
+
+def publish_employee_outputs(
+    employee_id: str, result: dict[str, Any], context: dict[str, Any], workspace_root: str | None
+) -> list[dict[str, Any]]:
+    from app.application.agent_orchestrator.artifact_files import RUN_FILE_MIME_TYPES
+    from app.application.shipment_excel_etl_security import resolve_etl_path
+    from app.mod_sdk.employee_tool_registry import office_output_paths
+
+    paths = {
+        resolve_etl_path(raw, workspace_root=workspace_root)
+        for raw in office_output_paths(employee_id, result)
+    }
+    artifacts = []
+    run_id = str(context.get("run_id") or "")
+    for path in paths:
+        with open_etl_input_file(path, workspace_root=workspace_root) as source:
+            if len(paths) != 1:
+                continue
+            result["file_path"] = str(path)
+            if run_id and path.suffix.lower() in RUN_FILE_MIME_TYPES:
+                artifacts.append(store_employee_output(run_id, path, source.read(), context))
+    return artifacts
