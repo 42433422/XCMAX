@@ -1,8 +1,4 @@
-"""
-报表服务模块
-
-提供销售、库存、采购等统计报表。
-"""
+"""统计销售、库存和采购。"""
 
 from datetime import datetime
 from decimal import Decimal
@@ -29,8 +25,6 @@ from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 
 
 class ReportService(NeuroEventPublisherMixin):
-    """报表服务类"""
-
     @staticmethod
     def _decimal_to_float(value: Any) -> Any:
         if isinstance(value, Decimal):
@@ -50,14 +44,7 @@ class ReportService(NeuroEventPublisherMixin):
         status: str | None = None,
         customer_name: str | None = None,
     ) -> dict[str, Any]:
-        """销售报表。
-
-        ``source`` 决定数据源：
-        - ``"sales_order"``（默认）：**主源**，按 ``SalesOrderItem`` 正交读模型聚合
-          （产品 / 客户 / 日期），``summary.total_amount`` 与 ``SalesOrder.total_amount`` 一致。
-        - ``"shipment"``：遗留 ``ShipmentRecord`` **兼容路径**，仅作兼容保留，
-          不再作为销售主源。
-        """
+        """按订单汇总销售，兼容指定来源的历史发货报表。"""
         if source == "shipment":
             return self._get_sales_report_from_shipments(
                 start_date, end_date, group_by, customer_id
@@ -92,10 +79,7 @@ class ReportService(NeuroEventPublisherMixin):
 
             # 权威汇总：summary.total_amount 以纳入订单的 SalesOrder.total_amount 之和为准
             # （与订单总额一致），各维度明细 amount 仍按 SalesOrderItem.amount 聚合。
-            _zero = Decimal("0")
-            order_totals: dict[int, Decimal] = {}
-            for _item, order in pairs:
-                order_totals[order.id] = order.total_amount or _zero
+            order_totals = {order.id: order.total_amount or Decimal("0") for _, order in pairs}
             summary_total = sum(order_totals.values())
 
             if group_by == "product":
@@ -193,10 +177,7 @@ class ReportService(NeuroEventPublisherMixin):
         group_by: str,
         customer_id: int | None,
     ) -> dict[str, Any]:
-        """遗留 ``ShipmentRecord`` 销售报表（兼容路径，非主源）。
-
-        保留仅供历史兼容读取；新销售数据由销售订单汇总。
-        """
+        """读取历史发货记录的销售汇总。"""
         with get_db() as db:
             query = db.query(ShipmentRecord, func.count(ShipmentRecord.id).label("record_count"))
 

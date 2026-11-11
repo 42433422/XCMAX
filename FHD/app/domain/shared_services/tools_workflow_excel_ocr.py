@@ -16,19 +16,10 @@ def _registered_router_excel_analysis(
     payload = dict(params or {})
     payload["action"] = action
     if not str(payload.get("file_path") or "").strip():
-        excel_ctx = (
-            runtime_context.get("excel_analysis")
-            if isinstance(runtime_context.get("excel_analysis"), dict)
-            else None
-        )
-        if not excel_ctx:
-            last_ctx = runtime_context.get("last_excel_analysis_context")
-            if isinstance(last_ctx, dict):
-                excel_ctx = (
-                    last_ctx.get("result") if isinstance(last_ctx.get("result"), dict) else last_ctx
-                )
-        if isinstance(excel_ctx, dict):
-            payload["file_path"] = str(excel_ctx.get("file_path") or "").strip()
+        from app.domain.context.session_excel_context import excel_analysis_from_runtime
+
+        excel_ctx = excel_analysis_from_runtime(runtime_context) or {}
+        payload["file_path"] = str(excel_ctx.get("file_path") or "").strip()
     if not str(payload.get("file_path") or "").strip():
         return {"success": False, "message": "excel_analysis 缺少 file_path 参数"}
     if action == "query" and not payload.get("query_expression"):

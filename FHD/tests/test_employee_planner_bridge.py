@@ -164,6 +164,14 @@ def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatc
     assert Path(allowed["data"]["file_path"]).is_file()
     assert denied["data"]["error_code"] == "employee_file_access_denied"
     assert not target.exists()
+    from app.application.employee_runtime.agent import EmployeeAgent
+
+    def context_only(self, task, payload, **kwargs):
+        assert payload is None
+        return {"success": True, "result": {"outputs": [{"output": "协作上下文"}]}}
+
+    monkeypatch.setattr(EmployeeAgent, "run", context_only)
+    assert _registered_router_employee("context", params, owner.context, "normal", "")["success"]
 
 
 def test_office_employee_never_reports_success_without_artifact(employee_mods_root, monkeypatch):
@@ -361,12 +369,11 @@ def test_employee_workflow_hands_off_the_declared_deliverable(tmp_path, monkeypa
     assert result["data"].get("file_path") == (str(pdf) if action == "execute" else None)
 
 
-@pytest.mark.parametrize("filename", ["sales.xlsx", "sales.csv"])
-def test_authenticated_excel_reads_require_own_upload_or_current_run_receipt(
-    tmp_path, monkeypatch, trusted_actor, filename
-):
+@pytest.mark.parametrize("suffix", ["xlsx", "csv"])
+def test_workflow_spreadsheet_receipts(tmp_path, monkeypatch, trusted_actor, suffix):
     from io import BytesIO
 
+    from app.application.agent_orchestrator.artifact_files import artifact_path
     from app.application.elt.service import get_elt_service
     from app.db.models.elt import EltUpload
     from app.domain.shared_services.tools_workflow_excel_ocr import (
@@ -384,35 +391,46 @@ def test_authenticated_excel_reads_require_own_upload_or_current_run_receipt(
             content_type="text/csv",
             stream=BytesIO(b"amount\n120\n80\n"),
         )
-        path = db.get(EltUpload, upload["upload_id"]).storage_path
+        original = db.get(EltUpload, upload["upload_id"]).storage_path
 
-    def read(file_path, context):
-        with tenant_scope(owner.tenant_id):
-            return _registered_router_excel_analysis(
-                "statistics", {"file_path": str(file_path)}, context, "normal", ""
-            )
+    copy = {"file_path": "uploads/chat-copy.csv", "upload_id": upload["upload_id"]}
+    context = {**owner.context, "run_id": "run_owner", "excel_analysis": copy}
 
-    assert read(path, owner.context)["row_count"] == 2
-    assert read(path, other.context)["error_code"] == "spreadsheet_access_denied"
-    with tenant_scope(owner.tenant_id):
-        exported = _registered_router_excel_analysis(
-            "export",
-            {"file_path": filename, "rows": [{"amount": 200}]},
-            {**owner.context, "run_id": "run_owner"},
-            "normal",
-            "",
-        )
-    assert exported["success"], exported
+    def tool(action, params, ctx=context, tenant=owner.tenant_id):
+        with tenant_scope(tenant):
+            return _registered_router_excel_analysis(action, params, ctx, "normal", "")
+
+    for args in ({}, {"file_path": original}):
+        stats = tool("statistics", args)
+        assert stats["row_count"] == 2 and stats["numeric_summary"]["amount"]["sum"] == 200
+    for args, ctx, tenant in (
+        ({}, {**other.context, "excel_analysis": copy}, owner.tenant_id),
+        ({"file_path": "/unrelated.csv"}, context, owner.tenant_id),
+        ({}, context, 999),
+    ):
+        assert tool("statistics", args, ctx, tenant)["error_code"] == "spreadsheet_access_denied"
+
+    filename = f"sales.{suffix}"
+    params = {"file_path": filename, "rows": [{"amount": 120}, {"amount": 80}]}
+    exported = tool("export", params)
     receipt = exported["artifacts"][0]
-    assert exported["data"]["file_path"] == receipt["uri"]
-    assert receipt["name"] == filename
-    assert read(receipt["uri"], owner.context)["error_code"] == "spreadsheet_access_denied"
-    result = read(
-        receipt["uri"],
-        {
-            **owner.context,
-            "run_id": "run_owner",
-            "node_outputs": {"employee": {"success": True, "artifacts": [receipt]}},
-        },
+    uri = {"file_path": receipt["uri"]}
+    artifact = artifact_path("run_owner", receipt["artifact_id"])
+    assert exported["success"] and exported["data"]["file_path"] == uri["file_path"]
+    assert receipt["name"] == filename and artifact.suffix == "." + suffix
+    assert tool("statistics", uri)["error_code"] == "spreadsheet_access_denied"
+    context["node_outputs"] = {"export": exported}
+    stats = tool("statistics", uri)
+    assert stats["row_count"] == 2 and stats["numeric_summary"]["amount"]["sum"] == 200
+    assert not tool("statistics", uri, {**context, "run_id": "different-run"})["success"]
+    artifact.write_bytes(b"changed")
+    assert "checksum" in tool("statistics", uri)["message"]
+
+    def unavailable(*args, **kwargs):
+        raise OSError("receipt storage unavailable")
+
+    monkeypatch.setattr(
+        "app.application.tools.workflow_spreadsheet_scope.store_spreadsheet", unavailable
     )
-    assert result["numeric_summary"]["amount"]["sum"] == 200
+    failed = tool("export", params)
+    assert not failed["success"] and not failed.get("artifacts")

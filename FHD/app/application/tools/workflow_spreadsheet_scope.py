@@ -21,6 +21,7 @@ from app.application.office_parse_app_service import EMPLOYEE_BY_SUFFIX
 from app.application.shipment_excel_etl_security import open_etl_input_file
 from app.db.models.elt import EltUpload
 from app.db.session import get_db
+from app.domain.context.session_excel_context import excel_analysis_from_runtime
 from app.infrastructure.auth.agent_mod_scope import _bound_actor
 from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.path_io.path_utils import get_app_data_dir
@@ -66,28 +67,17 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
     if prior is not None:
         content, suffix = prior
     else:
-        source_id = file_path
-        for candidate in (
-            context.get("excel_analysis"),
-            context.get("last_excel_analysis_context"),
-        ):
-            if not isinstance(candidate, dict):
-                continue
-            candidate = candidate.get("result", candidate)
-            if (
-                isinstance(candidate, dict)
-                and candidate.get("file_path") == file_path
-                and isinstance(candidate.get("upload_id"), str)
-            ):
-                source_id = candidate["upload_id"]
-                break
+        analysis = excel_analysis_from_runtime(context) or {}
+        reference = analysis.get("upload_id")
+        if isinstance(reference, str) and reference and file_path == analysis.get("file_path"):
+            file_path = reference
         with get_db() as db:
             upload_id = (
                 db.query(EltUpload.id)
                 .filter(
                     EltUpload.owner_user_id == actor.id,
                     EltUpload.tenant_id == tenant_id_for_write(),
-                    or_(EltUpload.id == source_id, EltUpload.storage_path == source_id),
+                    or_(EltUpload.id == file_path, EltUpload.storage_path == file_path),
                 )
                 .scalar()
             )

@@ -471,6 +471,8 @@ def execute_employee_task_local(
     context = runtime_context or {}
     candidates = candidate_pack_ids(employee_id) if "_actor_authorization" in context else []
     reader = next((pack for pack in candidates if pack in EMPLOYEE_BY_SUFFIX.values()), None)
+    if reader and context.get("employee_collaboration_run") is True:
+        reader, input_data = None, None
     scope = (
         office_reader_input(reader, input_data or {}, context)
         if reader

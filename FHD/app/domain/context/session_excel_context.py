@@ -93,8 +93,10 @@ def excel_analysis_from_runtime(
         return analysis
     last = runtime_context.get("last_excel_analysis_context")
     if isinstance(last, dict):
-        nested = last.get("excel_analysis")
-        return nested if isinstance(nested, dict) else last
+        return next(
+            (last[key] for key in ("excel_analysis", "result") if isinstance(last.get(key), dict)),
+            last,
+        )
     return None
 
 
