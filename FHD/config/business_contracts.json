@@ -618,21 +618,21 @@
       "requirement_id": "R10",
       "scenario_id": "R10-recovery-tenant",
       "rule": "恢复只读回并修复本租户的业务行。",
-      "source": "租户 2 重放租户 1 的来源会被拒绝。租户 1 的转换结果和租户 2 的客户名都不变。本租户自己的修复还没有放在同一次执行里。",
-      "preconditions": ["租户 1 有已完成的来源", "租户 2 有一条客户"],
-      "inputs": ["租户 2 重放租户 1 的 run"],
-      "allowed": ["返回 ELT_NOT_FOUND"],
-      "forbidden_effects": ["恢复写到租户 2", "改掉租户 1 的已完成转换结果"],
-      "oracle": "租户 1 的 customer_name 仍是旧转换结果，租户 2 的客户名仍是租户二原客户",
+      "source": "同一次执行里先撤销本租户刚写入的客户和产品，再核对租户 2 的客户名。",
+      "preconditions": ["租户 1 已确认写入一条客户和产品", "租户 2 另有一条客户"],
+      "inputs": ["租户 1 的回滚"],
+      "allowed": ["本租户客户和产品被撤销", "租户 2 的客户名不变"],
+      "forbidden_effects": ["回滚删掉租户 2 的客户"],
+      "oracle": "租户 1 的客户和产品为 0，租户 2 的 unit_name 仍是租户二原客户",
       "tests": [
-        "tests/test_application/test_elt_replay.py::test_replay_cannot_read_another_owners_or_tenants_source[7-2]"
+        "tests/test_application/test_etl_preview_task_boundaries.py::test_rollback_repairs_current_tenant_and_leaves_the_other_tenant"
       ],
       "boundary": {
-        "real": ["sqlite", "ELT replay"],
+        "real": ["sqlite", "ELT execute", "ELT rollback"],
         "doubles": [],
         "execution": "real"
       },
-      "known_defects": ["同一次执行里还没有先修复本租户的业务行"],
+      "known_defects": [],
       "fault_version": "恢复时漏掉租户过滤",
       "platforms": ["linux"],
       "database_modes": ["sqlite"],

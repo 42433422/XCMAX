@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.application.elt import (
@@ -326,6 +326,46 @@ def test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate
     with store.factory() as db:
         assert db.query(PurchaseUnit).count() == db.query(Product).count() == 0
     assert snapshot(store, run_id)["lease"] == (None, None, None)
+
+
+def test_rollback_repairs_current_tenant_and_leaves_the_other_tenant(preview_store, monkeypatch):
+    store = preview_store
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    csv = (
+        "客户名称,产品型号,产品名称,价格\n"
+        "本租户客户,LOCAL-1,本租户产品,12.50\n"
+    ).encode()
+    run_id = create_preview(store, target="customer_products", csv=csv)
+    store.executor.futures[-1].result(timeout=10)
+    preview = snapshot(store, run_id)
+    with store.factory() as db:
+        store.service.execute(
+            db,
+            run_id=run_id,
+            owner_user_id=7,
+            confirmed=True,
+            valid_rows_only=False,
+            preview_revision=preview["preview_revision"],
+        )
+    store.executor.futures[-1].result(timeout=10)
+    with store.factory() as db:
+        own = db.query(PurchaseUnit).one()
+        assert own.unit_name == "本租户客户" and own.tenant_id == 1
+        with db.get_bind().begin() as conn:
+            conn.execute(
+                text(
+                    "insert into purchase_units (unit_name, tenant_id, is_active, version) "
+                    "values ('租户二原客户', 2, 1, 1)"
+                )
+            )
+        rolled_back = store.service.rollback(db, run_id=run_id, owner_user_id=7)
+        assert rolled_back["rollback_status"] == "completed"
+        assert db.query(PurchaseUnit).count() == db.query(Product).count() == 0
+        with db.get_bind().connect() as conn:
+            foreign = conn.execute(
+                text("select unit_name, tenant_id from purchase_units where tenant_id = 2")
+            ).one()
+        assert foreign.unit_name == "租户二原客户" and foreign.tenant_id == 2
 
 
 def test_unexpected_revalidation_error_fails_and_releases_lease(preview_store, monkeypatch):
