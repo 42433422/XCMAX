@@ -159,15 +159,15 @@
     },
     "FHD/app/application/elt/attendance_pipeline.py": {
       "base_file": "FHD/app/application/elt/attendance_pipeline.py",
-      "base_blob": "85b2440a6941d230651d018aad4af912298e59b3",
-      "head_blob": "1ad52242f7a32da9128e39406e6a02f3e4d402ba",
-      "before_lines": 593,
-      "after_lines": 1007,
-      "review_owner": "@42433422",
-      "reason": "Selected attendance candidates retain monthly marks and committed-row readback instead of re-parsing an untouched source workbook.",
-      "boundary": "Existing attendance pipeline only; static bound SQLite queries and 500-ID readback batches preserve idempotent writes and no new route.",
-      "validation": "Synthetic attendance confirmation and customer Excel gate tests cover real workbook writes, exclusions, monthly marks and committed output.",
-      "follow_up": "Review separation of monthly layout interpretation from attendance persistence after candidate-only ingestion is integrated; this record requests review, not approval."
+      "base_blob": "1ad52242f7a32da9128e39406e6a02f3e4d402ba",
+      "head_blob": "4477717615f20a28c896a53a847f343b28fd705e",
+      "before_lines": 1007,
+      "after_lines": 1019,
+      "reason": "Capture run-bound conservative rollback evidence inside the same SQLite write transaction, including prior-source presence and post-write digest.",
+      "boundary": "BEGIN IMMEDIATE serializes source writes while evidence is captured. Missing or shared-source evidence does not authorize deletion; this does not add row-level independent A/B rollback.",
+      "validation": "Final independent integrated sorted-file suite passed 919/919, including actual attendance imports, shared-source rejection, durable cleanup recovery, provider fixture isolation and first/later DELETE broken-trigger rollback. Ruff passed eight patch files; mypy passed six production files. Human architecture approval and new-head CI remain separate.",
+      "follow_up": "Human architecture review of +12 lines required; row-owned historical rollback is not implemented by this change.",
+      "review_owner": "@42433422"
     },
     "FHD/app/application/elt/table_segmentation.py": {
       "base_file": null,
@@ -220,13 +220,13 @@
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
       "base_blob": "d6fa1b295a042d8e9cfbf9cc5693ca55302bbd72",
-      "head_blob": "e2e11513e4558e19946c17228a2df766894dfcde",
+      "head_blob": "a1cddd97f3fc163e04e1f484b5d75a644176114c",
       "before_lines": 1374,
-      "after_lines": 1560,
-      "reason": "Receipt-driven withdrawal verifies empty and partial batches before knowledge deletion. A worker receipt whose status is partial, including attendance rows that were partly written, stays a partial batch on the first write and on later progress reads instead of being recorded as failed.",
-      "boundary": "Owned and tenant-scoped receipts remain mandatory; unknown, missing, running or contradictory evidence fails closed. Successful business rollback is not replayed during knowledge cleanup recovery. Only a typed document-not-found response is idempotent; conflicts stay blocked. Polling limits remain per process (8 total, 2 per tenant), not global. Knowledge deletion failures invalidate cached revision; not-found requires strict durable JSON verification so persistence failure cannot be mistaken for successful deletion.",
-      "validation": "Partial attendance receipt, complete-coverage partial batch, refresh, withdrawal and poll-budget tests passed 53/53. Ruff passed on the edited files. The prior 628-case claim belongs to de6419d63, not this head. Human architecture approval and new-head CI remain separate.",
-      "follow_up": "Human architecture review of the receipt lifecycle growth remains required; preserve the partial outcome instead of splitting the file to hide the line count.",
+      "after_lines": 1564,
+      "reason": "Preserve verified attendance partial-write receipts through initial execution, progress refresh and explicit rollback; retain durable knowledge cleanup, strict receipt evidence and process-local bounded polling.",
+      "boundary": "Owned and tenant-scoped receipts remain mandatory; unknown, missing, running or contradictory evidence fails closed. Successful business rollback is not replayed during knowledge cleanup recovery. Only a typed document-not-found response is idempotent; conflicts stay blocked. Polling limits remain per process (8 total, 2 per tenant), not global. Knowledge deletion failures invalidate cached revision; not-found requires strict durable JSON verification so persistence failure cannot be mistaken for successful deletion. Partial is accepted only for attendance with strict executed/error counts proving both writes and errors; arbitrary partial statuses remain blocked, and tenant/owner/reversibility checks stay enforced. Attendance withdrawal now requires a run-bound exclusive-source snapshot, unchanged source digest and no ambiguous external references; legacy missing evidence and shared source A/B must be rejected rather than independently withdrawn. Any DELETE failure now aborts the SQLite transaction rather than continuing partial deletion.",
+      "validation": "Final independent integrated sorted-file suite passed 919/919, including actual attendance imports, shared-source rejection, durable cleanup recovery, provider fixture isolation and first/later DELETE broken-trigger rollback. Ruff passed eight patch files; mypy passed six production files. Human architecture approval and new-head CI remain separate.",
+      "follow_up": "Human architecture review of +190 lines required; do not mechanically split to hide receipt lifecycle growth.",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {

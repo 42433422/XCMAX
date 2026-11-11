@@ -265,6 +265,7 @@ def persist_attendance_rows(
 ) -> dict[str, Any]:
     """Write cleaned rows once, then the workbook. Missing output is a failure."""
     from app.application.attendance_import_app_service import _ensure_schema
+    from app.application.elt.attendance_rollback_scope import source_snapshot
 
     fault = os.environ.get("FHD_ETL_ATTENDANCE_FAULT", "") if fault is None else fault
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -276,7 +277,8 @@ def persist_attendance_rows(
     try:
         _ensure_schema(conn)
         _ensure_monthly_schema(conn)
-        conn.execute("BEGIN")
+        conn.execute("BEGIN IMMEDIATE")
+        _, prior_source_rows = source_snapshot(conn, source_file)
         for row in rows:
             issues = row.get("validation_result") or []
             if issues or not str(row.get("employee_name") or "").strip():
@@ -339,6 +341,8 @@ def persist_attendance_rows(
                 datetime.now().isoformat(timespec="seconds"),
             ),
         )
+        batch_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+        rollback_digest, _ = source_snapshot(conn, source_file)
         conn.commit()
     except sqlite3.Error as exc:
         conn.rollback()
@@ -354,6 +358,14 @@ def persist_attendance_rows(
     return {
         "source_file": source_file,
         "db_path": str(db_path),
+        "batch_id": batch_id,
+        "rollback_scope": {
+            "version": 1,
+            "run_id": run_id,
+            "source_file": source_file,
+            "exclusive_source": not prior_source_rows,
+            "digest": rollback_digest,
+        },
         "executed": written,
         "skipped": skipped,
         "errors": errors,

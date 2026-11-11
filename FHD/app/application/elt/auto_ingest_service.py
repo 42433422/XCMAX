@@ -30,6 +30,7 @@ from app.application.elt.errors import EltError
 from app.application.elt.knowledge_index_meta import (
     business_completion_from_run,
     enrich_knowledge_progress,
+    is_partial_business_receipt,
 )
 from app.application.elt.target_detection import detect_etl_target
 from app.application.shipment_excel_etl_security import (
@@ -1497,7 +1498,10 @@ class AutoIngestService:
             )
         if (
             current.get("id") != run_id
-            or current.get("status") not in {"completed", "failed", "interrupted"}
+            or (
+                current.get("status") not in {"completed", "failed", "interrupted"}
+                and not is_partial_business_receipt(current)
+            )
             or (current.get("rollback_status") is not None and not rollback_done)
             or not isinstance(summary, dict)
             or not all(

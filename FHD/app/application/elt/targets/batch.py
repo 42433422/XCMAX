@@ -234,9 +234,49 @@ class AttendanceAdapter(TargetAdapter):
         db_path = Path(str(receipt.get("db_path") or ""))
         if not source_file or not db_path.is_file():
             raise EltError("ELT_ATTENDANCE_ROLLBACK_DATA_MISSING", "考勤撤销依据不存在")
+        from app.application.elt.attendance_rollback_scope import (
+            has_external_reference,
+            source_snapshot,
+        )
+
+        scope = receipt.get("rollback_scope")
+        if (
+            not isinstance(scope, dict)
+            or type(scope.get("version")) is not int
+            or scope.get("version") != 1
+            or scope.get("exclusive_source") is not True
+            or not context.get("run_id")
+            or scope.get("run_id") != str(context["run_id"])
+            or scope.get("source_file") != source_file
+            or source_file != self._source_file_key(context)
+            or db_path.resolve() != self._db_path().resolve()
+            or type(receipt.get("batch_id")) is not int
+            or receipt["batch_id"] <= 0
+        ):
+            raise EltError(
+                "ELT_ATTENDANCE_ROLLBACK_SCOPE_UNVERIFIED",
+                "考勤撤回缺少本次独占写入证据，未删除任何数据",
+                status_code=409,
+            )
         conn = sqlite3.connect(str(db_path))
         try:
-            conn.execute("BEGIN")
+            conn.execute("BEGIN IMMEDIATE")
+            digest, _ = source_snapshot(conn, source_file)
+            batches = conn.execute(
+                "SELECT id FROM attendance_import_batches WHERE source_file = ?", (source_file,)
+            ).fetchall()
+            if batches != [(receipt["batch_id"],)]:
+                raise EltError(
+                    "ELT_ATTENDANCE_ROLLBACK_SCOPE_UNVERIFIED",
+                    "考勤批次归属不明确，未删除任何数据",
+                    status_code=409,
+                )
+            if digest != scope.get("digest") or has_external_reference(conn, source_file):
+                raise EltError(
+                    "ELT_ATTENDANCE_ROLLBACK_CONCURRENT_CHANGE",
+                    "同源考勤已有其他写入或修改，未删除任何数据",
+                    status_code=409,
+                )
             deleted = 0
             for statement in (
                 "DELETE FROM attendance_daily_records WHERE source_file = ?",
@@ -246,14 +286,14 @@ class AttendanceAdapter(TargetAdapter):
                 "DELETE FROM products WHERE source_file = ?",
                 "DELETE FROM customers WHERE source_file = ?",
             ):
-                try:
-                    cursor = conn.execute(statement, (source_file,))
-                    deleted += int(cursor.rowcount or 0)
-                except sqlite3.OperationalError:
-                    continue
+                cursor = conn.execute(statement, (source_file,))
+                deleted += int(cursor.rowcount or 0)
             batch_id = int(receipt.get("batch_id") or 0)
             if batch_id:
-                conn.execute("DELETE FROM attendance_import_batches WHERE id = ?", (batch_id,))
+                conn.execute(
+                    "DELETE FROM attendance_import_batches WHERE id = ? AND source_file = ?",
+                    (batch_id, source_file),
+                )
             conn.commit()
             return deleted
         except RECOVERABLE_ERRORS:
