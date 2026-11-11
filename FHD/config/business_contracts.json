@@ -450,14 +450,20 @@
       "requirement_id": "R07",
       "scenario_id": "R07-unknown-side-effect",
       "rule": "外部副作用结果未知时必须停下来核对，不能当成已经成功。",
-      "source": "尚未执行。",
-      "preconditions": ["外部调用没有回执"],
-      "inputs": ["重试"],
-      "allowed": ["返回未知并保留待核对状态"],
-      "forbidden_effects": ["未知副作用被记成成功"],
-      "oracle": "外部回执是否存在",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "source": "客户行已经提交后回执丢失。结果必须是 unknown，不能重试，产品不能继续写入。",
+      "preconditions": ["客户行已提交", "回执在提交后抛出"],
+      "inputs": ["同一条导入"],
+      "allowed": ["success 为假", "outcome 为 unknown", "要求核对", "客户名仍是 committed"],
+      "forbidden_effects": ["未知结果被记成成功", "回执丢失后继续创建产品"],
+      "oracle": "SQLite 里的客户名，以及返回的 outcome 和 retryable",
+      "tests": [
+        "tests/test_application/test_tools_workflow_registered_branch_cov2.py::TestExecuteExcelImportRecords::test_committed_customer_with_failed_receipt_requires_reconciliation[RuntimeError-registered]"
+      ],
+      "boundary": {
+        "real": ["sqlite customer commit"],
+        "doubles": ["product service"],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "没有外部回执仍返回成功",
       "platforms": ["linux"],
