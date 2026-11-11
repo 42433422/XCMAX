@@ -521,7 +521,8 @@ jobs:
             --source-sha "$BACKEND_SOURCE_SHA" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
-            --backend skipped
+            --backend skipped \
+            --evidence-out business-contract-evidence.json
       - uses: actions/setup-python@v7
         if: needs.classify.outputs.backend == 'true'
         with:
@@ -543,7 +544,8 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --shards shards \
-            --backend ran
+            --backend ran \
+            --evidence-out business-contract-evidence.json
       - name: Install the verified coverage version
         if: needs.classify.outputs.backend == 'true'
         env:
@@ -566,6 +568,7 @@ jobs:
             FHD/coverage.json
             FHD/coverage-behavior.json
             FHD/coverage.xml
+            FHD/business-contract-evidence.json
           if-no-files-found: error
           retention-days: 7
 

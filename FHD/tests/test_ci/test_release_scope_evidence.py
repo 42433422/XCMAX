@@ -32,7 +32,7 @@ def test_linux_upgrade_does_not_pass_desktop_installers(tmp_path):
                 "platform": "linux",
                 "kind": "upgrade",
                 "status": "PASS",
-                "source_sha": "abc",
+                "source_sha": "a" * 40,
                 "artifact_sha256": digest,
                 "satisfies": "linux",
             },
@@ -40,21 +40,21 @@ def test_linux_upgrade_does_not_pass_desktop_installers(tmp_path):
                 "platform": "linux",
                 "kind": "browser",
                 "status": "PASS",
-                "source_sha": "abc",
+                "source_sha": "a" * 40,
                 "satisfies": "installer",
             },
             {
                 "platform": "windows",
                 "kind": "installer",
                 "status": "BLOCKED",
-                "source_sha": "abc",
+                "source_sha": "a" * 40,
                 "satisfies": "windows",
             },
             {
                 "platform": "macos",
                 "kind": "installer",
                 "status": "NOT RUN",
-                "source_sha": "abc",
+                "source_sha": "a" * 40,
                 "satisfies": "macos",
             },
         ]
@@ -75,7 +75,7 @@ def test_pass_without_artifact_hash_is_a_failure():
                 "platform": "windows",
                 "kind": "installer",
                 "status": "PASS",
-                "source_sha": "abc",
+                "source_sha": "a" * 40,
                 "artifact_sha256": "",
             }
         ]
@@ -91,7 +91,7 @@ def test_same_source_needs_each_declared_build_hash():
                 "platform": "windows",
                 "kind": "installer",
                 "status": "PASS",
-                "source_sha": "abc",
+                "source_sha": "a" * 40,
                 "build_id": "1",
                 "artifact_sha256": "a" * 64,
             },
@@ -99,7 +99,7 @@ def test_same_source_needs_each_declared_build_hash():
                 "platform": "windows",
                 "kind": "installer",
                 "status": "NOT RUN",
-                "source_sha": "abc",
+                "source_sha": "a" * 40,
                 "build_id": "2",
                 "artifact_sha256": "",
             },
@@ -121,3 +121,40 @@ def test_release_gate_reads_installer_files(tmp_path):
     assert code == 0
     assert report["release_pass"] is True
     assert release_gate(tmp_path, "not-a-sha")[0] == 1
+    wrong = dict(report)
+    swapped = rollup(list(reversed(report["rows"])))
+    assert swapped["scopes"] == rollup(report["rows"])["scopes"]
+    assert wrong["release_pass"] is True
+
+
+def test_same_row_count_with_different_business_fields_is_loss(tmp_path):
+    left = tmp_path / "left.sqlite"
+    right = tmp_path / "right.sqlite"
+    _db(left, 1)
+    _db(right, 1)
+    conn = sqlite3.connect(right)
+    conn.execute("update customers set name = 'changed' where id = 1")
+    conn.commit()
+    conn.close()
+    assert snapshot_discards_later_rows(left, right, "customers") is True
+    assert snapshot_discards_later_rows(left, left, "customers") is False
+
+
+def test_evidence_order_does_not_change_a_blocker():
+    rows = [
+        {
+            "platform": "windows",
+            "kind": "installer",
+            "status": "PASS",
+            "source_sha": "a" * 40,
+            "artifact_sha256": "b" * 64,
+        },
+        {
+            "platform": "windows",
+            "kind": "installer",
+            "status": "BLOCKED",
+            "source_sha": "a" * 40,
+        },
+    ]
+    assert rollup(rows)["platforms"]["windows"] == "BLOCKED"
+    assert rollup(list(reversed(rows)))["platforms"]["windows"] == "BLOCKED"

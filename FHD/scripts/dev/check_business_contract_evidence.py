@@ -54,7 +54,7 @@ REQUIRED_TESTS = {
     ),
     "R03-confirm-binding": (
         "tests/test_application/test_etl_preview_confirmation.py"
-        "::test_missing_or_wrong_approval_does_not_write_or_claim_run"
+        "::test_missing_or_wrong_approval_does_not_write_or_claim_run[None]"
     ),
     "R10-tenant-scope": (
         "tests/test_application/test_etl_knowledge_isolation.py"
@@ -157,18 +157,22 @@ def _case_status(case: ET.Element) -> tuple[str, str]:
     return "PASS", ""
 
 
+def case_nodeid(classname: str, name: str) -> str:
+    """Rebuild a pytest nodeid. The name must match exactly, including parameters."""
+    module = classname.replace(".", "/")
+    if not module.endswith(".py"):
+        module += ".py"
+    return f"{module}::{name}"
+
+
 def junit_attempts(paths: list[Path], node_id: str) -> list[dict]:
-    module, _, name = node_id.partition("::")
-    module_tail = module[:-3].replace("/", ".") if module.endswith(".py") else module
     attempts: list[dict] = []
     for path in paths:
         root = ET.fromstring(path.read_bytes())
         for case in root.iter("testcase"):
             case_name = case.get("name") or ""
-            classname = case.get("classname") or case.get("file") or ""
-            if not case_name.startswith(name):
-                continue
-            if module_tail not in classname and module not in classname:
+            classname = case.get("classname") or ""
+            if case_nodeid(classname, case_name) != node_id:
                 continue
             status, detail = _case_status(case)
             attempts.append(
@@ -243,6 +247,8 @@ def evidence_from_junit(
         "test_sha": source_sha,
         "run_id": run_id,
         "run_attempt": run_attempt,
+        "execution_environment": "github-actions",
+        "data_version": "repository-fixtures",
         "platform": "github-actions",
         "database_mode": "sqlite",
         "configuration": {"process": "spawn", "database": "temporary sqlite"},
@@ -261,6 +267,8 @@ def not_applicable_evidence(*, source_sha: str, run_id: str, run_attempt: str, r
         "test_sha": source_sha,
         "run_id": run_id,
         "run_attempt": run_attempt,
+        "execution_environment": "github-actions",
+        "data_version": "repository-fixtures",
         "platform": "github-actions",
         "database_mode": "not-started",
         "configuration": {},
@@ -278,7 +286,21 @@ def not_applicable_evidence(*, source_sha: str, run_id: str, run_attempt: str, r
     }
 
 
-def ci_gate(shards: Path, *, source_sha: str, run_id: str, run_attempt: str, backend: str) -> dict:
+def _sha40(value: str) -> bool:
+    return len(value) == 40 and all(char in "0123456789abcdef" for char in value)
+
+
+def ci_gate(
+    shards: Path,
+    *,
+    source_sha: str,
+    run_id: str,
+    run_attempt: str,
+    backend: str,
+    evidence_out: Path | None = None,
+) -> dict:
+    if not _sha40(source_sha):
+        raise ValueError("source sha must be 40 lowercase hex characters")
     if backend == "skipped":
         evidence = not_applicable_evidence(
             source_sha=source_sha,
@@ -308,6 +330,8 @@ def ci_gate(shards: Path, *, source_sha: str, run_id: str, run_attempt: str, bac
             required_ids=MINIMUM_REQUIRED,
             allow_not_applicable=False,
         )
+    if evidence_out is not None:
+        evidence_out.write_text(json.dumps(evidence, ensure_ascii=False), encoding="utf-8")
     if errors:
         raise ValueError("; ".join(errors))
     return evidence
@@ -325,6 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     gate.add_argument("--run-attempt", required=True)
     gate.add_argument("--shards", type=Path, default=Path("shards"))
     gate.add_argument("--backend", choices=["ran", "skipped"], required=True)
+    gate.add_argument("--evidence-out", type=Path)
     args = parser.parse_args(argv)
     try:
         if args.command == "catalog":
@@ -347,6 +372,7 @@ def main(argv: list[str] | None = None) -> int:
             run_id=args.run_id,
             run_attempt=args.run_attempt,
             backend=args.backend,
+            evidence_out=args.evidence_out,
         )
     except (OSError, ValueError, ET.ParseError, json.JSONDecodeError) as exc:
         print(f"business contract evidence rejected: {exc}", file=sys.stderr)
