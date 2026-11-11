@@ -99,14 +99,20 @@
       "requirement_id": "R03",
       "scenario_id": "R03-repeat-confirm-no-second-write",
       "rule": "同一份已确认的预演再次提交，不得第二次写入。",
-      "source": "错版本拒绝已有执行。重复确认的副作用尚未单独执行。",
+      "source": "客户预演确认一次后，用同一版本再确认。第二次必须被拒绝，客户名保持第一次的两行。",
       "preconditions": ["第一次确认已经落库"],
       "inputs": ["同一预演版本的第二次确认"],
-      "allowed": ["读回第一次的结果"],
+      "allowed": ["读回第一次的客户名", "错误码 ELT_PREVIEW_REQUIRED"],
       "forbidden_effects": ["第二次确认再插入一批业务行"],
-      "oracle": "第一次确认后的业务主键",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "oracle": "第一次确认后的客户名清单",
+      "tests": [
+        "tests/test_application/test_etl_preview_confirmation.py::test_repeat_confirm_does_not_write_the_customers_again"
+      ],
+      "boundary": {
+        "real": ["sqlite", "ELT execute"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "重复确认再次写入",
       "platforms": ["linux"],
