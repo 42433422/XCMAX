@@ -1,12 +1,8 @@
 import type { NavigationGuardNext, RouteLocationNormalized, RouteRecordRaw } from 'vue-router'
 import { AI_DELIVERY_ROUTES } from '../privateModDeliveryRoutes'
 
-/** 宿主 ERP / 审批等业务路由（minimal 构建下为空数组） */
-const routes: RouteRecordRaw[] = []
-
-/** minimal 构建：Vite 静态剔除下列宿主 ERP/审批等业务路由（勿改为动态 import 独立 chunk） */
-if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
-  routes.push(
+/** 宿主 ERP / 审批等业务路由。客户端只保留企业版完整表。 */
+const routes: RouteRecordRaw[] = [
     {
       path: '/ai-ecosystem',
       name: 'ai-ecosystem',
@@ -187,7 +183,6 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       component: () => import('../../views/InventoryView.vue'),
       meta: { title: '库存管理' },
     },
-  )
-}
+]
 
 export const BUSINESS_ROUTES: RouteRecordRaw[] = routes

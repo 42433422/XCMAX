@@ -750,54 +750,20 @@ describe('router/index 覆盖率补齐', () => {
   // ═══════════════════════════════════════════════════════════
   // 9. beforeEach 守卫 - platform shell 重定向
   // ═══════════════════════════════════════════════════════════
-  describe('beforeEach 守卫 - platform shell 重定向', () => {
-    it('platform shell + 非 core 路由 + 有 host business page 时重定向', async () => {
+  describe('beforeEach 守卫 - 企业版完整路由不再按壳裁剪', () => {
+    it('旧壳标记打开时业务页仍留在企业版路由', async () => {
       mockIsPlatformShellModeEnabled.mockReturnValue(true)
       mockResolveHostBusinessPageRedirect.mockReturnValue('/mod/host-business')
-      // products 不是 SHELL_CORE_ROUTE_NAMES 中的路由；查询要跟着到 Mod 页
       await router.push({ path: '/products', query: { keyword: 'A001', focus: '2' } })
-      expect(router.currentRoute.value.path).toBe('/mod/host-business')
+      expect(router.currentRoute.value.name).toBe('products')
       expect(router.currentRoute.value.query).toMatchObject({ keyword: 'A001', focus: '2' })
     })
 
-    it('合并来源查询时保留重定向目标自带的章节和锚点', async () => {
+    it('设置页和角色页都在完整路由表里', async () => {
       mockIsPlatformShellModeEnabled.mockReturnValue(true)
-      mockResolveHostBusinessPageRedirect.mockReturnValue('/settings?section=model-payment#billing')
-      await router.push({ path: '/products', query: { keyword: 'A001', focus: '2' } })
-      expect(router.currentRoute.value.path).toBe('/settings')
-      expect(router.currentRoute.value.query).toEqual({ section: 'model-payment', keyword: 'A001', focus: '2' })
-      expect(router.currentRoute.value.hash).toBe('#billing')
-    })
-
-    it('platform shell + 非 core 路由 + 无 host business page 时重定向到 planner chat home', async () => {
-      mockIsPlatformShellModeEnabled.mockReturnValue(true)
-      mockResolveHostBusinessPageRedirect.mockReturnValue(null)
-      mockResolvePlannerChatHomePath.mockReturnValue('/planner-chat-home')
-      await router.push('/products')
-      expect(router.currentRoute.value.path).toBe('/planner-chat-home')
-    })
-
-    it('platform shell + core 路由时不重定向', async () => {
-      mockIsPlatformShellModeEnabled.mockReturnValue(true)
-      // settings 是 SHELL_CORE_ROUTE_NAMES 中的路由
       await router.push('/settings')
       expect(router.currentRoute.value.name).toBe('settings')
-    })
-
-    it('platform shell + industry delivery 路由时不重定向', async () => {
-      mockIsPlatformShellModeEnabled.mockReturnValue(true)
-      mockIsIndustryDeliveryRouteName.mockReturnValue(true)
-      // products 在 INDUSTRY_DELIVERY_ROUTE_NAMES 中
-      await router.push('/products')
-      expect(router.currentRoute.value.name).toBe('products')
-    })
-
-    it('platform shell + mod meta 路由时不重定向', async () => {
-      mockIsPlatformShellModeEnabled.mockReturnValue(true)
-      // mod-landing 有 meta.mod = true
-      await router.push('/mod/test-mod')
-      // mod 路由不被 platform shell 重定向
-      // 但可能被其他守卫处理
+      expect(router.hasRoute('tenant-roles')).toBe(true)
     })
   })
 
@@ -1207,57 +1173,33 @@ describe('router/index 覆盖率补齐', () => {
     })
   })
 
-  describe('filterPlatformShellRoutes', () => {
-    it('platform shell 模式下只保留 shell core 路由', async () => {
+  describe('企业版完整路由表', () => {
+    it('旧壳标记不再裁掉库存、订单和角色路由', async () => {
       mockIsPlatformShellModeEnabled.mockReturnValue(true)
 
       vi.resetModules()
       const { default: shellRouter } = await import('./index')
 
       const names = shellRouter.getRoutes().map((r) => r.name)
-      // SHELL_CORE_ROUTE_NAMES 中的路由应该存在
       expect(names).toContain('login')
       expect(names).toContain('chat')
       expect(names).toContain('settings')
       expect(names).toContain('mod-store')
-      // 非 shell core 路由应该被过滤掉
-      expect(names).not.toContain('inventory')
-      expect(names).not.toContain('orders')
+      expect(names).toContain('inventory')
+      expect(names).toContain('orders')
+      expect(names).toContain('tenant-roles')
     })
 
-    it('platform shell 模式下保留 mod meta 路由', async () => {
-      mockIsPlatformShellModeEnabled.mockReturnValue(true)
-
-      vi.resetModules()
-      const { default: shellRouter } = await import('./index')
-
-      const names = shellRouter.getRoutes().map((r) => r.name)
-      // mod-landing 有 meta.mod = true
-      expect(names).toContain('mod-landing')
-    })
-
-    it('platform shell 模式下保留 /mod/ 路径路由', async () => {
+    it('保留 mod 路由和员工空间重定向', async () => {
       mockIsPlatformShellModeEnabled.mockReturnValue(true)
 
       vi.resetModules()
       const { default: shellRouter } = await import('./index')
 
       const paths = shellRouter.getRoutes().map((r) => r.path)
-      // /mod/:modId 路径以 /mod/ 开头
       expect(paths.some((p) => p.startsWith('/mod/'))).toBe(true)
-    })
-
-    it('platform shell 模式下 /employee-workspace 和 /yuangong-stitch 被过滤（无 name）', async () => {
-      mockIsPlatformShellModeEnabled.mockReturnValue(true)
-
-      vi.resetModules()
-      const { default: shellRouter } = await import('./index')
-
-      // filterPlatformShellRoutes 中 if (!r.name) return false 先执行
-      // /employee-workspace 和 /yuangong-stitch 是重定向路由，无 name
-      const paths = shellRouter.getRoutes().map((r) => r.path)
-      expect(paths).not.toContain('/employee-workspace')
-      expect(paths).not.toContain('/yuangong-stitch')
+      expect(paths).toContain('/employee-workspace')
+      expect(paths).toContain('/yuangong-stitch')
     })
   })
 
