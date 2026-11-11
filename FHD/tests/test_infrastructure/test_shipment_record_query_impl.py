@@ -193,3 +193,56 @@ class TestGetLatestShipments:
         ):
             result = query.get_latest_shipments(5)
         assert result == []
+
+
+def test_document_lookup_uses_persisted_number_beyond_recent_window(monkeypatch):
+    import json
+    from contextlib import contextmanager
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.db.models import ShipmentRecord
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    engine = create_engine("sqlite://")
+    ShipmentRecord.__table__.create(engine)
+    with Session(engine) as session:
+        for index in range(205):
+            session.add(
+                ShipmentRecord(
+                    tenant_id=1,
+                    purchase_unit="synthetic",
+                    product_name="test",
+                    quantity_kg=1,
+                    quantity_tins=1,
+                    parsed_data=json.dumps({"document": {"order_number": f"ORDER-{index}"}}),
+                )
+            )
+        session.add(
+            ShipmentRecord(
+                tenant_id=2,
+                purchase_unit="other",
+                product_name="test",
+                quantity_kg=1,
+                quantity_tins=1,
+                parsed_data=json.dumps({"document": {"order_number": "OTHER"}}),
+            )
+        )
+        session.commit()
+
+    @contextmanager
+    def db():
+        with Session(engine) as session:
+            yield session
+
+    monkeypatch.setattr("app.infrastructure.persistence.shipment_record_query_impl.get_db", db)
+    query = SQLAlchemyShipmentRecordQuery()
+    with tenant_scope(1):
+        result = query.find_document_by_order_number("ORDER-0")
+        assert result["order_number"] == "ORDER-0"
+        assert result["tenant_id"] == 1
+        assert query.find_document_by_order_number("OTHER") is None
+    with tenant_scope(None), pytest.raises(ValueError, match="tenant scope"):
+        query.find_document_by_order_number("ORDER-0")
+    engine.dispose()

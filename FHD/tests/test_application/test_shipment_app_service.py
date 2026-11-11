@@ -84,6 +84,21 @@ class DummyRecordQuery:
     def __init__(self, data: list[dict] | None = None):
         self._data = data or []
 
+    def find_document_by_order_number(self, order_number):
+        import json
+
+        return next(
+            (
+                row
+                for row in self._data
+                if json.loads(row.get("parsed_data") or "{}")
+                .get("document", {})
+                .get("order_number")
+                == order_number
+            ),
+            None,
+        )
+
     def query_shipments(self, **kwargs) -> dict:
         return {
             "success": True,
@@ -1040,10 +1055,33 @@ class TestGenerateShipmentDocument:
             order_number="26-11-00002A",
         )
         assert result["duplicate"] is True
-        assert result["record_id"] == 7
-        assert result["doc_name"] == "slip.xlsx"
+        assert "file_path" not in result
+        assert "doc_name" not in result
+        assert "record_id" not in result
         assert doc_gen.call_count == 0
         assert record_store.recorded == []
+
+    def test_repeat_lookup_failure_does_not_generate(self):
+
+        query = DummyRecordQuery()
+        query.find_document_by_order_number = Mock(side_effect=OSError("db unavailable"))
+        generator = DummyDocumentGenerator(success=True)
+        store = DummyRecordStore()
+        service = ShipmentApplicationService(
+            repository=DummyRepository(),
+            document_generator=generator,
+            record_store=store,
+            record_query=query,
+        )
+        result = service.generate_shipment_document(
+            unit_name="synthetic",
+            products=[{"name": "test", "quantity_kg": 1}],
+            order_number="EXISTING",
+        )
+        assert result["success"] is False
+        assert result["error_code"] == "SHIPMENT_LOOKUP_FAILED"
+        assert generator.call_count == 0
+        assert store.recorded == []
 
     def test_generate_success_without_record_store(self):
         doc_gen = DummyDocumentGenerator(success=True)

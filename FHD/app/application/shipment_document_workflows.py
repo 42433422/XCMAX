@@ -9,7 +9,11 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import uuid4
 
-from app.application.ports import ShipmentDocumentGeneratorPort, ShipmentRecordStorePort
+from app.application.ports import (
+    ShipmentDocumentGeneratorPort,
+    ShipmentRecordQueryPort,
+    ShipmentRecordStorePort,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -32,6 +36,7 @@ def _shipment_document(parsed_data: Any) -> dict[str, Any]:
 class ShipmentDocumentWorkflowMixin:
     _document_generator: ShipmentDocumentGeneratorPort | None
     _record_store: ShipmentRecordStorePort | None
+    _record_query: ShipmentRecordQueryPort | None
 
     def get_shipment_records(
         self, unit_name: str | None = None, *, limit: int = 100
@@ -43,28 +48,27 @@ class ShipmentDocumentWorkflowMixin:
         number = str(order_number or "").strip()
         if not number:
             return None
-        try:
-            records = self.get_shipment_records(limit=200)
-        except RECOVERABLE_ERRORS:
+        if self._record_query is None:
             return None
-        for row in records or []:
-            if str(row.get("order_number") or "").strip() != number:
-                continue
-            document = _shipment_document(row.get("parsed_data"))
-            record_id = row.get("id")
+        try:
+            row = self._record_query.find_document_by_order_number(number)
+        except RECOVERABLE_ERRORS:
+            logger.exception("Cannot establish whether shipment document already exists")
             return {
-                "success": True,
-                "duplicate": True,
-                "message": "该订单编号已有发货单，未重复生成",
-                "doc_name": document.get("doc_name"),
-                "file_path": document.get("file_path"),
-                "order_number": number,
-                "record_id": record_id,
-                "order_id": record_id,
-                "total_amount": document.get("total_amount", row.get("amount")),
-                "total_quantity": document.get("total_quantity"),
+                "success": False,
+                "error_code": "SHIPMENT_LOOKUP_FAILED",
+                "message": "无法核对已有发货单，请稍后重试",
             }
-        return None
+        if row is None:
+            return None
+        # Editing a shipment does not grant permission to download existing files.
+        # Keep this receipt opaque; the normal download route enforces view access.
+        return {
+            "success": True,
+            "duplicate": True,
+            "order_number": number,
+            "message": "该订单编号已有发货单，未重复生成；请从出货记录查看",
+        }
 
     def record_created_shipment(
         self,
