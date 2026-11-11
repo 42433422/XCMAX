@@ -361,3 +361,47 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
         assert "隔离测试产品" in str(list(book.active.values))
         book.close()
     engine.dispose()
+
+
+def test_r05_export_without_a_file_fails_the_business_assertion(
+    tmp_path, monkeypatch, trusted_actor
+):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from app.application.shipment_document_workflows import ShipmentDocumentWorkflowMixin
+
+    def empty_export(self, *_args, **_kwargs):
+        return {"success": True, "file_path": ""}
+
+    monkeypatch.setattr(ShipmentDocumentWorkflowMixin, "export_shipment_records", empty_export)
+    try:
+        test_approved_shipment_then_export_uses_full_persisted_plan(
+            tmp_path, monkeypatch, trusted_actor
+        )
+    except AssertionError as exc:
+        assert "is_file" in str(exc) or "file_path" in str(exc)
+    else:
+        raise AssertionError("an export without a file was accepted")
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    restored = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan",
+            "-q",
+            "-o",
+            "addopts=",
+            "--tb=line",
+        ],
+        cwd=str(Path(__file__).resolve().parents[2]),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert restored.returncode == 0, restored.stdout + restored.stderr

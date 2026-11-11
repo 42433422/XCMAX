@@ -21,6 +21,16 @@ from tests.test_application.test_idempotency_recovery_e23_e24 import (
 
 CLASSNAME = "tests.test_application.test_idempotency_recovery_e23_e24"
 NAME = "test_e23_kill_after_commit_returns_the_same_row"
+EXPORT_CLASS = "tests.test_application.test_shipment_records_agent_routes"
+EXPORT_NAME = "test_approved_shipment_then_export_uses_full_persisted_plan"
+
+
+def _case(classname: str, name: str, inner: str = "") -> str:
+    return f"<testcase classname='{classname}' name='{name}'>{inner}</testcase>"
+
+
+def _passing_pair() -> str:
+    return _case(CLASSNAME, NAME) + _case(EXPORT_CLASS, EXPORT_NAME)
 
 
 def _xml(body: str) -> str:
@@ -48,7 +58,7 @@ def test_removing_the_required_scenario_is_rejected():
 
 
 def test_passed_junit_is_accepted(tmp_path: Path):
-    body = f"<testcase classname='{CLASSNAME}' name='{NAME}'/>"
+    body = _passing_pair()
     evidence = evidence_from_junit(
         [_write(tmp_path, body)], source_sha="abc", run_id="9", run_attempt="1"
     )
@@ -83,9 +93,9 @@ def test_missing_required_result_is_rejected(tmp_path: Path):
 
 def test_wrong_sha_skip_and_retry_cover_are_rejected(tmp_path: Path):
     failed = (
-        f"<testcase classname='{CLASSNAME}' name='{NAME}'>"
-        "<failure message='len(after) == 1'>assert 2 == 1</failure></testcase>"
-        f"<testcase classname='{CLASSNAME}' name='{NAME}'/>"
+        _case(CLASSNAME, NAME, "<failure message='len(after) == 1'>assert 2 == 1</failure>")
+        + _case(CLASSNAME, NAME)
+        + _case(EXPORT_CLASS, EXPORT_NAME)
     )
     evidence = evidence_from_junit(
         [_write(tmp_path, failed)], source_sha="abc", run_id="9", run_attempt="1"
@@ -105,7 +115,12 @@ def test_wrong_sha_skip_and_retry_cover_are_rejected(tmp_path: Path):
                 {"n": 1, "status": "FAIL", "failure": "assert 2 == 1"},
                 {"n": 2, "status": "PASS", "failure": ""},
             ],
-        }
+        },
+        {
+            "scenario_id": "R05-approved-shipment-export",
+            "status": "PASS",
+            "attempts": [{"n": 1, "status": "PASS", "failure": ""}],
+        },
     ]
     assert any(
         "PASS hides" in error
@@ -114,9 +129,7 @@ def test_wrong_sha_skip_and_retry_cover_are_rejected(tmp_path: Path):
         )
     )
 
-    skipped = (
-        f"<testcase classname='{CLASSNAME}' name='{NAME}'><skipped message='skip'/></testcase>"
-    )
+    skipped = _case(CLASSNAME, NAME, "<skipped message='skip'/>") + _case(EXPORT_CLASS, EXPORT_NAME)
     skipped_evidence = evidence_from_junit(
         [_write(tmp_path / "skip", skipped)],
         source_sha="abc",
@@ -144,7 +157,10 @@ def test_damaged_evidence_and_blocked_are_rejected():
     assert any("scenarios missing" in error for error in damaged)
     blocked = {
         "source_sha": "abc",
-        "scenarios": [{"scenario_id": "R08-e23-readback", "status": "BLOCKED", "attempts": []}],
+        "scenarios": [
+            {"scenario_id": scenario_id, "status": "BLOCKED", "attempts": []}
+            for scenario_id in MINIMUM_REQUIRED
+        ],
     }
     assert any(
         "BLOCKED" in error
