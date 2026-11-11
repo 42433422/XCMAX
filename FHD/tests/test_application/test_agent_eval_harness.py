@@ -33,14 +33,23 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
 @pytest.mark.parametrize("fail_task", [False, True])
 def test_eval_owns_real_approval_queue_and_restores_it(monkeypatch, fail_task) -> None:
     from app.application.agent_orchestrator import task_execution_repository as queues
+    from app.application.agent_orchestrator import tool_permission
     from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 
+    original_claims = tool_permission._IDEMPOTENCY
+    original_owners = tool_permission._LIVE_OWNERS
+    original_path = tool_permission._idempotency_path()
     original_queue = queues._task_execution_repository
     original_open = queues._OPEN_REPOSITORIES
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
 
     def run_task(_task):
+        assert tool_permission._IDEMPOTENCY is not original_claims
+        assert tool_permission._LIVE_OWNERS is not original_owners
+        assert tool_permission._idempotency_path() != original_path
+        tool_permission._IDEMPOTENCY["evaluation-only"] = {}
+        tool_permission._LIVE_OWNERS.add("evaluation-owner")
         repository = queues.get_task_execution_repository()
         assert isinstance(repository, queues.SQLAlchemyTaskExecutionRepository)
         assert repository is not original_queue
@@ -73,6 +82,10 @@ def test_eval_owns_real_approval_queue_and_restores_it(monkeypatch, fail_task) -
         assert run_eval()["passed"] == 1
     assert queues._task_execution_repository is original_queue
     assert queues._OPEN_REPOSITORIES is original_open
+    assert tool_permission._IDEMPOTENCY is original_claims
+    assert tool_permission._LIVE_OWNERS is original_owners
+    assert "evaluation-only" not in original_claims
+    assert "evaluation-owner" not in original_owners
 
 
 def test_agent_eval_cli_prints_only_public_summary(monkeypatch, capsys) -> None:
@@ -148,3 +161,18 @@ def test_legacy_shipment_fixture_does_not_admit_enterprise_tenant(monkeypatch) -
     assert response.status_code == 403
     assert "租户数据隔离" in response.json()["detail"]
     assert not service.mock_calls
+
+
+def test_eval_route_receipts_do_not_leak_into_later_requests(monkeypatch) -> None:
+    from app.application.agent_orchestrator import tool_permission
+
+    kinds = {"excel_vector_route_agent", "materials_route_agent", "products_route_agent"}
+    tasks = [task for task in eval_module.load_tasks() if task["kind"] in kinds]
+    monkeypatch.setattr(eval_module, "load_tasks", lambda _path: tasks)
+    claims = dict(tool_permission._IDEMPOTENCY)
+    owners = set(tool_permission._LIVE_OWNERS)
+    result = run_eval()
+    assert result["failed"] == 0, result["results"]
+    assert result["passed"] == len(tasks) > 0
+    assert claims == tool_permission._IDEMPOTENCY
+    assert owners == tool_permission._LIVE_OWNERS

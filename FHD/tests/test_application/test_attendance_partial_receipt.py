@@ -227,6 +227,7 @@ def test_cross_source_shared_metadata_or_legacy_receipt_never_deleted(
     with sqlite3.connect(db_path) as db:
         assert tuple(db.iterdump()) == before
 
+
 @pytest.mark.parametrize("table", ["attendance_daily_records", "attendance_employees"])
 def test_attendance_delete_error_rolls_back_entire_database(tmp_path, monkeypatch, table):
     from app.application.elt.attendance_pipeline import persist_attendance_rows
