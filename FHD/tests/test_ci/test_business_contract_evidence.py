@@ -15,6 +15,7 @@ from scripts.dev.check_business_contract_evidence import (
     evidence_from_junit,
     floor_errors,
     load_catalog,
+    required_node_ids,
     requirement_rollup,
     validate,
 )
@@ -34,9 +35,14 @@ def _case(classname: str, name: str, inner: str = "") -> str:
 
 def _passing_pair() -> str:
     body = ""
-    for node_id in REQUIRED_TESTS.values():
-        module, _, name = node_id.partition("::")
-        body += _case(module[:-3].replace("/", "."), name)
+    seen: set[str] = set()
+    for node_ids in required_node_ids().values():
+        for node_id in node_ids:
+            if node_id in seen:
+                continue
+            seen.add(node_id)
+            module, _, name = node_id.partition("::")
+            body += _case(module[:-3].replace("/", "."), name)
     return body
 
 
@@ -65,13 +71,27 @@ def test_removing_the_required_scenario_is_rejected():
 
 
 def test_one_passing_child_does_not_complete_the_requirement():
-    rollup = requirement_rollup(load_catalog())
-    assert rollup["R03"] == "NOT RUN"
-    assert rollup["R04"] == "NOT RUN"
-    assert rollup["R07"] == "NOT RUN"
-    assert rollup["R01"] == "NOT RUN"
-    assert rollup["R06"] == "NOT RUN"
-    assert rollup["R10"] == "NOT RUN"
+    rollup = requirement_rollup(
+        {
+            "contracts": [
+                {
+                    "requirement_id": "RX",
+                    "scenario_id": "RX-done",
+                    "tests": ["tests/a.py::test_a"],
+                    "boundary": {"execution": "real"},
+                    "known_defects": [],
+                },
+                {
+                    "requirement_id": "RX",
+                    "scenario_id": "RX-open",
+                    "tests": [],
+                    "boundary": {"execution": "NOT RUN"},
+                    "known_defects": [],
+                },
+            ]
+        }
+    )
+    assert rollup["RX"] == "NOT RUN"
 
 
 def test_floor_from_main_rejects_a_shrunk_required_set():

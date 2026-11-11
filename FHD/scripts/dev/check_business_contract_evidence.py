@@ -189,6 +189,42 @@ def case_nodeid(classname: str, name: str) -> str:
     return f"{module}::{name}"
 
 
+def required_node_ids(data: dict | None = None) -> dict[str, list[str]]:
+    """Required scenarios keep their gate test and every test the catalog lists."""
+    catalog = data if data is not None else load_catalog()
+    nodes = {key: [value] for key, value in REQUIRED_TESTS.items()}
+    for item in catalog.get("contracts") or []:
+        if not isinstance(item, dict):
+            continue
+        scenario_id = str(item.get("scenario_id") or "")
+        if scenario_id not in nodes:
+            continue
+        for node_id in item.get("tests") or []:
+            if isinstance(node_id, str) and node_id not in nodes[scenario_id]:
+                nodes[scenario_id].append(node_id)
+    return nodes
+
+
+def attempts_for_nodes(paths: list[Path], node_ids: list[str]) -> list[dict]:
+    found: list[dict] = []
+    for node_id in node_ids:
+        rows = junit_attempts(paths, node_id)
+        if rows:
+            found.extend(rows)
+            continue
+        found.append(
+            {
+                "n": len(found) + 1,
+                "status": "NOT RUN",
+                "failure": f"missing {node_id}",
+                "evidence_path": "",
+            }
+        )
+    for index, item in enumerate(found, start=1):
+        item["n"] = index
+    return found
+
+
 def junit_attempts(paths: list[Path], node_id: str) -> list[dict]:
     attempts: list[dict] = []
     for path in paths:
@@ -279,8 +315,8 @@ def evidence_from_junit(
         "real": ["sqlite", "approval resume", "inventory", "shipment rows", "xlsx"],
         "doubles": ["fixed approval plan"],
         "scenarios": [
-            scenario_from_attempts(scenario_id, junit_attempts(paths, node_id))
-            for scenario_id, node_id in REQUIRED_TESTS.items()
+            scenario_from_attempts(scenario_id, attempts_for_nodes(paths, node_ids))
+            for scenario_id, node_ids in required_node_ids().items()
         ],
     }
 
