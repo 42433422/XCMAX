@@ -463,14 +463,12 @@ def _registered_router_employee(
     ok = bool(result.get("success")) and (not bool(result.get("blocked_by_risk_gate")))
     artifacts = []
     if ok:
-        from app.application.agent_orchestrator.artifact_files import (
-            RUN_FILE_MIME_TYPES,
-            store_run_file,
-        )
+        from app.application.agent_orchestrator.artifact_files import RUN_FILE_MIME_TYPES
         from app.application.shipment_excel_etl_security import (
             open_etl_input_file,
             resolve_etl_path,
         )
+        from app.application.tools.workflow_spreadsheet_scope import store_employee_output
         from app.mod_sdk.employee_tool_registry import office_output_paths
 
         paths = {
@@ -484,21 +482,9 @@ def _registered_router_employee(
                     continue
                 result["file_path"] = str(path)
                 if run_id and path.suffix.lower() in RUN_FILE_MIME_TYPES:
-                    if path.suffix.lower() in {".pdf", ".docx", ".pptx"}:
-                        from app.infrastructure.auth.agent_mod_scope import _bound_actor
-
-                        actor = _bound_actor(runtime_context)
-                        artifacts.append(
-                            store_run_file(
-                                run_id,
-                                source.read(),
-                                name=path.name,
-                                owner_user_id=actor.id,
-                                tenant_id=str(runtime_context.get("tenant_id") or ""),
-                            )
-                        )
-                    else:
-                        artifacts.append(store_run_file(run_id, source.read(), name=path.name))
+                    artifacts.append(
+                        store_employee_output(run_id, path, source.read(), runtime_context)
+                    )
     return {
         "success": ok,
         "message": "员工执行完成" if ok else str(result.get("error") or "员工执行失败"),

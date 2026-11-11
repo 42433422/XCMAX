@@ -14,6 +14,7 @@ from sqlalchemy import or_
 from app.application.agent_orchestrator.artifact_files import (
     artifact_path,
     read_verified_run_file,
+    store_run_file,
     store_spreadsheet,
 )
 from app.application.elt.service import get_elt_service
@@ -141,3 +142,16 @@ def export_workflow_spreadsheet(
             result["artifacts"] = [receipt]
             data["file_path"] = receipt["uri"]
     return result
+
+
+def store_employee_output(
+    run_id: str, path: Path, content: bytes, context: dict[str, Any]
+) -> dict[str, Any]:
+    owner = _bound_actor(context).id if path.suffix.lower() in {".pdf", ".docx", ".pptx"} else None
+    return store_run_file(
+        run_id,
+        content,
+        name=path.name,
+        owner_user_id=owner,
+        tenant_id=str(context.get("tenant_id") or ""),
+    )
