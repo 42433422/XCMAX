@@ -319,15 +319,21 @@
       "requirement_id": "R06",
       "scenario_id": "R06-authorized-self-approval",
       "rule": "已在审批人列表中的人可以自批，并只写入授权范围内的结果。",
-      "source": "产品允许有权限的审批人自批。这条还没有真实执行。",
+      "source": "FHD/tests/test_routes/test_system_routes.py 的数据库恢复。申请人是管理员且在审批链上时可以自批；第二次审批不再次调用恢复。",
       "preconditions": ["操作者在该节点审批人列表中"],
       "inputs": ["自批"],
       "allowed": ["审批通过并发生授权写入"],
       "forbidden_effects": ["把自批一律禁止"],
       "oracle": "审批人列表与审批后的业务状态",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
-      "known_defects": [],
+      "tests": [
+        "tests/test_routes/test_system_routes.py::test_restore_waits_for_approval_even_for_applicant_admin"
+      ],
+      "boundary": {
+        "real": ["sqlite", "approval request", "database restore"],
+        "doubles": ["database service restore is a test double until approval"],
+        "execution": "NOT RUN"
+      },
+      "known_defects": ["批准之后的数据库恢复实现仍是测试替身，不能把副作用算成真实执行"],
       "fault_version": "有权限的自批被拒绝",
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
