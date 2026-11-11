@@ -171,6 +171,12 @@ def _recover_once(db_path: str, idem_path: str, name: str, key: str, barrier, se
     try:
         _bind(db_path, idem_path)
         permissions.drop_process_idempotency_memory()
+        if os.environ.get("XCMAX_CONTRACT_FAULT") == "ignore-claim":
+
+            def begin(*_args, **_kwargs):
+                return (f"forced-{os.getpid()}", None)
+
+            permissions.begin_idempotent_replay = begin
         barrier.wait(timeout=30)
         result = _execute(name, key)
         sender.send(
@@ -369,6 +375,43 @@ def test_r07_replaying_the_old_success_for_a_different_phone_fails(monkeypatch):
             "-m",
             "pytest",
             "tests/test_application/test_idempotency_recovery_e23_e24.py::test_same_key_with_different_phone_does_not_reuse_the_row",
+            "-q",
+            "-o",
+            "addopts=",
+            "--tb=line",
+        ],
+        cwd=str(Path(__file__).resolve().parents[2]),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert restored.returncode == 0, restored.stdout + restored.stderr
+
+
+def test_r09_two_recoveries_without_the_claim_leave_two_rows():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    os.environ["XCMAX_CONTRACT_FAULT"] = "ignore-claim"
+    try:
+        test_e24_two_recoveries_leave_one_row()
+    except AssertionError as exc:
+        assert "1" in str(exc)
+    else:
+        raise AssertionError("two recoveries without a claim still left one row")
+    finally:
+        os.environ.pop("XCMAX_CONTRACT_FAULT", None)
+    env = os.environ.copy()
+    env.pop("XCMAX_CONTRACT_FAULT", None)
+    env.pop("PYTHONPATH", None)
+    restored = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/test_application/test_idempotency_recovery_e23_e24.py::test_e24_two_recoveries_leave_one_row",
             "-q",
             "-o",
             "addopts=",

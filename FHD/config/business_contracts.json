@@ -179,22 +179,28 @@
     },
     {
       "requirement_id": "R09",
-      "scenario_id": "R09-concurrency",
-      "rule": "并发不能静默覆盖或重复执行。竞态用屏障或明确故障注入点，并保留重放信息。",
-      "source": "幂等与恢复竞争；本批只登记。E24 已有部分覆盖，尚未纳入本门禁。",
-      "preconditions": ["两个执行者同时处理同一意图"],
-      "inputs": ["屏障同步的并发调用"],
-      "allowed": ["一个赢家", "另一个读回原结果或明确冲突"],
-      "forbidden_effects": ["静默覆盖", "重复副作用"],
-      "oracle": "并发结束后的业务行数和各自回执",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "scenario_id": "R09-two-recoveries",
+      "rule": "提交前崩溃之后，两个恢复同时进行，最终只能留下一行客户。另一个可以成功或明确返回进行中，不能各自再插入。",
+      "source": "FHD/tests/test_application/test_idempotency_recovery_e23_e24.py 的双恢复。用进程屏障对齐，不用 sleep。",
+      "preconditions": ["创建在提交前退出", "库里还没有这个客户", "两个恢复进程同时过屏障"],
+      "inputs": ["客户名「崩溃前客户」", "幂等键 e24-race"],
+      "allowed": ["最终一行", "至少一个成功", "另一个成功或 idempotency_in_progress", "回执里的 id 属于这一行或为空"],
+      "forbidden_effects": ["两个恢复各自插入一行"],
+      "oracle": "并发结束后按客户名读到的行数",
+      "tests": [
+        "tests/test_application/test_idempotency_recovery_e23_e24.py::test_e24_two_recoveries_leave_one_row"
+      ],
+      "boundary": {
+        "real": ["sqlite", "two spawned processes", "barrier", "AgentToolExecutor"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
-      "fault_version": "移除版本冲突保护",
+      "fault_version": "恢复时忽略已有领取并各自插入",
       "platforms": ["linux"],
-      "database_modes": ["sqlite", "postgresql"],
-      "resources": [],
-      "required_for_merge": false
+      "database_modes": ["sqlite"],
+      "resources": ["临时 sqlite", "可 spawn 的 Python 进程"],
+      "required_for_merge": true
     },
     {
       "requirement_id": "R10",
