@@ -15,12 +15,56 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _shipment_document(parsed_data: Any) -> dict[str, Any]:
+    if isinstance(parsed_data, dict):
+        parsed = parsed_data
+    else:
+        try:
+            import json
+
+            parsed = json.loads(parsed_data or "{}")
+        except (TypeError, ValueError):
+            return {}
+    document = parsed.get("document") if isinstance(parsed, dict) else None
+    return document if isinstance(document, dict) else {}
+
+
 class ShipmentDocumentWorkflowMixin:
     _document_generator: ShipmentDocumentGeneratorPort | None
     _record_store: ShipmentRecordStorePort | None
 
-    def get_shipment_records(self, unit_name: str | None = None) -> list[dict[str, Any]]:
+    def get_shipment_records(
+        self, unit_name: str | None = None, *, limit: int = 100
+    ) -> list[dict[str, Any]]:
         raise NotImplementedError
+
+    def _reused_shipment_document(self, order_number: str | None) -> dict[str, Any] | None:
+        """同一租户、同一订单编号已有发货单时直接交回，不再写第二张。"""
+        number = str(order_number or "").strip()
+        if not number:
+            return None
+        try:
+            records = self.get_shipment_records(limit=200)
+        except (NotImplementedError, RECOVERABLE_ERRORS):
+            return None
+        for row in records or []:
+            if str(row.get("order_number") or "").strip() != number:
+                continue
+            document = _shipment_document(row.get("parsed_data"))
+            record_id = row.get("id")
+            return {
+                "success": True,
+                "duplicate": True,
+                "message": "该订单编号已有发货单，未重复生成",
+                "doc_name": document.get("doc_name"),
+                "file_path": document.get("file_path"),
+                "order_number": number,
+                "record_id": record_id,
+                "order_id": record_id,
+                "total_amount": document.get("total_amount", row.get("amount")),
+                "total_quantity": document.get("total_quantity"),
+            }
+        return None
 
     def record_created_shipment(
         self,
@@ -357,6 +401,9 @@ class ShipmentDocumentWorkflowMixin:
                 "doc_name": None,
                 "file_path": None,
             }
+        reused = self._reused_shipment_document(order_number)
+        if reused is not None:
+            return reused
 
         products_source = "request"
         product_rows = list(products or [])

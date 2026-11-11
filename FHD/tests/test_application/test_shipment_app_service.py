@@ -1013,6 +1013,38 @@ class TestGenerateShipmentDocument:
         assert result["order_id"] == 42
         assert len(record_store.recorded) == 1
 
+    def test_repeat_order_number_reuses_existing_slip(self):
+        doc_gen = DummyDocumentGenerator(success=True)
+        record_store = DummyRecordStore()
+        svc = ShipmentApplicationService(
+            repository=DummyRepository(),
+            document_generator=doc_gen,
+            record_store=record_store,
+            record_query=DummyRecordQuery(
+                [
+                    {
+                        "id": 7,
+                        "order_number": "26-11-00002A",
+                        "amount": 25,
+                        "parsed_data": (
+                            '{"document":{"doc_name":"slip.xlsx","file_path":"/tmp/slip.xlsx",'
+                            '"order_number":"26-11-00002A","total_amount":25,"total_quantity":2}}'
+                        ),
+                    }
+                ]
+            ),
+        )
+        result = svc.generate_shipment_document(
+            unit_name="单位甲",
+            products=[{"name": "产品甲", "quantity_kg": 1}],
+            order_number="26-11-00002A",
+        )
+        assert result["duplicate"] is True
+        assert result["record_id"] == 7
+        assert result["doc_name"] == "slip.xlsx"
+        assert doc_gen.call_count == 0
+        assert record_store.recorded == []
+
     def test_generate_success_without_record_store(self):
         doc_gen = DummyDocumentGenerator(success=True)
         svc = ShipmentApplicationService(
