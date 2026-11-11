@@ -61,15 +61,13 @@ def _run_seeds(loop) -> list[dict]:
     results: list[dict] = []
 
     def record(seed_id: str, category: str, ok: bool, detail: str) -> None:
-        tool_verdict = "PASS" if ok else "FAIL"
-        asks_model = category in {"clarify", "long_conversation", "handoff"}
         results.append(
             {
                 "scenario_id": seed_id,
                 "category": category,
                 "lane": "fixed_tool_plan",
-                "verdict": tool_verdict,
-                "capability_verdict": "NOT RUN" if asks_model else tool_verdict,
+                "verdict": "PASS" if ok else "FAIL",
+                "capability_verdict": "NOT RUN",
                 "detail": detail,
                 "tool_version": "2",
                 "prompt_version": "none",
@@ -352,9 +350,7 @@ def test_employee_eval_seeds_cover_six_categories():
     failed = [f"{row['scenario_id']}:{row['detail']}" for row in seeds if row["verdict"] != "PASS"]
     assert not failed, failed
     assert all(row["lane"] == "fixed_tool_plan" and row["model"] == "none" for row in seeds)
-    model_categories = {"clarify", "long_conversation", "handoff"}
-    assert all(row["capability_verdict"] == "NOT RUN" for row in seeds if row["category"] in model_categories)
-    assert all(row["capability_verdict"] == "PASS" for row in seeds if row["category"] not in model_categories)
+    assert all(row["capability_verdict"] == "NOT RUN" for row in seeds)
     live = _live_model_lane()
     assert live["verdict"] in {"BLOCKED", "NOT RUN"}
     assert live["verdict"] != "PASS"
