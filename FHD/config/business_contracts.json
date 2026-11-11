@@ -461,6 +461,31 @@
     },
     {
       "requirement_id": "R10",
+      "scenario_id": "R10-foreign-approval-does-not-insert-customer",
+      "rule": "租户 22 的审批不能授权租户 11 写入客户。",
+      "source": "跨租户审批测试。审批队列在内存里，客户表是 SQLite。",
+      "preconditions": ["租户 22 的审批已通过"],
+      "inputs": ["租户 11 携带租户 22 的审批号去创建客户"],
+      "allowed": ["拒绝，原因 approval_tenant_mismatch"],
+      "forbidden_effects": ["写入「闭环驳回不应写入」"],
+      "oracle": "SQLite 客户名清单里没有该名称",
+      "tests": [
+        "tests/test_application/test_approval_executor_gate.py::test_other_tenant_approval_does_not_authorize"
+      ],
+      "boundary": {
+        "real": ["sqlite customers"],
+        "doubles": ["in-memory approval queue"],
+        "execution": "real"
+      },
+      "known_defects": [],
+      "fault_version": "跨租户审批仍插入客户",
+      "platforms": ["linux"],
+      "database_modes": ["sqlite"],
+      "resources": ["sqlite"],
+      "required_for_merge": false
+    },
+    {
+      "requirement_id": "R10",
       "scenario_id": "R10-approval-tenant",
       "rule": "审批只能读取和修改本租户的审批单。",
       "source": "知识库导入的租户隔离不能代替审批。",
