@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import importlib
-from typing import TYPE_CHECKING
+import os
+import threading
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
 
@@ -134,18 +138,81 @@ def _classify_and_submit_client_issue(
     )
 
 
+def _is_workflow_control(message: str) -> bool:
+    from app.application.ai_chat.workflow_session import CANCEL_WORDS, CONFIRM_WORDS
+
+    text = str(message or "").strip().lower().rstrip("。.!！")
+    return text in CONFIRM_WORDS or text in CANCEL_WORDS
+
+
+def _tool_heartbeat_seconds() -> float:
+    raw = os.environ.get("XCAGI_CHAT_STREAM_TOOL_HEARTBEAT_SEC", "8").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 8.0
+    return max(0.2, min(value, 30.0))
+
+
+def _progress(encode: Callable[[dict[str, Any]], bytes], phase: str, label: str) -> bytes:
+    return encode({"type": "tool_progress", "phase": phase, "label": label, "text": label})
+
+
+def _heartbeats(
+    fn: Callable[[], Any],
+    label: str,
+    sink: dict[str, Any],
+    encode: Callable[[dict[str, Any]], bytes],
+) -> Iterator[bytes]:
+    """Run blocking local work off the producer and keep the stream observably alive."""
+    box: dict = {}
+
+    def run() -> None:
+        from app.utils.operational_errors import BOUNDARY_ERRORS
+
+        try:
+            box["value"] = fn()
+        except BOUNDARY_ERRORS as exc:
+            box["error"] = exc
+
+    thread = threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True)
+    thread.start()
+    interval = _tool_heartbeat_seconds()
+    while thread.is_alive():
+        thread.join(interval)
+        if thread.is_alive():
+            yield _progress(encode, "running", label)
+    if "error" in box:
+        raise box["error"]
+    sink["value"] = box.get("value")
+
+
 def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
     """Execute every online stream through the LangGraph-backed chat service."""
     from app.application.planner_compat.offline import is_offline
 
+    facade = _facade()
+    encode = facade._sse_event_line
+    control = _is_workflow_control(str(body.message or ""))
     if is_offline(body.mode):
         from app.application.planner_compat_service import execute_compat_chat
 
         # The sync producer runs in its owned worker. Reuse JSON admission,
         # authorization, local handlers and receipts rather than a second lane.
-        payload = asyncio.run(execute_compat_chat(request, body))
-        yield _facade()._sse_event_line({"type": "token", "text": payload["response"]})
-        yield _facade()._sse_event_line({"type": "done", "result": payload})
+        # Yield before that work: the first-event watch is 20s and would cancel
+        # a confirmed rebuild that has not yet produced a byte.
+        label = "正在执行已确认的任务" if control else "正在处理本地任务"
+        yield _progress(encode, "running", label)
+        sink: dict = {}
+        yield from _heartbeats(
+            lambda: asyncio.run(execute_compat_chat(request, body)),
+            label,
+            sink,
+            encode,
+        )
+        payload = sink["value"]
+        yield encode({"type": "token", "text": payload["response"]})
+        yield encode({"type": "done", "result": payload})
         return
     from app.application import get_ai_chat_app_service
     from app.application.agent_task_context import scoped_conversation_user_id
@@ -156,8 +223,11 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     from app.infrastructure.llm.client import llm_client_factory_scope
     from app.infrastructure.tenant_scope import tenant_scope
 
-    facade = _facade()
-    sse_event_line = facade._sse_event_line
+    sse_event_line = encode
+    if control:
+        yield _progress(encode, "running", "正在执行已确认的任务")
+    else:
+        yield _progress(encode, "started", "正在处理任务")
     runtime_context, _ = facade._merge_runtime_context_with_message_paths(
         body.context, body.message
     )
@@ -217,19 +287,26 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     service = get_ai_chat_app_service()
     tenant_id = runtime_context.get("tenant_id")
     tenant_id = int(tenant_id) if tenant_id is not None else None
-    yield sse_event_line({"type": "tool_progress", "phase": "started", "label": "正在处理任务"})
     try:
-        with (
-            tenant_scope(tenant_id),
-            llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)),
-        ):
-            payload = service.process_chat(
-                user_id=scoped_user_id,
-                message=str(body.message or ""),
-                context=runtime_context,
-                source=body.source,
-                file_context=resolve_file_context(runtime_context),
-            )
+        def _chat():
+            with (
+                tenant_scope(tenant_id),
+                llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)),
+            ):
+                return service.process_chat(
+                    user_id=scoped_user_id,
+                    message=str(body.message or ""),
+                    context=runtime_context,
+                    source=body.source,
+                    file_context=resolve_file_context(runtime_context),
+                )
+
+        if control:
+            sink = {}
+            yield from _heartbeats(_chat, "正在执行已确认的任务", sink, encode)
+            payload = sink["value"]
+        else:
+            payload = _chat()
     except facade.RECOVERABLE_ERRORS as exc:
         from app.infrastructure.chat_stream_lifetime import current_lifetime
 

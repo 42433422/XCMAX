@@ -5,6 +5,7 @@ import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
+import { isWorkflowControlMessage } from '@/utils/chatSseStream'
 export type ChatRequestScope = {
   signal?: AbortSignal
   isCurrent?: () => boolean
@@ -270,6 +271,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   }
 
   function resolveChatTimeoutMs(message: string): number {
+    if (isWorkflowControlMessage(message)) return 180_000
     const text = String(message || '').trim()
     const isComplexTask = /(导入|入库|数据库|工作流|执行|创建|新增|批量|excel|上传|加入数据库)/i.test(text)
     return isComplexTask ? 180_000 : 90_000

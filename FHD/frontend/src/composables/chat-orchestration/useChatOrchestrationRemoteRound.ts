@@ -13,7 +13,7 @@ import productsApi from '@/api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { useModsStore } from '@/stores/mods'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
-import { readPlannerSseResponse, isChatStreamEnabled, IncompletePlannerSseError, type PlannerSseEvent } from '@/utils/chatSseStream'
+import { readPlannerSseResponse, isChatStreamEnabled, isWorkflowControlMessage, IncompletePlannerSseError, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
 import { stripPlannerDisplayMarkers } from '@/utils/chatBubbleDisplay'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
@@ -336,13 +336,14 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const controller = new AbortController()
       const streamState = { stalled: false }
       const officeToolRun = isOfficeEltToolMessage(primaryForStream)
+      const workflowControl = isWorkflowControlMessage(primaryForStream)
       const abort = () => controller.abort()
       if (!officeToolRun) {
         requestScope.signal?.addEventListener('abort', abort, { once: true })
         if (requestScope.signal?.aborted) abort()
       }
       let killTimer = 0
-      const stallTimer = officeToolRun ? 0 : window.setTimeout(() => {
+      const stallTimer = officeToolRun || workflowControl ? 0 : window.setTimeout(() => {
         streamState.stalled = true
         controller.abort()
       }, CHAT_STREAM_STALL_MS)
