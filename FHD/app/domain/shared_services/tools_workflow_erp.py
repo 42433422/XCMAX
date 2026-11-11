@@ -406,6 +406,7 @@ def _registered_router_reports(
             *date_filters,
             "customer_id",
             "customer_name",
+            "order_no",
             "status",
             "payment_state",
             "min_amount_exclusive",
