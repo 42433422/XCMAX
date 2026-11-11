@@ -40,6 +40,7 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         "document_template",
         "purchase",
         "finance",
+        "excel_analysis",
     }
 )
 
