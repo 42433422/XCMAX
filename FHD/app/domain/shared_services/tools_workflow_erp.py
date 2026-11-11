@@ -459,10 +459,13 @@ def _registered_router_reports(
     from app.application.agent_orchestrator.artifact_files import store_spreadsheet
 
     artifact = store_spreadsheet(run_id, exported["data"], name=exported["filename"])
+    from app.application.agent_orchestrator.artifact_files import verified_spreadsheet_path
+
     return {
         "success": True,
         "message": "报表文件已生成",
         "row_count": len(rows),
+        "data": {"file_path": str(verified_spreadsheet_path(run_id, artifact))},
         "artifacts": [artifact],
     }
 
