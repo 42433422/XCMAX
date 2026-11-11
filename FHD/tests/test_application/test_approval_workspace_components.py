@@ -39,7 +39,10 @@ def test_final_ai_approval_requires_confirmed_execution(monkeypatch, with_node):
     )
     req.current_node = node if with_node else None
     db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = req
+    query = MagicMock()
+    query.filter.return_value = query
+    query.first.return_value = req
+    db.query.return_value = query
 
     @contextmanager
     def session():
