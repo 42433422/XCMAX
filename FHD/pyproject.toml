@@ -285,8 +285,7 @@ ignore_missing_imports = true
 #   避免本地交互式运行因 fail_under（当前 84，由棘轮维护）产生噪音。CI 通过显式 --cov 等参数生效（见
 #   .github/workflows/ci-cd.yml + test.yml）。
 [tool.pytest.ini_options]
-# 唯一默认后端套件：tests/（与 CI 一致）。勿与 XCAGI/xcagi_tests 同跑——模块名冲突且部分用例已迁移。
-# 遗留 xcagi 用例：pytest XCAGI/xcagi_tests --import-mode=importlib
+# 唯一后端套件：从 FHD/ 执行 pytest tests/（与 CI 一致）。
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -325,7 +324,6 @@ source = ["app"]
 branch = true
 omit = [
     "*/tests/*",
-    "*/xcagi_tests/*",
     "*/__pycache__/*",
     "*/migrations/*",
     "*/alembic/*",

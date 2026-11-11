@@ -9,6 +9,7 @@ from contextlib import nullcontext
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator.business_write_guard import worker_write_guard
@@ -19,6 +20,22 @@ logger = logging.getLogger("app.domain.shared_services.inventory_service")
 
 def _facade():
     return importlib.import_module("app.domain.shared_services.inventory_service")
+
+
+def _posted_stock_out(db, product_id, reference_type, reference_id):
+    model = _facade().InventoryTransaction
+    query = db.query(model).filter(
+        model.product_id == product_id,
+        model.transaction_type == "out",
+        model.reference_type == reference_type,
+        model.reference_id == reference_id,
+    )
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    tenant_id = current_tenant_id()
+    if tenant_id is not None:
+        query = query.filter(model.tenant_id == tenant_id)
+    return query.first()
 
 
 def _positive_movement_quantity(value: Any) -> float:
@@ -234,15 +251,8 @@ class InventoryMovementsMixin:
         with _facade().get_db() as db, worker_write_guard(db):
             try:
                 if reference_type and reference_id not in (None, ""):
-                    posted = (
-                        db.query(_facade().InventoryTransaction)
-                        .filter(
-                            _facade().InventoryTransaction.product_id == resolved_product_id,
-                            _facade().InventoryTransaction.transaction_type == "out",
-                            _facade().InventoryTransaction.reference_type == str(reference_type),
-                            _facade().InventoryTransaction.reference_id == reference_id,
-                        )
-                        .first()
+                    posted = _posted_stock_out(
+                        db, resolved_product_id, str(reference_type), reference_id
                     )
                     if posted is not None:
                         return {
@@ -301,7 +311,24 @@ class InventoryMovementsMixin:
                     created_at=now,
                 )
                 db.add(transaction)
-                db.commit()
+                try:
+                    db.commit()
+                except IntegrityError:
+                    db.rollback()
+                    raced = _posted_stock_out(
+                        db, resolved_product_id, str(reference_type), reference_id
+                    )
+                    if raced is None:
+                        raise
+                    return {
+                        "success": True,
+                        "message": "该业务单据已出库，未重复扣减",
+                        "data": {
+                            "already_posted": True,
+                            "ledger_id": raced.ledger_id,
+                            "quantity": quantity,
+                        },
+                    }
                 return {
                     "success": True,
                     "message": "出库成功",

@@ -63,7 +63,7 @@
 - HTTP:[app/fastapi_routes/print_routes.py](../app/fastapi_routes/print_routes.py) `/api/print/*`
 - **单张标签打印**:`POST /api/print/single_label` → 实现在 [app/fastapi_routes/ai_assistant.py](../app/fastapi_routes/ai_assistant.py) `compat_print_single_label` → 调 [app/application/print_app_service.py](../app/application/print_app_service.py) `PrintApplicationService.print_single_label`
 - **工作流标签调度**:`POST /api/print/workflow/label-print/dispatch` 幂等接口（含产品查找 + 打印）
-- **商标监控**:不是代码功能,只是 BarTender 使用说明。见 [docs/user-guides/bartender/](./user-guides/bartender/)。
+- **商标监控**:[tools/bartender-monitor/](../tools/bartender-monitor/) 提供独立的 Windows BarTender 窗口识别、图片 OCR 与结果映射工具，使用说明与启动脚本同目录维护。
 
 ### 微信 / WeChat
 
@@ -107,7 +107,6 @@
 
 ## 非代码功能澄清
 
-- **"商标监控"**:原仓根 `监控/商标监控使用说明.txt`——BarTender 用户手册,**没有代码**。已整合到 [docs/user-guides/bartender/](./user-guides/bartender/)。
 - **"软著申请"**:软件著作权申请资料,**没有代码**。位于仓根 `软著申请/`,建议归档到 `docs/legal/`(本次未动,以免丢失原始路径)。
 
 ## 待归并项(未来 PR)

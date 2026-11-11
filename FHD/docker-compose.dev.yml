@@ -4,8 +4,7 @@
 services:
   backend:
     build:
-      # ⚠️ 已统一主入口至 XCAGI/，构建上下文指向 XCAGI/
-      context: ./XCAGI
+      context: .
       dockerfile: Dockerfile
       target: development
     container_name: xcagi-backend-dev
@@ -13,7 +12,6 @@ services:
       - "5000:5000"
     environment:
       - XCAGI_ENV=development
-      - XCAGI_DEBUG=1
       - XCAGI_DEBUG=1
       - SECRET_KEY=dev-secret-key
       - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://xcagi:xcagi@postgres:5432/xcagi_dev}
@@ -36,12 +34,11 @@ services:
 
   celery-worker:
     build:
-      # ⚠️ 已统一主入口至 XCAGI/，构建上下文指向 XCAGI/
-      context: ./XCAGI
+      context: .
       dockerfile: Dockerfile
       target: development
     container_name: xcagi-celery-worker-dev
-    command: celery -A celery_app worker --loglevel=debug --concurrency=1
+    command: celery -A app.extensions:celery_app worker --loglevel=debug --concurrency=1
     environment:
       - XCAGI_ENV=development
       - SECRET_KEY=dev-secret-key
