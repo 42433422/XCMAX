@@ -174,14 +174,20 @@
       "requirement_id": "R04",
       "scenario_id": "R04-summary-line",
       "rule": "导出文件的汇总行必须等于已提交明细的合计，而不是只看到单行数量和金额。",
-      "source": "数量和金额已在导出单元格中核对。汇总行尚未单独对照。",
-      "preconditions": ["已提交明细含合计"],
+      "source": "获批出货导出重新打开 xlsx。汇总行金额必须等于已提交的 500。",
+      "preconditions": ["已提交明细金额 500"],
       "inputs": ["重新打开的导出文件"],
-      "allowed": ["汇总单元格等于合计"],
+      "allowed": ["合计行金额等于 500"],
       "forbidden_effects": ["没有汇总仍宣布导出完成"],
-      "oracle": "提交时保存的合计",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "oracle": "提交时保存的金额 500",
+      "tests": [
+        "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"
+      ],
+      "boundary": {
+        "real": ["sqlite", "xlsx file"],
+        "doubles": ["fixed plan instead of a live model"],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "汇总与已提交合计不符仍通过",
       "platforms": ["linux"],
