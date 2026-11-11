@@ -143,11 +143,63 @@ def release_gate(root: Path, source_sha: str) -> tuple[int, dict]:
     return (0 if report["release_pass"] else 1), report
 
 
+def _self_check() -> int:
+    """Prove the release rules without a candidate artifact."""
+    declared = json.loads(
+        (Path(__file__).resolve().parents[2] / "config" / "release_scope_evidence.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    if tuple(declared["required_scopes"]) != REQUIRED_SCOPES:
+        print("required scopes drifted", file=sys.stderr)
+        return 1
+    missing = rollup([], REQUIRED_SCOPES)
+    if missing["release_pass"] or missing["scopes"]["windows-installer"] != "NOT RUN":
+        print("missing installer became a pass", file=sys.stderr)
+        return 1
+    blocked = rollup(
+        [
+            {
+                "scope_id": "macos-installer",
+                "platform": "macos",
+                "kind": "installer",
+                "status": "BLOCKED",
+                "source_sha": "a" * 40,
+                "artifact_sha256": "b" * 64,
+            },
+            {
+                "scope_id": "windows-installer",
+                "platform": "windows",
+                "kind": "installer",
+                "status": "PASS",
+                "source_sha": "a" * 40,
+                "artifact_sha256": "b" * 64,
+            },
+        ],
+        REQUIRED_SCOPES,
+    )
+    reversed_rows = rollup(list(reversed(blocked["rows"])), REQUIRED_SCOPES)
+    if blocked["release_pass"] or reversed_rows["scopes"] != blocked["scopes"]:
+        print("blocked scope became a pass", file=sys.stderr)
+        return 1
+    code, _report = release_gate(Path("."), "NOT-A-SHA")
+    if code == 0:
+        print("bad source sha was accepted", file=sys.stderr)
+        return 1
+    print("release scope evidence self-check ok")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--artifact-dir", required=True)
-    parser.add_argument("--source-sha", required=True)
+    parser.add_argument("--self-check", action="store_true")
+    parser.add_argument("--artifact-dir")
+    parser.add_argument("--source-sha")
     args = parser.parse_args(argv)
+    if args.self_check:
+        return _self_check()
+    if not args.artifact_dir or not args.source_sha:
+        parser.error("--artifact-dir and --source-sha are required")
     code, report = release_gate(Path(args.artifact_dir), args.source_sha)
     json.dump(report, sys.stdout, ensure_ascii=False)
     sys.stdout.write("\n")
