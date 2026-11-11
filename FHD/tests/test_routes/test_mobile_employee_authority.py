@@ -138,6 +138,7 @@ def test_group_office_upload_requires_actual_owner(trusted_actor, monkeypatch, t
             content_type="text/csv",
             stream=BytesIO(b"amount\n20\n"),
         )
+
     @contextmanager
     def same_database():
         db = owner.factory()
