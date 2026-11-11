@@ -2,11 +2,12 @@
 """
 从备份目录或单个 .db 文件恢复 XCAGI 本地 SQLite 数据。
 
-开发环境数据目录 = 项目根目录（与 app.utils.path_io.path_utils.get_app_data_dir 一致）。
-打包环境数据目录 = %APPDATA%\\XCAGI。
+目标数据目录由 XCAGI_DATA_DIR / XCAGI_DESKTOP_DATA_DIR 优先指定；未指定时
+沿用 app.utils.path_io.path_utils.get_app_data_dir，不因脚本去重改变默认位置。
 
 用法示例：
-  cd XCAGI
+  cd FHD
+  set XCAGI_DATA_DIR=D:\\xcagi-data
   .venv\\Scripts\\python scripts/restore_sqlite_databases.py --from "D:\\backups\\xcagi_20260101"
   .venv\\Scripts\\python scripts/restore_sqlite_databases.py --from "D:\\old\\products.db" --as products.db
   .venv\\Scripts\\python scripts/restore_sqlite_databases.py --from-appdata   # 从本机打包版目录拉取到当前开发目录

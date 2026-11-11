@@ -37,7 +37,7 @@ services:
     image: ${XCAGI_CELERY_IMAGE:-xcagi/celery-worker}:${XCAGI_IMAGE_TAG:-latest}
     container_name: xcagi-celery-worker
     restart: unless-stopped
-    command: celery -A celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.extensions:celery_app worker --loglevel=info --concurrency=2
     environment:
       - XCAGI_ENV=production
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}

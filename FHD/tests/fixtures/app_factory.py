@@ -1,4 +1,4 @@
-"""Shared FastAPI app factory for tests/ and XCAGI/xcagi_tests/."""
+"""Shared FastAPI app factory for the FHD/tests suite."""
 
 from __future__ import annotations
 

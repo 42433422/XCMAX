@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 生产镜像用 server-api 锁定依赖；XCAGI/requirements.txt 含 -e .. 仅适合本地 editable 安装
 COPY requirements-server-api.txt requirements.txt
+COPY packages /build/packages
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
@@ -39,6 +40,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash appuser
+
+# Keep LangGraph imports on the audited source tree (same gate as Dockerfile.fhd-api).
+ENV PYTHONPATH=/app/packages/xcagi_langgraph_core:/app/packages/xcagi_langgraph_checkpoint:/app/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite:/app/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres:/app/packages/xcagi_langgraph_prebuilt:/app/packages/xcagi_langgraph_sdk
 
 COPY --from=builder /build/wheels /wheels
 RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels \
@@ -68,7 +72,9 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONUTF8=1 \
-    XCAGI_ENV=development
+    XCAGI_ENV=development \
+    FASTAPI_HOST=0.0.0.0 \
+    FASTAPI_PORT=5000
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -76,6 +82,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements-server-api.txt requirements.txt
+COPY packages /app/packages
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
