@@ -1,5 +1,5 @@
 {
-  "lines": 2398172,
+  "lines": 2398192,
   "updated": "2026-11-11",
-  "note": "同一源坐标的两行改为按 source_slice 一起提交并保持预览完成，不再误判失败；Playwright apt 重试在解析失败时改用 archive.ubuntu.com。净增 4 行。"
+  "note": "人员兼容路由把分页参数改成 Annotated，避免 Query 的 alias 在 Pydantic 下被当成错误；Playwright 依赖在官方镜像也解析失败时改用公共 DNS。净增 20 行。"
 }

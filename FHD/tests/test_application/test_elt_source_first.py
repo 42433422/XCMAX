@@ -210,9 +210,7 @@ def test_corrupt_source_snapshot_is_rejected(preview_store, monkeypatch, damage)
         assert db.query(PurchaseUnit).count() == 0
 
 
-def test_repeated_source_coordinates_commit_together_as_slices(
-    preview_store, monkeypatch
-):
+def test_repeated_source_coordinates_commit_together_as_slices(preview_store, monkeypatch):
     store = preview_store
     monkeypatch.setenv("FHD_ETL_LLM", "off")
     duplicate = ParsedRow("same-sheet", 1, {"客户名称": "raw only"})
