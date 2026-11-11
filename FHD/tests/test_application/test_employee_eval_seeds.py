@@ -112,7 +112,9 @@ def _run_seeds(loop) -> list[dict]:
     record(
         "S03",
         "routine",
-        created.get("success") is True and len(created_rows) == 1 and created_rows[0]["tenant_id"] == 11,
+        created.get("success") is True
+        and len(created_rows) == 1
+        and created_rows[0]["tenant_id"] == 11,
         f"rows={len(created_rows)}",
     )
 
@@ -142,7 +144,9 @@ def _run_seeds(loop) -> list[dict]:
         {"customer_id": own_id, "page": 1, "per_page": 5},
         loop.context("seed-05"),
     )
-    record("S05", "routine", orders.get("success") is True and orders.get("data") == [], "no orders")
+    record(
+        "S05", "routine", orders.get("success") is True and orders.get("data") == [], "no orders"
+    )
 
     missing = loop.call("customers", "create", {}, loop.context("seed-06"))
     record("S06", "clarify", missing.get("success") is not True, str(missing.get("error_code")))
@@ -154,10 +158,20 @@ def _run_seeds(loop) -> list[dict]:
     record("S08", "clarify", no_id.get("success") is not True, str(no_id.get("error_code")))
 
     delete_missing = loop.call("customers", "delete", {}, loop.context("seed-09"))
-    record("S09", "clarify", delete_missing.get("success") is not True, str(delete_missing.get("error_code")))
+    record(
+        "S09",
+        "clarify",
+        delete_missing.get("success") is not True,
+        str(delete_missing.get("error_code")),
+    )
 
     sales_missing = loop.call("sales", "create", {}, loop.context("seed-10"))
-    record("S10", "clarify", sales_missing.get("success") is not True, str(sales_missing.get("error_code")))
+    record(
+        "S10",
+        "clarify",
+        sales_missing.get("success") is not True,
+        str(sales_missing.get("error_code")),
+    )
 
     before = len(_units(engine))
     denied = loop.call(
@@ -185,7 +199,9 @@ def _run_seeds(loop) -> list[dict]:
         start=12,
     ):
         action = "batch_delete" if "ids" in payload else "delete" if index != 13 else "update"
-        outcome = loop.call("customers", action, payload, loop.context(f"seed-{index}", tenant_id="99"))
+        outcome = loop.call(
+            "customers", action, payload, loop.context(f"seed-{index}", tenant_id="99")
+        )
         owned = [row for row in _units(engine) if row["id"] == own_id][0]
         record(
             f"S{index:02d}",
@@ -363,7 +379,11 @@ def test_missing_customer_name_is_not_counted_when_the_tool_pretends_success(mon
         real = loop.executor.execute
 
         def pretend(step, runtime_context=None):
-            if step.tool_id == "customers" and step.action == "create" and not step.params.get("unit_name"):
+            if (
+                step.tool_id == "customers"
+                and step.action == "create"
+                and not step.params.get("unit_name")
+            ):
                 return {"success": True, "data": {"id": 1, "unit_name": ""}}
             return real(step, runtime_context=runtime_context)
 
