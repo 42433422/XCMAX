@@ -11,7 +11,7 @@ echo  正在重启所有服务...
 echo ════════════════════════════════════════
 echo.
 
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 
 docker-compose restart
 

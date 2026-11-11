@@ -55,8 +55,8 @@ docker run --rm -p 127.0.0.1:5000:5000 \
 说明：
 
 - `path/to/your_mods_parent` 下应为**多个 Mod 目录**（每个子目录含 `manifest.json`），与线上一致；若只有一个 Mod，该目录本身应作为 `/mods` 的内容（即挂载点下直接是 `your_mod_id/manifest.json`）。
-- `XCAGI_MOD_SANDBOX=1`：关闭 `/docs`、`/redoc`（见 `XCAGI/run_fastapi.py`）。
-- **Redis**：多数缓存为懒加载；未起 Redis 时，**不保证**所有业务 API 可用。本镜像目标为 **Mod 加载 + 基础 HTTP（如 `/health`）+ 你自行对 Mod 路由的冒烟**。
+- 入口为 `app.fastapi_app:create_fastapi_app()`，与现行后端共用应用工厂；不额外承诺关闭 `/docs`、`/redoc`。
+- **Redis**：多数缓存为懒加载；未起 Redis 时，**不保证**所有业务 API 可用。本镜像目标为 **Mod 加载 + 基础 HTTP（如 `/api/health`）+ 你自行对 Mod 路由的冒烟**。
 - **Apache-2.0**：社区版以 [`LICENSE`](../LICENSE) 为准；若向第三方分发镜像或二进制，请保留许可证与 NOTICE 声明。
 
 ## 可选：docker compose 片段
@@ -99,15 +99,14 @@ docker run --rm -p 127.0.0.1:5000:5000 `
 ## 验收
 
 1. 容器日志出现 Mod 扩展加载相关信息。
-2. `curl -fsS http://127.0.0.1:5000/health` 返回 200。
+2. `curl -fsS http://127.0.0.1:5000/api/health` 返回 200。
 3. 按需请求 Mod 注册的 API 路径做 1～2 条冒烟。
 
 ## 构建与运行注意事项
 
 - **PyAudio**：`Dockerfile.mod-sandbox` 的 builder 阶段已安装 `portaudio19-dev`；若自行改依赖仍从源码编 PyAudio，需保留该包。
-- **`openai` SDK**：主栈 `app/fastapi_routes/xcagi_compat.py` 等在 import 期需要 `openai`；已在 [`XCAGI/requirements.txt`](../XCAGI/requirements.txt) 声明 `openai>=1.40.0`。若 worker 启动报 `ModuleNotFoundError: openai`，请重新构建镜像。
-- **Redis**：未启动 Redis 时，不保证所有依赖缓存的 API 可用；本镜像目标仍为 **Mod 加载 + `/health` + 自选 Mod 路由**。
-- **镜像体积**：当前与主栈共用完整 `XCAGI/requirements.txt`（含 torch 等），首次构建与 `exporting layers` 可能较慢，属预期行为。
+- **依赖**：与服务端共用 [`requirements-server-api.txt`](../requirements-server-api.txt)；构建上下文包含其引用的六个 LangGraph 本地包及来源记录，不再引入 XCAGI 开发与 ML 依赖集合。
+- **Redis**：未启动 Redis 时，不保证所有依赖缓存的 API 可用；本镜像目标仍为 **Mod 加载 + `/api/health` + 自选 Mod 路由**。
 
 ## 冒烟记录（维护者本地）
 

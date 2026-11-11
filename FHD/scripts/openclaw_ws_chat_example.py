@@ -18,7 +18,7 @@ OpenClaw Gateway WebSocket：challenge → connect → chat.send → 接收事�
   OPENCLAW_WS_URL          默认 ws://localhost:28789/ws
   OPENCLAW_SESSION_KEY     默认 main
 
-示例:
+示例（从 FHD/ 运行维护源）:
   set OPENCLAW_GATEWAY_TOKEN=你的token
   python scripts/openclaw_ws_chat_example.py 你好
 """

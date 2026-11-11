@@ -9,10 +9,10 @@
 4. 验证数据完整性
 5. 可选：删除 customers.db
 
-使用方式：
+使用方式（从 FHD/ 运行；数据目录沿用应用 get_db_path 的配置与 Mod 后缀）：
     python scripts/merge_databases.py --dry-run  # 预览
-    python scripts/merge_databases.py             # 执行
-    python scripts/merge_databases.py --rollback  # 回滚
+    python scripts/merge_databases.py --no-dry-run  # 执行
+    python scripts/merge_databases.py --verify  # 验证
 """
 
 import argparse
@@ -22,12 +22,16 @@ import sqlite3
 import sys
 from datetime import datetime
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from app.db.init_db import get_customers_db_path, get_db_path
+from app.db.init_db import get_db_path
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+
+def _legacy_customers_sqlite_path() -> str:
+    """历史合并脚本：应用数据目录下的 customers.db（若已合并到主库则可能不存在）。"""
+    return get_db_path("customers.db")
 
 
 def backup_database(db_path: str) -> str:
@@ -57,7 +61,7 @@ def get_table_data(db_path: str, table_name: str) -> list:
 def merge_purchase_units(dry_run: bool = True) -> dict:
     """合并 purchase_units 表"""
     products_db = get_db_path("products.db")
-    customers_db = get_customers_db_path()
+    customers_db = _legacy_customers_sqlite_path()
 
     print("\n" + "=" * 60)
     print("数据库合并 - purchase_units 表")
@@ -163,7 +167,7 @@ def merge_purchase_units(dry_run: bool = True) -> dict:
 def verify_merge() -> dict:
     """验证合并结果"""
     products_db = get_db_path("products.db")
-    customers_db = get_customers_db_path()
+    customers_db = _legacy_customers_sqlite_path()
 
     results = {
         "products_db_exists": os.path.exists(products_db),
@@ -227,13 +231,15 @@ def main():
             print(f"  - {err}")
         return
 
-    if args.cleanup and os.path.exists(get_customers_db_path()):
-        print("\n🗑️  准备删除 customers.db...")
-        backup_path = backup_database(get_customers_db_path())
-        if backup_path:
-            os.remove(get_customers_db_path())
-            print(f"  ✅ 已删除: {get_customers_db_path()}")
-            print(f"  📦 备份: {backup_path}")
+    if args.cleanup:
+        legacy_c = _legacy_customers_sqlite_path()
+        if os.path.exists(legacy_c):
+            print("\n🗑️  准备删除 customers.db...")
+            backup_path = backup_database(legacy_c)
+            if backup_path:
+                os.remove(legacy_c)
+                print(f"  ✅ 已删除: {legacy_c}")
+                print(f"  📦 备份: {backup_path}")
 
     print("\n" + "=" * 60)
     print("验证合并结果...")
