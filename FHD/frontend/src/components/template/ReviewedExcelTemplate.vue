@@ -471,9 +471,24 @@ watch([getAuthSessionEpoch, () => productReadAccountEpoch.value], () => {
   emit('stage', 'archive')
 }, { flush: 'sync' })
 onBeforeUnmount(() => { resetIntake(); stopIngestPoll(); alive = false; operationEpoch += 1; selectionEpoch += 1 })
-function openFilePicker() {
+const WORKBOOK_NAME = /\.(xlsx|xls|docx)$/i
+function importableWorkbook(file: File) {
+  return WORKBOOK_NAME.test(file.name) && !file.name.startsWith('~$')
+}
+function openPicker(folder: boolean) {
   if (!alive || busy.value || documentWorkPending.value) return
-  fileInputRef.value?.click()
+  const input = fileInputRef.value
+  if (!input) return
+  if (folder) input.setAttribute('webkitdirectory', '')
+  else input.removeAttribute('webkitdirectory')
+  input.multiple = true
+  input.click()
+}
+function openFilePicker() {
+  openPicker(false)
+}
+function openFolderPicker() {
+  openPicker(true)
 }
 function startProcessing(approvedRoundKey = '') {
   if (!alive || busy.value || archiveRunPending.value) return
@@ -554,13 +569,56 @@ function applyChosenFiles(list: File[]) {
   classificationNotice.value = ''
   emit('stage', 'archive')
 }
-function onComposerDrop(event: DragEvent) {
+type DroppedEntry = {
+  isFile: boolean
+  isDirectory: boolean
+  file: (ok: (file: File) => void, err?: () => void) => void
+  createReader: () => { readEntries: (ok: (entries: DroppedEntry[]) => void, err?: () => void) => void }
+}
+function droppedEntries(event: DragEvent) {
+  return Array.from(event.dataTransfer?.items || []).flatMap((item) => {
+    const entry = (item as DataTransferItem & { webkitGetAsEntry?: () => DroppedEntry | null }).webkitGetAsEntry?.()
+    return entry ? [entry] : []
+  })
+}
+async function collectDropped(entry: DroppedEntry, found: File[]) {
+  if (found.length > 200) return
+  if (entry.isFile) {
+    const file = await new Promise<File>((resolve, reject) => entry.file(resolve, () => reject(new Error('unreadable'))))
+    if (importableWorkbook(file)) found.push(file)
+    return
+  }
+  if (!entry.isDirectory) return
+  const reader = entry.createReader()
+  for (;;) {
+    const batch = await new Promise<DroppedEntry[]>((resolve, reject) => reader.readEntries(resolve, () => reject(new Error('unreadable'))))
+    if (!batch.length) return
+    for (const child of batch) {
+      await collectDropped(child, found)
+      if (found.length > 200) return
+    }
+  }
+}
+async function onComposerDrop(event: DragEvent) {
   event.preventDefault()
   composerDragOver.value = false
   if (!alive || busy.value || documentWorkPending.value) return
-  const list = Array.from(event.dataTransfer?.files || []).filter((item) => /\.(xlsx|xls|docx)$/i.test(item.name))
+  const entries = droppedEntries(event)
+  const folder = entries.some((entry) => entry.isDirectory)
+  let list: File[] = []
+  try {
+    if (folder) {
+      for (const entry of entries) {
+        await collectDropped(entry, list)
+        if (list.length > 200) break
+      }
+    } else list = Array.from(event.dataTransfer?.files || []).filter(importableWorkbook)
+  } catch {
+    error.value = '文件夹没有读完，请改为选择其中的文件'
+    return
+  }
   if (!list.length) {
-    error.value = '请拖入 Excel 或对账单 Word（.xlsx / .xls / .docx）'
+    error.value = folder ? '文件夹里没有 Excel 或对账单 Word（.xlsx / .xls / .docx）' : '请拖入 Excel 或对账单 Word（.xlsx / .xls / .docx）'
     return
   }
   applyChosenFiles(list)
@@ -568,8 +626,14 @@ function onComposerDrop(event: DragEvent) {
 function choose(event: Event) {
   if (!alive || busy.value) return
   const input = event.target as HTMLInputElement
-  const list = Array.from(input.files || [])
+  const folder = input.hasAttribute('webkitdirectory')
+  const list = Array.from(input.files || []).filter((item) => !folder || importableWorkbook(item))
   input.value = ''
+  input.removeAttribute('webkitdirectory')
+  if (folder && !list.length) {
+    error.value = '文件夹里没有 Excel 或对账单 Word（.xlsx / .xls / .docx）'
+    return
+  }
   applyChosenFiles(list)
 }
 function confirmLegacyScope(form: FormData, name: string, hash: string, current: () => boolean) {
@@ -1709,7 +1773,7 @@ async function downloadCandidate(index: number) {
       @dragleave.prevent="onComposerDragLeave"
       @drop.prevent="onComposerDrop"
     >
-      <div v-if="composerDragOver" class="elt-composer__drop" role="status">松开以加入文件</div>
+      <div v-if="composerDragOver" class="elt-composer__drop" role="status">松开以加入文件或文件夹</div>
       <input
         ref="fileInputRef"
         class="elt-composer__file-input"
@@ -1719,10 +1783,13 @@ async function downloadCandidate(index: number) {
         :disabled="busy || documentWorkPending"
         @change="choose"
       >
-      <button type="button" class="elt-composer__attach" :disabled="busy || documentWorkPending" @click="openFilePicker">添加文件</button>
+      <div class="elt-composer__sources">
+        <button type="button" class="elt-composer__attach" :disabled="busy || documentWorkPending" @click="openFilePicker">添加文件</button>
+        <button type="button" class="elt-composer__folder" :disabled="busy || documentWorkPending" @click="openFolderPicker">添加文件夹</button>
+      </div>
       <div class="elt-composer__chips" aria-label="待处理文件">
-        <span v-for="(item, index) in files" :key="index" class="elt-composer__chip">{{ item.name }}</span>
-        <span v-if="!files.length" class="elt-composer__placeholder">拖入或选择 Excel / 对账单 Word（.xlsx / .xls / .docx）</span>
+        <span v-for="(item, index) in files" :key="index" class="elt-composer__chip">{{ item.webkitRelativePath || item.name }}</span>
+        <span v-if="!files.length" class="elt-composer__placeholder">可一次多选，或拖入文件、文件夹（.xlsx / .xls / .docx）</span>
       </div>
       <label class="elt-composer__prompt">
         <span class="sr-only">整理要求</span>
@@ -1757,7 +1824,7 @@ async function downloadCandidate(index: number) {
         :disabled="archiveOnSelect ? cancelAnalysis : !files.length || files.length > 200 || busy"
         @click="archiveOnSelect ? stopArchiveProcessing() : classify()"
       >{{ archiveOnSelect ? cancelAnalysis ? '正在停止…' : '停止后续处理' : '重试未完成文件' }}</button>
-      <p class="elt-composer__hint">再次添加会留在本批 · 每批最多 200 个 · 单文件 &lt; 20 MB · 整批 &lt; 50 MB</p>
+      <p class="elt-composer__hint">可一次多选文件或整个文件夹 · 再次添加会留在本批 · 每批最多 200 个 · 单文件 &lt; 20 MB · 整批 &lt; 50 MB</p>
     </div>
   </section>
 
@@ -1880,7 +1947,7 @@ async function downloadCandidate(index: number) {
   display: grid;
   grid-template-columns: auto 1fr auto;
   grid-template-areas:
-    "attach chips start"
+    "sources chips start"
     "prompt prompt send"
     "hint hint hint";
   gap: 0.5rem 0.65rem;
@@ -1911,7 +1978,7 @@ async function downloadCandidate(index: number) {
   opacity: 0;
   pointer-events: none;
 }
-.elt-composer__attach { grid-area: attach; }
+.elt-composer__sources { grid-area: sources; display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .elt-composer__chips {
   grid-area: chips;
   display: flex;
@@ -1962,6 +2029,7 @@ async function downloadCandidate(index: number) {
 .elt-composer__start,
 .elt-composer__retry,
 .elt-composer__attach,
+.elt-composer__folder,
 .elt-composer__send {
   border-radius: 10px;
   padding: 0.55rem 0.9rem;

@@ -794,7 +794,67 @@ describe('reviewed Excel template', () => {
       const input = wrapper.get('input.elt-composer__file-input').element as HTMLInputElement
       const click = vi.spyOn(input, 'click').mockImplementation(() => undefined)
       await wrapper.get('.elt-composer__attach').trigger('click')
+      expect(input.hasAttribute('webkitdirectory')).toBe(false)
+      expect(input.multiple).toBe(true)
       expect(click).toHaveBeenCalledTimes(1)
+    } finally { wrapper.unmount() }
+  })
+
+  it('stages a batch of files and a folder of workbooks, skipping other files', async () => {
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const input = wrapper.get('input.elt-composer__file-input').element as HTMLInputElement
+      const batch = ['甲.xlsx', '乙.xls', '丙.docx'].map((name) => new File(['x'], name))
+      Object.defineProperty(input, 'files', { configurable: true, value: batch })
+      await wrapper.get('input.elt-composer__file-input').trigger('change')
+      expect(wrapper.findAll('.elt-composer__chip').map((chip) => chip.text())).toEqual(['甲.xlsx', '乙.xls', '丙.docx'])
+      const click = vi.spyOn(input, 'click').mockImplementation(() => undefined)
+      await wrapper.get('.elt-composer__folder').trigger('click')
+      expect(input.hasAttribute('webkitdirectory')).toBe(true)
+      expect(click).toHaveBeenCalledTimes(1)
+      const nested = new File(['x'], '送货单.xlsx')
+      Object.defineProperty(nested, 'webkitRelativePath', { value: '三月/客户/送货单.xlsx' })
+      const picture = new File(['p'], '照片.png')
+      const lock = new File(['l'], '~$送货单.xlsx')
+      Object.defineProperty(input, 'files', { configurable: true, value: [nested, picture, lock] })
+      await wrapper.get('input.elt-composer__file-input').trigger('change')
+      expect(wrapper.findAll('.elt-composer__chip').map((chip) => chip.text())).toEqual(['三月/客户/送货单.xlsx'])
+      expect(input.hasAttribute('webkitdirectory')).toBe(false)
+      Object.defineProperty(input, 'webkitdirectory', { configurable: true, value: '' })
+      input.setAttribute('webkitdirectory', '')
+      Object.defineProperty(input, 'files', { configurable: true, value: [picture] })
+      await wrapper.get('input.elt-composer__file-input').trigger('change')
+      expect(wrapper.get('[role=alert]').text()).toContain('文件夹里没有')
+      expect(wrapper.findAll('.elt-composer__chip').map((chip) => chip.text())).toEqual(['三月/客户/送货单.xlsx'])
+    } finally { wrapper.unmount() }
+  })
+
+  it('imports workbooks from a dropped folder', async () => {
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const nested = new File(['x'], '明细.xlsx')
+      Object.defineProperty(nested, 'webkitRelativePath', { value: '批次/明细.xlsx' })
+      const picture = new File(['p'], '说明.txt')
+      let sent = false
+      const directory = {
+        isFile: false,
+        isDirectory: true,
+        createReader: () => ({
+          readEntries: (ok: (entries: unknown[]) => void) => {
+            if (sent) { ok([]); return }
+            sent = true
+            ok([
+              { isFile: true, isDirectory: false, file: (done: (file: File) => void) => done(nested) },
+              { isFile: true, isDirectory: false, file: (done: (file: File) => void) => done(picture) },
+            ])
+          },
+        }),
+      }
+      await wrapper.get('.elt-composer').trigger('drop', {
+        dataTransfer: { files: [], items: [{ webkitGetAsEntry: () => directory }] },
+      })
+      await flushPromises()
+      expect(wrapper.findAll('.elt-composer__chip').map((chip) => chip.text())).toEqual(['批次/明细.xlsx'])
     } finally { wrapper.unmount() }
   })
 
