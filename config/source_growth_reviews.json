@@ -220,13 +220,13 @@
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
       "base_blob": "d6fa1b295a042d8e9cfbf9cc5693ca55302bbd72",
-      "head_blob": "bf9d44e1f3e4910cc6ace492582b775568c55828",
+      "head_blob": "e2e11513e4558e19946c17228a2df766894dfcde",
       "before_lines": 1374,
-      "after_lines": 1547,
-      "reason": "Receipt-driven withdrawal verifies empty and partial batches before knowledge deletion; completed business rollback can resume knowledge cleanup after interruption. Retains actual boolean receipt compatibility, worker failure preservation and process-local bounded polling.",
+      "after_lines": 1560,
+      "reason": "Receipt-driven withdrawal verifies empty and partial batches before knowledge deletion. A worker receipt whose status is partial, including attendance rows that were partly written, stays a partial batch on the first write and on later progress reads instead of being recorded as failed.",
       "boundary": "Owned and tenant-scoped receipts remain mandatory; unknown, missing, running or contradictory evidence fails closed. Successful business rollback is not replayed during knowledge cleanup recovery. Only a typed document-not-found response is idempotent; conflicts stay blocked. Polling limits remain per process (8 total, 2 per tenant), not global. Knowledge deletion failures invalidate cached revision; not-found requires strict durable JSON verification so persistence failure cannot be mistaken for successful deletion.",
-      "validation": "Final independent integrated sort-u suite passed 628/628 after repairing office fixture provider-alias leakage (original reverse order reproduced four failures). Three production files passed mypy and patch files passed Ruff. Earlier recovery draft failed durability review and is superseded; human architecture approval and new-head CI remain separate.",
-      "follow_up": "Human architecture review of +173 lines required; preserve receipt and recovery boundary rather than mechanical splitting.",
+      "validation": "Partial attendance receipt, complete-coverage partial batch, refresh, withdrawal and poll-budget tests passed 53/53. Ruff passed on the edited files. The prior 628-case claim belongs to de6419d63, not this head. Human architecture approval and new-head CI remain separate.",
+      "follow_up": "Human architecture review of the receipt lifecycle growth remains required; preserve the partial outcome instead of splitting the file to hide the line count.",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {

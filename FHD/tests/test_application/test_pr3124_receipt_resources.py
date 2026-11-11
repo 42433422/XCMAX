@@ -442,3 +442,99 @@ def test_incomplete_coverage_keeps_zero_write_completion(
     )
     assert result["status"] == expected
     assert result["coverage"]["complete"] is False
+
+
+def test_partial_worker_receipt_is_not_failed(tmp_path, monkeypatch):
+    fake = MagicMock()
+    fake.get_run.return_value = {"target_type": "attendance", "preview_revision": "v"}
+    fake.execute.return_value = {
+        "status": "partial",
+        "summary": {"executed": 1, "new": 1, "update": 0, "error": 1},
+        "executed_rows": 1,
+        "receipt": {"rows_written": True, "partial": True},
+    }
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake)
+    with tenant_scope(42):
+        result = ais.AutoIngestService()._ingest_business(
+            MagicMock(),
+            owner_user_id=7,
+            path=tmp_path / "unused",
+            file_name="unused.csv",
+            target_type="attendance",
+            batch_id="b",
+            prepared_plan={
+                "run_id": "r",
+                "upload_id": "u",
+                "preview_revision": "v",
+                "target_type": "attendance",
+            },
+        )
+    assert result["status"] == "partial"
+    assert result["failed"] is False
+
+
+@pytest.mark.usefixtures("ledger_root")
+def test_partial_receipt_stays_partial_when_coverage_is_complete(tmp_path, monkeypatch):
+    source = tmp_path / "order.csv"
+    source.write_text("code,name\nM-1,demo\n", encoding="utf-8")
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setattr(ais, "get_request_active_mod_id", lambda: "m")
+    monkeypatch.setattr(
+        ais,
+        "enrich_knowledge_progress",
+        lambda receipt, _tenant, progress: (receipt, progress("done", 100), {}),
+    )
+    service = ais.AutoIngestService()
+    monkeypatch.setattr(service, "detect_target", lambda *_a, **_k: {"target_type": "attendance"})
+    monkeypatch.setattr(service, "_ingest_knowledge", lambda **_k: {"action": "new"})
+    monkeypatch.setattr(
+        service,
+        "_ingest_business",
+        lambda *_a, **_k: {
+            "status": "partial",
+            "summary": {"executed": 1, "new": 1, "update": 0, "error": 0},
+            "receipt": {"rows_written": True, "partial": True},
+            "failed": False,
+        },
+    )
+    result = service.run(
+        MagicMock(),
+        owner_user_id=7,
+        tenant_id=42,
+        source_path=source,
+        file_name="order.csv",
+    )
+    assert result["coverage"]["complete"] is True
+    assert result["status"] == "partial"
+    assert result["business_progress"]["stage"] == "partial"
+
+
+@pytest.mark.usefixtures("ledger_root")
+def test_refresh_keeps_partial_attendance_receipt(monkeypatch):
+    from contextlib import nullcontext
+
+    batch = {
+        "batch_id": "b",
+        "status": "running",
+        "tenant_id": 42,
+        "owner_user_id": 7,
+        "mod_id": "m",
+        "business": {"run_id": "r"},
+        "knowledge": {"action": "new"},
+        "detection": {"target_type": "attendance"},
+    }
+    ais._save_ledger(42, {"batches": {"b": dict(batch)}})
+    monkeypatch.setattr(ais, "get_request_active_mod_id", lambda: "m")
+    fake = MagicMock()
+    fake.get_run.return_value = {
+        "id": "r",
+        "status": "partial",
+        "progress": 100,
+        "summary": {"executed": 1, "new": 1, "update": 0, "error": 1},
+        "receipt": {"rows_written": True, "partial": True},
+    }
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake)
+    monkeypatch.setattr("app.db.session.get_db", lambda: nullcontext(MagicMock()))
+    refreshed = ais.AutoIngestService()._refresh_business(dict(batch))
+    assert refreshed["status"] == "partial"
+    assert refreshed["business_progress"]["stage"] == "partial"

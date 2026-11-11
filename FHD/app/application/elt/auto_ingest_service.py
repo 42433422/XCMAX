@@ -642,6 +642,8 @@ class AutoIngestService:
                 )
             elif business.get("pending_execution"):
                 biz_prog = _progress("executing", 80, message="业务写入处理中，请等待实际回执")
+            elif business.get("status") == "partial":
+                biz_prog = _progress("partial", 100, message="部分业务行已写入，请核对未写入部分")
             elif business.get("status") == "completed":
                 _, biz_prog = business_completion_from_run(business, _progress)
             else:
@@ -663,6 +665,8 @@ class AutoIngestService:
                     if business.get("pending_preview")
                     else "failed"
                     if business.get("failed")
+                    else "partial"
+                    if business.get("status") == "partial"
                     else completion_status
                     if coverage["complete"] or completion_status == "completed_empty"
                     else "partial"
@@ -1022,6 +1026,15 @@ class AutoIngestService:
             status = str(run.get("status") or "")
             if status == "completed":
                 batch_status, progress = business_completion_from_run(run, _progress)
+            elif status == "partial":
+                batch_status, progress = (
+                    "partial",
+                    _progress(
+                        "partial",
+                        int(run.get("progress") or 100),
+                        message="部分业务行已写入，请核对未写入部分",
+                    ),
+                )
             elif status in {"failed", "interrupted", "outcome_unknown"}:
                 batch_status, progress = (
                     "failed",
@@ -1439,7 +1452,7 @@ class AutoIngestService:
             "pending_execution": isinstance(executed, dict)
             and executed.get("status") in {"queued", "executing"},
             "failed": not isinstance(executed, dict)
-            or executed.get("status") not in {"completed", "queued", "executing"},
+            or executed.get("status") not in {"completed", "partial", "queued", "executing"},
         }
 
     def _withdraw_business(
