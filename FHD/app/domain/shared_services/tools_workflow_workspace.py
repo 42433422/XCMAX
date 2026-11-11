@@ -466,15 +466,13 @@ def _registered_router_employee(
             open_etl_input_file,
             resolve_etl_path,
         )
+        from app.mod_sdk.employee_tool_registry import office_output_paths
 
         paths = set()
-        for output in (result.get("result") or {}).get("outputs") or []:
-            nested = output.get("output") or {}
-            raw = output.get("output_path") or nested.get("output_path")
-            if raw:
-                path = resolve_etl_path(str(raw), workspace_root=workspace_root)
-                with open_etl_input_file(path, workspace_root=workspace_root):
-                    paths.add(str(path))
+        for raw in office_output_paths(employee_id, result):
+            path = resolve_etl_path(raw, workspace_root=workspace_root)
+            with open_etl_input_file(path, workspace_root=workspace_root):
+                paths.add(str(path))
         if len(paths) == 1:
             result["file_path"] = paths.pop()
             run_id = str(runtime_context.get("run_id") or "")

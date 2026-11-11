@@ -506,7 +506,7 @@ def test_sales_report_keeps_customer_and_confirmation_filters(report_env):
                 customer_id=customer_id,
                 customer_name=name,
                 state=state,
-                status=state,
+                status="quote",
                 total_amount=Decimal(amount),
                 created_at=datetime(2026, 11, 6),
             )
@@ -526,3 +526,11 @@ def test_sales_report_keeps_customer_and_confirmation_filters(report_env):
         result = ReportService().get_sales_report(customer_name="客户A", status="confirmed")
         assert result["success"]
         assert result["summary"]["total_amount"] == 200
+
+        from app.application.sales.quotes import SalesQuotes
+
+        orders = SalesQuotes(report_env["test_db"], lambda: "", Decimal).query(
+            customer_name="客户A", status="confirmed"
+        )
+        assert orders["total"] == 2
+        assert orders["summary"]["amount"] == result["summary"]["total_amount"]

@@ -1,0 +1,78 @@
+"""Read authenticated workflow spreadsheets through upload and run receipts."""
+
+from __future__ import annotations
+
+import hashlib
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Any
+
+from app.application.agent_orchestrator.artifact_files import (
+    artifact_path,
+    read_verified_spreadsheet,
+)
+from app.application.elt.service import get_elt_service
+from app.application.shipment_excel_etl_security import open_etl_input_file
+from app.db.models.elt import EltUpload
+from app.db.session import get_db
+from app.infrastructure.auth.agent_mod_scope import _bound_actor
+from app.infrastructure.tenant_scope import tenant_id_for_write
+
+
+def _run_spreadsheet(file_path: str, context: dict[str, Any]) -> bytes | None:
+    run_id = context.get("run_id")
+    outputs = context.get("node_outputs")
+    if not isinstance(run_id, str) or not isinstance(outputs, dict):
+        return None
+    for output in outputs.values():
+        if not isinstance(output, dict) or output.get("success") is not True:
+            continue
+        data = output.get("data")
+        receipts = [
+            row
+            for row in output.get("artifacts") or []
+            if isinstance(row, dict) and str(row.get("artifact_id", "")).startswith("xlsx_")
+        ]
+        for receipt in receipts:
+            artifact_id = receipt["artifact_id"]
+            path = artifact_path(run_id, artifact_id)
+            if file_path in {str(path), f"/api/agent/runs/{run_id}/artifacts/{artifact_id}"} or (
+                len(receipts) == 1 and isinstance(data, dict) and data.get("file_path") == file_path
+            ):
+                return read_verified_spreadsheet(run_id, receipt)
+    return None
+
+
+@contextmanager
+def workflow_spreadsheet_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[Path]:
+    actor = _bound_actor(context)
+    content = _run_spreadsheet(file_path, context)
+    suffix = ".xlsx"
+    if content is None:
+        with get_db() as db:
+            upload_id = (
+                db.query(EltUpload.id)
+                .filter(
+                    EltUpload.owner_user_id == actor.id,
+                    EltUpload.tenant_id == tenant_id_for_write(),
+                    EltUpload.storage_path == file_path,
+                )
+                .scalar()
+            )
+            if upload_id is None:
+                raise PermissionError("表格不属于当前账号或当前任务")
+            upload = get_elt_service()._owned_upload(db, upload_id, actor.id)
+            suffix = Path(upload.file_name).suffix.lower()
+            with open_etl_input_file(upload.storage_path, owner_user_id=actor.id) as source:
+                content = source.read(upload.size_bytes + 1)
+            if (
+                len(content) != upload.size_bytes
+                or hashlib.sha256(content).hexdigest() != upload.sha256
+            ):
+                raise PermissionError("上传表格与保存回执不一致")
+    with TemporaryDirectory(prefix="xcagi-workflow-sheet-") as directory:
+        path = Path(directory) / ("sheet" + suffix)
+        path.write_bytes(content)
+        yield path

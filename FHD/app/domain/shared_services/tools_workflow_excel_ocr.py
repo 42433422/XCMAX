@@ -37,9 +37,26 @@ def _registered_router_excel_analysis(
     try:
         from app.application.tools.workflow import handle_excel_analysis
 
-        result = handle_excel_analysis(
-            payload, workspace_root=runtime_context.get("workspace_root")
-        )
+        if (
+            action in {"read", "structure", "query", "statistics"}
+            and "_actor_authorization" in runtime_context
+        ):
+            from app.application.tools.workflow_spreadsheet_scope import (
+                workflow_spreadsheet_snapshot,
+            )
+
+            original = str(payload["file_path"])
+            with workflow_spreadsheet_snapshot(original, runtime_context) as snapshot:
+                result = handle_excel_analysis({**payload, "file_path": str(snapshot)})
+            if isinstance(result, dict):
+                result["file_path"] = original
+                result.pop("resolved_path", None)
+        else:
+            result = handle_excel_analysis(
+                payload, workspace_root=runtime_context.get("workspace_root")
+            )
+    except PermissionError as err:
+        return {"success": False, "error_code": "spreadsheet_access_denied", "message": str(err)}
     except RECOVERABLE_ERRORS as err:
         logger.error("excel_analysis 执行失败: %s", err, exc_info=True)
         return {"success": False, "message": f"Excel 分析失败：{str(err)}"}

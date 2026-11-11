@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
 
 def test_employee_list_matches_the_declared_tool_result(employee_mods_root):
     from app.application.agent_orchestrator.tool_spec import validate_tool_result
@@ -305,3 +307,85 @@ def test_excel_verification_rejects_incorrect_count_or_total(monkeypatch, count,
         "",
     )
     assert result["success"] is ok and result["verification"]["verified"] is ok
+
+
+@pytest.mark.parametrize("action", ["context", "execute"])
+def test_employee_workflow_hands_off_the_declared_deliverable(tmp_path, monkeypatch, action):
+    from app.application.employee_runtime import executor
+    from app.domain.shared_services.tools_workflow_workspace import _registered_router_employee
+
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    pdf = tmp_path / "report.pdf"
+    pdf.write_bytes(b"%PDF-test")
+    output = (
+        {"output": "上游文本"}
+        if action == "context"
+        else {"output_path": str(tmp_path / "parsed.json"), "output": {"pdf_output_path": str(pdf)}}
+    )
+    monkeypatch.setattr(
+        executor,
+        "execute_employee_task_local",
+        lambda *a, **kw: {"success": True, "result": {"outputs": [output]}},
+    )
+    result = _registered_router_employee(
+        action,
+        {"employee_id": "pdf-generate-employee", "task": "协作"},
+        {"workspace_root": str(tmp_path)},
+        "normal",
+        "",
+    )
+    assert result["success"]
+    assert result["data"].get("file_path") == (str(pdf) if action == "execute" else None)
+
+
+def test_authenticated_excel_reads_require_own_upload_or_current_run_receipt(
+    tmp_path, monkeypatch, trusted_actor
+):
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    from app.application.agent_orchestrator.artifact_files import store_spreadsheet
+    from app.application.elt.service import get_elt_service
+    from app.db.models.elt import EltUpload
+    from app.domain.shared_services.tools_workflow_excel_ocr import (
+        _registered_router_excel_analysis,
+    )
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    owner, other = trusted_actor(user_id=7), trusted_actor(user_id=8)
+    with tenant_scope(owner.tenant_id), owner.factory.begin() as db:
+        upload = get_elt_service().save_upload(
+            db,
+            owner_user_id=owner.user_id,
+            file_name="orders.csv",
+            content_type="text/csv",
+            stream=BytesIO(b"amount\n120\n80\n"),
+        )
+        path = db.get(EltUpload, upload["upload_id"]).storage_path
+
+    def read(file_path, context):
+        with tenant_scope(owner.tenant_id):
+            return _registered_router_excel_analysis(
+                "statistics", {"file_path": str(file_path)}, context, "normal", ""
+            )
+
+    assert read(path, owner.context)["row_count"] == 2
+    assert read(path, other.context)["error_code"] == "spreadsheet_access_denied"
+    workbook = Workbook()
+    workbook.active.append(["amount"])
+    workbook.active.append([200])
+    buffer = BytesIO()
+    workbook.save(buffer)
+    receipt = store_spreadsheet("run_owner", buffer.getvalue())
+    assert read(receipt["uri"], owner.context)["error_code"] == "spreadsheet_access_denied"
+    result = read(
+        receipt["uri"],
+        {
+            **owner.context,
+            "run_id": "run_owner",
+            "node_outputs": {"employee": {"success": True, "artifacts": [receipt]}},
+        },
+    )
+    assert result["numeric_summary"]["amount"]["sum"] == 200

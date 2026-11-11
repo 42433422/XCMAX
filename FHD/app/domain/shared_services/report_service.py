@@ -119,7 +119,9 @@ class ReportService(NeuroEventPublisherMixin):
             if customer_name:
                 query = query.filter(SalesOrder.customer_name == customer_name)
             if status:
-                query = query.filter(SalesOrder.state == status)
+                from app.application.sales.quotes import sales_status_predicate
+
+                query = query.filter(sales_status_predicate(status))
             if payment_state:
                 query = query.filter(SalesOrder.payment_state == payment_state)
             if min_amount_exclusive is not None:

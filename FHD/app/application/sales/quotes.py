@@ -10,8 +10,10 @@ from typing import Any
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models import Customer, SalesOrder, SalesOrderItem
+from app.db.models.sales import SALES_ORDER_STATE_FLOW
 
 from .contracts import SessionFactory
 from .idempotency import CLOSED_LOOP_FP_PREFIX
@@ -35,6 +37,11 @@ def inclusive_bound(value: Any, *, end: bool) -> datetime | None:
             return day.replace(hour=23, minute=59, second=59)
         return day
     return datetime.fromisoformat(text)
+
+
+def sales_status_predicate(status: str) -> ColumnElement[bool]:
+    column = SalesOrder.state if status in SALES_ORDER_STATE_FLOW else SalesOrder.status
+    return column == status
 
 
 class SalesQuotes:
@@ -75,7 +82,7 @@ class SalesQuotes:
             if current_tenant_id() is not None or owned_tenant_id() is not None:
                 q = apply_tenant_filter(q, SalesOrder)
             if status:
-                q = q.filter(SalesOrder.status == status)
+                q = q.filter(sales_status_predicate(status))
             if customer_id:
                 q = q.filter(SalesOrder.customer_id == customer_id)
             if customer_name:

@@ -11,7 +11,6 @@ import pytest
 @pytest.fixture
 def local_inference_receiver():
     import threading
-    import time
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     state = {"posts": 0, "delay": 0}
@@ -20,7 +19,7 @@ def local_inference_receiver():
         def do_POST(self):
             self.rfile.read(int(self.headers.get("Content-Length", 0)))
             state["posts"] += 1
-            time.sleep(state["delay"])
+            threading.Event().wait(state["delay"])
             try:
                 self.send_response(200)
                 self.send_header("Content-Length", "2")

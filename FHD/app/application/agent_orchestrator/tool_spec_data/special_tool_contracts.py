@@ -13,6 +13,10 @@ def _sample(name: str, input: dict[str, Any], output: dict[str, Any]) -> dict[st
     return {"name": name, "input": input, "output": output}
 
 
+def _success(**fields: Any) -> dict[str, Any]:
+    return {"success": True, **fields}
+
+
 _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ("sales", "create_order"): [
         _sample(
@@ -21,7 +25,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "customer_name": "测试客户",
                 "items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}],
             },
-            {"success": True, "data": {"id": 1, "state": "confirmed", "total_amount": 100}},
+            _success(data={"id": 1, "state": "confirmed", "total_amount": 100}),
         )
     ],
     ("sales", "quote"): [
@@ -31,14 +35,14 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "customer_name": "测试客户",
                 "items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}],
             },
-            {"success": True, "data": {"id": 1, "total_amount": 100}},
+            _success(data={"id": 1, "total_amount": 100}),
         )
     ],
     ("business_db", "read"): [
         _sample(
             "read_products_by_keyword",
             {"entity": "products", "keyword": "5003"},
-            {"success": True, "data": [{"model_number": "5003", "name": "sample product"}]},
+            _success(data=[{"model_number": "5003", "name": "sample product"}]),
         )
     ],
     ("business_db", "write"): [
@@ -49,7 +53,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "operation": "create",
                 "payload": {"unit_name": "Acme Trading"},
             },
-            {"success": True, "message": "customer created", "data": {"id": "cust_1"}},
+            _success(message="customer created", data={"id": "cust_1"}),
         )
     ],
     ("customers", "create"): [
@@ -61,27 +65,24 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "contact_phone": "13900000000",
                 "contact_address": "上海",
             },
-            {"success": True, "data": {"id": 7, "unit_name": "星光贸易", "contact_person": "张三"}},
+            _success(data={"id": 7, "unit_name": "星光贸易", "contact_person": "张三"}),
         )
     ],
     ("customers", "update"): [
         _sample(
             "update_customer_route",
             {"id": 7, "unit_name": "星光贸易二部", "contact_person": "李四"},
-            {
-                "success": True,
-                "data": {"id": 7, "unit_name": "星光贸易二部", "contact_person": "李四"},
-            },
+            _success(data={"id": 7, "unit_name": "星光贸易二部", "contact_person": "李四"}),
         )
     ],
     ("customers", "delete"): [
-        _sample("delete_customer_route", {"id": 7}, {"success": True, "message": "已删除"})
+        _sample("delete_customer_route", {"id": 7}, _success(message="已删除"))
     ],
     ("customers", "batch_delete"): [
         _sample(
             "batch_delete_customer_route",
             {"ids": [7, "bad", 8]},
-            {"success": True, "message": "已删除 2 条", "deleted": 2, "skipped": ["bad"]},
+            _success(message="已删除 2 条", deleted=2, skipped=["bad"]),
         )
     ],
     ("products", "create"): [
@@ -91,7 +92,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
             {
                 "success": True,
                 "created": True,
-                "raw": {"success": True, "data": {"id": 7, "model_number": "5003"}},
+                "raw": _success(data={"id": 7, "model_number": "5003"}),
             },
         )
     ],
@@ -99,186 +100,184 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
         _sample(
             "update_product",
             {"id": 7, "name": "5003 v2"},
-            {"success": True, "data": {"id": 7, "name": "5003 v2"}},
+            _success(data={"id": 7, "name": "5003 v2"}),
         )
     ],
     ("products", "delete"): [
-        _sample("delete_product", {"id": 7}, {"success": True, "message": "产品删除成功"})
+        _sample("delete_product", {"id": 7}, _success(message="产品删除成功"))
     ],
     ("products", "batch_create"): [
         _sample(
             "batch_create_products",
             {"products": [{"name": "5003", "unit_price": 12.5}]},
-            {"success": True, "data": {"success_count": 1, "failed_count": 0}},
+            _success(data={"success_count": 1, "failed_count": 0}),
         )
     ],
     ("products", "batch_delete"): [
         _sample(
             "batch_delete_products",
             {"ids": [7, 8]},
-            {"success": True, "message": "已删除 2 条", "deleted": 2, "skipped": []},
+            _success(message="已删除 2 条", deleted=2, skipped=[]),
         )
     ],
     ("materials", "create"): [
         _sample(
             "create_material",
             {"name": "树脂", "material_code": "R-001", "min_quantity": 12},
-            {"success": True, "message": "创建成功", "data": {"id": 1, "name": "树脂"}},
+            _success(message="创建成功", data={"id": 1, "name": "树脂"}),
         )
     ],
     ("materials", "update"): [
         _sample(
             "update_material",
             {"id": 1, "name": "树脂 v2"},
-            {"success": True, "message": "更新成功", "data": {"id": 1, "name": "树脂 v2"}},
+            _success(message="更新成功", data={"id": 1, "name": "树脂 v2"}),
         )
     ],
     ("materials", "delete"): [
         _sample(
             "delete_material",
             {"id": 1},
-            {"success": True, "message": "删除成功", "data": {"id": 1}},
+            _success(message="删除成功", data={"id": 1}),
         )
     ],
     ("materials", "batch_delete"): [
         _sample(
             "batch_delete_materials",
             {"ids": [1, 2]},
-            {"success": True, "message": "已删除 2 条记录", "deleted_count": 2},
+            _success(message="已删除 2 条记录", deleted_count=2),
         )
     ],
     ("inventory", "create_storage_location"): [
         _sample(
             "create_storage_location",
             {"warehouse_id": 1, "code": "A-01"},
-            {"success": True, "id": 11},
+            _success(id=11),
         )
     ],
     ("inventory", "update_storage_location"): [
         _sample(
             "update_storage_location",
             {"location_id": 11, "status": "full"},
-            {"success": True, "data": {"id": 11, "status": "full"}},
+            _success(data={"id": 11, "status": "full"}),
         )
     ],
     ("inventory", "create_warehouse"): [
         _sample(
             "create_warehouse",
             {"name": "主仓"},
-            {"success": True, "data": {"id": 1, "name": "主仓"}},
+            _success(data={"id": 1, "name": "主仓"}),
         )
     ],
     ("inventory", "update_warehouse"): [
         _sample(
             "update_warehouse",
             {"warehouse_id": 1, "name": "副仓"},
-            {"success": True, "data": {"id": 1, "name": "副仓"}},
+            _success(data={"id": 1, "name": "副仓"}),
         )
     ],
     ("inventory", "delete_warehouse"): [
-        _sample("delete_warehouse", {"warehouse_id": 1}, {"success": True, "message": "deleted"})
+        _sample("delete_warehouse", {"warehouse_id": 1}, _success(message="deleted"))
     ],
     ("inventory", "stock_in"): [
         _sample(
             "inventory_stock_in",
             {"product_id": 1, "warehouse_id": 2, "quantity": 3.0},
-            {"success": True, "data": {"transaction_type": "in"}},
+            _success(data={"transaction_type": "in"}),
         )
     ],
     ("inventory", "stock_out"): [
         _sample(
             "inventory_stock_out",
             {"product_id": 1, "warehouse_id": 2, "quantity": 1.0},
-            {"success": True, "data": {"transaction_type": "out"}},
+            _success(data={"transaction_type": "out"}),
         )
     ],
     ("inventory", "transfer"): [
         _sample(
             "inventory_transfer",
             {"product_id": 1, "from_warehouse_id": 1, "to_warehouse_id": 2, "quantity": 1.0},
-            {"success": True, "data": {"transaction_type": "transfer"}},
+            _success(data={"transaction_type": "transfer"}),
         )
     ],
     ("purchase", "create_supplier"): [
         _sample(
             "create_purchase_supplier",
             {"name": "星光供应商", "contact_person": "张三"},
-            {"success": True, "message": "创建成功", "data": {"id": 1, "name": "星光供应商"}},
+            _success(message="创建成功", data={"id": 1, "name": "星光供应商"}),
         )
     ],
     ("purchase", "update_supplier"): [
         _sample(
             "update_purchase_supplier",
             {"supplier_id": 1, "status": "active"},
-            {"success": True, "message": "更新成功", "data": {"id": 1, "status": "active"}},
+            _success(message="更新成功", data={"id": 1, "status": "active"}),
         )
     ],
     ("purchase", "delete_supplier"): [
-        _sample(
-            "delete_purchase_supplier", {"supplier_id": 1}, {"success": True, "message": "删除成功"}
-        )
+        _sample("delete_purchase_supplier", {"supplier_id": 1}, _success(message="删除成功"))
     ],
     ("purchase", "create_order"): [
         _sample(
             "create_purchase_order",
             {"supplier_id": 1, "items": [{"product_id": 2, "quantity": 3}]},
-            {"success": True, "message": "创建成功", "data": {"id": 9, "status": "draft"}},
+            _success(message="创建成功", data={"id": 9, "status": "draft"}),
         )
     ],
     ("purchase", "update_order"): [
         _sample(
             "update_purchase_order",
             {"order_id": 9, "remark": "调整交期"},
-            {"success": True, "message": "更新成功", "data": {"id": 9, "remark": "调整交期"}},
+            _success(message="更新成功", data={"id": 9, "remark": "调整交期"}),
         )
     ],
     ("purchase", "approve_order"): [
         _sample(
             "approve_purchase_order",
             {"order_id": 9, "approver": "manager"},
-            {"success": True, "message": "审批成功", "data": {"id": 9, "status": "approved"}},
+            _success(message="审批成功", data={"id": 9, "status": "approved"}),
         )
     ],
     ("purchase", "cancel_order"): [
         _sample(
             "cancel_purchase_order",
             {"order_id": 9},
-            {"success": True, "message": "取消成功", "data": {"id": 9, "status": "cancelled"}},
+            _success(message="取消成功", data={"id": 9, "status": "cancelled"}),
         )
     ],
     ("purchase", "create_inbound"): [
         _sample(
             "create_purchase_inbound",
             {"order_id": 9, "items": [{"product_id": 2, "quantity": 3}]},
-            {"success": True, "message": "入库成功", "data": {"id": 5, "order_id": 9}},
+            _success(message="入库成功", data={"id": 5, "order_id": 9}),
         )
     ],
     ("finance", "create_transaction"): [
         _sample(
             "create_finance_transaction",
             {"transaction_type": "expense", "amount": 128.5, "description": "运费"},
-            {"success": True, "data": {"id": 31, "transaction_type": "expense", "amount": 128.5}},
+            _success(data={"id": 31, "transaction_type": "expense", "amount": 128.5}),
         )
     ],
     ("finance", "update_transaction"): [
         _sample(
             "update_finance_transaction",
             {"transaction_id": 31, "status": "paid"},
-            {"success": True, "data": {"id": 31, "status": "paid"}},
+            _success(data={"id": 31, "status": "paid"}),
         )
     ],
     ("finance", "delete_transaction"): [
         _sample(
             "delete_finance_transaction",
             {"transaction_id": 31},
-            {"success": True, "message": "凭证已删除"},
+            _success(message="凭证已删除"),
         )
     ],
     ("employee", "list"): [
         _sample(
             "list_available_employees",
             {},
-            {"success": True, "data": [{"employee_id": "quote-agent", "name": "报价员工"}]},
+            _success(data=[{"employee_id": "quote-agent", "name": "报价员工"}]),
         )
     ],
     ("employee", "execute"): [
@@ -289,12 +288,11 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "task": "Prepare a quote",
                 "input": {"customer": "Acme Trading"},
             },
-            {
-                "success": True,
-                "message": "employee run accepted",
-                "employee_id": "quote-agent",
-                "data": {"status": "accepted"},
-            },
+            _success(
+                message="employee run accepted",
+                employee_id="quote-agent",
+                data={"status": "accepted"},
+            ),
         )
     ],
     ("employee", "context"): [
@@ -305,24 +303,22 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "task": "Summarize the customer account context",
                 "input": {},
             },
-            {
-                "success": True,
-                "message": "员工协作上下文已生成",
-                "employee_id": "quote-agent",
-                "data": {"result": {"summary": "当前客户账户上下文"}},
-            },
+            _success(
+                message="员工协作上下文已生成",
+                employee_id="quote-agent",
+                data={"result": {"summary": "当前客户账户上下文"}},
+            ),
         )
     ],
     ("excel_import", "execute_import"): [
         _sample(
             "execute_pending_import",
             {"pending_import_id": "pending-import-1"},
-            {
-                "success": True,
-                "message": "import completed",
-                "imported_count": 1,
-                "data": {"pending_import_id": "pending-import-1"},
-            },
+            _success(
+                message="import completed",
+                imported_count=1,
+                data={"pending_import_id": "pending-import-1"},
+            ),
         )
     ],
     ("excel_import", "import_records"): [
@@ -332,12 +328,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "records": [{"unit_name": "Acme Trading", "model_number": "5003"}],
                 "source": "agent_fixture",
             },
-            {
-                "success": True,
-                "message": "records imported",
-                "imported_count": 1,
-                "data": {"records": 1},
-            },
+            _success(message="records imported", imported_count=1, data={"records": 1}),
         )
     ],
     ("unit_products_import", "execute_import"): [
@@ -348,32 +339,30 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "unit_name": "Acme Trading",
                 "skip_duplicates": True,
             },
-            {
-                "success": True,
-                "message": "unit products imported",
-                "created_customers": 1,
-                "created_products": 2,
-                "data": {"unit_name": "Acme Trading"},
-            },
+            _success(
+                message="unit products imported",
+                created_customers=1,
+                created_products=2,
+                data={"unit_name": "Acme Trading"},
+            ),
         )
     ],
     ("template_extract", "extract"): [
         _sample(
             "extract_excel_template_structure",
             {"file_path": "/tmp/shipment-template.xlsx", "sheet_name": "出货"},
-            {
-                "success": True,
-                "file_path": "/tmp/shipment-template.xlsx",
-                "sheet_names": ["出货"],
-                "fields": [{"label": "客户", "type": "dynamic"}],
-                "sample_rows": [{"客户": "ACME Trading"}],
-                "grid_preview": {"rows": [["客户"], ["ACME Trading"]]},
-                "grid_style_cache": {"cells": {}},
-                "sheets": [{"sheet_name": "出货"}],
-                "artifacts": [
+            _success(
+                file_path="/tmp/shipment-template.xlsx",
+                sheet_names=["出货"],
+                fields=[{"label": "客户", "type": "dynamic"}],
+                sample_rows=[{"客户": "ACME Trading"}],
+                grid_preview={"rows": [["客户"], ["ACME Trading"]]},
+                grid_style_cache={"cells": {}},
+                sheets=[{"sheet_name": "出货"}],
+                artifacts=[
                     {"artifact_type": "template_analysis", "name": "shipment-template.xlsx"}
                 ],
-            },
+            ),
         )
     ],
     ("business_event", "print_label"): [
@@ -385,7 +374,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "printer_id": "default",
                 "copies": 1,
             },
-            {"success": True, "job_id": "print-job-1", "event": "print.job.submitted"},
+            _success(job_id="print-job-1", event="print.job.submitted"),
         )
     ],
     ("business_event", "inventory_update"): [
@@ -398,7 +387,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "reason": "shipment",
                 "new_quantity": 18,
             },
-            {"success": True, "event": "inventory.changed"},
+            _success(event="inventory.changed"),
         )
     ],
     ("shipment_records", "create"): [
@@ -418,25 +407,21 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "contact_person": "张三",
                 "contact_phone": "13900000000",
             },
-            {
-                "success": True,
-                "message": "出货记录已创建",
-                "data": {"id": 7, "unit_name": "星光贸易"},
-            },
+            _success(message="出货记录已创建", data={"id": 7, "unit_name": "星光贸易"}),
         )
     ],
     ("shipment_records", "update"): [
         _sample(
             "update_shipment_record",
             {"id": 7, "unit_name": "星光贸易", "status": "printed"},
-            {"success": True, "message": "出货记录已更新", "data": {"id": 7, "status": "printed"}},
+            _success(message="出货记录已更新", data={"id": 7, "status": "printed"}),
         )
     ],
     ("shipment_records", "delete"): [
         _sample(
             "delete_shipment_record",
             {"id": 7},
-            {"success": True, "message": "出货记录已删除", "deleted_count": 1},
+            _success(message="出货记录已删除", deleted_count=1),
         )
     ],
     ("shipment_orders", "generate"): [
@@ -447,73 +432,63 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "products": [{"name": "5003", "qty": 2}],
                 "date": "2026-06-19",
             },
-            {
-                "success": True,
-                "file_path": "/tmp/shipment.xlsx",
-                "doc_name": "shipment.xlsx",
-                "record_id": 7,
-                "order_id": 7,
-            },
+            _success(
+                file_path="/tmp/shipment.xlsx", doc_name="shipment.xlsx", record_id=7, order_id=7
+            ),
         )
     ],
     ("shipment_orders", "generate_batch"): [
         _sample(
             "generate_shipment_order_batch",
             {"shipments": [{"unit_name": "星光贸易", "products": [{"name": "5003", "qty": 2}]}]},
-            {"success": True, "data": {"processed": 1, "total": 1, "errors": []}},
+            _success(data={"processed": 1, "total": 1, "errors": []}),
         )
     ],
     ("shipment_orders", "print"): [
         _sample(
             "mark_shipment_order_printed",
             {"file_path": "/tmp/shipment.xlsx", "order_id": 7, "printer_name": "HP"},
-            {
-                "success": True,
-                "message": "已标记为已打印",
-                "file_path": "/tmp/shipment.xlsx",
-                "updated": True,
-                "printed_at": "2026-06-19T10:00:00",
-            },
+            _success(
+                message="已标记为已打印",
+                file_path="/tmp/shipment.xlsx",
+                updated=True,
+                printed_at="2026-06-19T10:00:00",
+            ),
         )
     ],
     ("shipment_orders", "clear_shipment"): [
         _sample(
             "clear_shipment_orders_for_unit",
             {"purchase_unit": "星光贸易"},
-            {
-                "success": True,
-                "message": "已清空星光贸易的发货记录",
-                "purchase_unit": "星光贸易",
-                "cleared_count": 3,
-            },
+            _success(message="已清空星光贸易的发货记录", purchase_unit="星光贸易", cleared_count=3),
         )
     ],
     ("shipment_orders", "set_sequence"): [
         _sample(
             "set_shipment_order_sequence",
             {"sequence": 12},
-            {"success": True, "message": "序号已设置为 12", "sequence": 12},
+            _success(message="序号已设置为 12", sequence=12),
         )
     ],
     ("shipment_orders", "reset_sequence"): [
         _sample(
             "reset_shipment_order_sequence",
             {},
-            {"success": True, "message": "序号已重置", "sequence": 1},
+            _success(message="序号已重置", sequence=1),
         )
     ],
     ("shipment_orders", "clear_all"): [
         _sample(
             "clear_all_shipment_orders",
             {},
-            {"success": True, "message": "已清空所有发货单", "deleted_count": 5},
+            _success(message="已清空所有发货单", deleted_count=5),
         )
     ],
     ("shipment_orders", "delete"): [
         _sample(
             "delete_shipment_order",
             {"id": 7, "order_number": "7"},
-            {"success": True, "message": "订单 7 已删除", "deleted_id": 7},
+            _success(message="订单 7 已删除", deleted_id=7),
         )
     ],
     ("print", "print_document"): [
@@ -524,68 +499,59 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "printer_name": "DocPrinter",
                 "use_automation": False,
             },
-            {
-                "success": True,
-                "message": "文档已提交打印",
-                "file_path": "/tmp/document.pdf",
-                "printer_name": "DocPrinter",
-                "status": "printed",
-            },
+            _success(
+                message="文档已提交打印",
+                file_path="/tmp/document.pdf",
+                printer_name="DocPrinter",
+                status="printed",
+            ),
         )
     ],
     ("print", "print_label"): [
         _sample(
             "print_label_route",
             {"file_path": "/tmp/label.png", "printer_name": "LabelPrinter", "copies": 2},
-            {
-                "success": True,
-                "message": "标签已打印",
-                "file_path": "/tmp/label.png",
-                "printer_name": "LabelPrinter",
-                "copies": 2,
-                "status": "printed",
-                "require_confirm": False,
-            },
+            _success(
+                message="标签已打印",
+                file_path="/tmp/label.png",
+                printer_name="LabelPrinter",
+                copies=2,
+                status="printed",
+                require_confirm=False,
+            ),
         )
     ],
     ("print", "test"): [
         _sample(
             "test_printer_route",
             {"printer_name": "DocPrinter"},
-            {
-                "success": True,
-                "message": "测试页已发送",
-                "printer_name": "DocPrinter",
-                "status": "printed",
-            },
+            _success(message="测试页已发送", printer_name="DocPrinter", status="printed"),
         )
     ],
     ("print", "save_printer_selection"): [
         _sample(
             "save_printer_selection_route",
             {"document_printer": "DocPrinter", "label_printer": "LabelPrinter"},
-            {
-                "success": True,
-                "message": "打印机选择已保存",
-                "document_printer": "DocPrinter",
-                "label_printer": "LabelPrinter",
-                "document": ["DocPrinter"],
-                "label": ["LabelPrinter"],
-            },
+            _success(
+                message="打印机选择已保存",
+                document_printer="DocPrinter",
+                label_printer="LabelPrinter",
+                document=["DocPrinter"],
+                label=["LabelPrinter"],
+            ),
         )
     ],
     ("print", "workflow_label_dispatch"): [
         _sample(
             "workflow_label_dispatch_route",
             {"model_number": "M-1", "quantity": 2, "idempotency_key": "idem-1"},
-            {
-                "success": True,
-                "message": "标签已打印",
-                "model_number": "M-1",
-                "product_name": "M-1",
-                "quantity": 2,
-                "status": "printed",
-            },
+            _success(
+                message="标签已打印",
+                model_number="M-1",
+                product_name="M-1",
+                quantity=2,
+                status="printed",
+            ),
         )
     ],
     ("business_event", "shipment_create"): [
@@ -597,173 +563,145 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "contact_person": "Lee",
                 "contact_phone": "13800000000",
             },
-            {"success": True, "event": "shipment.created", "published": True},
+            _success(event="shipment.created", published=True),
         )
     ],
     ("system_maintenance", "set_default_printer"): [
         _sample(
             "set_default_printer",
             {"printer_name": "HP"},
-            {"success": True, "message": "默认打印机已更新", "http_status_code": 200},
+            _success(message="默认打印机已更新", http_status_code=200),
         )
     ],
     ("system_maintenance", "enable_startup"): [
         _sample(
             "enable_startup",
             {},
-            {"success": True, "message": "已启用开机启动", "http_status_code": 200},
+            _success(message="已启用开机启动", http_status_code=200),
         )
     ],
     ("system_maintenance", "disable_startup"): [
         _sample(
             "disable_startup",
             {},
-            {"success": True, "message": "已关闭开机启动", "http_status_code": 200},
+            _success(message="已关闭开机启动", http_status_code=200),
         )
     ],
     ("system_maintenance", "backup_database"): [
         _sample(
             "backup_database",
             {},
-            {
-                "success": True,
-                "message": "数据库备份完成",
-                "backup_file": "backup.sql",
-                "http_status_code": 200,
-            },
+            _success(message="数据库备份完成", backup_file="backup.sql", http_status_code=200),
         )
     ],
     ("system_maintenance", "delete_database_backup"): [
         _sample(
             "delete_database_backup",
             {"backup_file": "backup.sql"},
-            {
-                "success": True,
-                "message": "备份已删除",
-                "backup_file": "backup.sql",
-                "http_status_code": 200,
-            },
+            _success(message="备份已删除", backup_file="backup.sql", http_status_code=200),
         )
     ],
     ("system_maintenance", "restore_database"): [
         _sample(
             "restore_database",
             {"backup_file": "backup.sql"},
-            {
-                "success": True,
-                "message": "数据库恢复完成",
-                "backup_file": "backup.sql",
-                "http_status_code": 200,
-            },
+            _success(message="数据库恢复完成", backup_file="backup.sql", http_status_code=200),
         )
     ],
     ("system_maintenance", "clear_performance_cache"): [
         _sample(
             "clear_performance_cache",
             {"pattern": "test:*"},
-            {
-                "success": True,
-                "message": "已清除模式 'test:*' 的缓存 (5 个键)",
-                "http_status_code": 200,
-            },
+            _success(message="已清除模式 'test:*' 的缓存 (5 个键)", http_status_code=200),
         )
     ],
     ("system_maintenance", "invalidate_performance_cache"): [
         _sample(
             "invalidate_performance_cache",
             {"keys": ["k1"]},
-            {
-                "success": True,
-                "message": "已删除 1 个缓存键",
-                "data": {"deleted_count": 1, "requested_keys": 1},
-                "http_status_code": 200,
-            },
+            _success(
+                message="已删除 1 个缓存键",
+                data={"deleted_count": 1, "requested_keys": 1},
+                http_status_code=200,
+            ),
         )
     ],
     ("system_maintenance", "reinitialize_performance"): [
         _sample(
             "reinitialize_performance",
             {},
-            {
-                "success": True,
-                "message": "性能优化系统已重新初始化",
-                "data": {"status": "ok"},
-                "http_status_code": 200,
-            },
+            _success(
+                message="性能优化系统已重新初始化", data={"status": "ok"}, http_status_code=200
+            ),
         )
     ],
     ("excel_analyzer", "analyze"): [
         _sample(
             "analyze_excel_template_zones",
             {"file_path": "/tmp/template.xlsx", "sheet_name": "Sheet1"},
-            {
-                "success": True,
-                "file_path": "/tmp/template.xlsx",
-                "file": "template.xlsx",
-                "sheet": "Sheet1",
-                "structure": {"max_row": 8, "max_col": 4},
-                "zones": [{"name": "header", "type": "template"}],
-                "merged_cells": [],
-                "editable_ranges": [],
-                "cells": {},
-            },
+            _success(
+                file_path="/tmp/template.xlsx",
+                file="template.xlsx",
+                sheet="Sheet1",
+                structure={"max_row": 8, "max_col": 4},
+                zones=[{"name": "header", "type": "template"}],
+                merged_cells=[],
+                editable_ranges=[],
+                cells={},
+            ),
         )
     ],
     ("excel_toolkit", "view"): [
         _sample(
             "view_excel_content",
             {"file_path": "/tmp/template.xlsx", "sheet_name": "Sheet1", "max_rows": 20},
-            {
-                "success": True,
-                "file_path": "/tmp/template.xlsx",
-                "file": "template.xlsx",
-                "sheet": "Sheet1",
-                "structure": {"max_row": 2, "max_col": 2, "dimensions": "A1:B2"},
-                "content": [{"row": 1, "cells": [{"coordinate": "A1", "value": "客户"}]}],
-                "row_count": 1,
-            },
+            _success(
+                file_path="/tmp/template.xlsx",
+                file="template.xlsx",
+                sheet="Sheet1",
+                structure={"max_row": 2, "max_col": 2, "dimensions": "A1:B2"},
+                content=[{"row": 1, "cells": [{"coordinate": "A1", "value": "客户"}]}],
+                row_count=1,
+            ),
         )
     ],
     ("excel_toolkit", "merged"): [
         _sample(
             "inspect_excel_merged_cells",
             {"file_path": "/tmp/template.xlsx", "sheet_name": "Sheet1"},
-            {
-                "success": True,
-                "file_path": "/tmp/template.xlsx",
-                "file": "template.xlsx",
-                "sheet": "Sheet1",
-                "merged_cells": [],
-                "count": 0,
-            },
+            _success(
+                file_path="/tmp/template.xlsx",
+                file="template.xlsx",
+                sheet="Sheet1",
+                merged_cells=[],
+                count=0,
+            ),
         )
     ],
     ("excel_toolkit", "styles"): [
         _sample(
             "inspect_excel_cell_styles",
             {"file_path": "/tmp/template.xlsx", "sheet_name": "Sheet1", "max_rows": 10},
-            {
-                "success": True,
-                "file_path": "/tmp/template.xlsx",
-                "file": "template.xlsx",
-                "sheet": "Sheet1",
-                "styles": [{"coordinate": "A1", "value": "客户"}],
-            },
+            _success(
+                file_path="/tmp/template.xlsx",
+                file="template.xlsx",
+                sheet="Sheet1",
+                styles=[{"coordinate": "A1", "value": "客户"}],
+            ),
         )
     ],
     ("excel_toolkit", "structure"): [
         _sample(
             "inspect_excel_structure",
             {"file_path": "/tmp/template.xlsx", "sheet_name": "Sheet1"},
-            {
-                "success": True,
-                "file_path": "/tmp/template.xlsx",
-                "file": "template.xlsx",
-                "sheet_names": ["Sheet1"],
-                "current_sheet": "Sheet1",
-                "structure": {"total_rows": 2, "total_columns": 2},
-                "columns": [{"index": 1, "letter": "A", "header": "客户"}],
-            },
+            _success(
+                file_path="/tmp/template.xlsx",
+                file="template.xlsx",
+                sheet_names=["Sheet1"],
+                current_sheet="Sheet1",
+                structure={"total_rows": 2, "total_columns": 2},
+                columns=[{"index": 1, "letter": "A", "header": "客户"}],
+            ),
         )
     ],
     ("label_template_generator", "execute"): [
@@ -778,7 +716,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "success": True,
                 "image_path": "/tmp/label.png",
                 "analysis": {"file": "label.png", "size": [800, 600]},
-                "ocr_result": {"success": True, "fields": [{"label": "品名", "value": "清漆"}]},
+                "ocr_result": _success(fields=[{"label": "品名", "value": "清漆"}]),
                 "code": "class ProductLabelTemplate:\\n    pass\\n",
             },
         )
@@ -792,96 +730,87 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "fields": [{"label": "客户"}],
                 "preview_data": {"sheet_name": "Sheet1"},
             },
-            {
-                "success": True,
-                "message": "模板创建成功",
-                "template": {"id": "db:1", "db_id": 1, "name": "发货模板"},
-                "http_status_code": 200,
-            },
+            _success(
+                message="模板创建成功",
+                template={"id": "db:1", "db_id": 1, "name": "发货模板"},
+                http_status_code=200,
+            ),
         )
     ],
     ("document_template", "update"): [
         _sample(
             "update_document_template",
             {"id": "db:1", "name": "发货模板 v2", "fields": [{"label": "客户"}]},
-            {
-                "success": True,
-                "message": "模板更新成功",
-                "template": {"id": "db:1", "db_id": 1, "name": "发货模板 v2"},
-                "http_status_code": 200,
-            },
+            _success(
+                message="模板更新成功",
+                template={"id": "db:1", "db_id": 1, "name": "发货模板 v2"},
+                http_status_code=200,
+            ),
         )
     ],
     ("document_template", "delete"): [
         _sample(
             "delete_document_template",
             {"id": "db:1"},
-            {
-                "success": True,
-                "message": "模板删除成功",
-                "deleted": {"id": "db:1", "db_id": 1},
-                "http_status_code": 200,
-            },
+            _success(
+                message="模板删除成功", deleted={"id": "db:1", "db_id": 1}, http_status_code=200
+            ),
         )
     ],
     ("generate_office_document", "execute"): [
         _sample(
             "generate_contract_docx",
             {"user_request": "Generate a contract", "output_format": "docx"},
-            {
-                "success": True,
-                "message": "document generated",
-                "file_name": "contract.docx",
-                "download_url": "/api/ai/kitten/document/pickup/token",
-                "pickup_token": "token",
-                "artifacts": [
+            _success(
+                message="document generated",
+                file_name="contract.docx",
+                download_url="/api/ai/kitten/document/pickup/token",
+                pickup_token="token",
+                artifacts=[
                     {
                         "artifact_type": "office_document",
                         "name": "contract.docx",
                         "source": "generate_office_document",
                     }
                 ],
-            },
+            ),
         )
     ],
     ("excel_vector_index", "execute"): [
         _sample(
             "build_excel_vector_index",
             {"file_path": "/tmp/products.xlsx", "index_name": "products"},
-            {
-                "success": True,
-                "message": "index built",
-                "index_id": "excel-index-1",
-                "excel_vector_index_id": "excel-index-1",
-                "excel_index_id": "excel-index-1",
-                "chunk_count": 3,
-                "row_count": 10,
-            },
+            _success(
+                message="index built",
+                index_id="excel-index-1",
+                excel_vector_index_id="excel-index-1",
+                excel_index_id="excel-index-1",
+                chunk_count=3,
+                row_count=10,
+            ),
         )
     ],
     ("excel_vector_index", "query"): [
         _sample(
             "query_excel_vector_index",
             {"index_id": "excel-index-1", "query": "5003 清漆", "top_k": 3},
-            {
-                "success": True,
-                "index_id": "excel-index-1",
-                "query": "5003 清漆",
-                "hits": [{"score": 0.92, "row": {"model_number": "5003", "product_name": "清漆"}}],
-            },
+            _success(
+                index_id="excel-index-1",
+                query="5003 清漆",
+                hits=[{"score": 0.92, "row": {"model_number": "5003", "product_name": "清漆"}}],
+            ),
         )
     ],
     ("ocr", "recognize"): [
         _sample(
             "recognize_ocr_image",
             {"file_path": "/tmp/label.png"},
-            {
-                "success": True,
-                "message": "识别成功",
-                "text": "购货单位：ACME Trading",
-                "file_path": "/tmp/label.png",
-                "artifacts": [{"artifact_type": "ocr_text", "name": "ocr_result"}],
-            },
+            _success(
+                message="识别成功",
+                text="购货单位：ACME Trading",
+                file_path="/tmp/label.png",
+                artifacts=[{"artifact_type": "ocr_text", "name": "ocr_result"}],
+            ),
         )
     ],
     ("ocr", "request"): [
@@ -893,52 +822,45 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "ocr_type": "general",
                 "user_id": "tenant-a",
             },
-            {
-                "success": True,
-                "message": "OCR 请求已发布",
-                "request_id": "ocr-request-1",
-                "image_url": "https://example.invalid/label.png",
-                "ocr_type": "general",
-                "user_id": "tenant-a",
-                "event": "ocr.requested",
-                "published": True,
-            },
+            _success(
+                message="OCR 请求已发布",
+                request_id="ocr-request-1",
+                image_url="https://example.invalid/label.png",
+                ocr_type="general",
+                user_id="tenant-a",
+                event="ocr.requested",
+                published=True,
+            ),
         )
     ],
     ("ocr", "extract"): [
         _sample(
             "extract_ocr_fields",
             {"text": "购货单位：ACME Trading\n联系人：Alice"},
-            {
-                "success": True,
-                "message": "提取成功",
-                "data": {"purchase_unit": "ACME Trading", "contact_person": "Alice"},
-            },
+            _success(
+                message="提取成功",
+                data={"purchase_unit": "ACME Trading", "contact_person": "Alice"},
+            ),
         )
     ],
     ("ocr", "analyze"): [
         _sample(
             "analyze_ocr_text",
             {"text": "订单编号：SO-1\n购货单位：ACME Trading"},
-            {
-                "success": True,
-                "message": "分析成功",
-                "data": {"text_type": "order", "confidence": 0.67},
-            },
+            _success(message="分析成功", data={"text_type": "order", "confidence": 0.67}),
         )
     ],
     ("ocr", "recognize_and_extract"): [
         _sample(
             "recognize_and_extract_ocr_image",
             {"file_path": "/tmp/order.png"},
-            {
-                "success": True,
-                "message": "识别和提取成功",
-                "text": "购货单位：ACME Trading",
-                "data": {"purchase_unit": "ACME Trading"},
-                "analysis": {"text_type": "customer", "confidence": 0.67},
-                "artifacts": [{"artifact_type": "ocr_text", "name": "ocr_result"}],
-            },
+            _success(
+                message="识别和提取成功",
+                text="购货单位：ACME Trading",
+                data={"purchase_unit": "ACME Trading"},
+                analysis={"text_type": "customer", "confidence": 0.67},
+                artifacts=[{"artifact_type": "ocr_text", "name": "ocr_result"}],
+            ),
         )
     ],
     ("dataset_rag", "query"): [
@@ -950,20 +872,19 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "top_k": 2,
                 "include_answer": True,
             },
-            {
-                "success": True,
-                "dataset_id": "platform-docs",
-                "query": "Which model should AI routes use?",
-                "answer": "AI routes should use XCauto [1].",
-                "chunks": [
+            _success(
+                dataset_id="platform-docs",
+                query="Which model should AI routes use?",
+                answer="AI routes should use XCauto [1].",
+                chunks=[
                     {
                         "chunk_id": "chunk_1",
                         "text": "AI routes should use XCauto.",
                         "source": "policy.pdf",
                     }
                 ],
-                "citations": [{"index": 1, "source": "policy.pdf", "chunk_index": 0}],
-            },
+                citations=[{"index": 1, "source": "policy.pdf", "chunk_index": 0}],
+            ),
         )
     ],
     ("dataset_rag", "ingest_document"): [
@@ -976,12 +897,11 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "tenant_id": "tenant-a",
                 "metadata": {"doc_type": "policy"},
             },
-            {
-                "success": True,
-                "dataset_id": "platform-docs",
-                "document": {"document_id": "doc_1", "source": "policy.pdf"},
-                "chunk_count": 1,
-            },
+            _success(
+                dataset_id="platform-docs",
+                document={"document_id": "doc_1", "source": "policy.pdf"},
+                chunk_count=1,
+            ),
         )
     ],
     ("dataset_rag", "diff_versions"): [
@@ -993,17 +913,16 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "from_version": "v1",
                 "to_version": "latest",
             },
-            {
-                "success": True,
-                "dataset_id": "platform-docs",
-                "source": "policy.pdf",
-                "from_version": 1,
-                "to_version": 2,
-                "changed": True,
-                "added_lines": ["Use AgentOrchestrator."],
-                "removed_lines": [],
-                "diff": ["--- policy.pdf@v1", "+++ policy.pdf@v2"],
-            },
+            _success(
+                dataset_id="platform-docs",
+                source="policy.pdf",
+                from_version=1,
+                to_version=2,
+                changed=True,
+                added_lines=["Use AgentOrchestrator."],
+                removed_lines=[],
+                diff=["--- policy.pdf@v1", "+++ policy.pdf@v2"],
+            ),
         )
     ],
     ("dataset_rag", "rollback_version"): [
@@ -1015,13 +934,12 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "target_version": "v1",
                 "metadata": {"reason": "bad update"},
             },
-            {
-                "success": True,
-                "dataset_id": "platform-docs",
-                "document": {"document_id": "doc_rollback", "source": "policy.pdf"},
-                "chunk_count": 1,
-                "rolled_back_from": {"document_id": "doc_v1", "version": 1},
-            },
+            _success(
+                dataset_id="platform-docs",
+                document={"document_id": "doc_rollback", "source": "policy.pdf"},
+                chunk_count=1,
+                rolled_back_from={"document_id": "doc_v1", "version": 1},
+            ),
         )
     ],
     ("dataset_rag", "rebuild_index"): [
@@ -1033,36 +951,29 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "background": True,
                 "max_attempts": 1,
             },
-            {
-                "success": True,
-                "dataset_id": "platform-docs",
-                "job": {"job_id": "rag_rebuild_1", "status": "queued"},
-                "background": True,
-            },
+            _success(
+                dataset_id="platform-docs",
+                job={"job_id": "rag_rebuild_1", "status": "queued"},
+                background=True,
+            ),
         )
     ],
     ("dataset_rag", "cancel_rebuild"): [
         _sample(
             "cancel_dataset_rebuild",
             {"dataset_id": "platform-docs", "job_id": "rag_rebuild_1"},
-            {
-                "success": True,
-                "dataset_id": "platform-docs",
-                "job_id": "rag_rebuild_1",
-                "job": {"job_id": "rag_rebuild_1", "status": "cancelled"},
-            },
+            _success(
+                dataset_id="platform-docs",
+                job_id="rag_rebuild_1",
+                job={"job_id": "rag_rebuild_1", "status": "cancelled"},
+            ),
         )
     ],
     ("dataset_rag", "delete_document"): [
         _sample(
             "delete_dataset_document",
             {"dataset_id": "platform-docs", "document_id": "doc_1"},
-            {
-                "success": True,
-                "dataset_id": "platform-docs",
-                "document_id": "doc_1",
-                "deleted_chunks": 1,
-            },
+            _success(dataset_id="platform-docs", document_id="doc_1", deleted_chunks=1),
         )
     ],
     ("memory_v2", "propose_candidate"): [
@@ -1076,33 +987,31 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "source": "settings_ui",
                 "confidence": 0.9,
             },
-            {
-                "success": True,
-                "created": True,
-                "candidate": {
+            _success(
+                created=True,
+                candidate={
                     "memory_id": "mem_1",
                     "memory_type": "preference",
                     "key": "favorite_customer",
                     "status": "pending",
                 },
-            },
+            ),
         )
     ],
     ("memory_v2", "confirm"): [
         _sample(
             "confirm_memory_v2_candidate",
             {"user_id": "tenant-a", "memory_id": "mem_1"},
-            {
-                "success": True,
-                "memory": {"memory_id": "mem_1", "status": "active", "eligible_for_planner": True},
-            },
+            _success(
+                memory={"memory_id": "mem_1", "status": "active", "eligible_for_planner": True}
+            ),
         )
     ],
     ("memory_v2", "reject"): [
         _sample(
             "reject_memory_v2_candidate",
             {"user_id": "tenant-a", "memory_id": "mem_1", "reason": "not useful"},
-            {"success": True, "memory": {"memory_id": "mem_1", "status": "rejected"}},
+            _success(memory={"memory_id": "mem_1", "status": "rejected"}),
         )
     ],
     ("memory_v2", "correct"): [
@@ -1115,21 +1024,20 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "value": "ACME Trading Ltd.",
                 "reason": "user corrected value",
             },
-            {
-                "success": True,
-                "memory": {
+            _success(
+                memory={
                     "memory_id": "mem_1",
                     "key": "favorite_customer",
                     "value": "ACME Trading Ltd.",
-                },
-            },
+                }
+            ),
         )
     ],
     ("memory_v2", "delete"): [
         _sample(
             "delete_memory_v2_record",
             {"user_id": "tenant-a", "memory_id": "mem_1", "reason": "user removed memory"},
-            {"success": True, "memory": {"memory_id": "mem_1", "status": "deleted"}},
+            _success(memory={"memory_id": "mem_1", "status": "deleted"}),
         )
     ],
 }
