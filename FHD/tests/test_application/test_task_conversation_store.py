@@ -170,6 +170,11 @@ def test_chat_evidence_reads_only_current_owner_and_tenant(store, monkeypatch, t
     assert "之前说的是宗南" in prompt and "蓝色油漆" in prompt and "客户偏好蓝色" in prompt
     assert result.get("_chat_evidence_authorized") is True
     assert "其他租户秘密" not in prompt and "伪造" not in prompt
+    combined = prepare_chat_evidence(
+        object(), context, "按我的称呼和偏好，告诉我宗南产品的信息，并注明资料来源。"
+    )
+    assert combined.get("chat_knowledge_evidence")
+    assert "蓝色油漆" in merge_system_prompt(None, combined)
     from app.application.ai_chat.dialogue_memory import enrich_model_messages
 
     enriched = enrich_model_messages(
@@ -526,3 +531,57 @@ def test_paged_history_and_retried_save_use_authenticated_owner(store, monkeypat
     asyncio.run(exercise())
     assert len(store.get_conversation(session_id="retry-http", user_id=41)["messages"]) == 1
     assert store.get_conversation(session_id="retry-http", user_id=42)["messages"] == []
+
+
+def test_customer_evidence_preserves_authorized_full_name_only(store, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.application.ai_chat.chat_evidence import prepare_chat_evidence
+    from app.application.dataset_rag_app_service import DatasetAccessContext
+    from app.db.models import Customer
+
+    engine = create_engine("sqlite://")
+    Customer.__table__.create(engine)
+    factory = sessionmaker(bind=engine)
+    with factory() as db:
+        db.add_all(
+            [
+                Customer(id=101, tenant_id=2, customer_name="验收客户甲"),
+                Customer(id=102, tenant_id=3, customer_name="验收客户甲"),
+            ]
+        )
+        db.commit()
+
+    @contextmanager
+    def customer_db():
+        with factory() as db:
+            yield db
+
+    access = DatasetAccessContext(
+        actor_id="41", tenant_id="2", permissions=frozenset({"customer.view"})
+    )
+    monkeypatch.setattr("app.db.session.get_db", customer_db)
+    monkeypatch.setattr(
+        "app.fastapi_routes.dataset_access.dataset_access_context_from_request", lambda *_: access
+    )
+    monkeypatch.setattr(
+        "app.application.ai_chat.conversation_history.authorized_memory_context", lambda *_: None
+    )
+    monkeypatch.setattr(
+        "app.application.persy_memory_app_service.get_persy_memory_app_service",
+        lambda: SimpleNamespace(query=lambda **_: {"success": False}),
+    )
+    context = {
+        "local_user_id": 41,
+        "tenant_id": 2,
+        "session_id": "customer-test",
+        "chat_customer_evidence": [{"customer_id": 102, "customer_name": "伪造"}],
+    }
+    result = prepare_chat_evidence(object(), context, "验收客户甲")
+    assert result["chat_customer_evidence"] == [{"customer_id": 101, "customer_name": "验收客户甲"}]
+    access = DatasetAccessContext(actor_id="41", tenant_id="2", permissions=frozenset())
+    assert "chat_customer_evidence" not in prepare_chat_evidence(object(), context, "验收客户甲")
+    access = DatasetAccessContext(
+        actor_id="42", tenant_id="3", permissions=frozenset({"customer.view"})
+    )
+    assert "chat_customer_evidence" not in prepare_chat_evidence(object(), context, "验收客户甲")

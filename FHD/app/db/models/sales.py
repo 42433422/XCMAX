@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     CheckConstraint,
@@ -16,6 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.db_base import Base
 from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
@@ -314,3 +315,19 @@ class SalesOrderItem(IntegerPrimaryKeyMixin, TenantScopedMixin, Base):
             ),
             "status": self.status,
         }
+
+
+def sales_status_predicate(status: str) -> ColumnElement[bool]:
+    column = SalesOrder.state if status in SALES_ORDER_STATE_FLOW else SalesOrder.status
+    return column == status
+
+
+def inclusive_order_bound(value: Any, *, end: bool) -> datetime | None:
+    """日期字符串按自然日闭合；结束日包含当天最后一秒。"""
+    if value is None or isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    parsed = datetime.fromisoformat(text)
+    return parsed.replace(hour=23, minute=59, second=59) if end and len(text) == 10 else parsed

@@ -150,10 +150,25 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
                 tool_id,
                 {**params, "task": params.get("task") or user_message},
                 str(workspace_root) if workspace_root else None,
+                runtime_context=runtime_context,
             )
             import json
 
             parsed = json.loads(raw)
+            if isinstance(parsed, dict) and parsed.get("success") is True:
+                from app.application.tools.workflow_spreadsheet_scope import (
+                    employee_output_receipts,
+                )
+
+                output = parsed.get("output")
+                if isinstance(output, dict):
+                    parsed["artifacts"] = employee_output_receipts(
+                        str(parsed.get("employee_id") or tool_id),
+                        output,
+                        runtime_context,
+                        str(workspace_root) if workspace_root else None,
+                    )
+                    parsed["data"] = output
             return parsed if isinstance(parsed, dict) else {"success": False, "message": raw}
     except RECOVERABLE_ERRORS:
         logging.getLogger(__name__).debug(

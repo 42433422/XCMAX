@@ -18,7 +18,12 @@
           <td :colspan="totalColumns" class="empty-state">{{ emptyText }}</td>
         </tr>
         <template v-else>
-          <tr v-for="(row, index) in localData" :key="getRowKey(row, index)">
+          <tr
+            v-for="(row, index) in localData"
+            :key="getRowKey(row, index)"
+            :data-row-id="String(getRowId(row) ?? '')"
+            :class="{ 'is-focused': isFocusedRow(row) }"
+          >
             <td v-if="selectable">
               <input
                 type="checkbox"
@@ -89,6 +94,10 @@ const props = defineProps({
   hasMore: {
     type: Boolean,
     default: true,
+  },
+  highlightId: {
+    type: [String, Number],
+    default: '',
   },
   height: {
     type: String,
@@ -161,6 +170,22 @@ watch(
 const getRowId = (row) => {
   return row.id ?? row[props.rowKey] ?? row
 }
+
+const isFocusedRow = (row) => {
+  const id = String(props.highlightId || '')
+  return id !== '' && String(getRowId(row) ?? '') === id
+}
+
+watch(
+  () => [props.highlightId, props.data],
+  async () => {
+    const id = String(props.highlightId || '')
+    if (!id || !tableWrapper.value) return
+    await nextTick()
+    const safe = window.CSS?.escape ? window.CSS.escape(id) : id.replace(/["\\]/g, '')
+    tableWrapper.value.querySelector(`[data-row-id="${safe}"]`)?.scrollIntoView?.({ block: 'center' })
+  },
+)
 
 const getRowKey = (row, index) => {
   return row[props.rowKey] ?? row.id ?? index
@@ -264,6 +289,10 @@ defineExpose({
 
 .data-table tbody tr:hover {
   background-color: rgba(219, 234, 254, 0.46);
+}
+
+.data-table tbody tr.is-focused {
+  background-color: rgba(24, 144, 255, 0.16);
 }
 
 .empty-state {

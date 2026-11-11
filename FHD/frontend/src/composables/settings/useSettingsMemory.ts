@@ -100,7 +100,8 @@ export function useSettingsMemory(localUser: Ref<User | null>) {
   }
 
   const memoryV2UserId = computed(() => {
-    const raw = localUser.value?.username || localUser.value?.id || 'default'
+    const username = String(localUser.value?.username || '').trim()
+    const raw = /^\p{Decimal_Number}+$/u.test(username) ? localUser.value?.id : username || localUser.value?.id
     return String(raw || 'default').trim() || 'default'
   })
 

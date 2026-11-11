@@ -32,6 +32,8 @@ _FACT_LABELS = {
     "deleted": "删除",
     "count": "数量",
     "total": "合计",
+    "row_count": "明细行数",
+    "amount_total": "金额合计",
 }
 
 

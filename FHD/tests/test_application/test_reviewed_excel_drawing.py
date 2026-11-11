@@ -173,7 +173,38 @@ def test_classifier_sends_distinct_drawing_evidence_and_rejects_forged_reference
         _classify_semantic_batch(batch_review)
 
 
-def synthetic_workbook_with_shape(*, extra_rows=False):
+@pytest.mark.parametrize("hidden_state", ["hidden", "veryHidden"])
+@pytest.mark.parametrize("coverage_scope", ["visible", "full"])
+def test_drawing_export_uses_visible_sheet_coverage(hidden_state, coverage_scope):
+    from app.application.reviewed_excel_auto_slice import derive_classified_documents
+    from app.application.reviewed_excel_template import inspect_workbook
+
+    body = synthetic_workbook_with_shape(hidden_state=hidden_state)
+    review = inspect_workbook(body)
+    part = {"sheet": "表", "range": "A1:B2"}
+    coverage = [{"sheet": "表", "unread": [], "drawing_unread": []}]
+    if coverage_scope == "full":
+        coverage.append({"sheet": "Internal", "unread": ["A1"], "drawing_unread": ["hidden"]})
+    classification = {
+        "source_sha256": review["sha256"],
+        "model_status": "returned",
+        "regions": [{**part, "dependencies": []}],
+        "coverage": coverage,
+        "suggested_documents": [{"fragments": [part]}],
+    }
+    result = derive_classified_documents(body, classification)
+    assert len(result) == 1 and result[0]["fragments"] == [part]
+    with ZipFile(BytesIO(result[0]["workbook"])) as book:
+        assert b"wsDr" in book.read("xl/drawings/drawing1.xml")
+    assert inspect_workbook(body)["sha256"] == review["sha256"]
+    coverage[0]["drawing_unread"] = ["visible"]
+    with pytest.raises(ReviewedExcelError, match="绘图证据覆盖不完整"):
+        derive_classified_documents(body, classification)
+
+
+def synthetic_workbook_with_shape(
+    *, extra_rows=False, unread_tail=False, end_row=1, hidden_state=None
+):
     from xml.etree import ElementTree as ET
 
     from openpyxl import Workbook
@@ -184,9 +215,14 @@ def synthetic_workbook_with_shape(*, extra_rows=False):
     ws["A1"] = "考勤表"
     ws["A2"] = "姓名"
     ws["B2"] = "日期"
-    if extra_rows:
+    if extra_rows or unread_tail:
         ws["A4"] = "末尾"
+    if extra_rows:
         ws.print_area = "A1:B2"
+    if hidden_state:
+        hidden = wb.create_sheet("Internal")
+        hidden.append(["Synthetic internal", 1])
+        hidden.sheet_state = hidden_state
     original = BytesIO()
     wb.save(original)
     with ZipFile(package()) as fixture:
@@ -197,7 +233,10 @@ def synthetic_workbook_with_shape(*, extra_rows=False):
             .replace(b"<x:rowOff>2</x:rowOff>", b"<x:rowOff>0</x:rowOff>")
             .replace(
                 b'<x:ext cx="100" cy="200"/>',
-                b"<x:to><x:col>0</x:col><x:colOff>0</x:colOff><x:row>1</x:row><x:rowOff>0</x:rowOff></x:to>",
+                (
+                    f"<x:to><x:col>0</x:col><x:colOff>0</x:colOff><x:row>{end_row}</x:row>"
+                    f"<x:rowOff>{0 if end_row else 1}</x:rowOff></x:to>"
+                ).encode(),
             )
         )
         rels = fixture.read("xl/worksheets/_rels/sheet1.xml.rels")
@@ -746,7 +785,106 @@ def test_independent_drawing_ids_and_contract_reject_forged_duplicate_or_outside
     with pytest.raises(ReviewedExcelError, match="重复"):
         _classify_semantic_batch(review, reference_ids=True)
     ids, area, primary = ["D0001"], "B2:B2", "S1:B2"
-    with pytest.raises(ReviewedExcelError, match="绘图证据不在区域内"):
+    with pytest.raises(ReviewedExcelError, match="D0001\\(A1:A2\\).*B2:B2"):
+        _classify_semantic_batch(review, reference_ids=True)
+
+
+def test_open_fragment_keeps_drawing_above_primary_rows(monkeypatch):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_classification import _classify_semantic_batch
+    from app.application.reviewed_excel_drawing import plan_drawing_batches
+    from app.application.reviewed_excel_template import inspect_workbook
+
+    body = synthetic_workbook_with_shape(unread_tail=True, end_row=0)
+    review = inspect_workbook(body)
+    cells = []
+    for cell in plan_drawing_batches(review)[0]:
+        if cell["cell"] == "A4":
+            continue
+        item = dict(cell)
+        if cell["cell"] == "A1":
+            item["context_only"] = True
+        cells.append(item)
+    review = {**review, "cells": cells, "full_cells": review["cells"]}
+
+    def model(*args, **kwargs):
+        return LlmAssistResult(
+            used_llm=True,
+            model="test",
+            data={
+                "physical_regions": [
+                    {
+                        "sheet": "表",
+                        "range": "A1:B4",
+                        "primary_id": "S1:A2",
+                        "evidence_ids": ["S1:A2"],
+                        "dependency_ids": [],
+                        "drawing_ids": ["D0001"],
+                        "reason": "考勤表",
+                    }
+                ],
+                "logical_documents": [
+                    {"document_id": "d1", "fragments": [{"sheet": "表", "range": "A1:B4"}]}
+                ],
+                "layout_references": [],
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete", model
+    )
+    accepted = _classify_semantic_batch(review, reference_ids=True)
+    region = accepted["regions"][0]
+    assert region["range"] == "A1:B2"
+    assert region["model_original_range"] == "A1:B4"
+    assert region["open_fragment"] is True
+    assert region["drawing_evidence"][0]["object_id"] == "1"
+    assert accepted["logical_documents"][0]["fragments"] == [{"sheet": "表", "range": "A1:B2"}]
+
+
+def test_open_fragment_names_drawing_blocked_by_unread_gap(monkeypatch):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_classification import _classify_semantic_batch
+    from app.application.reviewed_excel_drawing import plan_drawing_batches
+    from app.application.reviewed_excel_template import inspect_workbook
+
+    body = synthetic_workbook_with_shape(unread_tail=True, end_row=0)
+    review = inspect_workbook(body)
+    cells = []
+    for cell in plan_drawing_batches(review)[0]:
+        if cell["cell"] not in {"A1", "A4"}:
+            continue
+        item = dict(cell)
+        if cell["cell"] == "A1":
+            item["context_only"] = True
+        cells.append(item)
+    review = {**review, "cells": cells, "full_cells": review["cells"]}
+
+    def model(*args, **kwargs):
+        return LlmAssistResult(
+            used_llm=True,
+            model="test",
+            data={
+                "physical_regions": [
+                    {
+                        "sheet": "表",
+                        "range": "A1:B4",
+                        "primary_id": "S1:A4",
+                        "evidence_ids": ["S1:A4"],
+                        "dependency_ids": [],
+                        "drawing_ids": ["D0001"],
+                        "reason": "考勤表",
+                    }
+                ],
+                "logical_documents": [],
+                "layout_references": [],
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete", model
+    )
+    with pytest.raises(ReviewedExcelError, match="D0001\\(A1:A1\\).*未读格"):
         _classify_semantic_batch(review, reference_ids=True)
 
 

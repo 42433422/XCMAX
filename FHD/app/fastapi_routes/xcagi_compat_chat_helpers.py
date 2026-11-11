@@ -290,11 +290,14 @@ def _ensure_vector_index_if_needed(message: str, runtime_context: dict) -> str |
     return None
 
 
+_CHAT_TIMEOUT_CEILING_SECONDS = 600.0
+
+
 def _xcagi_chat_timeout_seconds() -> float:
     raw = os.environ.get("XCAGI_CHAT_TIMEOUT_SEC", "120").strip()
     try:
         v = float(raw)
-        return max(5.0, min(v, 600.0))
+        return max(5.0, min(v, _CHAT_TIMEOUT_CEILING_SECONDS))
     except ValueError:
         return 120.0
 
@@ -331,6 +334,27 @@ def _xcagi_chat_timeout_error_payload(timeout: float) -> dict:
 
 def _sse_event_line(payload: dict) -> bytes:
     return ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+
+
+def _sse_chunk_reports_running_tool(item: object) -> bool:
+    """True when a chunk says an authorized tool is still executing."""
+    if not isinstance(item, (bytes, bytearray)):
+        return False
+    for line in bytes(item).decode("utf-8", errors="ignore").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("data:"):
+            continue
+        try:
+            payload = json.loads(stripped[5:])
+        except json.JSONDecodeError:
+            continue
+        if (
+            isinstance(payload, dict)
+            and payload.get("type") == "tool_progress"
+            and payload.get("phase") == "running"
+        ):
+            return True
+    return False
 
 
 def _sse_payload_with_run_id(payload: dict[str, Any], run_id: str | None) -> dict[str, Any]:
@@ -380,13 +404,20 @@ async def _xcagi_planner_stream_bytes_async(
         worker = StreamWorker(lambda: _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier))
     finally:
         current_lifetime.reset(token)
-    deadline = time.monotonic() + _xcagi_chat_timeout_seconds()
-    receive_deadline = min(deadline, time.monotonic() + _xcagi_stream_first_token_timeout_seconds())
+    started_at = time.monotonic()
+    absolute_cap = started_at + _CHAT_TIMEOUT_CEILING_SECONDS
+    deadline = started_at + _xcagi_chat_timeout_seconds()
+    receive_deadline = min(deadline, started_at + _xcagi_stream_first_token_timeout_seconds())
     try:
         while True:
             item = await asyncio.wait_for(
                 worker.receive(), timeout=max(0.0, receive_deadline - time.monotonic())
             )
+            # A running tool is still producing work. Restart the chat budget
+            # from this progress, up to the same ceiling as XCAGI_CHAT_TIMEOUT_SEC.
+            # The first-event cap stays in force until that progress arrives.
+            if _sse_chunk_reports_running_tool(item):
+                deadline = min(absolute_cap, time.monotonic() + _xcagi_chat_timeout_seconds())
             receive_deadline = deadline
             if item is worker.END:
                 break

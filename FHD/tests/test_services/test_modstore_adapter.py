@@ -499,7 +499,7 @@ def chat_discovery_http(monkeypatch):
         return httpx.Response(200, json={})
 
     def client(**kwargs):
-        return real_client(**kwargs, transport=httpx.MockTransport(respond))
+        return real_client(**{**kwargs, "transport": httpx.MockTransport(respond)})
 
     monkeypatch.setattr(httpx, "Client", client)
     yield
@@ -643,7 +643,7 @@ class TestChatCompletionSync:
         monkeypatch.setattr(
             httpx,
             "Client",
-            lambda **kwargs: real_client(**kwargs, transport=httpx.MockTransport(respond)),
+            lambda **kwargs: real_client(**{**kwargs, "transport": httpx.MockTransport(respond)}),
         )
         if status == 200:
             result = adapter.chat_completion_sync([{"role": "user", "content": "hi"}])

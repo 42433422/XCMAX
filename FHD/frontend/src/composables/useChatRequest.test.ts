@@ -242,6 +242,8 @@ describe('useChatRequest', () => {
     expect(request.resolveChatTimeoutMs('导入数据库')).toBe(180000)
     expect(request.resolveChatTimeoutMs('批量excel上传')).toBe(180000)
     expect(request.resolveChatTimeoutMs('执行工作流')).toBe(180000)
+    expect(request.resolveChatTimeoutMs('确认')).toBe(180000)
+    expect(request.resolveChatTimeoutMs('取消')).toBe(180000)
   })
 
   it('resolveChatTimeoutMs returns 90000 for simple tasks', () => {

@@ -502,7 +502,7 @@ class TestChatCompletionSyncUserIdBranch:
         monkeypatch.setattr(
             httpx,
             "Client",
-            lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs),
+            lambda **kwargs: client_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
         )
         result = adapter.chat_completion_sync([{"role": "user", "content": "hi"}])
         assert result["choices"][0]["message"]["content"] == "ok"

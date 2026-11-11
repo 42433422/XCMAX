@@ -111,14 +111,14 @@
     },
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
       "base_file": "FHD/app/fastapi_routes/reviewed_excel_template.py",
-      "base_blob": "5c2179e25ab8bcfabb8626015f6ef75262af47ca",
-      "head_blob": "f936e965fd5c6d06e1e0f02b27ef17f5fef22632",
-      "before_lines": 2976,
-      "after_lines": 3013,
-      "reason": "Review request only: preserve hidden-sheet scope during classification recovery and confirmation, and exclude only hidden-source refusal/coverage.",
-      "boundary": "Server-created source scope binds original hash, exact derived sheet list and strict boolean; old versions without scope retain full-source semantics. Original coordinate digest, source geometry and tenant/owner validation remain enforced.",
-      "validation": "Hidden/veryHidden scope restoration and tamper rejection; actual 5/9-batch pause/resume/namespaced documents and final confirmation count; full integration CI and human architecture approval pending.",
-      "follow_up": "Review extraction of visible-source coverage from this oversized route module.",
+      "base_blob": "f936e965fd5c6d06e1e0f02b27ef17f5fef22632",
+      "head_blob": "0ef563a192d8f156e9553e69a3edf22bb51b74fb",
+      "before_lines": 3013,
+      "after_lines": 3110,
+      "reason": "Review request only: integrate saved-template intake continuation with duplicate-template reuse. A continuation revalidates classification ownership/version under the existing lock, claims the original receipt once, and preserves unknown outcomes.",
+      "boundary": "Existing reviewed-Excel save endpoint and persisted receipt only. Server-scoped preview revision, tenant, actor, model, authorization and classification checks remain required; template reuse does not substitute for business-write consent.",
+      "validation": "Real SQLite intake-continuation and classification-race regressions, template identity/file ownership tests, and full backend mypy passed locally. Integrated remote CI remains a separate merge gate; this request records growth, not architecture approval.",
+      "follow_up": "Review extraction of save/continuation coordination from the existing oversized route while retaining one transaction and identical authority checks.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/ai_chat_app_service.py": {
@@ -159,15 +159,15 @@
     },
     "FHD/app/application/elt/attendance_pipeline.py": {
       "base_file": "FHD/app/application/elt/attendance_pipeline.py",
-      "base_blob": "85b2440a6941d230651d018aad4af912298e59b3",
-      "head_blob": "1ad52242f7a32da9128e39406e6a02f3e4d402ba",
-      "before_lines": 593,
-      "after_lines": 1007,
-      "review_owner": "@42433422",
-      "reason": "Selected attendance candidates retain monthly marks and committed-row readback instead of re-parsing an untouched source workbook.",
-      "boundary": "Existing attendance pipeline only; static bound SQLite queries and 500-ID readback batches preserve idempotent writes and no new route.",
-      "validation": "Synthetic attendance confirmation and customer Excel gate tests cover real workbook writes, exclusions, monthly marks and committed output.",
-      "follow_up": "Review separation of monthly layout interpretation from attendance persistence after candidate-only ingestion is integrated; this record requests review, not approval."
+      "base_blob": "1ad52242f7a32da9128e39406e6a02f3e4d402ba",
+      "head_blob": "4477717615f20a28c896a53a847f343b28fd705e",
+      "before_lines": 1007,
+      "after_lines": 1019,
+      "reason": "Capture run-bound conservative rollback evidence inside the same SQLite write transaction, including prior-source presence and post-write digest.",
+      "boundary": "BEGIN IMMEDIATE serializes source writes while evidence is captured. Missing or shared-source evidence does not authorize deletion; this does not add row-level independent A/B rollback.",
+      "validation": "Final independent integrated sorted-file suite passed 919/919, including actual attendance imports, shared-source rejection, durable cleanup recovery, provider fixture isolation and first/later DELETE broken-trigger rollback. Ruff passed eight patch files; mypy passed six production files. Human architecture approval and new-head CI remain separate.",
+      "follow_up": "Human architecture review of +12 lines required; row-owned historical rollback is not implemented by this change.",
+      "review_owner": "@42433422"
     },
     "FHD/app/application/elt/table_segmentation.py": {
       "base_file": null,
@@ -195,14 +195,14 @@
     },
     "FHD/frontend/src/components/template/ReviewedExcelTemplate.vue": {
       "base_file": "FHD/frontend/src/components/template/ReviewedExcelTemplate.vue",
-      "base_blob": "9f410c4a7bad26a49de1e2c5f833cff4064419a0",
-      "head_blob": "f755be8de50410c08432734125c7c646639c45c7",
-      "before_lines": 2129,
-      "after_lines": 2206,
-      "reason": "Review request only: Coordinate recovered document work, stable slice identity, optional template selection and family representatives while showing save/intake uncertainty independently.",
-      "boundary": "Reviewed workbook UI state and API orchestration; original documents remain distinct and authoritative approval stays server-side.",
-      "validation": "Validation scope: Frontend type/build, optional-template, candidate recovery and workbook pipeline tests. Full integration CI and human architecture review remain outstanding; this request is not approval.",
-      "follow_up": "Extract recovered-pipeline and template-family state into focused composables with race/selection tests.",
+      "base_blob": "f755be8de50410c08432734125c7c646639c45c7",
+      "head_blob": "4a825e6bf9640403c0a000cc0c88f24476135096",
+      "before_lines": 2206,
+      "after_lines": 2299,
+      "reason": "Review request only: preserve a classified batch while appending multiple files or folders, continue saved templates through the prepared intake revision, and show reused-template results accurately.",
+      "boundary": "Existing template component orchestration and DOM file/directory selection. Account-scoped cancellation, file-size limits, original candidate selection, private/shared publication semantics and server approval remain intact.",
+      "validation": "108 template, preview, account-scope and ELT-center tests passed after integration; DOM file/directory types pass frontend build typecheck. Remote integration CI remains required; this request is not architecture approval.",
+      "follow_up": "Extract file selection and prepared intake state into focused existing composables when their account-switch and continuation contracts can be reviewed independently.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
@@ -219,14 +219,14 @@
     },
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
-      "base_blob": "06700aa2bfb064381136dc9b16b97b4653f4eb62",
-      "head_blob": "d6fa1b295a042d8e9cfbf9cc5693ca55302bbd72",
-      "before_lines": 1272,
-      "after_lines": 1374,
-      "reason": "Review request only: Detect interrupted background ingest workers without replaying uncertain writes. Re-read state and authorized identity after acquiring the batch guard; explicitly transfer worker ownership across start interruption.",
-      "boundary": "Batch claim, worker liveness and read-only receipt reconciliation cover both approval release and existing start_background. The liveness helper owns lock lifetime and thread handoff only. No new business-write authority or public endpoint.",
-      "validation": "Latest focused backend: 158 passed / 3 PostgreSQL environment skipped; 23 recovery regressions independently rerun. Includes real multi-process stale-reader interleavings, before/after-start interruption, late-worker cancellation, owner/tenant/mod isolation, old records and both background entry paths. Original two race reproductions now yield no re-execution and no stranded guard. Ruff and owned broad-except gate passed. Previous UI 81 tests passed; Windows runtime and final new-head CI remain unverified.",
-      "follow_up": "@42433422: review legacy running batches individually; old records without worker-protocol proof are not automatically declared dead. Review the existing whole-ledger multi-process persistence boundary separately.",
+      "base_blob": "d6fa1b295a042d8e9cfbf9cc5693ca55302bbd72",
+      "head_blob": "95f1782b1c911406ce68cd5f97cbd8f221f5a790",
+      "before_lines": 1374,
+      "after_lines": 1580,
+      "reason": "Preserve verified attendance partial-write receipts through initial execution, progress refresh and explicit rollback; retain durable knowledge cleanup, strict receipt evidence and process-local bounded polling. Review request extension: permit verified recoverable failed rollback to resume remaining transactional rows before knowledge cleanup.",
+      "boundary": "Owned and tenant-scoped receipts remain mandatory; unknown, missing, running or contradictory evidence fails closed. Successful business rollback is not replayed during knowledge cleanup recovery. Only a typed document-not-found response is idempotent; conflicts stay blocked. Polling limits remain per process (8 total, 2 per tenant), not global. Knowledge deletion failures invalidate cached revision; not-found requires strict durable JSON verification so persistence failure cannot be mistaken for successful deletion. Partial is accepted only for attendance with strict executed/error counts proving both writes and errors; arbitrary partial statuses remain blocked, and tenant/owner/reversibility checks stay enforced. Attendance withdrawal now requires a run-bound exclusive-source snapshot, unchanged source digest and no ambiguous external references; legacy missing evidence and shared source A/B must be rejected rather than independently withdrawn. Any DELETE failure now aborts the SQLite transaction rather than continuing partial deletion. Failed retry requires reversible=true, positive integer executed count, nonzero writes and no contradictory rollback receipt; existing owner fencing and per-row rollback remain authoritative. Running, outcome_unknown and unknown rollback states remain blocked.",
+      "validation": "Final independent integrated sorted-file suite passed 919/919, including actual attendance imports, shared-source rejection, durable cleanup recovery, provider fixture isolation and first/later DELETE broken-trigger rollback. Ruff passed eight patch files; mypy passed six production files. Human architecture approval and new-head CI remain separate. Follow-up candidate: 121 passed, 14 skipped across rollback field scope, partial/empty withdrawal, receipt resources and operation-owner suites; real two-row conflict leaves knowledge intact, retry preserves edits to restored rows and deletes knowledge only after completion. This is not human approval or new-head CI evidence.",
+      "follow_up": "Human architecture review of +206 lines required, including the additional 17-line failed-withdrawal recovery guard; prior review request does not approve this extension. Do not mechanically split to hide receipt lifecycle growth.",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
@@ -255,14 +255,14 @@
     },
     "FHD/app/application/reviewed_excel_classification.py": {
       "base_file": "FHD/app/application/reviewed_excel_classification.py",
-      "base_blob": "5c4251a1d6861948d010fcb08debcdffdf4e6dfc",
-      "head_blob": "b33f4d5b837165a1e68a465e606f830a89572b21",
-      "before_lines": 787,
-      "after_lines": 801,
-      "reason": "Model batch decision must distinguish unsent sheets from uncertainty in the current packet.",
-      "boundary": "Only request context and replay of previously archived request digests; original model false decisions and source boundary verification remain authoritative.",
-      "validation": "Multi-sheet packet scope and old/new archived request replay tests, plus classification contracts and provider failure regressions.",
-      "follow_up": "Keep model request context aligned with the packet contract; this entry requests human architecture review and is not approval.",
+      "base_blob": "b83d517418a3c61c1c1d823c940e5073a15b0d92",
+      "head_blob": "8317f16a7627c691b26f51f87ff3c69093ae4876",
+      "before_lines": 801,
+      "after_lines": 812,
+      "reason": "Preserve a cited drawing while closing unread-row fragments instead of clipping it away and rejecting the same valid model evidence repeatedly.",
+      "boundary": "Eleven net lines delegate bounded rectangle expansion to the existing drawing module; model rectangle, unread-cell, overlap and subsequent source validations remain in force.",
+      "validation": "29 drawing regression tests and context-only scope regression independently passed on 25ccc86d; full template regression and exact-head CI are required before merge.",
+      "follow_up": "Human architecture review of this exact bounded growth is still required. This record requests review, does not grant approval, and does not weaken the original cell/drawing scope checks.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py": {
@@ -311,6 +311,18 @@
       "boundary": "ELT model assistance and audit hooks only; SQL/audit errors are not silently classified as provider outages or successful writes.",
       "validation": "Validation scope: Model timeout, bounded units, malformed-answer repair and unknown-outcome/no-blind-retry regressions. Full integration CI and human architecture review remain outstanding; this request is not approval.",
       "follow_up": "Extract shared audited model-call/deadline primitives without losing per-unit limits.",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/reviewed_excel_drawing.py": {
+      "base_file": "FHD/app/application/reviewed_excel_drawing.py",
+      "base_blob": "9e5ccf7a69731d2bdf33c69ca0f19b6c1ae7346f",
+      "head_blob": "aa3de99a268072d3c9cd82967fac025971428563",
+      "before_lines": 832,
+      "after_lines": 958,
+      "reason": "Keep a complete cited drawing only within the original model rectangle and without including unsent cells; identify rejected drawing bounds so the next model answer can correct its range.",
+      "boundary": "Drawing-bound and sent-cell validation helpers only, with no new API, authorization bypass, extraction fallback or implicit classification acceptance. Existing full drawing selection validation still runs.",
+      "validation": "29 drawing regression tests and context-only scope regression independently passed on 25ccc86d; full template regression and exact-head CI are required before merge.",
+      "follow_up": "Human architecture review of this exact bounded growth is still required. This record requests review, does not grant approval, and does not weaken the original cell/drawing scope checks.",
       "review_owner": "@42433422"
     }
   }

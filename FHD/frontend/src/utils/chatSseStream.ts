@@ -84,6 +84,17 @@ export function resolveChatStreamPath(): string {
   return resolvePlannerChatStreamPath()
 }
 
+const WORKFLOW_CONTROL_WORDS = new Set([
+  '确认', '是', '是的', '好的', '好', '继续', '执行', '确认执行', 'ok', 'yes',
+  '取消', '否', '不要', '停止', 'no',
+])
+
+/** 回复「确认」或「取消」会接着执行已批准的计划，不能按普通首包时限掐断。 */
+export function isWorkflowControlMessage(message: string): boolean {
+  const text = String(message || '').trim().toLowerCase().replace(/[。.!！]+$/g, '')
+  return WORKFLOW_CONTROL_WORDS.has(text)
+}
+
 export function isChatStreamEnabled(): boolean {
   const v = String(import.meta.env.VITE_CHAT_STREAM ?? '')
     .trim()

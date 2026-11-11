@@ -137,6 +137,7 @@ def build_employee_pack_tools_detail() -> list[dict[str, Any]]:
             "handlers": row.get("handlers") or [],
             "runtime_ok": bool(row.get("runtime_ok")),
             "installed": True,
+            "description": str((row.get("function") or {}).get("description") or "")[:240],
         }
         for row in _cached_tool_rows()
     ]
@@ -175,7 +176,7 @@ def is_employee_tool(name: str) -> bool:
     return resolve_tool_to_pack_id(name) is not None
 
 
-def _office_output_paths(pack_id: str, result: dict[str, Any]) -> list[str]:
+def office_output_paths(pack_id: str, result: dict[str, Any]) -> list[str]:
     """Extract direct-runtime artifact paths from a completed office employee.
 
     The ten built-in document employees are local file workers.  For them a
@@ -240,7 +241,7 @@ def _verify_office_artifact(pack_id: str, result: dict[str, Any]) -> dict[str, A
     if result.get("success") is not True:
         return {"verified": False, "reason": "员工运行未成功", "paths": []}
 
-    paths = _office_output_paths(pack_id, result)
+    paths = office_output_paths(pack_id, result)
     if not paths:
         return {"verified": False, "reason": "员工未返回输出文件", "paths": []}
     invalid: list[str] = []
@@ -267,6 +268,7 @@ def execute_employee_tool(
     workspace_root: str | None = None,
     *,
     user_id: int = 0,
+    runtime_context: dict[str, Any] | None = None,
 ) -> str:
     from app.application.employee_runtime.executor import execute_employee_task_local
 
@@ -287,6 +289,7 @@ def execute_employee_tool(
         args,
         user_id=user_id,
         workspace_root=workspace_root,
+        runtime_context=runtime_context,
     )
     ok = bool(result.get("success") is True and not result.get("blocked_by_risk_gate"))
     artifact = _verify_office_artifact(pack_id, result)

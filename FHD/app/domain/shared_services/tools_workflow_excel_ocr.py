@@ -16,19 +16,10 @@ def _registered_router_excel_analysis(
     payload = dict(params or {})
     payload["action"] = action
     if not str(payload.get("file_path") or "").strip():
-        excel_ctx = (
-            runtime_context.get("excel_analysis")
-            if isinstance(runtime_context.get("excel_analysis"), dict)
-            else None
-        )
-        if not excel_ctx:
-            last_ctx = runtime_context.get("last_excel_analysis_context")
-            if isinstance(last_ctx, dict):
-                excel_ctx = (
-                    last_ctx.get("result") if isinstance(last_ctx.get("result"), dict) else last_ctx
-                )
-        if isinstance(excel_ctx, dict):
-            payload["file_path"] = str(excel_ctx.get("file_path") or "").strip()
+        from app.domain.context.session_excel_context import excel_analysis_from_runtime
+
+        excel_ctx = excel_analysis_from_runtime(runtime_context) or {}
+        payload["file_path"] = str(excel_ctx.get("file_path") or "").strip()
     if not str(payload.get("file_path") or "").strip():
         return {"success": False, "message": "excel_analysis 缺少 file_path 参数"}
     if action == "query" and not payload.get("query_expression"):
@@ -37,14 +28,59 @@ def _registered_router_excel_analysis(
     try:
         from app.application.tools.workflow import handle_excel_analysis
 
-        result = handle_excel_analysis(
-            payload, workspace_root=runtime_context.get("workspace_root")
-        )
+        if action == "export" and "_actor_authorization" in runtime_context:
+            from app.application.tools.workflow_spreadsheet_scope import export_workflow_spreadsheet
+
+            result = export_workflow_spreadsheet(payload, runtime_context, handle_excel_analysis)
+        elif (
+            action in {"read", "structure", "query", "statistics"}
+            and "_actor_authorization" in runtime_context
+        ):
+            from app.application.tools.workflow_spreadsheet_scope import (
+                workflow_file_snapshot,
+            )
+
+            original = str(payload["file_path"])
+            with workflow_file_snapshot(original, runtime_context) as snapshot:
+                if snapshot.suffix not in {".xlsx", ".xls", ".xlsm", ".csv"}:
+                    raise PermissionError("文件类型不支持表格分析")
+                result = handle_excel_analysis({**payload, "file_path": str(snapshot)})
+            if isinstance(result, dict):
+                result["file_path"] = original
+                result.pop("resolved_path", None)
+        else:
+            result = handle_excel_analysis(
+                payload, workspace_root=runtime_context.get("workspace_root")
+            )
+    except PermissionError as err:
+        return {"success": False, "error_code": "spreadsheet_access_denied", "message": str(err)}
     except RECOVERABLE_ERRORS as err:
         logger.error("excel_analysis 执行失败: %s", err, exc_info=True)
         return {"success": False, "message": f"Excel 分析失败：{str(err)}"}
     if not isinstance(result, dict):
         return {"success": False, "message": str(result)}
+    if (
+        result.get("success")
+        and action == "statistics"
+        and ("expected_row_count" in params or "expected_totals" in params)
+    ):
+        from math import isclose
+
+        mismatches = []
+        if (
+            "expected_row_count" in params
+            and result.get("row_count") != params["expected_row_count"]
+        ):
+            mismatches.append("明细行数")
+        for column, expected in (params.get("expected_totals") or {}).items():
+            actual = (result.get("numeric_summary") or {}).get(column, {}).get("sum")
+            if actual is None or not isclose(
+                float(actual), float(expected), rel_tol=1e-9, abs_tol=1e-9
+            ):
+                mismatches.append(str(column))
+        result["verification"] = {"verified": not mismatches, "mismatches": mismatches}
+        if mismatches:
+            result.update(success=False, message="Excel 核验未通过：" + "、".join(mismatches))
     if not result.get("success") and "error" in result and "message" not in result:
         result["message"] = result["error"]
     if result.get("success") is True and not isinstance(result.get("data"), dict):

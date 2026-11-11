@@ -211,6 +211,7 @@ def execute_planner_workflow_tool(
             args,
             workspace_root,
             db_write_token=db_write_token,
+            runtime_context=runtime_context,
         )
         if emp_raw is not None:
             logger.debug("planner tool employee pack tool=%s", name)

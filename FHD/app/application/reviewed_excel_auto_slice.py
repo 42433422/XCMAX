@@ -443,11 +443,23 @@ def derive_classified_documents(
     source = inspect_workbook(body)
     if classification.get("source_sha256") != source["sha256"]:
         raise ReviewedExcelError("分类结果与原件不一致")
-    if source.get("drawing_evidence"):
+    hidden_sheets = {
+        item.get("sheet")
+        for item in source.get("sheet_overview") or []
+        if isinstance(item, dict) and item.get("sheet_state") in {"hidden", "veryHidden"}
+    }
+    from app.application.reviewed_excel_evidence import prepare_auto_slice_review
+
+    drawing_source = prepare_auto_slice_review(source, skip_hidden_sheets=True)
+    if drawing_source.get("drawing_evidence"):
         from app.application.reviewed_excel_drawing import grouping_drawings
 
-        coverage = classification.get("coverage", [])
-        if len(coverage) != len(source["sheets"]) or any(
+        coverage = [
+            row
+            for row in classification.get("coverage", [])
+            if row.get("sheet") not in hidden_sheets
+        ]
+        if len(coverage) != len(drawing_source["sheets"]) or any(
             row.get("drawing_unread")
             or row.get("drawing_unassigned")
             or row.get("unread")
@@ -456,17 +468,12 @@ def derive_classified_documents(
             for row in coverage
         ):
             raise ReviewedExcelError("绘图证据覆盖不完整，暂不能裁切")
-        grouping_drawings(source, classification.get("regions", []), [])
+        grouping_drawings(drawing_source, classification.get("regions", []), [])
     if classification.get("model_status") != "returned":
         raise ReviewedExcelError("模型分类尚未返回")
     regions = classification.get("regions")
     if not isinstance(regions, list) or not regions:
         raise ReviewedExcelError("没有可提取的模型区域")
-    hidden_sheets = {
-        item.get("sheet")
-        for item in source.get("sheet_overview") or []
-        if isinstance(item, dict) and item.get("sheet_state") in {"hidden", "veryHidden"}
-    }
     known = {}
     for region in regions:
         if region.get("sheet") in hidden_sheets:
@@ -498,6 +505,9 @@ def derive_classified_documents(
         groups.append((group, "model_group", reason))
     if len(assigned) != len(known):
         raise ReviewedExcelError("模型尚未确定所有区域的独立单据关系，不能自动切片")
+    from app.application.reviewed_excel_template_blocks import join_split_template_blocks
+
+    groups = join_split_template_blocks(body, groups)
     from app.application.reviewed_excel_verify_cut import verify_after_cut
 
     verified = verify_after_cut(

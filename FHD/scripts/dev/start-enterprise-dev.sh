@@ -15,6 +15,12 @@ FRONTEND_DIR="${FHD_ROOT}/frontend"
 source "${SCRIPT_DIR}/ensure_dev_proxy_bypass.sh"
 
 export XCAGI_PRODUCT_SKU="${XCAGI_PRODUCT_SKU:-enterprise}"
+# 与 desktop/desktop-config.ts 一致：企业版默认开启数据对接中心。
+if [[ "${XCAGI_PRODUCT_SKU}" == "enterprise" ]]; then
+  export FHD_ETL_CENTER_ENABLED="${FHD_ETL_CENTER_ENABLED:-1}"
+else
+  export FHD_ETL_CENTER_ENABLED="${FHD_ETL_CENTER_ENABLED:-0}"
+fi
 export XCAGI_DEV_SERVER=1
 export XCAGI_DATA_DIR="${XCAGI_DATA_DIR:-${XCAGI_DIR}/data/desktop-dev}"
 export XCAGI_MODS_ROOT="${XCAGI_MODS_ROOT:-${FHD_ROOT}/mods}"

@@ -79,6 +79,20 @@ def candidate_pack_ids(pack_id: str) -> list[str]:
     return candidates
 
 
+def _seed_content_hash(path: Path) -> str:
+    from app.infrastructure.mods.package_hashing import compute_members_hash
+
+    return compute_members_hash(
+        [
+            (file.relative_to(path).as_posix(), file.read_bytes())
+            for file in path.rglob("*")
+            if file.is_file()
+            and "__pycache__" not in file.relative_to(path).parts
+            and file.suffix not in {".pyc", ".pyo"}
+        ]
+    )
+
+
 def resolve_pack_dir(pack_id: str) -> Path | None:
     roots = _employee_roots()
     for root in roots:
@@ -87,16 +101,13 @@ def resolve_pack_dir(pack_id: str) -> Path | None:
             if (pdir / "manifest.json").is_file():
                 receipt = pdir / ".xcagi-install-receipt.json"
                 if root == roots[0] and not receipt.exists() and not receipt.is_symlink():
-                    from app.infrastructure.mods.package import compute_directory_hash
-
                     for bundled_root in roots[1:]:
                         bundled = bundled_root / cid
                         try:
                             if (
                                 verify_direct_python_pack_trust(bundled)[0]
                                 and (bundled / "manifest.json").is_file()
-                                and compute_directory_hash(str(pdir))
-                                == compute_directory_hash(str(bundled))
+                                and _seed_content_hash(pdir) == _seed_content_hash(bundled)
                             ):
                                 return bundled
                         except OSError:

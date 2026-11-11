@@ -1,4 +1,5 @@
 import { computed, ref, onMounted, onActivated, watch } from 'vue'
+import { useRecordFocusQuery } from '@/composables/useRecordFocusQuery'
 import customersApi from '@/api/customers'
 import ordersApi from '@/api/orders'
 import templatePreviewApi from '@/api/templatePreview'
@@ -167,8 +168,14 @@ export function useCustomers() {
     return message || '客户列表加载失败，请重试';
   }
 
+  const { keyword: routeKeyword, focusId } = useRecordFocusQuery()
+  let pendingKeywordReload = false
+
   const loadCustomers = async ({ reset = true, background = false }: { reset?: boolean; background?: boolean } = {}) => {
-    if (loading.value) return;
+    if (loading.value) {
+      if (reset) pendingKeywordReload = true
+      return
+    }
     const quiet = background && customersLoaded;
     if (!quiet) {
       loading.value = true;
@@ -182,7 +189,8 @@ export function useCustomers() {
         customersApi.getCustomers({
           page: nextPage,
           per_page: perPage,
-          ...(pu ? { purchase_unit: pu } : {})
+          ...(pu ? { purchase_unit: pu } : {}),
+          ...(routeKeyword.value ? { keyword: routeKeyword.value } : {}),
         }),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error('加载超时，请重试')), CUSTOMER_LOAD_TIMEOUT_MS);
@@ -212,8 +220,16 @@ export function useCustomers() {
     } finally {
       if (timer) clearTimeout(timer);
       loading.value = false;
+      if (pendingKeywordReload) {
+        pendingKeywordReload = false
+        void loadCustomers({ reset: true })
+      }
     }
   };
+
+  watch(routeKeyword, () => {
+    void loadCustomers({ reset: true })
+  })
 
   const retryLoadCustomers = () => loadCustomers({ reset: true });
 
@@ -413,6 +429,7 @@ export function useCustomers() {
     productsNavLabel,
     shipmentNavLabel,
     customers,
+    focusId,
     purchaseUnitOptions,
     selectedPurchaseUnit,
     loading,

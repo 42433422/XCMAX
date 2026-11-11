@@ -57,6 +57,10 @@ class ShipmentRecordCommandPort(ABC):
 class ShipmentRecordQueryPort(ABC):
     """出货记录查询端口（Read side）。"""
 
+    def find_document_by_order_number(self, order_number: str) -> dict[str, Any] | None:
+        """Find a persisted document within the current tenant, without a recent-row cap."""
+        raise NotImplementedError
+
     @abstractmethod
     def query_shipments(
         self,

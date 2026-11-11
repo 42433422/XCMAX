@@ -69,7 +69,9 @@ async def test_lookup_maps_old_markets_to_unsupported(monkeypatch, status, body,
 
     real = httpx.AsyncClient
     monkeypatch.setattr(
-        httpx, "AsyncClient", lambda **kw: real(transport=httpx.MockTransport(handler), **kw)
+        httpx,
+        "AsyncClient",
+        lambda **kw: real(**(kw | {"transport": httpx.MockTransport(handler)})),
     )
     monkeypatch.setattr(
         "app.application.elt_login_authorization._platform_url", lambda: "https://market.invalid"

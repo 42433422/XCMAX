@@ -579,7 +579,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       } else {
         const planId = String(card.plan_id || '').trim()
         if (!planId) throw new Error('确认卡缺少任务标识，请返回原任务核对后重试')
-        const payload = await chatRequest.requestChatByModeWithTimeout(control, 90_000, { expectedWorkflowPlanId: planId }, {
+        const payload = await chatRequest.requestChatByModeWithTimeout(control, chatRequest.resolveChatTimeoutMs(control), { expectedWorkflowPlanId: planId }, {
           sessionId: scope.sessionId, messages: [...messages.value], signal: round.signal, isCurrent,
         })
         if (!isCurrent()) return

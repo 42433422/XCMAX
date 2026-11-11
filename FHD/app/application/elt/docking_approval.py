@@ -80,6 +80,8 @@ def submit_docking_write(
         service.cancel_unreleased_batch(batch_id=batch_id, tenant_id=int(tenant_id))
         raise
     queued = dict(batch)
+    metadata = get_approval_service().get_request_metadata(request.request_id) or {}
+    queued["approval_id"] = metadata.get("id")
     queued["approval_request_id"] = str(request.request_id or "")
     queued["status"] = "awaiting_approval"
     queued["success"] = True

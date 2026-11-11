@@ -9,8 +9,8 @@
       role="combobox"
       :aria-expanded="open ? 'true' : 'false'"
       aria-controls="top-quick-nav-list"
-      aria-label="输入功能名快速跳转"
-      placeholder="输入功能名快速跳转"
+      aria-label="搜索功能、产品型号或客户"
+      placeholder="搜索功能、产品型号或客户"
       autocomplete="off"
       @focus="onFocus"
       @keydown="onKeydown"
@@ -25,10 +25,10 @@
         aria-label="功能列表"
         :style="listStyle"
       >
-        <li v-if="!filtered.length" class="top-quick-nav__empty">没有匹配的功能</li>
+        <li v-if="!filtered.length" class="top-quick-nav__empty">没有匹配的功能、产品或客户</li>
         <li
           v-for="(item, idx) in filtered"
-          :key="`${item.source}-${item.key}-${idx}`"
+          :key="`${item.kind}-${item.key || item.id}-${idx}`"
           class="top-quick-nav__option"
           :class="{ highlighted: idx === highlightIndex }"
           role="option"
@@ -37,6 +37,7 @@
           @mousedown.prevent="choose(item)"
         >
           <i v-if="item.iconClass" class="fa top-quick-nav__option-icon" :class="item.iconClass" aria-hidden="true"></i>
+          <span v-if="item.kind !== 'nav'" class="top-quick-nav__kind">{{ item.kind === 'product' ? '产品' : '客户' }}</span>
           <span class="top-quick-nav__option-name">{{ item.name }}</span>
         </li>
       </ul>
@@ -50,28 +51,69 @@
  * 回车/点击后经 MainLayout 的 navigateToView 跳转（与侧栏点击完全同路径）。
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import customersApi from '@/api/customers'
+import productsApi from '@/api/products'
 import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
+import { useModsStore } from '@/stores/mods'
+import { pushErpPage } from '@/utils/erpPagePaths'
+import { productReadScopeKey } from '@/utils/productReadAccountScope'
 
 const emit = defineEmits(['select'])
+const router = useRouter()
 
 const { visibleNavItems } = useVisibleNavItems()
+const modsStore = useModsStore()
+const recordScope = computed(() => productReadScopeKey(String(modsStore.activeModId || '')))
 
 const query = ref('')
 const open = ref(false)
 const highlightIndex = ref(0)
 const keyboardMoved = ref(false)
 const inputRef = ref(null)
+const records = ref([])
 const listStyle = ref({ position: 'fixed', top: '0px', left: '0px', width: '420px', zIndex: 4000 })
+let recordTimer = null
+let recordGeneration = 0
 
 const filtered = computed(() => {
   const keyword = query.value.trim().toLowerCase()
-  const items = visibleNavItems.value || []
-  if (!keyword) return items
-  return items.filter((item) => {
-    const haystack = `${item.name || ''} ${item.key || ''} ${item.routeName || ''}`.toLowerCase()
-    return haystack.includes(keyword)
-  })
+  const items = (visibleNavItems.value || []).map((item) => ({ ...item, kind: 'nav' }))
+  const nav = keyword
+    ? items.filter((item) => `${item.name || ''} ${item.key || ''} ${item.routeName || ''}`.toLowerCase().includes(keyword))
+    : items
+  return keyword ? [...nav, ...records.value] : nav
 })
+
+function recordName(row, keys) {
+  return keys.map((key) => String(row?.[key] || '').trim()).filter(Boolean).join(' · ')
+}
+
+async function lookupRecords(keyword) {
+  const generation = ++recordGeneration
+  const scope = recordScope.value
+  const [products, customers] = await Promise.all([
+    productsApi.searchProducts(keyword).catch(() => null),
+    customersApi.getCustomers({ keyword, page: 1, per_page: 8 }).catch(() => null),
+  ])
+  if (generation !== recordGeneration || scope !== recordScope.value) return
+  const productRows = Array.isArray(products?.data) ? products.data : []
+  const customerRows = Array.isArray(customers?.data) ? customers.data : []
+  records.value = [
+    ...productRows.slice(0, 8).map((row) => ({
+      kind: 'product',
+      id: row.id,
+      name: recordName(row, ['model_number', 'name']) || '产品',
+      keyword: String(row.model_number || row.name || keyword),
+    })),
+    ...customerRows.slice(0, 8).map((row) => ({
+      kind: 'customer',
+      id: row.id,
+      name: recordName(row, ['customer_name', 'unit_name', 'name']) || '客户',
+      keyword: String(row.customer_name || row.unit_name || row.name || keyword),
+    })),
+  ]
+}
 
 function placeList() {
   const el = inputRef.value
@@ -104,9 +146,29 @@ function onBlur() {
   }, 180)
 }
 
+function clearRecordSearch() {
+  if (recordTimer) clearTimeout(recordTimer)
+  recordTimer = null
+  records.value = []
+  recordGeneration += 1
+}
+
+watch(recordScope, () => {
+  clearRecordSearch()
+  query.value = ''
+  open.value = false
+}, { flush: 'sync' })
+
 watch(query, () => {
   highlightIndex.value = 0
   keyboardMoved.value = false
+  clearRecordSearch()
+  const keyword = query.value.trim()
+  if (!keyword) return
+  const generation = recordGeneration
+  recordTimer = setTimeout(() => {
+    if (generation === recordGeneration) lookupRecords(keyword)
+  }, 250)
 })
 
 watch(highlightIndex, () => {
@@ -124,9 +186,25 @@ if (typeof window !== 'undefined') {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onViewportChange)
   window.removeEventListener('scroll', onViewportChange, true)
+  clearRecordSearch()
 })
 
 function choose(item) {
+  if (item?.kind === 'product' || item?.kind === 'customer') {
+    if (!records.value.includes(item)) return
+    pushErpPage(router, {
+      path: item.kind === 'product' ? '/products' : '/customers',
+      query: {
+        keyword: item.keyword || query.value.trim(),
+        ...(item.id != null && item.id !== '' ? { focus: String(item.id) } : {}),
+      },
+    })
+    query.value = ''
+    records.value = []
+    open.value = false
+    inputRef.value?.blur?.()
+    return
+  }
   if (!item?.key) return
   emit('select', item.key)
   query.value = ''
@@ -264,6 +342,16 @@ function onKeydown(event) {
 }
 
 .top-quick-nav__option.highlighted .top-quick-nav__option-icon {
+  color: #0b72d9;
+}
+
+.top-quick-nav__kind {
+  flex: none;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(219, 234, 254, 0.9);
   color: #0b72d9;
 }
 

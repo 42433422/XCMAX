@@ -176,7 +176,7 @@ router.beforeEach(async (to, _from, finish) => {
         }
       }
       if (modPage && router.resolve(modPage).matched.length > 0 && to.path !== modPage) {
-        next({ path: modPage, replace: true })
+        next({ path: modPage, query: to.query, hash: to.hash, replace: true })
         return
       }
       next({ name: 'settings', replace: true })
@@ -306,7 +306,8 @@ router.beforeEach(async (to, _from, finish) => {
   ) {
     const modPage = resolveHostBusinessPageRedirect(String(to.name))
     if (modPage) {
-      next(modPage)
+      const target = router.resolve(modPage)
+      next({ path: target.path, query: { ...target.query, ...to.query }, hash: to.hash || target.hash })
       return
     }
     next(resolvePlannerChatHomePath())
