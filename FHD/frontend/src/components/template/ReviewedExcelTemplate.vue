@@ -472,8 +472,12 @@ watch([getAuthSessionEpoch, () => productReadAccountEpoch.value], () => {
 }, { flush: 'sync' })
 onBeforeUnmount(() => { resetIntake(); stopIngestPoll(); alive = false; operationEpoch += 1; selectionEpoch += 1 })
 const WORKBOOK_NAME = /\.(xlsx|xls|docx)$/i
+const BATCH_BYTE_LIMIT = 50 * 1024 * 1024
 function importableWorkbook(file: File) {
   return WORKBOOK_NAME.test(file.name) && !file.name.startsWith('~$')
+}
+function batchBytes(items: File[]) {
+  return items.reduce((sum, item) => sum + item.size, 0)
 }
 function openPicker(folder: boolean) {
   if (!alive || busy.value || documentWorkPending.value) return
@@ -554,8 +558,13 @@ function applyChosenFiles(list: File[]) {
       error.value = '一次最多上传 200 个文件，请分批上传'
       return
     }
+    if (batchBytes(next) > BATCH_BYTE_LIMIT) {
+      error.value = '本批文件超过 50 MB，请分批上传'
+      return
+    }
+    const keptKeys = files.value.map((_, index) => archiveKeys.value[index] || crypto.randomUUID())
     files.value = next
-    archiveKeys.value = [...archiveKeys.value, ...list.map(() => crypto.randomUUID())]
+    archiveKeys.value = [...keptKeys, ...list.map(() => crypto.randomUUID())]
     error.value = ''
     return
   }
@@ -659,7 +668,7 @@ async function classify(approvedRoundKey = '') {
   const current = captureFileOperation()
   if (!current()) return
   if (busy.value || !files.value.length || files.value.length > 200) return
-  if (files.value.reduce((sum, item) => sum + item.size, 0) > 50 * 1024 * 1024) {
+  if (batchBytes(files.value) > BATCH_BYTE_LIMIT) {
     error.value = '本批文件超过 50 MB，请分批上传'; return
   }
   busy.value = true; error.value = ''
@@ -1187,6 +1196,7 @@ async function restoreClassification(item: RecentClassification) {
       if (!current()) return
       selectedFilesCurrent = captureAuthSession(); selectionEpoch += 1
       files.value = [new File([blob], item.name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]
+      archiveKeys.value = [crypto.randomUUID()]
     }
     if (!globalThis.crypto?.subtle) throw new Error('当前环境不能校验文件哈希，请使用安全连接')
     const source = await files.value[0].arrayBuffer()

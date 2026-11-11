@@ -858,6 +858,59 @@ describe('reviewed Excel template', () => {
     } finally { wrapper.unmount() }
   })
 
+  it('leaves a classified batch unchanged when an added file would exceed 50 MB', async () => {
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const state = wrapper.vm.$.setupState as { files: File[]; classifications: { name: string; status: string; sheets: [] }[]; archiveKeys: string[] }
+      const kept = new File(['a'], 'kept.xlsx')
+      Object.defineProperty(kept, 'size', { value: 40 * 1024 * 1024 })
+      state.files = [kept]
+      state.classifications = [{ name: 'kept.xlsx', status: 'classified', sheets: [] }]
+      state.archiveKeys = ['kept-key']
+      const input = wrapper.get('input.elt-composer__file-input').element as HTMLInputElement
+      const huge = new File(['b'], 'huge.xlsx')
+      Object.defineProperty(huge, 'size', { value: 15 * 1024 * 1024 })
+      Object.defineProperty(input, 'files', { configurable: true, value: [huge] })
+      await wrapper.get('input.elt-composer__file-input').trigger('change')
+      expect(state.files).toEqual([kept])
+      expect(state.archiveKeys).toEqual(['kept-key'])
+      expect(wrapper.get('[role=alert]').text()).toContain('50 MB')
+      const small = new File(['c'], 'more.xlsx')
+      Object.defineProperty(input, 'files', { configurable: true, value: [small] })
+      await wrapper.get('input.elt-composer__file-input').trigger('change')
+      expect(state.files.map((file) => file.name)).toEqual(['kept.xlsx', 'more.xlsx'])
+      expect(state.archiveKeys[0]).toBe('kept-key')
+      expect(state.archiveKeys[1]).not.toBe('kept-key')
+      expect(wrapper.find('[role=alert]').exists()).toBe(false)
+    } finally { wrapper.unmount() }
+  })
+
+  it('gives each file added after a restored classification its own request key', async () => {
+    api.recentClassifications.mockResolvedValue({ files: [{ classification_id: 'restored', name: '恢复.xlsx', sha256: '01', archive_version_id: 'ver-1', latest: { version: 'v1', confirmed: false, model_status: 'not_called', sheets: [] } }] })
+    api.downloadClassificationSource.mockResolvedValue({ blob: async () => new Blob(['restored']) })
+    api.archiveClassifyExcel.mockResolvedValue({ name: '追加.xlsx', status: 'classified', classification_id: 'added', version: 'v1', sheets: [] })
+    let issued = 0
+    vi.stubGlobal('crypto', { randomUUID: () => `key-${++issued}`, subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array([1]).buffer) } })
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      await wrapper.findAll('button').find((button) => button.text() === '查看已保存分类')!.trigger('click'); await flushPromises()
+      await wrapper.findAll('button').find((button) => button.text() === '恢复此分类并继续')!.trigger('click'); await flushPromises()
+      const state = wrapper.vm.$.setupState as { archiveKeys: string[] }
+      expect(state.archiveKeys).toEqual(['key-1'])
+      const input = wrapper.get('input.elt-composer__file-input').element as HTMLInputElement
+      const choose = async (name: string) => {
+        Object.defineProperty(input, 'files', { configurable: true, value: [new File(['x'], name)] })
+        await wrapper.get('input.elt-composer__file-input').trigger('change')
+        await wrapper.get('.elt-composer__start').trigger('click'); await flushPromises()
+      }
+      await choose('追加.xlsx')
+      await choose('再追加.xlsx')
+      const keys = api.archiveClassifyExcel.mock.calls.map((call) => (call[0] as FormData).get('request_key'))
+      expect(keys).toEqual(['key-2', 'key-3'])
+      expect(new Set(keys).size).toBe(2)
+    } finally { wrapper.unmount(); vi.unstubAllGlobals() }
+  })
+
   it('marks composer drag-over on dragover and clears on leave', async () => {
     const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     try {
