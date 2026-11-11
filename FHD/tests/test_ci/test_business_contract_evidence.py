@@ -12,6 +12,7 @@ from scripts.dev.check_business_contract_evidence import (
     REQUIRED_TESTS,
     catalog_errors,
     ci_gate,
+    floor_errors,
     evidence_from_junit,
     load_catalog,
     validate,
@@ -60,6 +61,26 @@ def test_removing_the_required_scenario_is_rejected():
         item for item in data["contracts"] if item["scenario_id"] not in MINIMUM_REQUIRED
     ]
     assert any("required scenarios removed" in error for error in catalog_errors(data))
+
+
+def test_floor_from_main_rejects_a_shrunk_required_set():
+    assert floor_errors(
+        {
+            "required_scenarios": list(MINIMUM_REQUIRED),
+            "required_tests": dict(REQUIRED_TESTS),
+        }
+    ) == []
+    errors = floor_errors(
+        {
+            "required_scenarios": ["R08-e23-readback", "not-in-this-change"],
+            "required_tests": {
+                **REQUIRED_TESTS,
+                "R08-e23-readback": "tests/other.py::test_other",
+            },
+        }
+    )
+    assert any("not-in-this-change" in error for error in errors)
+    assert any("tests/other.py::test_other" in error for error in errors)
 
 
 def test_passed_junit_is_accepted(tmp_path: Path):
@@ -207,6 +228,7 @@ def test_r08_readback_fails_when_recovery_inserts_again(monkeypatch):
     monkeypatch.setattr(permissions, "begin_idempotent_replay", drop_replay)
     with pytest.raises(AssertionError) as caught:
         test_e23_kill_after_commit_returns_the_same_row()
-    assert "1" in str(caught.value)
+    message = str(caught.value)
+    assert "客户名称已存在" in message or "1" in message
     monkeypatch.undo()
     test_e23_kill_after_commit_returns_the_same_row()

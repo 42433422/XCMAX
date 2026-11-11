@@ -111,6 +111,26 @@ def catalog_errors(data: dict) -> list[str]:
     return errors
 
 
+def floor_errors(floor: dict) -> list[str]:
+    """Fail when this change drops a scenario or test that the floor still requires.
+
+    CI loads the floor from ``origin/main`` once that file exists there. Editing
+    the copy in the pull request does not replace that floor.
+    """
+    errors: list[str] = []
+    required = floor.get("required_scenarios")
+    tests = floor.get("required_tests")
+    if not isinstance(required, list) or not isinstance(tests, dict):
+        return ["floor file is missing required_scenarios or required_tests"]
+    for scenario_id in required:
+        if scenario_id not in MINIMUM_REQUIRED:
+            errors.append(f"main still requires {scenario_id}")
+    for scenario_id, node_id in tests.items():
+        if REQUIRED_TESTS.get(str(scenario_id)) != node_id:
+            errors.append(f"main still requires {scenario_id} {node_id}")
+    return errors
+
+
 def _case_status(case: ET.Element) -> tuple[str, str]:
     for child in case:
         if child.tag == "failure":
@@ -282,6 +302,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("catalog")
+    floor = sub.add_parser("floor")
+    floor.add_argument("--floor", type=Path, required=True)
     gate = sub.add_parser("ci-gate")
     gate.add_argument("--source-sha", required=True)
     gate.add_argument("--run-id", required=True)
@@ -296,6 +318,13 @@ def main(argv: list[str] | None = None) -> int:
                 print("\n".join(errors), file=sys.stderr)
                 return 1
             print(f"business contracts ok: required={','.join(MINIMUM_REQUIRED)}")
+            return 0
+        if args.command == "floor":
+            errors = floor_errors(json.loads(args.floor.read_text(encoding="utf-8")))
+            if errors:
+                print("\n".join(errors), file=sys.stderr)
+                return 1
+            print(f"business contract floor held: required={','.join(MINIMUM_REQUIRED)}")
             return 0
         evidence = ci_gate(
             args.shards,

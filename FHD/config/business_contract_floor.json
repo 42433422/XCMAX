@@ -1,0 +1,16 @@
+{
+  "required_scenarios": [
+    "R08-e23-readback",
+    "R05-approved-shipment-export",
+    "R02-empty-preview",
+    "R07-same-key-different-params",
+    "R09-two-recoveries"
+  ],
+  "required_tests": {
+    "R08-e23-readback": "tests/test_application/test_idempotency_recovery_e23_e24.py::test_e23_kill_after_commit_returns_the_same_row",
+    "R05-approved-shipment-export": "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan",
+    "R02-empty-preview": "tests/test_application/test_etl_preview_task_boundaries.py::test_empty_preview_is_not_confirmable",
+    "R07-same-key-different-params": "tests/test_application/test_idempotency_recovery_e23_e24.py::test_same_key_with_different_phone_does_not_reuse_the_row",
+    "R09-two-recoveries": "tests/test_application/test_idempotency_recovery_e23_e24.py::test_e24_two_recoveries_leave_one_row"
+  }
+}
