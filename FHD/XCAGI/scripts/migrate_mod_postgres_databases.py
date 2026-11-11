@@ -78,7 +78,7 @@ def main() -> int:
         if not suf:
             continue
         dbn = f"{base_db}__{suf}"
-        mod_url = str(base_u.set(database=dbn))
+        mod_url = base_u.set(database=dbn).render_as_string(hide_password=False)
         print(f"==> alembic upgrade head  ->  {dbn}")
         env = os.environ.copy()
         env["DATABASE_URL"] = mod_url
