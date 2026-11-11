@@ -135,9 +135,9 @@ async def test_session_validity_keeps_none_compatibility_and_blocks_disabled_use
     response = await routes.auth_session_validate(request(), background)
     if principal is None:
         assert isinstance(response, dict) and response["valid"] is True
-        assert response["entitled_mod_ids"] == ["industry-employee"]
-        assert not background.tasks
-        sync.assert_awaited_once_with("fake-session")
+        assert "entitled_mod_ids" not in response
+        assert background.tasks
+        sync.assert_not_awaited()
     else:
         assert isinstance(response, Response) and response.status_code == 403
         assert json.loads(bytes(response.body))["valid"] is False

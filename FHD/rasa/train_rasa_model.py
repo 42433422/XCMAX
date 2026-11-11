@@ -1,152 +1,48 @@
-"""
-RASA NLU 模型训练脚本
+"""Train the optional Rasa NLU model with an explicitly supplied local corpus."""
 
-使用方法:
-    python train_rasa_model.py
+from __future__ import annotations
 
-训练完成后，模型会保存在 rasa/models/ 目录下
-"""
-
-import logging
-import os
+import argparse
 import subprocess
 import sys
+from pathlib import Path
 
-from app.utils.operational_errors import BOUNDARY_ERRORS
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-RASA_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.dirname(RASA_DIR)
-MODELS_DIR = os.path.join(RASA_DIR, "models")
+RASA_DIR = Path(__file__).resolve().parent
 
 
-def check_rasa_installed():
-    """检查 RASA 是否已安装"""
-    try:
-        import rasa
-
-        logger.info(f"RASA 版本: {rasa.__version__}")
-        return True
-    except ImportError:
-        logger.error("RASA 未安装，请运行: pip install rasa")
-        return False
-
-
-def train_nlu_model(config_path: str, nlu_data: str, output: str, force: bool = False):
-    """
-    训练 RASA NLU 模型
-
-    Args:
-        config_path: config.yml 路径
-        nlu_data: nlu.yml 路径
-        output: 输出目录
-        force: 是否强制重新训练
-    """
-    cmd = [
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, default=RASA_DIR / "config.yml")
+    parser.add_argument("--data", type=Path, default=RASA_DIR / "data" / "nlu.yml")
+    parser.add_argument("--output", type=Path, default=RASA_DIR / "models")
+    parser.add_argument("--force", action="store_true")
+    args = parser.parse_args(argv)
+    config, data, output = (p.expanduser().resolve() for p in (args.config, args.data, args.output))
+    for label, path in (("配置", config), ("训练数据", data)):
+        if not path.is_file():
+            parser.error(f"{label}不存在: {path}；训练数据由调用方通过 --data 提供")
+    command = [
         sys.executable,
         "-m",
         "rasa",
         "train",
         "nlu",
         "--config",
-        config_path,
+        str(config),
         "--nlu",
-        nlu_data,
+        str(data),
         "--output",
-        output,
+        str(output),
     ]
-
-    if force:
-        cmd.append("--force")
-
-    logger.info(f"执行命令: {' '.join(cmd)}")
-
+    if args.force:
+        command.append("--force")
     try:
-        result = subprocess.run(cmd, cwd=PROJECT_DIR, capture_output=True, text=True)
-        if result.returncode == 0:
-            logger.info("模型训练成功!")
-            logger.info(result.stdout)
-        else:
-            logger.error("模型训练失败!")
-            logger.error(result.stderr)
-            return False
-        return True
-    except BOUNDARY_ERRORS as e:
-        logger.error(f"训练过程出错: {e}")
-        return False
-
-
-def test_nlu_model(model_path: str):
-    """
-    测试 NLU 模型
-
-    Args:
-        model_path: 模型路径
-    """
-    test_messages = [
-        "生成发货单",
-        "查看客户列表",
-        "你好",
-        "不要生成发货单",
-        "打印标签",
-    ]
-
-    cmd = [sys.executable, "-m", "rasa", "parse", "--model", model_path, "--text"]
-
-    logger.info("\n测试 NLU 模型:")
-
-    for msg in test_messages:
-        logger.info(f"\n输入: {msg}")
-        try:
-            result = subprocess.run(cmd + [msg], cwd=PROJECT_DIR, capture_output=True, text=True)
-            if result.returncode == 0:
-                logger.info(f"输出: {result.stdout}")
-            else:
-                logger.error(f"错误: {result.stderr}")
-        except BOUNDARY_ERRORS as e:
-            logger.error(f"测试失败: {e}")
-
-
-def main():
-    """主函数"""
-    logger.info("=" * 50)
-    logger.info("RASA NLU 模型训练脚本")
-    logger.info("=" * 50)
-
-    if not check_rasa_installed():
-        sys.exit(1)
-
-    config_path = os.path.join(RASA_DIR, "config.yml")
-    nlu_data = os.path.join(RASA_DIR, "data", "nlu.yml")
-
-    if not os.path.exists(config_path):
-        logger.error(f"配置文件不存在: {config_path}")
-        sys.exit(1)
-
-    if not os.path.exists(nlu_data):
-        logger.error(f"训练数据不存在: {nlu_data}")
-        sys.exit(1)
-
-    os.makedirs(MODELS_DIR, exist_ok=True)
-
-    logger.info(f"\n配置: {config_path}")
-    logger.info(f"训练数据: {nlu_data}")
-    logger.info(f"输出目录: {MODELS_DIR}")
-
-    success = train_nlu_model(config_path, nlu_data, MODELS_DIR, force=True)
-
-    if success:
-        logger.info("\n训练完成! 可以使用以下方式加载模型:")
-        logger.info("1. 嵌入式模式:")
-        logger.info(f"   rasa_nlu_service = RasaNLUService(model_path='{MODELS_DIR}/<model_name>')")
-        logger.info("2. 服务器模式:")
-        logger.info("   rasa run --enable-api --models models/")
-        logger.info(
-            "   然后调用: RasaNLUService(rasa_url='http://localhost:5005', use_server=True)"
-        )
+        output.mkdir(parents=True, exist_ok=True)
+        return subprocess.run(command, cwd=RASA_DIR.parent, check=False).returncode
+    except OSError as exc:
+        print(f"无法启动 Rasa 训练: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

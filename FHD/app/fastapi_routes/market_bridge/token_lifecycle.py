@@ -3,7 +3,7 @@
 import hashlib
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from logging import Logger
 from typing import Any
 
@@ -81,6 +81,46 @@ class TokenLifecycle:
             self.save(sid, access, new_refresh)
         return access
 
+    async def probe(self, session_id: str, clear: Callable[[str], None]) -> str:
+        """Apply a definitive rejection only to the credentials actually probed."""
+
+        def identity() -> tuple[str, str, int | None]:
+            return (
+                self.access_token(session_id),
+                self.refresh_token(session_id),
+                self.user_id(session_id),
+            )
+
+        before = identity()
+
+        def save(session_id: str, token: str, refresh_token: str | None = None) -> None:
+            if identity() == before:
+                self.save(session_id, token, refresh_token)
+
+        guarded = replace(self, save=save)
+
+        async def refresh(sid: str) -> str:
+            if identity() != before:
+                return self.access_token(sid)
+            return await guarded.refresh(sid, distinguish_errors=True)
+
+        guarded.refresh_session = refresh
+        try:
+            token = await guarded.resolve(session_id, fast=True, allow_latest=False)
+        except HTTPException as exc:
+            if exc.status_code == 403:
+                token = ""
+            else:
+                self.logger.warning("market session probe deferred: refresh unavailable")
+                return self.access_token(session_id)
+        except RECOVERABLE_ERRORS:
+            self.logger.warning("market session probe deferred: transport unavailable")
+            return self.access_token(session_id)
+        if not token and identity() == before:
+            invalidate_fast_token_validation(session_id)
+            clear(session_id)
+        return token if identity() == before else self.access_token(session_id)
+
     async def resolve(
         self, session_id: str, *, fast: bool = False, allow_latest: bool = True
     ) -> str:
@@ -147,6 +187,8 @@ class TokenLifecycle:
         if isinstance(response, dict) and (
             response.get("ok") is False or response.get("success") is False
         ):
+            if fast:
+                return token
             invalidate_fast_token_validation(sid)
             return self.normalize(await self.refresh_session(sid))
         if (

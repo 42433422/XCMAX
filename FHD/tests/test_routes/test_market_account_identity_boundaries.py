@@ -129,6 +129,7 @@ def test_explicit_bearer_without_local_session_does_not_read_shared_tokens(monke
 @pytest.mark.asyncio
 async def test_fast_validation_cache_is_scoped_expires_and_invalidates(monkeypatch, change):
     state = {"owner": 71, "token": "synthetic-access", "now": 100.0}
+    monkeypatch.setattr(market, "session_market_refresh_token", lambda sid: "synthetic-refresh")
     monkeypatch.setattr(market, "_user_id_from_session", lambda sid: state["owner"])
     monkeypatch.setattr(market, "session_market_token", lambda sid: state["token"])
     monkeypatch.setattr(token_lifecycle.time, "monotonic", lambda: state["now"])
@@ -212,3 +213,118 @@ async def test_fast_validation_performs_one_probe_and_refreshes_only_rejection(
         assert result == "synthetic-old-access"
         assert requests == [("GET", "/api/auth/me")]
         saved.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "outcome", [400, 401, 403, 503, "transport", "malformed", "success", "missing"]
+)
+@pytest.mark.parametrize("race", ["none", "token", "owner", "refresh", "logout"])
+@pytest.mark.asyncio
+async def test_background_probe_applies_only_definitive_current_credential_rejection(
+    monkeypatch, outcome, race
+):
+    state = {"token": "old-access", "refresh": "old-refresh", "owner": 71}
+    if outcome == "missing":
+        state["refresh"] = ""
+    monkeypatch.setattr(market, "session_market_token", lambda sid: state["token"])
+    monkeypatch.setattr(market, "session_market_refresh_token", lambda sid: state["refresh"])
+    monkeypatch.setattr(market, "_user_id_from_session", lambda sid: state["owner"])
+    clear = Mock(side_effect=lambda sid: state.update(token="", refresh=""))
+    save = Mock(
+        side_effect=lambda sid, access, refresh: state.update(token=access, refresh=refresh)
+    )
+    monkeypatch.setattr(market, "clear_session_market_token", clear)
+    monkeypatch.setattr(market, "save_session_market_token", save)
+    latest = Mock(side_effect=AssertionError("Probe cannot borrow another session's token"))
+    monkeypatch.setattr(market, "latest_session_market_token", latest)
+
+    async def remote(method, path, **kwargs):
+        if path == "/api/auth/me":
+            if outcome == "missing" and race != "none":
+                state[race if race != "logout" else "token"] = "" if race == "logout" else "new"
+            return {"__proxy_error__": True, "status_code": 401}
+        assert path == "/api/auth/refresh"
+        if race != "none":
+            state[race if race != "logout" else "token"] = "" if race == "logout" else "new"
+        if outcome == "transport":
+            raise httpx.ConnectError("synthetic unavailable")
+        if outcome == "malformed":
+            return {}
+        if outcome == "success":
+            return {"access_token": "rotated-access", "refresh_token": "rotated-refresh"}
+        return {"__proxy_error__": True, "status_code": outcome}
+
+    monkeypatch.setattr(market, "_proxy_json", remote)
+    result = await market.resolve_valid_market_access_token_fast("probe-session")
+    assert result == state["token"]
+    assert clear.call_count == int(race == "none" and outcome in (401, 403, "missing"))
+    assert save.call_count == int(race == "none" and outcome == "success")
+    latest.assert_not_called()
+    if race == "none":
+        assert result == (
+            ""
+            if outcome in (401, 403, "missing")
+            else "rotated-access"
+            if outcome == "success"
+            else "old-access"
+        )
+
+
+@pytest.mark.asyncio
+async def test_validate_returns_before_probe_and_rejects_after_confirmed_revocation(monkeypatch):
+    from dataclasses import fields
+
+    from fastapi import BackgroundTasks
+
+    from app.fastapi_routes.domains.auth.session_access import SessionAccess
+
+    state = {"token": "revoked-access"}
+    monkeypatch.setattr(market, "session_market_token", lambda sid: state["token"])
+    monkeypatch.setattr(market, "session_market_refresh_token", lambda sid: "")
+    monkeypatch.setattr(market, "_user_id_from_session", lambda sid: 71)
+    monkeypatch.setattr(market, "clear_session_market_token", lambda sid: state.update(token=""))
+    remote = AsyncMock(return_value={"__proxy_error__": True, "status_code": 401})
+    monkeypatch.setattr(market, "_proxy_json", remote)
+    backend = SimpleNamespace(
+        session_manager=SimpleNamespace(get_session_info=lambda sid: {"id": sid})
+    )
+    ports = {field.name: Mock(return_value=None) for field in fields(SessionAccess)}
+    ports.update(
+        session_id=lambda request: "revoked-session",
+        backend=lambda: backend,
+        product_sku=lambda: "enterprise",
+        stored_market_token=market.session_market_token,
+        market_token=market.resolve_valid_market_access_token_fast,
+        sync_entitlements=AsyncMock(return_value=set()),
+        session_meta=lambda *args: {},
+        infra_errors=lambda: (RuntimeError,),
+    )
+    sessions = SessionAccess(**ports)
+    tasks = BackgroundTasks()
+    assert (await sessions.validate(_request(), tasks))["valid"] is True
+    remote.assert_not_awaited()
+    await tasks()
+    response = await sessions.validate(_request(), BackgroundTasks())
+    assert response.status_code == 200
+    import json
+
+    assert json.loads(response.body)["valid"] is False
+    remote.assert_awaited_once()
+
+
+@pytest.mark.parametrize("payload", [{"ok": False}, {"success": False}, {}])
+@pytest.mark.parametrize("refresh", ["", "synthetic-refresh"])
+@pytest.mark.asyncio
+async def test_fast_probe_never_revokes_on_ambiguous_success_status(monkeypatch, payload, refresh):
+    monkeypatch.setattr(market, "session_market_token", lambda sid: "synthetic-access")
+    monkeypatch.setattr(market, "session_market_refresh_token", lambda sid: refresh)
+    monkeypatch.setattr(market, "_user_id_from_session", lambda sid: 71)
+    remote = AsyncMock(return_value=payload)
+    clear = Mock()
+    monkeypatch.setattr(market, "_proxy_json", remote)
+    monkeypatch.setattr(market, "clear_session_market_token", clear)
+    assert (
+        await market.resolve_valid_market_access_token_fast("probe-session") == "synthetic-access"
+    )
+    remote.assert_awaited_once()
+    clear.assert_not_called()

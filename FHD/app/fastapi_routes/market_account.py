@@ -378,7 +378,7 @@ async def resolve_valid_market_access_token(session_id: str, *, allow_latest: bo
 
 
 async def resolve_valid_market_access_token_fast(session_id: str) -> str:
-    return await _token_lifecycle().resolve(session_id, fast=True)
+    return await _token_lifecycle().probe(session_id, clear_session_market_token)
 
 
 def _looks_like_verification_required(payload: Any) -> bool:
