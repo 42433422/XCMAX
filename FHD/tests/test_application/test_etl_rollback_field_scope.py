@@ -22,6 +22,8 @@ from app.db.db_base import Base
 from app.db.models.elt import EltRun, EltRunRow, EltTemplateVersion, EltUpload
 from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit
+from tests.test_application.test_etl_auto_ingest_service import ledger_root as ledger_root
+from tests.test_application.test_etl_auto_ingest_service import rag_service as rag_service
 
 
 @pytest.fixture
@@ -295,3 +297,67 @@ def test_etl_timestamp_hooks_keep_utc_naive_without_deprecated_calls(model, fiel
     after = datetime.now(UTC).replace(tzinfo=None)
     assert value.tzinfo is None
     assert before <= value <= after
+
+
+@pytest.mark.usefixtures("ledger_root")
+def test_auto_ingest_withdraw_retries_failed_rows_before_deleting_knowledge(
+    db, monkeypatch, rag_service
+):
+    from app.application.elt import auto_ingest_service as ais
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    customer, product = seed_business_rows(db)
+    first = apply_import(db, "customer_products", customer, price="10")
+    second = apply_import(db, "customer_products", customer)
+    run, rows = persist_run(db, "customer_products", [first, second])
+    run.executed_rows = run.update_rows = 2
+    run.receipt_json = dump_json({"rows_written": True})
+    customer.contact_phone = "300"
+    db.commit()
+    monkeypatch.setattr(
+        "app.application.elt.service.get_elt_service", lambda: EltService(adviser=MagicMock())
+    )
+    monkeypatch.setattr(ais, "get_request_active_mod_id", lambda: "m")
+    service = ais.AutoIngestService()
+    kb = service._ingest_knowledge(
+        text="Synthetic rollback recovery document",
+        source_key="recovery.txt",
+        run_id="recovery-kb",
+        owner_user_id=1,
+        content_hash="a" * 64,
+        note="",
+        tenant_id=1,
+    )
+    batch = {
+        "batch_id": "retry",
+        "tenant_id": 1,
+        "owner_user_id": 1,
+        "mod_id": "m",
+        "status": "applied",
+        "business": {"run_id": run.id},
+        "knowledge": kb,
+    }
+    ais._save_ledger(1, {"batches": {"retry": batch}})
+
+    def documents():
+        return rag_service.status(dataset_id="office-docking", tenant_id="1")["documents"]
+
+    with tenant_scope(1):
+        with pytest.raises(EltError) as error:
+            service.withdraw(db, tenant_id=1, owner_user_id=1, batch_id="retry")
+        assert error.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
+        assert run.rollback_status == "failed"
+        assert [row.execution_status for row in rows] == ["success", "rolled_back"]
+        assert run.operation_token is None
+        assert any(doc["document_id"] == kb["match_ref"] for doc in documents())
+        customer.contact_phone = "200"
+        product.price = Decimal("40")
+        db.commit()
+        result = service.withdraw(db, tenant_id=1, owner_user_id=1, batch_id="retry")
+        assert result["status"] == "withdrawn"
+        assert result["withdraw"]["business"]["rollback_status"] == "completed"
+        assert [row.execution_status for row in rows] == ["rolled_back", "rolled_back"]
+        assert customer.contact_phone == "100"
+        assert product.price == Decimal("40")
+        assert not any(doc["document_id"] == kb["match_ref"] for doc in documents())
+        assert service.withdraw(db, tenant_id=1, owner_user_id=1, batch_id="retry") == result

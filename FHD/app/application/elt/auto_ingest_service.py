@@ -1496,13 +1496,29 @@ class AutoIngestService:
                 and rollback["rows"] > 0
                 and valid_at
             )
+        # A failed transactional rollback is resumable: the service fences the
+        # new owner and skips committed rolled_back rows. Never infer completion
+        # from this state, or treat it as a zero-write/knowledge-only withdrawal.
+        rollback_retry = (
+            current.get("rollback_status") == "failed"
+            and current.get("reversible") is True
+            and rollback is None
+            and isinstance(summary, dict)
+            and type(summary.get("executed")) is int
+            and summary["executed"] > 0
+            and not zero_rows
+        )
         if (
             current.get("id") != run_id
             or (
                 current.get("status") not in {"completed", "failed", "interrupted"}
                 and not is_partial_business_receipt(current)
             )
-            or (current.get("rollback_status") is not None and not rollback_done)
+            or (
+                current.get("rollback_status") is not None
+                and not rollback_done
+                and not rollback_retry
+            )
             or not isinstance(summary, dict)
             or not all(
                 type(summary.get(key)) is int and summary[key] >= 0
