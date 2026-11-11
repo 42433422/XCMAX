@@ -1,5 +1,5 @@
 {
-  "lines": 2412518,
+  "lines": 2412551,
   "updated": "2026-11-11",
-  "note": "Excel 读取沿用任务租户，核对导出文件时不再缺少企业归属。"
+  "note": "销售表的 amount 列可以按 total_amount 核对。"
 }
