@@ -1,5 +1,3 @@
-"""Inventory in, out, and transfer operations."""
-
 from __future__ import annotations
 
 import importlib
@@ -16,7 +14,6 @@ from app.application.agent_orchestrator.business_write_guard import worker_write
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.domain.shared_services.inventory_service")
-
 
 def _facade():
     return importlib.import_module("app.domain.shared_services.inventory_service")

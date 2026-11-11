@@ -1,12 +1,4 @@
-"""
-财务应用服务
-
-聚合两类数据来源：
-1. 实时派生：从 ShipmentRecord（销售收入/AR）和 PurchaseOrder（采购支出/AP）聚合。
-2. 手动凭证：通过 FinancialTransaction 表记录手工收付款、账期调整等。
-
-消失条件：当引入正式 ERP 总账模块时，本模块迁移为 GL 适配器。
-"""
+"""财务应用服务：出货与采购派生看板，以及手工凭证。"""
 
 from __future__ import annotations
 
