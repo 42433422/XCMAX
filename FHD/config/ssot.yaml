@@ -418,6 +418,16 @@ domains:
     check: python "../成都修茈科技有限公司/scripts/build_capability_center.py" --check
     sync: python "../成都修茈科技有限公司/scripts/build_capability_center.py"
 
+  - name: business-contracts
+    owner: quality
+    enabled: true
+    # 业务契约目录。必跑场景写在检查器的 MINIMUM_REQUIRED 里，目录删掉必跑项会失败。
+    ssot: FHD/config/business_contracts.json
+    derived: []
+    mode: lint
+    check: python scripts/dev/check_business_contract_evidence.py catalog
+    sync: null
+
   - name: product-lines
     owner: release
     enabled: true
