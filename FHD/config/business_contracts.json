@@ -129,22 +129,28 @@
     },
     {
       "requirement_id": "R07",
-      "scenario_id": "R07-same-intent-once",
-      "rule": "同一业务意图重试只产生一次规定副作用。同键同参读回原结果，同键异参明确冲突。",
-      "source": "工具幂等契约；本批只登记，不把调用次数当业务证据。",
-      "preconditions": ["第一次调用已经成功"],
-      "inputs": ["相同幂等键", "相同或不同参数"],
-      "allowed": ["同键同参返回原业务结果", "同键异参返回冲突"],
-      "forbidden_effects": ["重试再次扣库存或再次建单", "同键异参返回原成功结果"],
-      "oracle": "第一次成功后的数据库行和业务回执",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "scenario_id": "R07-same-key-different-params",
+      "rule": "同一幂等键已经创建客户后，换一个电话再提交必须冲突，不能交回原来的成功结果，也不能改掉已保存的电话。",
+      "source": "FHD/tests/test_application/test_idempotency_recovery_e23_e24.py 的同键异参。",
+      "preconditions": ["租户 11", "进程在提交后退出", "库里已有电话 13800000023 的客户"],
+      "inputs": ["同一幂等键 e23-mismatch", "新电话 13800000999"],
+      "allowed": ["返回 idempotency_conflict", "库里仍只有原来那一行和原来的电话"],
+      "forbidden_effects": ["同键异参返回原成功结果", "覆盖已保存的电话"],
+      "oracle": "崩溃后、重试前读到的那一行客户电话",
+      "tests": [
+        "tests/test_application/test_idempotency_recovery_e23_e24.py::test_same_key_with_different_phone_does_not_reuse_the_row"
+      ],
+      "boundary": {
+        "real": ["sqlite", "spawned process", "AgentToolExecutor"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
-      "fault_version": "重试时再次扣库存，或同键异参返回原成功结果",
+      "fault_version": "同键异参仍返回上一次成功结果",
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
-      "resources": [],
-      "required_for_merge": false
+      "resources": ["临时 sqlite", "可 spawn 的 Python 进程"],
+      "required_for_merge": true
     },
     {
       "requirement_id": "R08",
