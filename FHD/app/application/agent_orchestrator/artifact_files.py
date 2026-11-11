@@ -11,6 +11,14 @@ from typing import Any
 
 from app.utils.path_io.path_utils import get_app_data_dir
 
+RUN_FILE_MIME_TYPES = {
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".csv": "text/csv",
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
 
 def artifact_path(run_id: str, artifact_id: str) -> Path:
     # 内联字面量正则（与 label_job_service 同款）：CodeQL 将 fullmatch 校验识别为
@@ -21,19 +29,18 @@ def artifact_path(run_id: str, artifact_id: str) -> Path:
         raise ValueError("invalid run artifact identity")
     root = Path(get_app_data_dir()).resolve() / "agent-artifacts"
     folder = root / run_id
-    suffix = ".csv" if artifact_id.startswith("csv_") else ".xlsx"
-    path = folder / f"{artifact_id}{suffix}"
+    suffix = "." + artifact_id.partition("_")[0]
+    path = folder / (artifact_id + (suffix if suffix in RUN_FILE_MIME_TYPES else ".xlsx"))
     if root.is_symlink() or folder.is_symlink() or path.is_symlink():
         raise ValueError("artifact symlinks are not permitted")
     return path
 
 
-def store_spreadsheet(
-    run_id: str, content: bytes, *, name: str = "销售报表.xlsx"
-) -> dict[str, Any]:
+def store_run_file(run_id: str, content: bytes, *, name: str = "销售报表.xlsx") -> dict[str, Any]:
     digest = hashlib.sha256(content).hexdigest()
-    is_csv = Path(name).suffix.lower() == ".csv"
-    artifact_id = f"{'csv' if is_csv else 'xlsx'}_{digest[:32]}"
+    suffix = Path(name).suffix.lower()
+    suffix = suffix if suffix in RUN_FILE_MIME_TYPES else ".xlsx"
+    artifact_id = f"{suffix[1:]}_{digest[:32]}"
     path = artifact_path(run_id, artifact_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     output = tempfile.NamedTemporaryFile(dir=path.parent, prefix=".artifact-", delete=False)
@@ -54,17 +61,16 @@ def store_spreadsheet(
         "artifact_id": artifact_id,
         "artifact_type": "file",
         "name": Path(name).name,
-        "mime_type": (
-            "text/csv"
-            if is_csv
-            else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
+        "mime_type": RUN_FILE_MIME_TYPES[suffix],
         "uri": f"/api/agent/runs/{run_id}/artifacts/{artifact_id}",
         "metadata": {"sha256": digest, "size_bytes": len(content)},
     }
 
 
-def read_verified_spreadsheet(run_id: str, artifact: dict[str, Any]) -> bytes:
+store_spreadsheet = store_run_file
+
+
+def read_verified_run_file(run_id: str, artifact: dict[str, Any]) -> bytes:
     path = artifact_path(run_id, artifact["artifact_id"])
     content = path.read_bytes()
     metadata = artifact.get("metadata") or {}
@@ -75,6 +81,9 @@ def read_verified_spreadsheet(run_id: str, artifact: dict[str, Any]) -> bytes:
     return content
 
 
+read_verified_spreadsheet = read_verified_run_file
+
+
 def verified_spreadsheet_path(run_id: str, artifact: dict[str, Any]) -> Path:
-    read_verified_spreadsheet(run_id, artifact)
+    read_verified_run_file(run_id, artifact)
     return artifact_path(run_id, artifact["artifact_id"])

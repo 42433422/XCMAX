@@ -164,17 +164,40 @@ def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatc
     assert Path(allowed["data"]["file_path"]).is_file()
     assert denied["data"]["error_code"] == "employee_file_access_denied"
     assert not target.exists()
-    from app.application.employee_runtime.agent import EmployeeAgent
+    from app.application.employee_runtime import executor
 
-    def context_only(self, task, payload, **kwargs):
-        assert not any(key in (payload or {}) for key in ("upload_id", "file_path", "path"))
-        return {"success": True, "result": {"outputs": [{"output": "协作上下文"}]}}
+    def no_file_worker(*args, **kwargs):
+        pytest.fail("context-only must not execute the file worker")
 
-    monkeypatch.setattr(EmployeeAgent, "run", context_only)
+    monkeypatch.setattr(executor, "_action_direct_python_module", no_file_worker)
     context_params = {"employee_id": "csv_full_read", "task": "提供上游上下文"}
-    assert _registered_router_employee("context", context_params, owner.context, "normal", "")[
-        "success"
-    ]
+
+    def call(action, context, **inputs):
+        return _registered_router_employee(
+            action, {**context_params, "input": inputs}, context, "normal", ""
+        )
+
+    assert call("context", owner.context)["success"]
+    viewer = trusted_actor(user_id=9, role="viewer", permissions=["customer.view"])
+    for context in (viewer.context, {**owner.context, "tenant_id": "999"}):
+        assert call("context", context)["data"]["error_code"] in {
+            "tool_permission_denied",
+            "tool_identity_required",
+        }
+    target.write_text("private\nsecret\n")
+    for action in ("execute", "context"):
+        denied = call(
+            action, owner.context, invoke_mode="collaboration_context", file_path=str(target)
+        )
+        assert denied["data"]["error_code"] == "employee_file_access_denied"
+    assert target.read_text() == "private\nsecret\n"
+    for flag in (False, True):
+        denied = call(
+            "execute",
+            {**owner.context, "employee_collaboration_run": flag},
+            invoke_mode="collaboration_context",
+        )
+        assert denied["data"]["error_code"] == "employee_file_access_denied"
 
 
 def test_office_employee_never_reports_success_without_artifact(employee_mods_root, monkeypatch):
@@ -275,46 +298,6 @@ def test_seeded_employee_cache_uses_trusted_source_without_trusting_modified_cod
     assert loader.resolve_pack_dir("test-worker") == installed / "test-worker"
 
 
-def test_employee_handoff_exposes_only_verified_real_output(tmp_path, monkeypatch):
-    from app.application.agent_orchestrator import artifact_files
-    from app.application.employee_runtime import executor
-    from app.domain.shared_services.tools_workflow_workspace import _registered_router_employee
-
-    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setattr(artifact_files, "get_app_data_dir", lambda: str(tmp_path / "receipts"))
-    output = tmp_path / "report.xlsx"
-    output.write_bytes(b"real-output")
-    monkeypatch.setattr(
-        executor,
-        "execute_employee_task_local",
-        lambda *a, **kw: {
-            "success": True,
-            "result": {"outputs": [{"ok": True, "output": {"output_path": str(output)}}]},
-        },
-    )
-    result = _registered_router_employee(
-        "execute",
-        {"employee_id": "test-worker", "task": "生成报表"},
-        {"workspace_root": str(tmp_path), "run_id": "run_verified"},
-        "normal",
-        "",
-    )
-    assert result["success"] and result["data"]["file_path"] == str(output)
-    output.unlink()
-    assert (
-        artifact_files.read_verified_spreadsheet("run_verified", result["artifacts"][0])
-        == b"real-output"
-    )
-    with pytest.raises(OSError):
-        _registered_router_employee(
-            "execute",
-            {"employee_id": "test-worker", "task": "生成报表"},
-            {"workspace_root": str(tmp_path)},
-            "normal",
-            "",
-        )
-
-
 @pytest.mark.parametrize("count,total,ok", [(2, 200, True), (1, 200, False), (2, 201, False)])
 def test_excel_verification_rejects_incorrect_count_or_total(monkeypatch, count, total, ok):
     from app.domain.shared_services.tools_workflow_excel_ocr import (
@@ -344,18 +327,22 @@ def test_excel_verification_rejects_incorrect_count_or_total(monkeypatch, count,
 
 
 @pytest.mark.parametrize(
-    "action,suffix", [("context", "pdf"), ("execute", "pdf"), ("execute", "csv")]
+    "action,suffix",
+    [("context", "pdf"), *(("execute", ext) for ext in ("pdf", "csv", "docx", "pptx", "xlsx"))],
 )
 def test_employee_workflow_hands_off_the_declared_deliverable(
-    tmp_path, monkeypatch, action, suffix
+    tmp_path, monkeypatch, trusted_actor, action, suffix
 ):
     from app.application.employee_runtime import executor
+    from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
     from app.domain.shared_services.tools_workflow_workspace import _registered_router_employee
+    from app.infrastructure.tenant_scope import tenant_scope
 
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     document = tmp_path / f"report.{suffix}"
-    document.write_bytes(b"amount\n200\n" if suffix == "csv" else b"%PDF-test")
+    content = b"amount\n200\n" if suffix == "csv" else b"office fixture"
+    document.write_bytes(content)
     output = (
         {"output": "上游文本"}
         if action == "context"
@@ -369,16 +356,27 @@ def test_employee_workflow_hands_off_the_declared_deliverable(
         "execute_employee_task_local",
         lambda *a, **kw: {"success": True, "result": {"outputs": [output]}},
     )
-    result = _registered_router_employee(
-        action,
-        {"employee_id": f"{suffix}-generate-employee", "task": "协作"},
-        {"workspace_root": str(tmp_path), "run_id": "run_handoff"},
-        "normal",
-        "",
-    )
+    employee = {"docx": "word", "pptx": "ppt"}.get(suffix, suffix)
+    employee_id = f"{employee}-generate-employee" if suffix != "xlsx" else "test-worker"
+    if suffix == "xlsx":
+        output.pop("output_path", None)
+    owner = trusted_actor(user_id=7)
+    context = {**owner.context, "workspace_root": str(tmp_path), "run_id": "run_handoff"}
+    params = {"employee_id": employee_id, "task": "协作"}
+    result = _registered_router_employee(action, params, context, "normal", "")
     assert result["success"]
     assert result["data"].get("file_path") == (str(document) if action == "execute" else None)
-    assert [row["mime_type"] for row in result["artifacts"]] == ["text/csv"] * (suffix == "csv")
+    assert len(result["artifacts"]) == int(action == "execute")
+    if action == "execute":
+        context["node_outputs"] = {"employee": result}
+        document.unlink()
+        with (
+            tenant_scope(owner.tenant_id),
+            workflow_file_snapshot(str(document), context) as staged,
+        ):
+            assert staged.suffix == "." + suffix and staged.read_bytes() == content
+        with pytest.raises(OSError):
+            _registered_router_employee(action, params, context, "normal", "")
 
 
 @pytest.mark.parametrize("suffix", ["xlsx", "csv"])

@@ -27,9 +27,7 @@ from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 class ReportService(NeuroEventPublisherMixin):
     @staticmethod
     def _decimal_to_float(value: Any) -> Any:
-        if isinstance(value, Decimal):
-            return float(value)
-        return value
+        return float(value) if isinstance(value, Decimal) else value
 
     def get_sales_report(
         self,
@@ -109,15 +107,19 @@ class ReportService(NeuroEventPublisherMixin):
                     },
                 }
 
-            elif group_by == "customer":
-                customer_stats: dict[str, dict] = {}
+            if group_by in {"customer", "date"}:
+                by_customer = group_by == "customer"
+                field = "customer_name" if by_customer else "date"
+                stats: dict[str, dict] = {}
                 zero = Decimal("0")
                 for item, order in pairs:
-                    key = order.customer_name or f"客户{order.customer_id or order.id}"
-                    entry = customer_stats.setdefault(
-                        key,
-                        {"customer_name": key, "order_ids": set(), "amount": zero},
-                    )
+                    if by_customer:
+                        key = order.customer_name or f"客户{order.customer_id or order.id}"
+                    else:
+                        key = (
+                            order.created_at.strftime("%Y-%m-%d") if order.created_at else "unknown"
+                        )
+                    entry = stats.setdefault(key, {"order_ids": set(), "amount": zero})
                     entry["order_ids"].add(order.id)
                     entry["amount"] += item.amount or zero
 
@@ -125,43 +127,14 @@ class ReportService(NeuroEventPublisherMixin):
                     "success": True,
                     "data": [
                         {
-                            "customer_name": key,
+                            field: key,
                             "order_count": len(entry["order_ids"]),
                             "amount": float(entry["amount"]),
                         }
-                        for key, entry in sorted(customer_stats.items())
+                        for key, entry in sorted(stats.items())
                     ],
                     "summary": {
-                        "total_customers": len(customer_stats),
-                        "total_amount": float(summary_total),
-                    },
-                }
-
-            elif group_by == "date":
-                date_stats: dict[str, dict] = {}
-                zero = Decimal("0")
-                for item, order in pairs:
-                    created_at = order.created_at
-                    date_key = created_at.strftime("%Y-%m-%d") if created_at else "unknown"
-                    entry = date_stats.setdefault(
-                        date_key,
-                        {"date": date_key, "order_ids": set(), "amount": zero},
-                    )
-                    entry["order_ids"].add(order.id)
-                    entry["amount"] += item.amount or zero
-
-                return {
-                    "success": True,
-                    "data": [
-                        {
-                            "date": key,
-                            "order_count": len(entry["order_ids"]),
-                            "amount": float(entry["amount"]),
-                        }
-                        for key, entry in sorted(date_stats.items())
-                    ],
-                    "summary": {
-                        "total_days": len(date_stats),
+                        ("total_customers" if by_customer else "total_days"): len(stats),
                         "total_amount": float(summary_total),
                     },
                 }

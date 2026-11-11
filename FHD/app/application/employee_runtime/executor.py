@@ -472,30 +472,21 @@ def execute_employee_task_local(
     context = runtime_context or {}
     candidates = candidate_pack_ids(employee_id) if "_actor_authorization" in context else []
     reader = next((pack for pack in candidates if pack in EMPLOYEE_BY_SUFFIX.values()), None)
-    context_only = context_only is True and not any(
-        key in (input_data or {})
-        for key in (
-            "upload_id",
-            "file_path",
-            "path",
-            "excel_path",
-            "template_path",
-            "template_relpath",
-            "output_path",
-            "output_relpath",
-            "workspace_root",
+    if (
+        reader
+        and context_only
+        and not any(
+            key in (input_data or {}) for key in ("upload_id", "file_path", "path", "excel_path")
         )
-    )
-    if reader and context_only:
+    ):
         from app.application.agent_orchestrator.tool_permission import actor_tool_denial
 
-        denial = actor_tool_denial("employee", "context", context)
-        if denial is not None:
+        if denial := actor_tool_denial("employee", "context", context):
             return {"success": False, **denial}
-    stage_file = bool(reader) and not context_only
+        reader, input_data = None, None
     scope = (
         office_reader_input(reader, input_data or {}, context)
-        if stage_file and reader
+        if reader
         else nullcontext(input_data)
     )
     try:
@@ -504,9 +495,7 @@ def execute_employee_task_local(
                 task,
                 payload,
                 user_id=user_id,
-                workspace_root=payload["workspace_root"]
-                if stage_file and payload
-                else workspace_root,
+                workspace_root=payload["workspace_root"] if reader and payload else workspace_root,
                 session_id=session_id,
                 runtime_context=runtime_context,
             )

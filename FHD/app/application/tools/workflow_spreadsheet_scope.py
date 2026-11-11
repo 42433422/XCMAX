@@ -13,7 +13,7 @@ from sqlalchemy import or_
 
 from app.application.agent_orchestrator.artifact_files import (
     artifact_path,
-    read_verified_spreadsheet,
+    read_verified_run_file,
     store_spreadsheet,
 )
 from app.application.elt.service import get_elt_service
@@ -27,7 +27,7 @@ from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.path_io.path_utils import get_app_data_dir
 
 
-def _run_spreadsheet(file_path: str, context: dict[str, Any]) -> tuple[bytes, str] | None:
+def _run_file(file_path: str, context: dict[str, Any]) -> tuple[bytes, str] | None:
     run_id = context.get("run_id")
     outputs = context.get("node_outputs")
     if not isinstance(run_id, str) or not isinstance(outputs, dict):
@@ -39,8 +39,7 @@ def _run_spreadsheet(file_path: str, context: dict[str, Any]) -> tuple[bytes, st
         receipts = [
             row
             for row in output.get("artifacts") or []
-            if isinstance(row, dict)
-            and str(row.get("artifact_id", "")).startswith(("xlsx_", "csv_"))
+            if isinstance(row, dict) and row.get("artifact_type") == "file"
         ]
         for receipt in receipts:
             artifact_id = receipt["artifact_id"]
@@ -48,7 +47,7 @@ def _run_spreadsheet(file_path: str, context: dict[str, Any]) -> tuple[bytes, st
             if file_path in {str(path), f"/api/agent/runs/{run_id}/artifacts/{artifact_id}"} or (
                 len(receipts) == 1 and isinstance(data, dict) and data.get("file_path") == file_path
             ):
-                return read_verified_spreadsheet(run_id, receipt), path.suffix
+                return read_verified_run_file(run_id, receipt), path.suffix
     return None
 
 
@@ -63,7 +62,7 @@ def _staging_root() -> Path:
 @contextmanager
 def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[Path]:
     actor = _bound_actor(context)
-    prior = _run_spreadsheet(file_path, context)
+    prior = _run_file(file_path, context)
     if prior is not None:
         content, suffix = prior
     else:
@@ -102,15 +101,8 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
 def office_reader_input(
     employee_id: str, payload: dict[str, Any], context: dict[str, Any]
 ) -> Iterator[dict[str, Any]]:
-    # These workers accept several path aliases and can choose a template or an
-    # output path. Supply only server-owned paths, including the output root.
-    source = str(
-        payload.get("upload_id")
-        or payload.get("file_path")
-        or payload.get("path")
-        or payload.get("excel_path")
-        or ""
-    ).strip()
+    aliases = ("upload_id", "file_path", "path", "excel_path")
+    source = next((str(payload[key]).strip() for key in aliases if payload.get(key)), "")
     with workflow_file_snapshot(source, context) as snapshot:
         if EMPLOYEE_BY_SUFFIX.get(snapshot.suffix) != employee_id:
             raise PermissionError("文件类型与读取员工不匹配")

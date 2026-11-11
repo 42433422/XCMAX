@@ -463,6 +463,10 @@ def _registered_router_employee(
     ok = bool(result.get("success")) and (not bool(result.get("blocked_by_risk_gate")))
     artifacts = []
     if ok:
+        from app.application.agent_orchestrator.artifact_files import (
+            RUN_FILE_MIME_TYPES,
+            store_run_file,
+        )
         from app.application.shipment_excel_etl_security import (
             open_etl_input_file,
             resolve_etl_path,
@@ -479,10 +483,8 @@ def _registered_router_employee(
                 if len(paths) != 1:
                     continue
                 result["file_path"] = str(path)
-                if run_id and path.suffix.lower() in {".xlsx", ".csv"}:
-                    from app.application.agent_orchestrator.artifact_files import store_spreadsheet
-
-                    artifacts.append(store_spreadsheet(run_id, source.read(), name=path.name))
+                if run_id and path.suffix.lower() in RUN_FILE_MIME_TYPES:
+                    artifacts.append(store_run_file(run_id, source.read(), name=path.name))
     return {
         "success": ok,
         "message": "员工执行完成" if ok else str(result.get("error") or "员工执行失败"),
