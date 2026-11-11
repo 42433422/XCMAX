@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
-  mode: { enabled: true, mode: 'auto' }, identity: { localUserId: 7, tenantId: 3 },
+  mode: { enabled: true, mode: 'auto' }, identity: { localUserId: 7 as number | string, tenantId: 3 },
   currentSession: true, details: vi.fn(), approve: vi.fn(),
 }))
 vi.mock('@/api/approval', () => ({ approvalApi: { getRequestDetails: mocks.details, approve: mocks.approve } }))
@@ -18,7 +18,8 @@ function ready(value: ReturnType<typeof batch>, overrides: Record<string, unknow
 }
 beforeEach(() => { vi.clearAllMocks(); mocks.mode.enabled = true; mocks.mode.mode = 'auto'; mocks.currentSession = true; mocks.identity.localUserId = 7; mocks.identity.tenantId = 3 })
 describe('automatic docking approval', () => {
-  it('uses the normal authorized endpoint and accepts queued receipts without claiming import success', async () => {
+  it.each([7, '7'])('uses the normal authorized endpoint for identity %s without claiming import success', async (userId) => {
+    mocks.identity.localUserId = userId
     const value = batch(); ready(value)
     expect(await approveDockingIfAutomatic(value, () => true)).toEqual({ attempted: true, accepted: true })
     expect(mocks.approve).toHaveBeenCalledWith(value.approval_id, 7, expect.stringContaining('自动审批模式'))

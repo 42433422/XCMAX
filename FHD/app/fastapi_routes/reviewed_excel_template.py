@@ -2848,6 +2848,8 @@ async def reviewed_excel_save(
                 # Old template-library clients authorize one template only, never implicit business writes.
                 cleaned = clean_workbook(body, run.file_sha256, selected)
             if saved_template:
+                if confirmed_plan is None:
+                    raise HTTPException(status_code=409, detail="入库预演缺失，不能提交")
                 # Claim this continuation before external approval creation. A lost result
                 # is read back, never blindly submitted twice; the template is not recreated.
                 _recheck(request, (tenant, owner))

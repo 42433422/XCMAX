@@ -17,7 +17,7 @@ export async function approveDockingIfAutomatic(batch: DockingApprovalBatch, isC
   const userId = Number(identity?.localUserId), tenantId = Number(identity?.tenantId)
   const session = captureAuthSession()
   const active = () => isCurrent() && session() && state.enabled && state.mode === 'auto'
-    && getRuntimeTenantStorageScopeInput()?.localUserId === userId && getRuntimeTenantStorageScopeInput()?.tenantId === tenantId
+    && Number(getRuntimeTenantStorageScopeInput()?.localUserId) === userId && Number(getRuntimeTenantStorageScopeInput()?.tenantId) === tenantId
   if (!active() || !Number.isSafeInteger(userId) || userId <= 0 || !Number.isSafeInteger(tenantId) || tenantId <= 0
     || batch.success === false || batch.status !== 'awaiting_approval') return { attempted: false, accepted: false }
   if (!Number.isSafeInteger(batch.approval_id) || !batch.approval_id || !batch.approval_request_id || !batch.batch_id) {
