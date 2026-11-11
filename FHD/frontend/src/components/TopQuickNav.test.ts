@@ -1,7 +1,14 @@
 import { computed, ref } from 'vue'
-import { mount } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import TopQuickNav from './TopQuickNav.vue'
+
+const searchProducts = vi.hoisted(() => vi.fn(async () => ({ success: true, data: [] })))
+const getCustomers = vi.hoisted(() => vi.fn(async () => ({ success: true, data: [] })))
+
+vi.mock('@/api/products', () => ({ default: { searchProducts } }))
+vi.mock('@/api/customers', () => ({ default: { getCustomers } }))
 
 const navItems = vi.hoisted(() => [
   { key: 'chat', name: '智能对话', routeName: 'chat', source: 'core', iconClass: 'fa-comments-o' },
@@ -27,9 +34,18 @@ vi.mock('@/composables/useVisibleNavItems', () => ({
   }),
 }))
 
+let activeRouter: ReturnType<typeof createRouter>
+
 async function mountNav() {
+  activeRouter = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
+  })
+  await activeRouter.push('/')
+  await activeRouter.isReady()
   const wrapper = mount(TopQuickNav, {
     attachTo: document.body,
+    global: { plugins: [activeRouter] },
   })
   await wrapper.find('input').trigger('focus')
   return wrapper
@@ -127,6 +143,46 @@ describe('TopQuickNav', () => {
     await wrapper.find('input').setValue('客户')
     await wrapper.find('input').trigger('keydown', { key: 'Enter', isComposing: true })
     expect(wrapper.emitted('select')).toBeFalsy()
+    wrapper.unmount()
+  })
+
+  it('按产品型号和客户搜索，点击后打开对应列表并带上定位', async () => {
+    searchProducts.mockImplementation(async () => ({
+      success: true,
+      data: [{ id: 7, model_number: 'A001', name: '阀体' }],
+    }))
+    getCustomers.mockImplementation(async () => ({
+      success: true,
+      data: [{ id: 3, customer_name: '华星客户' }],
+    }))
+    const wrapper = await mountNav()
+    const input = wrapper.find('input')
+    const waitRecords = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      await flushPromises()
+    }
+    const clickOption = async (label: string) => {
+      const option = [...document.querySelectorAll('.top-quick-nav__option')].find((node) => (node.textContent || '').includes(label))
+      option?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await flushPromises()
+    }
+
+    await input.setValue('A001')
+    await waitRecords()
+    const names = optionNames()
+    expect(names.some((name) => name.includes('产品') && name.includes('A001'))).toBe(true)
+    expect(names.some((name) => name.includes('客户') && name.includes('华星客户'))).toBe(true)
+
+    await clickOption('华星客户')
+    expect(activeRouter.currentRoute.value.path).toContain('/customers')
+    expect(activeRouter.currentRoute.value.query).toMatchObject({ keyword: '华星客户', focus: '3' })
+
+    await input.trigger('focus')
+    await input.setValue('A001')
+    await waitRecords()
+    await clickOption('阀体')
+    expect(activeRouter.currentRoute.value.path).toContain('/products')
+    expect(activeRouter.currentRoute.value.query).toMatchObject({ keyword: 'A001', focus: '7' })
     wrapper.unmount()
   })
 })

@@ -60,6 +60,7 @@
           :has-more="hasMore"
           :height="'500px'"
           row-key="id"
+          :highlight-id="focusId"
           empty-text="暂无产品数据"
           @update:selected-ids="selectedIds = $event"
           @load-more="loadMoreProducts"
@@ -140,7 +141,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
+import { useRecordFocusQuery } from '@/composables/useRecordFocusQuery';
 import { useProductsStore } from '@/stores/products';
 import { useProductsReadLifecycle, createProductListLoader, createProductUnitsLoader } from '@/composables/useProductsReadLifecycle';
 import { storeToRefs } from 'pinia';
@@ -164,6 +166,8 @@ const isEdit = ref(false);
 const selectedIds = ref([]);
 const selectAll = ref(false);
 const searchQuery = ref('');
+const { keyword: routeKeyword, focusId } = useRecordFocusQuery();
+searchQuery.value = routeKeyword.value;
 const selectedUnit = ref('');
 const currentPage = ref(1);
 const perPage = ref(1000);
@@ -471,11 +475,17 @@ const handleImport = async (e) => {
   }
 };
 
+watch(routeKeyword, (value) => {
+  if (searchQuery.value === value) return;
+  searchQuery.value = value;
+  loadProducts();
+});
+
 const { refreshProducts } = useProductsReadLifecycle({
   store, loadProducts, loadUnits,
   resetScope: () => {
     currentRequestId.value++;
-    selectedIds.value = []; selectedUnit.value = ''; searchQuery.value = ''; units.value = [];
+    selectedIds.value = []; selectedUnit.value = ''; searchQuery.value = routeKeyword.value; units.value = [];
     showModal.value = false; showDeleteConfirm.value = false; showBatchDeleteConfirm.value = false;
     itemToDelete.value = null; productListNotice.value = '';
     formData.value = { id: null, model_number: '', name: '', specification: '', price: 0 };

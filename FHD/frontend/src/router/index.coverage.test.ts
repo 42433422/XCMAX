@@ -754,9 +754,10 @@ describe('router/index 覆盖率补齐', () => {
     it('platform shell + 非 core 路由 + 有 host business page 时重定向', async () => {
       mockIsPlatformShellModeEnabled.mockReturnValue(true)
       mockResolveHostBusinessPageRedirect.mockReturnValue('/mod/host-business')
-      // products 不是 SHELL_CORE_ROUTE_NAMES 中的路由
-      await router.push('/products')
+      // products 不是 SHELL_CORE_ROUTE_NAMES 中的路由；查询要跟着到 Mod 页
+      await router.push({ path: '/products', query: { keyword: 'A001', focus: '2' } })
       expect(router.currentRoute.value.path).toBe('/mod/host-business')
+      expect(router.currentRoute.value.query).toMatchObject({ keyword: 'A001', focus: '2' })
     })
 
     it('platform shell + 非 core 路由 + 无 host business page 时重定向到 planner chat home', async () => {
