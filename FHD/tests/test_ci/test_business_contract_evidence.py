@@ -12,8 +12,8 @@ from scripts.dev.check_business_contract_evidence import (
     REQUIRED_TESTS,
     catalog_errors,
     ci_gate,
-    floor_errors,
     evidence_from_junit,
+    floor_errors,
     load_catalog,
     validate,
 )
@@ -229,6 +229,7 @@ def test_r08_readback_fails_when_recovery_inserts_again(monkeypatch):
     with pytest.raises(AssertionError) as caught:
         test_e23_kill_after_commit_returns_the_same_row()
     message = str(caught.value)
-    assert "客户名称已存在" in message or "1" in message
+    folded = message.encode("utf-8", "backslashreplace").decode("unicode_escape")
+    assert "客户名称已存在" in message or "客户名称已存在" in folded
     monkeypatch.undo()
     test_e23_kill_after_commit_returns_the_same_row()
