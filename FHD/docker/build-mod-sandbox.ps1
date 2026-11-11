@@ -8,12 +8,9 @@ $Ctx = Join-Path ([System.IO.Path]::GetTempPath()) ("xcagi-mod-sandbox-" + [guid
 
 try {
     New-Item -ItemType Directory -Path $Ctx | Out-Null
-    Copy-Item -Recurse (Join-Path $RepoRoot "app") (Join-Path $Ctx "app")
-    New-Item -ItemType Directory -Path (Join-Path $Ctx "XCAGI") | Out-Null
-    Copy-Item (Join-Path $RepoRoot "XCAGI\requirements.txt") (Join-Path $Ctx "XCAGI")
-    Copy-Item (Join-Path $RepoRoot "XCAGI\run.py") (Join-Path $Ctx "XCAGI")
-    Copy-Item (Join-Path $RepoRoot "XCAGI\run_fastapi.py") (Join-Path $Ctx "XCAGI")
-    Copy-Item -Recurse (Join-Path $RepoRoot "resources") (Join-Path $Ctx "resources")
+    foreach ($item in @('app', 'packages', 'config', 'resources', 'requirements-server-api.txt')) {
+        Copy-Item -Recurse (Join-Path $RepoRoot $item) (Join-Path $Ctx $item)
+    }
     Copy-Item (Join-Path $PSScriptRoot "Dockerfile.mod-sandbox") (Join-Path $Ctx "Dockerfile")
 
     Set-Location $Ctx

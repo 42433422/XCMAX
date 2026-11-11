@@ -26,7 +26,7 @@
 |------|------|
 | `FHD/docker-compose.yml` 及 `docker-compose.*.yml` | 文件头已标 experimental |
 | `FHD/docker/docker-compose.fhd-*.yml`、`Dockerfile.*` | 非桌面 SKU；非签约主路径 |
-| `FHD/XCAGI/docker-compose*.yml` | 同上 |
+| `FHD/XCAGI/docker-compose.monitoring.yml` | 使用 `FHD/monitoring`，与根 compose 叠加；其余重复子 compose 已收敛到 `FHD/` |
 | `FHD/app/fastapi_routes/health_k8s.py` | K8s 风格探针；桌面健康走通用 health |
 
 CI 可继续构建容器作 **非阻断** 旁路；**不得**把容器绿当作发布主线门禁。

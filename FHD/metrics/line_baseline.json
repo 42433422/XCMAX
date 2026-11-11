@@ -1,5 +1,5 @@
 {
-  "lines": 2413231,
+  "lines": 2397449,
   "updated": "2026-11-11",
-  "note": "回读失败断言接受 CI 里 Unicode 转义的客户名称已存在"
+  "note": "把已含 main 的下层合入 cursor/elt-empty-preview-b845"
 }

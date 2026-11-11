@@ -1,5 +1,7 @@
 # XCMAX 历史与大文件归档指针
 
+2026-11-11 启动外壳清理：`FHD/XCAGI/` 原始树及关联修改文件已逐字节校验外置至 `~/XCMAX-archives/xcagi-legacy-20261111-4f527c75e/`；逐文件 SHA256 见 `MANIFEST.json`，亦可从提交 `4f527c75e06d37825a765ab88acb482f9b482eec` 恢复。归档包含旧静态副本、占位 AI、重复部署/迁移工具、历史报告与吸收分析；当前入口和运行资源边界见 `FHD/XCAGI/README.md`，历史报告中的测试/性能数字不代表本轮验收。
+
 2026-11-10 旧余债 P2 快照外置：`FHD/docs/architecture/DEBT24_P2_CLOSEOUT.md` 原文及 SHA256 位于 `~/XCMAX-archives/debt24-p2-20261110/`，亦可从提交 `9c53fb4f00` 恢复；现行边界以各注册 SSOT 为准。
 
 2026-11-10 旧分支余债快照外置：`FHD/docs/architecture/DEBT19_STILL9_FOLLOWUP.md` 原文及 SHA256 位于 `~/XCMAX-archives/debt19-followup-20261110/`，亦可从提交 `532b1978d5` 恢复；历史数字不代表当前状态。

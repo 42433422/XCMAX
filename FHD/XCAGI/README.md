@@ -1,14 +1,16 @@
-# XCAGI 子工程
+# XCAGI 启动与运行资源
 
-- **HTTP 入口**：[`run.py`](./run.py) → `app.fastapi_app:get_fastapi_app`，默认 **5000**。
-- **Python 包 `app/`**：权威代码仅在仓库根 [`../app`](../app)。本地可在 `XCAGI/` 下生成指向它的 **junction / 符号链接**（便于 IDE 打开 `XCAGI/app`）：在仓库根执行 `powershell -File scripts/ensure_xcagi_app_link.ps1` 或 `bash scripts/ensure_xcagi_app_link.sh`。链接目录已被 [`XCAGI/.gitignore`](./.gitignore) 的 `/app` 规则忽略，勿提交到 **XCAGI** 子仓库。
-- **前端**：仅维护仓库根 [`../frontend`](../frontend），见 [`FRONTEND.md`](./FRONTEND.md)。
-- **数据库迁移（SSOT）**：修订文件**只**在仓库根 [`../alembic/versions/`](../alembic/versions/) 维护。本目录 [`alembic.ini`](./alembic.ini) 的 `script_location` 指向 `../alembic`，与在 `FHD/` 根执行 `alembic -c alembic.ini upgrade head` **完全等价**。详见 [`alembic/README.md`](./alembic/README.md) 与 [`../docs/DB_DUAL_TARGET_STRATEGY.md`](../docs/DB_DUAL_TARGET_STRATEGY.md)。**禁止**在 `XCAGI/alembic/versions/` 新增修订。
-- **活跃运行布局**：`run_fastapi.py` 是桌面打包入口，`kb/` 是运行时知识资源；本子树不是可整树删除的旧后端。`FHD/run.py` 与此入口复用同一应用工厂和监听配置，开发默认端口 `42422`，桌面默认 `5000`，Electron 显式端口保持固定。
-- **Mod 来源**：常规编辑源为 [`../mods`](../mods)，本目录 `mods/` 为构建导出。例外只由 [`mods_ssot.py`](../scripts/dev/mods_ssot.py) 的 `EXPORT_ONLY_MODS` / `SOURCE_ONLY_MODS` 定义；当前考勤引擎以本目录 `mods/attendance-industry` 为正本，禁止再建手工同步副本。
+业务后端维护在 [`FHD/app`](../app)，前端维护在 [`FHD/frontend`](../frontend)。本目录保留桌面入口、运行资源与兼容命令。
 
-环境变量清单见仓库根 [`.env.example`](../.env.example)。
+| 内容 | 当前职责 |
+|------|----------|
+| `run.py` / `run_fastapi.py` | Electron 开发入口 / PyInstaller 打包入口；调用同一 `app.fastapi_app:create_fastapi_app` 工厂，保留桌面初始化和迁移 |
+| `alembic.ini` | 指向 [`../alembic`](../alembic)，迁移只维护一份 |
+| `mods/attendance-industry` | 考勤引擎与视图的维护正本；其他 Mod 规则见 [`mods_ssot.py`](../scripts/dev/mods_ssot.py) |
+| `kb/fixes` / `kb/patterns` | 由现行知识检索器加载的运行知识；Odoo 来源边界材料仍由专用校验器验证 |
+| `rasa/` | 转发 [`../rasa`](../rasa/README.md) 的训练命令，并保留已有模型发现路径 |
+| `package.json` | 委派到真实前端的测试与检查命令，保留工具链版本镜像 |
 
-## debt19 converge
+启动、部署与打包命令复用 `FHD/` 根维护源；现行前端资产来源见 [`FRONTEND.md`](FRONTEND.md)。开发/桌面监听策略由应用启动参数和共享监听配置决定。
 
-Runtime SSOT is `FHD/app` + `FHD/run.py`. Duplicate `mods/*` copies removed.
+环境变量见 [`../.env.example`](../.env.example)，迁移规则见 [`ALEMBIC_MIGRATION_GUIDE.md`](../docs/guides/ALEMBIC_MIGRATION_GUIDE.md)。历史占位代码、静态副本和文档的恢复入口见 [`ARCHIVE_POINTER.md`](../../ARCHIVE_POINTER.md)。
