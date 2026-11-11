@@ -225,7 +225,10 @@ export function useSettingsAccount() {
 
   const profileSubline = computed(() => {
     const u = localUser.value
-    if (!u) return t(accountLoading.value ? 'settings.accountChecking' : accountError.value ? 'settings.accountUnavailable' : sessionValid.value ? 'settings.marketAccount' : 'settings.loginSyncHint')
+    if (!u) {
+      if (accountLoading.value && String(accountProfileStore.displayBrand || '').trim()) return ''
+      return t(accountLoading.value ? 'settings.accountChecking' : accountError.value ? 'settings.accountUnavailable' : sessionValid.value ? 'settings.marketAccount' : 'settings.loginSyncHint')
+    }
     const username = String(u.username || '').trim()
     const brand = String(accountProfileStore.displayBrand || '').trim()
     if (brand) {

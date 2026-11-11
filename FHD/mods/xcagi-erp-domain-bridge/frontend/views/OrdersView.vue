@@ -22,6 +22,7 @@
           :columns="columns"
           :data="store.orders"
           :loading="store.loading"
+          :show-loading-row="false"
           :selectable="false"
           row-key="id"
           empty-text="暂无出货记录"
