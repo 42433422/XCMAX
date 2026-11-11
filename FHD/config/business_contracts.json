@@ -224,14 +224,20 @@
       "requirement_id": "R06",
       "scenario_id": "R06-approval-cancelled",
       "rule": "审批已取消时不得发生受保护写入。",
-      "source": "等待和拒绝已经有执行。取消后的业务写入尚未单独执行。",
+      "source": "取消后的客户创建测试。客户表是 SQLite，审批队列在内存里。",
       "preconditions": ["审批状态是 cancelled"],
-      "inputs": ["取消后的执行"],
-      "allowed": ["拒绝写入"],
-      "forbidden_effects": ["取消后仍插入业务行"],
-      "oracle": "取消前后的业务主键",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "inputs": ["取消后创建客户"],
+      "allowed": ["拒绝，原因 approval_cancelled", "状态仍是 cancelled"],
+      "forbidden_effects": ["取消后仍插入「闭环驳回不应写入」"],
+      "oracle": "SQLite 客户名清单",
+      "tests": [
+        "tests/test_application/test_approval_executor_gate.py::test_cancelled_approval_does_not_insert_a_customer"
+      ],
+      "boundary": {
+        "real": ["sqlite customers"],
+        "doubles": ["in-memory approval queue"],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "取消后仍插入业务行",
       "platforms": ["linux"],
