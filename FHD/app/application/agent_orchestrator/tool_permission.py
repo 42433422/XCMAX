@@ -495,6 +495,12 @@ def _try_claim(key: str, record: dict[str, Any]) -> dict[str, Any] | None:
         conn.close()
 
 
+def _tool_output_json(output: dict[str, Any]) -> str:
+    from app.application.agent_orchestrator.tool_process import dump_tool_output
+
+    return dump_tool_output(output)
+
+
 def _finish_claim(key: str, owner: str, output: dict[str, Any] | None) -> None:
     """Only the worker that claimed a key may settle it or release a known failure."""
     conn = _idempotency_conn()
@@ -511,7 +517,7 @@ def _finish_claim(key: str, owner: str, output: dict[str, Any] | None) -> None:
                 changed = conn.execute(
                     "update tool_idempotency set inflight = 0, output_json = ? "
                     "where scope_key = ? and owner = ? and inflight = 1",
-                    (json.dumps(output, ensure_ascii=False), key, owner),
+                    (_tool_output_json(output), key, owner),
                 ).rowcount
             if changed != 1:
                 raise RuntimeError("工具幂等执行权已变化，必须核验原调用结果")
@@ -674,7 +680,7 @@ def _complete_dead_claim(key: str, owner: str, output: dict[str, Any]) -> bool:
             (
                 "update tool_idempotency set inflight = 0, output_json = ? "
                 "where scope_key = ? and owner = ? and inflight = 1",
-                (json.dumps(output, ensure_ascii=False), key, owner),
+                (_tool_output_json(output), key, owner),
             )
         ]
     )
