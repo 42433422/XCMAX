@@ -170,7 +170,7 @@ def test_group_office_upload_requires_actual_owner(trusted_actor, monkeypatch, t
                 actor.user_id,
                 runtime_context=actor.context,
             )
-        assert result["success"] is allowed
+        assert result["success"] is allowed, result
         if not allowed:
             assert result["error_code"] == "employee_file_access_denied"
     assert seen == [b"amount\n20\n"]
