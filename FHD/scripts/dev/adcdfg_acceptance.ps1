@@ -39,10 +39,13 @@ if (-not $SkipPytest) {
 }
 
 $fe = Get-Content 'frontend/package.json' -Raw
-if ($fe -notmatch '"build": "vite build --mode generic"') {
-    throw 'frontend default build is not generic'
+if ($fe -notmatch 'VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full vite build') {
+    throw 'frontend default build is not enterprise full'
 }
-Write-Host '[OK] frontend default build:generic' -ForegroundColor Green
+if ($fe -match 'build:generic|build:minimal|--mode generic|--mode minimal') {
+    throw 'frontend still exposes generic or minimal shell builds'
+}
+Write-Host '[OK] frontend default build is enterprise full' -ForegroundColor Green
 
 $failed = @($checks | Where-Object { -not $_.ok })
 if ($failed.Count -gt 0) {

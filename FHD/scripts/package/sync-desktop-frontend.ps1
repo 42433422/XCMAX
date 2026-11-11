@@ -1,10 +1,10 @@
 ﻿# 将最新 frontend 构建产物同步到本机已安装的 XCAGI（桌面包不含 admin-vue-dist）
-# Edition: generic = 默认通用壳（ADCDFG）；full = 完整 ERP
+# 客户端只同步企业版完整路由。
 param(
   [switch]$AlsoWinUnpacked,
   [switch]$Build,
-  [ValidateSet('full', 'generic', 'minimal')]
-  [string]$Edition = 'generic',
+  [ValidateSet('full')]
+  [string]$Edition = 'full',
   [ValidateSet('personal', 'enterprise')]
   [string]$ProductSku = 'enterprise',
   [string]$Version = ''
@@ -17,7 +17,7 @@ $Root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $Src = Join-Path $Root 'templates\vue-dist'
 
 $skuEditionMap = @{
-  personal   = 'minimal'
+  personal   = 'full'
   enterprise = 'full'
 }
 
@@ -26,20 +26,10 @@ if ($Build -or -not (Test-Path (Join-Path $Src 'index.html'))) {
   if (-not (Test-Path 'node_modules')) {
     npm install
   }
-  $buildEdition = if ($skuEditionMap.ContainsKey($ProductSku)) {
-    $skuEditionMap[$ProductSku]
-  } else {
-    $Edition
-  }
-  $env:VITE_XCAGI_PRODUCT_SKU = $ProductSku
+  $buildEdition = 'full'
+  $env:VITE_XCAGI_PRODUCT_SKU = 'enterprise'
   $env:VITE_XCAGI_EDITION = $buildEdition
-  if ($buildEdition -eq 'minimal') {
-    npm run build:minimal
-  } elseif ($buildEdition -eq 'full') {
-    npm run build:full
-  } else {
-    npm run build
-  }
+  npm run build:full
   Remove-Item Env:VITE_XCAGI_EDITION -ErrorAction SilentlyContinue
   Remove-Item Env:VITE_XCAGI_PRODUCT_SKU -ErrorAction SilentlyContinue
   Pop-Location

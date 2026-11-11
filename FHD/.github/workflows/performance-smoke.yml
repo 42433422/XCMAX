@@ -86,7 +86,7 @@ jobs:
         run: |
           npm ci
           npm test -- tests/performance-budget.test.ts
-          npm run build:generic
+          npm run build
           npx playwright install --with-deps chromium
           node --version > ../performance-results/node-version.txt
           npm run preview -- --host 127.0.0.1 --port 5001 > ../performance-results/preview.log 2>&1 &

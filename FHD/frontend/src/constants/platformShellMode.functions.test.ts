@@ -304,14 +304,14 @@ describe('isShellEditionBuild', () => {
     mockReadBuildEdition.mockReset()
   })
 
-  it('returns true when edition is minimal', () => {
+  it('returns false when edition is minimal', () => {
     mockReadBuildEdition.mockReturnValue('minimal')
-    expect(isShellEditionBuild()).toBe(true)
+    expect(isShellEditionBuild()).toBe(false)
   })
 
-  it('returns true when edition is generic', () => {
+  it('returns false when edition is generic', () => {
     mockReadBuildEdition.mockReturnValue('generic')
-    expect(isShellEditionBuild()).toBe(true)
+    expect(isShellEditionBuild()).toBe(false)
   })
 
   it('returns false when edition is full', () => {
@@ -329,20 +329,23 @@ describe('bootstrapMinimalEditionDefaults', () => {
     mockReadBuildEdition.mockReset()
   })
 
-  it('does nothing when edition is not minimal', () => {
+  it('clears shell mode when edition is full', () => {
     mockReadBuildEdition.mockReturnValue('full')
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     bootstrapMinimalEditionDefaults()
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBeNull()
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 
-  it('sets shell mode to 1 when minimal and not previously set to 0', () => {
+  it('clears shell mode when edition is minimal', () => {
     mockReadBuildEdition.mockReturnValue('minimal')
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
+    localStorage.setItem(LS_PLATFORM_SHELL_AUTO_MINIMAL, 'minimal_edition_build')
     bootstrapMinimalEditionDefaults()
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_MINIMAL)).toBe('minimal_edition_build')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_MINIMAL)).toBeNull()
   })
 
-  it('does not override when user explicitly set to 0', () => {
+  it('keeps shell mode off when it was already 0', () => {
     mockReadBuildEdition.mockReturnValue('minimal')
     localStorage.setItem(LS_PLATFORM_SHELL_MODE, '0')
     bootstrapMinimalEditionDefaults()
@@ -360,26 +363,30 @@ describe('bootstrapGenericEditionDefaults', () => {
     mockReadBuildEdition.mockReset()
   })
 
-  it('does nothing when edition is full', () => {
+  it('clears shell mode when edition is full', () => {
     mockReadBuildEdition.mockReturnValue('full')
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     bootstrapGenericEditionDefaults()
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBeNull()
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 
-  it('does nothing when edition is minimal (minimal takes precedence)', () => {
+  it('clears shell mode when edition is minimal', () => {
     mockReadBuildEdition.mockReturnValue('minimal')
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     bootstrapGenericEditionDefaults()
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBeNull()
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 
-  it('sets shell mode when edition is generic and not previously 0', () => {
+  it('clears shell mode when edition is generic', () => {
     mockReadBuildEdition.mockReturnValue('generic')
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
+    localStorage.setItem(LS_PLATFORM_SHELL_AUTO_GENERIC, 'generic_edition_build')
     bootstrapGenericEditionDefaults()
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_GENERIC)).toBe('generic_edition_build')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_GENERIC)).toBeNull()
   })
 
-  it('does not override when user explicitly set to 0', () => {
+  it('keeps shell mode off when it was already 0', () => {
     mockReadBuildEdition.mockReturnValue('generic')
     localStorage.setItem(LS_PLATFORM_SHELL_MODE, '0')
     bootstrapGenericEditionDefaults()
@@ -396,25 +403,27 @@ describe('bootstrapEditionDefaults', () => {
     mockReadBuildEdition.mockReset()
   })
 
-  it('calls both bootstrap functions', () => {
+  it('clears shell mode for a full edition', () => {
     mockReadBuildEdition.mockReturnValue('full')
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     bootstrapEditionDefaults()
-    // No throw, both branches return early
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBeNull()
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 
-  it('bootstraps minimal when edition is minimal', () => {
+  it('clears shell mode when edition is minimal', () => {
     mockReadBuildEdition.mockReturnValue('minimal')
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     bootstrapEditionDefaults()
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_MINIMAL)).toBe('minimal_edition_build')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_MINIMAL)).toBeNull()
   })
 
-  it('bootstraps generic when edition is generic', () => {
+  it('clears shell mode when edition is generic', () => {
     mockReadBuildEdition.mockReturnValue('generic')
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     bootstrapEditionDefaults()
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_GENERIC)).toBe('generic_edition_build')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_GENERIC)).toBeNull()
   })
 })
 
@@ -467,11 +476,12 @@ describe('bootstrapEnterpriseShellDefaults', () => {
     expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBeNull()
   })
 
-  it('does nothing when SKU is enterprise but edition is shell (minimal)', () => {
+  it('clears shell mode when SKU is enterprise even if edition env is minimal', () => {
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', 'enterprise')
     mockReadBuildEdition.mockReturnValue('minimal')
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     bootstrapEnterpriseShellDefaults()
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBeNull()
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 
   it('sets shell mode to 0 when SKU is enterprise and edition is full', () => {
@@ -481,12 +491,12 @@ describe('bootstrapEnterpriseShellDefaults', () => {
     expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 
-  it('sets shell mode to 0 when SKU is enterprise and edition is generic', () => {
+  it('clears shell mode when SKU is enterprise and edition env is generic', () => {
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', 'enterprise')
     mockReadBuildEdition.mockReturnValue('generic')
-    // isShellEditionBuild returns true for generic, so should NOT set
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     bootstrapEnterpriseShellDefaults()
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBeNull()
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 })
 
@@ -535,12 +545,12 @@ describe('isPlatformShellModeEnabled', () => {
     expect(isPlatformShellModeEnabled()).toBe(false)
   })
 
-  it('returns true when URL has shell param', () => {
+  it('returns false when URL has shell param', () => {
     const original = window.location.href
     window.history.replaceState({}, '', '/?shell=1')
     mockReadBuildEdition.mockReturnValue('full')
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
-    expect(isPlatformShellModeEnabled()).toBe(true)
+    expect(isPlatformShellModeEnabled()).toBe(false)
     window.history.replaceState({}, '', original)
   })
 
@@ -553,11 +563,11 @@ describe('isPlatformShellModeEnabled', () => {
     window.history.replaceState({}, '', original)
   })
 
-  it('returns true when localStorage is "1"', () => {
+  it('returns false when localStorage is "1"', () => {
     localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     mockReadBuildEdition.mockReturnValue('full')
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
-    expect(isPlatformShellModeEnabled()).toBe(true)
+    expect(isPlatformShellModeEnabled()).toBe(false)
   })
 
   it('returns false when localStorage is "0"', () => {
@@ -567,39 +577,39 @@ describe('isPlatformShellModeEnabled', () => {
     expect(isPlatformShellModeEnabled()).toBe(false)
   })
 
-  it('returns true when VITE_XCAGI_PLATFORM_SHELL is "1"', () => {
+  it('returns false when VITE_XCAGI_PLATFORM_SHELL is "1"', () => {
     vi.stubEnv('VITE_XCAGI_PLATFORM_SHELL', '1')
     mockReadBuildEdition.mockReturnValue('full')
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
-    expect(isPlatformShellModeEnabled()).toBe(true)
+    expect(isPlatformShellModeEnabled()).toBe(false)
   })
 
-  it('returns true when VITE_XCAGI_PLATFORM_SHELL is "true"', () => {
+  it('returns false when VITE_XCAGI_PLATFORM_SHELL is "true"', () => {
     vi.stubEnv('VITE_XCAGI_PLATFORM_SHELL', 'true')
     mockReadBuildEdition.mockReturnValue('full')
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
-    expect(isPlatformShellModeEnabled()).toBe(true)
+    expect(isPlatformShellModeEnabled()).toBe(false)
   })
 
-  it('returns true when VITE_XCAGI_PLATFORM_SHELL is "yes"', () => {
+  it('returns false when VITE_XCAGI_PLATFORM_SHELL is "yes"', () => {
     vi.stubEnv('VITE_XCAGI_PLATFORM_SHELL', 'yes')
     mockReadBuildEdition.mockReturnValue('full')
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
-    expect(isPlatformShellModeEnabled()).toBe(true)
+    expect(isPlatformShellModeEnabled()).toBe(false)
   })
 
-  it('returns true when edition is minimal', () => {
+  it('returns false when edition is minimal', () => {
     mockReadBuildEdition.mockReturnValue('minimal')
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
     vi.stubEnv('VITE_XCAGI_PLATFORM_SHELL', '')
-    expect(isPlatformShellModeEnabled()).toBe(true)
+    expect(isPlatformShellModeEnabled()).toBe(false)
   })
 
-  it('returns true when edition is generic', () => {
+  it('returns false when edition is generic', () => {
     mockReadBuildEdition.mockReturnValue('generic')
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
     vi.stubEnv('VITE_XCAGI_PLATFORM_SHELL', '')
-    expect(isPlatformShellModeEnabled()).toBe(true)
+    expect(isPlatformShellModeEnabled()).toBe(false)
   })
 
   it('returns false when full edition, no env, no storage, no URL params', () => {
@@ -620,20 +630,22 @@ describe('applyMinimalPackPlatformShell', () => {
     mockShouldAutoEnableMinimalPlatformShell.mockReset()
   })
 
-  it('does nothing when shouldAutoEnableMinimalPlatformShell returns false', () => {
+  it('clears shell mode when auto-enable is false', () => {
     mockShouldAutoEnableMinimalPlatformShell.mockReturnValue(false)
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     applyMinimalPackPlatformShell(['other'])
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBeNull()
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 
-  it('sets shell mode to 1 when auto-enable and not previously 0', () => {
+  it('does not turn shell mode on when auto-enable is true', () => {
     mockShouldAutoEnableMinimalPlatformShell.mockReturnValue(true)
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     applyMinimalPackPlatformShell(['xcagi-planner-bridge'])
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_MINIMAL)).toBe('1')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_MINIMAL)).toBeNull()
   })
 
-  it('does not override when user explicitly set to 0', () => {
+  it('keeps shell mode off when it was already 0', () => {
     mockShouldAutoEnableMinimalPlatformShell.mockReturnValue(true)
     localStorage.setItem(LS_PLATFORM_SHELL_MODE, '0')
     applyMinimalPackPlatformShell(['xcagi-planner-bridge'])
@@ -650,20 +662,22 @@ describe('applyGenericPackPlatformShell', () => {
     mockShouldAutoEnablePlatformShell.mockReset()
   })
 
-  it('does nothing when shouldAutoEnablePlatformShell returns false', () => {
+  it('clears shell mode when auto-enable is false', () => {
     mockShouldAutoEnablePlatformShell.mockReturnValue(false)
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     applyGenericPackPlatformShell(['other'])
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBeNull()
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 
-  it('sets shell mode to 1 when auto-enable and not previously 0', () => {
+  it('does not turn shell mode on when auto-enable is true', () => {
     mockShouldAutoEnablePlatformShell.mockReturnValue(true)
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     applyGenericPackPlatformShell(['xcagi-planner-bridge'])
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_GENERIC)).toBe('1')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_GENERIC)).toBeNull()
   })
 
-  it('does not override when user explicitly set to 0', () => {
+  it('keeps shell mode off when it was already 0', () => {
     mockShouldAutoEnablePlatformShell.mockReturnValue(true)
     localStorage.setItem(LS_PLATFORM_SHELL_MODE, '0')
     applyGenericPackPlatformShell(['xcagi-planner-bridge'])
@@ -683,53 +697,39 @@ describe('applyEditionPackPlatformShell', () => {
     vi.unstubAllEnvs()
   })
 
-  it('does nothing when SKU is enterprise', () => {
+  it('clears shell mode when SKU is enterprise', () => {
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', 'enterprise')
     mockReadBuildEdition.mockReturnValue('full')
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     applyEditionPackPlatformShell([])
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBeNull()
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 
-  it('applies minimal pack when edition is minimal', () => {
+  it('clears shell mode when edition is minimal', () => {
     mockReadBuildEdition.mockReturnValue('minimal')
     mockShouldAutoEnableMinimalPlatformShell.mockReturnValue(true)
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     applyEditionPackPlatformShell(['xcagi-planner-bridge'])
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_MINIMAL)).toBe('1')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_MINIMAL)).toBeNull()
   })
 
-  it('applies generic pack when edition is generic', () => {
+  it('clears shell mode when edition is generic', () => {
     mockReadBuildEdition.mockReturnValue('generic')
     mockShouldAutoEnablePlatformShell.mockReturnValue(true)
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     applyEditionPackPlatformShell(['xcagi-planner-bridge'])
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_GENERIC)).toBe('1')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_GENERIC)).toBeNull()
   })
 
-  it('falls back to minimal when full edition and minimal auto-enable', () => {
-    mockReadBuildEdition.mockReturnValue('full')
-    mockShouldAutoEnableMinimalPlatformShell.mockReturnValue(true)
-    mockShouldAutoEnablePlatformShell.mockReturnValue(false)
-    applyEditionPackPlatformShell(['xcagi-planner-bridge'])
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_MINIMAL)).toBe('1')
-  })
-
-  it('falls back to generic when full edition and generic auto-enable', () => {
-    mockReadBuildEdition.mockReturnValue('full')
-    mockShouldAutoEnableMinimalPlatformShell.mockReturnValue(false)
-    mockShouldAutoEnablePlatformShell.mockReturnValue(true)
-    applyEditionPackPlatformShell(['xcagi-planner-bridge'])
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_AUTO_GENERIC)).toBe('1')
-  })
-
-  it('falls back to generic when full edition and neither auto-enable', () => {
+  it('clears shell mode for a full edition', () => {
     mockReadBuildEdition.mockReturnValue('full')
     mockShouldAutoEnableMinimalPlatformShell.mockReturnValue(false)
     mockShouldAutoEnablePlatformShell.mockReturnValue(false)
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     applyEditionPackPlatformShell([])
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBeNull()
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 })
 
@@ -738,9 +738,10 @@ describe('setPlatformShellModeEnabled', () => {
     localStorage.clear()
   })
 
-  it('sets shell mode to "1" when on is true', () => {
+  it('keeps shell mode off when asked to turn it on', () => {
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
     setPlatformShellModeEnabled(true)
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
   })
 
   it('sets shell mode to "0" when on is false', () => {
