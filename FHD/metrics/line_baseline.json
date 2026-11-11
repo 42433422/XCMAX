@@ -1,5 +1,5 @@
 {
-  "lines": 2414527,
+  "lines": 2414529,
   "updated": "2026-11-11",
-  "note": "员工种子交接文件改成 json.dumps，去掉 Ruff 禁止的百分号格式化"
+  "note": "回读失败断言接受 CI 里 Unicode 转义的客户名称已存在"
 }
