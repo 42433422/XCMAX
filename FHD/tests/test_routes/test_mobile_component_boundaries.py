@@ -52,6 +52,7 @@ from app.fastapi_routes.mobile_extensions.routes_worklists import (
 from app.infrastructure.tenant_scope import tenant_scope
 from app.security.mobile_jwt import issue_mobile_tokens
 from app.utils.time import utc_now_naive
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @dataclass
@@ -298,7 +299,8 @@ async def test_source_factory_reads_and_close_share_one_context(super_stream, en
 
 
 @pytest.mark.asyncio
-async def test_independent_employee_component_streams_configured_executor():
+async def test_independent_employee_component_streams_configured_executor(trusted_actor):
+    actor = trusted_actor(user_id=71)
     execute = MagicMock(return_value={"success": True})
     component = EmployeeChatRoutes(
         EmployeeChatRoutesPorts(
@@ -318,6 +320,7 @@ async def test_independent_employee_component_streams_configured_executor():
         response = await client.post(
             "/employees/fixture/chat/stream",
             json={"message": "hello", "conversation_id": "c-71", "mod_id": "fixture-mod"},
+            headers=actor.headers,
         )
     assert response.status_code == 200
     assert [event["type"] for event in _events(response.text)] == ["token", "token", "done"]
@@ -326,18 +329,20 @@ async def test_independent_employee_component_streams_configured_executor():
         "user_id": 71,
         "workspace_root": None,
         "session_id": "mobile_chat_71",
+        "runtime_context": actor.context,
     }
     assert execute.call_args.args[2]["conversation_id"] == "c-71"
 
 
 @pytest.mark.asyncio
-async def test_employee_stream_close_before_work_does_not_start_thread(monkeypatch):
+async def test_employee_stream_close_before_work_does_not_start_thread(monkeypatch, trusted_actor):
+    actor = trusted_actor(user_id=71)
     execute = MagicMock()
     monkeypatch.setattr(
         "app.application.employee_runtime.executor.execute_employee_task_local", execute
     )
     response = await routes.mobile_employee_chat_stream(
-        "fixture", _request(), Principal(), {"message": "fake"}
+        "fixture", actor.request, Principal(), {"message": "fake"}
     )
     assert isinstance(response, StreamingResponse)
     stream = cast("AsyncGenerator[bytes, None]", response.body_iterator)

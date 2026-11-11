@@ -21,6 +21,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
 
 @pytest.fixture
 def m():
@@ -65,7 +67,8 @@ def test_extract_employee_reply_text_uses_nested_output_error(m):
 
 
 @pytest.mark.asyncio
-async def test_mobile_employee_chat_stream_marks_interactive_payload(m, monkeypatch):
+async def test_mobile_employee_chat_stream_marks_interactive_payload(m, monkeypatch, trusted_actor):
+    actor = trusted_actor(user_id=9)
     captured: dict[str, object] = {}
 
     def fake_execute(employee_id, message, payload, **kwargs):
@@ -85,7 +88,7 @@ async def test_mobile_employee_chat_stream_marks_interactive_payload(m, monkeypa
 
     response = await m.mobile_employee_chat_stream(
         "emp-1",
-        MagicMock(),
+        actor.request,
         user=_user(9),
         body={
             "message": "你好",
@@ -2768,7 +2771,8 @@ class TestMobileAiGroupMessagesSuccess:
 
 class TestMobileAiGroupPostSuccess:
     @pytest.mark.asyncio
-    async def test_success(self, m):
+    async def test_success(self, m, trusted_actor):
+        actor = trusted_actor(user_id=5)
         body = SimpleNamespace(
             message="hi", sender_name="me", mentions=[], dispatch=True, branch_context=None
         )
@@ -2782,12 +2786,13 @@ class TestMobileAiGroupPostSuccess:
         ):
             svc_cls.return_value.post_message = AsyncMock(return_value={"ok": True})
             result = await m.mobile_ai_group_post(
-                request=MagicMock(), group_id="g1", body=body, user=_user()
+                request=actor.request, group_id="g1", body=body, user=_user(5)
             )
         assert result is not None
 
     @pytest.mark.asyncio
-    async def test_success_passes_branch_context(self, m):
+    async def test_success_passes_branch_context(self, m, trusted_actor):
+        actor = trusted_actor(user_id=5)
         body = SimpleNamespace(
             message="fix it",
             sender_name="me",
@@ -2807,7 +2812,7 @@ class TestMobileAiGroupPostSuccess:
         ):
             svc_cls.return_value.post_message = AsyncMock(return_value={"ok": True})
             result = await m.mobile_ai_group_post(
-                request=MagicMock(), group_id="g1", body=body, user=_user()
+                request=actor.request, group_id="g1", body=body, user=_user(5)
             )
         assert result is not None
         assert svc_cls.return_value.post_message.await_args.kwargs["branch_context"] == (
@@ -2815,7 +2820,8 @@ class TestMobileAiGroupPostSuccess:
         )
 
     @pytest.mark.asyncio
-    async def test_value_error(self, m):
+    async def test_value_error(self, m, trusted_actor):
+        actor = trusted_actor(user_id=5)
         body = SimpleNamespace(
             message="hi", sender_name=None, mentions=[], dispatch=True, branch_context=None
         )
@@ -2829,12 +2835,13 @@ class TestMobileAiGroupPostSuccess:
         ):
             svc_cls.return_value.post_message = AsyncMock(side_effect=ValueError("bad"))
             result = await m.mobile_ai_group_post(
-                request=MagicMock(), group_id="g1", body=body, user=_user()
+                request=actor.request, group_id="g1", body=body, user=_user(5)
             )
         assert result.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_recoverable_error(self, m):
+    async def test_recoverable_error(self, m, trusted_actor):
+        actor = trusted_actor(user_id=5)
         err_class = _err_class(m)
         body = SimpleNamespace(
             message="hi", sender_name=None, mentions=[], dispatch=True, branch_context=None
@@ -2849,7 +2856,7 @@ class TestMobileAiGroupPostSuccess:
         ):
             svc_cls.return_value.post_message = AsyncMock(side_effect=err_class("fail"))
             result = await m.mobile_ai_group_post(
-                request=MagicMock(), group_id="g1", body=body, user=_user()
+                request=actor.request, group_id="g1", body=body, user=_user(5)
             )
         assert result.status_code == 500
 

@@ -187,9 +187,14 @@ def test_tool_categories_list(misc_client: TestClient) -> None:
 
 def test_memory_v2_routes_lifecycle_and_preference_sync(
     misc_client: TestClient,
+    trusted_actor,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
+    actor = trusted_actor(
+        user_id=7, role="admin", permissions=["memory_v2.read", "memory_v2.write"]
+    )
+    misc_client.headers.update(actor.headers)
     import app.domain.shared_services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
@@ -201,7 +206,7 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
         created = misc_client.post(
             "/memory/v2/candidates",
             json={
-                "user_id": "u-memory",
+                "user_id": "7",
                 "memory_type": "preference",
                 "key": "default_customer",
                 "value": "七彩乐园",
@@ -216,72 +221,81 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
 
         pending = misc_client.get(
             "/memory/v2",
-            params={"user_id": "u-memory", "status": "pending"},
+            params={"user_id": "7", "status": "pending"},
         ).json()
         assert pending["summary"]["by_status"]["pending"] == 1
         assert pending["memories"][0]["memory_id"] == memory_id
 
         confirmed = misc_client.post(
             f"/memory/v2/{memory_id}/confirm",
-            json={"user_id": "u-memory"},
+            json={"user_id": "7"},
         ).json()
         assert confirmed["memory"]["status"] == "active"
 
         svc = memory_mod.get_user_memory_service()
-        assert svc.get_preference("u-memory", "default_customer") == "七彩乐园"
+        assert svc.get_preference("7", "default_customer") == "七彩乐园"
 
         corrected = misc_client.patch(
             f"/memory/v2/{memory_id}",
             json={
-                "user_id": "u-memory",
+                "user_id": "7",
                 "key": "favorite_customer",
                 "value": "彩虹乐园",
                 "reason": "用户纠正名称",
             },
         ).json()
         assert corrected["memory"]["key"] == "favorite_customer"
-        assert svc.get_preference("u-memory", "default_customer") is None
-        assert svc.get_preference("u-memory", "favorite_customer") == "彩虹乐园"
+        assert svc.get_preference("7", "default_customer") is None
+        assert svc.get_preference("7", "favorite_customer") == "彩虹乐园"
 
-        summary = misc_client.get("/memory/v2/summary", params={"user_id": "u-memory"}).json()
+        summary = misc_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
         assert summary["summary"]["by_status"]["active"] == 1
         assert "彩虹乐园" in summary["planner_context"]
 
         deleted = misc_client.delete(
             f"/memory/v2/{memory_id}",
-            params={"user_id": "u-memory", "reason": "用户删除"},
+            params={"user_id": "7", "reason": "用户删除"},
         ).json()
         assert deleted["memory"]["status"] == "deleted"
-        assert svc.get_preference("u-memory", "favorite_customer") is None
+        assert svc.get_preference("7", "favorite_customer") is None
 
-        final_summary = misc_client.get("/memory/v2/summary", params={"user_id": "u-memory"}).json()
+        final_summary = misc_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
         assert final_summary["summary"]["by_status"]["deleted"] == 1
         assert "无已确认记忆" in final_summary["planner_context"]
     finally:
         memory_mod.reset_user_memory_service()
 
 
-def test_memory_v2_routes_validate_type_and_status(misc_client: TestClient) -> None:
+def test_memory_v2_routes_validate_type_and_status(misc_client: TestClient, trusted_actor) -> None:
+    actor = trusted_actor(
+        user_id=7, role="admin", permissions=["memory_v2.read", "memory_v2.write"]
+    )
+    misc_client.headers.update(actor.headers)
     with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
         bad_type = misc_client.post(
             "/memory/v2/candidates",
-            json={"user_id": "u", "memory_type": "unknown", "key": "k", "value": "v"},
+            json={"user_id": "7", "memory_type": "unknown", "key": "k", "value": "v"},
         )
     assert bad_type.status_code == 400
     assert bad_type.json()["success"] is False
     assert bad_type.json()["error_code"] == "schema_validation_failed"
     orchestrator.assert_not_called()
 
-    bad_status = misc_client.get("/memory/v2", params={"user_id": "u", "status": "unknown"})
+    bad_status = misc_client.get("/memory/v2", params={"user_id": "7", "status": "unknown"})
     assert bad_status.status_code == 400
     assert bad_status.json()["success"] is False
 
 
 def test_memory_v2_routes_govern_blocked_source(
     misc_client: TestClient,
+    trusted_actor,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
+    actor = trusted_actor(
+        user_id=7, role="admin", permissions=["memory_v2.read", "memory_v2.write"]
+    )
+    misc_client.headers.update(actor.headers)
     import app.domain.shared_services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
@@ -293,7 +307,7 @@ def test_memory_v2_routes_govern_blocked_source(
         created = misc_client.post(
             "/memory/v2/candidates",
             json={
-                "user_id": "u-govern",
+                "user_id": "7",
                 "memory_type": "preference",
                 "key": "favorite_customer",
                 "value": "污染客户",
@@ -311,12 +325,12 @@ def test_memory_v2_routes_govern_blocked_source(
 
         confirm = misc_client.post(
             f"/memory/v2/{candidate['memory_id']}/confirm",
-            json={"user_id": "u-govern"},
+            json={"user_id": "7"},
         )
         assert confirm.status_code == 404
         assert confirm.json()["success"] is False
 
-        summary = misc_client.get("/memory/v2/summary", params={"user_id": "u-govern"}).json()
+        summary = misc_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
         assert summary["summary"]["by_status"]["rejected"] == 1
         assert summary["summary"]["by_source_policy"]["blocked"] == 1
         assert "污染客户" not in summary["planner_context"]

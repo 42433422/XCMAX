@@ -93,14 +93,14 @@ def _base_tool_specs() -> dict[str, dict[str, Any]]:
         return {}
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def _explicit_allowlist(config: dict[str, Any], manifest: dict[str, Any]) -> list[str] | None:
-    actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
-    agent = actions.get("agent") if isinstance(actions.get("agent"), dict) else {}
-    v2 = (
-        manifest.get("employee_config_v2")
-        if isinstance(manifest.get("employee_config_v2"), dict)
-        else {}
-    )
+    actions = _as_dict(config.get("actions"))
+    agent = _as_dict(actions.get("agent"))
+    v2 = _as_dict(manifest.get("employee_config_v2"))
     for candidate in (
         config.get("tools"),
         actions.get("tools"),
@@ -115,16 +115,16 @@ def _explicit_allowlist(config: dict[str, Any], manifest: dict[str, Any]) -> lis
 
 def _capability_text(manifest: dict[str, Any], config: dict[str, Any]) -> str:
     parts: list[str] = []
-    emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+    emp = _as_dict(manifest.get("employee"))
     for cap in emp.get("capabilities") or []:
         if isinstance(cap, dict):
             parts.append(str(cap.get("label") or ""))
             parts.append(str(cap.get("description") or ""))
         else:
             parts.append(str(cap))
-    cog = config.get("cognition") if isinstance(config.get("cognition"), dict) else {}
-    agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
-    role = agent.get("role") if isinstance(agent.get("role"), dict) else {}
+    cog = _as_dict(config.get("cognition"))
+    agent = _as_dict(cog.get("agent"))
+    role = _as_dict(agent.get("role"))
     for exp in role.get("expertise") or []:
         parts.append(str(exp))
     for skill in cog.get("skills") or []:
@@ -133,7 +133,7 @@ def _capability_text(manifest: dict[str, Any], config: dict[str, Any]) -> str:
             parts.append(str(skill.get("brief") or ""))
         else:
             parts.append(str(skill))
-    identity = config.get("identity") if isinstance(config.get("identity"), dict) else {}
+    identity = _as_dict(config.get("identity"))
     for key in ("domain", "area", "description", "name"):
         if not isinstance(identity, dict):
             identity = {}
@@ -143,17 +143,13 @@ def _capability_text(manifest: dict[str, Any], config: dict[str, Any]) -> str:
 
 
 def is_read_only(manifest: dict[str, Any], config: dict[str, Any]) -> bool:
-    actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
-    agent = actions.get("agent") if isinstance(actions.get("agent"), dict) else {}
-    ws = agent.get("workspace") if isinstance(agent.get("workspace"), dict) else {}
+    actions = _as_dict(config.get("actions"))
+    agent = _as_dict(actions.get("agent"))
+    ws = _as_dict(agent.get("workspace"))
     if bool(ws.get("read_only")):
         return True
-    v2 = (
-        manifest.get("employee_config_v2")
-        if isinstance(manifest.get("employee_config_v2"), dict)
-        else {}
-    )
-    wp = v2.get("workspace_policy") if isinstance(v2.get("workspace_policy"), dict) else {}
+    v2 = _as_dict(manifest.get("employee_config_v2"))
+    wp = _as_dict(v2.get("workspace_policy"))
     return bool(wp.get("read_only"))
 
 

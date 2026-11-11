@@ -132,10 +132,15 @@ class AiGroupChatService:
         department_loader: Callable[[], dict[str, Any]] | None = None,
         employee_loader: Callable[[], list[dict[str, Any]]] | None = None,
         mode: str = "admin",
+        runtime_context: dict[str, Any] | None = None,
     ) -> None:
         self._mode = mode if mode in {"admin", "enterprise"} else "admin"
         self._completion_fn = completion_fn or _default_completion
-        self._employee_executor_fn = employee_executor_fn or _default_employee_executor
+        from functools import partial
+
+        self._employee_executor_fn = employee_executor_fn or partial(
+            _default_employee_executor, runtime_context=runtime_context
+        )
         self._has_custom_employee_executor = employee_executor_fn is not None
         self._department_loader = (
             department_loader

@@ -116,6 +116,7 @@ def _execute_closed_loop(loop: Acceptance) -> None:
     _seed_order(
         engine,
         order_no="SO-E02-OTHER",
+        state="quote",
         customer_id=customer_id,
         customer_name="闭环指定客户甲",
         status="quote",

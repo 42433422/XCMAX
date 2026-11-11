@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.application.mobile_extensions.protocols import (
@@ -174,6 +174,11 @@ class EmployeeChatRoutes:
                     format_mobile_response(None, "message 必填", success=False, code=400),
                     status_code=400,
                 )
+            from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
+            runtime_context = request_runtime_context(request)
+            if str(runtime_context.get("user_id")) != str(user_id):
+                raise HTTPException(status_code=403, detail="employee actor mismatch")
             conversation_id = str((body or {}).get("conversation_id") or "").strip()
             payload = {
                 "trigger": "mobile_chat",
@@ -199,6 +204,7 @@ class EmployeeChatRoutes:
                         user_id=user_id,
                         workspace_root=None,
                         session_id=f"mobile_chat_{user_id}",
+                        runtime_context=runtime_context,
                     )
                     final_text = ports.extract_employee_reply_text(result)
                     if not final_text:
