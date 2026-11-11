@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from openpyxl import Workbook
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
@@ -326,6 +327,73 @@ def test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate
     with store.factory() as db:
         assert db.query(PurchaseUnit).count() == db.query(Product).count() == 0
     assert snapshot(store, run_id)["lease"] == (None, None, None)
+
+
+def test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out(
+    preview_store, monkeypatch
+):
+    store = preview_store
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "并列"
+    sheet.append(["客户名称", "产品型号", "产品名称", "价格", None, "客户名称", "产品型号", "产品名称", "价格"])
+    sheet.append(["左客户", "L-1", "左产品", 10, None, "右客户", "R-1", "右产品", 20])
+    sheet.append(["备注：不要入库", None, None, None, None, None, None, None, None])
+    payload = BytesIO()
+    book.save(payload)
+    with store.factory() as db:
+        upload = store.service.save_upload(
+            db,
+            owner_user_id=7,
+            file_name="side-by-side.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            stream=BytesIO(payload.getvalue()),
+        )
+        db.commit()
+        run_id = store.service.create_preview(
+            db, owner_user_id=7, upload_id=upload["upload_id"], target_type="customer_products"
+        )["id"]
+    store.executor.futures[-1].result(timeout=10)
+    preview = snapshot(store, run_id)
+    assert preview["status"] == "preview_ready"
+    with store.factory() as db:
+        run = db.get(EltRun, run_id)
+        features = load_json(run.source_features_json, {})
+        rows = db.query(EltRunRow).filter(EltRunRow.run_id == run_id).order_by(EltRunRow.id).all()
+        split = [
+            (
+                row.source_row,
+                row.source_slice,
+                load_json(row.provenance_json, {}).get("table_id"),
+                load_json(row.normalized_json, {}).get("customer_name"),
+                load_json(row.normalized_json, {}).get("model_number"),
+                load_json(row.normalized_json, {}).get("name"),
+            )
+            for row in rows
+        ]
+    assert split == [
+        (2, 0, "并列!T1", "左客户", "L-1", "左产品"),
+        (2, 1, "并列!T2", "右客户", "R-1", "右产品"),
+    ]
+    assert [(item["row"], item["role"]) for item in features["excluded_rows"]] == [(3, "note")]
+    with store.factory() as db:
+        store.service.execute(
+            db,
+            run_id=run_id,
+            owner_user_id=7,
+            confirmed=True,
+            valid_rows_only=False,
+            preview_revision=preview["preview_revision"],
+        )
+    store.executor.futures[-1].result(timeout=10)
+    with store.factory() as db:
+        products = db.query(Product).order_by(Product.model_number).all()
+        assert [(row.unit, row.model_number, row.name, row.price) for row in products] == [
+            ("左客户", "L-1", "左产品", Decimal("10")),
+            ("右客户", "R-1", "右产品", Decimal("20")),
+        ]
+        assert sorted(row.unit_name for row in db.query(PurchaseUnit).all()) == ["右客户", "左客户"]
 
 
 def test_rollback_repairs_current_tenant_and_leaves_the_other_tenant(preview_store, monkeypatch):
