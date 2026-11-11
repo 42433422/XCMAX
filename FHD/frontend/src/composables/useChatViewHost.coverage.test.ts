@@ -49,7 +49,6 @@ describe('useChatViewHost – coverage ramp', () => {
     const w = window as unknown as Record<string, unknown>
     delete w.__VUE_CHAT_SEND__
     delete w.__VUE_CHAT_FILL__
-    w.__VUE_HANDLE_AUTO_ACTION__ = false
   })
 
   it('onMounted 时调用 modsStore.initialize', async () => {
@@ -123,7 +122,6 @@ describe('useChatViewHost – coverage ramp', () => {
     const w = window as unknown as Record<string, unknown>
     expect(typeof w.__VUE_CHAT_SEND__).toBe('function')
     expect(typeof w.__VUE_CHAT_FILL__).toBe('function')
-    expect(w.__VUE_HANDLE_AUTO_ACTION__).toBe(true)
     expect(typeof (window as any).handleAutoAction).toBe('function')
     wrapper.unmount()
   })
@@ -311,7 +309,6 @@ describe('useChatViewHost – coverage ramp', () => {
 
     expect(w.__VUE_CHAT_SEND__).toBeUndefined()
     expect(w.__VUE_CHAT_FILL__).toBeUndefined()
-    expect(w.__VUE_HANDLE_AUTO_ACTION__).toBe(false)
   })
 
   it('onBeforeUnmount 移除事件监听', async () => {

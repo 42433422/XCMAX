@@ -1,21 +1,7 @@
 @echo off
-chcp 65001 >nul
-
-:: ============================================
-:: XCAGI 项目停止脚本
-:: ============================================
-
-echo.
-echo ════════════════════════════════════════
-echo  正在停止所有服务...
-echo ════════════════════════════════════════
-echo.
-
-cd /d "%~dp0"
-
-docker-compose down
-
-echo.
-echo [✓] 所有服务已停止
-echo.
-pause
+setlocal EnableExtensions
+pushd "%~dp0.." || exit /b 1
+call "%~dp0..\stop.bat" %*
+set "XCAGI_LAUNCH_EXIT=%ERRORLEVEL%"
+popd
+exit /b %XCAGI_LAUNCH_EXIT%

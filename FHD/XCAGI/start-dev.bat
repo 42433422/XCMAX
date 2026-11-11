@@ -12,19 +12,14 @@ echo [1/2] Starting backend at http://127.0.0.1:5000 ^(Unified FastAPI entry)^ .
 echo [INFO] Updated 2026-04-17: Port 8000 deleted, unified to port 5000
 start "XCAGI Backend" /D "%~dp0" cmd /k "call ""%~dp0xcagi-backend-with-db.cmd"""
 
-set "FRONTEND_DIR=%~dp0frontend"
+set "FRONTEND_DIR=%~dp0..\frontend"
 if not exist "%FRONTEND_DIR%\package.json" (
-  if exist "%~dp0..\frontend\package.json" (
-    set "FRONTEND_DIR=%~dp0..\frontend"
-  )
-)
-if not exist "%FRONTEND_DIR%\package.json" (
-  echo [WARN] frontend\package.json not found ^(tried XCAGI\frontend and repo ..\frontend^), skip frontend.
+  echo [WARN] ..\frontend\package.json not found, skip frontend.
   goto done
 )
 
 echo [2/2] Starting frontend at http://127.0.0.1:5001 ...
-start "XCAGI Frontend" /D "%FRONTEND_DIR%" cmd /k "npm run dev"
+start "XCAGI Frontend" /D "%FRONTEND_DIR%" cmd /k "set VITE_DEV_PORT=5001&& set VITE_API_BASE=http://127.0.0.1:5000&& npm run dev"
 
 timeout /t 3 /nobreak >nul
 start "" "http://127.0.0.1:5001/index.html"

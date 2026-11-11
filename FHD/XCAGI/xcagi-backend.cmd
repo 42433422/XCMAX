@@ -140,7 +140,7 @@ echo [INFO] =================================================================
 
 REM --reload-dir：只监视业务代码目录，避免改动 XCAGI\*.py / 文档时误触发全量重载打断请求
 REM --factory：get_fastapi_app 为应用工厂，与 uvicorn 推荐用法一致
-"%PY_EXE%" -m uvicorn app.fastapi_app:get_fastapi_app --factory --host !UVICORN_HOST! --port 5000 --reload --reload-dir "%FHD_ROOT%\app" --reload-dir "%FHD_ROOT%\backend" --reload-dir "%FHD_ROOT%\mods" --reload-dir "%FHD_ROOT%\resources"
+"%PY_EXE%" -m uvicorn app.fastapi_app:get_fastapi_app --factory --host !UVICORN_HOST! --port 5000 --reload --reload-dir "%FHD_ROOT%\app" --reload-dir "%FHD_ROOT%\mods" --reload-dir "%FHD_ROOT%\resources"
 set "FULL_RC=%ERRORLEVEL%"
 REM Windows: Ctrl+C / console close often yields 3221225786 ^(0xC000013A^) — not a startup failure.
 if "%FULL_RC%"=="3221225786" (

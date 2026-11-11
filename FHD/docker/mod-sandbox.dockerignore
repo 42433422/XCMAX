@@ -20,9 +20,7 @@ tests
 venv
 node_modules
 *.md
+!**/README.md
 
-# Large XCAGI-only trees not needed for the sandbox image (Dockerfile copies only run.py + run_fastapi.py).
-XCAGI/mods
-XCAGI/ai_engines
-XCAGI/resources
-XCAGI/tests
+# The sandbox loads the application factory directly from FHD/app.
+XCAGI
