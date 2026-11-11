@@ -116,7 +116,7 @@ describe('data docking user-only intake', () => {
     wrapper.unmount()
   })
 
-  it('saves the selected template before preparing its intake preview', async () => {
+  it('saves the selected template then prepares and submits its exact intake preview', async () => {
     const { wrapper, choose, openDocument, button } = await setup(); await choose()
     expect((archive.reviewExcel.mock.calls[0][0] as FormData).get('auto_slice_index')).toBe('0')
     const dispatch = vi.spyOn(window, 'dispatchEvent')
@@ -128,10 +128,12 @@ describe('data docking user-only intake', () => {
     expect(archive.previewReviewedIntake).not.toHaveBeenCalled()
     expect(button('保存模板').attributes('disabled')).toBeUndefined()
     await button('保存模板').trigger('click'); await flushPromises()
-    expect(archive.saveReviewedExcel).toHaveBeenCalledTimes(1)
+    expect(archive.saveReviewedExcel).toHaveBeenCalledTimes(2)
     const form = archive.saveReviewedExcel.mock.calls[0][0] as FormData
     expect(['review_id', 'private_intake', 'publish_to_tenant', 'candidate_id'].map(key => form.get(key))).toEqual(['review-production-0', 'true', 'false', 'candidate-1'])
     expect([form.get('intake_run_id'), form.get('preview_revision'), form.get('template_only')]).toEqual([null, null, 'true'])
+    const continuation = archive.saveReviewedExcel.mock.calls[1][0] as FormData
+    expect(['review_id', 'candidate_id', 'intake_run_id', 'preview_revision', 'template_only'].map(key => continuation.get(key))).toEqual(['review-production-0', 'candidate-1', 'intake-1', 'rev-1', null])
     expect(archive.previewReviewedIntake).toHaveBeenCalledTimes(1)
     const previewForm = archive.previewReviewedIntake.mock.calls[0][0] as FormData
     expect([previewForm.get('review_id'), previewForm.get('candidate_id')]).toEqual(['review-production-0', 'candidate-1'])

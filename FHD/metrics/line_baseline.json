@@ -1,5 +1,5 @@
 {
-  "lines": 2406290,
+  "lines": 2406292,
   "updated": "2026-11-10",
-  "note": "用户授权修复模板默认入库等四项；集成回归与独立复审后额外补缺失计划拦截和合法字符串身份兼容。相对main源码净增220行、回归397行、说明4行，共621行；保留安全验证，不删无关代码凑数。"
+  "note": "PR3131 CI repair adds two exact continuation assertions to the higher-level ELT view test; source growth review identities updated without weakening safety gates."
 }
