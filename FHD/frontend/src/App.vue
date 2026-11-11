@@ -141,12 +141,10 @@ const routeReadinessHandlers = computed(() => {
     <router-view v-if="hideChrome" />
     <MainLayout v-else>
       <router-view v-slot="{ Component, route }">
-        <transition v-if="!isAdminConsoleSpa() && !isDesktopShell()" name="route-fade" mode="out-in">
-          <keep-alive :max="32">
-            <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
-          </keep-alive>
-        </transition>
-        <!-- 管理端与桌面壳不用 out-in：后台窗口的 requestAnimationFrame 可能暂停并卡住旧页面。 -->
+        <keep-alive v-if="!isAdminConsoleSpa() && !isDesktopShell()" :max="32">
+          <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
+        </keep-alive>
+        <!-- 管理端与桌面壳不用淡出叠层：离开中的旧页面会和下一页一起留在文档里。 -->
         <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
         <RouteErrorBoundary v-else :path="route.fullPath">

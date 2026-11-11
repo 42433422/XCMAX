@@ -844,6 +844,14 @@ jobs:
           E2E_VITE_MOCK_API: "1"
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:5001
         run: npm run test:e2e:p0 -- --reporter=line
+      - name: Preserve mock E2E layout screenshots and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-e2e-evidence-${{ github.run_attempt }}
+          path: FHD/frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   arch-fitness:
     needs: guard-temp-scripts

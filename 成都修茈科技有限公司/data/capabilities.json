@@ -320,7 +320,7 @@
           "features": [
             {
               "id": "base-edition-pack",
-              "name": "三档部署形态（minimal / generic / full）",
+              "name": "企业版客户端与管理端",
               "status": "verified",
               "platforms": [
                 "windows",
@@ -353,7 +353,7 @@
                   "accepted_count": 1
                 }
               ],
-              "summary": "同一套系统可按需裁剪为空壳对话版、通用行业版或完整 ERP 版，适配不同规模客户的落地节奏。",
+              "summary": "客户端只保留完整企业版。管理端是单独的网页，不打进桌面安装包。",
               "featured": true,
               "evidence_ref": null,
               "evidence_ref_name": null
@@ -387,7 +387,7 @@
               "summary": "安装、首次启动初始化与部署引导。",
               "featured": false,
               "evidence_ref": "base-edition-pack",
-              "evidence_ref_name": "三档部署形态（minimal / generic / full）"
+              "evidence_ref_name": "企业版客户端与管理端"
             },
             {
               "id": "base-device-bind",
@@ -535,7 +535,7 @@
               "summary": "运行数据目录与部署配置的读写管理。",
               "featured": false,
               "evidence_ref": "base-edition-pack",
-              "evidence_ref_name": "三档部署形态（minimal / generic / full）"
+              "evidence_ref_name": "企业版客户端与管理端"
             },
             {
               "id": "base-update-mgmt",
@@ -3220,10 +3220,10 @@
                   "accepted_count": 1
                 }
               ],
-              "summary": "平台壳裁剪与 edition 包引导。",
+              "summary": "宿主仍提供平台能力接口。客户端不再用通用壳裁掉企业版页面。",
               "featured": false,
               "evidence_ref": "base-edition-pack",
-              "evidence_ref_name": "三档部署形态（minimal / generic / full）"
+              "evidence_ref_name": "企业版客户端与管理端"
             }
           ]
         },

@@ -90,6 +90,8 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
     if (publicEntry.value) { splash.dismissStartupSplashImmediate(); return }
     void splash.runStartup(async (current, stage, signal) => {
       stage('正在确认登录和工作空间…')
+      let fontError: unknown
+      const fontsReady = waitForCriticalFonts().catch(error => { fontError = error })
       const auth = await authenticate(current, signal)
       if (!current()) return
       if (!auth.ok) throw new Error('登录未确认，请返回登录后重试')
@@ -110,7 +112,8 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
       if (!modsStore.isLoaded) throw new Error(modsStore.loadError || '侧栏配置未就绪，请重试')
       if (modsStore.clientModsUiOff) useWorkflowAiEmployeesStore().stripModWorkflowEmployeeKeys()
       stage('正在准备图标和页面…')
-      await waitForCriticalFonts()
+      await fontsReady
+      if (fontError) throw fontError
       // Keep the route mounted while blocked: its onMounted hooks must be able to finish.
       await waitUntil(() => !viewPending.value, signal)
       stage('正在读取当前页面…')

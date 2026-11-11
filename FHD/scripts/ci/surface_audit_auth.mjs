@@ -1,6 +1,6 @@
 /**
  * 表面巡检共用登录：
- * - P-W / P-App：默认 admin / admin123（account_kind=admin）
+ * - P-W / P-App：外部提供巡检凭据（account_kind=admin）
  * - P-S 企业版桌面：专用演示账号 xcagi-enterprise-demo（见 config/surface_audit_demo_account.json）
  */
 import { execFileSync } from 'node:child_process'
@@ -14,7 +14,7 @@ const FHD_ROOT = path.resolve(__dirname, '../..')
 const API_BASE = (process.env.SURFACE_AUDIT_API_URL || 'http://127.0.0.1:5000').replace(/\/$/, '')
 
 function demoAccountDefaults() {
-  const fallback = { username: 'xcagi-enterprise-demo', password: 'Demo@2026' }
+  const fallback = { username: 'xcagi-enterprise-demo', password: '' }
   try {
     const raw = fs.readFileSync(path.join(FHD_ROOT, 'config/surface_audit_demo_account.json'), 'utf8')
     const cfg = JSON.parse(raw)
@@ -55,7 +55,7 @@ async function fetchJson(url, opts = {}) {
   return { status: res.status, body, cookies: parseCookies(setCookie) }
 }
 
-function resolveCredentials(accountKind = 'admin') {
+export function resolveCredentials(accountKind = 'admin') {
   const kind = String(accountKind || 'admin').trim().toLowerCase()
   const demo = demoAccountDefaults()
   if (kind === 'enterprise') {
@@ -71,13 +71,13 @@ function resolveCredentials(accountKind = 'admin') {
       process.env.XCAGI_SURFACE_AUDIT_ENTERPRISE_PASSWORD ||
       process.env.SURFACE_AUDIT_PASSWORD ||
       demo.password
-    if (user && password) return { username: user, password, accountKind: 'enterprise' }
+    if (!user || !password) throw new Error('Explicit enterprise audit credentials are required')
+    return { username: user, password, accountKind: 'enterprise' }
   }
-  return {
-    username: process.env.SURFACE_AUDIT_USER || 'admin',
-    password: process.env.SURFACE_AUDIT_PASSWORD || 'admin123',
-    accountKind: kind === 'enterprise' ? 'admin' : kind || 'admin',
-  }
+  const username = process.env.SURFACE_AUDIT_USER
+  const password = process.env.SURFACE_AUDIT_PASSWORD
+  if (!username || !password) throw new Error('Explicit audit credentials are required')
+  return { username, password, accountKind: kind || 'admin' }
 }
 
 async function authHeaders(auth, extra = {}) {
@@ -168,74 +168,6 @@ export async function fetchSessionMe(auth) {
   })
   const data = res.body?.data
   return data && typeof data === 'object' ? data : null
-}
-
-async function pickEnterpriseMarketUser(auth) {
-  const forced = String(process.env.SURFACE_AUDIT_IMPERSONATE_MARKET_USER_ID || '').trim()
-  if (forced) {
-    return { market_user_id: Number(forced), username: process.env.SURFACE_AUDIT_IMPERSONATE_USERNAME || '' }
-  }
-  const res = await fetchJson(`${API_BASE}/api/xcmax/admin/market/users`, {
-    headers: await authHeaders(auth),
-  })
-  const rows = Array.isArray(res.body?.data)
-    ? res.body.data
-    : Array.isArray(res.body?.users)
-      ? res.body.users
-      : []
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue
-    const isAdmin = Boolean(row.is_admin ?? row.is_market_admin)
-    const isEnterprise = Boolean(row.is_enterprise ?? row.enterprise)
-    if (isAdmin) continue
-    const id = row.id ?? row.user_id ?? row.market_user_id
-    if (id == null) continue
-    if (isEnterprise || rows.length === 1) {
-      return {
-        market_user_id: Number(id),
-        username: String(row.username || row.name || '').trim(),
-        company: String(row.company || row.company_brand || '').trim(),
-      }
-    }
-  }
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue
-    if (Boolean(row.is_admin ?? row.is_market_admin)) continue
-    const id = row.id ?? row.user_id ?? row.market_user_id
-    if (id == null) continue
-    return {
-      market_user_id: Number(id),
-      username: String(row.username || row.name || '').trim(),
-      company: String(row.company || row.company_brand || '').trim(),
-    }
-  }
-  return null
-}
-
-async function impersonateEnterpriseUser(auth, target) {
-  const res = await fetchJson(`${API_BASE}/api/xcmax/admin/impersonate`, {
-    method: 'POST',
-    headers: await authHeaders(auth, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({
-      market_user_id: target.market_user_id,
-      username: target.username || '',
-      company: target.company || '',
-    }),
-  })
-  if (!res.body?.success) {
-    throw new Error(res.body?.message || '管理员代管企业用户失败')
-  }
-  auth.impersonating = true
-  auth.impersonating_market_user_id = target.market_user_id
-  auth.impersonating_username = target.username || ''
-  const me = await fetchSessionMe(auth)
-  if (me) {
-    auth.account_kind = me.account_kind || auth.account_kind
-    auth.market_is_admin = Boolean(me.market_is_admin)
-    auth.market_is_enterprise = Boolean(me.market_is_enterprise)
-    auth.impersonating = me.impersonating_market_user_id != null
-  }
-  return auth
 }
 
 /** P-S / P-App 企业版：演示企业账号登录；P-S 禁止回退 admin（会截到 Mod 后台） */

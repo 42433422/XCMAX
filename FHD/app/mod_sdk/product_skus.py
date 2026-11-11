@@ -185,7 +185,6 @@ def configure_sku_edition_env(sku: ProductSku | None = None) -> ProductSku | Non
     runtime = SKU_RUNTIME_EDITION[key]
     os.environ.setdefault("XCAGI_DEFAULT_EDITION", runtime)
     os.environ.setdefault("XCAGI_EDITION", runtime)
-    os.environ.setdefault("XCAGI_PLATFORM_SHELL", "1")
     if runtime == "minimal":
         os.environ.setdefault("XCAGI_MINIMAL_EDITION", "1")
     elif runtime == "generic":

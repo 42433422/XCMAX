@@ -7,26 +7,24 @@
 # 因此同一版本发布时，网页端与桌面端内嵌的是字节级同一份前端。
 #
 # 用法（在 FHD 根目录）:
-#   bash scripts/package/build-frontend.sh [enterprise|personal|generic]
+#   bash scripts/package/build-frontend.sh [enterprise|personal]
 #
-# 环境变量:
-#   XCAGI_PRODUCT_SKU    SKU（enterprise/personal），默认 enterprise
-#   XCAGI_EDITION        edition，默认按 SKU 映射（enterprise=full, personal=minimal, 其他=generic）
+# 客户端只有企业版完整路由。兼容 personal 安装参数，但仍构建同一企业前端。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 
 SKU="${1:-${XCAGI_PRODUCT_SKU:-enterprise}}"
-case "${SKU}" in
-  personal) EDITION="${XCAGI_EDITION:-minimal}" ; VITE_SKU=personal ;;
-  enterprise) EDITION="${XCAGI_EDITION:-full}" ; VITE_SKU=enterprise ;;
-  generic) EDITION="${XCAGI_EDITION:-generic}" ; VITE_SKU=generic ;;
-  *)
-    echo "[err] SKU must be personal|enterprise|generic, got: ${SKU}" >&2
-    exit 1
-    ;;
-esac
+if [[ "${SKU}" == "personal" ]]; then
+  SKU=enterprise
+fi
+if [[ "${SKU}" != "enterprise" ]]; then
+  echo "[err] client frontend is enterprise full only, got: ${SKU}" >&2
+  exit 1
+fi
+EDITION=full
+VITE_SKU=enterprise
 
 VUE_DIST="$ROOT/templates/vue-dist"
 if [[ -d "$ROOT/frontend/node_modules" ]] || [[ -z "${SKIP_FRONTEND_INSTALL:-}" ]]; then
@@ -34,11 +32,7 @@ if [[ -d "$ROOT/frontend/node_modules" ]] || [[ -z "${SKIP_FRONTEND_INSTALL:-}" 
 fi
 
 echo "========== Building frontend (sku=${SKU}, edition=${EDITION}) =========="
-case "${EDITION}" in
-  minimal) (cd frontend && VITE_XCAGI_PRODUCT_SKU="${VITE_SKU}" VITE_XCAGI_EDITION=minimal npm run build:minimal) ;;
-  generic) (cd frontend && VITE_XCAGI_PRODUCT_SKU="${VITE_SKU}" VITE_XCAGI_EDITION=generic npm run build:generic) ;;
-  *)       (cd frontend && VITE_XCAGI_PRODUCT_SKU="${VITE_SKU}" VITE_XCAGI_EDITION=full npm run build:full) ;;
-esac
+(cd frontend && VITE_XCAGI_PRODUCT_SKU="${VITE_SKU}" VITE_XCAGI_EDITION=full npm run build:full)
 
 # 校验唯一前端产物存在且含 Vite 内容 hash（供两端共享与缓存失效判断）。
 [[ -f "$VUE_DIST/index.html" ]] || {
@@ -50,14 +44,11 @@ echo "[ok] templates/vue-dist ready (${HASH}) -> 桌面端 PyInstaller 内嵌 + 
 
 # B9 防回归（2026-09-11 确诊：旧通道构建的 enterprise vue-dist 渲染层完全缺失
 # `mods/<id>/frontend/views/` glob 键 → findModViewLoader 全部未命中 → Mod 业务页空壳）。
-# full edition 的 dist 必须保留这些键；minimal/generic 按设计可无 Mod 视图，不做此校验。
-if [[ "${EDITION}" == "full" ]]; then
-  MODKEY_HIT="$(grep -rloE 'mods/[A-Za-z0-9_-]+/frontend/views/' "$VUE_DIST" 2>/dev/null | head -1 || true)"
-  [[ -n "$MODKEY_HIT" ]] || {
-    echo "[err] vue-dist 缺 mods/<id>/frontend/views/ glob 键（B9 防回归）：渲染层将回退「未安装」空壳" >&2
-    exit 1
-  }
-  echo "[ok] modViews glob 键在册（B9 防回归 PASS）"
-fi
+MODKEY_HIT="$(grep -rloE 'mods/[A-Za-z0-9_-]+/frontend/views/' "$VUE_DIST" 2>/dev/null | head -1 || true)"
+[[ -n "$MODKEY_HIT" ]] || {
+  echo "[err] vue-dist 缺 mods/<id>/frontend/views/ glob 键（B9 防回归）：渲染层将回退「未安装」空壳" >&2
+  exit 1
+}
+echo "[ok] modViews glob 键在册（B9 防回归 PASS）"
 mkdir -p "$ROOT/build"
 printf '{"sku":"%s","edition":"%s","index":"%s"}\n' "${SKU}" "${EDITION}" "${HASH}" > "$ROOT/build/vue-dist-identity.json"

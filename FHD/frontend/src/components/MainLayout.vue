@@ -52,9 +52,11 @@
           <GlobalTaskCenter />
         </div>
       </div>
-      <div class="route-content">
+      <div class="route-content" :aria-busy="pendingSidebarView ? 'true' : undefined">
         <RouteLoadingFeedback :key="pendingSidebarView || failedSidebarView" :active="!!pendingSidebarView" :failed="!!failedSidebarView" :stage="pendingViewStage" class="route-nav-feedback" data-testid="route-nav-feedback" @retry="handleViewChange(failedSidebarView)" />
-        <slot></slot>
+        <div v-show="!pendingSidebarView" class="route-content-slot">
+          <slot></slot>
+        </div>
       </div>
     </div>
     <DocumentPreviewPictureInPicture />
@@ -303,7 +305,7 @@ const viewTitles = computed(() => {
 })
 
 const currentViewTitle = computed(() => {
-  const key = currentRouteName.value
+  const key = pendingSidebarView.value || currentRouteName.value
   if (key === UNMATCHED_ROUTE_KEY) return '页面不存在'
   const industryId = String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID)
   const fromNav = resolveCoreNavLabel(key, industryId, modsForUi.value)
@@ -524,5 +526,5 @@ onBeforeUnmount(() => {
 <style scoped src="./MainLayoutActions.css"></style>
 
 <style scoped>
-.route-content { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+.route-content, .route-content-slot { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 </style>

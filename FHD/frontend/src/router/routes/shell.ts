@@ -77,21 +77,17 @@ export const SHELL_ROUTES: RouteRecordRaw[] = [
     name: 'other-tools',
     redirect: { name: 'workflow-employee-space' },
   },
-  ...(import.meta.env.VITE_XCAGI_EDITION !== 'minimal'
-    ? [
-        {
-          path: '/workflow-visualization',
-          name: 'workflow-visualization',
-          component: () => import('../../views/WorkflowVisualizationView.vue'),
-          meta: { title: '流程可视化' },
-        } as RouteRecordRaw,
-      ]
-    : []),
+  {
+    path: '/workflow-visualization',
+    name: 'workflow-visualization',
+    component: () => import('../../views/WorkflowVisualizationView.vue'),
+    meta: { title: '流程可视化' },
+  },
   {
     path: '/workflow-employee-space',
     name: 'workflow-employee-space',
     component: () => import('../../views/EmployeeWorkspaceView.vue'),
-    meta: { title: '员工空间' },
+    meta: { title: '员工工作台' },
   },
   ...(isAdminConsoleSpa()
     ? [

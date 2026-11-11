@@ -93,7 +93,7 @@ jobs:
         run: |
           npm ci
           npm test -- tests/performance-budget.test.ts
-          npm run build:generic
+          npm run build
           npx playwright install chromium
 
       - name: Install Playwright system deps (bounded retry)

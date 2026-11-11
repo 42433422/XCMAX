@@ -437,3 +437,13 @@ def test_native_runtime_matrix_covers_supervision_changes():
         )
         assert step["if"] == "matrix.os != 'windows-2022'"
         assert "continue-on-error" not in step
+
+
+def test_surface_audit_credential_and_hint_contracts():
+    result = subprocess.run(
+        ["node", "--test", "scripts/ci/surface_audit_auth.test.mjs"],
+        cwd=ROOT / "FHD",
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

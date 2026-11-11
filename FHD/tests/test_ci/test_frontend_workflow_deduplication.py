@@ -112,8 +112,7 @@ def test_shared_hygiene_accepts_example_config_but_not_unknown_git_state(tmp_pat
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     for filename in (
         ".env.example",
-        "frontend/.env.generic",
-        "frontend/.env.minimal",
+        "frontend/.env.example",
         "app/main.py",
     ):
         path = tmp_path / filename
