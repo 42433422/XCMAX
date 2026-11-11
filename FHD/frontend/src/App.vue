@@ -141,7 +141,7 @@ const routeReadinessHandlers = computed(() => {
     <router-view v-if="hideChrome" />
     <MainLayout v-else>
       <router-view v-slot="{ Component, route }">
-        <transition v-if="!isAdminConsoleSpa() && !isDesktopShell()" name="route-fade" mode="out-in">
+        <transition v-if="!isAdminConsoleSpa() && !isDesktopShell()" name="route-fade">
           <keep-alive :max="32">
             <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
           </keep-alive>
