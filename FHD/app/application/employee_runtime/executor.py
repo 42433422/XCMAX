@@ -459,6 +459,7 @@ def execute_employee_task_local(
     workspace_root: str | None = None,
     session_id: str | None = None,
     runtime_context: dict[str, Any] | None = None,
+    context_only: bool = False,
 ) -> dict[str, Any]:
     """委托给 EmployeeAgent 执行本地 employee_pack，保持原返回契约。"""
     from contextlib import nullcontext
@@ -471,11 +472,30 @@ def execute_employee_task_local(
     context = runtime_context or {}
     candidates = candidate_pack_ids(employee_id) if "_actor_authorization" in context else []
     reader = next((pack for pack in candidates if pack in EMPLOYEE_BY_SUFFIX.values()), None)
-    if reader and context.get("employee_collaboration_run") is True:
-        reader, input_data = None, None
+    context_only = context_only is True and not any(
+        key in (input_data or {})
+        for key in (
+            "upload_id",
+            "file_path",
+            "path",
+            "excel_path",
+            "template_path",
+            "template_relpath",
+            "output_path",
+            "output_relpath",
+            "workspace_root",
+        )
+    )
+    if reader and context_only:
+        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+        denial = actor_tool_denial("employee", "context", context)
+        if denial is not None:
+            return {"success": False, **denial}
+    stage_file = bool(reader) and not context_only
     scope = (
         office_reader_input(reader, input_data or {}, context)
-        if reader
+        if stage_file and reader
         else nullcontext(input_data)
     )
     try:
@@ -484,7 +504,9 @@ def execute_employee_task_local(
                 task,
                 payload,
                 user_id=user_id,
-                workspace_root=payload["workspace_root"] if reader and payload else workspace_root,
+                workspace_root=payload["workspace_root"]
+                if stage_file and payload
+                else workspace_root,
                 session_id=session_id,
                 runtime_context=runtime_context,
             )

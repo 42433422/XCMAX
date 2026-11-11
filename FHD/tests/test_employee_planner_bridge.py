@@ -167,11 +167,14 @@ def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatc
     from app.application.employee_runtime.agent import EmployeeAgent
 
     def context_only(self, task, payload, **kwargs):
-        assert payload is None
+        assert not any(key in (payload or {}) for key in ("upload_id", "file_path", "path"))
         return {"success": True, "result": {"outputs": [{"output": "协作上下文"}]}}
 
     monkeypatch.setattr(EmployeeAgent, "run", context_only)
-    assert _registered_router_employee("context", params, owner.context, "normal", "")["success"]
+    context_params = {"employee_id": "csv_full_read", "task": "提供上游上下文"}
+    assert _registered_router_employee("context", context_params, owner.context, "normal", "")[
+        "success"
+    ]
 
 
 def test_office_employee_never_reports_success_without_artifact(employee_mods_root, monkeypatch):

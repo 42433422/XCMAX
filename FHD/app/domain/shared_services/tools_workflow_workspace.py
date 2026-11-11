@@ -458,6 +458,7 @@ def _registered_router_employee(
         workspace_root=workspace_root,
         session_id=str(runtime_context.get("session_id") or params.get("session_id") or "") or None,
         runtime_context=runtime_context,
+        context_only=action == "context",
     )
     ok = bool(result.get("success")) and (not bool(result.get("blocked_by_risk_gate")))
     artifacts = []
