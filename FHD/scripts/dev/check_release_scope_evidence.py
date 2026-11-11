@@ -6,7 +6,11 @@ turn a Linux upgrade or a browser run into an installer pass.
 
 from __future__ import annotations
 
+import argparse
+import hashlib
+import json
 import sqlite3
+import sys
 from pathlib import Path
 
 _INSTALL_PLATFORMS = frozenset({"windows", "macos"})
@@ -59,3 +63,69 @@ def snapshot_discards_later_rows(snapshot: Path, upgraded: Path, table: str) -> 
             conn.close()
 
     return count(snapshot) < count(upgraded)
+
+
+def _installer_files(root: Path, suffix: str) -> list[Path]:
+    return sorted(
+        path
+        for path in root.rglob(f"*{suffix}")
+        if path.is_file() and not path.name.endswith(".blockmap")
+    )
+
+
+def installer_rows(root: Path, source_sha: str) -> list[dict]:
+    rows: list[dict] = []
+    for platform, suffix in (("windows", ".exe"), ("macos", ".dmg")):
+        matches = _installer_files(root, suffix)
+        if not matches:
+            rows.append(
+                {
+                    "platform": platform,
+                    "kind": "installer",
+                    "status": "NOT RUN",
+                    "source_sha": source_sha,
+                    "satisfies": platform,
+                }
+            )
+            continue
+        digest = hashlib.sha256(matches[0].read_bytes()).hexdigest()
+        rows.append(
+            {
+                "platform": platform,
+                "kind": "installer",
+                "status": "PASS",
+                "source_sha": source_sha,
+                "artifact_sha256": digest,
+                "satisfies": platform,
+                "path": str(matches[0]),
+            }
+        )
+    return rows
+
+
+def release_gate(root: Path, source_sha: str) -> tuple[int, dict]:
+    if len(source_sha) != 40 or any(char not in "0123456789abcdef" for char in source_sha):
+        report = {"release_pass": False, "error": "source_sha must be 40 lowercase hex characters"}
+        return 1, report
+    report = rollup(installer_rows(root, source_sha))
+    passed = (
+        report["platforms"].get("windows") == "PASS"
+        and report["platforms"].get("macos") == "PASS"
+    )
+    report["release_pass"] = passed
+    return (0 if passed else 1), report
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--artifact-dir", required=True)
+    parser.add_argument("--source-sha", required=True)
+    args = parser.parse_args(argv)
+    code, report = release_gate(Path(args.artifact_dir), args.source_sha)
+    json.dump(report, sys.stdout, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

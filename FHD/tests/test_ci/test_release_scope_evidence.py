@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import sqlite3
 
-from scripts.dev.check_release_scope_evidence import rollup, snapshot_discards_later_rows
+from scripts.dev.check_release_scope_evidence import (
+    release_gate,
+    rollup,
+    snapshot_discards_later_rows,
+)
 
 
 def _db(path, rows: int) -> None:
@@ -103,3 +107,17 @@ def test_same_source_needs_each_declared_build_hash():
     )
     assert report["platforms"]["windows"] == "NOT RUN"
     assert report["release_pass"] is False
+
+
+def test_release_gate_reads_installer_files(tmp_path):
+    sha = "a" * 40
+    empty_code, empty = release_gate(tmp_path, sha)
+    assert empty_code == 1
+    assert empty["platforms"]["windows"] == "NOT RUN"
+    assert empty["platforms"]["macos"] == "NOT RUN"
+    (tmp_path / "XCAGI-Enterprise-Setup.exe").write_bytes(b"win")
+    (tmp_path / "XCAGI-Enterprise.dmg").write_bytes(b"mac")
+    code, report = release_gate(tmp_path, sha)
+    assert code == 0
+    assert report["release_pass"] is True
+    assert release_gate(tmp_path, "not-a-sha")[0] == 1
