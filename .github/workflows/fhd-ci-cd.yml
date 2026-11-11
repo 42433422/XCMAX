@@ -818,6 +818,7 @@ jobs:
             echo "::warning::playwright install-deps attempt ${attempt} failed; refreshing apt lists"
             sudo apt-get clean || true
             sudo rm -rf /var/lib/apt/lists/*
+            sudo find /etc/apt -type f -exec sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g' {} + || true
             sudo apt-get update
           done
           if [ "$rc" -ne 0 ]; then
