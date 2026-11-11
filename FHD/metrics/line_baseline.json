@@ -1,5 +1,5 @@
 {
-  "lines": 2396199,
+  "lines": 2397449,
   "updated": "2026-11-11",
-  "note": "Ruff format 要求员工上传授权测试补一行"
+  "note": "把已含 main 的下层合入 cursor/elt-empty-preview-b845"
 }
