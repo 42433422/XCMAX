@@ -270,6 +270,9 @@ def validate(
         return ["evidence is not an object"]
     if evidence.get("source_sha") != expected_sha or not expected_sha:
         errors.append("source sha does not match the candidate")
+    for field in ("run_id", "run_attempt", "execution_environment", "data_version"):
+        if not str(evidence.get(field) or "").strip():
+            errors.append(f"{field} is not bound")
     scenarios = evidence.get("scenarios")
     if not isinstance(scenarios, list):
         return errors + ["scenarios missing"]

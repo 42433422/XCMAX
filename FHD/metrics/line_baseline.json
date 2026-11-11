@@ -1,5 +1,5 @@
 {
-  "lines": 2398144,
+  "lines": 2398161,
   "updated": "2026-11-11",
-  "note": "契约证据按 pytest 类名还原 nodeid，类方法和参数实例不再被当成缺失"
+  "note": "契约证据缺 run、attempt、环境或数据版本时拒绝"
 }

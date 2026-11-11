@@ -233,6 +233,19 @@ def test_damaged_evidence_and_blocked_are_rejected():
     )
 
 
+def test_evidence_without_run_binding_is_rejected(tmp_path: Path):
+    evidence = evidence_from_junit(
+        [_write(tmp_path, _passing_pair())], source_sha="abc", run_id="9", run_attempt="1"
+    )
+    evidence["run_id"] = ""
+    evidence["data_version"] = ""
+    errors = validate(
+        evidence, expected_sha="abc", required_ids=MINIMUM_REQUIRED, allow_not_applicable=False
+    )
+    assert any("run_id is not bound" in error for error in errors)
+    assert any("data_version is not bound" in error for error in errors)
+
+
 def test_ci_gate_blocks_when_the_shard_never_started(tmp_path: Path):
     with pytest.raises(ValueError, match="no junit"):
         ci_gate(tmp_path, source_sha="a" * 40, run_id="9", run_attempt="1", backend="ran")
