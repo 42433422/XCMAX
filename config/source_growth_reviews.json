@@ -255,14 +255,14 @@
     },
     "FHD/app/application/reviewed_excel_classification.py": {
       "base_file": "FHD/app/application/reviewed_excel_classification.py",
-      "base_blob": "5c4251a1d6861948d010fcb08debcdffdf4e6dfc",
-      "head_blob": "b33f4d5b837165a1e68a465e606f830a89572b21",
-      "before_lines": 787,
-      "after_lines": 801,
-      "reason": "Model batch decision must distinguish unsent sheets from uncertainty in the current packet.",
-      "boundary": "Only request context and replay of previously archived request digests; original model false decisions and source boundary verification remain authoritative.",
-      "validation": "Multi-sheet packet scope and old/new archived request replay tests, plus classification contracts and provider failure regressions.",
-      "follow_up": "Keep model request context aligned with the packet contract; this entry requests human architecture review and is not approval.",
+      "base_blob": "b83d517418a3c61c1c1d823c940e5073a15b0d92",
+      "head_blob": "8317f16a7627c691b26f51f87ff3c69093ae4876",
+      "before_lines": 801,
+      "after_lines": 812,
+      "reason": "Preserve a cited drawing while closing unread-row fragments instead of clipping it away and rejecting the same valid model evidence repeatedly.",
+      "boundary": "Eleven net lines delegate bounded rectangle expansion to the existing drawing module; model rectangle, unread-cell, overlap and subsequent source validations remain in force.",
+      "validation": "29 drawing regression tests and context-only scope regression independently passed on 25ccc86d; full template regression and exact-head CI are required before merge.",
+      "follow_up": "Human architecture review of this exact bounded growth is still required. This record requests review, does not grant approval, and does not weaken the original cell/drawing scope checks.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py": {
@@ -311,6 +311,18 @@
       "boundary": "ELT model assistance and audit hooks only; SQL/audit errors are not silently classified as provider outages or successful writes.",
       "validation": "Validation scope: Model timeout, bounded units, malformed-answer repair and unknown-outcome/no-blind-retry regressions. Full integration CI and human architecture review remain outstanding; this request is not approval.",
       "follow_up": "Extract shared audited model-call/deadline primitives without losing per-unit limits.",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/reviewed_excel_drawing.py": {
+      "base_file": "FHD/app/application/reviewed_excel_drawing.py",
+      "base_blob": "9e5ccf7a69731d2bdf33c69ca0f19b6c1ae7346f",
+      "head_blob": "aa3de99a268072d3c9cd82967fac025971428563",
+      "before_lines": 832,
+      "after_lines": 958,
+      "reason": "Keep a complete cited drawing only within the original model rectangle and without including unsent cells; identify rejected drawing bounds so the next model answer can correct its range.",
+      "boundary": "Drawing-bound and sent-cell validation helpers only, with no new API, authorization bypass, extraction fallback or implicit classification acceptance. Existing full drawing selection validation still runs.",
+      "validation": "29 drawing regression tests and context-only scope regression independently passed on 25ccc86d; full template regression and exact-head CI are required before merge.",
+      "follow_up": "Human architecture review of this exact bounded growth is still required. This record requests review, does not grant approval, and does not weaken the original cell/drawing scope checks.",
       "review_owner": "@42433422"
     }
   }

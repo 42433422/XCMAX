@@ -738,6 +738,114 @@ def restore_drawing_parts(source: bytes, derived: bytes, selected: list[dict]) -
     return output
 
 
+def _cell_range(bounds: tuple) -> str:
+    from openpyxl.utils import get_column_letter
+
+    c1, r1, c2, r2 = bounds
+    return f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+
+
+def _unsent_points(review: dict, sheet: str) -> set[tuple[int, int]]:
+    from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
+
+    sent = {(cell["sheet"], cell["cell"]) for cell in review.get("cells", [])}
+    points = set()
+    for cell in review.get("full_cells", review.get("cells", [])):
+        if cell["sheet"] != sheet or (cell["sheet"], cell["cell"]) in sent:
+            continue
+        col, row = coordinate_from_string(cell["cell"])
+        points.add((column_index_from_string(col), row))
+    return points
+
+
+def _rect_hits(bounds: tuple, points: set[tuple[int, int]]) -> bool:
+    c1, r1, c2, r2 = bounds
+    return any(c1 <= col <= c2 and r1 <= row <= r2 for col, row in points)
+
+
+def _drawing_label(sent: list[dict], ref: dict) -> str:
+    key = (ref["sheet"], ref["part"], ref["object_id"])
+    for index, drawing in enumerate(sent, 1):
+        if (drawing["sheet"], drawing["part"], drawing["object_id"]) == key:
+            return f"D{index:04d}"
+    return str(ref["object_id"])
+
+
+def drawing_mismatch_message(
+    review: dict, sent: list[dict], region_range: str, refs: list[dict], *, advice: str
+) -> str:
+    catalog = {
+        (item["sheet"], item["part"], item["object_id"]): item
+        for item in review.get("drawing_evidence", [])
+    }
+    parts = []
+    for ref in refs[:4]:
+        obj = catalog.get((ref["sheet"], ref["part"], ref["object_id"]))
+        label = _drawing_label(sent, ref)
+        if obj is None:
+            parts.append(label)
+            continue
+        parts.append(f"{label}({_cell_range(drawing_bounds(obj))})")
+    extra = f" 等{len(refs)}个" if len(refs) > 4 else ""
+    shown = "、".join(parts)
+    return f"模型绘图证据不在区域内已发送范围：{shown}{extra} 未完整落在 {region_range}。{advice}"
+
+
+def clip_keeping_cited_drawings(
+    review: dict,
+    region: dict,
+    sent: list[dict],
+    original: tuple,
+    clipped: tuple,
+) -> tuple:
+    """Keep a cited drawing when closing an open fragment would drop it.
+
+    Growth stops at the model rectangle and never covers a cell this batch did not send.
+    """
+    refs = region.get("drawing_evidence") or []
+    if not isinstance(refs, list):
+        return clipped
+    catalog = {
+        (item["sheet"], item["part"], item["object_id"]): item
+        for item in review.get("drawing_evidence", [])
+    }
+    unread = _unsent_points(review, region["sheet"])
+    outside = []
+    for ref in refs:
+        if not isinstance(ref, dict) or set(ref) != {"sheet", "part", "object_id"}:
+            return clipped
+        obj = catalog.get((ref["sheet"], ref["part"], ref["object_id"]))
+        if obj is None:
+            return clipped
+        bounds = drawing_bounds(obj)
+        if not rectangles_cover(bounds, [original]):
+            continue
+        if rectangles_cover(bounds, [clipped]):
+            continue
+        outside.append((ref, bounds))
+    if not outside:
+        return clipped
+    boxes = [bounds for _, bounds in outside]
+    grown = (
+        max(original[0], min(clipped[0], *(box[0] for box in boxes))),
+        max(original[1], min(clipped[1], *(box[1] for box in boxes))),
+        min(original[2], max(clipped[2], *(box[2] for box in boxes))),
+        min(original[3], max(clipped[3], *(box[3] for box in boxes))),
+    )
+    blocked = _rect_hits(grown, unread) or any(_rect_hits(box, unread) for box in boxes)
+    if blocked:
+        advice = (
+            "范围若扩到该绘图会盖住本批未读格。请从 drawing_ids 删除它，"
+            "或单独划一个不盖住未读格且完整包含它的区域。"
+        )
+        raise ReviewedExcelError(
+            drawing_mismatch_message(
+                review, sent, _cell_range(clipped), [ref for ref, _ in outside], advice=advice
+            )
+        )
+    return grown
+
+
 def validate_region_drawings(review: dict, sent: list[dict], region: dict) -> None:
     from app.application.reviewed_excel_evidence import bounded_range
     from app.application.reviewed_excel_reference_ids import MAX_DRAWING_IDS_PER_REGION
@@ -752,13 +860,31 @@ def validate_region_drawings(review: dict, sent: list[dict], region: dict) -> No
         not isinstance(refs, list)
         or len(refs) > MAX_DRAWING_IDS_PER_REGION
         or any(
-            not isinstance(ref, dict)
-            or set(ref) != {"sheet", "part", "object_id"}
-            or (ref["sheet"], ref["part"], ref["object_id"]) not in inside
-            for ref in refs
+            not isinstance(ref, dict) or set(ref) != {"sheet", "part", "object_id"} for ref in refs
         )
     ):
         raise ReviewedExcelError("模型绘图证据不在区域内已发送范围")
+    missing = [ref for ref in refs if (ref["sheet"], ref["part"], ref["object_id"]) not in inside]
+    if not missing:
+        return
+    unread = _unsent_points(review, region["sheet"])
+    catalog = {
+        (item["sheet"], item["part"], item["object_id"]): item
+        for item in review.get("drawing_evidence", [])
+    }
+    touches = False
+    for ref in missing:
+        obj = catalog.get((ref["sheet"], ref["part"], ref["object_id"]))
+        if obj is not None and _rect_hits(drawing_bounds(obj), unread):
+            touches = True
+    advice = (
+        "该对象碰到本批未读格，不能放进本批区域；请从 drawing_ids 删除，并让区域不要碰到它。"
+        if touches
+        else "请把区域扩到完整包含该边界，或从 drawing_ids 删除。不要盖住未读格，也不要切断其他绘图。"
+    )
+    raise ReviewedExcelError(
+        drawing_mismatch_message(review, sent, region["range"], missing, advice=advice)
+    )
 
 
 def drawing_coverage(review: dict, batches: list, sheet: str, rectangles: list) -> dict:
