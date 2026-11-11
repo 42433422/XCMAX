@@ -532,6 +532,18 @@ function onComposerDragLeave(event: DragEvent) {
 }
 function applyChosenFiles(list: File[]) {
   if (!alive || busy.value || documentWorkPending.value) return
+  const canAppend = classifications.value.some((item) => item.status === 'classified')
+  if (canAppend && files.value.length) {
+    const next = [...files.value, ...list]
+    if (next.length > 200) {
+      error.value = '一次最多上传 200 个文件，请分批上传'
+      return
+    }
+    files.value = next
+    archiveKeys.value = [...archiveKeys.value, ...list.map(() => crypto.randomUUID())]
+    error.value = ''
+    return
+  }
   files.value = list
   archiveKeys.value = files.value.map(() => crypto.randomUUID())
   archiveProgress.value = ''
@@ -1745,7 +1757,7 @@ async function downloadCandidate(index: number) {
         :disabled="archiveOnSelect ? cancelAnalysis : !files.length || files.length > 200 || busy"
         @click="archiveOnSelect ? stopArchiveProcessing() : classify()"
       >{{ archiveOnSelect ? cancelAnalysis ? '正在停止…' : '停止后续处理' : '重试未完成文件' }}</button>
-      <p class="elt-composer__hint">每批最多 200 个 · 单文件 &lt; 20 MB · 整批 &lt; 50 MB</p>
+      <p class="elt-composer__hint">再次添加会留在本批 · 每批最多 200 个 · 单文件 &lt; 20 MB · 整批 &lt; 50 MB</p>
     </div>
   </section>
 
