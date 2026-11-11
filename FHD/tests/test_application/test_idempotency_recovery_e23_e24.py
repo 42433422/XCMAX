@@ -287,14 +287,15 @@ def test_e24_two_recoveries_leave_one_row():
         right.join(timeout=30)
         rows = _rows(engine, "崩溃前客户")
         successes = [item for item in (left_result, right_result) if item.get("success") is True]
-        assert left.exitcode == 0 and right.exitcode == 0
-        assert len(rows) == 1
-        assert len(successes) >= 1
-        assert all(item.get("id") in (None, rows[0]["id"]) for item in (left_result, right_result))
+        observed = {"rows": len(rows), "left": left_result, "right": right_result}
+        assert left.exitcode == 0 and right.exitcode == 0, observed
+        assert len(rows) == 1, observed
+        assert len(successes) >= 1, observed
+        assert all(item.get("id") in (None, rows[0]["id"]) for item in (left_result, right_result)), observed
         assert all(
             item.get("success") is True or item.get("error_code") == "idempotency_in_progress"
             for item in (left_result, right_result)
-        )
+        ), observed
 
 
 def test_e24_second_crash_can_still_recover():
@@ -389,7 +390,7 @@ def test_r07_replaying_the_old_success_for_a_different_phone_fails(monkeypatch):
     assert restored.returncode == 0, restored.stdout + restored.stderr
 
 
-def test_r09_two_recoveries_without_the_claim_leave_two_rows():
+def test_r09_ignored_claim_is_not_reported_as_in_progress():
     import subprocess
     import sys
     from pathlib import Path
@@ -398,7 +399,9 @@ def test_r09_two_recoveries_without_the_claim_leave_two_rows():
     try:
         test_e24_two_recoveries_leave_one_row()
     except AssertionError as exc:
-        assert "1" in str(exc)
+        text = str(exc)
+        assert "'rows': 1" in text, text
+        assert "'success': False" in text and "'error_code': None" in text, text
     else:
         raise AssertionError("two recoveries without a claim still left one row")
     finally:
