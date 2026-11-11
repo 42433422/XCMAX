@@ -126,6 +126,30 @@ def catalog_errors(data: dict) -> list[str]:
     return errors
 
 
+def requirement_rollup(data: dict) -> dict[str, str]:
+    """A requirement passes only when every scenario under it has real evidence.
+
+    One passing child leaves the requirement NOT RUN.
+    """
+    grouped: dict[str, list[dict]] = {}
+    for item in data.get("contracts") or []:
+        if isinstance(item, dict):
+            grouped.setdefault(str(item.get("requirement_id") or ""), []).append(item)
+    result: dict[str, str] = {}
+    for requirement_id, items in grouped.items():
+        complete = True
+        for item in items:
+            boundary = item.get("boundary") if isinstance(item.get("boundary"), dict) else {}
+            if (
+                boundary.get("execution") != "real"
+                or not item.get("tests")
+                or item.get("known_defects")
+            ):
+                complete = False
+        result[requirement_id] = "PASS" if complete else "NOT RUN"
+    return result
+
+
 def floor_errors(floor: dict) -> list[str]:
     """Fail when this change drops a scenario or test that the floor still requires.
 

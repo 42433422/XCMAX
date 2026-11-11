@@ -11,6 +11,7 @@ from scripts.dev.check_business_contract_evidence import (
     MINIMUM_REQUIRED,
     REQUIRED_TESTS,
     catalog_errors,
+    requirement_rollup,
     ci_gate,
     floor_errors,
     evidence_from_junit,
@@ -61,6 +62,16 @@ def test_removing_the_required_scenario_is_rejected():
         item for item in data["contracts"] if item["scenario_id"] not in MINIMUM_REQUIRED
     ]
     assert any("required scenarios removed" in error for error in catalog_errors(data))
+
+
+def test_one_passing_child_does_not_complete_the_requirement():
+    rollup = requirement_rollup(load_catalog())
+    assert rollup["R03"] == "NOT RUN"
+    assert rollup["R04"] == "NOT RUN"
+    assert rollup["R07"] == "NOT RUN"
+    assert rollup["R01"] == "NOT RUN"
+    assert rollup["R06"] == "NOT RUN"
+    assert rollup["R10"] == "NOT RUN"
 
 
 def test_floor_from_main_rejects_a_shrunk_required_set():
