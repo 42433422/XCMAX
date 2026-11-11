@@ -9,11 +9,9 @@ CTX="$(mktemp -d "${TMPDIR:-/tmp}/xcagi-mod-sandbox-XXXXXX")"
 cleanup() { rm -rf "$CTX"; }
 trap cleanup EXIT
 
-cp -a "$REPO_ROOT/app" "$CTX/app"
-mkdir -p "$CTX/XCAGI"
-cp -a "$REPO_ROOT/XCAGI/requirements.txt" "$CTX/XCAGI/"
-cp -a "$REPO_ROOT/XCAGI/run.py" "$REPO_ROOT/XCAGI/run_fastapi.py" "$CTX/XCAGI/"
-cp -a "$REPO_ROOT/resources" "$CTX/resources"
+for item in app packages config resources requirements-server-api.txt; do
+  cp -a "$REPO_ROOT/$item" "$CTX/$item"
+done
 cp -a "$SCRIPT_DIR/Dockerfile.mod-sandbox" "$CTX/Dockerfile"
 
 docker build -t xcagi-mod-sandbox "$CTX"

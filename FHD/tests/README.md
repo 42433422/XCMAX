@@ -1,35 +1,22 @@
 # FHD 测试入口
 
-## 两套 pytest 根 conftest
+## 统一 pytest 入口
 
-| 套件 | 命令 | conftest |
-|------|------|----------|
-| **CI 默认** | `pytest tests/` 或 `make test` | [`conftest.py`](conftest.py) |
-| **XCAGI 遗留** | `pytest XCAGI/xcagi_tests --import-mode=importlib` 或 `make test-xcagi` | [`XCAGI/xcagi_tests/conftest.py`](../XCAGI/xcagi_tests/conftest.py) |
+从 `FHD/` 执行 `python -m pytest tests/`，使用 [`../pyproject.toml`](../pyproject.toml) 和 [`conftest.py`](conftest.py)，与 CI 一致。
+从仓库根执行 `make test`；`make test-xcagi` 是同一入口的兼容别名。
 
-**勿同时收集** `tests/` 与 `XCAGI/xcagi_tests`（模块名冲突，见 `pyproject.toml`）。
-
-## 决策树
-
-```
-需要整机 FastAPI + TestClient？
-├─ 是，且走 CI 默认门禁 → pytest tests/
-├─ 是，且要 XCAGI 子树历史用例 → pytest XCAGI/xcagi_tests --import-mode=importlib
-└─ 仅单域/单文件 → pytest tests/routes/test_health.py -q
-```
+单域或单文件可在 `FHD/` 指定路径，例如 `python -m pytest tests/test_dev/test_ssot_registry_crosscheck.py -q`。
 
 ## 共享 fixture
 
 - App 工厂：[`fixtures/app_factory.py`](fixtures/app_factory.py) · `get_test_fastapi_app()`
 - 路由子目录：[`routes/conftest.py`](routes/conftest.py)
 
-## CI 稳定子集
+## 测试选择与覆盖率
 
-`CI_STABLE_ONLY=1 pytest tests/` 仅跑白名单 nodeid（见 `conftest.py` `_CI_STABLE_NODEID_FRAGMENTS`）。
+默认收集完整 `tests/`。`conftest.py` 给 `test_coverage_ramp_*.py` 添加 `coverage_ramp` 标记；仅检查行为套件时可用 `python -m pytest tests/ -m 'not coverage_ramp'`。
 
-## collect_ignore
-
-遗留/未落地用例暂从采集排除；覆盖率门槛见 [`docs/reports/COVERAGE_RAMP.md`](docs/reports/COVERAGE_RAMP.md)。
+覆盖率门槛见 [`../docs/reports/COVERAGE_RAMP.md`](../docs/reports/COVERAGE_RAMP.md)。
 
 ## ELT intake sample pack
 

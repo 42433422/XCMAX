@@ -38,8 +38,8 @@ echo.
 echo [LAUNCHER DEBUG] Bat location: %~f0
 echo [LAUNCHER DEBUG] Working directory: %CD%
 echo [LAUNCHER DEBUG] If this window flashes and closes unexpectedly, edit the desktop shortcut:
-echo [LAUNCHER DEBUG]   Target -> cmd.exe /k "E:\FHD\XCAGI\start-xcagi.bat"
-echo [LAUNCHER DEBUG]   Start in -> E:\FHD\XCAGI
+echo [LAUNCHER DEBUG]   Target -> cmd.exe /k "%~f0"
+echo [LAUNCHER DEBUG]   Start in -> %~dp0
 echo.
 
 REM %~dp0 always ends with \ - use %%CD%% after cd /d for a stable absolute path (CRLF line endings required for .bat on Windows).
@@ -292,7 +292,7 @@ if not exist "%FRONTEND_DIR%\node_modules\.bin\vite.cmd" (
     call npm.cmd install
     popd
 )
-start "XCAGI Frontend" /D "%FRONTEND_DIR%" cmd /k "npm.cmd run dev"
+start "XCAGI Frontend" /D "%FRONTEND_DIR%" cmd /k "set VITE_DEV_PORT=5001&& set VITE_API_BASE=http://127.0.0.1:5000&& npm.cmd run dev"
 ping 127.0.0.1 -n 5 >nul
 
 REM Backend may become healthy while Vite starts; avoid opening the browser before API is up.
@@ -349,9 +349,9 @@ echo [IMPORTANT] This launcher window will ALWAYS pause at the end so you can re
 echo [HINT] The services (Backend on 5000 + Frontend on 5001) continue running even after you close this window.
 echo [HINT] If the window still flashes and disappears immediately, edit the desktop shortcut:
 echo          Right-click shortcut ^> Properties ^> Target:
-echo             cmd.exe /k "E:\FHD\XCAGI\start-xcagi.bat"
+echo             cmd.exe /k "%~f0"
 echo          Start in:
-echo             E:\FHD\XCAGI
+echo             %~dp0
 echo.
 echo [INFO] Press any key to close THIS launcher only. Backend + Frontend keep running in their own windows.
 pause

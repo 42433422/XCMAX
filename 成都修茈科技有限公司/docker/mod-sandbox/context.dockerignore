@@ -23,6 +23,5 @@ node_modules
 
 # Large XCAGI-only trees not needed for the sandbox image (Dockerfile copies only run.py + run_fastapi.py).
 XCAGI/mods
-XCAGI/ai_engines
 XCAGI/resources
 XCAGI/tests
