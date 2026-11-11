@@ -437,14 +437,20 @@
       "requirement_id": "R07",
       "scenario_id": "R07-recovery-no-double-ledger",
       "rule": "恢复不得把已经记下的账再记一次。",
-      "source": "客户行恢复已有执行。会计分录恢复尚未单独执行。",
+      "source": "第一笔付款已经提交一条分录。新的数据库会话用同一幂等键再付款，分录主键不变。",
       "preconditions": ["崩溃前账已提交"],
-      "inputs": ["恢复调用"],
-      "allowed": ["分录仍是原来那一套"],
+      "inputs": ["同一幂等键 bank-1 的再次付款"],
+      "allowed": ["回执是同一笔收款", "分录仍是一条"],
       "forbidden_effects": ["恢复再插入一套分录"],
-      "oracle": "崩溃后读到的分录主键",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "oracle": "第一次付款的收款主键，以及 JournalEntry 条数 1",
+      "tests": [
+        "tests/test_services/test_payment_idempotency.py::test_retry_survives_new_session_and_full_payment"
+      ],
+      "boundary": {
+        "real": ["sqlite", "journal entry", "new database session"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "恢复再记一笔",
       "platforms": ["linux"],
