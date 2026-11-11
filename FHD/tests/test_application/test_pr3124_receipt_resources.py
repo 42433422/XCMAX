@@ -356,7 +356,9 @@ def test_mapping_failure_survives_only_reader_confirmation(tmp_path, monkeypatch
         lambda receipt, _tenant, progress: (receipt, progress("done", 100), {}),
     )
     service = ais.AutoIngestService()
-    monkeypatch.setattr(service, "detect_target", lambda *_args, **_kwargs: {"target_type": "products"})
+    monkeypatch.setattr(
+        service, "detect_target", lambda *_args, **_kwargs: {"target_type": "products"}
+    )
     monkeypatch.setattr(
         service, "_ingest_knowledge", lambda **_kwargs: {"action": "skip", "reason": "test"}
     )
