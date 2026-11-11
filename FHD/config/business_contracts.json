@@ -568,14 +568,20 @@
       "requirement_id": "R10",
       "scenario_id": "R10-approval-tenant",
       "rule": "审批只能读取和修改本租户的审批单。",
-      "source": "知识库导入的租户隔离不能代替审批。",
-      "preconditions": ["两个租户各有一张待审单"],
-      "inputs": ["用租户 A 的身份审批租户 B"],
-      "allowed": ["拒绝"],
+      "source": "租户 7 的审批人不能改租户 8 的持久化审批单，但可以批准本租户的同一张流程。",
+      "preconditions": ["两个租户各有一张待审单", "审批人都是 41"],
+      "inputs": ["租户 7 批准租户 8 的单", "租户 7 批准自己的单"],
+      "allowed": ["跨租户返回 404", "本租户变为 approved"],
       "forbidden_effects": ["改到另一租户的审批状态"],
-      "oracle": "两个租户审批单的状态",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "oracle": "两张审批单的 status",
+      "tests": [
+        "tests/test_application/test_approval_workspace.py::test_other_tenant_cannot_change_a_persisted_approval"
+      ],
+      "boundary": {
+        "real": ["sqlite", "approval request"],
+        "doubles": ["actor resolver returns user 41"],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "跨租户审批成功",
       "platforms": ["linux"],
