@@ -1,5 +1,5 @@
 {
-  "lines": 2395697,
+  "lines": 2395698,
   "updated": "2026-11-11",
-  "note": "销售链权限、同单防重、租户唯一约束和导出回执，相对 main 61da5dd5 的业务闭环增量"
+  "note": "Ruff 要求 inventory_movements 顶层函数前保留空行，相对销售链基线多 1 行"
 }
