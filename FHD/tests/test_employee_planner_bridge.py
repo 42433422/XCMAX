@@ -361,14 +361,12 @@ def test_employee_workflow_hands_off_the_declared_deliverable(tmp_path, monkeypa
     assert result["data"].get("file_path") == (str(pdf) if action == "execute" else None)
 
 
+@pytest.mark.parametrize("filename", ["sales.xlsx", "sales.csv"])
 def test_authenticated_excel_reads_require_own_upload_or_current_run_receipt(
-    tmp_path, monkeypatch, trusted_actor
+    tmp_path, monkeypatch, trusted_actor, filename
 ):
     from io import BytesIO
 
-    from openpyxl import Workbook
-
-    from app.application.agent_orchestrator.artifact_files import store_spreadsheet
     from app.application.elt.service import get_elt_service
     from app.db.models.elt import EltUpload
     from app.domain.shared_services.tools_workflow_excel_ocr import (
@@ -396,12 +394,18 @@ def test_authenticated_excel_reads_require_own_upload_or_current_run_receipt(
 
     assert read(path, owner.context)["row_count"] == 2
     assert read(path, other.context)["error_code"] == "spreadsheet_access_denied"
-    workbook = Workbook()
-    workbook.active.append(["amount"])
-    workbook.active.append([200])
-    buffer = BytesIO()
-    workbook.save(buffer)
-    receipt = store_spreadsheet("run_owner", buffer.getvalue())
+    with tenant_scope(owner.tenant_id):
+        exported = _registered_router_excel_analysis(
+            "export",
+            {"file_path": filename, "rows": [{"amount": 200}]},
+            {**owner.context, "run_id": "run_owner"},
+            "normal",
+            "",
+        )
+    assert exported["success"], exported
+    receipt = exported["artifacts"][0]
+    assert exported["data"]["file_path"] == receipt["uri"]
+    assert receipt["name"] == filename
     assert read(receipt["uri"], owner.context)["error_code"] == "spreadsheet_access_denied"
     result = read(
         receipt["uri"],

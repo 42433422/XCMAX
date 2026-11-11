@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory, mkdtemp
@@ -14,6 +14,7 @@ from sqlalchemy import or_
 from app.application.agent_orchestrator.artifact_files import (
     artifact_path,
     read_verified_spreadsheet,
+    store_spreadsheet,
 )
 from app.application.elt.service import get_elt_service
 from app.application.office_parse_app_service import EMPLOYEE_BY_SUFFIX
@@ -25,7 +26,7 @@ from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.path_io.path_utils import get_app_data_dir
 
 
-def _run_spreadsheet(file_path: str, context: dict[str, Any]) -> bytes | None:
+def _run_spreadsheet(file_path: str, context: dict[str, Any]) -> tuple[bytes, str] | None:
     run_id = context.get("run_id")
     outputs = context.get("node_outputs")
     if not isinstance(run_id, str) or not isinstance(outputs, dict):
@@ -37,7 +38,8 @@ def _run_spreadsheet(file_path: str, context: dict[str, Any]) -> bytes | None:
         receipts = [
             row
             for row in output.get("artifacts") or []
-            if isinstance(row, dict) and str(row.get("artifact_id", "")).startswith("xlsx_")
+            if isinstance(row, dict)
+            and str(row.get("artifact_id", "")).startswith(("xlsx_", "csv_"))
         ]
         for receipt in receipts:
             artifact_id = receipt["artifact_id"]
@@ -45,7 +47,7 @@ def _run_spreadsheet(file_path: str, context: dict[str, Any]) -> bytes | None:
             if file_path in {str(path), f"/api/agent/runs/{run_id}/artifacts/{artifact_id}"} or (
                 len(receipts) == 1 and isinstance(data, dict) and data.get("file_path") == file_path
             ):
-                return read_verified_spreadsheet(run_id, receipt)
+                return read_verified_spreadsheet(run_id, receipt), path.suffix
     return None
 
 
@@ -60,9 +62,10 @@ def _staging_root() -> Path:
 @contextmanager
 def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[Path]:
     actor = _bound_actor(context)
-    content = _run_spreadsheet(file_path, context)
-    suffix = ".xlsx"
-    if content is None:
+    prior = _run_spreadsheet(file_path, context)
+    if prior is not None:
+        content, suffix = prior
+    else:
         with get_db() as db:
             upload_id = (
                 db.query(EltUpload.id)
@@ -111,3 +114,24 @@ def office_reader_input(
             key: payload[key] for key in ("action", "max_row_cap", "max_col_cap") if key in payload
         }
         yield {**options, "file_path": str(snapshot), "workspace_root": workspace}
+
+
+def export_workflow_spreadsheet(
+    payload: dict[str, Any],
+    context: dict[str, Any],
+    export: Callable[..., dict[str, Any]],
+) -> dict[str, Any]:
+    _bound_actor(context)
+    run_id = str(context.get("run_id") or "")
+    if not run_id:
+        raise PermissionError("导出表格需要当前任务")
+    with TemporaryDirectory(prefix="workflow-export-", dir=_staging_root()) as directory:
+        result = export(payload, workspace_root=directory)
+        if result.get("success") is True:
+            data = result["data"]
+            path = Path(data["file_path"])
+            with open_etl_input_file(path, workspace_root=directory) as source:
+                receipt = store_spreadsheet(run_id, source.read(), name=path.name)
+            result["artifacts"] = [receipt]
+            data["file_path"] = receipt["uri"]
+    return result

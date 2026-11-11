@@ -21,7 +21,8 @@ def artifact_path(run_id: str, artifact_id: str) -> Path:
         raise ValueError("invalid run artifact identity")
     root = Path(get_app_data_dir()).resolve() / "agent-artifacts"
     folder = root / run_id
-    path = folder / f"{artifact_id}.xlsx"
+    suffix = ".csv" if artifact_id.startswith("csv_") else ".xlsx"
+    path = folder / f"{artifact_id}{suffix}"
     if root.is_symlink() or folder.is_symlink() or path.is_symlink():
         raise ValueError("artifact symlinks are not permitted")
     return path
@@ -31,7 +32,8 @@ def store_spreadsheet(
     run_id: str, content: bytes, *, name: str = "销售报表.xlsx"
 ) -> dict[str, Any]:
     digest = hashlib.sha256(content).hexdigest()
-    artifact_id = f"xlsx_{digest[:32]}"
+    is_csv = Path(name).suffix.lower() == ".csv"
+    artifact_id = f"{'csv' if is_csv else 'xlsx'}_{digest[:32]}"
     path = artifact_path(run_id, artifact_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     output = tempfile.NamedTemporaryFile(dir=path.parent, prefix=".artifact-", delete=False)
@@ -52,7 +54,11 @@ def store_spreadsheet(
         "artifact_id": artifact_id,
         "artifact_type": "file",
         "name": Path(name).name,
-        "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "mime_type": (
+            "text/csv"
+            if is_csv
+            else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
         "uri": f"/api/agent/runs/{run_id}/artifacts/{artifact_id}",
         "metadata": {"sha256": digest, "size_bytes": len(content)},
     }

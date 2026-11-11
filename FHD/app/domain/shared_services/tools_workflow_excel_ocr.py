@@ -37,7 +37,11 @@ def _registered_router_excel_analysis(
     try:
         from app.application.tools.workflow import handle_excel_analysis
 
-        if (
+        if action == "export" and "_actor_authorization" in runtime_context:
+            from app.application.tools.workflow_spreadsheet_scope import export_workflow_spreadsheet
+
+            result = export_workflow_spreadsheet(payload, runtime_context, handle_excel_analysis)
+        elif (
             action in {"read", "structure", "query", "statistics"}
             and "_actor_authorization" in runtime_context
         ):

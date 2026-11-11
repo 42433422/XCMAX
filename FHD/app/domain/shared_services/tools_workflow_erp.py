@@ -400,11 +400,10 @@ def _registered_router_reports(
     from app.domain.shared_services.report_service import ReportService
 
     svc = ReportService()
+    date_filters = ("start_date", "end_date", "group_by")
     filters = {
         "sales": (
-            "start_date",
-            "end_date",
-            "group_by",
+            *date_filters,
             "customer_id",
             "customer_name",
             "status",
@@ -413,7 +412,7 @@ def _registered_router_reports(
             "region",
         ),
         "inventory": ("warehouse_id", "category", "model_number"),
-        "purchase": ("start_date", "end_date", "group_by"),
+        "purchase": date_filters,
     }
 
     def query(kind: str) -> dict[str, Any]:

@@ -62,36 +62,8 @@ class ReportService(NeuroEventPublisherMixin):
             return self._get_sales_report_from_shipments(
                 start_date, end_date, group_by, customer_id
             )
-        return self._get_sales_report_from_orders(
-            inclusive_order_bound(start_date, end=False),
-            inclusive_order_bound(end_date, end=True),
-            group_by,
-            customer_id,
-            payment_state,
-            min_amount_exclusive,
-            region,
-            status,
-            customer_name,
-        )
-
-    def _get_sales_report_from_orders(
-        self,
-        start_date: datetime | None,
-        end_date: datetime | None,
-        group_by: str,
-        customer_id: int | None,
-        payment_state: str | None = None,
-        min_amount_exclusive: Any = None,
-        region: str | None = None,
-        status: str | None = None,
-        customer_name: str | None = None,
-    ) -> dict[str, Any]:
-        """SalesOrder 正交读模型聚合（主源）。
-
-        按 ``SalesOrderItem`` 在产品 / 客户 / 日期维度聚合，金额用 ``Decimal`` 累加
-        保证确定性；``summary.total_amount`` 等于被纳入订单的 ``SalesOrder.total_amount`` 之和。
-        多租户隔离由 ``TenantScopedMixin`` + 全局 tenant filter 自动生效。
-        """
+        start_date = inclusive_order_bound(start_date, end=False)
+        end_date = inclusive_order_bound(end_date, end=True)
         with get_db() as db:
             query = db.query(SalesOrderItem, SalesOrder).join(
                 SalesOrder, SalesOrderItem.order_id == SalesOrder.id
@@ -223,7 +195,7 @@ class ReportService(NeuroEventPublisherMixin):
     ) -> dict[str, Any]:
         """遗留 ``ShipmentRecord`` 销售报表（兼容路径，非主源）。
 
-        保留仅供历史兼容读取；新销售数据一律走 ``_get_sales_report_from_orders``。
+        保留仅供历史兼容读取；新销售数据由销售订单汇总。
         """
         with get_db() as db:
             query = db.query(ShipmentRecord, func.count(ShipmentRecord.id).label("record_count"))
