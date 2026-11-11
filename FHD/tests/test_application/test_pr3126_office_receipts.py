@@ -1,3 +1,4 @@
+import json
 import zipfile
 from copy import deepcopy
 from io import BytesIO
@@ -37,7 +38,7 @@ def office_bytes(suffix):
         ("pptx", "ppt-generate-employee", "ppt-full-read-employee"),
     ],
 )
-@pytest.mark.parametrize("dispatch_path", ["registered", "direct"])
+@pytest.mark.parametrize("dispatch_path", ["registered", "direct", "adapter", "pack", "planner"])
 def test_generated_office_file_owned_handoff(
     tmp_path, monkeypatch, trusted_actor, suffix, generator, reader, dispatch_path
 ):
@@ -76,20 +77,38 @@ def test_generated_office_file_owned_handoff(
     monkeypatch.setattr(EmployeeAgent, "run", read_snapshot)
     context = {**owner.context, "run_id": "office-run"}
     with tenant_scope(owner.tenant_id):
+        monkeypatch.setattr(employee_tool_registry, "resolve_tool_to_pack_id", lambda name: name)
         if dispatch_path == "direct":
             from app.application.tools.workflow_tools.dispatch import (
                 execute_registered_workflow_tool,
             )
 
-            monkeypatch.setattr(
-                employee_tool_registry, "is_employee_tool", lambda name: name == generator
-            )
-            monkeypatch.setattr(
-                employee_tool_registry, "resolve_tool_to_pack_id", lambda name: name
-            )
             exported = execute_registered_workflow_tool(
                 generator, "execute", {"task": "生成文件", "_runtime_context": context}
             )
+        elif dispatch_path == "adapter":
+            from app.application.tools.workflow_tools import adapters
+            from app.application.tools.workflow_tools.contracts import ToolCall
+
+            raw = adapters.employee(
+                ToolCall(generator, {"task": "生成文件"}, runtime_context=context)
+            )
+            assert raw is not None
+            exported = json.loads(raw)
+        elif dispatch_path in {"pack", "planner"}:
+            from app.domain.app_pure.employee_pack_runner import (
+                execute_employee_pack_tool,
+                try_execute_employee_planner_tool,
+            )
+
+            runner = (
+                execute_employee_pack_tool
+                if dispatch_path == "pack"
+                else try_execute_employee_planner_tool
+            )
+            raw = runner(generator, {"task": "生成文件"}, runtime_context=context)
+            assert raw is not None
+            exported = json.loads(raw)
         else:
             exported = _registered_router_employee(
                 "execute", {"employee_id": generator, "task": "生成文件"}, context, "normal", ""
@@ -177,6 +196,14 @@ def test_direct_generator_file_is_readable_and_failed_receipt_stays_failed(
     monkeypatch.setattr(employee_tool_registry, "is_employee_tool", lambda name: name == generator)
     monkeypatch.setattr(employee_tool_registry, "resolve_tool_to_pack_id", lambda name: name)
     calls = []
+    receipts = []
+    store_output = scope.store_employee_output
+
+    def register_once(*args, **kwargs):
+        receipts.append(args)
+        return store_output(*args, **kwargs)
+
+    monkeypatch.setattr(scope, "store_employee_output", register_once)
 
     def generate(*args, **kwargs):
         calls.append(args)
@@ -188,6 +215,7 @@ def test_direct_generator_file_is_readable_and_failed_receipt_stays_failed(
             generator, "execute", {"_runtime_context": context}
         )
         assert result["success"] and result["artifact_postcondition"]["verified"]
+        assert len(receipts) == 1  # All entry points share one registry publication.
         context["node_outputs"] = {"generate": result}
         path.unlink()
         with scope.workflow_file_snapshot(result["data"]["file_path"], context) as snapshot:
