@@ -664,7 +664,7 @@ class AutoIngestService:
                     else "failed"
                     if business.get("failed")
                     else completion_status
-                    if coverage["complete"]
+                    if coverage["complete"] or completion_status == "completed_empty"
                     else "partial"
                 ),
                 coverage=coverage,

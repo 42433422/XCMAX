@@ -381,3 +381,51 @@ def test_mapping_failure_survives_only_reader_confirmation(tmp_path, monkeypatch
     else:
         assert saved["status"] == held
         assert "error" not in saved
+
+
+@pytest.mark.usefixtures("ledger_root")
+@pytest.mark.parametrize(
+    ("rows_written", "summary", "expected"),
+    [
+        (False, {"executed": 0, "new": 0, "update": 0, "skip": 1, "error": 1}, "completed_empty"),
+        (True, {"executed": 1, "new": 1, "update": 0, "skip": 0, "error": 1}, "partial"),
+    ],
+)
+def test_incomplete_coverage_keeps_zero_write_completion(
+    tmp_path, monkeypatch, rows_written, summary, expected
+):
+    source = tmp_path / "order.csv"
+    source.write_text("code,name\nM-1,demo\n", encoding="utf-8")
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setattr(ais, "get_request_active_mod_id", lambda: "m")
+    monkeypatch.setattr(
+        ais,
+        "enrich_knowledge_progress",
+        lambda receipt, _tenant, progress: (receipt, progress("done", 100), {}),
+    )
+    service = ais.AutoIngestService()
+    monkeypatch.setattr(service, "detect_target", lambda *_a, **_k: {"target_type": "products"})
+    monkeypatch.setattr(
+        service,
+        "_ingest_knowledge",
+        lambda **_k: {"action": "skip", "degraded": True, "reason": "test"},
+    )
+    monkeypatch.setattr(
+        service,
+        "_ingest_business",
+        lambda *_a, **_k: {
+            "status": "completed",
+            "summary": summary,
+            "receipt": {"rows_written": rows_written},
+            "failed": False,
+        },
+    )
+    result = service.run(
+        MagicMock(),
+        owner_user_id=7,
+        tenant_id=42,
+        source_path=source,
+        file_name="order.csv",
+    )
+    assert result["status"] == expected
+    assert result["coverage"]["complete"] is False
