@@ -219,7 +219,11 @@ def test_supervision_preserves_suite_result(supervised_services, exit_code):
     backend, guard, args = supervised_services
     result = subprocess.run([*args, sys.executable, "-c", f"raise SystemExit({exit_code})"])
     assert result.returncode == exit_code
-    assert backend.poll() is None and guard.poll() is None
+    assert guard.poll() is None
+    if exit_code:
+        assert backend.wait(timeout=5) != 0
+    else:
+        assert backend.poll() is None
 
 
 def test_guard_death_between_suites_prevents_second_command(supervised_services, tmp_path):
@@ -277,7 +281,7 @@ def test_guard_death_during_suite_stops_backend_and_browser(supervised_services,
 
 
 @pytest.mark.parametrize("parent_exits", [False, True])
-def test_detached_browser_is_stopped_even_after_parent_exit(
+def test_detached_browser_cleanup_and_failed_session_follow_platform_contract(
     supervised_services, tmp_path, parent_exits
 ):
     import time
@@ -317,9 +321,12 @@ raise SystemExit(17)
         if not parent_exits:
             assert backend.wait(timeout=5) != 0
         else:
-            assert backend.poll() is None and guard.poll() is None
+            assert backend.wait(timeout=5) != 0 and guard.poll() is None
         stopped = not browser.is_running() or browser.status() == psutil.STATUS_ZOMBIE
-        assert stopped
+        if sys.platform == "linux" or not parent_exits:
+            assert stopped
+        # Darwin's unobserved orphan cleanup is best-effort; even in that case
+        # the failed suite must have lost its isolated authenticated backend.
     finally:
         if suite.poll() is None:
             suite.kill()
@@ -343,6 +350,7 @@ module = runpy.run_path(sys.argv[1])
 if sys.argv[2] == 'unsupported':
     sys.platform = 'unsupported'
 else:
+    sys.platform = "linux"
     class Denied:
         def __call__(self, *args):
             return -1
@@ -367,3 +375,65 @@ raise SystemExit(module['run'](int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[
     assert result.returncode != 0
     assert not marker.exists()
     assert backend.wait(timeout=5) != 0
+
+
+@pytest.mark.parametrize("exit_code", [0, 17])
+def test_darwin_branch_does_not_require_linux_prctl(supervised_services, exit_code):
+    backend, guard, args = supervised_services
+    code = """
+import ctypes, runpy, sys
+module = runpy.run_path(sys.argv[1])
+sys.platform = 'darwin'
+def forbidden(*args, **kwargs):
+    raise AssertionError('Darwin must not load Linux prctl')
+ctypes.CDLL = forbidden
+raise SystemExit(module['run'](int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]),
+                              sys.argv[5], sys.argv[6], sys.argv[7:]))
+"""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            code,
+            *args[1:],
+            sys.executable,
+            "-c",
+            f"raise SystemExit({exit_code})",
+        ]
+    )
+    assert result.returncode == exit_code
+    assert guard.poll() is None
+    if exit_code:
+        assert backend.wait(timeout=5) != 0
+    else:
+        assert backend.poll() is None
+
+
+def test_native_runtime_matrix_covers_supervision_changes():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "classifier", ROOT / "scripts/dev/change_classifier.py"
+    )
+    assert spec is not None and spec.loader is not None
+    classifier = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(classifier)
+    paths = classifier.RELEVANT["runtime_contract"]["exact"]
+    assert "FHD/scripts/dev/e2e_supervise.py" in paths
+    assert "FHD/scripts/dev/e2e-full.sh" in paths
+    assert "FHD/tests/test_ci/test_isolated_e2e_credentials.py" in paths
+    for path in paths:
+        assert classifier.decide("runtime_contract", [path])
+    for workflow in (
+        "FHD/.github/workflows/mac-control-contract.yml",
+        ".github/workflows/fhd-mac-control-contract.yml",
+    ):
+        runtime = yaml.safe_load((ROOT / workflow).read_text())["jobs"]["runtime-contract"]
+        assert "macos-15" in runtime["strategy"]["matrix"]["os"]
+        step = next(
+            step
+            for step in runtime["steps"]
+            if "tests/test_ci/test_isolated_e2e_credentials.py" in step.get("run", "")
+        )
+        assert step["if"] == "matrix.os != 'windows-2022'"
+        assert "continue-on-error" not in step

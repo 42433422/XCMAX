@@ -52,16 +52,21 @@ def run(backend_pid: int, frontend_pid: int, guard_pid: int, api: str, web: str,
             except psutil.Error:
                 pass
 
-    # Linux CI must retain ownership of double-forked/orphaned Chromium workers,
-    # even when their parent exits before the first userspace observation.
-    # This setting affects only this supervisor's descendant reparenting.
-    if sys.platform != "linux":
+    # Linux retains orphan ownership; Darwin has no equivalent subreaper API.
+    # Both platforms keep service/guard supervision and identity-safe cleanup.
+    # On Darwin, a detached child missed before its parent exits may remain;
+    # failure invalidates its isolated local session by stopping the services.
+    if sys.platform == "linux":
+        libc = ctypes.CDLL(None, use_errno=True)
+        libc.prctl.argtypes = [ctypes.c_int, *([ctypes.c_ulong] * 4)]
+        libc.prctl.restype = ctypes.c_int
+        if libc.prctl(36, 1, 0, 0, 0) != 0:  # PR_SET_CHILD_SUBREAPER
+            stop_services()
+            return 1
+    elif sys.platform != "darwin":
         stop_services()
         return 1
-    libc = ctypes.CDLL(None, use_errno=True)
-    libc.prctl.argtypes = [ctypes.c_int, *([ctypes.c_ulong] * 4)]
-    libc.prctl.restype = ctypes.c_int
-    if libc.prctl(36, 1, 0, 0, 0) != 0 or not ready():  # PR_SET_CHILD_SUBREAPER
+    if not ready():
         stop_services()
         return 1
     supervisor = psutil.Process(os.getpid())
@@ -76,6 +81,7 @@ def run(backend_pid: int, frontend_pid: int, guard_pid: int, api: str, web: str,
             except psutil.Error:
                 pass
 
+    result = 1
     try:
         while child.poll() is None:
             remember_descendants()
@@ -86,8 +92,11 @@ def run(backend_pid: int, frontend_pid: int, guard_pid: int, api: str, web: str,
         if not ready():
             stop_services()
             return 1
-        return child.returncode
+        result = child.returncode
+        return result
     finally:
+        if result != 0:
+            stop_services()
         # Chromium is detached into a new process group. Track Process identities
         # (PID + creation time), including descendants whose parent has exited.
         # Freeze ancestors before the final traversal so they cannot spawn more

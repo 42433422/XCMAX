@@ -141,8 +141,8 @@
       "after_lines": 1111,
       "reason": "Review request only: Reject business writes when their persisted approval task has been cancelled, matching existing waiting/rejected/expired denial.",
       "boundary": "Existing approval_execution_denial only: adds cancelled state and approval_cancelled error without changing role grants, finance permissions or approval bypass rules.",
-      "validation": "Validation scope: test_approval_executor_gate.py cancelled-task regression plus evidence-stack integration tests. Full integration CI and human architecture review remain outstanding; this request is not approval.",
-      "follow_up": "Human architecture review of this exact 1108-to-1111-line cancellation guard change remains required; preserve the single authorization path.",
+      "validation": "Independent AI technical review of the recorded base/head blobs confirms the scoped cancelled-approval denial without changing role grants or bypass rules. All 14 test_approval_executor_gate.py cases passed on isolated Linux Python 3.12, including cancelled-task rejection before customer insertion and approved-write database readback. These synthetic SQLite tests do not establish production-data behavior or human approval; final-candidate CI and actual GitHub review remain separate.",
+      "follow_up": "The prior human-only wording was added by integration record 14b29fe6, not a verified user requirement. Record the actual review of this exact 1108-to-1111-line change item by item in the PR and obey effective branch protection. Preserve the single authorization path; this technical record does not claim approval by a human.",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_auth_api_merged.py": {

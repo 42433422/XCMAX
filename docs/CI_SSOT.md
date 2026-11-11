@@ -522,6 +522,8 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 SSOT 脚本：`FHD/frontend/package.json` → `test:e2e:p0`；编排见 `FHD/scripts/dev/e2e-full.sh`。
 
+本地 `make e2e` 支持 Linux/macOS，使用每轮随机凭据、临时数据库与私有浏览器 profile；始终核对自有回环监听与市场 guard，失败或中断先停止本轮服务，使会话失效，再清理私有产物。Linux 使用子 reaper 确定性回收孤儿后代；macOS 按进程身份尽力回收已观察后代，父进程瞬间退出时未观察到的 detached 浏览器可能残留，不宣称同等资源回收保证。`runtime-contract` 的 `macos-15` 针对性验证通过后才可确认实际 Darwin 兼容性，Linux 伪平台分支测试不能替代。
+
 ## 同步根 workflow
 
 ```bash

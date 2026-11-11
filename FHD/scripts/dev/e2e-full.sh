@@ -226,7 +226,8 @@ export PLAYWRIGHT_BASE_URL="${WEB_URL}"
 
 
 run_suite() {
-  "${PY}" "${SCRIPT_DIR}/e2e_supervise.py" \
+  mkdir -p "${E2E_DATA_DIR}/browser-tmp"
+  TMPDIR="${E2E_DATA_DIR}/browser-tmp" "${PY}" "${SCRIPT_DIR}/e2e_supervise.py" \
     "${BACKEND_PID}" "${FRONTEND_PID}" "${MARKET_GUARD_PID}" "${API_URL}" "${WEB_URL}" \
     node node_modules/@playwright/test/cli.js "$@"
 }

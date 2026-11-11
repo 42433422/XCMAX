@@ -234,7 +234,7 @@ def _node_env(lane: str = "") -> dict[str, str]:
                 env["SURFACE_AUDIT_PASSWORD"] = demo_password()
             except RECOVERABLE_ERRORS:
                 env.setdefault("SURFACE_AUDIT_USER", "xcagi-enterprise-demo")
-                env.setdefault("SURFACE_AUDIT_PASSWORD", "Demo@2026")
+                env.setdefault("SURFACE_AUDIT_PASSWORD", "")
     elif lane_key != "P-W":
         env.setdefault("SURFACE_AUDIT_PRODUCT_SKU", "personal")
     if (

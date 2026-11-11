@@ -1,5 +1,5 @@
 {
-  "lines": 2399112,
+  "lines": 2399372,
   "updated": "2026-11-11",
-  "note": "Retain Ruff-only safety test formatting (+69 lines) and extend existing bounded official APT source fallback to performance smoke (+37 maintained lines); preserve all performance budgets, negative controls and fail-closed evidence checks without DNS/security changes."
+  "note": "组合用户要求的macOS E2E兼容修复与生产演示凭据默认关闭：保留Linux子reaper及平台监督，补原生平台和默认关闭/随机凭据/打包归档排除回归；只纠正指定审批登记，不改真实账号或活动迁移，保留历史归档但不随镜像及源码包分发。总增量由合并树实测。"
 }
