@@ -358,8 +358,12 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
         path = output.get("file_path") or (output.get("data") or {}).get("file_path")
         assert path and Path(path).is_file(), output
         book = load_workbook(path, read_only=True)
-        assert "隔离测试产品" in str(list(book.active.values))
+        cells = [cell for row in book.active.values for cell in row]
+        text = {str(cell) for cell in cells}
         book.close()
+        assert "隔离测试产品" in text
+        assert 2 in cells or "2" in text
+        assert 500 in cells or "500" in text
     engine.dispose()
 
 
