@@ -738,6 +738,17 @@ def test_required_empty_array_is_present_and_a_missing_key_is_not():
     assert not ok and message == "LLM 输出 缺少字段：rows"
 
 
+def test_finance_reference_id_accepts_the_numeric_order_id():
+    params = {
+        "transaction_type": "receivable",
+        "amount": 200,
+        "reference_type": "sales_order",
+        "reference_id": 3,
+    }
+    result = validate_tool_call("finance", "create_transaction", params)
+    assert result.ok, result.message
+
+
 def test_email_contract_rejects_long_invalid_input_without_backtracking():
     started = perf_counter()
     assert _string_constraint_error("email", "x@" + "!" * 50_000, {"format": "email"})

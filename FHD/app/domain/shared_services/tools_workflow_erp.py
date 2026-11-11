@@ -488,7 +488,11 @@ def _registered_router_finance(
             ),
         )
     if action == "create_transaction":
-        return cast("dict[Any, Any]", svc.create_transaction(dict(params or {})))
+        payload = dict(params or {})
+        reference_id = payload.get("reference_id")
+        if isinstance(reference_id, int) and not isinstance(reference_id, bool):
+            payload["reference_id"] = str(reference_id)
+        return cast("dict[Any, Any]", svc.create_transaction(payload))
     if action == "update_transaction":
         transaction_id = int(params.get("transaction_id") or 0)
         payload = {k: v for k, v in params.items() if k != "transaction_id"}
