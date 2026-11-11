@@ -233,6 +233,27 @@ class InventoryMovementsMixin:
             }
         with _facade().get_db() as db, worker_write_guard(db):
             try:
+                if reference_type and reference_id not in (None, ""):
+                    posted = (
+                        db.query(_facade().InventoryTransaction)
+                        .filter(
+                            _facade().InventoryTransaction.product_id == resolved_product_id,
+                            _facade().InventoryTransaction.transaction_type == "out",
+                            _facade().InventoryTransaction.reference_type == str(reference_type),
+                            _facade().InventoryTransaction.reference_id == reference_id,
+                        )
+                        .first()
+                    )
+                    if posted is not None:
+                        return {
+                            "success": True,
+                            "message": "该业务单据已出库，未重复扣减",
+                            "data": {
+                                "already_posted": True,
+                                "ledger_id": posted.ledger_id,
+                                "quantity": quantity,
+                            },
+                        }
                 resolved_warehouse_id, problem, error_code = _stock_out_warehouse_id(
                     db, warehouse_id
                 )
