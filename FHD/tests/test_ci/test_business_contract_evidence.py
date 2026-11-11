@@ -41,8 +41,11 @@ def _passing_pair() -> str:
             if node_id in seen:
                 continue
             seen.add(node_id)
-            module, _, name = node_id.partition("::")
-            body += _case(module[:-3].replace("/", "."), name)
+            bits = node_id.split("::")
+            classname = bits[0][:-3].replace("/", ".")
+            if len(bits) > 2:
+                classname += "." + ".".join(bits[1:-1])
+            body += _case(classname, bits[-1])
     return body
 
 
@@ -95,12 +98,15 @@ def test_one_passing_child_does_not_complete_the_requirement():
 
 
 def test_floor_from_main_rejects_a_shrunk_required_set():
-    assert floor_errors(
-        {
-            "required_scenarios": list(MINIMUM_REQUIRED),
-            "required_tests": dict(REQUIRED_TESTS),
-        }
-    ) == []
+    assert (
+        floor_errors(
+            {
+                "required_scenarios": list(MINIMUM_REQUIRED),
+                "required_tests": dict(REQUIRED_TESTS),
+            }
+        )
+        == []
+    )
     errors = floor_errors(
         {
             "required_scenarios": ["R08-e23-readback", "not-in-this-change"],

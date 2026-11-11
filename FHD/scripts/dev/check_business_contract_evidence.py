@@ -182,11 +182,17 @@ def _case_status(case: ET.Element) -> tuple[str, str]:
 
 
 def case_nodeid(classname: str, name: str) -> str:
-    """Rebuild a pytest nodeid. The name must match exactly, including parameters."""
-    module = classname.replace(".", "/")
+    """Rebuild a pytest nodeid, including the class and parameters."""
+    parts = classname.split(".")
+    classes: list[str] = []
+    while parts and parts[-1][:1].isupper():
+        classes.append(parts.pop())
+    classes.reverse()
+    module = "/".join(parts)
     if not module.endswith(".py"):
         module += ".py"
-    return f"{module}::{name}"
+    body = "::".join(classes + [name]) if classes else name
+    return f"{module}::{body}"
 
 
 def required_node_ids(data: dict | None = None) -> dict[str, list[str]]:
