@@ -191,6 +191,15 @@ def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatc
         )
         assert denied["data"]["error_code"] == "employee_file_access_denied"
     assert target.read_text() == "private\nsecret\n"
+    for key in (
+        "template_path",
+        "template_relpath",
+        "output_path",
+        "output_relpath",
+        "workspace_root",
+    ):
+        denied = call("context", owner.context, **{key: str(target)})
+        assert denied["data"]["error_code"] == "employee_file_access_denied"
     for flag in (False, True):
         denied = call(
             "execute",
@@ -342,6 +351,10 @@ def test_employee_workflow_hands_off_the_declared_deliverable(
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     document = tmp_path / f"report.{suffix}"
     content = b"amount\n200\n" if suffix == "csv" else b"office fixture"
+    if suffix in {"pdf", "docx", "pptx"}:
+        from tests.test_application.test_pr3126_office_receipts import office_bytes
+
+        content = office_bytes(suffix)
     document.write_bytes(content)
     output = (
         {"output": "上游文本"}

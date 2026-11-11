@@ -47,6 +47,15 @@ def _run_file(file_path: str, context: dict[str, Any]) -> tuple[bytes, str] | No
             if file_path in {str(path), f"/api/agent/runs/{run_id}/artifacts/{artifact_id}"} or (
                 len(receipts) == 1 and isinstance(data, dict) and data.get("file_path") == file_path
             ):
+                if path.suffix in {".pdf", ".docx", ".pptx"}:
+                    actor = _bound_actor(context)
+                    metadata = receipt.get("metadata") or {}
+                    if (
+                        metadata.get("owner_user_id") != str(actor.id)
+                        or metadata.get("tenant_id") != str(tenant_id_for_write())
+                        or metadata.get("tenant_id") != str(context.get("tenant_id"))
+                    ):
+                        raise PermissionError("文件回执不属于当前账号与租户")
                 return read_verified_run_file(run_id, receipt), path.suffix
     return None
 

@@ -484,7 +484,21 @@ def _registered_router_employee(
                     continue
                 result["file_path"] = str(path)
                 if run_id and path.suffix.lower() in RUN_FILE_MIME_TYPES:
-                    artifacts.append(store_run_file(run_id, source.read(), name=path.name))
+                    if path.suffix.lower() in {".pdf", ".docx", ".pptx"}:
+                        from app.infrastructure.auth.agent_mod_scope import _bound_actor
+
+                        actor = _bound_actor(runtime_context)
+                        artifacts.append(
+                            store_run_file(
+                                run_id,
+                                source.read(),
+                                name=path.name,
+                                owner_user_id=actor.id,
+                                tenant_id=str(runtime_context.get("tenant_id") or ""),
+                            )
+                        )
+                    else:
+                        artifacts.append(store_run_file(run_id, source.read(), name=path.name))
     return {
         "success": ok,
         "message": "员工执行完成" if ok else str(result.get("error") or "员工执行失败"),

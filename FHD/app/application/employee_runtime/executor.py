@@ -476,7 +476,18 @@ def execute_employee_task_local(
         reader
         and context_only
         and not any(
-            key in (input_data or {}) for key in ("upload_id", "file_path", "path", "excel_path")
+            key in (input_data or {})
+            for key in (
+                "upload_id",
+                "file_path",
+                "path",
+                "excel_path",
+                "template_path",
+                "template_relpath",
+                "output_path",
+                "output_relpath",
+                "workspace_root",
+            )
         )
     ):
         from app.application.agent_orchestrator.tool_permission import actor_tool_denial
