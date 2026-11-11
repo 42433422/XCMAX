@@ -64,12 +64,15 @@ def test_removing_the_required_scenario_is_rejected():
 
 
 def test_floor_from_main_rejects_a_shrunk_required_set():
-    assert floor_errors(
-        {
-            "required_scenarios": list(MINIMUM_REQUIRED),
-            "required_tests": dict(REQUIRED_TESTS),
-        }
-    ) == []
+    assert (
+        floor_errors(
+            {
+                "required_scenarios": list(MINIMUM_REQUIRED),
+                "required_tests": dict(REQUIRED_TESTS),
+            }
+        )
+        == []
+    )
     errors = floor_errors(
         {
             "required_scenarios": ["R08-e23-readback", "not-in-this-change"],
