@@ -85,6 +85,7 @@ def _add_order(
     )
     db.add(order)
     db.flush()
+
     for it in items:
         item = SalesOrderItem(
             order_id=order.id,
@@ -487,3 +488,49 @@ class TestGroupByFailClosed:
         result = svc.get_sales_report(group_by="unknown")  # 默认 source=sales_order
         assert result["success"] is False
         assert "unknown" in result["message"]
+
+
+def test_sales_report_keeps_customer_and_confirmation_filters(report_env):
+    with report_env["test_db"]() as db:
+        for index, (amount, customer_id, name, state) in enumerate(
+            [
+                ("120", 1, "客户A", "confirmed"),
+                ("80", 1, "客户A", "confirmed"),
+                ("300", 1, "客户A", "quote"),
+                ("999", 2, "客户B", "confirmed"),
+            ],
+            1,
+        ):
+            order = SalesOrder(
+                order_no=f"FILTER-{index}",
+                customer_id=customer_id,
+                customer_name=name,
+                state=state,
+                status="quote",
+                total_amount=Decimal(amount),
+                created_at=datetime(2026, 11, 6),
+            )
+            db.add(order)
+            db.flush()
+            db.add(
+                SalesOrderItem(
+                    order_id=order.id,
+                    product_id=1,
+                    product_name="产品A",
+                    quantity=1,
+                    unit_price=Decimal(amount),
+                    amount=Decimal(amount),
+                )
+            )
+        db.flush()
+        result = ReportService().get_sales_report(customer_name="客户A", status="confirmed")
+        assert result["success"]
+        assert result["summary"]["total_amount"] == 200
+
+        from app.application.sales.quotes import SalesQuotes
+
+        orders = SalesQuotes(report_env["test_db"], lambda: "", Decimal).query(
+            customer_name="客户A", status="confirmed"
+        )
+        assert orders["total"] == 2
+        assert orders["summary"]["amount"] == result["summary"]["total_amount"]

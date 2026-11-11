@@ -178,7 +178,11 @@ describe('document capsule interaction boundaries', () => {
     expect(wrapper.findAll('.reviewed-template__select-candidate').every(el => (el.element as HTMLButtonElement).disabled)).toBe(true)
     await wrapper.findAll('.reviewed-template__preview--a4')[2].trigger('click'); await flushPromises()
     expect((document.querySelector('.template-preview-dialog footer button') as HTMLButtonElement).disabled).toBe(true)
-    expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+    expect(api.saveReviewedExcel).toHaveBeenCalledTimes(2)
+    const calls = api.saveReviewedExcel.mock.calls.map(call => call[0] as FormData)
+    expect(calls.filter(form => form.get('template_only') === 'true')).toHaveLength(1)
+    expect(calls[1].get('review_id')).toBe(calls[0].get('review_id'))
+    expect(calls[1].get('intake_run_id')).toBeTruthy()
   })
 
   it('keeps a refining document previewable but blocks selection until its new revision returns', async () => {

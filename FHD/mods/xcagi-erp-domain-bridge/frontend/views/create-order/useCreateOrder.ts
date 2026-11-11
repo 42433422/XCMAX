@@ -51,6 +51,7 @@ interface ShipmentResult {
   success: boolean
   doc_name?: string
   message?: string
+  duplicate?: boolean
 }
 
 declare global {
@@ -351,7 +352,7 @@ export function useCreateOrder() {
         }))
       })
       if (data.success) {
-        showStatus('发货单生成成功！', 'success')
+        showStatus(data.duplicate ? (data.message || '该订单编号已有发货单，未重复生成') : '发货单生成成功！', 'success')
         result.value = data
       } else {
         showStatus('生成失败: ' + data.message, 'error')

@@ -82,6 +82,7 @@
           :selected-ids="selectedIds"
           :has-more="hasMore"
           row-key="id"
+          :highlight-id="focusId"
           :empty-text="`暂无${entityName}数据`"
           @update:selected-ids="selectedIds = $event"
           @load-more="loadMoreCustomers"
@@ -209,7 +210,7 @@ import { useCustomers } from './customers/useCustomers'
 
 const {
   pageNavTitle, entityName, productsNavLabel, shipmentNavLabel,
-  customers, purchaseUnitOptions, selectedPurchaseUnit, loading, loadError, retryLoadCustomers, selectedIds,
+  customers, focusId, purchaseUnitOptions, selectedPurchaseUnit, loading, loadError, retryLoadCustomers, selectedIds,
   totalCustomers, hasMore, importFileInput,
   showEditModal, showDeleteConfirm, showBatchDeleteConfirm, showAddModal,
   addForm, itemToDelete, templateOptions, selectedTemplateId, loadingTemplateOptions,

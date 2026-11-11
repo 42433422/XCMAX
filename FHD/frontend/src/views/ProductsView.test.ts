@@ -40,4 +40,22 @@ describe('ProductsView.vue', () => {
     })
     expect(wrapper.find('#view-products').exists()).toBe(true)
   })
+
+  it('reads the top-search model and focuses that product row', async () => {
+    const router = makeRouter()
+    await router.push({ path: '/products', query: { keyword: 'A001', focus: '7' } })
+    await router.isReady()
+    const wrapper = mount(ProductsView, {
+      global: {
+        plugins: [router],
+        stubs: {
+          DataTable: { props: ['highlightId'], template: '<div class="stub-table">{{ highlightId }}</div>' },
+          RouterLink: true,
+        },
+      },
+    })
+    const search = wrapper.findAll('input').find((node) => (node.attributes('placeholder') || '').includes('型号'))
+    expect((search?.element as HTMLInputElement).value).toBe('A001')
+    expect(wrapper.find('.stub-table').text()).toBe('7')
+  })
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { readPlannerSseResponse, isChatStreamEnabled, resolveChatStreamPath } from './chatSseStream'
+import { readPlannerSseResponse, isChatStreamEnabled, isWorkflowControlMessage, resolveChatStreamPath } from './chatSseStream'
 import { resolvePlannerChatStreamPath } from './plannerChatPaths'
 
 function mockSseResponse(chunks: string[]): Response {
@@ -30,6 +30,12 @@ describe('chatSseStream', () => {
 
   it('readPlannerSseResponse throws when body missing', async () => {
     await expect(readPlannerSseResponse(new Response(null), () => {})).rejects.toThrow(/不可读/)
+  })
+
+  it('treats plan confirmation and cancellation as workflow controls', () => {
+    expect(isWorkflowControlMessage(' 确认！ ')).toBe(true)
+    expect(isWorkflowControlMessage('取消')).toBe(true)
+    expect(isWorkflowControlMessage('重建索引')).toBe(false)
   })
 
   it('isChatStreamEnabled respects VITE_CHAT_STREAM off', () => {

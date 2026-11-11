@@ -13,6 +13,7 @@ import io
 import json
 import logging
 import threading
+import time
 from contextvars import copy_context
 from datetime import UTC, datetime
 from io import BytesIO
@@ -24,10 +25,12 @@ from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.application.elt import auto_ingest_liveness as liveness
+from app.application.elt import receipt_poll_budget
 from app.application.elt.errors import EltError
 from app.application.elt.knowledge_index_meta import (
     business_completion_from_run,
     enrich_knowledge_progress,
+    is_partial_business_receipt,
 )
 from app.application.elt.target_detection import detect_etl_target
 from app.application.shipment_excel_etl_security import (
@@ -98,12 +101,33 @@ def _progress(
     return out
 
 
-def _patch_batch(tenant_id: int | str, batch_id: str, **fields: Any) -> dict[str, Any] | None:
+def _patch_batch(
+    tenant_id: int | str,
+    batch_id: str,
+    *,
+    expected_running: dict[str, Any] | None = None,
+    terminal_failure: bool = False,
+    **fields: Any,
+) -> dict[str, Any] | None:
     with _LOCK:
         ledger = _load_ledger(tenant_id)
         batch = (ledger.get("batches") or {}).get(batch_id)
         if not isinstance(batch, dict):
             return None
+        if expected_running is not None:
+            if any(
+                batch.get(key) != expected_running.get(key)
+                for key in ("batch_id", "tenant_id", "owner_user_id", "mod_id")
+            ):
+                raise EltError(
+                    "ETL_AUTO_INGEST_SCOPE_CHANGED", "批次身份已变化，停止归并回执", status_code=409
+                )
+            status = batch.get("status")
+            # A progress read can mark a still-previewing run awaiting confirmation
+            # before execute() records its refusal. That reader transition may take
+            # the owning worker's failure. Withdrawal and rejection stay closed.
+            if status != "running" and not (terminal_failure and status == "awaiting_confirmation"):
+                return dict(batch)
         batch.update(fields)
         batch["updated_at"] = _utcnow()
         ledger.setdefault("batches", {})[batch_id] = batch
@@ -619,12 +643,22 @@ class AutoIngestService:
                 )
             elif business.get("pending_execution"):
                 biz_prog = _progress("executing", 80, message="业务写入处理中，请等待实际回执")
+            elif business.get("status") == "partial":
+                biz_prog = _progress("partial", 100, message="部分业务行已写入，请核对未写入部分")
+            elif business.get("status") == "completed":
+                _, biz_prog = business_completion_from_run(business, _progress)
             else:
                 biz_prog = _progress("done", 100, message="业务域已写入")
+            completion_status = (
+                business_completion_from_run(business, _progress)[0]
+                if business.get("status") == "completed"
+                else "applied"
+            )
             coverage = _batch_coverage(kb_receipt, business, detection)
             final = _patch_batch(
                 tenant_id,
                 batch_id,
+                expected_running=batch,
                 status=(
                     "running"
                     if business.get("pending_execution")
@@ -632,8 +666,10 @@ class AutoIngestService:
                     if business.get("pending_preview")
                     else "failed"
                     if business.get("failed")
-                    else "applied"
-                    if coverage["complete"]
+                    else "partial"
+                    if business.get("status") == "partial"
+                    else completion_status
+                    if coverage["complete"] or completion_status == "completed_empty"
                     else "partial"
                 ),
                 coverage=coverage,
@@ -659,6 +695,8 @@ class AutoIngestService:
             _patch_batch(
                 tenant_id,
                 batch_id,
+                expected_running=batch,
+                terminal_failure=True,
                 status="failed",
                 kb_progress=kb_progress,
                 business_progress=_progress(
@@ -794,7 +832,13 @@ class AutoIngestService:
                 raise EltError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
             batch = self._refresh_business(dict(batch))
             status = str(batch.get("status") or "")
-            if status in {"running", "applied", "partial", "awaiting_confirmation"}:
+            if status in {
+                "running",
+                "applied",
+                "partial",
+                "completed_empty",
+                "awaiting_confirmation",
+            }:
                 return {
                     "success": True,
                     "batch_id": batch_id,
@@ -821,7 +865,13 @@ class AutoIngestService:
                         "ETL_AUTO_INGEST_FORBIDDEN", "批次身份已变化，未执行", status_code=403
                     )
                 status = str(batch.get("status") or "")
-                if status in {"running", "applied", "partial", "awaiting_confirmation"}:
+                if status in {
+                    "running",
+                    "applied",
+                    "partial",
+                    "completed_empty",
+                    "awaiting_confirmation",
+                }:
                     return {
                         "success": True,
                         "batch_id": batch_id,
@@ -941,7 +991,7 @@ class AutoIngestService:
                 ledger = _load_ledger(batch["tenant_id"])
                 latest = ledger.get("batches", {}).get(batch["batch_id"])
                 if latest != batch:
-                    return dict(latest) if isinstance(latest, dict) else batch
+                    return batch
                 batch.update(
                     status="failed",
                     updated_at=_utcnow(),
@@ -977,6 +1027,15 @@ class AutoIngestService:
             status = str(run.get("status") or "")
             if status == "completed":
                 batch_status, progress = business_completion_from_run(run, _progress)
+            elif status == "partial":
+                batch_status, progress = (
+                    "partial",
+                    _progress(
+                        "partial",
+                        int(run.get("progress") or 100),
+                        message="部分业务行已写入，请核对未写入部分",
+                    ),
+                )
             elif status in {"failed", "interrupted", "outcome_unknown"}:
                 batch_status, progress = (
                     "failed",
@@ -986,6 +1045,20 @@ class AutoIngestService:
                         message="业务写入失败或结果待核对；请核对已写入部分，勿重复提交",
                     ),
                 )
+            elif status == "preview_ready" and (
+                batch.get("error") or batch.get("status") == "failed"
+            ):
+                # A refused write rolls the run back to preview. Keep the failure
+                # closed so a later read does not invite a second submission.
+                batch_status, progress = (
+                    "failed",
+                    _progress(
+                        "failed",
+                        0,
+                        message="业务写入未完成，请核对已写入部分，勿重复提交",
+                        error=str(batch.get("error") or "") or None,
+                    ),
+                )
             elif status == "preview_ready":
                 batch_status, progress = (
                     "awaiting_confirmation",
@@ -993,7 +1066,7 @@ class AutoIngestService:
                         "pending", 70, message="业务预演待确认；请在当前导入里核对所选模板后再入库"
                     ),
                 )
-            else:
+            elif status in {"queued", "executing"}:
                 batch_status, progress = (
                     "running",
                     _progress(
@@ -1002,12 +1075,22 @@ class AutoIngestService:
                         message="业务处理仍在进行，请等待实际回执",
                     ),
                 )
+            else:
+                batch_status, progress = (
+                    "failed",
+                    _progress("outcome_unknown", 0, message="业务回执状态异常，请核对，勿重复提交"),
+                )
             with _LOCK:
                 ledger = _load_ledger(batch["tenant_id"])
                 latest = (ledger.get("batches") or {}).get(batch["batch_id"])
+                if not isinstance(latest, dict) or any(
+                    latest.get(key) != batch.get(key)
+                    for key in ("batch_id", "tenant_id", "owner_user_id", "mod_id")
+                ):
+                    # Never return or mutate a row belonging to a changed scope.
+                    return batch
                 if (
-                    not isinstance(latest, dict)
-                    or latest.get("status") == "withdrawn"
+                    latest.get("status") == "withdrawn"
                     or latest.get("status") != batch.get("status")
                     or latest.get("business") != batch.get("business")
                 ):
@@ -1120,15 +1203,17 @@ class AutoIngestService:
                 )
             if batch.get("status") == "withdrawn":
                 return batch
-            if batch.get("status") not in {"applied", "partial"}:
+            if batch.get("status") not in {"applied", "partial", "completed_empty"}:
                 raise EltError(
                     "ETL_AUTO_INGEST_BAD_STATE",
                     f"当前状态不可撤回：{batch.get('status')}",
                     status_code=400,
                 )
 
-        kb_rollback = self._withdraw_knowledge(batch)
+        # Verify/undo business first: a missing or empty receipt must not leave
+        # knowledge deleted when the business rollback refuses the operation.
         biz_rollback = self._withdraw_business(db, batch=batch, owner_user_id=owner_user_id)
+        kb_rollback = self._withdraw_knowledge(batch)
 
         with _LOCK:
             ledger = _load_ledger(tenant_id)
@@ -1285,10 +1370,11 @@ class AutoIngestService:
             except RECOVERABLE_ERRORS:
                 logger.debug("auto-ingest progress_cb failed", exc_info=True)
 
-        # Knowledge-only targets: KB path already covered.
-        if target_type == "knowledge":
+        # Confirmed preview target wins over a detector label such as abnormal.
+        confirmed = str((prepared_plan or {}).get("target_type") or target_type)
+        if confirmed == "knowledge":
             _notify("skipped", 100, "knowledge_only_target")
-            return {"skipped": True, "reason": "knowledge_only_target", "target_type": target_type}
+            return {"skipped": True, "reason": "knowledge_only_target", "target_type": confirmed}
 
         service = get_elt_service()
         if prepared_plan:
@@ -1296,7 +1382,7 @@ class AutoIngestService:
             upload_id = str(prepared_plan["upload_id"])
             current = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
             if (
-                current.get("target_type") != target_type
+                current.get("target_type") != confirmed
                 or current.get("preview_revision") != prepared_plan["preview_revision"]
             ):
                 raise EltError(
@@ -1318,7 +1404,7 @@ class AutoIngestService:
             business={
                 "run_id": run_id,
                 "upload_id": upload_id,
-                "target_type": target_type,
+                "target_type": confirmed,
                 "status": "executing",
             },
         )
@@ -1330,17 +1416,44 @@ class AutoIngestService:
             valid_rows_only=bool(prepared_plan.get("valid_rows_only")) if prepared_plan else True,
             preview_revision=str(preview_revision or ""),
         )
+        # execute commits the write claim before returning its read-only receipt.
+        # Release that read transaction before waiting for the worker.
+        db.rollback()
+        with receipt_poll_budget.admit(tenant_id_for_write()) as admitted:
+            deadline = time.monotonic() + max(0.0, float(poll_seconds))
+            delay = 0.25
+            while (
+                admitted
+                and isinstance(executed, dict)
+                and str(executed.get("status") or "") in {"queued", "executing"}
+                and time.monotonic() < deadline
+            ):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                time.sleep(min(delay, remaining))
+                delay = min(delay * 2, 2.0)
+                try:
+                    executed = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
+                finally:
+                    # Includes terminal receipts and failed/cancelled reads. A failed
+                    # release must stop this poll, not sleep with a checked-out connection.
+                    db.rollback()
         return {
-            "target_type": target_type,
+            "target_type": confirmed,
             "upload_id": upload_id,
             "run_id": run_id,
             "preview_revision": preview_revision,
             "summary": executed.get("summary") if isinstance(executed, dict) else None,
+            "executed_rows": executed.get("executed_rows") if isinstance(executed, dict) else None,
+            "new_rows": executed.get("new_rows") if isinstance(executed, dict) else None,
+            "update_rows": executed.get("update_rows") if isinstance(executed, dict) else None,
+            "receipt": executed.get("receipt") if isinstance(executed, dict) else None,
             "status": executed.get("status") if isinstance(executed, dict) else None,
             "pending_execution": isinstance(executed, dict)
             and executed.get("status") in {"queued", "executing"},
             "failed": not isinstance(executed, dict)
-            or executed.get("status") in {"failed", "interrupted", "outcome_unknown"},
+            or executed.get("status") not in {"completed", "partial", "queued", "executing"},
         }
 
     def _withdraw_business(
@@ -1351,8 +1464,101 @@ class AutoIngestService:
         business = batch.get("business") or {}
         run_id = str(business.get("run_id") or "")
         if not run_id or business.get("skipped"):
-            return {"skipped": True, "reason": "no_business_run"}
-        rolled = get_elt_service().rollback(db, run_id=run_id, owner_user_id=owner_user_id)
+            if (
+                not run_id
+                and business.get("skipped") is True
+                and business.get("reason") == "knowledge_only_target"
+                and business.get("target_type") == "knowledge"
+            ):
+                return {"skipped": True, "reason": "no_business_run"}
+            raise EltError(
+                "ELT_EMPTY_RECEIPT_UNVERIFIED", "缺少可核实的业务回执，未撤回", status_code=409
+            )
+        service = get_elt_service()
+        current = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
+        summary = current.get("summary")
+        receipt = current.get("receipt")
+        rows_written = receipt.get("rows_written", 0) if isinstance(receipt, dict) else None
+        # The worker stores bool(rows_written). False is a zero-write receipt;
+        # an integer zero remains valid. True is not an integer zero.
+        zero_rows = rows_written is False or (type(rows_written) is int and rows_written == 0)
+        rollback = receipt.get("rollback") if isinstance(receipt, dict) else None
+        rollback_done = False
+        if current.get("rollback_status") == "completed" and isinstance(rollback, dict):
+            at = rollback.get("at")
+            try:
+                valid_at = isinstance(at, str) and datetime.fromisoformat(at).tzinfo is not None
+            except ValueError:
+                valid_at = False
+            rollback_done = (
+                rollback.get("status") == "completed"
+                and type(rollback.get("rows")) is int
+                and rollback["rows"] > 0
+                and valid_at
+            )
+        # A failed transactional rollback is resumable: the service fences the
+        # new owner and skips committed rolled_back rows. Never infer completion
+        # from this state, or treat it as a zero-write/knowledge-only withdrawal.
+        rollback_retry = (
+            current.get("rollback_status") == "failed"
+            and current.get("reversible") is True
+            and rollback is None
+            and isinstance(summary, dict)
+            and type(summary.get("executed")) is int
+            and summary["executed"] > 0
+            and not zero_rows
+        )
+        if (
+            current.get("id") != run_id
+            or (
+                current.get("status") not in {"completed", "failed", "interrupted"}
+                and not is_partial_business_receipt(current)
+            )
+            or (
+                current.get("rollback_status") is not None
+                and not rollback_done
+                and not rollback_retry
+            )
+            or not isinstance(summary, dict)
+            or not all(
+                type(summary.get(key)) is int and summary[key] >= 0
+                for key in ("executed", "new", "update")
+            )
+            or not isinstance(receipt, dict)
+            or not (
+                zero_rows
+                or rows_written is True
+                or (type(rows_written) is int and rows_written > 0)
+            )
+        ):
+            raise EltError(
+                "ELT_EMPTY_RECEIPT_UNVERIFIED",
+                "业务回执不足或撤回状态异常，未撤回",
+                status_code=409,
+            )
+        if rollback_done:
+            if all(summary[key] == 0 for key in ("executed", "new", "update")) and zero_rows:
+                raise EltError(
+                    "ELT_EMPTY_RECEIPT_UNVERIFIED",
+                    "撤回回执与写入计数矛盾，未撤回",
+                    status_code=409,
+                )
+            return {
+                "rolled_back": True,
+                "already_rolled_back": True,
+                "run_id": run_id,
+                "status": current["status"],
+                "rollback_status": "completed",
+            }
+        if all(summary[key] == 0 for key in ("executed", "new", "update")) and zero_rows:
+            if current.get("status") != "completed":
+                raise EltError(
+                    "ELT_EMPTY_RECEIPT_UNVERIFIED",
+                    "业务未完成，不能确认零写入，未撤回",
+                    status_code=409,
+                )
+            return {"skipped": True, "reason": "no_business_writes", "run_id": run_id}
+        rolled = service.rollback(db, run_id=run_id, owner_user_id=owner_user_id)
         return {
             "rolled_back": True,
             "run_id": run_id,

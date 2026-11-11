@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { customersApi } from './customers'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { useCustomers } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/customers/useCustomers'
 
 vi.mock('./core', () => ({
@@ -52,6 +53,26 @@ describe('customersApi', () => {
     await flushPromises()
     expect(wrapper.find('p').text()).toBe('WIN-READBACK 验收员 13800000001 隔离地址')
     expect(wrapper.find('span').text()).toBe('1')
+    wrapper.unmount()
+  })
+
+  it('loads the customer from the top-search query and keeps its focus id', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/customers', component: { template: '<div />' } }],
+    })
+    await router.push({ path: '/customers', query: { keyword: '华星', focus: '3' } })
+    await router.isReady()
+    const { api } = await import('./core')
+    vi.mocked(api.get).mockResolvedValue({ success: true, data: [{ id: 3, customer_name: '华星' }], total: 1 })
+    const wrapper = mount(defineComponent({
+      setup: useCustomers,
+      template: '<div><span class="focus">{{ focusId }}</span><p v-for="row in customers" :key="row.id">{{ row.customer_name }}</p></div>',
+    }), { global: { plugins: [router] } })
+    await flushPromises()
+    expect(wrapper.find('.focus').text()).toBe('3')
+    expect(wrapper.text()).toContain('华星')
+    expect(vi.mocked(api.get).mock.calls.some((call) => call[1]?.keyword === '华星')).toBe(true)
     wrapper.unmount()
   })
 

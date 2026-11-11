@@ -132,20 +132,25 @@ describe('archive selection through the actual kept-alive docking route', () => 
     expect(archive.reviewExcel).toHaveBeenCalledTimes(1)
     const resetInput = vi.spyOn(input.element, 'value', 'set')
     const nextFiles = await choose([...names])
+    const keptNames = [...new Set(['production.xlsx', ...names])]
     expect(resetInput).toHaveBeenCalledWith('')
     expect(archive.archiveClassifyExcel).toHaveBeenCalledTimes(1 + names.length)
     expect(archive.analyzeClassification).toHaveBeenCalledTimes(1 + names.length)
-    expect(archive.reviewExcel).toHaveBeenCalledTimes(1 + names.length)
+    expect(archive.reviewExcel).toHaveBeenCalledTimes(keptNames.length)
     expect(archive.confirmClassification).not.toHaveBeenCalled()
+    const seenNames = new Set(['production.xlsx'])
     for (const [index, source] of nextFiles.entries()) {
       const archiveForm = archive.archiveClassifyExcel.mock.calls[index + 1][0] as FormData
-      const reviewForm = archive.reviewExcel.mock.calls[index + 1][0] as FormData
       expect(archiveForm.get('file')).toBe(source)
-      expect(reviewForm.get('file')).toBe(source)
-      expect([reviewForm.get('classification_id'), reviewForm.get('classification_version'), reviewForm.get('auto_slice_index')]).toEqual([`classification:${source.name}`, 'model-v2', '0'])
       const analysisForm = archive.analyzeClassification.mock.calls[index + 1][1] as FormData
       expect(archive.analyzeClassification.mock.calls[index + 1][0]).toBe(`classification:${source.name}`)
       expect(analysisForm.get('version')).toBe('v1')
+      const reviewCall = archive.reviewExcel.mock.calls.find((call) => (call[0] as FormData).get('classification_id') === `classification:${source.name}`)
+      expect(reviewCall).toBeTruthy()
+      const reviewForm = reviewCall![0] as FormData
+      if (!seenNames.has(source.name)) expect(reviewForm.get('file')).toBe(source)
+      seenNames.add(source.name)
+      expect([reviewForm.get('classification_id'), reviewForm.get('classification_version'), reviewForm.get('auto_slice_index')]).toEqual([`classification:${source.name}`, 'model-v2', '0'])
       for (const request of [analysisForm, reviewForm]) for (const key of ['use_login_notice', 'model_opt_in', 'consent', 'sample_authorized', 'own_file_authorized', 'continue_authorized', 'retry_authorized']) expect(request.has(key)).toBe(false)
     }
     expect(archive.reviewedExcelIdentity).not.toHaveBeenCalled()
@@ -155,10 +160,12 @@ describe('archive selection through the actual kept-alive docking route', () => 
     expect(wrapper.findAll('.classification-region')).toHaveLength(0)
     expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
     const documents = wrapper.findAll('[data-document-key]')
-    expect(documents).toHaveLength(names.length)
+    expect(documents).toHaveLength(keptNames.length)
     expect(wrapper.find('[role=dialog]').exists()).toBe(false)
-    for (const [index, name] of names.entries()) {
-      await documents[index].trigger('click'); await flushPromises()
+    for (const name of keptNames) {
+      const capsule = documents.find((item) => item.attributes('aria-label')?.startsWith(name.replace(/\.xlsx$/, '')))
+      expect(capsule).toBeTruthy()
+      await capsule!.trigger('click'); await flushPromises()
       expect(wrapper.get('[role=dialog]').attributes('aria-label')).toBe(name.replace(/\.xlsx$/, ''))
       expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(4)
       expect(wrapper.get('.reviewed-document-picker__original').text()).toContain(`原件 ${name}`)
@@ -166,9 +173,9 @@ describe('archive selection through the actual kept-alive docking route', () => 
       expect(wrapper.findAll('.reviewed-template__select-candidate')).toHaveLength(3)
       await wrapper.get('[aria-label="关闭可选模板"]').trigger('click'); await flushPromises()
     }
-    expect(archive.reviewExcel).toHaveBeenCalledTimes(1 + names.length)
+    expect(archive.reviewExcel).toHaveBeenCalledTimes(keptNames.length)
     expect(archive.previewReviewedIntake).not.toHaveBeenCalled()
-    for (const name of names) expect(wrapper.text()).toContain(name)
+    for (const name of keptNames) expect(wrapper.text()).toContain(name)
     expect(wrapper.find('.etl-dropzone').exists()).toBe(false)
     expect(legacy.upload).not.toHaveBeenCalled(); expect(legacy.preview).not.toHaveBeenCalled(); expect(legacy.execute).not.toHaveBeenCalled()
   })

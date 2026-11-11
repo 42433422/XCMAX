@@ -18,6 +18,7 @@ from app.application.agent_orchestrator.approval_grant import (
     issue_approval_grant,
     validate_approval_grant,
 )
+from app.application.agent_orchestrator.artifact_files import artifact_path
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_permission import (
@@ -902,7 +903,9 @@ def test_real_effects_match_database_file_and_failure_status(
         runtime_context=_ctx(actor, task_id="export", workspace_root=str(tmp_path)),
     )
     assert finished.status == "completed" and finished.tool_calls[0].output["success"] is True
-    written = tmp_path / "customers.csv"
+    output = finished.tool_calls[0].output
+    receipt = output["artifacts"][0]
+    written = artifact_path(finished.run_id, receipt["artifact_id"])
     assert written.is_file()
     assert "ROW00" in written.read_text(encoding="utf-8")
     reread = _execute(
@@ -910,10 +913,12 @@ def test_real_effects_match_database_file_and_failure_status(
             node_id="reread",
             tool_id="excel_analysis",
             action="read",
-            params={"file_path": "customers.csv"},
+            params={"file_path": output["data"]["file_path"]},
         ),
         actor,
         task_id="reread",
+        run_id=finished.run_id,
+        node_outputs={"export": output},
         workspace_root=str(tmp_path),
     )
     assert reread["success"] is True

@@ -81,7 +81,7 @@ def _single(rows: list[Any], path: str) -> Any:
     raise UnresolvedReference(f"{{{{{path}}}}} 引用的前序结果有 {len(rows)} 条，无法确定是哪一条")
 
 
-def _lookup(outputs: dict[str, Any], path: str) -> Any:
+def _lookup(outputs: dict[str, Any], path: str, expected_type: str = "") -> Any:
     tokens = _tokens(path.strip())
     head = tokens[0] if tokens else ""
     if not isinstance(head, str) or head not in outputs:
@@ -108,6 +108,12 @@ def _lookup(outputs: dict[str, Any], path: str) -> Any:
                 raise UnresolvedReference(f"{{{{{path}}}}} 在前序结果中找不到字段 {token}")
         else:
             raise UnresolvedReference(f"{{{{{path}}}}} 在前序结果中找不到字段 {token}")
+    if (expected_type == "array" and isinstance(current, list)) or (
+        expected_type == "object" and isinstance(current, dict)
+    ):
+        from copy import deepcopy
+
+        return deepcopy(current)
     if isinstance(current, list):
         current = _single(current, path)
     if current is None or current == "" or isinstance(current, (dict, list)):
@@ -115,18 +121,24 @@ def _lookup(outputs: dict[str, Any], path: str) -> Any:
     return current
 
 
-def resolve_references(value: Any, outputs: dict[str, Any], problems: list[str]) -> Any:
+def resolve_references(
+    value: Any, outputs: dict[str, Any], problems: list[str], schema: dict[str, Any] | None = None
+) -> Any:
     """Return ``value`` with references substituted; unresolved ones go to ``problems``."""
+    schema = schema or {}
     if isinstance(value, dict):
-        return {k: resolve_references(v, outputs, problems) for k, v in value.items()}
+        properties = schema.get("properties") or {}
+        return {
+            k: resolve_references(v, outputs, problems, properties.get(k)) for k, v in value.items()
+        }
     if isinstance(value, list):
-        return [resolve_references(v, outputs, problems) for v in value]
+        return [resolve_references(v, outputs, problems, schema.get("items")) for v in value]
     if not isinstance(value, str) or "{{" not in value:
         return value
     full = _FULL.match(value)
     try:
         if full:
-            return _lookup(outputs, full.group(1))
+            return _lookup(outputs, full.group(1), str(schema.get("type") or ""))
         return _EMBEDDED.sub(lambda m: str(_lookup(outputs, m.group(1))), value)
     except UnresolvedReference as exc:
         problems.append(str(exc))
@@ -164,7 +176,12 @@ def refuse_unresolved_step(run: Any, step: Any, node_outputs: dict[str, Any]) ->
     cover the concrete values rather than the template text.
     """
     problems: list[str] = []
-    resolved = resolve_references(dict(step.params or {}), node_outputs, problems)
+    from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
+
+    spec = build_tool_specs_v2().get((step.tool_id, step.action))
+    resolved = resolve_references(
+        dict(step.params or {}), node_outputs, problems, spec.input_schema if spec else None
+    )
     if not problems:
         problems = [f"无法识别的占位符 {p[:80]}" for p in unresolved_placeholders(resolved)]
     if not problems:

@@ -236,9 +236,14 @@ class GroupRoutes:
                     format_mobile_response(None, "未授权", success=False, code=401), status_code=401
                 )
             try:
+                from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
+                runtime_context = request_runtime_context(request)
+                if str(runtime_context.get("user_id")) != str(uid):
+                    raise ValueError("group actor mismatch")
                 branch_context = _mobile_branch_context_from_body(body)
                 result = await ports.ai_group_service(
-                    mode=ports.mobile_group_mode(request)
+                    mode=ports.mobile_group_mode(request), runtime_context=runtime_context
                 ).post_message(
                     user_id=uid,
                     group_id=group_id,

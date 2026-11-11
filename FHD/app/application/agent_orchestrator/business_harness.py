@@ -41,6 +41,7 @@ _FACT_KEYS = (
     "deleted",
     "count",
     "total",
+    "row_count",
 )
 
 
@@ -218,6 +219,10 @@ def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
 def _result_facts(payloads: list[dict[str, Any]]) -> dict[str, Any]:
     facts: dict[str, Any] = {}
     for payload in payloads:
+        numeric = payload.get("numeric_summary")
+        amount = numeric.get("total_amount") if isinstance(numeric, dict) else None
+        if isinstance(amount, dict) and isinstance(amount.get("sum"), (int, float)):
+            facts["amount_total"] = amount["sum"]
         raw_nested = payload.get("data")
         nested: dict[str, Any] = raw_nested if isinstance(raw_nested, dict) else {}
         for source in (payload, nested):

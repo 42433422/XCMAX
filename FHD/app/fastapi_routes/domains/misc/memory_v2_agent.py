@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.application.workflow.workflow_types import normalize_workflow_risk
@@ -32,13 +32,22 @@ def agent_output(run: Any, node_id: str) -> dict[str, Any]:
 
 
 def user_id_from_request(request: Request, params: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or params.get("user_id")
-        or params.get("userId")
-        or "default"
-    ).strip()
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+
+    user = get_logged_in_user(request)
+    owner = str(user.id)
+    aliases = {owner}
+    # A numeric legacy username may be another account's canonical id.
+    if not str(user.username).isdecimal():
+        aliases.add(str(user.username))
+    claims = [
+        str(value).strip()
+        for value in (request.headers.get("X-User-Id"), params.get("user_id"), params.get("userId"))
+        if value is not None and str(value).strip() not in {"", "default"}
+    ]
+    if any(value not in aliases for value in claims):
+        raise HTTPException(status_code=403, detail="只能访问当前账户的记忆")
+    return claims[0] if claims else owner
 
 
 def run_memory_v2_agent(
@@ -56,7 +65,7 @@ def run_memory_v2_agent(
 
     data = dict(params or {})
     user_id = user_id_from_request(request, data)
-    data.setdefault("user_id", user_id)
+    data["user_id"] = user_id
     action_meta = get_memory_v2_action_meta(action)
     if action_meta is None:
         return JSONResponse(
@@ -89,16 +98,20 @@ def run_memory_v2_agent(
         risk_level=risk,
         metadata={"source": "memory_v2_route", "route": route_path},
     )
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+
+    principal = require_agent_principal(request)
     runtime_context = {
+        **authenticated_runtime_context({}, principal),
         "source": "memory_v2_route",
         "route": route_path,
         "request_path": str(request.url.path),
-        "user_id": user_id,
         "route_confirmed": True,
     }
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
-        user_id=user_id,
+        user_id=principal.user_id,
         message=str(data.get("message") or f"Memory v2 {action}"),
         plan=plan,
         runtime_context=runtime_context,

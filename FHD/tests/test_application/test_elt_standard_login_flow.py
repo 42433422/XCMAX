@@ -182,10 +182,7 @@ def standard_login(tmp_path, monkeypatch):
     monkeypatch.setattr(
         httpx,
         "AsyncClient",
-        lambda **kwargs: client_type(
-            transport=httpx.MockTransport(remote),
-            **kwargs,
-        ),
+        lambda **kwargs: client_type(**{**kwargs, "transport": httpx.MockTransport(remote)}),
     )
     app = FastAPI()
     app.include_router(auth_router)

@@ -533,7 +533,11 @@ def test_offline_stream_and_json_share_verified_receipt_without_model_or_writes(
         for line in raw.decode("utf-8").splitlines()
         if line.startswith("data: ")
     ]
-    assert [event["type"] for event in events] == ["token", "done"]
+    assert events[0]["type"] == "tool_progress" and events[0]["phase"] == "running"
+    assert [event["type"] for event in events if event["type"] != "tool_progress"] == [
+        "token",
+        "done",
+    ]
     result = events[-1]["result"]
     assert result["business_receipt"]["verified"] is True
     assert result.get("run_id")

@@ -15,14 +15,14 @@ logger = logging.getLogger(__name__)
 _DATASET_QUERY_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chat-knowledge")
 _PREPARED_EVIDENCE = object()
 _KNOWLEDGE_QUERY = re.compile(
-    r"(?:查(?:一下|下|询|看)?|搜索|找一下|有哪些|是什么|多少|谁是|介绍一下|说明一下|"
+    r"(?:查(?:一下|下|询|看)?|搜索|找一下|告诉我|请问|有哪些|是什么|多少|谁是|介绍一下|说明一下|"
     r"怎么(?:办|用|做|使用|操作)|如何(?:使用|操作)|使用指南|操作手册|为什么|是否|有没有|能不能|可以吗|产品|客户|订单|账单|库存|"
     r"报价|合同|业务文档|知识库).{0,40}(?:[？?]|$|产品|客户|订单|账单|库存|报价|合同|文档|知识|"
     r"有哪些|是什么|多少|怎么|如何)|(?:[？?]|有哪些|是什么|多少|谁是|有没有)"
     r"|(?:知识库|知识网络|业务文档|操作手册|使用说明|使用指南|制度|政策|规范|流程).{0,40}(?:怎么|如何|什么|哪些|步骤|流程|使用|说明|查询|$)"
 )
 _WRITE_REQUEST = re.compile(r"(?:删除|修改|新增|保存|导入|入库|出库|发货|下单|开单|审批|执行|创建)")
-_CONVERSATION_FOLLOWUP = re.compile(r"(?:刚才|之前|上次|上面|你记得|记不记得|我叫|我的名字|偏好)")
+_CONVERSATION_FOLLOWUP = re.compile(r"(?:刚才|之前|上次|上面|你记得|记不记得)")
 _CUSTOMER_LOOKUP = re.compile(
     r"(?:查一下|查下|查询|查看|查)\s*([\u4e00-\u9fffA-Za-z0-9]{2,8}?)(?:那个|这个|的)(?:账单|订单|单据|产品)"
 )
@@ -70,6 +70,7 @@ def prepare_chat_evidence(
 
     result = dict(context)
     result.pop("chat_knowledge_evidence", None)
+    result.pop("chat_customer_evidence", None)
     result.pop("chat_memory_evidence", None)
     result.pop("_chat_memory_evidence_authorized", None)
     result.pop("recent_messages", None)
@@ -169,6 +170,35 @@ def prepare_chat_evidence(
             return result
         result["_chat_evidence_authorized"] = True
         result["_chat_memory_evidence_authorized"] = True
+        if "customer.view" in access.permissions:
+            try:
+                from sqlalchemy import func, literal
+
+                from app.db.models.customer import Customer
+                from app.db.session import get_db
+                from app.infrastructure.tenant_scope import owned_tenant_scope
+
+                with owned_tenant_scope(int(tenant)), get_db() as db:
+                    bind = db.get_bind(mapper=Customer)
+                    position = func.strpos if bind.dialect.name == "postgresql" else func.instr
+                    rows = (
+                        db.query(Customer.id, Customer.customer_name)
+                        .filter(
+                            Customer.tenant_id == int(tenant),
+                            Customer.customer_name != "",
+                            position(literal(message), Customer.customer_name) > 0,
+                        )
+                        .order_by(func.length(Customer.customer_name).desc())
+                        .limit(20)
+                        .all()
+                    )
+                    result["chat_customer_evidence"] = [
+                        {"customer_id": row.id, "customer_name": row.customer_name}
+                        for row in rows
+                        if row.customer_name in message
+                    ]
+            except RECOVERABLE_ERRORS:
+                logger.warning("authorized customer name evidence unavailable", exc_info=True)
         try:
             from app.application.persy_memory_app_service import get_persy_memory_app_service
 

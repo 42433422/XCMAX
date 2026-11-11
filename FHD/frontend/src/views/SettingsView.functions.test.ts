@@ -1922,28 +1922,30 @@ describe('SettingsView functions – memoryV2UserId computed', () => {
     wrapper.unmount()
   })
 
-  it('有 user.username 时返回 username', async () => {
-    mockAuthApiGetCurrentUser.mockResolvedValue({
-      success: true,
-      data: {
-        user: {
-          id: 1,
-          username: 'testuser',
-          display_name: 'Test',
-          email: '',
-          role: 'user',
-          is_active: true,
+  it.each([['testuser', 'testuser'], ['13800138000', '1']])(
+    '为用户名 %s 选择记忆所属账号', async (username, expected) => {
+      mockAuthApiGetCurrentUser.mockResolvedValue({
+        success: true,
+        data: {
+          user: {
+            id: 1,
+            username,
+            display_name: 'Test',
+            email: '',
+            role: 'user',
+            is_active: true,
+          },
+          permissions: [],
         },
-        permissions: [],
-      },
-    })
-    const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2UserId).toBe('testuser')
-    wrapper.unmount()
-  })
+      })
+      const wrapper = await mountSettings()
+      await nextTick()
+      await nextTick()
+      const vm = wrapper.vm as any
+      expect(vm.memoryV2UserId).toBe(expected)
+      wrapper.unmount()
+    },
+  )
 
   it('username 为空时 unwrapUserFromMe 返回 null，memoryV2UserId 回退到 default', async () => {
     // unwrapUserFromMe 要求 username 非空，否则返回 null

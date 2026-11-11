@@ -281,11 +281,34 @@ class DocumentLifecycle:
         with self._repository.lock:
             state = self._repository.datasets.get(dataset_key)
             if state is None or doc_key not in state.documents:
+                # Cache absence is not durable evidence after a failed write/load.
+                path = self._repository.storage_path
+                if path.exists():
+                    raw = json.loads(path.read_text(encoding="utf-8"))
+                    if (
+                        not isinstance(raw, dict)
+                        or type(raw.get("version")) is not int
+                        or raw.get("version") != 1
+                        or not isinstance(raw.get("datasets"), dict)
+                    ):
+                        raise ValueError("invalid durable dataset snapshot")
+                    payload = raw["datasets"].get(dataset_key)
+                    if dataset_key in raw["datasets"]:
+                        if (
+                            not isinstance(payload, dict)
+                            or payload.get("dataset_id") != dataset_key
+                            or not isinstance(payload.get("documents"), dict)
+                        ):
+                            raise ValueError("invalid durable dataset documents")
+                        if doc_key in payload["documents"]:
+                            self._repository.lock.revision = None
+                            raise RuntimeError("dataset cache does not match durable documents")
                 return {
                     "success": False,
                     "dataset_id": dataset_key,
                     "document_id": doc_key,
                     "message": "document not found",
+                    "error_code": "dataset_document_not_found",
                 }
             document = state.documents[doc_key]
             denied = _ensure_tenant_allowed(
@@ -308,17 +331,26 @@ class DocumentLifecycle:
                 )
             ):
                 return {"success": False, "error_code": "dataset_document_conflict"}
-            state.documents.pop(doc_key, None)
-            before = len(state.chunks)
-            state.chunks = [
-                c
-                for c in state.chunks
-                if not isinstance(c.metadata, dict) or c.metadata.get("document_id") != doc_key
-            ]
-            self._renumber_chunks(state)
-            self._vector._sync_vector_index_locked(state)
-            self._vector._refresh_index_metadata(state)
-            self._repository._persist_locked()
+            persisted = False
+            try:
+                state.documents.pop(doc_key, None)
+                before = len(state.chunks)
+                state.chunks = [
+                    c
+                    for c in state.chunks
+                    if not isinstance(c.metadata, dict) or c.metadata.get("document_id") != doc_key
+                ]
+                self._renumber_chunks(state)
+                self._vector._sync_vector_index_locked(state)
+                self._vector._refresh_index_metadata(state)
+                self._repository._persist_locked()
+                persisted = True
+            finally:
+                if not persisted:
+                    # Even if atomic replace succeeded before the error, only a
+                    # fresh disk snapshot can establish the outcome on retry.
+                    self._repository.lock.revision = None
+
         return {
             "success": True,
             "dataset_id": dataset_key,

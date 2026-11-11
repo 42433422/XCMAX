@@ -297,7 +297,7 @@ def test_template_call_passes_configured_timeout_to_http(monkeypatch, setting, e
     monkeypatch.setattr(
         httpx,
         "AsyncClient",
-        lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+        lambda **kwargs: real_client(**(kwargs | {"transport": httpx.MockTransport(respond)})),
     )
 
     def session_provider(*, timeout_seconds):
@@ -360,7 +360,7 @@ def test_audited_stream_keeps_provider_body_and_parsed_result(monkeypatch):
     monkeypatch.setattr(
         httpx,
         "AsyncClient",
-        lambda **kwargs: real_client(transport=Transport(), **kwargs),
+        lambda **kwargs: real_client(**(kwargs | {"transport": Transport()})),
     )
     monkeypatch.setenv("FHD_ETL_LLM", "on")
     monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic.invalid")

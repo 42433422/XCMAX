@@ -157,6 +157,7 @@ function modelOutcomeUnknown(err: unknown) {
   return state?.outcome_unknown === true || !(state?.outcome_unknown === false || state?.retryable === true || ['notice_not_published', 'login_notice_required', 'model_connection_error', 'model_configuration_error'].includes(state?.code || state?.error_code || ''))
 }
 const savedId = ref('')
+const savedReused = ref(false)
 const savedModelStatus = ref('')
 let resumePipelineRunning = false
 let resumePipelineRequested = false
@@ -440,7 +441,7 @@ function captureFileOperation() {
 function resetReview() {
   resetIntake()
   review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = initialOptionalTemplateIndex(props.archiveOnSelect)
-  savedId.value = ''; savedModelStatus.value = ''; ingestBatchId.value = ''; kbProgress.value = null; businessProgress.value = null; stopIngestPoll(); sheetIndex.value = 0
+  savedId.value = ''; savedReused.value = false; savedModelStatus.value = ''; ingestBatchId.value = ''; kbProgress.value = null; businessProgress.value = null; stopIngestPoll(); sheetIndex.value = 0
   feedback.value = ''; publishToTenant.value = false
 }
 function resetSelectionState() {
@@ -471,9 +472,28 @@ watch([getAuthSessionEpoch, () => productReadAccountEpoch.value], () => {
   emit('stage', 'archive')
 }, { flush: 'sync' })
 onBeforeUnmount(() => { resetIntake(); stopIngestPoll(); alive = false; operationEpoch += 1; selectionEpoch += 1 })
-function openFilePicker() {
+const WORKBOOK_NAME = /\.(xlsx|xls|docx)$/i
+const BATCH_BYTE_LIMIT = 50 * 1024 * 1024
+function importableWorkbook(file: File) {
+  return WORKBOOK_NAME.test(file.name) && !file.name.startsWith('~$')
+}
+function batchBytes(items: File[]) {
+  return items.reduce((sum, item) => sum + item.size, 0)
+}
+function openPicker(folder: boolean) {
   if (!alive || busy.value || documentWorkPending.value) return
-  fileInputRef.value?.click()
+  const input = fileInputRef.value
+  if (!input) return
+  if (folder) input.setAttribute('webkitdirectory', '')
+  else input.removeAttribute('webkitdirectory')
+  input.multiple = true
+  input.click()
+}
+function openFilePicker() {
+  openPicker(false)
+}
+function openFolderPicker() {
+  openPicker(true)
 }
 function startProcessing(approvedRoundKey = '') {
   if (!alive || busy.value || archiveRunPending.value) return
@@ -532,6 +552,23 @@ function onComposerDragLeave(event: DragEvent) {
 }
 function applyChosenFiles(list: File[]) {
   if (!alive || busy.value || documentWorkPending.value) return
+  const canAppend = classifications.value.some((item) => item.status === 'classified')
+  if (canAppend && files.value.length) {
+    const next = [...files.value, ...list]
+    if (next.length > 200) {
+      error.value = '一次最多上传 200 个文件，请分批上传'
+      return
+    }
+    if (batchBytes(next) > BATCH_BYTE_LIMIT) {
+      error.value = '本批文件超过 50 MB，请分批上传'
+      return
+    }
+    const keptKeys = files.value.map((_, index) => archiveKeys.value[index] || crypto.randomUUID())
+    files.value = next
+    archiveKeys.value = [...keptKeys, ...list.map(() => crypto.randomUUID())]
+    error.value = ''
+    return
+  }
   files.value = list
   archiveKeys.value = files.value.map(() => crypto.randomUUID())
   archiveProgress.value = ''
@@ -542,13 +579,50 @@ function applyChosenFiles(list: File[]) {
   classificationNotice.value = ''
   emit('stage', 'archive')
 }
-function onComposerDrop(event: DragEvent) {
+function droppedEntries(event: DragEvent): FileSystemEntry[] {
+  return Array.from(event.dataTransfer?.items || []).flatMap((item) => {
+    const entry = item.webkitGetAsEntry?.()
+    return entry ? [entry] : []
+  })
+}
+async function collectDropped(entry: FileSystemEntry, found: File[]) {
+  if (found.length > 200) return
+  if (entry.isFile) {
+    const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, () => reject(new Error('unreadable'))))
+    if (importableWorkbook(file)) found.push(file)
+    return
+  }
+  if (!entry.isDirectory) return
+  const reader = (entry as FileSystemDirectoryEntry).createReader()
+  for (;;) {
+    const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, () => reject(new Error('unreadable'))))
+    if (!batch.length) return
+    for (const child of batch) {
+      await collectDropped(child, found)
+      if (found.length > 200) return
+    }
+  }
+}
+async function onComposerDrop(event: DragEvent) {
   event.preventDefault()
   composerDragOver.value = false
   if (!alive || busy.value || documentWorkPending.value) return
-  const list = Array.from(event.dataTransfer?.files || []).filter((item) => /\.(xlsx|xls|docx)$/i.test(item.name))
+  const entries = droppedEntries(event)
+  const folder = entries.some((entry) => entry.isDirectory)
+  let list: File[] = []
+  try {
+    if (folder) {
+      for (const entry of entries) {
+        await collectDropped(entry, list)
+        if (list.length > 200) break
+      }
+    } else list = Array.from(event.dataTransfer?.files || []).filter(importableWorkbook)
+  } catch {
+    error.value = '文件夹没有读完，请改为选择其中的文件'
+    return
+  }
   if (!list.length) {
-    error.value = '请拖入 Excel 或对账单 Word（.xlsx / .xls / .docx）'
+    error.value = folder ? '文件夹里没有 Excel 或对账单 Word（.xlsx / .xls / .docx）' : '请拖入 Excel 或对账单 Word（.xlsx / .xls / .docx）'
     return
   }
   applyChosenFiles(list)
@@ -556,8 +630,14 @@ function onComposerDrop(event: DragEvent) {
 function choose(event: Event) {
   if (!alive || busy.value) return
   const input = event.target as HTMLInputElement
-  const list = Array.from(input.files || [])
+  const folder = input.hasAttribute('webkitdirectory')
+  const list = Array.from(input.files || []).filter((item) => !folder || importableWorkbook(item))
   input.value = ''
+  input.removeAttribute('webkitdirectory')
+  if (folder && !list.length) {
+    error.value = '文件夹里没有 Excel 或对账单 Word（.xlsx / .xls / .docx）'
+    return
+  }
   applyChosenFiles(list)
 }
 function confirmLegacyScope(form: FormData, name: string, hash: string, current: () => boolean) {
@@ -583,7 +663,7 @@ async function classify(approvedRoundKey = '') {
   const current = captureFileOperation()
   if (!current()) return
   if (busy.value || !files.value.length || files.value.length > 200) return
-  if (files.value.reduce((sum, item) => sum + item.size, 0) > 50 * 1024 * 1024) {
+  if (batchBytes(files.value) > BATCH_BYTE_LIMIT) {
     error.value = '本批文件超过 50 MB，请分批上传'; return
   }
   busy.value = true; error.value = ''
@@ -1111,6 +1191,7 @@ async function restoreClassification(item: RecentClassification) {
       if (!current()) return
       selectedFilesCurrent = captureAuthSession(); selectionEpoch += 1
       files.value = [new File([blob], item.name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]
+      archiveKeys.value = [crypto.randomUUID()]
     }
     if (!globalThis.crypto?.subtle) throw new Error('当前环境不能校验文件哈希，请使用安全连接')
     const source = await files.value[0].arrayBuffer()
@@ -1235,9 +1316,10 @@ async function save() {
     form.append('candidate_id', proposal.value.candidates[candidateIndex.value].id)
     form.append('selections', JSON.stringify(selected.value))
     if (currentComposerNote.value) form.append('composer_note', currentComposerNote.value)
-    const result = await templatePreviewApi.saveReviewedExcel(form) as { template_id: string }
+    const result = await templatePreviewApi.saveReviewedExcel(form) as { template_id: string; reused?: boolean }
     if (!current()) return
     savedId.value = result.template_id
+    savedReused.value = result.reused === true
     const ingest = (result as { auto_ingest?: { success?: boolean; error?: string; batch_id?: string; status?: string; kb_progress?: { pct?: number }; business_progress?: { pct?: number } } }).auto_ingest
     if (ingest?.batch_id) {
       kbProgress.value = ingest.kb_progress || { stage: 'queued', pct: 0, message: '排队写入知识库' }
@@ -1360,6 +1442,13 @@ async function downloadCandidate(index: number) {
               <div class="reviewed-documents">
                 <template v-for="doc in documentWorkspace.documents.value.filter(isFamilyRepresentative)" :key="doc.key">
                   <button type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${doc.typeLabel ? '，' + doc.typeLabel : ''}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="doc.typeLabel">{{ doc.typeLabel }}</small><small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
+                  <p v-if="documentWorkspace.saved(doc)" class="reviewed-document-work-status" role="status">
+                    <template v-if="doc.intakePending">数据库导入员、知识整理员正在分析原件，完成后自动提交入库…</template>
+                    <template v-else-if="doc.ingestStatus === 'submitting'">数据库导入员、知识整理员正在提交入库…</template>
+                    <template v-else-if="doc.ingestStatus === 'awaiting_approval'">两位员工已提交入库任务，等待审批工作台放行。模板已保存，不代表数据已入库。</template>
+                    <template v-else-if="doc.ingestStatus">入库任务：{{ autoIngestStatusLabel(doc.ingestStatus) }}{{ doc.ingestBatchId ? `（${doc.ingestBatchId}）` : '' }}。</template>
+                    <span v-if="doc.intakeError" role="alert">{{ doc.intakeError }}</span>
+                  </p>
                   <details v-if="relatedDocuments(doc).length > 1"><summary>建议复用 · {{ relatedDocuments(doc).length }} 份原单据</summary><button v-for="related in relatedDocuments(doc)" :key="related.key" type="button" @click="openDocument(related)">{{ related.displayName }}（{{ related.slice.fragments.map(part => `${part.sheet} ${part.range}`).join('、') }}）</button></details>
                 </template>
               </div>
@@ -1644,12 +1733,12 @@ async function downloadCandidate(index: number) {
           <p v-else>业务目标：{{ targetLabel(intakePlan.business.target_type) }}；预计新增 {{ intakePlan.business.summary.new }} 行、更新 {{ intakePlan.business.summary.update }} 行、跳过 {{ intakePlan.business.summary.skip }} 行、错误 {{ intakePlan.business.summary.error }} 行。</p>
           <p v-if="intakeZeroRowWarning" role="alert">预演可写入行为 0：确认入库也不会写入业务行（无报错≠已入库）。请核对原件与候选后再保存。</p>
           <p v-if="intakePlan.business.summary.error">错误行不写入业务库，仍留在知识库文档中。正确行按预演写入。</p>
-          <p>确认后保存 1 份模板到当前企业模板库，并按上方同一预演写入；重复数据跳过，更新范围以预演为准。撤回仅回退本批知识和业务写入，原件和模板保留。</p>
+          <p>确认后保存到当前企业模板库。同一块版式留在一份模板里；版式相同则沿用已有模板，不另存一份。并按上方同一预演写入；重复数据跳过，更新范围以预演为准。撤回仅回退本批知识和业务写入，原件和模板保留。</p>
         </template>
         <button type="button" :disabled="busy || intakePending || !canCommitSelectedTemplate()" @click="prepareIntake">重新预演入库范围</button>
       </section>
       <template v-if="archiveOnSelect">
-        <p class="reviewed-template__intake-note">本次处理 1 份所选文档（{{ file?.name }}{{ selectedRegion ? ` / ${selectedRegion}` : '' }}）。点击下方按钮会把清理后的模板保存到当前企业模板库（同一业务空间内按模板权限可见），并用原件写入知识库及自动识别的业务域；目标和数量以上方预演为准。请先下载候选核对。撤回仅回退本批知识与业务写入，保留原件和模板。</p>
+        <p class="reviewed-template__intake-note">本次处理 1 份所选文档（{{ file?.name }}{{ selectedRegion ? ` / ${selectedRegion}` : '' }}）。同一块版式留在一份模板里；版式相同则沿用已有模板。点击下方按钮会把清理后的模板保存到当前企业模板库（同一业务空间内按模板权限可见），并用原件写入知识库及自动识别的业务域；目标和数量以上方预演为准。请先下载候选核对。撤回仅回退本批知识与业务写入，保留原件和模板。</p>
         <button type="button" :disabled="!canConfirmIntake" @click="save">使用此模板并入库</button>
       </template>
       <template v-else>
@@ -1658,7 +1747,7 @@ async function downloadCandidate(index: number) {
       </template>
       </template>
     </div>
-    <p v-if="savedId">已保存到模板库。{{ savedModelStatus }} 可再次预览当前原件并保存新模板，已有模板不会被覆盖。<button type="button" :disabled="busy" @click="download(savedId)">下载清理后的模板</button></p>
+    <p v-if="savedId">{{ savedReused ? '模板库里已有相同版式，沿用那一份。' : '已保存到模板库。' }}{{ savedModelStatus }}<button type="button" :disabled="busy" @click="download(savedId)">下载清理后的模板</button></p>
     <div v-if="ingestBatchId" class="elt-ingest-progress" aria-label="自动入库真实进度">
       <div class="elt-ingest-progress__row">
         <span>知识库</span>
@@ -1697,7 +1786,7 @@ async function downloadCandidate(index: number) {
       @dragleave.prevent="onComposerDragLeave"
       @drop.prevent="onComposerDrop"
     >
-      <div v-if="composerDragOver" class="elt-composer__drop" role="status">松开以加入文件</div>
+      <div v-if="composerDragOver" class="elt-composer__drop" role="status">松开以加入文件或文件夹</div>
       <input
         ref="fileInputRef"
         class="elt-composer__file-input"
@@ -1707,10 +1796,13 @@ async function downloadCandidate(index: number) {
         :disabled="busy || documentWorkPending"
         @change="choose"
       >
-      <button type="button" class="elt-composer__attach" :disabled="busy || documentWorkPending" @click="openFilePicker">添加文件</button>
+      <div class="elt-composer__sources">
+        <button type="button" class="elt-composer__attach" :disabled="busy || documentWorkPending" @click="openFilePicker">添加文件</button>
+        <button type="button" class="elt-composer__folder" :disabled="busy || documentWorkPending" @click="openFolderPicker">添加文件夹</button>
+      </div>
       <div class="elt-composer__chips" aria-label="待处理文件">
-        <span v-for="(item, index) in files" :key="index" class="elt-composer__chip">{{ item.name }}</span>
-        <span v-if="!files.length" class="elt-composer__placeholder">拖入或选择 Excel / 对账单 Word（.xlsx / .xls / .docx）</span>
+        <span v-for="(item, index) in files" :key="index" class="elt-composer__chip">{{ item.webkitRelativePath || item.name }}</span>
+        <span v-if="!files.length" class="elt-composer__placeholder">可一次多选，或拖入文件、文件夹（.xlsx / .xls / .docx）</span>
       </div>
       <label class="elt-composer__prompt">
         <span class="sr-only">整理要求</span>
@@ -1745,7 +1837,7 @@ async function downloadCandidate(index: number) {
         :disabled="archiveOnSelect ? cancelAnalysis : !files.length || files.length > 200 || busy"
         @click="archiveOnSelect ? stopArchiveProcessing() : classify()"
       >{{ archiveOnSelect ? cancelAnalysis ? '正在停止…' : '停止后续处理' : '重试未完成文件' }}</button>
-      <p class="elt-composer__hint">每批最多 200 个 · 单文件 &lt; 20 MB · 整批 &lt; 50 MB</p>
+      <p class="elt-composer__hint">可一次多选文件或整个文件夹 · 再次添加会留在本批 · 每批最多 200 个 · 单文件 &lt; 20 MB · 整批 &lt; 50 MB</p>
     </div>
   </section>
 
@@ -1868,7 +1960,7 @@ async function downloadCandidate(index: number) {
   display: grid;
   grid-template-columns: auto 1fr auto;
   grid-template-areas:
-    "attach chips start"
+    "sources chips start"
     "prompt prompt send"
     "hint hint hint";
   gap: 0.5rem 0.65rem;
@@ -1899,7 +1991,7 @@ async function downloadCandidate(index: number) {
   opacity: 0;
   pointer-events: none;
 }
-.elt-composer__attach { grid-area: attach; }
+.elt-composer__sources { grid-area: sources; display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .elt-composer__chips {
   grid-area: chips;
   display: flex;
@@ -1950,6 +2042,7 @@ async function downloadCandidate(index: number) {
 .elt-composer__start,
 .elt-composer__retry,
 .elt-composer__attach,
+.elt-composer__folder,
 .elt-composer__send {
   border-radius: 10px;
   padding: 0.55rem 0.9rem;

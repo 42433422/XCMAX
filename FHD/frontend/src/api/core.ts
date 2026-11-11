@@ -374,7 +374,8 @@ async function requestOnce<T = unknown>(
     const message = timedOut
       ? `请求超时（>${Math.ceil(Number(timeoutMs) / 1000)}s）。该请求未成功。`
       : stability.message
-    if (!quiet) publishStabilityNotice(message)
+    // 超时保留失败回执供页面处理，默认不弹全局提示；其他网络故障仍提示。
+    if (!quiet && stability.kind !== 'timeout') publishStabilityNotice(message)
     throw new ApiError(message, 0, { success: false, stability })
   } finally {
     if (timeoutId) clearTimeout(timeoutId)

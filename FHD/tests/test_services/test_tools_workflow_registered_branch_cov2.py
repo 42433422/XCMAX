@@ -1941,7 +1941,8 @@ class TestEmployeeRouter:
             mock_build.return_value = {"registered_tool_count": 3}
             result = _registered_router_employee("list", {}, {}, "admin", "")
         assert result["success"] is True
-        assert result["data"]["registered_tool_count"] == 3
+        assert result["status"]["registered_tool_count"] == 3
+        assert result["data"] == []
 
     def test_query_alias(self):
         with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build:

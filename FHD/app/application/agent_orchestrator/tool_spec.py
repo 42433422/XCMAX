@@ -130,6 +130,8 @@ def _special_permission(tool_id: str, action: str) -> str:
         if action in DATASET_RAG_READ_ACTIONS:
             return DATASET_RAG_READ_PERMISSION
         return DATASET_RAG_WRITE_PERMISSION
+    if tool_id == "excel_analysis" and action in {"read", "structure", "query", "statistics"}:
+        return "tool.excel_analysis.read"
     fixed = PERMISSION_OVERRIDES.get(tool_id)
     if fixed is not None:
         return fixed

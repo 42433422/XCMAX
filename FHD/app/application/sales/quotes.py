@@ -12,6 +12,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db.models import Customer, SalesOrder, SalesOrderItem
+from app.db.models.sales import inclusive_order_bound, sales_status_predicate
 
 from .contracts import SessionFactory
 from .idempotency import CLOSED_LOOP_FP_PREFIX
@@ -20,21 +21,6 @@ from .idempotency import CLOSED_LOOP_FP_PREFIX
 def generate_order_no() -> str:
     # 秒级单号在同一秒的并发报价上会撞唯一约束。微秒后缀仍是时间单号。
     return f"SO{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-
-
-def inclusive_bound(value: Any, *, end: bool) -> datetime | None:
-    """日期字符串按自然日闭合；结束日包含当天最后一秒。"""
-    if value is None or isinstance(value, datetime):
-        return value
-    text = str(value).strip()
-    if not text:
-        return None
-    if len(text) == 10:
-        day = datetime.fromisoformat(text)
-        if end:
-            return day.replace(hour=23, minute=59, second=59)
-        return day
-    return datetime.fromisoformat(text)
 
 
 class SalesQuotes:
@@ -75,7 +61,7 @@ class SalesQuotes:
             if current_tenant_id() is not None or owned_tenant_id() is not None:
                 q = apply_tenant_filter(q, SalesOrder)
             if status:
-                q = q.filter(SalesOrder.status == status)
+                q = q.filter(sales_status_predicate(status))
             if customer_id:
                 q = q.filter(SalesOrder.customer_id == customer_id)
             if customer_name:
@@ -83,8 +69,8 @@ class SalesQuotes:
             if keyword:
                 like = f"%{keyword}%"
                 q = q.filter(SalesOrder.order_no.like(like) | SalesOrder.customer_name.like(like))
-            start = inclusive_bound(start_date, end=False)
-            end = inclusive_bound(end_date, end=True)
+            start = inclusive_order_bound(start_date, end=False)
+            end = inclusive_order_bound(end_date, end=True)
             if start is not None:
                 q = q.filter(SalesOrder.created_at >= start)
             if end is not None:

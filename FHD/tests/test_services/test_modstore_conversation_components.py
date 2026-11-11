@@ -46,7 +46,7 @@ def mock_async_transport(monkeypatch, handler):
     monkeypatch.setattr(
         httpx,
         "AsyncClient",
-        lambda **kwargs: client_type(transport=httpx.MockTransport(handler), **kwargs),
+        lambda **kwargs: client_type(**(kwargs | {"transport": httpx.MockTransport(handler)})),
     )
 
 
@@ -243,7 +243,7 @@ async def test_named_gateway_error_preserves_diagnosis_and_never_retries(
     monkeypatch.setattr(
         httpx,
         "Client",
-        lambda **kwargs: sync_type(transport=httpx.MockTransport(respond), **kwargs),
+        lambda **kwargs: sync_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
     )
     mock_async_transport(monkeypatch, respond)
     current = adapter()
@@ -304,7 +304,7 @@ async def test_each_completion_transport_uses_current_credential_and_payload(mon
     monkeypatch.setattr(
         httpx,
         "Client",
-        lambda **kwargs: sync_type(transport=httpx.MockTransport(respond), **kwargs),
+        lambda **kwargs: sync_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
     )
     mock_async_transport(monkeypatch, respond)
     monkeypatch.setattr(facade, "neuro_notify_ai_model_roundtrip", lambda **kwargs: None)
@@ -372,7 +372,7 @@ async def test_failover_uses_real_discovery_and_preserves_attempt_policy(monkeyp
     monkeypatch.setattr(
         httpx,
         "Client",
-        lambda **kwargs: sync_type(transport=httpx.MockTransport(respond), **kwargs),
+        lambda **kwargs: sync_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
     )
     mock_async_transport(monkeypatch, respond)
     monkeypatch.setattr(facade, "neuro_notify_ai_model_roundtrip", lambda **kwargs: None)
@@ -448,7 +448,7 @@ async def test_audited_completion_keeps_hook_local_and_captures_exact_raw_before
     monkeypatch.setattr(
         httpx,
         "Client",
-        lambda **kwargs: sync_type(transport=httpx.MockTransport(respond), **kwargs),
+        lambda **kwargs: sync_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
     )
     mock_async_transport(monkeypatch, respond)
     monkeypatch.setattr(facade, "neuro_notify_ai_model_roundtrip", lambda **_: None)
@@ -499,7 +499,7 @@ async def test_audit_archive_failure_propagates_without_backup_or_private_log(
     monkeypatch.setattr(
         httpx,
         "Client",
-        lambda **kwargs: sync_type(transport=httpx.MockTransport(respond), **kwargs),
+        lambda **kwargs: sync_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
     )
     mock_async_transport(monkeypatch, respond)
     current = adapter()
@@ -546,7 +546,7 @@ async def test_audited_route_token_echo_is_never_archived_logged_or_retried(
     monkeypatch.setattr(
         httpx,
         "Client",
-        lambda **kwargs: sync_type(transport=httpx.MockTransport(respond), **kwargs),
+        lambda **kwargs: sync_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
     )
     mock_async_transport(monkeypatch, respond)
     current = adapter()
@@ -634,7 +634,7 @@ def test_partial_sync_stream_is_closed_without_retrying_another_model(monkeypatc
     monkeypatch.setattr(
         httpx,
         "Client",
-        lambda **kwargs: sync_type(transport=httpx.MockTransport(respond), **kwargs),
+        lambda **kwargs: sync_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
     )
     current = adapter()
     monkeypatch.setattr(
@@ -729,7 +729,7 @@ def request_market(monkeypatch):
         monkeypatch.setattr(
             httpx,
             "Client",
-            lambda **kwargs: sync_type(transport=httpx.MockTransport(handler), **kwargs),
+            lambda **kwargs: sync_type(**(kwargs | {"transport": httpx.MockTransport(handler)})),
         )
         mock_async_transport(monkeypatch, handler)
         return facade.create_modstore_openai_client_from_request(Mock())
@@ -1118,7 +1118,7 @@ def test_preference_recovery_uses_own_session_authorization(
     monkeypatch.setattr(
         facade,
         "_httpx_sync_client",
-        lambda **kwargs: httpx.Client(transport=httpx.MockTransport(respond), **kwargs),
+        lambda **kwargs: httpx.Client(**(kwargs | {"transport": httpx.MockTransport(respond)})),
     )
     desktop_model_status_client.cookies.set("session_id", f"synthetic-session-{uid}")
     result = desktop_model_status_client.put(

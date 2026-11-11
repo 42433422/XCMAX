@@ -93,20 +93,14 @@ def _base_tool_specs() -> dict[str, dict[str, Any]]:
         return {}
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def _explicit_allowlist(config: dict[str, Any], manifest: dict[str, Any]) -> list[str] | None:
-    actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
-    if not isinstance(actions, dict):
-        actions = {}
-    agent = actions.get("agent") if isinstance(actions.get("agent"), dict) else {}
-    v2 = (
-        manifest.get("employee_config_v2")
-        if isinstance(manifest.get("employee_config_v2"), dict)
-        else {}
-    )
-    if not isinstance(agent, dict):
-        agent = {}
-    if not isinstance(v2, dict):
-        v2 = {}
+    actions = _as_dict(config.get("actions"))
+    agent = _as_dict(actions.get("agent"))
+    v2 = _as_dict(manifest.get("employee_config_v2"))
     for candidate in (
         config.get("tools"),
         actions.get("tools"),
@@ -121,24 +115,16 @@ def _explicit_allowlist(config: dict[str, Any], manifest: dict[str, Any]) -> lis
 
 def _capability_text(manifest: dict[str, Any], config: dict[str, Any]) -> str:
     parts: list[str] = []
-    emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
-    if not isinstance(emp, dict):
-        emp = {}
+    emp = _as_dict(manifest.get("employee"))
     for cap in emp.get("capabilities") or []:
         if isinstance(cap, dict):
             parts.append(str(cap.get("label") or ""))
             parts.append(str(cap.get("description") or ""))
         else:
             parts.append(str(cap))
-    cog = config.get("cognition") if isinstance(config.get("cognition"), dict) else {}
-    if not isinstance(cog, dict):
-        cog = {}
-    agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
-    if not isinstance(agent, dict):
-        agent = {}
-    role = agent.get("role") if isinstance(agent.get("role"), dict) else {}
-    if not isinstance(role, dict):
-        role = {}
+    cog = _as_dict(config.get("cognition"))
+    agent = _as_dict(cog.get("agent"))
+    role = _as_dict(agent.get("role"))
     for exp in role.get("expertise") or []:
         parts.append(str(exp))
     for skill in cog.get("skills") or []:
@@ -147,7 +133,7 @@ def _capability_text(manifest: dict[str, Any], config: dict[str, Any]) -> str:
             parts.append(str(skill.get("brief") or ""))
         else:
             parts.append(str(skill))
-    identity = config.get("identity") if isinstance(config.get("identity"), dict) else {}
+    identity = _as_dict(config.get("identity"))
     for key in ("domain", "area", "description", "name"):
         if not isinstance(identity, dict):
             identity = {}
@@ -157,27 +143,13 @@ def _capability_text(manifest: dict[str, Any], config: dict[str, Any]) -> str:
 
 
 def is_read_only(manifest: dict[str, Any], config: dict[str, Any]) -> bool:
-    actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
-    if not isinstance(actions, dict):
-        actions = {}
-    agent = actions.get("agent") if isinstance(actions.get("agent"), dict) else {}
-    if not isinstance(agent, dict):
-        agent = {}
-    ws = agent.get("workspace") if isinstance(agent.get("workspace"), dict) else {}
-    if not isinstance(ws, dict):
-        ws = {}
+    actions = _as_dict(config.get("actions"))
+    agent = _as_dict(actions.get("agent"))
+    ws = _as_dict(agent.get("workspace"))
     if bool(ws.get("read_only")):
         return True
-    v2 = (
-        manifest.get("employee_config_v2")
-        if isinstance(manifest.get("employee_config_v2"), dict)
-        else {}
-    )
-    if not isinstance(v2, dict):
-        v2 = {}
-    wp = v2.get("workspace_policy") if isinstance(v2.get("workspace_policy"), dict) else {}
-    if not isinstance(wp, dict):
-        wp = {}
+    v2 = _as_dict(manifest.get("employee_config_v2"))
+    wp = _as_dict(v2.get("workspace_policy"))
     return bool(wp.get("read_only"))
 
 
@@ -268,3 +240,33 @@ def employee_tool_names(
 
 
 __all__ = ["employee_tool_names", "is_read_only", "resolve_employee_tools"]
+
+
+def host_employee_denial(
+    employee_ids: list[str], payload: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Customer execution grants do not grant host-side management tools."""
+    if "_actor_authorization" not in context:
+        return None
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
+    from app.mod_sdk.employee_specialized_tools_employee_map import EMPLOYEE_TOOLS
+
+    try:
+        actor = _bound_actor(context)
+        if actor.role == "admin" and actor.tier == "admin" and actor.tenant_id is None:
+            return None
+    except AgentModAuthorizationError:
+        return {
+            "success": False,
+            "error_code": "tool_identity_required",
+            "error": "员工身份授权无效",
+        }
+    if str(payload.get("handler") or "").strip() == "specialized" or any(
+        EMPLOYEE_TOOLS.get(name) for name in employee_ids
+    ):
+        return {
+            "success": False,
+            "error_code": "employee_host_admin_required",
+            "error": "宿主管理员工和专用工具需要平台管理员权限",
+        }
+    return None

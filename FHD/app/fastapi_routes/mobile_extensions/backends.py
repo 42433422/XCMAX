@@ -177,9 +177,16 @@ def execute_employee(
     user_id: int,
     workspace_root: str | None,
     session_id: str | None,
+    runtime_context: dict[str, Any],
 ) -> dict[str, Any]:
     from app.application.employee_runtime.executor import execute_employee_task_local as operation
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
 
+    try:
+        if _bound_actor(runtime_context).id != user_id:
+            raise AgentModAuthorizationError("mobile actor mismatch")
+    except AgentModAuthorizationError:
+        return {"success": False, "error_code": "tool_identity_required"}
     return cast(
         "dict[str, Any]",
         operation(
@@ -189,6 +196,7 @@ def execute_employee(
             user_id=user_id,
             workspace_root=workspace_root,
             session_id=session_id,
+            runtime_context=runtime_context,
         ),
     )
 

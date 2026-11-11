@@ -275,6 +275,17 @@ def register_tenant_shipment_routes(router) -> None:
         with tenant_scope(user.tenant_id):
             return shipment_orders.api_orders_update(request, str(order_number), body)
 
+    @router.delete("/shipment/shipment-records/record")
+    def mod_shipment_record_delete(
+        request: Request,
+        body: dict = Body(...),
+        user=Depends(require_permission("shipment.edit")),
+    ):
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_orders.shipment_records_delete(request, body)
+
     @router.delete("/shipment/orders/{order_number}")
     def mod_shipment_order_delete(
         order_number: str,

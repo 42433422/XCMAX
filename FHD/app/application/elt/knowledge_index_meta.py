@@ -102,3 +102,19 @@ def business_completion_from_run(
             ),
         )
     return "applied", progress_factory("done", 100, message="业务写入已完成")
+
+
+def is_partial_business_receipt(run: dict[str, Any]) -> bool:
+    """Recognize the attendance worker's known, partially committed terminal outcome."""
+    summary = run.get("summary")
+    return (
+        run.get("status") == "partial"
+        and run.get("target_type") == "attendance"
+        and isinstance(summary, dict)
+        and all(
+            type(summary.get(key)) is int and summary[key] >= 0
+            for key in ("executed", "new", "update", "error")
+        )
+        and summary["executed"] > 0
+        and summary["error"] > 0
+    )

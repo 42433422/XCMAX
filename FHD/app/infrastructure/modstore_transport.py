@@ -113,7 +113,38 @@ def httpx_sync_client(**kwargs: Any) -> httpx.Client:
     proxy = kwargs.pop("proxy", None) or (os.environ.get("XCAGI_MARKET_PROXY") or "").strip()
     if proxy:
         kwargs["proxy"] = proxy
+    elif "transport" not in kwargs:
+        # HTTPX retries only connection establishment, never a sent POST/read timeout.
+        kwargs["transport"] = httpx.HTTPTransport(
+            retries=market_connect_attempts() - 1,
+            trust_env=kwargs["trust_env"],
+            verify=kwargs.get("verify", True),
+            cert=kwargs.get("cert"),
+            http1=kwargs.get("http1", True),
+            http2=kwargs.get("http2", False),
+            limits=kwargs.get("limits", httpx.Limits()),
+        )
     return httpx.Client(**kwargs)
+
+
+def httpx_async_client(*, timeout: float) -> httpx.AsyncClient:
+    limits = httpx.Limits(max_keepalive_connections=10, max_connections=30)
+    proxy = (os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None
+    transport = (
+        None
+        if proxy
+        else httpx.AsyncHTTPTransport(
+            retries=market_connect_attempts() - 1, trust_env=False, limits=limits
+        )
+    )
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(timeout, connect=10.0),
+        limits=limits,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        trust_env=False,
+        proxy=proxy,
+        transport=transport,
+    )
 
 
 class MarketSSEDecoder:

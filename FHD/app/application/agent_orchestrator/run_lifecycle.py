@@ -188,7 +188,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 "workspace_isolation": task.get("isolation") or context.get("workspace_isolation"),
             }
         )
-        provided_plan = previous.metadata.get("provided_plan")
+        provided_plan = previous.metadata.get("provided_plan") or previous.metadata.get("plan")
         if isinstance(provided_plan, dict) and provided_plan.get("nodes"):
             retry_plan = self.plan_from_snapshot(provided_plan)
             retry_plan.plan_id = f"{retry_plan.plan_id}:retry:{previous.run_id}"

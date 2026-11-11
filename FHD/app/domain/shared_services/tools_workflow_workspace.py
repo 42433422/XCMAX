@@ -365,7 +365,12 @@ def _registered_router_employee(
         return {
             "success": True,
             "message": f"已发现 {status.get('registered_tool_count', 0)} 个可调用员工",
-            "data": status,
+            "data": [
+                {**item, "employee_id": item.get("pack_id") or item.get("employee_id")}
+                for item in status.get("employee_pack_tools", [])
+                if isinstance(item, dict)
+            ],
+            "status": status,
         }
     if action not in {"execute", "context"}:
         return {"success": False, "message": f"未注册的 employee 动作: {action}"}
@@ -453,11 +458,18 @@ def _registered_router_employee(
         workspace_root=workspace_root,
         session_id=str(runtime_context.get("session_id") or params.get("session_id") or "") or None,
         runtime_context=runtime_context,
+        context_only=action == "context",
     )
     ok = bool(result.get("success")) and (not bool(result.get("blocked_by_risk_gate")))
+    artifacts = []
+    if ok:
+        from app.application.tools.workflow_spreadsheet_scope import employee_output_receipts
+
+        artifacts = employee_output_receipts(employee_id, result, runtime_context, workspace_root)
     return {
         "success": ok,
         "message": "员工执行完成" if ok else str(result.get("error") or "员工执行失败"),
         "employee_id": employee_id,
         "data": result,
+        "artifacts": artifacts,
     }

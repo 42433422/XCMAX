@@ -272,7 +272,9 @@ describe('reviewed Excel template', () => {
       await selectCandidate(wrapper)
       await wrapper.findAll('button').find(b => b.text() === '保存模板')!.trigger('click')
       await flushPromises()
-      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(2)
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('intake_run_id')).toBeTruthy()
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('preview_revision')).toBeTruthy()
       const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
       expect(form.get('composer_note')).toBe('第一条整理要求')
       expect((wrapper.get('.elt-composer__input').element as HTMLTextAreaElement).value).toBe('未发送草稿')
@@ -794,8 +796,121 @@ describe('reviewed Excel template', () => {
       const input = wrapper.get('input.elt-composer__file-input').element as HTMLInputElement
       const click = vi.spyOn(input, 'click').mockImplementation(() => undefined)
       await wrapper.get('.elt-composer__attach').trigger('click')
+      expect(input.hasAttribute('webkitdirectory')).toBe(false)
+      expect(input.multiple).toBe(true)
       expect(click).toHaveBeenCalledTimes(1)
     } finally { wrapper.unmount() }
+  })
+
+  it('stages a batch of files and a folder of workbooks, skipping other files', async () => {
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const input = wrapper.get('input.elt-composer__file-input').element as HTMLInputElement
+      const batch = ['甲.xlsx', '乙.xls', '丙.docx'].map((name) => new File(['x'], name))
+      Object.defineProperty(input, 'files', { configurable: true, value: batch })
+      await wrapper.get('input.elt-composer__file-input').trigger('change')
+      expect(wrapper.findAll('.elt-composer__chip').map((chip) => chip.text())).toEqual(['甲.xlsx', '乙.xls', '丙.docx'])
+      const click = vi.spyOn(input, 'click').mockImplementation(() => undefined)
+      await wrapper.get('.elt-composer__folder').trigger('click')
+      expect(input.hasAttribute('webkitdirectory')).toBe(true)
+      expect(click).toHaveBeenCalledTimes(1)
+      const nested = new File(['x'], '送货单.xlsx')
+      Object.defineProperty(nested, 'webkitRelativePath', { value: '三月/客户/送货单.xlsx' })
+      const picture = new File(['p'], '照片.png')
+      const lock = new File(['l'], '~$送货单.xlsx')
+      Object.defineProperty(input, 'files', { configurable: true, value: [nested, picture, lock] })
+      await wrapper.get('input.elt-composer__file-input').trigger('change')
+      expect(wrapper.findAll('.elt-composer__chip').map((chip) => chip.text())).toEqual(['三月/客户/送货单.xlsx'])
+      expect(input.hasAttribute('webkitdirectory')).toBe(false)
+      Object.defineProperty(input, 'webkitdirectory', { configurable: true, value: '' })
+      input.setAttribute('webkitdirectory', '')
+      Object.defineProperty(input, 'files', { configurable: true, value: [picture] })
+      await wrapper.get('input.elt-composer__file-input').trigger('change')
+      expect(wrapper.get('[role=alert]').text()).toContain('文件夹里没有')
+      expect(wrapper.findAll('.elt-composer__chip').map((chip) => chip.text())).toEqual(['三月/客户/送货单.xlsx'])
+    } finally { wrapper.unmount() }
+  })
+
+  it('imports workbooks from a dropped folder', async () => {
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const nested = new File(['x'], '明细.xlsx')
+      Object.defineProperty(nested, 'webkitRelativePath', { value: '批次/明细.xlsx' })
+      const picture = new File(['p'], '说明.txt')
+      let sent = false
+      const directory = {
+        isFile: false,
+        isDirectory: true,
+        createReader: () => ({
+          readEntries: (ok: (entries: unknown[]) => void) => {
+            if (sent) { ok([]); return }
+            sent = true
+            ok([
+              { isFile: true, isDirectory: false, file: (done: (file: File) => void) => done(nested) },
+              { isFile: true, isDirectory: false, file: (done: (file: File) => void) => done(picture) },
+            ])
+          },
+        }),
+      }
+      await wrapper.get('.elt-composer').trigger('drop', {
+        dataTransfer: { files: [], items: [{ webkitGetAsEntry: () => directory }] },
+      })
+      await flushPromises()
+      expect(wrapper.findAll('.elt-composer__chip').map((chip) => chip.text())).toEqual(['批次/明细.xlsx'])
+    } finally { wrapper.unmount() }
+  })
+
+  it('leaves a classified batch unchanged when an added file would exceed 50 MB', async () => {
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const state = wrapper.vm.$.setupState as { files: File[]; classifications: { name: string; status: string; sheets: [] }[]; archiveKeys: string[] }
+      const kept = new File(['a'], 'kept.xlsx')
+      Object.defineProperty(kept, 'size', { value: 40 * 1024 * 1024 })
+      state.files = [kept]
+      state.classifications = [{ name: 'kept.xlsx', status: 'classified', sheets: [] }]
+      state.archiveKeys = ['kept-key']
+      const input = wrapper.get('input.elt-composer__file-input').element as HTMLInputElement
+      const huge = new File(['b'], 'huge.xlsx')
+      Object.defineProperty(huge, 'size', { value: 15 * 1024 * 1024 })
+      Object.defineProperty(input, 'files', { configurable: true, value: [huge] })
+      await wrapper.get('input.elt-composer__file-input').trigger('change')
+      expect(state.files).toEqual([kept])
+      expect(state.archiveKeys).toEqual(['kept-key'])
+      expect(wrapper.get('[role=alert]').text()).toContain('50 MB')
+      const small = new File(['c'], 'more.xlsx')
+      Object.defineProperty(input, 'files', { configurable: true, value: [small] })
+      await wrapper.get('input.elt-composer__file-input').trigger('change')
+      expect(state.files.map((file) => file.name)).toEqual(['kept.xlsx', 'more.xlsx'])
+      expect(state.archiveKeys[0]).toBe('kept-key')
+      expect(state.archiveKeys[1]).not.toBe('kept-key')
+      expect(wrapper.find('[role=alert]').exists()).toBe(false)
+    } finally { wrapper.unmount() }
+  })
+
+  it('gives each file added after a restored classification its own request key', async () => {
+    api.recentClassifications.mockResolvedValue({ files: [{ classification_id: 'restored', name: '恢复.xlsx', sha256: '01', archive_version_id: 'ver-1', latest: { version: 'v1', confirmed: false, model_status: 'not_called', sheets: [] } }] })
+    api.downloadClassificationSource.mockResolvedValue({ blob: async () => new Blob(['restored']) })
+    api.archiveClassifyExcel.mockResolvedValue({ name: '追加.xlsx', status: 'classified', classification_id: 'added', version: 'v1', sheets: [] })
+    let issued = 0
+    vi.stubGlobal('crypto', { randomUUID: () => `key-${++issued}`, subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array([1]).buffer) } })
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      await wrapper.findAll('button').find((button) => button.text() === '查看已保存分类')!.trigger('click'); await flushPromises()
+      await wrapper.findAll('button').find((button) => button.text() === '恢复此分类并继续')!.trigger('click'); await flushPromises()
+      const state = wrapper.vm.$.setupState as { archiveKeys: string[] }
+      expect(state.archiveKeys).toEqual(['key-1'])
+      const input = wrapper.get('input.elt-composer__file-input').element as HTMLInputElement
+      const choose = async (name: string) => {
+        Object.defineProperty(input, 'files', { configurable: true, value: [new File(['x'], name)] })
+        await wrapper.get('input.elt-composer__file-input').trigger('change')
+        await wrapper.get('.elt-composer__start').trigger('click'); await flushPromises()
+      }
+      await choose('追加.xlsx')
+      await choose('再追加.xlsx')
+      const keys = api.archiveClassifyExcel.mock.calls.map((call) => (call[0] as FormData).get('request_key'))
+      expect(keys).toEqual(['key-2', 'key-3'])
+      expect(new Set(keys).size).toBe(2)
+    } finally { wrapper.unmount(); vi.unstubAllGlobals() }
   })
 
   it('marks composer drag-over on dragover and clears on leave', async () => {
@@ -872,7 +987,9 @@ describe('reviewed Excel template', () => {
       expect(api.previewReviewedIntake).not.toHaveBeenCalled()
       await wrapper.findAll('button').find(b => b.text() === '保存模板')!.trigger('click')
       await flushPromises()
-      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(2)
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('intake_run_id')).toBeTruthy()
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('preview_revision')).toBeTruthy()
       const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
       expect(form.get('private_intake')).toBe('true')
       expect(form.get('publish_to_tenant')).toBe('false')
@@ -904,7 +1021,9 @@ describe('reviewed Excel template', () => {
       expect(wrapper.get('[role=alert]').text()).toContain('打印版式未验证')
       await wrapper.findAll('button').find(b => b.text() === '保存模板')!.trigger('click')
       await flushPromises()
-      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(2)
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('intake_run_id')).toBeTruthy()
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('preview_revision')).toBeTruthy()
       const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
       expect(form.get('private_intake')).toBe('true')
       expect(form.get('publish_to_tenant')).toBe('false')

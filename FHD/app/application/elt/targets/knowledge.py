@@ -286,6 +286,10 @@ class KnowledgeAdapter(TargetAdapter):
                 permissions=frozenset({DATASET_WRITE_PERMISSION}),
             ),
         )
+        if isinstance(result, dict) and result.get("error_code") == "dataset_document_not_found":
+            # A prior authorized delete may have succeeded before its caller saved
+            # the batch receipt. Missing is idempotent; conflicts still fail closed.
+            return
         if isinstance(result, dict) and result.get("error_code") == "dataset_document_conflict":
             raise EltError(
                 "ELT_ROLLBACK_CONCURRENT_CHANGE",
