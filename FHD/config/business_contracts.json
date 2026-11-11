@@ -23,12 +23,12 @@
     {
       "requirement_id": "R01",
       "scenario_id": "R01-customer-product-rows",
-      "rule": "确认后，手写清单里的一个客户和两行产品必须落库，表头不能变成客户或产品。",
-      "source": "客户产品 CSV 预演确认测试。期望清单写在断言里，不读取解析器汇总。",
-      "preconditions": ["合成 CSV 含表头和两行产品"],
-      "inputs": ["客户名称,产品型号,产品名称,价格 以及两行产品"],
+      "rule": "确认后，手写清单里的一个客户和两行产品必须落库。表头、空行和合计不能变成客户或产品。",
+      "source": "客户产品 CSV 含表头、空行、合计和两行产品。期望清单写在断言里。",
+      "preconditions": ["合成 CSV 含表头、空行、合计和两行产品"],
+      "inputs": ["表头、隔离联合客户的两行产品、空行、合计"],
       "allowed": ["一个客户", "两行产品按型号、名称和价格落库"],
-      "forbidden_effects": ["表头变成业务记录", "少一行产品"],
+      "forbidden_effects": ["表头、空行或合计变成业务记录", "少一行产品"],
       "oracle": "断言中的客户名和两行产品元组",
       "tests": [
         "tests/test_application/test_etl_preview_task_boundaries.py::test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate"

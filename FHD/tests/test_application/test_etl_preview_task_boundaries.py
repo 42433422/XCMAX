@@ -291,6 +291,8 @@ def test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate
     csv = (
         "客户名称,产品型号,产品名称,价格\n"
         "隔离联合客户,LOCAL-1,隔离产品甲,12.50\n"
+        "\n"
+        "合计,,,\n"
         "隔离联合客户,LOCAL-2,隔离产品乙,25.00\n"
     ).encode()
     run_id = create_preview(store, target="customer_products", csv=csv)
