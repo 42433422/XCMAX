@@ -1,5 +1,5 @@
 {
-  "lines": 2395698,
+  "lines": 2395707,
   "updated": "2026-11-11",
-  "note": "Ruff 要求 inventory_movements 顶层函数前保留空行，相对销售链基线多 1 行"
+  "note": "出库和财务唯一索引在 SQLite 上用 SQL 表达式创建，索引已存在则跳过"
 }
