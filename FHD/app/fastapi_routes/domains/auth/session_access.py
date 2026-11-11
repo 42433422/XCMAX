@@ -42,6 +42,7 @@ class SessionAccess:
     owner_permission: Callable[[User], bool]
     product_sku: Callable[[], str | None]
     market_token: Callable[[str], Awaitable[str | None]]
+    stored_market_token: Callable[[str], str]
     sync_entitlements: Callable[[str], Awaitable[set[str]]]
     cached_entitlements: Callable[[], set[str] | None]
     subscription: Callable[[int], JsonObject]
@@ -109,6 +110,13 @@ class SessionAccess:
         """Expose an async task even when the injected port is a late-bound callable."""
         await self.sync_entitlements(session_id)
 
+    async def _probe_market_token(self, session_id: str) -> None:
+        """Refresh the market token after the workspace is already open."""
+        try:
+            await self.market_token(session_id)
+        except self.infra_errors():
+            self.logger.exception("enterprise market probe deferred from session validate")
+
     async def validate(self, request: Request, background_tasks: BackgroundTasks) -> RouteResult:
         session_id = self.session_id(request)
         if not session_id:
@@ -133,8 +141,9 @@ class SessionAccess:
             )
         try:
             if self.product_sku() == "enterprise":
-                market_tok = await self.market_token(session_id)
-                if not market_tok:
+                # Local token opens the workspace. The market probe waits out
+                # its 2s timeout and holds the desktop splash.
+                if not (self.stored_market_token(session_id) or "").strip():
                     return JSONResponse(
                         {
                             **error_envelope(
@@ -145,6 +154,7 @@ class SessionAccess:
                         },
                         status_code=200,
                     )
+                background_tasks.add_task(self._probe_market_token, session_id)
         except self.infra_errors():
             self.logger.exception("enterprise market session check on validate failed")
         entitled_mod_ids: list[str] = []
@@ -152,11 +162,8 @@ class SessionAccess:
             cached = self.cached_entitlements()
             if cached:
                 entitled_mod_ids = sorted(cached)
-                background_tasks.add_task(self._refresh_entitlements, session_id)
-            else:
-                entitled = await self.sync_entitlements(session_id)
-                if entitled:
-                    entitled_mod_ids = sorted(entitled)
+            # Do not await market auth/me or entitled-mod-ids on this response.
+            background_tasks.add_task(self._refresh_entitlements, session_id)
         except self.infra_errors():
             self.logger.exception("sync enterprise entitlements on validate failed")
         session_meta = self.session_meta(request, user)
