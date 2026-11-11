@@ -79,22 +79,28 @@
     },
     {
       "requirement_id": "R05",
-      "scenario_id": "R05-approved-plan-semantics",
-      "rule": "审批后执行必须保留获批计划的业务语义。计划含导出时，不能只完成出库或会计就宣布全部完成。",
-      "source": "销售审批执行；本批只登记。",
-      "preconditions": ["计划已经审批通过"],
-      "inputs": ["获批计划节点、依赖、参数和版本"],
-      "allowed": ["必要节点按获批内容执行"],
-      "forbidden_effects": ["静默丢掉导出等获批节点", "未再确认就改受保护内容"],
-      "oracle": "获批计划快照",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "scenario_id": "R05-approved-shipment-export",
+      "rule": "审批后执行必须保留获批计划的业务语义。计划含出库、出货和导出时，三步都要完成，导出文件必须能重新打开并含有已提交的产品。",
+      "source": "FHD/tests/test_application/test_shipment_records_agent_routes.py 的审批后导出。计划在测试里固定，不是真实模型验收。",
+      "preconditions": ["租户 7 有库存 10", "聊天确认进入审批", "获批计划含出库、出货、导出"],
+      "inputs": ["确认", "两次同意", "产品「隔离测试产品」数量 2、金额 500"],
+      "allowed": ["库存变为 8", "出货记录写入", "导出文件含该产品", "重复同意不再次出库"],
+      "forbidden_effects": ["只出库不出货或只出货不导出就宣布完成", "导出文件缺少已提交产品"],
+      "oracle": "获批计划的三个节点，以及重新打开的 xlsx 单元格",
+      "tests": [
+        "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"
+      ],
+      "boundary": {
+        "real": ["sqlite", "approval resume", "inventory ledger", "shipment rows", "xlsx file"],
+        "doubles": ["fixed plan instead of a live model"],
+        "execution": "real"
+      },
       "known_defects": [],
-      "fault_version": "删除应执行的导出节点",
+      "fault_version": "导出节点不写出文件仍返回成功",
       "platforms": ["linux"],
-      "database_modes": ["sqlite", "postgresql"],
-      "resources": [],
-      "required_for_merge": false
+      "database_modes": ["sqlite"],
+      "resources": ["临时 sqlite", "openpyxl"],
+      "required_for_merge": true
     },
     {
       "requirement_id": "R06",

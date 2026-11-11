@@ -17,11 +17,17 @@ from pathlib import Path
 FHD_ROOT = Path(__file__).resolve().parents[2]
 CATALOG = FHD_ROOT / "config" / "business_contracts.json"
 STATUSES = {"PASS", "FAIL", "BLOCKED", "NOT RUN", "NOT APPLICABLE"}
-MINIMUM_REQUIRED = ("R08-e23-readback",)
-REQUIRED_TEST = (
-    "tests/test_application/test_idempotency_recovery_e23_e24.py"
-    "::test_e23_kill_after_commit_returns_the_same_row"
-)
+MINIMUM_REQUIRED = ("R08-e23-readback", "R05-approved-shipment-export")
+REQUIRED_TESTS = {
+    "R08-e23-readback": (
+        "tests/test_application/test_idempotency_recovery_e23_e24.py"
+        "::test_e23_kill_after_commit_returns_the_same_row"
+    ),
+    "R05-approved-shipment-export": (
+        "tests/test_application/test_shipment_records_agent_routes.py"
+        "::test_approved_shipment_then_export_uses_full_persisted_plan"
+    ),
+}
 
 
 def load_catalog(path: Path | None = None) -> dict:
@@ -81,8 +87,9 @@ def catalog_errors(data: dict) -> list[str]:
         if isinstance(item, dict) and item.get("scenario_id") in MINIMUM_REQUIRED
         for test in item.get("tests") or []
     }
-    if REQUIRED_TEST not in wired:
-        errors.append(f"required test removed: {REQUIRED_TEST}")
+    for scenario_id, node_id in REQUIRED_TESTS.items():
+        if node_id not in wired:
+            errors.append(f"required test removed: {scenario_id} {node_id}")
     return errors
 
 
@@ -178,7 +185,6 @@ def validate(
 def evidence_from_junit(
     paths: list[Path], *, source_sha: str, run_id: str, run_attempt: str
 ) -> dict:
-    attempts = junit_attempts(paths, REQUIRED_TEST)
     return {
         "source_sha": source_sha,
         "test_sha": source_sha,
@@ -187,9 +193,12 @@ def evidence_from_junit(
         "platform": "github-actions",
         "database_mode": "sqlite",
         "configuration": {"process": "spawn", "database": "temporary sqlite"},
-        "real": ["sqlite", "spawned process", "AgentToolExecutor"],
-        "doubles": [],
-        "scenarios": [scenario_from_attempts("R08-e23-readback", attempts)],
+        "real": ["sqlite", "approval resume", "inventory", "shipment rows", "xlsx"],
+        "doubles": ["fixed approval plan"],
+        "scenarios": [
+            scenario_from_attempts(scenario_id, junit_attempts(paths, node_id))
+            for scenario_id, node_id in REQUIRED_TESTS.items()
+        ],
     }
 
 
@@ -206,11 +215,12 @@ def not_applicable_evidence(*, source_sha: str, run_id: str, run_attempt: str, r
         "doubles": [],
         "scenarios": [
             {
-                "scenario_id": "R08-e23-readback",
+                "scenario_id": scenario_id,
                 "status": "NOT APPLICABLE",
                 "reason": reason,
                 "attempts": [],
             }
+            for scenario_id in MINIMUM_REQUIRED
         ],
     }
 
