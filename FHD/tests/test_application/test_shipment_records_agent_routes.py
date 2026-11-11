@@ -211,6 +211,10 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
     from pathlib import Path
     from unittest.mock import Mock, patch
 
+    from app.application.agent_orchestrator.tool_permission import clear_idempotent_replay_for_tests
+
+    clear_idempotent_replay_for_tests()
+
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
