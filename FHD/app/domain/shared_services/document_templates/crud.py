@@ -286,7 +286,7 @@ def _update_template_with_payload_inner(payload: dict):
     try:
         from datetime import datetime
 
-        from sqlalchemy import text
+        from sqlalchemy import DateTime, bindparam, text
 
         from app.db.session import get_db
 
@@ -462,7 +462,7 @@ def _update_template_with_payload_inner(payload: dict):
                     "UPDATE templates SET "
                     + ", ".join(updates)
                     + f" WHERE id = :id AND ({tenant_sql})"
-                ),
+                ).bindparams(bindparam("updated_at", type_=DateTime())),
                 {**params, **tenant_bind},
             )
             db.commit()
