@@ -22,8 +22,7 @@
 services:
   backend:
     build:
-      # ⚠️ 已统一主入口至 XCAGI/,构建上下文指向 XCAGI/
-      context: ./XCAGI
+      context: .
       dockerfile: Dockerfile
       target: development
     container_name: xcagi-backend-staging
@@ -73,13 +72,13 @@ services:
 
   celery-worker:
     build:
-      context: ./XCAGI
+      context: .
       dockerfile: Dockerfile
       target: development
     container_name: xcagi-celery-worker-staging
     restart: unless-stopped
     command: >
-      celery -A celery_app worker --loglevel=debug --concurrency=1
+      celery -A app.extensions:celery_app worker --loglevel=debug --concurrency=1
     environment:
       - XCAGI_ENV=staging
       - SECRET_KEY=staging-secret-key-not-for-prod
