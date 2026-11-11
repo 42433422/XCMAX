@@ -116,11 +116,53 @@ def release_gate(root: Path, source_sha: str) -> tuple[int, dict]:
     return (0 if passed else 1), report
 
 
+def _self_check() -> int:
+    """BLOCKED and a missing installer stay failures for the release scope."""
+    blocked = rollup(
+        [
+            {
+                "platform": "windows",
+                "kind": "installer",
+                "status": "BLOCKED",
+                "source_sha": "a" * 40,
+                "satisfies": "windows",
+            },
+            {
+                "platform": "macos",
+                "kind": "installer",
+                "status": "PASS",
+                "source_sha": "a" * 40,
+                "artifact_sha256": "b" * 64,
+                "satisfies": "macos",
+            },
+        ]
+    )
+    missing = rollup(
+        [
+            {
+                "platform": "windows",
+                "kind": "installer",
+                "status": "NOT RUN",
+                "source_sha": "a" * 40,
+                "satisfies": "windows",
+            }
+        ]
+    )
+    if blocked["release_pass"] or missing["platforms"].get("windows") != "NOT RUN":
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--artifact-dir", required=True)
-    parser.add_argument("--source-sha", required=True)
+    parser.add_argument("--self-check", action="store_true")
+    parser.add_argument("--artifact-dir")
+    parser.add_argument("--source-sha")
     args = parser.parse_args(argv)
+    if args.self_check:
+        return _self_check()
+    if not args.artifact_dir or not args.source_sha:
+        parser.error("--artifact-dir and --source-sha are required")
     code, report = release_gate(Path(args.artifact_dir), args.source_sha)
     json.dump(report, sys.stdout, ensure_ascii=False)
     sys.stdout.write("\n")
