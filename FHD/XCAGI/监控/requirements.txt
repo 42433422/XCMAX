@@ -1,5 +1,0 @@
-numpy
-Pillow
-opencv-python
-easyocr
-pywin32

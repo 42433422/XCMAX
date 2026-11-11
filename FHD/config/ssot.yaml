@@ -80,6 +80,9 @@ domains:
     derived:
       - FHD/CHANGELOG.md
       - FHD/docs/security/CREDENTIAL_INCIDENT_CLOSEOUT.md
+      - FHD/XCAGI/README.md
+      - FHD/XCAGI/FRONTEND.md
+      - FHD/rasa/README.md
     mode: lint
     check: python scripts/dev/docs_ssot_lint.py
     sync: null

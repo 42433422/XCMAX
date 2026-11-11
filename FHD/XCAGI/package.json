@@ -1,31 +1,13 @@
 {
   "name": "xcagi-frontend",
   "version": "1.0.0",
-  "description": "XCAGI 前端测试配置",
+  "private": true,
+  "description": "兼容入口：前端测试与 lint 统一委派到 ../frontend",
   "scripts": {
-    "test": "jest",
-    "test:coverage": "jest --coverage",
-    "test:e2e": "playwright test",
-    "lint": "eslint static/js/"
-  },
-  "devDependencies": {
-    "@babel/preset-env": "^8.0.7",
-    "eslint": "^10.14.0",
-    "jest": "^30.5.2",
-    "jest-environment-jsdom": "^30.5.2",
-    "@babel/core": "^8.1.0"
-  },
-  "jest": {
-    "testEnvironment": "jsdom",
-    "moduleFileExtensions": ["js", "json"],
-    "testMatch": ["**/tests/**/*.test.js"],
-    "collectCoverageFrom": ["static/js/**/*.js", "!static/js/**/*.test.js"]
-  },
-  "overrides": {
-    "browserslist": "4.28.7",
-    "brace-expansion@^1.0.0": "1.1.21",
-    "js-yaml": "4.3.2",
-    "sharp": "0.35.5"
+    "test": "npm --prefix ../frontend run test --",
+    "test:coverage": "npm --prefix ../frontend run test:coverage --",
+    "test:e2e": "npm --prefix ../frontend run test:e2e --",
+    "lint": "npm --prefix ../frontend run lint --"
   },
   "engines": {
     "node": "^22.18.0 || >=24.11.0"
