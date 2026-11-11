@@ -1255,3 +1255,137 @@ def test_old_intake_claim_is_unknown_without_resubmitting(intake_store):
         state = load_json(_run(db, data["review_id"], 1, 7).draft_json, {})
         assert "intake_attempt" not in state
         assert state["intake_attempt_history"][-1]["id"] == "old"
+
+
+def test_saved_template_continues_to_approval_once_without_duplicate_template(intake_store):
+    store = intake_store
+    data = review(store)
+    saved = store.client.post(
+        f"{BASE}/save", data={**data, "private_intake": "true", "template_only": "true"}
+    )
+    assert saved.status_code == 200, saved.text
+    plan = store.client.post(f"{BASE}/intake-preview", data=data).json()["intake"]
+    store.executor.futures[-1].result(timeout=10)
+    with tenant_scope(1), store.factory() as db:
+        run = store.service.get_run(db, run_id=plan["run_id"], owner_user_id=7)
+    submit = {
+        **data,
+        "private_intake": "true",
+        "intake_run_id": plan["run_id"],
+        "preview_revision": run["preview_revision"],
+    }
+    result = store.client.post(f"{BASE}/save", data=submit)
+    assert result.status_code == 200, result.text
+    assert result.json()["template_id"] == saved.json()["template_id"]
+    assert result.json()["auto_ingest"]["status"] == "awaiting_approval"
+    again = store.client.post(f"{BASE}/save", data=submit)
+    assert again.status_code == 200, again.text
+    assert again.json()["replayed"]
+    assert again.json()["auto_ingest"] == result.json()["auto_ingest"]
+    with store.factory() as db:
+        assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
+        assert db.query(PurchaseUnit).count() == 0
+    assert store.starts == []
+    changed = store.client.post(f"{BASE}/save", data={**submit, "candidate_id": "wrong-candidate"})
+    assert changed.status_code == 409
+
+
+@pytest.mark.parametrize("fault", ["revision", "permission", "mod", "candidate"])
+def test_saved_template_continuation_rejects_changed_scope(intake_store, fault):
+    store = intake_store
+    data, plan, business = prepare(store)
+    template = {
+        key: value
+        for key, value in data.items()
+        if key not in {"intake_run_id", "preview_revision"}
+    }
+    saved = store.client.post(f"{BASE}/save", data={**template, "template_only": "true"})
+    assert saved.status_code == 200
+    if fault == "revision":
+        data["preview_revision"] = "stale"
+    elif fault == "permission":
+        store.actor["execute"] = False
+    elif fault == "mod":
+        store.actor["mod"] = "different"
+    else:
+        data["candidate_id"] = "different"
+    result = store.client.post(f"{BASE}/save", data=data)
+    assert result.status_code in (403, 409), result.text
+    assert store.starts == []
+    with store.factory() as db:
+        assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
+        assert db.query(PurchaseUnit).count() == 0
+
+
+def test_saved_template_lost_submission_is_not_sent_twice(intake_store, monkeypatch):
+    store = intake_store
+    data, _plan, _business = prepare(store)
+    template = {
+        key: value
+        for key, value in data.items()
+        if key not in {"intake_run_id", "preview_revision"}
+    }
+    assert (
+        store.client.post(f"{BASE}/save", data={**template, "template_only": "true"}).status_code
+        == 200
+    )
+    calls = []
+
+    def unknown(**kwargs):
+        calls.append(kwargs)
+        raise RuntimeError("synthetic lost response")
+
+    monkeypatch.setattr("app.application.elt.docking_approval.submit_docking_write", unknown)
+    first = store.client.post(f"{BASE}/save", data=data)
+    again = store.client.post(f"{BASE}/save", data=data)
+    assert first.status_code == again.status_code == 200
+    assert again.json()["replayed"]
+    assert len(calls) == 1
+
+
+def test_direct_intake_save_cannot_be_reopened_as_a_template_continuation(
+    intake_store, monkeypatch
+):
+    store = intake_store
+    data, _plan, _business = prepare(store)
+    calls = []
+
+    def submit(**kwargs):
+        calls.append(kwargs)
+        return {"success": True, "status": "awaiting_approval", "batch_id": "single-batch"}
+
+    monkeypatch.setattr("app.application.elt.docking_approval.submit_docking_write", submit)
+    assert store.client.post(f"{BASE}/save", data=data).status_code == 200
+    changed = store.client.post(f"{BASE}/save", data={**data, "valid_rows_only": "true"})
+    assert changed.status_code == 409
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("field,value,status", [("execute", False, 403), ("mod", "other-mod", 409)])
+def test_saved_continuation_rechecks_permission_at_write_boundary(
+    intake_store, monkeypatch, field, value, status
+):
+    store = intake_store
+    data, _plan, _business = prepare(store)
+    template = {
+        key: value
+        for key, value in data.items()
+        if key not in {"intake_run_id", "preview_revision"}
+    }
+    assert (
+        store.client.post(f"{BASE}/save", data={**template, "template_only": "true"}).status_code
+        == 200
+    )
+    original = routes._recheck
+
+    def changed(request, expected):
+        original(request, expected)
+        store.actor[field] = value
+
+    monkeypatch.setattr(routes, "_recheck", changed)
+    result = store.client.post(f"{BASE}/save", data=data)
+    assert result.status_code == status, result.text
+    assert store.starts == []
+    with store.factory() as db:
+        assert db.query(PurchaseUnit).count() == 0
+        assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1

@@ -2349,7 +2349,11 @@ def reviewed_excel_intake_status(review_id: str, request: Request, user=Depends(
             raise HTTPException(status_code=409, detail="业务空间已变化，请重新核对")
         _authorize_intake(request, (tenant, owner), plan.get("target_type"))
         business = get_elt_service().get_run(db, run_id=plan["run_id"], owner_user_id=owner)
-        return {"status": "created", "intake": {**plan, "business": business}}
+        return {
+            "status": "created",
+            "intake": {**plan, "business": business},
+            "auto_ingest": load_json(review.receipt_json, {}).get("auto_ingest"),
+        }
 
 
 @router.post("/api/templates/reviewed-excel/reviews/{review_id}/intake-retry")
@@ -2680,6 +2684,7 @@ async def reviewed_excel_save(
             raise ReviewedExcelError("清理范围无效")
         summary_for_ingest: dict = {}
         confirmed_plan: dict | None = None
+        saved_template = False
         with tenant_scope(tenant), get_db() as db:
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
@@ -2715,7 +2720,7 @@ async def reviewed_excel_save(
             ).hexdigest()
             if run.status == _SAVED:
                 receipt = load_json(run.receipt_json, {})
-                if receipt.get("request_key") == request_key:
+                if request_key in (receipt.get("request_key"), receipt.get("intake_request_key")):
                     return {
                         "success": True,
                         "template_id": receipt["template_id"],
@@ -2728,8 +2733,35 @@ async def reviewed_excel_save(
                             else "confirmation_required",
                         },
                     }
-                raise HTTPException(status_code=409, detail="此审阅已保存；新的清理范围请新建审阅")
-            if run.status != _READY or versions[-1]["version"] != proposal_version:
+                template_request_key = hashlib.sha256(
+                    dump_json(
+                        {
+                            "version": proposal_version,
+                            "candidate": candidate_id,
+                            "selections": selected,
+                            "name": name.strip(),
+                            "template_only": True,
+                        }
+                    ).encode()
+                ).hexdigest()
+                confirmation = state.get("confirmation") or {}
+                if (
+                    receipt.get("request_key") != template_request_key
+                    or not private_intake
+                    or template_only
+                    or not intake_run_id
+                    or receipt.get("intake_request_key")
+                    or confirmation.get("version") != proposal_version
+                    or confirmation.get("candidate") != candidate_id
+                    or confirmation.get("selected") != selected
+                ):
+                    raise HTTPException(
+                        status_code=409, detail="此审阅已保存；新的清理范围请新建审阅"
+                    )
+                saved_template = True
+            if (run.status != _READY and not saved_template) or versions[-1][
+                "version"
+            ] != proposal_version:
                 raise HTTPException(status_code=409, detail="审阅版本已过期或保存结果待核对")
             candidate = next(
                 (item for item in versions[-1]["candidates"] if item["id"] == candidate_id), None
@@ -2815,132 +2847,148 @@ async def reviewed_excel_save(
             else:
                 # Old template-library clients authorize one template only, never implicit business writes.
                 cleaned = clean_workbook(body, run.file_sha256, selected)
-            before = {(i["sheet"], i["cell"]) for i in candidate["clear"]}
-            after = {(i["sheet"], i["cell"]) for i in selected}
-            state["confirmation"] = {
-                "version": proposal_version,
-                "candidate": candidate_id,
-                "selected": selected,
-                "added": [{"sheet": s, "cell": c} for s, c in sorted(after - before)],
-                "removed": [{"sheet": s, "cell": c} for s, c in sorted(before - after)],
-            }
-            old_draft = run.draft_json
-            saving_draft = dump_json(state)
-            classification_lock = _lock_review_classification(db, run, tenant, owner)
-            _cas(db, run, old_draft, status=_SAVING, stage=_SAVING, draft_json=saving_draft)
-            try:
+            if saved_template:
+                # Claim this continuation before external approval creation. A lost result
+                # is read back, never blindly submitted twice; the template is not recreated.
                 _recheck(request, (tenant, owner))
-                db.expire_all()
-                _review_source_version(db, run, tenant, owner)
-                if confirmed_plan:
-                    if (
-                        _authorize_intake(request, (tenant, owner), confirmed_plan["target_type"])
-                        != confirmed_plan["mod_id"]
-                    ):
-                        raise HTTPException(status_code=409, detail="业务空间已变化，请重新预演")
-                    from app.application.elt.auto_ingest_service import workbook_text
+                if (
+                    _authorize_intake(request, (tenant, owner), confirmed_plan["target_type"])
+                    != confirmed_plan["mod_id"]
+                ):
+                    raise HTTPException(status_code=409, detail="业务空间已变化，请重新预演")
+                from app.application.elt.auto_ingest_service import workbook_text
 
-                    get_auto_ingest_service().validate_prepared(
-                        db,
-                        plan=confirmed_plan,
-                        path=prepared_path,
-                        owner_user_id=owner,
-                        tenant_id=tenant,
-                        preview_revision=preview_revision,
-                        owned_upload_user_id=upload.owner_user_id,
-                        source_text=workbook_text(_archived_original(db, run, tenant, owner)),
-                    )
-            except (HTTPException, EltError):
-                _release_failed_review(
-                    db, run.id, tenant, owner, saving_draft, old_draft, classification_lock
+                get_auto_ingest_service().validate_prepared(
+                    db,
+                    plan=confirmed_plan,
+                    path=prepared_path,
+                    owner_user_id=owner,
+                    tenant_id=tenant,
+                    preview_revision=preview_revision,
+                    owned_upload_user_id=upload.owner_user_id,
+                    source_text=workbook_text(_archived_original(db, run, tenant, owner)),
                 )
-                raise
-            root = Path(get_app_data_dir()) / "templates" / "reviewed_excel" / str(tenant)
-            path = root / f"{uuid4().hex}.xlsx"
-            created = False
-            fd = None
-            try:
-                root.mkdir(parents=True, exist_ok=True)
-                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                created = True
-                stream = os.fdopen(fd, "wb")
-                fd = None
-                with stream:
-                    stream.write(cleaned)
-            except OSError:
-                if fd is not None:
-                    try:
-                        os.close(fd)
-                    except OSError:
-                        pass
-                cleanup_failed = False
-                if created:
-                    try:
-                        path.unlink(missing_ok=True)
-                    except OSError:
-                        cleanup_failed = True
-                _release_failed_review(
-                    db, run.id, tenant, owner, saving_draft, old_draft, classification_lock
-                )
-                detail = "临时文件写入失败，模板未提交，可以重试"
-                if cleanup_failed:
-                    detail = "临时文件写入失败，模板未提交；临时副本需管理员清理"
-                raise HTTPException(status_code=503, detail=detail) from None
-            try:
-                from app.legacy.routes.document_templates_compat import run_archive_template_create
-
-                result, code = run_archive_template_create(
-                    {
-                        "name": name.strip(),
-                        "template_type": "Excel",
-                        "category": "excel",
-                        "business_scope": "custom",
-                        "source": "reviewed_excel_cleanup",
-                        "file_path": str(path),
-                        "fields": [],
-                        "preview_data": {
-                            "reviewed_excel": True,
-                            "source_sha256": (
-                                load_json(run.summary_json, {}).get("selected_region") or {}
-                            ).get("source_sha256", run.file_sha256),
-                            "derived_sha256": run.file_sha256,
-                            "selected_region": load_json(run.summary_json, {}).get(
-                                "selected_region"
-                            ),
-                            "review_id": review_id,
-                            **(
-                                {
-                                    "revision_parent": load_json(run.summary_json, {})[
-                                        "revision_parent"
-                                    ]
-                                }
-                                if load_json(run.summary_json, {}).get("revision_parent")
-                                else {}
-                            ),
-                        },
-                    }
-                )
-                if code >= 400 or not result.get("success"):
-                    raise HTTPException(
-                        status_code=code if code >= 400 else 500,
-                        detail=result.get("message", "保存失败"),
-                    )
-                template_id = result["template"]["id"]
-                persisted = db.execute(
+                old_receipt = run.receipt_json
+                receipt = load_json(old_receipt, {})
+                template_id = receipt["template_id"]
+                receipt["intake_request_key"] = request_key
+                receipt["auto_ingest"] = {"success": False, "error": "outcome_unknown"}
+                claimed = db.execute(
                     update(EltRun)
                     .where(
                         EltRun.id == run.id,
                         EltRun.tenant_id == tenant,
                         EltRun.owner_user_id == owner,
-                        EltRun.status == _SAVING,
+                        EltRun.status == _SAVED,
+                        EltRun.receipt_json == old_receipt,
                     )
-                    .values(
-                        status=_SAVED,
-                        stage=_SAVED,
-                        receipt_json=dump_json(
-                            {
-                                "request_key": request_key,
-                                "template_id": template_id,
+                    .values(receipt_json=dump_json(receipt))
+                )
+                if claimed.rowcount != 1:
+                    db.rollback()
+                    raise HTTPException(status_code=409, detail="入库提交正在处理中，请读取原结果")
+                summary_for_ingest = load_json(run.summary_json, {})
+                db.commit()
+            else:
+                before = {(i["sheet"], i["cell"]) for i in candidate["clear"]}
+                after = {(i["sheet"], i["cell"]) for i in selected}
+                state["confirmation"] = {
+                    "version": proposal_version,
+                    "candidate": candidate_id,
+                    "selected": selected,
+                    "added": [{"sheet": s, "cell": c} for s, c in sorted(after - before)],
+                    "removed": [{"sheet": s, "cell": c} for s, c in sorted(before - after)],
+                }
+                old_draft = run.draft_json
+                saving_draft = dump_json(state)
+                classification_lock = _lock_review_classification(db, run, tenant, owner)
+                _cas(db, run, old_draft, status=_SAVING, stage=_SAVING, draft_json=saving_draft)
+                try:
+                    _recheck(request, (tenant, owner))
+                    db.expire_all()
+                    _review_source_version(db, run, tenant, owner)
+                    if confirmed_plan:
+                        if (
+                            _authorize_intake(
+                                request, (tenant, owner), confirmed_plan["target_type"]
+                            )
+                            != confirmed_plan["mod_id"]
+                        ):
+                            raise HTTPException(
+                                status_code=409, detail="业务空间已变化，请重新预演"
+                            )
+                        from app.application.elt.auto_ingest_service import workbook_text
+
+                        get_auto_ingest_service().validate_prepared(
+                            db,
+                            plan=confirmed_plan,
+                            path=prepared_path,
+                            owner_user_id=owner,
+                            tenant_id=tenant,
+                            preview_revision=preview_revision,
+                            owned_upload_user_id=upload.owner_user_id,
+                            source_text=workbook_text(_archived_original(db, run, tenant, owner)),
+                        )
+                except (HTTPException, EltError):
+                    _release_failed_review(
+                        db, run.id, tenant, owner, saving_draft, old_draft, classification_lock
+                    )
+                    raise
+                root = Path(get_app_data_dir()) / "templates" / "reviewed_excel" / str(tenant)
+                path = root / f"{uuid4().hex}.xlsx"
+                created = False
+                fd = None
+                try:
+                    root.mkdir(parents=True, exist_ok=True)
+                    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    created = True
+                    stream = os.fdopen(fd, "wb")
+                    fd = None
+                    with stream:
+                        stream.write(cleaned)
+                except OSError:
+                    if fd is not None:
+                        try:
+                            os.close(fd)
+                        except OSError:
+                            pass
+                    cleanup_failed = False
+                    if created:
+                        try:
+                            path.unlink(missing_ok=True)
+                        except OSError:
+                            cleanup_failed = True
+                    _release_failed_review(
+                        db, run.id, tenant, owner, saving_draft, old_draft, classification_lock
+                    )
+                    detail = "临时文件写入失败，模板未提交，可以重试"
+                    if cleanup_failed:
+                        detail = "临时文件写入失败，模板未提交；临时副本需管理员清理"
+                    raise HTTPException(status_code=503, detail=detail) from None
+                try:
+                    from app.legacy.routes.document_templates_compat import (
+                        run_archive_template_create,
+                    )
+
+                    result, code = run_archive_template_create(
+                        {
+                            "name": name.strip(),
+                            "template_type": "Excel",
+                            "category": "excel",
+                            "business_scope": "custom",
+                            "source": "reviewed_excel_cleanup",
+                            "file_path": str(path),
+                            "fields": [],
+                            "preview_data": {
+                                "reviewed_excel": True,
+                                "source_sha256": (
+                                    load_json(run.summary_json, {}).get("selected_region") or {}
+                                ).get("source_sha256", run.file_sha256),
+                                "derived_sha256": run.file_sha256,
+                                "selected_region": load_json(run.summary_json, {}).get(
+                                    "selected_region"
+                                ),
+                                "review_id": review_id,
                                 **(
                                     {
                                         "revision_parent": load_json(run.summary_json, {})[
@@ -2950,24 +2998,57 @@ async def reviewed_excel_save(
                                     if load_json(run.summary_json, {}).get("revision_parent")
                                     else {}
                                 ),
-                            }
-                        ),
+                            },
+                        }
                     )
-                )
-                if persisted.rowcount != 1:
-                    db.rollback()
-                    raise HTTPException(
-                        status_code=409, detail="模板已写入但审阅回执未确认，请人工核对"
+                    if code >= 400 or not result.get("success"):
+                        raise HTTPException(
+                            status_code=code if code >= 400 else 500,
+                            detail=result.get("message", "保存失败"),
+                        )
+                    template_id = result["template"]["id"]
+                    persisted = db.execute(
+                        update(EltRun)
+                        .where(
+                            EltRun.id == run.id,
+                            EltRun.tenant_id == tenant,
+                            EltRun.owner_user_id == owner,
+                            EltRun.status == _SAVING,
+                        )
+                        .values(
+                            status=_SAVED,
+                            stage=_SAVED,
+                            receipt_json=dump_json(
+                                {
+                                    "request_key": request_key,
+                                    "template_id": template_id,
+                                    **(
+                                        {
+                                            "revision_parent": load_json(run.summary_json, {})[
+                                                "revision_parent"
+                                            ]
+                                        }
+                                        if load_json(run.summary_json, {}).get("revision_parent")
+                                        else {}
+                                    ),
+                                }
+                            ),
+                        )
                     )
-                _unlock_review_classification(db, classification_lock, tenant, owner)
-                # Snapshot before session closes: EltRun detaches when get_db() exits,
-                # and post-save auto-ingest must not touch ORM attributes afterward.
-                summary_for_ingest = load_json(run.summary_json, {})
-                db.commit()
-            except BOUNDARY_ERRORS:
-                # The legacy library commits in a separate transaction; do not retry or remove
-                # files when its outcome may have succeeded but its receipt was lost.
-                raise
+                    if persisted.rowcount != 1:
+                        db.rollback()
+                        raise HTTPException(
+                            status_code=409, detail="模板已写入但审阅回执未确认，请人工核对"
+                        )
+                    _unlock_review_classification(db, classification_lock, tenant, owner)
+                    # Snapshot before session closes: EltRun detaches when get_db() exits,
+                    # and post-save auto-ingest must not touch ORM attributes afterward.
+                    summary_for_ingest = load_json(run.summary_json, {})
+                    db.commit()
+                except BOUNDARY_ERRORS:
+                    # The legacy library commits in a separate transaction; do not retry or remove
+                    # files when its outcome may have succeeded but its receipt was lost.
+                    raise
         auto_ingest = {"success": False, "error": "confirmation_required"}
         if confirmed_plan:
             try:

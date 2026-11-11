@@ -3,8 +3,10 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useReviewedDocuments, type DocumentProposal, type DocumentReview, type DocumentSlice, type ReviewedDocument } from './useReviewedDocuments'
 
+const autoApproval = vi.hoisted(() => vi.fn())
+vi.mock('@/composables/useAutomaticDockingApproval', () => ({ approveDockingIfAutomatic: autoApproval }))
 const api = vi.hoisted(() => ({ reviewExcel: vi.fn(), reviewedCandidateResult: vi.fn(), previewReviewedIntake: vi.fn(), reviewedIntakeStatus: vi.fn(), retryReviewedIntake: vi.fn(), saveReviewedExcel: vi.fn(), refineReviewedExcel: vi.fn(), downloadClassificationSource: vi.fn() }))
-const elt = vi.hoisted(() => ({ run: vi.fn() }))
+const elt = vi.hoisted(() => ({ run: vi.fn(), autoIngestProgress: vi.fn() }))
 const runtime = vi.hoisted(() => ({ modId: '' }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 vi.mock('@/api/elt', () => ({ eltApi: elt }))
@@ -43,10 +45,10 @@ async function selected(doc: ReviewedDocument, index = 0) {
   controller.choose(doc, index); void controller.prepare(doc); await flushPromises()
 }
 beforeEach(() => {
-  vi.resetAllMocks(); runtime.modId = ''; scope = { live: true }; captureLive = true
+  vi.resetAllMocks(); autoApproval.mockResolvedValue({ attempted: false, accepted: false }); elt.autoIngestProgress.mockResolvedValue({ status: 'awaiting_approval' }); runtime.modId = ''; scope = { live: true }; captureLive = true
   api.reviewExcel.mockImplementation(async (form: FormData) => review(`review-${form.get('classification_id')}`))
   api.previewReviewedIntake.mockImplementation(async (form: FormData) => readyIntake(form))
-  api.saveReviewedExcel.mockResolvedValue({ template_id: 'synthetic-template' })
+  api.saveReviewedExcel.mockResolvedValue({ template_id: 'synthetic-template', auto_ingest: { success: true, status: 'awaiting_approval', batch_id: 'batch-test' } })
   api.refineReviewedExcel.mockImplementation(async (form: FormData) => ({ review_id: String(form.get('review_id')), proposal: proposal(String(form.get('review_id')), 'refined-v2') }))
   wrapper = mount(defineComponent({ setup() {
     controller = useReviewedDocuments({ capture: () => { const captured = scope, accepted = captureLive; return () => captured.live && accepted }, outcomeUnknown: error => !!(error as { outcome_unknown?: boolean } | null)?.outcome_unknown, saved })
@@ -208,7 +210,11 @@ describe('reviewed document ownership and receipts', () => {
     await controller.prepare(a); await controller.save(a); controller.choose(a, 2)
     expect(api.previewReviewedIntake).toHaveBeenCalledTimes(previews)
     expect(api.reviewExcel).toHaveBeenCalledTimes(modelCalls); expect(api.refineReviewedExcel).toHaveBeenCalledTimes(refinementCalls)
-    expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+    expect(api.saveReviewedExcel).toHaveBeenCalledTimes(2)
+    const calls = api.saveReviewedExcel.mock.calls.map(call => call[0] as FormData)
+    expect(calls.filter(form => form.get('template_only') === 'true')).toHaveLength(1)
+    expect(calls[1].get('review_id')).toBe(calls[0].get('review_id'))
+    expect(calls[1].get('intake_run_id')).toBeTruthy()
     expect(a.candidateIndex).toBe(1); expect(controller.canSave(a)).toBe(false)
     expect(saved).toHaveBeenCalledTimes(1)
   })
@@ -494,17 +500,19 @@ it('restores a saved receipt through running and queued intake states without re
   await vi.advanceTimersByTimeAsync(2000)
   expect(doc.intakePending).toBe(false); expect(doc.intakeError).toBe('')
   expect(doc.intake?.business.status).toBe('preview_ready')
-  expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+  expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+  expect((api.saveReviewedExcel.mock.calls[0][0] as FormData).get('intake_run_id')).toBe(doc.intake!.run_id)
 })
 
-it.each(['not_started', 'outcome_unknown'])('keeps a saved template separate from %s intake', async status => {
+it('does not repeat an unknown saved intake', async () => {
+  const status = 'outcome_unknown'
   api.reviewExcel.mockResolvedValue(savedReview('saved-state'))
   api.reviewedIntakeStatus.mockResolvedValue({ status })
   const doc = await generated('saved-state'); await flushPromises()
   expect(controller.saved(doc)).toBe(true)
   expect(doc.intakePending).toBe(false)
   expect(doc.intakeUnknown).toBe(status === 'outcome_unknown')
-  expect(doc.intakeError).toContain(status === 'not_started' ? '尚未开始' : '待核对')
+  expect(doc.intakeError).toContain('待核对')
   expect(api.previewReviewedIntake).not.toHaveBeenCalled()
 })
 
@@ -702,4 +710,81 @@ it('ignores refinement after the user switches to another proposal version', asy
   expect(await task).toBe(false)
   expect(doc.proposals.map(item => item.version)).not.toContain('late-version')
   expect(doc.requirements).toEqual([])
+})
+
+it('automatically submits a saved template with its exact ready preview, once', async () => {
+  const doc = await generated('auto-write'); controller.choose(doc, 0)
+  api.saveReviewedExcel.mockResolvedValueOnce({ template_id: 'synthetic-template' })
+    .mockResolvedValue({ template_id: 'synthetic-template', auto_ingest: { success: true, status: 'awaiting_approval', batch_id: 'batch-1' } })
+  await controller.save(doc); await flushPromises()
+  expect(api.saveReviewedExcel).toHaveBeenCalledTimes(2)
+  const form = api.saveReviewedExcel.mock.calls[1][0] as FormData
+  expect(form.get('template_only')).toBeNull()
+  expect(form.get('intake_run_id')).toBe(doc.intake!.run_id)
+  expect(form.get('preview_revision')).toBe('ready-revision')
+  expect(doc.ingestStatus).toBe('awaiting_approval')
+  await controller.prepare(doc); await flushPromises()
+  expect(api.saveReviewedExcel).toHaveBeenCalledTimes(2)
+})
+
+it('does not repeat an automatic write after an unknown response', async () => {
+  const doc = await generated('unknown-write'); controller.choose(doc, 0)
+  api.saveReviewedExcel.mockResolvedValueOnce({ template_id: 'synthetic-template' }).mockRejectedValue(new Error('network lost'))
+  await controller.save(doc); await flushPromises()
+  expect(doc.ingestStatus).toBe('outcome_unknown')
+  await controller.prepare(doc); await flushPromises()
+  expect(api.saveReviewedExcel).toHaveBeenCalledTimes(2)
+})
+
+it('automatically submits a new saved revision and ignores the old progress response', async () => {
+  vi.useFakeTimers()
+  const doc = await generated('revision-write'); controller.choose(doc, 0)
+  await controller.save(doc); await flushPromises()
+  const oldProgress = deferred<{ status: string }>()
+  elt.autoIngestProgress.mockReturnValueOnce(oldProgress.promise)
+  await vi.advanceTimersByTimeAsync(2000)
+  await controller.refine(doc, '新要求')
+  expect(doc.ingestStatus).toBe('')
+  controller.choose(doc, 0)
+  await controller.save(doc); await flushPromises()
+  expect(api.saveReviewedExcel).toHaveBeenCalledTimes(4)
+  expect(doc.ingestStatus).toBe('awaiting_approval')
+  oldProgress.resolve({ status: 'failed' }); await flushPromises()
+  expect(doc.ingestStatus).toBe('awaiting_approval')
+  expect((api.saveReviewedExcel.mock.calls[3][0] as FormData).get('proposal_version')).toBe('refined-v2')
+})
+
+it('continues a saved template whose authoritative preview state is not_started', async () => {
+  api.reviewExcel.mockImplementation(async () => savedReview('interrupted-save'))
+  api.reviewedIntakeStatus.mockResolvedValue({ status: 'not_started' })
+  const doc = await generated('interrupted-save'); await flushPromises()
+  expect(api.previewReviewedIntake).toHaveBeenCalledOnce()
+  expect(api.saveReviewedExcel).toHaveBeenCalledOnce()
+  expect(doc.ingestStatus).toBe('awaiting_approval')
+})
+
+it('restores a completed batch without submitting or previewing it again', async () => {
+  vi.useFakeTimers()
+  const result = savedReview('completed-save')
+  api.reviewExcel.mockResolvedValue(result)
+  const form = new FormData(); form.append('review_id', result.review_id); form.append('candidate_id', result.proposal.candidates[0].id)
+  const plan = readyIntake(form).intake
+  plan.business.status = 'completed'
+  api.reviewedIntakeStatus.mockResolvedValue({ status: 'created', intake: plan,
+    auto_ingest: { success: true, batch_id: 'existing-batch', status: 'awaiting_approval' } })
+  elt.autoIngestProgress.mockResolvedValue({ batch_id: 'existing-batch', status: 'applied' })
+  const doc = await generated('completed-save'); await flushPromises(); await vi.advanceTimersByTimeAsync(2000)
+  expect(doc.ingestStatus).toBe('applied')
+  expect(api.previewReviewedIntake).not.toHaveBeenCalled()
+  expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+})
+
+it('uses the existing automatic approval preference and reads actual batch progress', async () => {
+  autoApproval.mockResolvedValue({ attempted: true, accepted: true })
+  elt.autoIngestProgress.mockResolvedValue({ batch_id: 'batch-test', status: 'applied' })
+  const doc = await generated('automatic-approval'); controller.choose(doc, 0)
+  await controller.save(doc); await flushPromises()
+  expect(autoApproval).toHaveBeenCalledOnce()
+  expect(elt.autoIngestProgress).toHaveBeenCalledWith('batch-test')
+  expect(doc.ingestStatus).toBe('applied')
 })

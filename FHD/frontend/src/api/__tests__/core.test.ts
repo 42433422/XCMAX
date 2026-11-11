@@ -5,6 +5,7 @@ import { authApi } from '@/api/auth'
 
 describe('api core types', () => {
   afterEach(() => {
+    document.getElementById('stability-notice')?.remove()
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
@@ -42,7 +43,7 @@ describe('api core types', () => {
     await rejection
   })
 
-  it('a quiet 8s probe does not toast the chat failure, and a user request does', async () => {
+  it('keeps both probe and user request timeouts silent while rejecting', async () => {
     vi.useFakeTimers()
     document.getElementById('stability-notice')?.remove()
     vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
@@ -58,7 +59,22 @@ describe('api core types', () => {
     const noisyRejection = expect(noisy).rejects.toThrow('请求超时（>8s）。该请求未成功。')
     await vi.advanceTimersByTimeAsync(8000)
     await noisyRejection
-    expect(document.getElementById('stability-notice')?.textContent).toBe('请求超时（>8s）。该请求未成功。')
+    expect(document.getElementById('stability-notice')).toBeNull()
+    await expect(noisy).rejects.toMatchObject({ data: { success: false, stability: { kind: 'timeout' } } })
+  })
+
+  it('does not show a timeout reported by the transport either', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connection timed out')))
+    await expect(api.get('/api/timed-out', {}, { retry: false })).rejects.toMatchObject({
+      data: { success: false, stability: { kind: 'timeout', action: 'check_result' } },
+    })
+    expect(document.getElementById('stability-notice')).toBeNull()
+  })
+
+  it('still displays non-timeout transport failures', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    await expect(api.get('/api/unreachable', {}, { retry: false })).rejects.toMatchObject({ status: 0 })
+    expect(document.getElementById('stability-notice')?.textContent).toBeTruthy()
   })
 
   it('waits for a long request when no client timeout is configured', async () => {

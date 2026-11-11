@@ -272,7 +272,9 @@ describe('reviewed Excel template', () => {
       await selectCandidate(wrapper)
       await wrapper.findAll('button').find(b => b.text() === '保存模板')!.trigger('click')
       await flushPromises()
-      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(2)
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('intake_run_id')).toBeTruthy()
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('preview_revision')).toBeTruthy()
       const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
       expect(form.get('composer_note')).toBe('第一条整理要求')
       expect((wrapper.get('.elt-composer__input').element as HTMLTextAreaElement).value).toBe('未发送草稿')
@@ -872,7 +874,9 @@ describe('reviewed Excel template', () => {
       expect(api.previewReviewedIntake).not.toHaveBeenCalled()
       await wrapper.findAll('button').find(b => b.text() === '保存模板')!.trigger('click')
       await flushPromises()
-      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(2)
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('intake_run_id')).toBeTruthy()
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('preview_revision')).toBeTruthy()
       const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
       expect(form.get('private_intake')).toBe('true')
       expect(form.get('publish_to_tenant')).toBe('false')
@@ -904,7 +908,9 @@ describe('reviewed Excel template', () => {
       expect(wrapper.get('[role=alert]').text()).toContain('打印版式未验证')
       await wrapper.findAll('button').find(b => b.text() === '保存模板')!.trigger('click')
       await flushPromises()
-      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(2)
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('intake_run_id')).toBeTruthy()
+      expect((api.saveReviewedExcel.mock.calls[1][0] as FormData).get('preview_revision')).toBeTruthy()
       const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
       expect(form.get('private_intake')).toBe('true')
       expect(form.get('publish_to_tenant')).toBe('false')

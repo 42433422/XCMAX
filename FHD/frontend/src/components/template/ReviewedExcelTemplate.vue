@@ -1360,6 +1360,13 @@ async function downloadCandidate(index: number) {
               <div class="reviewed-documents">
                 <template v-for="doc in documentWorkspace.documents.value.filter(isFamilyRepresentative)" :key="doc.key">
                   <button type="button" class="reviewed-template__candidate-capsule" :class="{ 'reviewed-template__candidate-capsule--saved': documentWorkspace.saved(doc) }" :data-document-key="doc.key" :aria-label="`${doc.displayName}${doc.typeLabel ? '，' + doc.typeLabel : ''}${documentWorkspace.saved(doc) ? '，已保存' : '，未保存'}`" aria-haspopup="dialog" @click="openDocument(doc)">{{ doc.displayName }}<small v-if="doc.typeLabel">{{ doc.typeLabel }}</small><small v-if="documentPhase(doc)">{{ documentPhase(doc) }}</small></button>
+                  <p v-if="documentWorkspace.saved(doc)" class="reviewed-document-work-status" role="status">
+                    <template v-if="doc.intakePending">数据库导入员、知识整理员正在分析原件，完成后自动提交入库…</template>
+                    <template v-else-if="doc.ingestStatus === 'submitting'">数据库导入员、知识整理员正在提交入库…</template>
+                    <template v-else-if="doc.ingestStatus === 'awaiting_approval'">两位员工已提交入库任务，等待审批工作台放行。模板已保存，不代表数据已入库。</template>
+                    <template v-else-if="doc.ingestStatus">入库任务：{{ autoIngestStatusLabel(doc.ingestStatus) }}{{ doc.ingestBatchId ? `（${doc.ingestBatchId}）` : '' }}。</template>
+                    <span v-if="doc.intakeError" role="alert">{{ doc.intakeError }}</span>
+                  </p>
                   <details v-if="relatedDocuments(doc).length > 1"><summary>建议复用 · {{ relatedDocuments(doc).length }} 份原单据</summary><button v-for="related in relatedDocuments(doc)" :key="related.key" type="button" @click="openDocument(related)">{{ related.displayName }}（{{ related.slice.fragments.map(part => `${part.sheet} ${part.range}`).join('、') }}）</button></details>
                 </template>
               </div>
