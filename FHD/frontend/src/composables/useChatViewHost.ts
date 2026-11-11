@@ -139,7 +139,6 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
       if (domInput) domInput.value = text
       return true
     }
-    ;(window as unknown as { __VUE_HANDLE_AUTO_ACTION__?: boolean }).__VUE_HANDLE_AUTO_ACTION__ = true
     ;(window as Window & { handleAutoAction: (a: unknown, m?: string) => void }).handleAutoAction = (
       action: unknown,
       userMessage?: string,
@@ -168,7 +167,6 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
     const w = window as unknown as Record<string, unknown>
     if (w.__VUE_CHAT_SEND__) delete w.__VUE_CHAT_SEND__
     if (w.__VUE_CHAT_FILL__) delete w.__VUE_CHAT_FILL__
-    w.__VUE_HANDLE_AUTO_ACTION__ = false
     if (legacyAutoActionHandler) {
       ;(window as unknown as { handleAutoAction: typeof legacyAutoActionHandler }).handleAutoAction = legacyAutoActionHandler
     }

@@ -1,7 +1,7 @@
 # SSOT 索引（唯一真相源登记表）
 
 > **本文件为 SSOT 索引的 SSOT**。任何文档声称 SSOT 必须在此登记。
-> 最后更新：2026-10-24
+> 最后更新：2026-11-11
 
 ## 登记规则
 
@@ -98,10 +98,12 @@
 | capability-center | `成都修茈科技有限公司/data/capabilities/catalog.json` | blocking |
 | product-lines | `FHD/config/product_lines.yaml` | blocking |
 
+维护入口说明：[`XCAGI/README.md`](../XCAGI/README.md) 记录桌面壳与运行资源边界，[`XCAGI/FRONTEND.md`](../XCAGI/FRONTEND.md) 指向现行前端，[`rasa/README.md`](../rasa/README.md) 记录可选模型训练入口；三者作为派生说明登记在 `docs-ssot`。
+
 ## 已退役 SSOT（指针化）
 
 | 原文档 | 指向 | 原因 |
 |--------|------|------|
 | reports/COVERAGE_GAP.md | reports/COVERAGE_RAMP.md | 覆盖率 SSOT 收敛 |
 | reports/FHD_DEPTH_ASSESSMENT_REVISED_2026-05-03.md（覆盖率章节） | reports/COVERAGE_RAMP.md | 覆盖率 SSOT 收敛 |
-| XCAGI/BUSINESS_MODEL.md（定价章节） | account_system_ssot.md + saas_plans.json + PlanTemplate | 2026-07 定价 SSOT 收敛；BUSINESS_MODEL 保留战略叙事 |
+| XCAGI/BUSINESS_MODEL.md | [account_system_ssot.md](account_system_ssot.md) + [saas_plans.json](../config/saas_plans.json) + PlanTemplate | 全文归档；恢复见 [ARCHIVE_POINTER.md](../../ARCHIVE_POINTER.md) |

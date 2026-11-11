@@ -71,7 +71,7 @@ fi
 echo "[2/2] 启动前端 Vite（5001）..."
 (
   cd "${FRONTEND_DIR}"
-  npm run dev
+  VITE_DEV_PORT=5001 VITE_API_BASE=http://127.0.0.1:5000 npm run dev
 ) &
 sleep 4
 open "http://127.0.0.1:5001/" 2>/dev/null || true

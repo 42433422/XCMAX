@@ -1,5 +1,6 @@
 # experimental — 非签约部署主路径（主路径=桌面私有化 + 现网单 CVM 滚动；见 FHD/docs/architecture/DEPLOY_PATH_SSOT.md / ADR-route-a）。本文件保留供容器实验；阶段三前不删、不强制迁 extras。
-version: '3.8'
+# Run from FHD/: docker compose -f docker-compose.yml -f XCAGI/docker-compose.monitoring.yml up -d
+# Compose resolves mounts against the first file (FHD/docker-compose.yml).
 
 services:
   prometheus:
@@ -8,8 +9,8 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./k8s/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./k8s/monitoring/prometheus/alert_rules.yml:/etc/prometheus/rules/alert_rules.yml
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -17,6 +18,7 @@ services:
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
     restart: unless-stopped
+    networks: [xcagi-network]
 
   alertmanager:
     image: prom/alertmanager:latest
@@ -24,32 +26,13 @@ services:
     ports:
       - "9093:9093"
     volumes:
-      - ./k8s/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
     restart: unless-stopped
-
-  loki:
-    image: grafana/loki:latest
-    container_name: xcagi-loki
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./k8s/monitoring/loki/loki.yml:/etc/loki/loki.yml
-      - loki_data:/data
-    command: -config.file=/etc/loki/loki.yml
-    restart: unless-stopped
-
-  promtail:
-    image: grafana/promtail:latest
-    container_name: xcagi-promtail
-    volumes:
-      - ./k8s/monitoring/loki/promtail.yml:/etc/promtail/promtail.yml
-      - ./logs:/var/log/xcagi:ro
-    command: -config.file=/etc/promtail/promtail.yml
-    restart: unless-stopped
+    networks: [xcagi-network]
 
   grafana:
     image: grafana/grafana:latest
@@ -60,12 +43,15 @@ services:
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:?GF_SECURITY_ADMIN_PASSWORD is required}
     volumes:
-      - ./k8s/monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
     restart: unless-stopped
+    networks: [xcagi-network]
 
 volumes:
   prometheus_data:
   alertmanager_data:
-  loki_data:
   grafana_data:
+
+networks:
+  xcagi-network:

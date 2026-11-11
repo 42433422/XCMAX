@@ -151,7 +151,7 @@ def main() -> int:
     admin_engine.dispose()
 
     for dbn in created:
-        mod_url = str(base_u.set(database=dbn))
+        mod_url = base_u.set(database=dbn)
         try:
             eng = create_engine(mod_url, isolation_level="AUTOCOMMIT", future=True)
             with eng.connect() as c:

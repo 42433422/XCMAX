@@ -3,11 +3,11 @@
 MOD Packaging CLI Tool - 命令行 MOD 打包工具
 
 用法:
-    python mod_pack.py pack <mod_directory> [-o output_dir] [--no-sign]
-    python mod_pack.py unpack <package_file> [-o output_dir]
-    python mod_pack.py validate <package_file>
-    python mod_pack.py info <package_file>
-    python mod_pack.py sign <package_file> [--key private_key.pem]
+    python tools/mod_pack.py pack <mod_directory> [-o output_dir] [--no-sign]
+    python tools/mod_pack.py unpack <package_file> [-o output_dir]
+    python tools/mod_pack.py validate <package_file>
+    python tools/mod_pack.py info <package_file>
+    python tools/mod_pack.py sign <package_file> [--key private_key.pem]
 """
 
 import argparse
@@ -15,10 +15,11 @@ import json
 import logging
 import os
 import sys
+import tempfile
 
 BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
 
-# 添加项目根目录到路径
+# 此文件统一位于 FHD/tools；从任意工作目录定位真实 FHD/app。
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.infrastructure.mods.package import ModPackage, ModPackageError, ModSignatureError
@@ -60,12 +61,7 @@ def cmd_pack(args):
 
         if args.verify:
             logger.info("正在验证包...")
-            is_valid, msg, info = package.validate_mod_package(package_path)
-            if is_valid:
-                logger.info(f"✅ 包验证通过：{info.get('id')} v{info.get('version')}")
-            else:
-                logger.error(f"❌ 包验证失败：{msg}")
-                return 1
+            return cmd_validate(argparse.Namespace(package_file=package_path))
 
         return 0
 
@@ -160,8 +156,9 @@ def cmd_info(args):
             logger.error(f"MOD 包不存在：{package_path}")
             return 1
 
-        package = ModPackage(package_path)
-        info = package.get_package_info()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            extract_path, manifest = ModPackage.extract_package(package_path, temp_dir)
+            info = ModPackage(extract_path).get_package_info()
 
         print("\n=== MOD 包信息 ===")
         print(f"ID:      {info.get('id')}")
@@ -170,8 +167,6 @@ def cmd_info(args):
         print(f"作者：    {info.get('author')}")
         print(f"描述：    {info.get('description')}")
         print(f"依赖：    {json.dumps(info.get('dependencies', {}), ensure_ascii=False, indent=2)}")
-
-        manifest = package.manifest
 
         if manifest.get("backend"):
             print("\n=== 后端扩展 ===")
@@ -227,31 +222,24 @@ def cmd_sign(args):
             logger.error(f"私钥文件不存在：{args.key}")
             return 1
 
-        import tempfile
         import zipfile
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with zipfile.ZipFile(package_path, "r") as zipf:
-                zipf.extractall(temp_dir)
-
-            package = ModPackage(temp_dir)
-            signature = package._generate_signature(args.key)
-
-            meta_inf_dir = os.path.join(temp_dir, "META-INF")
-            os.makedirs(meta_inf_dir, exist_ok=True)
-
-            signature_path = os.path.join(meta_inf_dir, "signature.json")
-            with open(signature_path, "w", encoding="utf-8") as f:
-                json.dump(signature, f, indent=2, ensure_ascii=False)
-
-            output_path = args.output or package_path
-
-            with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                for root, _, files in os.walk(temp_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, temp_dir)
-                        zipf.write(file_path, arcname)
+        output_path = os.path.abspath(args.output or package_path)
+        with tempfile.TemporaryDirectory(dir=os.path.dirname(output_path)) as temp_dir:
+            # Signing authors a new package; validation and installation still verify it.
+            extract_path, _ = ModPackage.extract_package(
+                package_path, os.path.join(temp_dir, "source"), verify_signature=False
+            )
+            signed_path = ModPackage(extract_path).create_package(
+                output_dir=os.path.join(temp_dir, "signed"),
+                include_signature=True,
+                private_key=args.key,
+            )
+            with zipfile.ZipFile(signed_path) as archive:
+                signature = json.loads(archive.read("META-INF/signature.json"))
+            if not signature.get("signature"):
+                raise ModSignatureError("未生成有效签名，原包未修改")
+            os.replace(signed_path, output_path)
 
         logger.info(f"✅ MOD 包已签名：{output_path}")
         return 0

@@ -11,7 +11,7 @@ echo  XCAGI 健康检查
 echo ════════════════════════════════════════
 echo.
 
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 
 :: 检查 Docker 服务
 echo [1/5] 检查 Docker 服务...
