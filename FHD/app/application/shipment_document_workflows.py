@@ -45,7 +45,7 @@ class ShipmentDocumentWorkflowMixin:
             return None
         try:
             records = self.get_shipment_records(limit=200)
-        except (NotImplementedError, RECOVERABLE_ERRORS):
+        except RECOVERABLE_ERRORS:
             return None
         for row in records or []:
             if str(row.get("order_number") or "").strip() != number:
