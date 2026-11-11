@@ -256,6 +256,12 @@ def _action_direct_python_module(
     if not isinstance(direct_cfg, dict):
         direct_cfg = {}
     module_name = str(direct_cfg.get("module") or "worker").strip() or "worker"
+    payload = dict((reasoning or {}).get("input") or {})
+    for key in ("file_path", "workspace_root", "user_request", "output_path"):
+        if key in (reasoning or {}) and key not in payload:
+            payload[key] = reasoning[key]
+    payload.setdefault("task", task)
+    payload.setdefault("workspace_root", str(workspace_root or os.getcwd()))
     module_path = pack_root / "backend" / "employees" / f"{module_name}.py"
     if not module_path.is_file():
         for py in (pack_root / "backend" / "employees").glob("*.py"):
@@ -264,12 +270,6 @@ def _action_direct_python_module(
                 break
     if not module_path.is_file():
         if _find_vendor_convert_module(pack_root):
-            payload = dict((reasoning or {}).get("input") or {})
-            for key in ("file_path", "workspace_root", "user_request", "output_path"):
-                if key in (reasoning or {}) and key not in payload:
-                    payload[key] = reasoning[key]
-            payload.setdefault("task", task)
-            payload.setdefault("workspace_root", str(workspace_root or os.getcwd()))
             return _action_vendor_convert(pack_root, employee_id, payload, workspace_root)
         return {"handler": "direct_python", "ok": False, "error": DIRECT_PYTHON_RUNTIME_MISSING_MSG}
     mod = _import_module_from_path(
@@ -281,12 +281,6 @@ def _action_direct_python_module(
     run_fn = getattr(mod, "run", None)
     if not callable(run_fn):
         return {"handler": "direct_python", "ok": False, "error": "module has no run(payload, ctx)"}
-    payload = dict((reasoning or {}).get("input") or {})
-    for key in ("file_path", "workspace_root", "user_request", "output_path"):
-        if key in (reasoning or {}) and key not in payload:
-            payload[key] = reasoning[key]
-    payload.setdefault("task", task)
-    payload.setdefault("workspace_root", str(workspace_root or os.getcwd()))
     # No-file document requests use deterministic vendor conversion.
     is_generate = "generate" in employee_id.lower()
     has_file = bool(str(payload.get("file_path") or payload.get("path") or "").strip())
@@ -467,17 +461,33 @@ def execute_employee_task_local(
     runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """委托给 EmployeeAgent 执行本地 employee_pack，保持原返回契约。"""
-    from app.application.employee_runtime.agent import EmployeeAgent
+    from contextlib import nullcontext
 
-    result: dict[str, Any] = EmployeeAgent(employee_id).run(
-        task,
-        input_data,
-        user_id=user_id,
-        workspace_root=workspace_root,
-        session_id=session_id,
-        runtime_context=runtime_context,
+    from app.application.employee_runtime.agent import EmployeeAgent
+    from app.application.employee_runtime.loader import candidate_pack_ids
+    from app.application.office_parse_app_service import EMPLOYEE_BY_SUFFIX
+    from app.application.tools.workflow_spreadsheet_scope import office_reader_input
+
+    context = runtime_context or {}
+    candidates = candidate_pack_ids(employee_id) if "_actor_authorization" in context else []
+    reader = next((pack for pack in candidates if pack in EMPLOYEE_BY_SUFFIX.values()), None)
+    scope = (
+        office_reader_input(reader, input_data or {}, context)
+        if reader
+        else nullcontext(input_data)
     )
-    return result
+    try:
+        with scope as payload:
+            return EmployeeAgent(employee_id).run(
+                task,
+                payload,
+                user_id=user_id,
+                workspace_root=payload["workspace_root"] if reader and payload else workspace_root,
+                session_id=session_id,
+                runtime_context=runtime_context,
+            )
+    except PermissionError as exc:
+        return {"success": False, "error_code": "employee_file_access_denied", "error": str(exc)}
 
 
 __all__ = ["execute_employee_task_local"]

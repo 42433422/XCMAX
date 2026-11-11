@@ -22,23 +22,10 @@ from app.db.models import (
     ShipmentRecord,
     Supplier,
 )
+from app.db.models.sales import inclusive_order_bound, sales_status_predicate
 from app.db.session import get_db
 from app.domain.shared_services.report_export import export_report_to_excel
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-
-
-def _inclusive_bound(value: Any, *, end: bool) -> datetime | None:
-    if value is None or isinstance(value, datetime):
-        return value
-    text = str(value).strip()
-    if not text:
-        return None
-    if len(text) == 10:
-        day = datetime.fromisoformat(text)
-        if end:
-            return day.replace(hour=23, minute=59, second=59)
-        return day
-    return datetime.fromisoformat(text)
 
 
 class ReportService(NeuroEventPublisherMixin):
@@ -76,8 +63,8 @@ class ReportService(NeuroEventPublisherMixin):
                 start_date, end_date, group_by, customer_id
             )
         return self._get_sales_report_from_orders(
-            _inclusive_bound(start_date, end=False),
-            _inclusive_bound(end_date, end=True),
+            inclusive_order_bound(start_date, end=False),
+            inclusive_order_bound(end_date, end=True),
             group_by,
             customer_id,
             payment_state,
@@ -119,8 +106,6 @@ class ReportService(NeuroEventPublisherMixin):
             if customer_name:
                 query = query.filter(SalesOrder.customer_name == customer_name)
             if status:
-                from app.application.sales.quotes import sales_status_predicate
-
                 query = query.filter(sales_status_predicate(status))
             if payment_state:
                 query = query.filter(SalesOrder.payment_state == payment_state)

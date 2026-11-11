@@ -268,6 +268,7 @@ def execute_employee_tool(
     workspace_root: str | None = None,
     *,
     user_id: int = 0,
+    runtime_context: dict[str, Any] | None = None,
 ) -> str:
     from app.application.employee_runtime.executor import execute_employee_task_local
 
@@ -288,6 +289,7 @@ def execute_employee_tool(
         args,
         user_id=user_id,
         workspace_root=workspace_root,
+        runtime_context=runtime_context,
     )
     ok = bool(result.get("success") is True and not result.get("blocked_by_risk_gate"))
     artifact = _verify_office_artifact(pack_id, result)

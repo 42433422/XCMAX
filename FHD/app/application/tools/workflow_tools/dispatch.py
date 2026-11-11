@@ -150,6 +150,7 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
                 tool_id,
                 {**params, "task": params.get("task") or user_message},
                 str(workspace_root) if workspace_root else None,
+                runtime_context=runtime_context,
             )
             import json
 

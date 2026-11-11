@@ -125,22 +125,45 @@ def test_planner_registry_includes_installed_employee_pack(employee_mods_root):
     assert pack_id in names
 
 
-def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatch):
-    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatch, trusted_actor):
+    from io import BytesIO
+
+    from app.application.elt.service import get_elt_service
+    from app.domain.shared_services.tools_workflow_workspace import _registered_router_employee
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.mod_sdk.employee_tool_registry import invalidate_employee_tool_cache
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     pack_id = "csv-full-read-employee"
     _write_csv_read_pack(employee_mods_root, pack_id)
-    csv_file = tmp_path / "sample.csv"
-    csv_file.write_text("a,b\n1,2\n3,4\n", encoding="utf-8")
-
-    from app.mod_sdk.employee_tool_registry import (
-        execute_employee_tool,
-        invalidate_employee_tool_cache,
-    )
-
     invalidate_employee_tool_cache()
-    raw = execute_employee_tool(pack_id, {"file_path": str(csv_file)}, str(tmp_path))
-    data = json.loads(raw)
-    assert data.get("success") is True
+    owner, other = trusted_actor(user_id=7), trusted_actor(user_id=8)
+    with tenant_scope(owner.tenant_id), owner.factory.begin() as db:
+        upload = get_elt_service().save_upload(
+            db,
+            owner_user_id=owner.user_id,
+            file_name="sample.csv",
+            content_type="text/csv",
+            stream=BytesIO(b"a,b\n1,2\n3,4\n"),
+        )
+    target = tmp_path / "foreign.csv"
+    params = {
+        "employee_id": "csv_full_read",
+        "task": "读取表格",
+        "input": {
+            "upload_id": upload["upload_id"],
+            "template_relpath": str(target),
+            "output_relpath": str(target),
+            "workspace_root": str(tmp_path),
+        },
+    }
+    with tenant_scope(owner.tenant_id):
+        allowed = _registered_router_employee("execute", params, owner.context, "normal", "")
+        denied = _registered_router_employee("execute", params, other.context, "normal", "")
+    assert allowed["success"], allowed
+    assert Path(allowed["data"]["file_path"]).is_file()
+    assert denied["data"]["error_code"] == "employee_file_access_denied"
+    assert not target.exists()
 
 
 def test_office_employee_never_reports_success_without_artifact(employee_mods_root, monkeypatch):

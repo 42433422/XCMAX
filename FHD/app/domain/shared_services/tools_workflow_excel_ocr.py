@@ -42,11 +42,13 @@ def _registered_router_excel_analysis(
             and "_actor_authorization" in runtime_context
         ):
             from app.application.tools.workflow_spreadsheet_scope import (
-                workflow_spreadsheet_snapshot,
+                workflow_file_snapshot,
             )
 
             original = str(payload["file_path"])
-            with workflow_spreadsheet_snapshot(original, runtime_context) as snapshot:
+            with workflow_file_snapshot(original, runtime_context) as snapshot:
+                if snapshot.suffix not in {".xlsx", ".xls", ".xlsm", ".csv"}:
+                    raise PermissionError("文件类型不支持表格分析")
                 result = handle_excel_analysis({**payload, "file_path": str(snapshot)})
             if isinstance(result, dict):
                 result["file_path"] = original
