@@ -14,7 +14,9 @@ from tests.test_application.test_etl_auto_ingest_service import ledger_root as l
 
 
 @pytest.mark.usefixtures("ledger_root")
-@pytest.mark.parametrize("kind", ["empty", "written", "receipt_written", "forbidden", "incomplete"])
+@pytest.mark.parametrize(
+    "kind", ["empty", "worker_bool", "written", "receipt_written", "forbidden", "incomplete"]
+)
 def test_empty_withdraw_checks_real_receipt_before_knowledge(monkeypatch, kind):
     batch = {
         "batch_id": "b",
@@ -42,7 +44,9 @@ def test_empty_withdraw_checks_real_receipt_before_knowledge(monkeypatch, kind):
         fake.get_run.return_value["summary"] = {}
     if kind == "forbidden":
         fake.get_run.side_effect = EltError("FORBIDDEN", "owner denied", status_code=403)
-    if kind == "empty":
+    if kind == "worker_bool":
+        fake.get_run.return_value["receipt"]["rows_written"] = False
+    if kind in {"empty", "worker_bool"}:
         fake.rollback.side_effect = EltConflict("ELT_ROLLBACK_EMPTY", "本次运行没有已写入的数据")
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake)
     service = ais.AutoIngestService()
@@ -59,7 +63,7 @@ def test_empty_withdraw_checks_real_receipt_before_knowledge(monkeypatch, kind):
     assert result["status"] == "withdrawn"
     fake.get_run.assert_called_once_with(ANY, run_id="r", owner_user_id=7)
     knowledge.assert_called_once()
-    if kind == "empty":
+    if kind in {"empty", "worker_bool"}:
         fake.rollback.assert_not_called()
         assert result["withdraw"]["business"]["reason"] == "no_business_writes"
     else:
@@ -213,7 +217,7 @@ def test_empty_withdraw_keeps_scope_gate(monkeypatch, scope):
         "bad_summary",
         "missing_receipt",
         "bad_receipt",
-        "rows_bool",
+        "rows_true",
         "rows_string",
         "rows_negative",
         "running",
@@ -248,7 +252,7 @@ def test_empty_withdraw_rejects_unproven_receipts(monkeypatch, fault):
         current[fault.removeprefix("bad_")] = []
     elif fault.startswith("rows_"):
         current["receipt"]["rows_written"] = {
-            "rows_bool": False,
+            "rows_true": True,
             "rows_string": "0",
             "rows_negative": -1,
         }[fault]
@@ -337,3 +341,43 @@ def test_empty_withdraw_real_elt_run_zero_success_rows(tmp_path, monkeypatch):
         knowledge.assert_called_once()
         assert db.get(EltRun, "r").rollback_status is None
     engine.dispose()
+
+
+@pytest.mark.usefixtures("ledger_root")
+@pytest.mark.parametrize("held", ["awaiting_confirmation", "withdrawn", "rejected"])
+def test_mapping_failure_survives_only_reader_confirmation(tmp_path, monkeypatch, held):
+    source = tmp_path / "order.csv"
+    source.write_text("code,name\nM-1,demo\n", encoding="utf-8")
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setattr(ais, "get_request_active_mod_id", lambda: "m")
+    monkeypatch.setattr(
+        ais,
+        "enrich_knowledge_progress",
+        lambda receipt, _tenant, progress: (receipt, progress("done", 100), {}),
+    )
+    service = ais.AutoIngestService()
+    monkeypatch.setattr(service, "detect_target", lambda *_args, **_kwargs: {"target_type": "products"})
+    monkeypatch.setattr(
+        service, "_ingest_knowledge", lambda **_kwargs: {"action": "skip", "reason": "test"}
+    )
+
+    def refuse(*_args, **kwargs):
+        ais._patch_batch(42, kwargs["batch_id"], status=held)
+        raise EltConflict("ELT_MAPPING_CONFIRMATION_REQUIRED", "有歧义的字段尚未确认")
+
+    monkeypatch.setattr(service, "_ingest_business", refuse)
+    with pytest.raises(EltConflict):
+        service.run(
+            MagicMock(),
+            owner_user_id=7,
+            tenant_id=42,
+            source_path=source,
+            file_name="order.csv",
+        )
+    saved = next(iter(ais._load_ledger(42)["batches"].values()))
+    if held == "awaiting_confirmation":
+        assert saved["status"] == "failed"
+        assert saved["error"] == "EltConflict"
+    else:
+        assert saved["status"] == held
+        assert "error" not in saved

@@ -104,6 +104,7 @@ def _patch_batch(
     batch_id: str,
     *,
     expected_running: dict[str, Any] | None = None,
+    terminal_failure: bool = False,
     **fields: Any,
 ) -> dict[str, Any] | None:
     with _LOCK:
@@ -119,8 +120,13 @@ def _patch_batch(
                 raise EltError(
                     "ETL_AUTO_INGEST_SCOPE_CHANGED", "批次身份已变化，停止归并回执", status_code=409
                 )
-            if batch.get("status") != "running":
-                # Late receipts must not revive withdrawn work.
+            status = batch.get("status")
+            # A progress read can mark a still-previewing run awaiting confirmation
+            # before execute() records its refusal. That reader transition may take
+            # the owning worker's failure. Withdrawal and rejection stay closed.
+            if status != "running" and not (
+                terminal_failure and status == "awaiting_confirmation"
+            ):
                 return dict(batch)
         batch.update(fields)
         batch["updated_at"] = _utcnow()
@@ -686,6 +692,7 @@ class AutoIngestService:
                 tenant_id,
                 batch_id,
                 expected_running=batch,
+                terminal_failure=True,
                 status="failed",
                 kb_progress=kb_progress,
                 business_progress=_progress(
@@ -1455,6 +1462,12 @@ class AutoIngestService:
             current = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
             summary = current.get("summary")
             receipt = current.get("receipt")
+            rows_written = receipt.get("rows_written", 0) if isinstance(receipt, dict) else None
+            # The worker stores bool(rows_written). False is a zero-write receipt;
+            # an integer zero remains valid. True is not an integer zero.
+            zero_rows = rows_written is False or (
+                type(rows_written) is int and rows_written == 0
+            )
             if (
                 current.get("id") != run_id
                 or current.get("status") != "completed"
@@ -1465,18 +1478,14 @@ class AutoIngestService:
                     for key in ("executed", "new", "update")
                 )
                 or not isinstance(receipt, dict)
-                or type(receipt.get("rows_written", 0)) is not int
-                or receipt.get("rows_written", 0) < 0
+                or not (zero_rows or (type(rows_written) is int and rows_written > 0))
             ):
                 raise EltError(
                     "ELT_EMPTY_RECEIPT_UNVERIFIED",
                     "业务回执不足或撤回状态异常，未撤回",
                     status_code=409,
                 )
-            if (
-                all(summary[key] == 0 for key in ("executed", "new", "update"))
-                and receipt.get("rows_written", 0) == 0
-            ):
+            if all(summary[key] == 0 for key in ("executed", "new", "update")) and zero_rows:
                 return {"skipped": True, "reason": "no_business_writes", "run_id": run_id}
         rolled = service.rollback(db, run_id=run_id, owner_user_id=owner_user_id)
         return {

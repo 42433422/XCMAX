@@ -220,13 +220,13 @@
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
       "base_blob": "d6fa1b295a042d8e9cfbf9cc5693ca55302bbd72",
-      "head_blob": "88c62195537bfd442b937e155c3ce336ae273339",
+      "head_blob": "d3e126854605fbf2c03716f9e30bd4bf52a4685f",
       "before_lines": 1374,
-      "after_lines": 1500,
-      "reason": "Bounded receipt polling releases database connections before waiting; withdrawal requires strict owned terminal receipt evidence, including verified zero-write completion, and preserves failed/unknown outcomes without replay.",
-      "boundary": "Same auto-ingest ownership and receipt lifecycle; main guard/handoff and unknown-outcome no-replay remain unchanged. Zero-write withdrawal requires exact integer counters, matching identity, completed execution and zero successful write rows. Office save does not confirm low-confidence mapping.",
-      "validation": "Final 185-case receipt, real QueuePool, zero-write withdrawal, office, worker recovery and identity/terminal-state suite passed both author and independent integrated rerun (185/185); Ruff and production mypy passed. Source-growth request is not human architecture approval; new-head CI pending.",
-      "follow_up": "Human architecture review of +126 lines required; retain receipt classification in this lifecycle rather than mechanical file splitting.",
+      "after_lines": 1509,
+      "reason": "Bounded receipt polling releases database connections before waiting. Zero-write withdrawal accepts the worker's boolean false as well as an integer zero, after identity and strict counters match. A reader that marks the batch awaiting confirmation cannot drop the owning worker's failure; withdrawn and rejected batches stay closed.",
+      "boundary": "Same auto-ingest ownership and receipt lifecycle; main guard/handoff and unknown-outcome no-replay remain unchanged. Office save does not confirm low-confidence mapping. Only awaiting_confirmation may receive the owning worker's failure; withdrawal and rejection are not overwritten.",
+      "validation": "Receipt resource tests including boolean false withdrawal and the confirmation-race failure, plus the auto-ingest service suite, passed 78/78. Source-growth request is not human architecture approval; new-head CI pending.",
+      "follow_up": "Human architecture review of the receipt lifecycle growth remains required; do not split this file only to hide the line count.",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
