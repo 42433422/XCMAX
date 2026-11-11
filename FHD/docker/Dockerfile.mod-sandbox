@@ -21,9 +21,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     portaudio19-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY XCAGI/requirements.txt .
+COPY requirements-server-api.txt requirements.txt
+COPY packages /build/packages
 
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /wheels -r requirements.txt
+RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
 
 FROM python:3.11-slim AS production
 
@@ -43,12 +44,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash appuser
 
+# Keep LangGraph imports on the audited source tree (same gate as Dockerfile.fhd-api).
+ENV PYTHONPATH=/app/packages/xcagi_langgraph_core:/app/packages/xcagi_langgraph_checkpoint:/app/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite:/app/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres:/app/packages/xcagi_langgraph_prebuilt:/app/packages/xcagi_langgraph_sdk
+
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 
-# Whitelist: core app + launcher + shared resources (db_seed, etc.)
+# Whitelist: the current application, vendored provenance and runtime resources.
 COPY --chown=appuser:appuser app /app/app
-COPY --chown=appuser:appuser XCAGI/run.py XCAGI/run_fastapi.py /app/XCAGI/
+COPY --chown=appuser:appuser packages /app/packages
+COPY --chown=appuser:appuser config /app/config
 COPY --chown=appuser:appuser resources /app/resources
 
 # 启动期多个模块会在仓库根下 mkdir（如 /app/config、/app/templates）；统一保证 appuser 可写
@@ -61,6 +66,6 @@ EXPOSE 5000
 
 # FastAPI is ASGI; UvicornWorker（与 gunicorn_config.py SSOT 一致）。
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:5000/health >/dev/null || exit 1
+    CMD curl -fsS http://127.0.0.1:5000/api/health >/dev/null || exit 1
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "120", "--graceful-timeout", "30", "-k", "uvicorn.workers.UvicornWorker", "XCAGI.run_fastapi:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "120", "--graceful-timeout", "30", "-k", "uvicorn.workers.UvicornWorker", "app.fastapi_app:create_fastapi_app()"]

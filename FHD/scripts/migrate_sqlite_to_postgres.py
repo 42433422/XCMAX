@@ -1,3 +1,9 @@
+"""Maintained migration entry under FHD/scripts.
+
+Pass an absolute --sqlite-path when moving between working directories. The
+existing SQLITE_PATH / cwd-relative data/products.db default is unchanged.
+"""
+
 from __future__ import annotations
 
 import argparse

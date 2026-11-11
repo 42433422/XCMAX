@@ -1,11 +1,20 @@
-﻿# 开发环境重启：与仓库根 start-dev.bat 走同一套启动链（xcagi-backend-with-db.cmd → xcagi-backend.cmd）。
-# 请勿仅用「python run.py」替代：会跳过 DATABASE_URL / Postgres / CORS 等初始化。
-#
-# Vite :5001 将 /api 代理到 FastAPI :5000（见 frontend/vite.config.js）。
+﻿# Restart the selected existing launcher without switching database modes.
+param(
+    [ValidateSet('desktop', 'web')]
+    [string]$Mode = 'desktop'
+)
 
-$ErrorActionPreference = 'Continue'
+$ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$startDev = Join-Path $repoRoot 'start-dev.bat'
+$startDev = if ($Mode -eq 'web') {
+    Join-Path $PSScriptRoot 'start-dev.bat'
+} else {
+    Join-Path $repoRoot 'start-dev.bat'
+}
+if (-not (Test-Path -LiteralPath $startDev -PathType Leaf)) {
+    Write-Error "start-dev.bat not found: $startDev"
+    exit 1
+}
 
 $ports = 5000, 5001
 foreach ($port in $ports) {
@@ -20,10 +29,5 @@ foreach ($port in $ports) {
 
 Start-Sleep -Seconds 2
 
-if (-not (Test-Path -LiteralPath $startDev)) {
-    Write-Error "start-dev.bat not found: $startDev"
-    exit 1
-}
-
 Write-Host "Starting via: $startDev"
-Start-Process -FilePath $startDev -WorkingDirectory $repoRoot
+Start-Process -FilePath $startDev -WorkingDirectory (Split-Path -Parent $startDev) -ErrorAction Stop
