@@ -480,7 +480,7 @@ class TestModstorePlatformAdapterChatCompletion:
         monkeypatch.setattr(
             httpx,
             "Client",
-            lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs),
+            lambda **kwargs: client_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
         )
         yield
         assert calls == [

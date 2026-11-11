@@ -127,6 +127,26 @@ def httpx_sync_client(**kwargs: Any) -> httpx.Client:
     return httpx.Client(**kwargs)
 
 
+def httpx_async_client(*, timeout: float) -> httpx.AsyncClient:
+    limits = httpx.Limits(max_keepalive_connections=10, max_connections=30)
+    proxy = (os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None
+    transport = (
+        None
+        if proxy
+        else httpx.AsyncHTTPTransport(
+            retries=market_connect_attempts() - 1, trust_env=False, limits=limits
+        )
+    )
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(timeout, connect=10.0),
+        limits=limits,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        trust_env=False,
+        proxy=proxy,
+        transport=transport,
+    )
+
+
 class MarketSSEDecoder:
     """Decode market data lines while tracking event boundaries and final content."""
 

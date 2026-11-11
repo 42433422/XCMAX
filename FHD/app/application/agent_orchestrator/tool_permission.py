@@ -15,6 +15,11 @@ import uuid
 from pathlib import Path
 from typing import Any, cast
 
+from app.application.agent_orchestrator.run_audit_scope import (
+    attach_child_result as attach_child_result,
+)
+from app.application.agent_orchestrator.run_audit_scope import mutate_run_audit as mutate_run_audit
+from app.application.agent_orchestrator.run_audit_scope import read_run_audit as read_run_audit
 from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2, get_tool_action_spec
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -1099,41 +1104,3 @@ def execution_trace(
         "retry_count": retry_count,
     }
     return cast("dict[str, Any]", redact(traced))
-
-
-def attach_child_result(parent: Any, child: Any) -> bool:
-    """Parent can read the child final result only inside the same tenant."""
-    parent_tenant = str((parent.metadata.get("runtime_context") or {}).get("tenant_id") or "")
-    child_context = child.metadata.get("runtime_context") or {}
-    child_tenant = str(child_context.get("tenant_id") or "")
-    if not parent_tenant or parent_tenant != child_tenant:
-        return False
-    parent.metadata.setdefault("child_results", {})[child.run_id] = {
-        "status": child.status,
-        "final_output": child.final_output,
-        "parent_task_id": child_context.get("parent_task_id"),
-        "parent_run_id": child_context.get("parent_run_id"),
-        "tenant_id": child_tenant,
-        "employee_id": child_context.get("employee_id"),
-    }
-    return True
-
-
-def read_run_audit(run: Any, *, reader_tenant: str) -> dict[str, Any] | None:
-    """Ordinary users cannot read another tenant's tool audit."""
-    owner = str((run.metadata.get("runtime_context") or {}).get("tenant_id") or "")
-    if not owner or str(reader_tenant) != owner:
-        return None
-    return {
-        "run_id": run.run_id,
-        "tenant_id": owner,
-        "events": [event.to_dict() for event in run.events],
-    }
-
-
-def mutate_run_audit(run: Any, *, reader_tenant: str, message: str) -> bool:
-    """Refuse writes to another tenant's audit log."""
-    if read_run_audit(run, reader_tenant=reader_tenant) is None:
-        return False
-    run.add_event("audit.note", message, {"tenant_id": str(reader_tenant)})
-    return True

@@ -157,9 +157,10 @@ def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user"):
             )
             db.add(user)
             db.flush()
+            user_id = user.id
             db.add(
                 UserSession(
-                    session_id=sid, user_id=user.id, expires_at=utc_now_naive() + timedelta(hours=1)
+                    session_id=sid, user_id=user_id, expires_at=utc_now_naive() + timedelta(hours=1)
                 )
             )
         previous = client.headers.get("X-Session-ID")
@@ -170,7 +171,7 @@ def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user"):
                 patch("app.db.session.SessionLocal", factory),
                 patch("app.application.facades.session_facade.get_session_service", SessionService),
             ):
-                yield
+                yield user_id
         finally:
             if previous is None:
                 client.headers.pop("X-Session-ID", None)
