@@ -80,7 +80,11 @@ async def test_confirm_reports_progress_before_slow_knowledge_init(monkeypatch):
 
     def process_chat(**_kwargs):
         order.append("chat")
-        return {"success": True, "response": "索引重建已开始", "data": {"action": "workflow_started"}}
+        return {
+            "success": True,
+            "response": "索引重建已开始",
+            "data": {"action": "workflow_started"},
+        }
 
     service.process_chat.side_effect = process_chat
     request = MagicMock(headers={}, cookies={})

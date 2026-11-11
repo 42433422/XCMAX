@@ -288,10 +288,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     tenant_id = runtime_context.get("tenant_id")
     tenant_id = int(tenant_id) if tenant_id is not None else None
     try:
+
         def _chat():
             with (
                 tenant_scope(tenant_id),
-                llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)),
+                llm_client_factory_scope(
+                    lambda: create_modstore_openai_client_from_request(request)
+                ),
             ):
                 return service.process_chat(
                     user_id=scoped_user_id,
