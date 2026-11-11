@@ -118,14 +118,14 @@ def test_release_gate_reads_installer_files(tmp_path):
     (tmp_path / "XCAGI-Enterprise-Setup.exe").write_bytes(b"win")
     (tmp_path / "XCAGI-Enterprise.dmg").write_bytes(b"mac")
     code, report = release_gate(tmp_path, sha)
-    assert code == 0
-    assert report["release_pass"] is True
+    assert code == 1
+    assert report["release_pass"] is False
     assert report["upgrade_rollback"] == "NOT RUN"
+    same = tmp_path / "upgrade-snapshot.sqlite"
+    _db(same, 1)
+    (tmp_path / "upgrade-current.sqlite").write_bytes(same.read_bytes())
+    assert release_gate(tmp_path, sha)[0] == 0
     assert release_gate(tmp_path, "not-a-sha")[0] == 1
-    wrong = dict(report)
-    swapped = rollup(list(reversed(report["rows"])))
-    assert swapped["scopes"] == rollup(report["rows"])["scopes"]
-    assert wrong["release_pass"] is True
 
 
 def test_same_row_count_with_different_business_fields_is_loss(tmp_path):
@@ -145,7 +145,7 @@ def test_same_row_count_with_different_business_fields_is_loss(tmp_path):
     right.rename(tmp_path / "upgrade-current.sqlite")
     code, report = release_gate(tmp_path, "a" * 40)
     assert code == 1
-    assert report["release_pass"] is True
+    assert report["release_pass"] is False
     assert report["upgrade_rollback"] == "FAIL"
 
 

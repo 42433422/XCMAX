@@ -18,7 +18,7 @@ _INSTALL_PLATFORMS = frozenset({"windows", "macos"})
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-REQUIRED_SCOPES = ("windows-installer", "macos-installer")
+REQUIRED_SCOPES = ("windows-installer", "macos-installer", "upgrade-rollback")
 
 
 def judge_scope(row: dict) -> str:
@@ -136,7 +136,6 @@ def installer_rows(root: Path, source_sha: str) -> list[dict]:
 
 
 def upgrade_rollback_status(root: Path) -> str:
-    """Compare business id and name. Missing evidence stays NOT RUN, not PASS."""
     snapshot = root / "upgrade-snapshot.sqlite"
     current = root / "upgrade-current.sqlite"
     if not snapshot.is_file() or not current.is_file():
@@ -153,13 +152,12 @@ def release_gate(root: Path, source_sha: str) -> tuple[int, dict]:
     report = rollup(installer_rows(root, source_sha), REQUIRED_SCOPES)
     upgrade = upgrade_rollback_status(root)
     report["upgrade_rollback"] = upgrade
-    if upgrade == "FAIL" or not report["release_pass"]:
-        return 1, report
-    return 0, report
+    report["scopes"]["upgrade-rollback"] = upgrade
+    report["release_pass"] = all(report["scopes"].get(scope) == "PASS" for scope in REQUIRED_SCOPES)
+    return (0 if report["release_pass"] else 1), report
 
 
 def _self_check() -> int:
-    """Prove the release rules without a candidate artifact."""
     declared = json.loads(
         (Path(__file__).resolve().parents[2] / "config" / "release_scope_evidence.json").read_text(
             encoding="utf-8"
