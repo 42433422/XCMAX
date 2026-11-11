@@ -119,7 +119,7 @@ const routeReadinessHandlers = computed(() => {
 
 <template>
   <section v-if="startupVisible" ref="startupPanel" class="startup-readiness" tabindex="-1"
-    role="dialog" aria-modal="true" aria-labelledby="startup-title" aria-describedby="startup-status"
+    :role="startupError ? 'dialog' : 'status'" :aria-modal="startupError ? 'true' : undefined" aria-labelledby="startup-title" aria-describedby="startup-status"
     data-testid="startup-readiness" :data-state="startupError ? 'error' : 'loading'">
     <div class="startup-readiness__panel">
       <h1 id="startup-title">{{ startupError ? '工作台暂未就绪' : '正在进入工作台' }}</h1>
@@ -131,8 +131,8 @@ const routeReadinessHandlers = computed(() => {
       </div>
     </div>
   </section>
-  <div class="app-shell" data-testid="startup-workspace" :inert="startupVisible || undefined"
-    :aria-hidden="startupVisible || undefined" :aria-busy="startupVisible || undefined"
+  <div class="app-shell" data-testid="startup-workspace" :inert="startupError ? true : undefined"
+    :aria-hidden="startupError ? true : undefined" :aria-busy="startupVisible && !startupError ? true : undefined"
     :class="{ 'is-ready': appReady || hideChrome, 'app-shell--bare': hideChrome }">
     <LegacyFloatPanels v-if="!hideChrome" />
     <AppGlobalProviders :show-lan-gate="!isAdminConsoleSpa()" />
@@ -141,12 +141,10 @@ const routeReadinessHandlers = computed(() => {
     <router-view v-if="hideChrome" />
     <MainLayout v-else>
       <router-view v-slot="{ Component, route }">
-        <transition v-if="!isAdminConsoleSpa() && !isDesktopShell()" name="route-fade">
-          <keep-alive :max="32">
-            <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
-          </keep-alive>
-        </transition>
-        <!-- 管理端与桌面壳不用 out-in：后台窗口的 requestAnimationFrame 可能暂停并卡住旧页面。 -->
+        <keep-alive v-if="!isAdminConsoleSpa() && !isDesktopShell()" :max="32">
+          <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
+        </keep-alive>
+        <!-- 管理端与桌面壳不用淡出叠层：离开中的旧页面会和下一页一起留在文档里。 -->
         <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
         <RouteErrorBoundary v-else :path="route.fullPath">
@@ -172,14 +170,26 @@ const routeReadinessHandlers = computed(() => {
 <style>
 .startup-readiness {
   position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 40;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--app-text, #253858);
+  box-shadow: 0 8px 24px rgba(37, 56, 88, 0.16);
+  outline: none;
+}
+.startup-readiness[data-state="error"] {
   inset: 0;
   z-index: 2147483647;
   display: grid;
   place-items: center;
-  padding: 24px;
+  width: auto;
+  border-radius: 0;
   background: var(--app-bg, #f4f7fb);
-  color: var(--app-text, #253858);
-  outline: none;
+  box-shadow: none;
 }
 .startup-readiness__panel { max-width: 480px; text-align: center; }
 .startup-readiness h1 { font-size: 22px; }
