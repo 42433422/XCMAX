@@ -179,6 +179,8 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
         values = list(workbook.active.values)
         workbook.close()
         assert "验收产品" in str(values) and "更新产品" not in str(values)
+        summary = next(row for row in values if row and row[0] == "合计")
+        assert summary[8] in (500, 500.0)
         with tenant_scope(8):
             assert (
                 service.export_shipment_records()["file_path"]

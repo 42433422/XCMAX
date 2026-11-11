@@ -531,14 +531,20 @@
       "requirement_id": "R10",
       "scenario_id": "R10-export-tenant",
       "rule": "导出文件只含本租户已提交的数据。",
-      "source": "尚未执行。",
+      "source": "租户 7 的产品已改成更新产品。租户 8 导出重新打开后只有验收产品，合计是 500。",
       "preconditions": ["两个租户各有已提交明细"],
-      "inputs": ["租户 A 的导出"],
-      "allowed": ["文件里只有租户 A"],
-      "forbidden_effects": ["导出含另一租户的金额或数量"],
-      "oracle": "重新打开的文件与租户 A 的已提交明细",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "inputs": ["租户 8 的导出"],
+      "allowed": ["文件里有验收产品", "合计金额 500"],
+      "forbidden_effects": ["导出含租户 7 的更新产品", "合计把两个租户加在一起"],
+      "oracle": "重新打开的文件不含更新产品，合计等于租户 8 已提交的 500",
+      "tests": [
+        "tests/test_application/test_shipment_records_agent_routes.py::test_shipment_record_mutation_routes_execute_through_agent_orchestrator"
+      ],
+      "boundary": {
+        "real": ["sqlite", "xlsx file"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "导出混入另一租户",
       "platforms": ["linux"],
