@@ -215,16 +215,22 @@ def test_failed_raw_load_never_commits_partial_rows_or_completion_marker(
 ):
     store = preview_store
     monkeypatch.setenv("FHD_ETL_LLM", "off")
-    duplicate = ParsedRow("same-sheet", 1, {"客户名称": "raw only"})
-    monkeypatch.setattr(
-        service_preview,
-        "parse_file",
-        lambda *_args, **_kwargs: ParsedDataset(
-            ["客户名称"], [duplicate, duplicate], {"kind": "sheet"}
-        ),
-    )
-    run_id = create_preview(store)
-    wait_for_job(store)
+    from sqlalchemy import event
+
+    inserted = []
+
+    def fail_after_raw_insert(_mapper, _connection, row):
+        inserted.append(row.id)
+        if len(inserted) == 2:
+            raise RuntimeError("injected raw snapshot persistence failure")
+
+    event.listen(EltRunRow, "after_insert", fail_after_raw_insert)
+    try:
+        run_id = create_preview(store)
+        wait_for_job(store)
+    finally:
+        event.remove(EltRunRow, "after_insert", fail_after_raw_insert)
+    assert len(inserted) == 2  # Real INSERTs occurred before the transaction failed.
     assert snapshot(store, run_id)["status"] == "failed"
     with store.factory() as db:
         run = db.get(EltRun, run_id)

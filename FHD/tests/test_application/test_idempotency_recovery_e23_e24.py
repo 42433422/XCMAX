@@ -286,18 +286,40 @@ def test_e24_two_recoveries_leave_one_row():
         left.join(timeout=30)
         right.join(timeout=30)
         rows = _rows(engine, "崩溃前客户")
-        successes = [item for item in (left_result, right_result) if item.get("success") is True]
         observed = {"rows": len(rows), "left": left_result, "right": right_result}
         assert left.exitcode == 0 and right.exitcode == 0, observed
-        assert len(rows) == 1, observed
-        assert len(successes) >= 1, observed
-        assert all(
-            item.get("id") in (None, rows[0]["id"]) for item in (left_result, right_result)
-        ), observed
-        assert all(
+        _assert_recovery_contract(rows, observed)
+
+
+def _assert_recovery_contract(rows, observed):
+    outcomes = (observed["left"], observed["right"])
+    if not (
+        len(rows) == 1
+        and any(item.get("success") is True for item in outcomes)
+        and all(item.get("id") in (None, rows[0]["id"]) for item in outcomes)
+        and all(
             item.get("success") is True or item.get("error_code") == "idempotency_in_progress"
-            for item in (left_result, right_result)
-        ), observed
+            for item in outcomes
+        )
+    ):
+        raise AssertionError(observed)
+
+
+@pytest.mark.parametrize("duplicate_rows", [False, True])
+def test_recovery_contract_rejects_both_ignored_claim_schedules(duplicate_rows):
+    rows = [{"id": 1}] + ([{"id": 2}] if duplicate_rows else [])
+    observed = {
+        "rows": len(rows),
+        "left": {"success": True, "id": 1},
+        "right": (
+            {"success": True, "id": 2}
+            if duplicate_rows
+            else {"success": False, "error_code": "customer_name_exists"}
+        ),
+    }
+    with pytest.raises(AssertionError) as caught:
+        _assert_recovery_contract(rows, observed)
+    assert caught.value.args[0] == observed
 
 
 def test_e24_second_crash_can_still_recover():
@@ -401,9 +423,16 @@ def test_r09_ignored_claim_is_not_reported_as_in_progress():
     try:
         test_e24_two_recoveries_leave_one_row()
     except AssertionError as exc:
-        text = str(exc)
-        assert "'rows': 1" in text, text
-        assert "customer_name_exists" in text, text
+        observed = exc.args[0]
+        assert isinstance(observed, dict), observed
+        outcomes = (observed["left"], observed["right"])
+        if observed["rows"] == 2:
+            assert all(item["success"] is True for item in outcomes), observed
+            assert len({item["id"] for item in outcomes}) == 2, observed
+        else:
+            assert observed["rows"] == 1, observed
+            assert sum(item["success"] is True for item in outcomes) == 1, observed
+            assert any(item["error_code"] == "customer_name_exists" for item in outcomes), observed
     else:
         raise AssertionError("two recoveries without a claim still left one row")
     finally:

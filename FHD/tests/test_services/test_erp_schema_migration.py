@@ -4,7 +4,7 @@
 - ``Base.metadata`` 含全部新增表（含 receivable_allocations）。
 - fresh bootstrap（一次性临时库）建出这些表（仅作 fresh create 兜底）。
 - 既有 schema 的升级仍运行 ``alembic upgrade head``（bootstrap 不接管既有库升级）。
-- forward upgrade / backfill 保留既有数据；downgrade -1 后可再次 upgrade head（幂等一致）。
+- forward upgrade / backfill 保留既有数据；显式回退到分支共同祖先后可再次 upgrade head（幂等一致）。
 """
 
 from __future__ import annotations
@@ -311,14 +311,59 @@ class TestAlembicForwardUpgrade:
         } <= _columns(_db_url, "products")
 
     def test_upgrade_downgrade_upgrade_idempotent(self, _db_url: str) -> None:
+        from alembic.script import ScriptDirectory
+        from sqlalchemy import create_engine
+
         cfg = _alembic_config()
-        command.upgrade(cfg, "head")
-        command.downgrade(cfg, "-1")
-        # downgrade 仅删除本迁移新增的维度/约束，业务数据主体表保留
-        assert "sales_orders" in _tables(_db_url)
-        # 可再次 upgrade head（幂等一致）
-        command.upgrade(cfg, "head")
-        assert _tables(_db_url) >= _ERP_TABLES
+        # A merge head has multiple parents: unqualified "-1" is ambiguous.
+        # Roll back both branches to their shared ancestor, not just the no-op merge.
+        ancestor = "2026_11_11_agent_permissions"
+        command.upgrade(cfg, ancestor)
+        engine = create_engine(_db_url)
+        try:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO products (id, name, tenant_id, unit, is_active) "
+                        "VALUES (7, 'preserved-product', 1, 'item', 1)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO roles (id, name, description, is_system) VALUES (901, 'operator', '', 1)"
+                    )
+                )
+            command.upgrade(cfg, "head")
+            assert "source_slice" in _columns(_db_url, "etl_run_rows")
+            grant = text(
+                "SELECT count(*) FROM role_permissions rp JOIN permissions p "
+                "ON p.id = rp.permission_id WHERE rp.role_id = 901 "
+                "AND p.code = 'tool.sales.create_order'"
+            )
+            with engine.connect() as connection:
+                assert connection.execute(grant).scalar_one() == 1
+            command.downgrade(cfg, ancestor)
+            with engine.connect() as connection:
+                assert connection.execute(
+                    text("SELECT version_num FROM alembic_version")
+                ).scalars().all() == [ancestor]
+                # Permission downgrade deliberately preserves explicit/previous grants.
+                assert connection.execute(grant).scalar_one() == 1
+            assert "source_slice" not in _columns(_db_url, "etl_run_rows")
+            assert "sales_orders" in _tables(_db_url)
+            command.upgrade(cfg, "head")
+            with engine.connect() as connection:
+                assert connection.execute(
+                    text("SELECT id, name, tenant_id FROM products WHERE id = 7")
+                ).one() == (7, "preserved-product", 1)
+                assert connection.execute(grant).scalar_one() == 1
+                assert connection.execute(
+                    text("SELECT version_num FROM alembic_version")
+                ).scalars().all() == [ScriptDirectory.from_config(cfg).get_current_head()]
+            assert "source_slice" in _columns(_db_url, "etl_run_rows")
+            assert _tables(_db_url) >= _ERP_TABLES
+        finally:
+            engine.dispose()
 
 
 class TestBootstrapIsFreshCreateFallback:
