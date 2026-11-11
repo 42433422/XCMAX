@@ -498,6 +498,9 @@ def derive_classified_documents(
         groups.append((group, "model_group", reason))
     if len(assigned) != len(known):
         raise ReviewedExcelError("模型尚未确定所有区域的独立单据关系，不能自动切片")
+    from app.application.reviewed_excel_template_blocks import join_split_template_blocks
+
+    groups = join_split_template_blocks(body, groups)
     from app.application.reviewed_excel_verify_cut import verify_after_cut
 
     verified = verify_after_cut(

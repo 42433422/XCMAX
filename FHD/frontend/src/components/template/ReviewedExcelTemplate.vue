@@ -157,6 +157,7 @@ function modelOutcomeUnknown(err: unknown) {
   return state?.outcome_unknown === true || !(state?.outcome_unknown === false || state?.retryable === true || ['notice_not_published', 'login_notice_required', 'model_connection_error', 'model_configuration_error'].includes(state?.code || state?.error_code || ''))
 }
 const savedId = ref('')
+const savedReused = ref(false)
 const savedModelStatus = ref('')
 let resumePipelineRunning = false
 let resumePipelineRequested = false
@@ -440,7 +441,7 @@ function captureFileOperation() {
 function resetReview() {
   resetIntake()
   review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = initialOptionalTemplateIndex(props.archiveOnSelect)
-  savedId.value = ''; savedModelStatus.value = ''; ingestBatchId.value = ''; kbProgress.value = null; businessProgress.value = null; stopIngestPoll(); sheetIndex.value = 0
+  savedId.value = ''; savedReused.value = false; savedModelStatus.value = ''; ingestBatchId.value = ''; kbProgress.value = null; businessProgress.value = null; stopIngestPoll(); sheetIndex.value = 0
   feedback.value = ''; publishToTenant.value = false
 }
 function resetSelectionState() {
@@ -1235,9 +1236,10 @@ async function save() {
     form.append('candidate_id', proposal.value.candidates[candidateIndex.value].id)
     form.append('selections', JSON.stringify(selected.value))
     if (currentComposerNote.value) form.append('composer_note', currentComposerNote.value)
-    const result = await templatePreviewApi.saveReviewedExcel(form) as { template_id: string }
+    const result = await templatePreviewApi.saveReviewedExcel(form) as { template_id: string; reused?: boolean }
     if (!current()) return
     savedId.value = result.template_id
+    savedReused.value = result.reused === true
     const ingest = (result as { auto_ingest?: { success?: boolean; error?: string; batch_id?: string; status?: string; kb_progress?: { pct?: number }; business_progress?: { pct?: number } } }).auto_ingest
     if (ingest?.batch_id) {
       kbProgress.value = ingest.kb_progress || { stage: 'queued', pct: 0, message: '排队写入知识库' }
@@ -1644,12 +1646,12 @@ async function downloadCandidate(index: number) {
           <p v-else>业务目标：{{ targetLabel(intakePlan.business.target_type) }}；预计新增 {{ intakePlan.business.summary.new }} 行、更新 {{ intakePlan.business.summary.update }} 行、跳过 {{ intakePlan.business.summary.skip }} 行、错误 {{ intakePlan.business.summary.error }} 行。</p>
           <p v-if="intakeZeroRowWarning" role="alert">预演可写入行为 0：确认入库也不会写入业务行（无报错≠已入库）。请核对原件与候选后再保存。</p>
           <p v-if="intakePlan.business.summary.error">错误行不写入业务库，仍留在知识库文档中。正确行按预演写入。</p>
-          <p>确认后保存 1 份模板到当前企业模板库，并按上方同一预演写入；重复数据跳过，更新范围以预演为准。撤回仅回退本批知识和业务写入，原件和模板保留。</p>
+          <p>确认后保存到当前企业模板库。同一块版式留在一份模板里；版式相同则沿用已有模板，不另存一份。并按上方同一预演写入；重复数据跳过，更新范围以预演为准。撤回仅回退本批知识和业务写入，原件和模板保留。</p>
         </template>
         <button type="button" :disabled="busy || intakePending || !canCommitSelectedTemplate()" @click="prepareIntake">重新预演入库范围</button>
       </section>
       <template v-if="archiveOnSelect">
-        <p class="reviewed-template__intake-note">本次处理 1 份所选文档（{{ file?.name }}{{ selectedRegion ? ` / ${selectedRegion}` : '' }}）。点击下方按钮会把清理后的模板保存到当前企业模板库（同一业务空间内按模板权限可见），并用原件写入知识库及自动识别的业务域；目标和数量以上方预演为准。请先下载候选核对。撤回仅回退本批知识与业务写入，保留原件和模板。</p>
+        <p class="reviewed-template__intake-note">本次处理 1 份所选文档（{{ file?.name }}{{ selectedRegion ? ` / ${selectedRegion}` : '' }}）。同一块版式留在一份模板里；版式相同则沿用已有模板。点击下方按钮会把清理后的模板保存到当前企业模板库（同一业务空间内按模板权限可见），并用原件写入知识库及自动识别的业务域；目标和数量以上方预演为准。请先下载候选核对。撤回仅回退本批知识与业务写入，保留原件和模板。</p>
         <button type="button" :disabled="!canConfirmIntake" @click="save">使用此模板并入库</button>
       </template>
       <template v-else>
@@ -1658,7 +1660,7 @@ async function downloadCandidate(index: number) {
       </template>
       </template>
     </div>
-    <p v-if="savedId">已保存到模板库。{{ savedModelStatus }} 可再次预览当前原件并保存新模板，已有模板不会被覆盖。<button type="button" :disabled="busy" @click="download(savedId)">下载清理后的模板</button></p>
+    <p v-if="savedId">{{ savedReused ? '模板库里已有相同版式，沿用那一份。' : '已保存到模板库。' }}{{ savedModelStatus }}<button type="button" :disabled="busy" @click="download(savedId)">下载清理后的模板</button></p>
     <div v-if="ingestBatchId" class="elt-ingest-progress" aria-label="自动入库真实进度">
       <div class="elt-ingest-progress__row">
         <span>知识库</span>

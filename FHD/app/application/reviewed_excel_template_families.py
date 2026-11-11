@@ -157,4 +157,7 @@ def suggest_template_families(
         for group in groups
     ):
         raise ReviewedExcelError("模板复用证据不完整，不能合并")
+    from app.application.reviewed_excel_template_blocks import merge_same_layout_families
+
+    groups = merge_same_layout_families(groups, evidence)
     return [{"members": group["members"], "reason": group["reason"][:1000]} for group in groups]

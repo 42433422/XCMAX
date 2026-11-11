@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 
 from app.domain.shared_services.document_templates.renderer import (
     _parse_json_dict,
@@ -73,6 +74,35 @@ def _build_template_payload_from_row(row):
         "fields": fields if isinstance(fields, list) else [],
         "preview_data": preview_data,
     }
+
+
+def _reused_reviewed_template(db, tenant_id: int, fingerprint: str) -> int | None:
+    """Oldest active reviewed-excel template with this cleaned layout, if the file exists."""
+    from sqlalchemy import text
+
+    rows = db.execute(
+        text(
+            """
+            SELECT id, original_file_path, analyzed_data, is_active
+            FROM templates
+            WHERE tenant_id = :tenant_id
+              AND (is_active IS NULL OR is_active = 1)
+            ORDER BY id
+            """
+        ),
+        {"tenant_id": tenant_id},
+    )
+    for row in rows.yield_per(32):
+        path = str(row.original_file_path or "")
+        if not path or not Path(path).is_file():
+            continue
+        analyzed = _parse_json_dict(row.analyzed_data)
+        preview = analyzed.get("preview_data")
+        if not isinstance(preview, dict) or preview.get("reviewed_excel") is not True:
+            continue
+        if str(preview.get("content_fingerprint") or "") == fingerprint:
+            return int(row.id)
+    return None
 
 
 def create_template_with_payload(payload: dict | None):
@@ -149,7 +179,44 @@ def _create_template_with_payload_inner(payload: dict):
         except TenantScopeError:
             return _j({"success": False, "message": "缺少租户上下文，无法创建模板"}, 403)
 
+        reviewed = source == "reviewed_excel_cleanup" or preview_data.get("reviewed_excel") is True
+        fingerprint = ""
+        if reviewed and file_path:
+            from app.application.reviewed_excel_template_blocks import (
+                workbook_template_fingerprint,
+            )
+
+            try:
+                fingerprint = workbook_template_fingerprint(Path(file_path).read_bytes())
+            except RECOVERABLE_ERRORS:
+                fingerprint = ""
+            if fingerprint:
+                preview_data = {**preview_data, "content_fingerprint": fingerprint}
+                analyzed_data["preview_data"] = preview_data
+
         with get_db() as db:
+            if fingerprint:
+                reused = _reused_reviewed_template(db, tenant_id, fingerprint)
+                if reused is not None:
+                    return _j(
+                        {
+                            "success": True,
+                            "message": "已有相同版式的模板，沿用那一份",
+                            "reused": True,
+                            "template": {
+                                "id": f"db:{reused}",
+                                "db_id": reused,
+                                "name": template_name,
+                                "template_type": template_type,
+                                "business_scope": business_scope,
+                                "category": incoming_category,
+                                "source": source,
+                                "file_path": file_path,
+                                "fields": fields,
+                                "preview_data": preview_data,
+                            },
+                        }
+                    )
             # psycopg3 Cursor 无 lastrowid（PG 需 RETURNING）；SQLite 桌面端保持 lastrowid
             is_pg = db.get_bind().dialect.name == "postgresql"
             insert_sql = """

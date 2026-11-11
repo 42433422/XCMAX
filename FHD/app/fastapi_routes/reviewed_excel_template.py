@@ -2720,6 +2720,7 @@ async def reviewed_excel_save(
                         "success": True,
                         "template_id": receipt["template_id"],
                         "replayed": True,
+                        "reused": bool(receipt.get("reused")),
                         "auto_ingest": receipt.get("auto_ingest")
                         or {
                             "success": False,
@@ -2926,6 +2927,12 @@ async def reviewed_excel_save(
                         detail=result.get("message", "保存失败"),
                     )
                 template_id = result["template"]["id"]
+                reused = bool(result.get("reused"))
+                if reused:
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        logger.warning("duplicate template file was left on disk")
                 persisted = db.execute(
                     update(EltRun)
                     .where(
@@ -2941,6 +2948,7 @@ async def reviewed_excel_save(
                             {
                                 "request_key": request_key,
                                 "template_id": template_id,
+                                "reused": reused,
                                 **(
                                     {
                                         "revision_parent": load_json(run.summary_json, {})[
@@ -3005,6 +3013,7 @@ async def reviewed_excel_save(
             "success": True,
             "template_id": template_id,
             "replayed": False,
+            "reused": reused,
             "auto_ingest": auto_ingest,
         }
     except (ValueError, TypeError, EltError) as exc:
