@@ -186,6 +186,8 @@ def test_r08_readback_fails_when_recovery_inserts_again(monkeypatch):
     monkeypatch.setattr(permissions, "begin_idempotent_replay", drop_replay)
     with pytest.raises(AssertionError) as caught:
         test_e23_kill_after_commit_returns_the_same_row()
-    assert "1" in str(caught.value)
+    message = str(caught.value)
+    folded = message.encode("utf-8", "backslashreplace").decode("unicode_escape")
+    assert "客户名称已存在" in message or "客户名称已存在" in folded
     monkeypatch.undo()
     test_e23_kill_after_commit_returns_the_same_row()
