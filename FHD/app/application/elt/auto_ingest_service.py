@@ -25,6 +25,7 @@ from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.application.elt import auto_ingest_liveness as liveness
+from app.application.elt import receipt_poll_budget
 from app.application.elt.errors import EltError
 from app.application.elt.knowledge_index_meta import (
     business_completion_from_run,
@@ -124,9 +125,7 @@ def _patch_batch(
             # A progress read can mark a still-previewing run awaiting confirmation
             # before execute() records its refusal. That reader transition may take
             # the owning worker's failure. Withdrawal and rejection stay closed.
-            if status != "running" and not (
-                terminal_failure and status == "awaiting_confirmation"
-            ):
+            if status != "running" and not (terminal_failure and status == "awaiting_confirmation"):
                 return dict(batch)
         batch.update(fields)
         batch["updated_at"] = _utcnow()
@@ -1410,22 +1409,26 @@ class AutoIngestService:
         # execute commits the write claim before returning its read-only receipt.
         # Release that read transaction before waiting for the worker.
         db.rollback()
-        deadline = time.monotonic() + max(0.0, float(poll_seconds))
-        while (
-            isinstance(executed, dict)
-            and str(executed.get("status") or "") in {"queued", "executing"}
-            and time.monotonic() < deadline
-        ):
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            time.sleep(min(0.25, remaining))
-            try:
-                executed = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
-            finally:
-                # Includes terminal receipts and failed/cancelled reads. A failed
-                # release must stop this poll, not sleep with a checked-out connection.
-                db.rollback()
+        with receipt_poll_budget.admit(tenant_id_for_write()) as admitted:
+            deadline = time.monotonic() + max(0.0, float(poll_seconds))
+            delay = 0.25
+            while (
+                admitted
+                and isinstance(executed, dict)
+                and str(executed.get("status") or "") in {"queued", "executing"}
+                and time.monotonic() < deadline
+            ):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                time.sleep(min(delay, remaining))
+                delay = min(delay * 2, 2.0)
+                try:
+                    executed = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
+                finally:
+                    # Includes terminal receipts and failed/cancelled reads. A failed
+                    # release must stop this poll, not sleep with a checked-out connection.
+                    db.rollback()
         return {
             "target_type": confirmed,
             "upload_id": upload_id,
@@ -1465,9 +1468,7 @@ class AutoIngestService:
             rows_written = receipt.get("rows_written", 0) if isinstance(receipt, dict) else None
             # The worker stores bool(rows_written). False is a zero-write receipt;
             # an integer zero remains valid. True is not an integer zero.
-            zero_rows = rows_written is False or (
-                type(rows_written) is int and rows_written == 0
-            )
+            zero_rows = rows_written is False or (type(rows_written) is int and rows_written == 0)
             if (
                 current.get("id") != run_id
                 or current.get("status") != "completed"
