@@ -26,10 +26,10 @@
 [domain->infrastructure] app/domain/shared_services/deepseek_intent_service.py:191
 [domain->infrastructure] app/domain/shared_services/distillation_data_collector.py:124
 [domain->infrastructure] app/domain/shared_services/document_templates/analyzer.py:177
-[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:144
-[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:145
-[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:239
-[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:38
+[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:174
+[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:175
+[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:306
+[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:39
 [domain->infrastructure] app/domain/shared_services/fhd_payment_reconciliation.py:36
 [domain->infrastructure] app/domain/shared_services/intent_confirmation_service.py:392
 [domain->infrastructure] app/domain/shared_services/intent_recognition_pipeline.py:213

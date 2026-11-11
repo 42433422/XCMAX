@@ -257,5 +257,25 @@ def test_saving_the_same_reviewed_layout_reuses_the_template(tmp_path, monkeypat
     reused = again.get_json()
     assert body["template"]["id"] == reused["template"]["id"]
     assert reused["reused"] is True
+    revision = payload(second)
+    revision["name"] = "送货单修订"
+    revision["preview_data"] = {"reviewed_excel": True, "revision_parent": {"review_id": 9}}
+    with tenant_scope(1):
+        forked = crud.create_template_with_payload(revision)
+    assert forked.get_json().get("reused") is not True
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
+        assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 2
+
+
+def test_print_area_keeps_the_outside_piece_as_its_own_slice():
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "表"
+    sheet["A1"] = "考勤表"
+    sheet["A2"] = "姓名"
+    sheet["B2"] = "日期"
+    sheet["A4"] = "末尾"
+    sheet.print_area = "A1:B2"
+    body = _save(book)
+    slices = derive_classified_documents(body, _classify(body, [("表", "A1:B2"), ("表", "A3:B4")]))
+    assert [item["fragments"][0]["range"] for item in slices] == ["A1:B2", "A3:B4"]

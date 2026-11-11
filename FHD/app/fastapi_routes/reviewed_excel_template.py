@@ -65,6 +65,7 @@ from app.application.reviewed_excel_review_store import (
     _SAVING,
     _archived_original,
     _cas,
+    _drop_reused_template_copy,
     _fork_saved_review,
     _intake_selection_key,
     _lock_review_classification,
@@ -74,6 +75,7 @@ from app.application.reviewed_excel_review_store import (
     _release_failed_review,
     _require_private_model,
     _review_source_version,
+    _reviewed_save_result,
     _run,
     _source,
     _stored_candidate_response,
@@ -2716,19 +2718,18 @@ async def reviewed_excel_save(
             if run.status == _SAVED:
                 receipt = load_json(run.receipt_json, {})
                 if receipt.get("request_key") == request_key:
-                    return {
-                        "success": True,
-                        "template_id": receipt["template_id"],
-                        "replayed": True,
-                        "reused": bool(receipt.get("reused")),
-                        "auto_ingest": receipt.get("auto_ingest")
+                    return _reviewed_save_result(
+                        str(receipt["template_id"]),
+                        replayed=True,
+                        reused=bool(receipt.get("reused")),
+                        auto_ingest=receipt.get("auto_ingest")
                         or {
                             "success": False,
                             "error": "outcome_unknown"
                             if intake_run_id
                             else "confirmation_required",
                         },
-                    }
+                    )
                 raise HTTPException(status_code=409, detail="此审阅已保存；新的清理范围请新建审阅")
             if run.status != _READY or versions[-1]["version"] != proposal_version:
                 raise HTTPException(status_code=409, detail="审阅版本已过期或保存结果待核对")
@@ -2926,13 +2927,7 @@ async def reviewed_excel_save(
                         status_code=code if code >= 400 else 500,
                         detail=result.get("message", "保存失败"),
                     )
-                template_id = result["template"]["id"]
-                reused = bool(result.get("reused"))
-                if reused:
-                    try:
-                        path.unlink(missing_ok=True)
-                    except OSError:
-                        logger.warning("duplicate template file was left on disk")
+                template_id, reused = _drop_reused_template_copy(path, result)
                 persisted = db.execute(
                     update(EltRun)
                     .where(
@@ -3009,13 +3004,9 @@ async def reviewed_excel_save(
                 receipt["auto_ingest"] = auto_ingest
                 persisted_run.receipt_json = dump_json(receipt)
                 db.commit()
-        return {
-            "success": True,
-            "template_id": template_id,
-            "replayed": False,
-            "reused": reused,
-            "auto_ingest": auto_ingest,
-        }
+        return _reviewed_save_result(
+            template_id, replayed=False, reused=reused, auto_ingest=auto_ingest
+        )
     except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(
             status_code=getattr(exc, "status_code", 400), detail=public_excel_error(exc)

@@ -156,8 +156,7 @@ function modelOutcomeUnknown(err: unknown) {
   const state = modelFailureState(err)
   return state?.outcome_unknown === true || !(state?.outcome_unknown === false || state?.retryable === true || ['notice_not_published', 'login_notice_required', 'model_connection_error', 'model_configuration_error'].includes(state?.code || state?.error_code || ''))
 }
-const savedId = ref('')
-const savedReused = ref(false)
+const savedId = ref(''); const savedReused = ref(false)
 const savedModelStatus = ref('')
 let resumePipelineRunning = false
 let resumePipelineRequested = false
@@ -1238,8 +1237,7 @@ async function save() {
     if (currentComposerNote.value) form.append('composer_note', currentComposerNote.value)
     const result = await templatePreviewApi.saveReviewedExcel(form) as { template_id: string; reused?: boolean }
     if (!current()) return
-    savedId.value = result.template_id
-    savedReused.value = result.reused === true
+    savedId.value = result.template_id; savedReused.value = result.reused === true
     const ingest = (result as { auto_ingest?: { success?: boolean; error?: string; batch_id?: string; status?: string; kb_progress?: { pct?: number }; business_progress?: { pct?: number } } }).auto_ingest
     if (ingest?.batch_id) {
       kbProgress.value = ingest.kb_progress || { stage: 'queued', pct: 0, message: '排队写入知识库' }

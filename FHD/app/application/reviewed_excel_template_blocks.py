@@ -14,6 +14,7 @@ from io import BytesIO
 from pathlib import Path
 
 from openpyxl import load_workbook
+from openpyxl.worksheet.print_settings import PrintArea
 
 from app.application.elt.parser_structure import semantic_key
 from app.application.reviewed_excel_evidence import bounded_range
@@ -58,7 +59,7 @@ def join_split_template_blocks(
 
     for left, right in _touching_pairs(items):
         upper, lower = (left, right) if _above(items[left], items[right]) else (right, left)
-        if items[lower]["heading"]:
+        if items[lower]["heading"] or not _same_print_unit(items[upper], items[lower]):
             continue
         union(upper, lower)
     ordered: dict[int, list[int]] = {}
@@ -180,9 +181,11 @@ def _piece(workbook, index: int, group: tuple[list[dict], str, str]) -> dict:
         max(item[3] for item in boxes),
     )
     heading = False
+    print_fit = "multi"
     if len(sheets) == 1:
         worksheet = workbook[next(iter(sheets))]
         heading = _is_document_heading_text(_row_text(worksheet, box[0], box[1], box[2]))
+        print_fit = _print_fit(worksheet, box)
     return {
         "order": index,
         "fragments": fragments,
@@ -191,6 +194,7 @@ def _piece(workbook, index: int, group: tuple[list[dict], str, str]) -> dict:
         "box": box,
         "sheet": next(iter(sheets)) if len(sheets) == 1 else "",
         "heading": heading,
+        "print_fit": print_fit,
         "multi": len(sheets) != 1,
     }
 
@@ -208,9 +212,43 @@ def _row_text(worksheet, c1: int, row: int, c2: int) -> str:
 
 
 def _above(left: dict, right: dict) -> bool:
-    if left["box"][1] != right["box"][1]:
-        return left["box"][1] < right["box"][1]
-    return left["box"][0] <= right["box"][0]
+    left_box, right_box = left["box"], right["box"]
+    if int(left_box[1]) != int(right_box[1]):
+        return int(left_box[1]) < int(right_box[1])
+    return int(left_box[0]) <= int(right_box[0])
+
+
+def _same_print_unit(left: dict, right: dict) -> bool:
+    """A slice inside the print area stays apart from one that leaves it."""
+    left_fit, right_fit = str(left.get("print_fit") or ""), str(right.get("print_fit") or "")
+    return left_fit == right_fit and left_fit in {"unset", "inside", "outside"}
+
+
+def _print_fit(worksheet, box: tuple[int, int, int, int]) -> str:
+    area = worksheet.print_area
+    if not area:
+        return "unset"
+    try:
+        ranges = PrintArea.from_string(str(area)).ranges
+    except RECOVERABLE_ERRORS:
+        return "unset"
+    boxes = [bounded_range(str(item)) for item in ranges]
+
+    def covers(outer: tuple[int, int, int, int]) -> bool:
+        return (
+            outer[0] <= box[0] and outer[1] <= box[1] and box[2] <= outer[2] and box[3] <= outer[3]
+        )
+
+    def hits(outer: tuple[int, int, int, int]) -> bool:
+        return (
+            outer[0] <= box[2] and box[0] <= outer[2] and outer[1] <= box[3] and box[1] <= outer[3]
+        )
+
+    if any(covers(item) for item in boxes):
+        return "inside"
+    if any(hits(item) for item in boxes):
+        return "cross"
+    return "outside"
 
 
 def _touching_pairs(items: list[dict]) -> list[tuple[int, int]]:

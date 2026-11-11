@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
@@ -34,6 +35,32 @@ _SAVING = "template_review_saving"
 _SAVED = "template_review_saved"
 _CLASS_SAVING = "classification_template_saving"
 _MODEL_PENDING = "template_review_model_pending"
+logger = logging.getLogger(__name__)
+
+
+def _drop_reused_template_copy(path: Path, result: dict) -> tuple[str, bool]:
+    """Remove the new file when the library kept an existing template."""
+    template = result.get("template")
+    template_id = str(template["id"]) if isinstance(template, dict) else ""
+    reused = result.get("reused") is True
+    if reused:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("duplicate template file was left on disk")
+    return template_id, reused
+
+
+def _reviewed_save_result(
+    template_id: str, *, replayed: bool, reused: bool, auto_ingest: dict
+) -> dict:
+    return {
+        "success": True,
+        "template_id": template_id,
+        "replayed": replayed,
+        "reused": reused,
+        "auto_ingest": auto_ingest,
+    }
 
 
 _OUTCOME_HTTP = {
