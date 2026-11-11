@@ -20,8 +20,7 @@ def _facade():
     return importlib.import_module("app.domain.shared_services.inventory_service")
 
 
-def _posted_stock_out(db, product_id, reference_type, reference_id):
-    model = _facade().InventoryTransaction
+def _posted_stock_out(db, model, product_id, reference_type, reference_id):
     query = db.query(model).filter(
         model.product_id == product_id,
         model.transaction_type == "out",
@@ -248,9 +247,10 @@ class InventoryMovementsMixin:
             }
         with _facade().get_db() as db, worker_write_guard(db):
             try:
+                stock_model = _facade().InventoryTransaction
                 if reference_type and reference_id not in (None, ""):
                     posted = _posted_stock_out(
-                        db, resolved_product_id, str(reference_type), reference_id
+                        db, stock_model, resolved_product_id, str(reference_type), reference_id
                     )
                     if posted is not None:
                         return {
@@ -291,7 +291,7 @@ class InventoryMovementsMixin:
                 ledger.quantity = float(ledger.quantity) - quantity
                 ledger.available_quantity = float(ledger.available_quantity) - quantity
                 ledger.updated_at = now
-                transaction = _facade().InventoryTransaction(
+                transaction = stock_model(
                     ledger_id=ledger.id,
                     transaction_type="out",
                     product_id=resolved_product_id,
@@ -314,7 +314,7 @@ class InventoryMovementsMixin:
                 except IntegrityError:
                     db.rollback()
                     raced = _posted_stock_out(
-                        db, resolved_product_id, str(reference_type), reference_id
+                        db, stock_model, resolved_product_id, str(reference_type), reference_id
                     )
                     if raced is None:
                         raise
