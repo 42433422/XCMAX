@@ -27,11 +27,6 @@ def _posted_stock_out(db, model, product_id, reference_type, reference_id):
         model.reference_type == reference_type,
         model.reference_id == reference_id,
     )
-    from app.infrastructure.tenant_scope import current_tenant_id
-
-    tenant_id = current_tenant_id()
-    if tenant_id is not None:
-        query = query.filter(model.tenant_id == tenant_id)
     return query.first()
 
 
