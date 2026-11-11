@@ -156,6 +156,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
     assert finance_delete_spec.permission == "tool.finance.delete_transaction"
     assert finance_delete_spec.test_fixtures[0]["input"]["transaction_id"] == 31
 
+    assert specs[("shipment_orders", "generate")].permission == "shipment.create"
     shipment_create_spec = specs[("shipment_records", "create")]
     assert shipment_create_spec.risk == "high"
     assert shipment_create_spec.required_params == ["unit_name"]
