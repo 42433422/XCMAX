@@ -401,7 +401,7 @@ def test_r09_ignored_claim_is_not_reported_as_in_progress():
     except AssertionError as exc:
         text = str(exc)
         assert "'rows': 1" in text, text
-        assert "'success': False" in text and "'error_code': None" in text, text
+        assert "customer_name_exists" in text, text
     else:
         raise AssertionError("two recoveries without a claim still left one row")
     finally:

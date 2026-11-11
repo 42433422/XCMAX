@@ -1,5 +1,5 @@
 {
-  "lines": 2399345,
+  "lines": 2398015,
   "updated": "2026-11-11",
-  "note": "把已含 main 的下层合入 cursor/evidence-exact-match-b845"
+  "note": "同名客户创建返回 customer_name_exists，恢复失败回执不再缺错误码"
 }
