@@ -120,6 +120,7 @@ def test_release_gate_reads_installer_files(tmp_path):
     code, report = release_gate(tmp_path, sha)
     assert code == 0
     assert report["release_pass"] is True
+    assert report["upgrade_rollback"] == "NOT RUN"
     assert release_gate(tmp_path, "not-a-sha")[0] == 1
     wrong = dict(report)
     swapped = rollup(list(reversed(report["rows"])))
@@ -138,6 +139,14 @@ def test_same_row_count_with_different_business_fields_is_loss(tmp_path):
     conn.close()
     assert snapshot_discards_later_rows(left, right, "customers") is True
     assert snapshot_discards_later_rows(left, left, "customers") is False
+    (tmp_path / "XCAGI-Enterprise-Setup.exe").write_bytes(b"win")
+    (tmp_path / "XCAGI-Enterprise.dmg").write_bytes(b"mac")
+    left.rename(tmp_path / "upgrade-snapshot.sqlite")
+    right.rename(tmp_path / "upgrade-current.sqlite")
+    code, report = release_gate(tmp_path, "a" * 40)
+    assert code == 1
+    assert report["release_pass"] is True
+    assert report["upgrade_rollback"] == "FAIL"
 
 
 def test_evidence_order_does_not_change_a_blocker():

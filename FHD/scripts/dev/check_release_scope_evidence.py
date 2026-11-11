@@ -135,12 +135,27 @@ def installer_rows(root: Path, source_sha: str) -> list[dict]:
     return rows
 
 
+def upgrade_rollback_status(root: Path) -> str:
+    """Compare business id and name. Missing evidence stays NOT RUN, not PASS."""
+    snapshot = root / "upgrade-snapshot.sqlite"
+    current = root / "upgrade-current.sqlite"
+    if not snapshot.is_file() or not current.is_file():
+        return "NOT RUN"
+    if snapshot_discards_later_rows(snapshot, current, "customers", ("id", "name")):
+        return "FAIL"
+    return "PASS"
+
+
 def release_gate(root: Path, source_sha: str) -> tuple[int, dict]:
     if len(source_sha) != 40 or any(char not in "0123456789abcdef" for char in source_sha):
         report = {"release_pass": False, "error": "source_sha must be 40 lowercase hex characters"}
         return 1, report
     report = rollup(installer_rows(root, source_sha), REQUIRED_SCOPES)
-    return (0 if report["release_pass"] else 1), report
+    upgrade = upgrade_rollback_status(root)
+    report["upgrade_rollback"] = upgrade
+    if upgrade == "FAIL" or not report["release_pass"]:
+        return 1, report
+    return 0, report
 
 
 def _self_check() -> int:
