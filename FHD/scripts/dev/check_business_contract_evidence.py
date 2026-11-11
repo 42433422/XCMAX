@@ -20,9 +20,12 @@ STATUSES = {"PASS", "FAIL", "BLOCKED", "NOT RUN", "NOT APPLICABLE"}
 MINIMUM_REQUIRED = (
     "R08-e23-readback",
     "R05-approved-shipment-export",
+    "R04-export-submitted-result",
+    "R03-confirm-binding",
     "R02-empty-preview",
     "R07-same-key-different-params",
     "R09-two-recoveries",
+    "R10-tenant-scope",
 )
 REQUIRED_TESTS = {
     "R08-e23-readback": (
@@ -44,6 +47,18 @@ REQUIRED_TESTS = {
     "R09-two-recoveries": (
         "tests/test_application/test_idempotency_recovery_e23_e24.py"
         "::test_e24_two_recoveries_leave_one_row"
+    ),
+    "R04-export-submitted-result": (
+        "tests/test_application/test_shipment_records_agent_routes.py"
+        "::test_approved_shipment_then_export_uses_full_persisted_plan"
+    ),
+    "R03-confirm-binding": (
+        "tests/test_application/test_etl_preview_confirmation.py"
+        "::test_missing_or_wrong_approval_does_not_write_or_claim_run"
+    ),
+    "R10-tenant-scope": (
+        "tests/test_application/test_etl_knowledge_isolation.py"
+        "::test_identical_content_in_two_tenants_never_replaces_first"
     ),
 }
 
