@@ -80,6 +80,7 @@ def _sessions() -> SessionAccess:
         owner_permission=lambda user: tenant_rbac_policy.owner_permission_for_user(user),
         product_sku=lambda: product_skus.resolve_product_sku(),
         market_token=lambda sid: market_account.resolve_valid_market_access_token_fast(sid),
+        stored_market_token=lambda sid: market_account.session_market_token(sid),
         sync_entitlements=lambda sid: mod_entitlements.sync_entitlements_for_session(sid),
         cached_entitlements=lambda: mod_entitlements.get_cached_entitled_client_mod_ids(),
         subscription=lambda uid: tenant_subscription_app_service.subscription_status_for_user(uid),

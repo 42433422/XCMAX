@@ -910,6 +910,10 @@ class TestAuthSessionValidateAdditional:
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
             patch(
+                "app.fastapi_routes.market_account.session_market_token",
+                return_value="synthetic-access",
+            ),
+            patch(
                 "app.fastapi_routes.market_account.resolve_valid_market_access_token_fast",
                 new=AsyncMock(side_effect=RuntimeError("market down")),
             ),
