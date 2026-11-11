@@ -17,7 +17,7 @@ help:
 	@echo "  setup          — FHD/.venv + pip install (requirements-dev.txt 或 requirements.txt)"
 	@echo "  dev            — 启动 XCAGI (FHD/XCAGI/run.py)"
 	@echo "  test           — pytest FHD/tests/"
-	@echo "  test-xcagi     — pytest FHD/XCAGI/xcagi_tests (importlib)"
+	@echo "  test-xcagi     — test 的兼容别名"
 	@echo "  test-coverage  — pytest + app 覆盖率"
 	@echo "  lint           — ruff check FHD/app/"
 	@echo "  openapi-check  — OpenAPI 路由/Schema 错误门禁"
@@ -35,8 +35,7 @@ dev:
 test:
 	cd $(FHD) && $(PY) -m pytest tests/ -q
 
-test-xcagi:
-	cd $(FHD) && $(PY) -m pytest XCAGI/xcagi_tests --import-mode=importlib -q
+test-xcagi: test
 
 test-coverage:
 	cd $(FHD) && $(PY) -m pytest tests/ --cov=app --cov-report=term-missing

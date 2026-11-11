@@ -1,5 +1,7 @@
 """
-XCAGI 性能优化系统 - 快速启动和验证脚本
+XCAGI 性能组件诊断脚本。
+
+在诊断进程中检查组件可用性；本进程计数与微基准不能用于在线服务性能验收。
 
 用于：
 1. 验证所有优化组件是否正常工作
@@ -15,7 +17,7 @@ import time
 
 BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
 
-# 将项目根目录添加到 Python 路径
+# 此文件统一位于 FHD/tools；从任意工作目录定位真实 FHD/app。
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -31,6 +33,7 @@ def print_banner():
 ╚═══════════════════════════════════════════════════════════╝
     """
     print(banner)
+    print("组件诊断结果只描述本进程，不构成在线服务性能验收。")
 
 
 def check_redis_connection():
@@ -167,11 +170,11 @@ def check_api_endpoints():
     print("\n🌐 [6/6] 检查性能API端点...")
 
     endpoints = [
-        ("GET /api/performance/status", "状态接口"),
-        ("GET /api/performance/health", "健康检查"),
-        ("GET /api/performance/metrics/summary", "指标摘要"),
-        ("GET /api/performance/cache/stats", "缓存统计"),
-        ("GET /api/performance/metrics/prometheus", "Prometheus"),
+        ("/api/performance/status", "状态接口"),
+        ("/api/performance/health", "健康检查"),
+        ("/api/performance/metrics/summary", "指标摘要"),
+        ("/api/performance/cache/stats", "缓存统计"),
+        ("/api/performance/metrics/prometheus", "Prometheus"),
     ]
 
     all_ok = True

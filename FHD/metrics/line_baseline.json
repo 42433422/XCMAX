@@ -1,5 +1,5 @@
 {
-  "lines": 2412399,
+  "lines": 2395346,
   "updated": "2026-11-11",
-  "note": "在 main 基线 2412381 上补 tool.sales.create_order 种子、角色授权和回归，净增 18 行。"
+  "note": "普通业务用户创建销售订单的权限种子和回归，相对 main 61da5dd5 净增 18 行"
 }

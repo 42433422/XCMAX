@@ -7,7 +7,7 @@
 > **定价 SSOT（运行时）**：本文 §2.2.1（企业宿主）与 §2.4（市场会员）为**商业化定价**的文档 SSOT；
 > 机器配置分别为 [`config/saas_plans.json`](../config/saas_plans.json) 与 MODstore
 > [`init_default_plan_templates`](../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py)。
-> 销售/法务勿引用 [`guides/LICENSING.md`](guides/LICENSING.md) 已退役 FAQ 价或 [`XCAGI/BUSINESS_MODEL.md`](../XCAGI/BUSINESS_MODEL.md) 历史参考价。
+> 销售/法务以以上定价源为准；退役历史文档的恢复入口见 [`ARCHIVE_POINTER.md`](../../ARCHIVE_POINTER.md)。
 
 ## 零、产品端与分发矩阵
 
