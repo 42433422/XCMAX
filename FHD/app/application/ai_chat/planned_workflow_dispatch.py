@@ -242,9 +242,13 @@ class PlannedWorkflowDispatch:
             if unavailable and "余额不足" in reason:
                 message_text = f"{reason.rstrip('。')}。本次没有执行任何业务操作。"
             elif unavailable:
-                message_text = "平台模型暂时没有返回可用结果，请检查模型连接后重试。本次没有执行任何业务操作。"
+                message_text = (
+                    "平台模型暂时没有返回可用结果，请检查模型连接后重试。本次没有执行任何业务操作。"
+                )
             else:
-                message_text = "平台模型计划未通过系统校验，本次没有执行任何业务操作。请补充条件后重试。"
+                message_text = (
+                    "平台模型计划未通过系统校验，本次没有执行任何业务操作。请补充条件后重试。"
+                )
             return {
                 "success": False,
                 "execution_state": "failed",
