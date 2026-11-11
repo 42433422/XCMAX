@@ -340,18 +340,26 @@ def test_excel_verification_rejects_incorrect_count_or_total(monkeypatch, count,
     assert result["success"] is ok and result["verification"]["verified"] is ok
 
 
-@pytest.mark.parametrize("action", ["context", "execute"])
-def test_employee_workflow_hands_off_the_declared_deliverable(tmp_path, monkeypatch, action):
+@pytest.mark.parametrize(
+    "action,suffix", [("context", "pdf"), ("execute", "pdf"), ("execute", "csv")]
+)
+def test_employee_workflow_hands_off_the_declared_deliverable(
+    tmp_path, monkeypatch, action, suffix
+):
     from app.application.employee_runtime import executor
     from app.domain.shared_services.tools_workflow_workspace import _registered_router_employee
 
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    pdf = tmp_path / "report.pdf"
-    pdf.write_bytes(b"%PDF-test")
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    document = tmp_path / f"report.{suffix}"
+    document.write_bytes(b"amount\n200\n" if suffix == "csv" else b"%PDF-test")
     output = (
         {"output": "上游文本"}
         if action == "context"
-        else {"output_path": str(tmp_path / "parsed.json"), "output": {"pdf_output_path": str(pdf)}}
+        else {
+            "output_path": str(tmp_path / "parsed.json"),
+            "output": {"document_output_path": str(document)},
+        }
     )
     monkeypatch.setattr(
         executor,
@@ -360,13 +368,14 @@ def test_employee_workflow_hands_off_the_declared_deliverable(tmp_path, monkeypa
     )
     result = _registered_router_employee(
         action,
-        {"employee_id": "pdf-generate-employee", "task": "协作"},
-        {"workspace_root": str(tmp_path)},
+        {"employee_id": f"{suffix}-generate-employee", "task": "协作"},
+        {"workspace_root": str(tmp_path), "run_id": "run_handoff"},
         "normal",
         "",
     )
     assert result["success"]
-    assert result["data"].get("file_path") == (str(pdf) if action == "execute" else None)
+    assert result["data"].get("file_path") == (str(document) if action == "execute" else None)
+    assert [row["mime_type"] for row in result["artifacts"]] == ["text/csv"] * (suffix == "csv")
 
 
 @pytest.mark.parametrize("suffix", ["xlsx", "csv"])

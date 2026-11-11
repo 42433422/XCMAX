@@ -77,8 +77,7 @@ class ReportService(NeuroEventPublisherMixin):
 
             pairs = [(item, order) for item, order in query.all()]
 
-            # 权威汇总：summary.total_amount 以纳入订单的 SalesOrder.total_amount 之和为准
-            # （与订单总额一致），各维度明细 amount 仍按 SalesOrderItem.amount 聚合。
+            # 汇总采用订单总额，分组明细按订单行聚合。
             order_totals = {order.id: order.total_amount or Decimal("0") for _, order in pairs}
             summary_total = sum(order_totals.values())
 
@@ -167,7 +166,6 @@ class ReportService(NeuroEventPublisherMixin):
                     },
                 }
 
-            # fail-closed：主源（sales_order）不支持未知 group_by，避免返回误导性空报表
             return {"success": False, "message": f"不支持的 group_by: {group_by}"}
 
     def _get_sales_report_from_shipments(

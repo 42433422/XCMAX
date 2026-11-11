@@ -468,27 +468,20 @@ def _registered_router_employee(
         )
         from app.mod_sdk.employee_tool_registry import office_output_paths
 
-        paths = set()
-        for raw in office_output_paths(employee_id, result):
-            path = resolve_etl_path(raw, workspace_root=workspace_root)
-            with open_etl_input_file(path, workspace_root=workspace_root):
-                paths.add(str(path))
-        if len(paths) == 1:
-            result["file_path"] = paths.pop()
-            run_id = str(runtime_context.get("run_id") or "")
-            if run_id and result["file_path"].lower().endswith(".xlsx"):
-                from pathlib import Path
+        paths = {
+            resolve_etl_path(raw, workspace_root=workspace_root)
+            for raw in office_output_paths(employee_id, result)
+        }
+        run_id = str(runtime_context.get("run_id") or "")
+        for path in paths:
+            with open_etl_input_file(path, workspace_root=workspace_root) as source:
+                if len(paths) != 1:
+                    continue
+                result["file_path"] = str(path)
+                if run_id and path.suffix.lower() in {".xlsx", ".csv"}:
+                    from app.application.agent_orchestrator.artifact_files import store_spreadsheet
 
-                from app.application.agent_orchestrator.artifact_files import store_spreadsheet
-
-                with open_etl_input_file(
-                    result["file_path"], workspace_root=workspace_root
-                ) as source:
-                    artifacts.append(
-                        store_spreadsheet(
-                            run_id, source.read(), name=Path(result["file_path"]).name
-                        )
-                    )
+                    artifacts.append(store_spreadsheet(run_id, source.read(), name=path.name))
     return {
         "success": ok,
         "message": "员工执行完成" if ok else str(result.get("error") or "员工执行失败"),
