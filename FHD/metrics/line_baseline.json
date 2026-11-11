@@ -1,5 +1,5 @@
 {
-  "lines": 2398501,
+  "lines": 2399006,
   "updated": "2026-11-11",
-  "note": "PR3151 CI regression repair: retain rollback-after-insert, tenant-filter, deterministic claim-bypass and branched migration round-trip safety coverage; four test files add 89 maintained lines, no production or gate changes."
+  "note": "用户要求移除可复用演示密码：随机凭据和临时数据隔离、私有产物、监听归属与持续监督，Linux子reaper保障孤儿浏览器生命周期归属；相对APT候选累计净增484行（前轮444行、内核归属及不支持时关闭的回归40行），23项安全回归，保留最新main及owner同步，无无关删除。"
 }

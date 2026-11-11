@@ -818,6 +818,16 @@ jobs:
             echo "::warning::playwright install-deps attempt ${attempt} failed; refreshing apt lists"
             sudo apt-get clean || true
             sudo rm -rf /var/lib/apt/lists/*
+            # Limit mirror fallback to APT source files; preserve keys and trust settings.
+            for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+              [ -e "$source" ] || continue
+              if [ ! -f "$source" ] || [ -L "$source" ]; then
+                echo "::error::Refusing non-regular APT source: $source"; exit 1
+              fi
+              if ! sudo sed -i -E 's@(^|[[:space:]])(https?://)azure\.archive\.ubuntu\.com(/|[[:space:]]|$)@\1\2archive.ubuntu.com\3@g' "$source"; then
+                echo "::error::APT mirror fallback failed: $source"; exit 1
+              fi
+            done
             sudo apt-get update
           done
           if [ "$rc" -ne 0 ]; then

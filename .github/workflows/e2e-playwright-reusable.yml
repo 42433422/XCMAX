@@ -71,6 +71,16 @@ jobs:
             echo "::warning::playwright install-deps attempt ${attempt} failed; refreshing apt lists"
             sudo apt-get clean || true
             sudo rm -rf /var/lib/apt/lists/*
+            # Limit mirror fallback to APT source files; preserve keys and trust settings.
+            for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+              [ -e "$source" ] || continue
+              if [ ! -f "$source" ] || [ -L "$source" ]; then
+                echo "::error::Refusing non-regular APT source: $source"; exit 1
+              fi
+              if ! sudo sed -i -E 's@(^|[[:space:]])(https?://)azure\.archive\.ubuntu\.com(/|[[:space:]]|$)@\1\2archive.ubuntu.com\3@g' "$source"; then
+                echo "::error::APT mirror fallback failed: $source"; exit 1
+              fi
+            done
             sudo apt-get update
           done
           if [ "$rc" -ne 0 ]; then
@@ -83,9 +93,6 @@ jobs:
       - name: Run full-stack login + ERP P0 (mandatory)
         env:
           E2E_FULL_STACK: "1"
-          E2E_USER: xcagi-enterprise-demo
-          E2E_PASSWORD: Demo@2026
-          E2E_ACCOUNT_KIND: enterprise
           E2E_PYTHON: ${{ github.workspace }}/FHD/.venv/bin/python
         run: bash ../scripts/dev/e2e-full.sh
 
@@ -95,8 +102,6 @@ jobs:
         with:
           name: xcagi-full-stack-playwright-evidence
           path: |
-            FHD/frontend/playwright-report/
-            FHD/frontend/test-results/
-            FHD/docs/evidence/e2e/*.png
+            ${{ runner.temp }}/xcagi-e2e-evidence/*.png
           if-no-files-found: warn
           retention-days: 14
