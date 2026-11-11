@@ -1,5 +1,5 @@
 {
-  "lines": 2398161,
+  "lines": 2398162,
   "updated": "2026-11-11",
-  "note": "契约证据缺 run、attempt、环境或数据版本时拒绝"
+  "note": "Ruff format 给员工上传授权测试补一行"
 }
