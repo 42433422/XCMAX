@@ -251,6 +251,26 @@ class FinanceAppService:
     def create_transaction(self, data: dict[str, Any]) -> dict[str, Any]:
         with get_db() as db:
             try:
+                reference_type = data.get("reference_type")
+                reference_id = data.get("reference_id")
+                if isinstance(reference_id, str) and reference_id.isdigit():
+                    reference_id = int(reference_id)
+                if reference_type and reference_id not in (None, ""):
+                    posted = (
+                        db.query(FinancialTransaction)
+                        .filter(
+                            FinancialTransaction.transaction_type == data["transaction_type"],
+                            FinancialTransaction.reference_type == reference_type,
+                            FinancialTransaction.reference_id == reference_id,
+                        )
+                        .first()
+                    )
+                    if posted is not None:
+                        return {
+                            "success": True,
+                            "message": "该业务单据已登记，未重复入账",
+                            "data": posted.to_dict(),
+                        }
                 txn = FinancialTransaction(
                     transaction_type=data["transaction_type"],
                     amount=Decimal(str(data["amount"])),
