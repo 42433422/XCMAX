@@ -1,5 +1,5 @@
 {
-  "lines": 2398162,
+  "lines": 2398168,
   "updated": "2026-11-11",
-  "note": "Ruff format 给员工上传授权测试补一行"
+  "note": "同名客户唯一约束测试改为断言重复插入被拒绝并复用已有行，模糊歧义仍阻断创建；测试净增 6 行，用于修复 backend-test-shard 4 的 IntegrityError。"
 }
