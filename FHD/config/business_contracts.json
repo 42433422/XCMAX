@@ -222,21 +222,71 @@
     },
     {
       "requirement_id": "R06",
-      "scenario_id": "R06-approval-authority",
-      "rule": "按已确认规则验证权限、租户、资源范围和审批状态。有权限的审批人可以自批。未授权、等待、拒绝或取消时不得发生受保护写入。",
-      "source": "审批权限规则；本批只登记，不引入申请人绝对不得自批。",
-      "preconditions": ["审批请求处于明确状态"],
-      "inputs": ["操作者身份、租户、资源范围、审批决定"],
-      "allowed": ["授权审批人自批", "授权范围内的批准写入"],
-      "forbidden_effects": ["无权限审批造成受保护写入"],
-      "oracle": "权限与审批状态规则，对照写入是否发生",
+      "scenario_id": "R06-approval-cancelled",
+      "rule": "审批已取消时不得发生受保护写入。",
+      "source": "等待和拒绝已经有执行。取消后的业务写入尚未单独执行。",
+      "preconditions": ["审批状态是 cancelled"],
+      "inputs": ["取消后的执行"],
+      "allowed": ["拒绝写入"],
+      "forbidden_effects": ["取消后仍插入业务行"],
+      "oracle": "取消前后的业务主键",
       "tests": [],
       "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
       "known_defects": [],
-      "fault_version": "放行无权限审批",
+      "fault_version": "取消后仍插入业务行",
       "platforms": ["linux"],
-      "database_modes": ["sqlite", "postgresql"],
+      "database_modes": ["sqlite"],
       "resources": [],
+      "required_for_merge": false
+    },
+    {
+      "requirement_id": "R06",
+      "scenario_id": "R06-waiting-no-write",
+      "rule": "审批还在等待时不得插入客户。",
+      "source": "等待审批的执行测试。客户表是 SQLite，审批队列在内存里。",
+      "preconditions": ["审批状态是 waiting_approval"],
+      "inputs": ["携带一个未完成的审批号去创建客户"],
+      "allowed": ["拒绝，原因 approval_required", "状态仍是 waiting_approval"],
+      "forbidden_effects": ["等待期间插入「闭环驳回不应写入」"],
+      "oracle": "SQLite 客户名清单",
+      "tests": [
+        "tests/test_application/test_approval_executor_gate.py::test_waiting_approval_denies_before_write"
+      ],
+      "boundary": {
+        "real": ["sqlite customers"],
+        "doubles": ["in-memory approval queue"],
+        "execution": "real"
+      },
+      "known_defects": [],
+      "fault_version": "等待审批仍插入客户",
+      "platforms": ["linux"],
+      "database_modes": ["sqlite"],
+      "resources": ["sqlite"],
+      "required_for_merge": false
+    },
+    {
+      "requirement_id": "R06",
+      "scenario_id": "R06-rejected-no-write",
+      "rule": "审批被拒绝后，再次提交也不得插入客户。",
+      "source": "驳回后重试的执行测试。客户表是 SQLite。",
+      "preconditions": ["审批已被拒绝"],
+      "inputs": ["第一次执行和带着 approved 标记的第二次执行"],
+      "allowed": ["两次都拒绝"],
+      "forbidden_effects": ["驳回后插入「闭环驳回不应写入」"],
+      "oracle": "SQLite 客户名清单",
+      "tests": [
+        "tests/test_application/test_approval_executor_gate.py::test_resubmit_after_reject_still_has_no_row"
+      ],
+      "boundary": {
+        "real": ["sqlite customers"],
+        "doubles": ["in-memory approval queue"],
+        "execution": "real"
+      },
+      "known_defects": [],
+      "fault_version": "驳回后重试仍插入客户",
+      "platforms": ["linux"],
+      "database_modes": ["sqlite"],
+      "resources": ["sqlite"],
       "required_for_merge": false
     },
     {
