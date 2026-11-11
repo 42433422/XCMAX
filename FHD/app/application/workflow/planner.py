@@ -199,7 +199,13 @@ class LLMWorkflowPlanner:
         # Every online business turn is first planned by the configured platform
         # model. Deterministic checks may reject or constrain that plan, but never
         # synthesize an executable replacement when the model output is missing.
-        planned = self._plan_with_llm(plan_id, user_id, message, registry_for_plan, context)
+        from app.infrastructure.modstore_transport import MarketModelError
+
+        try:
+            planned = self._plan_with_llm(plan_id, user_id, message, registry_for_plan, context)
+        except MarketModelError as exc:
+            context["planning_failure_reason"] = str(exc)
+            planned = None
         # 统一 Agent Runtime 接缝：把 pre-plan 记忆召回落上计划元数据，
         # 供编排器转成 run.memory_references（主链路可观测闭合）。
         recall_meta = {
