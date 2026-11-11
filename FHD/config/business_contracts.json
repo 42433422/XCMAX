@@ -24,7 +24,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": ["合成工作簿"],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R01",
@@ -49,7 +49,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": ["合成 CSV", "sqlite"],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R02",
@@ -124,7 +124,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R04",
@@ -174,7 +174,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": ["临时 sqlite", "openpyxl"],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R04",
@@ -199,7 +199,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R05",
@@ -249,7 +249,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R06",
@@ -274,7 +274,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": ["sqlite"],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R06",
@@ -299,7 +299,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": ["sqlite"],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R07",
@@ -429,7 +429,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R06",
@@ -454,7 +454,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R06",
@@ -479,7 +479,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R07",
@@ -504,7 +504,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R07",
@@ -529,7 +529,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R07",
@@ -554,7 +554,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R10",
@@ -579,7 +579,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": ["sqlite"],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R10",
@@ -604,7 +604,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R10",
@@ -629,7 +629,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R10",
@@ -654,7 +654,7 @@
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     }
   ]
 }

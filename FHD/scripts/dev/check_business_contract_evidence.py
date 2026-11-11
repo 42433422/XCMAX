@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""业务契约目录与执行证据校验。
-
-``catalog`` 只检查契约形状，以及必跑场景没有被从目录里拿掉。
-``ci-gate`` 只接受本次分片 JUnit 里的结果，不读取手写的 PASS。
-后端被分类器跳过时，必跑场景记为 NOT APPLICABLE，不能记成 PASS。
-"""
+"""业务契约目录与执行证据校验。ci-gate 只认本次 JUnit，不认手写 PASS。"""
 
 from __future__ import annotations
 
@@ -17,50 +12,17 @@ from pathlib import Path
 FHD_ROOT = Path(__file__).resolve().parents[2]
 CATALOG = FHD_ROOT / "config" / "business_contracts.json"
 STATUSES = {"PASS", "FAIL", "BLOCKED", "NOT RUN", "NOT APPLICABLE"}
-MINIMUM_REQUIRED = (
-    "R08-e23-readback",
-    "R05-approved-shipment-export",
-    "R04-export-submitted-result",
-    "R03-confirm-binding",
-    "R02-empty-preview",
-    "R07-same-key-different-params",
-    "R09-two-recoveries",
-    "R10-tenant-scope",
-)
-REQUIRED_TESTS = {
-    "R08-e23-readback": (
-        "tests/test_application/test_idempotency_recovery_e23_e24.py"
-        "::test_e23_kill_after_commit_returns_the_same_row"
-    ),
-    "R05-approved-shipment-export": (
-        "tests/test_application/test_shipment_records_agent_routes.py"
-        "::test_approved_shipment_then_export_uses_full_persisted_plan"
-    ),
-    "R02-empty-preview": (
-        "tests/test_application/test_etl_preview_task_boundaries.py"
-        "::test_empty_preview_is_not_confirmable"
-    ),
-    "R07-same-key-different-params": (
-        "tests/test_application/test_idempotency_recovery_e23_e24.py"
-        "::test_same_key_with_different_phone_does_not_reuse_the_row"
-    ),
-    "R09-two-recoveries": (
-        "tests/test_application/test_idempotency_recovery_e23_e24.py"
-        "::test_e24_two_recoveries_leave_one_row"
-    ),
-    "R04-export-submitted-result": (
-        "tests/test_application/test_shipment_records_agent_routes.py"
-        "::test_approved_shipment_then_export_uses_full_persisted_plan"
-    ),
-    "R03-confirm-binding": (
-        "tests/test_application/test_etl_preview_confirmation.py"
-        "::test_missing_or_wrong_approval_does_not_write_or_claim_run[None]"
-    ),
-    "R10-tenant-scope": (
-        "tests/test_application/test_etl_knowledge_isolation.py"
-        "::test_identical_content_in_two_tenants_never_replaces_first"
-    ),
-}
+
+
+def _floor_requirements(path: Path | None = None) -> tuple[tuple[str, ...], dict[str, str]]:
+    target = path or (FHD_ROOT / "config" / "business_contract_floor.json")
+    data = json.loads(target.read_text(encoding="utf-8"))
+    required = tuple(str(item) for item in data["required_scenarios"])
+    tests = {str(key): str(value) for key, value in data["required_tests"].items()}
+    return required, tests
+
+
+MINIMUM_REQUIRED, REQUIRED_TESTS = _floor_requirements()
 
 
 def load_catalog(path: Path | None = None) -> dict:
