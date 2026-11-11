@@ -66,13 +66,28 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
     if prior is not None:
         content, suffix = prior
     else:
+        source_id = file_path
+        for candidate in (
+            context.get("excel_analysis"),
+            context.get("last_excel_analysis_context"),
+        ):
+            if not isinstance(candidate, dict):
+                continue
+            candidate = candidate.get("result", candidate)
+            if (
+                isinstance(candidate, dict)
+                and candidate.get("file_path") == file_path
+                and isinstance(candidate.get("upload_id"), str)
+            ):
+                source_id = candidate["upload_id"]
+                break
         with get_db() as db:
             upload_id = (
                 db.query(EltUpload.id)
                 .filter(
                     EltUpload.owner_user_id == actor.id,
                     EltUpload.tenant_id == tenant_id_for_write(),
-                    or_(EltUpload.id == file_path, EltUpload.storage_path == file_path),
+                    or_(EltUpload.id == source_id, EltUpload.storage_path == source_id),
                 )
                 .scalar()
             )
