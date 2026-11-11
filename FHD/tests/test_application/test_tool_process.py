@@ -543,3 +543,9 @@ def test_worker_result_file_contains_only_public_route_identity(tmp_path, monkey
     encoded = (tmp_path / "result").read_text()
     assert json.loads(encoded)["llm_route_metadata"] == route
     assert "private-token" not in encoded and "private-mask" not in encoded
+
+
+def test_finance_writes_restore_the_task_tenant():
+    from app.application.agent_orchestrator.tool_executor import _SQL_TENANT_SCOPED_TOOL_IDS
+
+    assert "finance" in _SQL_TENANT_SCOPED_TOOL_IDS
