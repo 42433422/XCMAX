@@ -428,7 +428,18 @@ def _classify_semantic_batch(
                 if any(first <= row <= last for row in unread_in_region):
                     raise ReviewedExcelError("模型区域包含本批未读内容，原分类未改变")
                 fragment_metadata = {"model_original_range": area, "open_fragment": True}
-                r1, r2 = first, last
+                if drawings:
+                    from app.application.reviewed_excel_drawing import clip_keeping_cited_drawings
+
+                    c1, r1, c2, r2 = clip_keeping_cited_drawings(
+                        review,
+                        region,
+                        drawings,
+                        (c1, r1, c2, r2),
+                        (c1, first, c2, last),
+                    )
+                else:
+                    r1, r2 = first, last
                 area = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
                 region = {**region, "range": area}
         for old_c1, old_r1, old_c2, old_r2 in rects.setdefault(sheet, []):
