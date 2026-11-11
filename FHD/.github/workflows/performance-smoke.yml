@@ -87,7 +87,43 @@ jobs:
           npm ci
           npm test -- tests/performance-budget.test.ts
           npm run build:generic
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
+
+      - name: Install Playwright system deps (bounded retry)
+        working-directory: frontend
+        run: |
+          set -uo pipefail
+          rc=1
+          for attempt in 1 2 3; do
+            echo "[deps] attempt ${attempt}/3"
+            if npx playwright install-deps chromium; then
+              rc=0
+              break
+            fi
+            echo "::warning::playwright install-deps attempt ${attempt} failed; refreshing apt lists"
+            sudo apt-get clean || true
+            sudo rm -rf /var/lib/apt/lists/*
+            # Limit mirror fallback to APT source files; preserve keys and trust settings.
+            for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+              [ -e "$source" ] || continue
+              if [ ! -f "$source" ] || [ -L "$source" ]; then
+                echo "::error::Refusing non-regular APT source: $source"; exit 1
+              fi
+              if ! sudo sed -i -E 's@(^|[[:space:]])(https?://)azure\.archive\.ubuntu\.com(/|[[:space:]]|$)@\1\2archive.ubuntu.com\3@g' "$source"; then
+                echo "::error::APT mirror fallback failed: $source"; exit 1
+              fi
+            done
+            sudo apt-get update
+          done
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::playwright system deps failed after 3 attempts (环境阻断，需人工排查，不得跳过)"
+            exit 1
+          fi
+
+
+      - name: Start production UI preview
+        working-directory: FHD/frontend
+        run: |
           node --version > ../performance-results/node-version.txt
           npm run preview -- --host 127.0.0.1 --port 5001 > ../performance-results/preview.log 2>&1 &
           echo $! > ../performance-results/preview.pid
