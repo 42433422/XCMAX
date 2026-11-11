@@ -1196,14 +1196,10 @@ class AutoIngestService:
                     status_code=400,
                 )
 
-        if batch.get("status") == "completed_empty":
-            # Verify the owned receipt before removing knowledge. Empty writes
-            # have nothing for the row rollback service to undo.
-            biz_rollback = self._withdraw_business(db, batch=batch, owner_user_id=owner_user_id)
-            kb_rollback = self._withdraw_knowledge(batch)
-        else:
-            kb_rollback = self._withdraw_knowledge(batch)
-            biz_rollback = self._withdraw_business(db, batch=batch, owner_user_id=owner_user_id)
+        # Verify/undo business first: a missing or empty receipt must not leave
+        # knowledge deleted when the business rollback refuses the operation.
+        biz_rollback = self._withdraw_business(db, batch=batch, owner_user_id=owner_user_id)
+        kb_rollback = self._withdraw_knowledge(batch)
 
         with _LOCK:
             ledger = _load_ledger(tenant_id)
@@ -1453,41 +1449,82 @@ class AutoIngestService:
 
         business = batch.get("business") or {}
         run_id = str(business.get("run_id") or "")
-        empty_batch = batch.get("status") == "completed_empty"
         if not run_id or business.get("skipped"):
-            if empty_batch:
-                raise EltError(
-                    "ELT_EMPTY_RECEIPT_UNVERIFIED", "缺少可核实的业务回执，未撤回", status_code=409
-                )
-            return {"skipped": True, "reason": "no_business_run"}
-        service = get_elt_service()
-        if empty_batch:
-            current = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
-            summary = current.get("summary")
-            receipt = current.get("receipt")
-            rows_written = receipt.get("rows_written", 0) if isinstance(receipt, dict) else None
-            # The worker stores bool(rows_written). False is a zero-write receipt;
-            # an integer zero remains valid. True is not an integer zero.
-            zero_rows = rows_written is False or (type(rows_written) is int and rows_written == 0)
             if (
-                current.get("id") != run_id
-                or current.get("status") != "completed"
-                or current.get("rollback_status") is not None
-                or not isinstance(summary, dict)
-                or not all(
-                    type(summary.get(key)) is int and summary[key] >= 0
-                    for key in ("executed", "new", "update")
-                )
-                or not isinstance(receipt, dict)
-                or not (zero_rows or (type(rows_written) is int and rows_written > 0))
+                not run_id
+                and business.get("skipped") is True
+                and business.get("reason") == "knowledge_only_target"
+                and business.get("target_type") == "knowledge"
             ):
+                return {"skipped": True, "reason": "no_business_run"}
+            raise EltError(
+                "ELT_EMPTY_RECEIPT_UNVERIFIED", "缺少可核实的业务回执，未撤回", status_code=409
+            )
+        service = get_elt_service()
+        current = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
+        summary = current.get("summary")
+        receipt = current.get("receipt")
+        rows_written = receipt.get("rows_written", 0) if isinstance(receipt, dict) else None
+        # The worker stores bool(rows_written). False is a zero-write receipt;
+        # an integer zero remains valid. True is not an integer zero.
+        zero_rows = rows_written is False or (type(rows_written) is int and rows_written == 0)
+        rollback = receipt.get("rollback") if isinstance(receipt, dict) else None
+        rollback_done = False
+        if current.get("rollback_status") == "completed" and isinstance(rollback, dict):
+            at = rollback.get("at")
+            try:
+                valid_at = isinstance(at, str) and datetime.fromisoformat(at).tzinfo is not None
+            except ValueError:
+                valid_at = False
+            rollback_done = (
+                rollback.get("status") == "completed"
+                and type(rollback.get("rows")) is int
+                and rollback["rows"] > 0
+                and valid_at
+            )
+        if (
+            current.get("id") != run_id
+            or current.get("status") not in {"completed", "failed", "interrupted"}
+            or (current.get("rollback_status") is not None and not rollback_done)
+            or not isinstance(summary, dict)
+            or not all(
+                type(summary.get(key)) is int and summary[key] >= 0
+                for key in ("executed", "new", "update")
+            )
+            or not isinstance(receipt, dict)
+            or not (
+                zero_rows
+                or rows_written is True
+                or (type(rows_written) is int and rows_written > 0)
+            )
+        ):
+            raise EltError(
+                "ELT_EMPTY_RECEIPT_UNVERIFIED",
+                "业务回执不足或撤回状态异常，未撤回",
+                status_code=409,
+            )
+        if rollback_done:
+            if all(summary[key] == 0 for key in ("executed", "new", "update")) and zero_rows:
                 raise EltError(
                     "ELT_EMPTY_RECEIPT_UNVERIFIED",
-                    "业务回执不足或撤回状态异常，未撤回",
+                    "撤回回执与写入计数矛盾，未撤回",
                     status_code=409,
                 )
-            if all(summary[key] == 0 for key in ("executed", "new", "update")) and zero_rows:
-                return {"skipped": True, "reason": "no_business_writes", "run_id": run_id}
+            return {
+                "rolled_back": True,
+                "already_rolled_back": True,
+                "run_id": run_id,
+                "status": current["status"],
+                "rollback_status": "completed",
+            }
+        if all(summary[key] == 0 for key in ("executed", "new", "update")) and zero_rows:
+            if current.get("status") != "completed":
+                raise EltError(
+                    "ELT_EMPTY_RECEIPT_UNVERIFIED",
+                    "业务未完成，不能确认零写入，未撤回",
+                    status_code=409,
+                )
+            return {"skipped": True, "reason": "no_business_writes", "run_id": run_id}
         rolled = service.rollback(db, run_id=run_id, owner_user_id=owner_user_id)
         return {
             "rolled_back": True,

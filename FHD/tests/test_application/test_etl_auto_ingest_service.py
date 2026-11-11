@@ -235,6 +235,11 @@ def test_auto_ingest_withdraw_rolls_back_kb_and_business(
         doc_id = batch["knowledge"]["match_ref"]
         assert rag_service.status(dataset_id="office-docking", tenant_id="9")["documents"]
 
+        fake_etl.get_run.return_value = {
+            **fake_etl.execute.return_value,
+            "receipt": {"rows_written": True},
+            "rollback_status": None,
+        }
         withdrawn = service.withdraw(
             MagicMock(), tenant_id=9, owner_user_id=3, batch_id=batch["batch_id"]
         )

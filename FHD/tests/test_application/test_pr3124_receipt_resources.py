@@ -15,7 +15,16 @@ from tests.test_application.test_etl_auto_ingest_service import ledger_root as l
 
 @pytest.mark.usefixtures("ledger_root")
 @pytest.mark.parametrize(
-    "kind", ["empty", "worker_bool", "written", "receipt_written", "forbidden", "incomplete"]
+    "kind",
+    [
+        "empty",
+        "worker_bool",
+        "written",
+        "receipt_written",
+        "worker_true",
+        "forbidden",
+        "incomplete",
+    ],
 )
 def test_empty_withdraw_checks_real_receipt_before_knowledge(monkeypatch, kind):
     batch = {
@@ -40,6 +49,8 @@ def test_empty_withdraw_checks_real_receipt_before_knowledge(monkeypatch, kind):
         fake.get_run.return_value["summary"]["executed"] = 1
     if kind == "receipt_written":
         fake.get_run.return_value["receipt"]["rows_written"] = 2
+    if kind == "worker_true":
+        fake.get_run.return_value["receipt"]["rows_written"] = True
     if kind == "incomplete":
         fake.get_run.return_value["summary"] = {}
     if kind == "forbidden":
@@ -217,7 +228,6 @@ def test_empty_withdraw_keeps_scope_gate(monkeypatch, scope):
         "bad_summary",
         "missing_receipt",
         "bad_receipt",
-        "rows_true",
         "rows_string",
         "rows_negative",
         "running",
@@ -278,7 +288,8 @@ def test_empty_withdraw_rejects_unproven_receipts(monkeypatch, fault):
 
 
 @pytest.mark.usefixtures("ledger_root")
-def test_empty_withdraw_real_elt_run_zero_success_rows(tmp_path, monkeypatch):
+@pytest.mark.parametrize("batch_status", ["applied", "partial", "completed_empty"])
+def test_empty_withdraw_real_elt_run_zero_success_rows(tmp_path, monkeypatch, batch_status):
     from app.application.elt.service import EltService
     from app.db.db_base import Base
     from app.db.models.elt import EltRun, EltRunRow, EltUpload
@@ -293,7 +304,7 @@ def test_empty_withdraw_real_elt_run_zero_success_rows(tmp_path, monkeypatch):
         "tenant_id": 42,
         "owner_user_id": 7,
         "mod_id": "m",
-        "status": "completed_empty",
+        "status": batch_status,
         "business": {"run_id": "r"},
     }
     ais._save_ledger(42, {"batches": {"b": batch}})
