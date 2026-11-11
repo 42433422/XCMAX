@@ -7,6 +7,7 @@ live-model lane BLOCKED.
 
 from __future__ import annotations
 
+import json
 import os
 
 from sqlalchemy.orm import Session
@@ -216,7 +217,10 @@ def _run_seeds(loop) -> list[dict]:
     employees.mkdir()
     for employee_id in ("employee-a", "employee-b"):
         (employees / f"{employee_id}.json").write_text(
-            '{"employee_id":"%s","tenant_id":"11","available":true}' % employee_id,
+            json.dumps(
+                {"employee_id": employee_id, "tenant_id": "11", "available": True},
+                ensure_ascii=False,
+            ),
             encoding="utf-8",
         )
     started = execute_employee_task_local(
