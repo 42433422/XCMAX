@@ -406,14 +406,20 @@
       "requirement_id": "R07",
       "scenario_id": "R07-retry-no-double-inventory",
       "rule": "同一幂等键重试不得第二次扣减库存。",
-      "source": "同键异参冲突已有执行。重试不重复扣库存尚未单独执行。",
-      "preconditions": ["第一次提交已经扣库存"],
-      "inputs": ["同一幂等键的重试"],
-      "allowed": ["库存只减少一次"],
-      "forbidden_effects": ["重试再次扣库存"],
-      "oracle": "第一次提交后的库存数量",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "source": "同一幂等键 del-001 交付两次。库存从 100 扣到 94，出库流水只有一条。",
+      "preconditions": ["库存 100", "订单订购 10"],
+      "inputs": ["idempotency_key=del-001 的两次交付，每次数量 6"],
+      "allowed": ["第二次返回已处理", "库存保持 94", "出库流水 1 条"],
+      "forbidden_effects": ["第二次再扣 6"],
+      "oracle": "库存台账数量 94，以及该明细的出库流水条数",
+      "tests": [
+        "tests/test_services/test_fulfillment_service.py::TestIdempotency::test_duplicate_deliver_with_same_key_is_noop"
+      ],
+      "boundary": {
+        "real": ["sqlite", "inventory ledger", "fulfillment"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "重试再次扣库存仍返回成功",
       "platforms": ["linux"],
