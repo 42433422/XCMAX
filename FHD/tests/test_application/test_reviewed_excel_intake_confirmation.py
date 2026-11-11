@@ -354,6 +354,14 @@ def test_receipt_refresh_preserves_concurrent_withdrawal_and_mod_visibility(
     intake_store, monkeypatch
 ):
     store = intake_store
+    # Keep this case on the deferred read path; polling completion has its own
+    # concurrent-withdrawal regression in test_pr3124_safety_boundaries.
+    ingest_business = store.intake._ingest_business
+
+    def defer_receipt(*args, **kwargs):
+        return ingest_business(*args, **{**kwargs, "poll_seconds": 0})
+
+    monkeypatch.setattr(store.intake, "_ingest_business", defer_receipt)
     data, _, _ = prepare(store)
     response = store.client.post(f"{BASE}/save", data=data)
     assert response.status_code == 200, response.text
@@ -1255,3 +1263,258 @@ def test_old_intake_claim_is_unknown_without_resubmitting(intake_store):
         state = load_json(_run(db, data["review_id"], 1, 7).draft_json, {})
         assert "intake_attempt" not in state
         assert state["intake_attempt_history"][-1]["id"] == "old"
+
+
+@pytest.mark.parametrize("reuse_existing", [False, True])
+def test_saved_template_continues_to_approval_once_without_duplicate_template(
+    intake_store, monkeypatch, reuse_existing
+):
+    from app.application import reviewed_excel_template_blocks as blocks
+    from app.db.models.approval import ApprovalRequest
+
+    store = intake_store
+    monkeypatch.setattr(blocks, "get_app_data_dir", lambda: str(store.root))
+    existing = None
+    if reuse_existing:
+        initial = review(store)
+        created = store.client.post(
+            f"{BASE}/save", data={**initial, "private_intake": "true", "template_only": "true"}
+        )
+        assert created.status_code == 200, created.text
+        assert created.json()["reused"] is False
+        existing = created.json()["template_id"]
+    data = review(store)
+    if reuse_existing:
+        assert data["review_id"] != initial["review_id"]
+    template_request = {**data, "private_intake": "true", "template_only": "true"}
+    saved = store.client.post(f"{BASE}/save", data=template_request)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["reused"] is reuse_existing
+    if reuse_existing:
+        assert saved.json()["template_id"] == existing
+    template_replay = store.client.post(f"{BASE}/save", data=template_request)
+    assert template_replay.status_code == 200, template_replay.text
+    assert template_replay.json()["replayed"]
+    assert template_replay.json()["reused"] is reuse_existing
+    preview = store.client.post(f"{BASE}/intake-preview", data=data)
+    assert preview.status_code == 200, preview.text
+    plan = preview.json()["intake"]
+    store.executor.futures[-1].result(timeout=10)
+    with tenant_scope(1), store.factory() as db:
+        run = store.service.get_run(db, run_id=plan["run_id"], owner_user_id=7)
+        prepared_path = Path(db.get(EltUpload, plan["upload_id"]).storage_path)
+        prepared = prepared_path.read_bytes()
+        template_path = Path(
+            db.execute(text("SELECT original_file_path FROM templates")).scalar_one()
+        )
+        template_body = template_path.read_bytes()
+        assert prepared_path != template_path
+    submit = {
+        **data,
+        "private_intake": "true",
+        "intake_run_id": plan["run_id"],
+        "preview_revision": run["preview_revision"],
+    }
+    result = store.client.post(f"{BASE}/save", data=submit)
+    assert result.status_code == 200, result.text
+    assert result.json()["template_id"] == saved.json()["template_id"]
+    assert result.json()["reused"] is reuse_existing
+    assert result.json()["auto_ingest"]["status"] == "awaiting_approval"
+    again = store.client.post(f"{BASE}/save", data=submit)
+    assert again.status_code == 200, again.text
+    assert again.json()["replayed"]
+    assert again.json()["template_id"] == saved.json()["template_id"]
+    assert again.json()["reused"] is reuse_existing
+    assert again.json()["auto_ingest"] == result.json()["auto_ingest"]
+    with store.factory() as db:
+        assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
+        assert db.query(ApprovalRequest).count() == 1
+        assert db.query(PurchaseUnit).count() == 0
+        receipt = json.loads(db.get(EltRun, data["review_id"]).receipt_json)
+        assert receipt["reused"] is reuse_existing
+        assert receipt["request_key"] != receipt["intake_request_key"]
+    assert list(template_path.parent.glob("*.xlsx")) == [template_path]
+    assert template_path.read_bytes() == template_body
+    assert prepared_path.read_bytes() == prepared
+    batch = ais._load_ledger(1)["batches"][result.json()["auto_ingest"]["batch_id"]]
+    assert batch["source_path"] == str(prepared_path)
+    assert batch["prepared_plan"]["run_id"] == plan["run_id"]
+    assert store.starts == []
+    changed = store.client.post(f"{BASE}/save", data={**submit, "candidate_id": "wrong-candidate"})
+    assert changed.status_code == 409
+
+
+@pytest.mark.parametrize("fault", ["revision", "permission", "mod", "candidate"])
+def test_saved_template_continuation_rejects_changed_scope(intake_store, fault):
+    store = intake_store
+    data, plan, business = prepare(store)
+    template = {
+        key: value
+        for key, value in data.items()
+        if key not in {"intake_run_id", "preview_revision"}
+    }
+    saved = store.client.post(f"{BASE}/save", data={**template, "template_only": "true"})
+    assert saved.status_code == 200
+    if fault == "revision":
+        data["preview_revision"] = "stale"
+    elif fault == "permission":
+        store.actor["execute"] = False
+    elif fault == "mod":
+        store.actor["mod"] = "different"
+    else:
+        data["candidate_id"] = "different"
+    result = store.client.post(f"{BASE}/save", data=data)
+    assert result.status_code in (403, 409), result.text
+    assert store.starts == []
+    with store.factory() as db:
+        assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
+        assert db.query(PurchaseUnit).count() == 0
+
+
+def test_saved_template_lost_submission_is_not_sent_twice(intake_store, monkeypatch):
+    store = intake_store
+    data, _plan, _business = prepare(store)
+    template = {
+        key: value
+        for key, value in data.items()
+        if key not in {"intake_run_id", "preview_revision"}
+    }
+    assert (
+        store.client.post(f"{BASE}/save", data={**template, "template_only": "true"}).status_code
+        == 200
+    )
+    calls = []
+
+    def unknown(**kwargs):
+        calls.append(kwargs)
+        raise RuntimeError("synthetic lost response")
+
+    monkeypatch.setattr("app.application.elt.docking_approval.submit_docking_write", unknown)
+    first = store.client.post(f"{BASE}/save", data=data)
+    again = store.client.post(f"{BASE}/save", data=data)
+    assert first.status_code == again.status_code == 200
+    assert again.json()["replayed"]
+    assert len(calls) == 1
+
+
+def test_direct_intake_save_cannot_be_reopened_as_a_template_continuation(
+    intake_store, monkeypatch
+):
+    store = intake_store
+    data, _plan, _business = prepare(store)
+    calls = []
+
+    def submit(**kwargs):
+        calls.append(kwargs)
+        return {"success": True, "status": "awaiting_approval", "batch_id": "single-batch"}
+
+    monkeypatch.setattr("app.application.elt.docking_approval.submit_docking_write", submit)
+    assert store.client.post(f"{BASE}/save", data=data).status_code == 200
+    changed = store.client.post(f"{BASE}/save", data={**data, "valid_rows_only": "true"})
+    assert changed.status_code == 409
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("field,value,status", [("execute", False, 403), ("mod", "other-mod", 409)])
+def test_saved_continuation_rechecks_permission_at_write_boundary(
+    intake_store, monkeypatch, field, value, status
+):
+    store = intake_store
+    data, _plan, _business = prepare(store)
+    template = {
+        key: value
+        for key, value in data.items()
+        if key not in {"intake_run_id", "preview_revision"}
+    }
+    assert (
+        store.client.post(f"{BASE}/save", data={**template, "template_only": "true"}).status_code
+        == 200
+    )
+    original = routes._recheck
+
+    def changed(request, expected):
+        original(request, expected)
+        store.actor[field] = value
+
+    monkeypatch.setattr(routes, "_recheck", changed)
+    result = store.client.post(f"{BASE}/save", data=data)
+    assert result.status_code == status, result.text
+    assert store.starts == []
+    with store.factory() as db:
+        assert db.query(PurchaseUnit).count() == 0
+        assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
+
+
+@pytest.mark.parametrize("phase", ["before_claim", "during_validation"])
+def test_saved_continuation_serializes_classification_version(intake_store, monkeypatch, phase):
+    import sqlite3
+    from unittest.mock import Mock
+
+    from app.application.elt.service_support import load_json
+
+    store = intake_store
+    data, _plan, _business = prepare(store)
+    template = {
+        key: value
+        for key, value in data.items()
+        if key not in {"intake_run_id", "preview_revision"}
+    }
+    assert (
+        store.client.post(f"{BASE}/save", data={**template, "template_only": "true"}).status_code
+        == 200
+    )
+    with store.factory() as db:
+        saved = db.get(EltRun, data["review_id"])
+        classification_id = load_json(saved.summary_json, {})["selected_region"][
+            "classification_id"
+        ]
+        original = db.get(EltRun, classification_id).draft_json
+    changed = load_json(original, {})
+    changed["versions"][-1]["version"] = "concurrent-classification-version"
+    blocked = []
+
+    def mutate_classification():
+        with sqlite3.connect(store.engine.url.database, timeout=0) as other:
+            try:
+                other.execute(
+                    "UPDATE etl_runs SET draft_json = ? WHERE id = ?",
+                    (json.dumps(changed), classification_id),
+                )
+            except sqlite3.OperationalError as exc:
+                assert "locked" in str(exc)
+                blocked.append(True)
+            else:
+                blocked.append(False)
+
+    if phase == "before_claim":
+        original_recheck = routes._recheck
+
+        def recheck(request, expected):
+            original_recheck(request, expected)
+            mutate_classification()
+
+        monkeypatch.setattr(routes, "_recheck", recheck)
+    else:
+        original_validate = store.intake.validate_prepared
+        calls = 0
+
+        def validate(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                mutate_classification()
+            return original_validate(*args, **kwargs)
+
+        monkeypatch.setattr(store.intake, "validate_prepared", validate)
+    submit = Mock(return_value={"success": True, "status": "awaiting_approval", "batch_id": "once"})
+    monkeypatch.setattr("app.application.elt.docking_approval.submit_docking_write", submit)
+    result = store.client.post(f"{BASE}/save", data=data)
+    assert result.status_code == (409 if phase == "before_claim" else 200), result.text
+    assert blocked == [phase == "during_validation"]
+    assert submit.call_count == (0 if phase == "before_claim" else 1)
+    with store.factory() as db:
+        assert db.query(PurchaseUnit).count() == 0
+        assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
+        assert db.get(EltRun, classification_id).status == "classification_ready"
+        receipt = load_json(db.get(EltRun, data["review_id"]).receipt_json, {})
+        assert bool(receipt.get("intake_request_key")) == (phase == "during_validation")

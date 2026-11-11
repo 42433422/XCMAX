@@ -58,6 +58,7 @@ def load_tasks(path: Path = DEFAULT_TASKS_PATH) -> list[dict[str, Any]]:
 
 def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
     # Offline parent-process mocks are contracts, not process/runtime acceptance.
+    from app.application.agent_orchestrator import tool_permission
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 
     class FixtureToolExecutor(AgentToolExecutor):
@@ -72,9 +73,12 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
             "DATASET_RAG_STORE_PATH": str(tmp_path / "dataset-rag" / "datasets.json"),
             "DATASET_RAG_VECTOR_INDEX_PATH": str(tmp_path / "dataset-rag" / "vectors.sqlite3"),
             "MODEL_USAGE_LEDGER_PATH": str(tmp_path / "model-usage.json"),
+            "XCAGI_TOOL_IDEMPOTENCY_PATH": str(tmp_path / "tool-idempotency.sqlite"),
         }
         with (
             patch.dict(os.environ, isolated_env, clear=False),
+            patch.object(tool_permission, "_IDEMPOTENCY", {}),
+            patch.object(tool_permission, "_LIVE_OWNERS", set()),
             _isolated_task_execution_queue(tmp_path),
             patch(
                 "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
@@ -157,9 +161,10 @@ def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user"):
             )
             db.add(user)
             db.flush()
+            user_id = user.id
             db.add(
                 UserSession(
-                    session_id=sid, user_id=user.id, expires_at=utc_now_naive() + timedelta(hours=1)
+                    session_id=sid, user_id=user_id, expires_at=utc_now_naive() + timedelta(hours=1)
                 )
             )
         previous = client.headers.get("X-Session-ID")
@@ -170,7 +175,7 @@ def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user"):
                 patch("app.db.session.SessionLocal", factory),
                 patch("app.application.facades.session_facade.get_session_service", SessionService),
             ):
-                yield
+                yield user_id
         finally:
             if previous is None:
                 client.headers.pop("X-Session-ID", None)

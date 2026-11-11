@@ -116,7 +116,7 @@ describe('data docking user-only intake', () => {
     wrapper.unmount()
   })
 
-  it('saves the selected template before preparing its intake preview', async () => {
+  it('saves once, then continues the same selection with its prepared intake revision', async () => {
     const { wrapper, choose, openDocument, button } = await setup(); await choose()
     expect((archive.reviewExcel.mock.calls[0][0] as FormData).get('auto_slice_index')).toBe('0')
     const dispatch = vi.spyOn(window, 'dispatchEvent')
@@ -128,13 +128,21 @@ describe('data docking user-only intake', () => {
     expect(archive.previewReviewedIntake).not.toHaveBeenCalled()
     expect(button('保存模板').attributes('disabled')).toBeUndefined()
     await button('保存模板').trigger('click'); await flushPromises()
-    expect(archive.saveReviewedExcel).toHaveBeenCalledTimes(1)
+    expect(archive.saveReviewedExcel).toHaveBeenCalledTimes(2)
     const form = archive.saveReviewedExcel.mock.calls[0][0] as FormData
     expect(['review_id', 'private_intake', 'publish_to_tenant', 'candidate_id'].map(key => form.get(key))).toEqual(['review-production-0', 'true', 'false', 'candidate-1'])
     expect([form.get('intake_run_id'), form.get('preview_revision'), form.get('template_only')]).toEqual([null, null, 'true'])
     expect(archive.previewReviewedIntake).toHaveBeenCalledTimes(1)
     const previewForm = archive.previewReviewedIntake.mock.calls[0][0] as FormData
     expect([previewForm.get('review_id'), previewForm.get('candidate_id')]).toEqual(['review-production-0', 'candidate-1'])
+    const continuation = archive.saveReviewedExcel.mock.calls[1][0] as FormData
+    expect(['review_id', 'proposal_version', 'candidate_id', 'selections', 'name'].map(key => continuation.get(key)))
+      .toEqual(['review_id', 'proposal_version', 'candidate_id', 'selections', 'name'].map(key => form.get(key)))
+    expect(['intake_run_id', 'preview_revision', 'template_only', 'private_intake', 'publish_to_tenant', 'valid_rows_only'].map(key => continuation.get(key)))
+      .toEqual(['intake-1', 'rev-1', null, 'true', 'false', 'false'])
+    const [saveOrder, continueOrder] = archive.saveReviewedExcel.mock.invocationCallOrder
+    expect(saveOrder).toBeLessThan(archive.previewReviewedIntake.mock.invocationCallOrder[0])
+    expect(archive.previewReviewedIntake.mock.invocationCallOrder[0]).toBeLessThan(continueOrder)
     expect(dispatch.mock.calls.map(([e]) => e).filter(e => e.type === 'xcagi:templates-updated')).toHaveLength(1)
     expect(wrapper.find('[role=dialog]').exists()).toBe(false)
     expect(wrapper.get('.reviewed-template__candidate-capsule--saved').attributes('aria-label')).toBe('生产单，已保存')

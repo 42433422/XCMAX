@@ -33,7 +33,13 @@ class RollbackServiceMixin:
         from app.application.elt import service_execution
 
         run = self._owned_run(db, run_id, owner_user_id)
-        if run.status not in {"completed", "failed", "interrupted"}:
+        known_partial = (
+            run.status == "partial"
+            and run.target_type == "attendance"
+            and int(run.executed_rows or 0) > 0
+            and int(run.error_rows or 0) > 0
+        )
+        if run.status not in {"completed", "failed", "interrupted"} and not known_partial:
             raise EltConflict("ELT_ROLLBACK_NOT_ALLOWED", "当前运行没有可撤销的写入")
         if not run.reversible:
             raise EltConflict("ELT_TARGET_NOT_REVERSIBLE", "导出和 Webhook 等外部目标不可撤销")
@@ -45,7 +51,12 @@ class RollbackServiceMixin:
             db,
             run,
             "batch_rollback" if hasattr(adapter, "rollback_batch") else "rollback",
-            allowed_statuses={"completed", "failed", "interrupted"},
+            allowed_statuses={
+                "completed",
+                "failed",
+                "interrupted",
+                *({"partial"} if known_partial else set()),
+            },
         )
         bind_owner(db, operation)
         external_started = False

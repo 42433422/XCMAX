@@ -2451,7 +2451,7 @@ def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
             a.rollback_batch({}, {"source_file": ""})
         assert ex3.value.code == "ELT_ATTENDANCE_ROLLBACK_DATA_MISSING"
 
-    # rollback success
+    # Legacy receipts without run-scope evidence must not authorize deletion.
     db_path = tmp_path / "roll.db"
     conn = sqlite3.connect(str(db_path))
     conn.execute("CREATE TABLE attendance_daily_records (source_file TEXT)")
@@ -2463,8 +2463,11 @@ def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
     conn.execute("INSERT INTO attendance_import_batches VALUES (1)")
     conn.commit()
     conn.close()
-    deleted = a.rollback_batch({}, {"source_file": "f", "db_path": str(db_path), "batch_id": 1})
-    assert deleted >= 0
+    with pytest.raises(EltError) as legacy:
+        a.rollback_batch({}, {"source_file": "f", "db_path": str(db_path), "batch_id": 1})
+    assert legacy.value.code == "ELT_ATTENDANCE_ROLLBACK_SCOPE_UNVERIFIED"
+    with sqlite3.connect(str(db_path)) as conn:
+        assert conn.execute("SELECT id FROM attendance_import_batches").fetchall() == [(1,)]
 
 
 def test_export_csv_adapter(tmp_path, monkeypatch):

@@ -36,10 +36,21 @@ def _default_employee_executor(
     task: str,
     input_data: dict[str, Any],
     user_id: int,
+    *,
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from app.application.employee_runtime.executor import execute_employee_task_local
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
 
-    return execute_employee_task_local(employee_id, task, input_data, user_id=user_id)
+    try:
+        actor = _bound_actor(runtime_context or {})
+        if actor.id != user_id:
+            raise AgentModAuthorizationError("group actor mismatch")
+    except AgentModAuthorizationError:
+        return {"success": False, "error_code": "tool_identity_required"}
+    return execute_employee_task_local(
+        employee_id, task, input_data, user_id=user_id, runtime_context=runtime_context
+    )
 
 
 def _xiaoc_assistant_member() -> dict[str, Any]:

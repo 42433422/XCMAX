@@ -1,7 +1,18 @@
-import { computed, ref } from 'vue'
-import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { computed, reactive, ref } from 'vue'
+import { createMemoryHistory, createRouter } from 'vue-router'
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import TopQuickNav from './TopQuickNav.vue'
+
+const searchProducts = vi.hoisted(() => vi.fn(async () => ({ success: true, data: [] })))
+const getCustomers = vi.hoisted(() => vi.fn(async () => ({ success: true, data: [] })))
+
+vi.mock('@/api/products', () => ({ default: { searchProducts } }))
+vi.mock('@/api/customers', () => ({ default: { getCustomers } }))
+const modsStore = reactive({ activeModId: 'mod-a' })
+vi.mock('@/stores/mods', () => ({ useModsStore: () => modsStore }))
 
 const navItems = vi.hoisted(() => [
   { key: 'chat', name: '智能对话', routeName: 'chat', source: 'core', iconClass: 'fa-comments-o' },
@@ -27,9 +38,18 @@ vi.mock('@/composables/useVisibleNavItems', () => ({
   }),
 }))
 
+let activeRouter: ReturnType<typeof createRouter>
+
 async function mountNav() {
+  activeRouter = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
+  })
+  await activeRouter.push('/')
+  await activeRouter.isReady()
   const wrapper = mount(TopQuickNav, {
     attachTo: document.body,
+    global: { plugins: [activeRouter] },
   })
   await wrapper.find('input').trigger('focus')
   return wrapper
@@ -128,5 +148,126 @@ describe('TopQuickNav', () => {
     await wrapper.find('input').trigger('keydown', { key: 'Enter', isComposing: true })
     expect(wrapper.emitted('select')).toBeFalsy()
     wrapper.unmount()
+  })
+
+  it('按产品型号和客户搜索，点击后打开对应列表并带上定位', async () => {
+    searchProducts.mockImplementation(async () => ({
+      success: true,
+      data: [{ id: 7, model_number: 'A001', name: '阀体' }],
+    }))
+    getCustomers.mockImplementation(async () => ({
+      success: true,
+      data: [{ id: 3, customer_name: '华星客户' }],
+    }))
+    const wrapper = await mountNav()
+    const input = wrapper.find('input')
+    const waitRecords = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      await flushPromises()
+    }
+    const clickOption = async (label: string) => {
+      const option = [...document.querySelectorAll('.top-quick-nav__option')].find((node) => (node.textContent || '').includes(label))
+      option?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await flushPromises()
+    }
+
+    await input.setValue('A001')
+    await waitRecords()
+    const names = optionNames()
+    expect(names.some((name) => name.includes('产品') && name.includes('A001'))).toBe(true)
+    expect(names.some((name) => name.includes('客户') && name.includes('华星客户'))).toBe(true)
+
+    await clickOption('华星客户')
+    expect(activeRouter.currentRoute.value.path).toContain('/customers')
+    expect(activeRouter.currentRoute.value.query).toMatchObject({ keyword: '华星客户', focus: '3' })
+
+    await input.trigger('focus')
+    await input.setValue('A001')
+    await waitRecords()
+    await clickOption('阀体')
+    expect(activeRouter.currentRoute.value.path).toContain('/products')
+    expect(activeRouter.currentRoute.value.query).toMatchObject({ keyword: 'A001', focus: '7' })
+    wrapper.unmount()
+  })
+
+  describe('搜索记录的账号与工作区边界', () => {
+    let wrapper: Awaited<ReturnType<typeof mountNav>> | undefined
+    const product = { id: 7, model_number: 'A001', name: '旧租户产品' }
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+      searchProducts.mockReset().mockResolvedValue({ success: true, data: [product] })
+      getCustomers.mockReset().mockResolvedValue({ success: true, data: [{ id: 3, customer_name: '旧租户客户' }] })
+      modsStore.activeModId = 'mod-a'
+      setRuntimeTenantStorageScopeInput({ tenantId: 1 })
+    })
+    afterEach(() => {
+      wrapper?.unmount()
+      wrapper = undefined
+      vi.useRealTimers()
+      setRuntimeTenantStorageScopeInput(null)
+    })
+
+    it.each([
+      ['账号', () => { productReadAccountEpoch.value++ }],
+      ['租户', () => { setRuntimeTenantStorageScopeInput({ tenantId: 2 }) }],
+      ['Mod', () => { modsStore.activeModId = 'mod-b' }],
+    ] as const)('切换%s立即清除已显示记录，旧选项不能继续跳转', async (_name, changeScope) => {
+      wrapper = await mountNav()
+      const input = wrapper.find('input')
+      await input.setValue('A001')
+      await vi.advanceTimersByTimeAsync(250)
+      await flushPromises()
+      expect(optionNames().join()).toContain('旧租户产品')
+      expect(optionNames().join()).toContain('旧租户客户')
+      const staleOption = document.querySelector('.top-quick-nav__option')!
+
+      changeScope()
+      staleOption.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await flushPromises()
+      expect(activeRouter.currentRoute.value.path).toBe('/')
+      expect((input.element as HTMLInputElement).value).toBe('')
+      await input.trigger('focus')
+      expect(optionNames().join()).not.toContain('旧租户')
+    })
+
+    it('取消旧工作区的防抖，仍允许新工作区搜索', async () => {
+      wrapper = await mountNav()
+      const input = wrapper.find('input')
+      await input.setValue('A001')
+      await vi.advanceTimersByTimeAsync(100)
+      productReadAccountEpoch.value++
+      await vi.advanceTimersByTimeAsync(250)
+      expect(searchProducts).not.toHaveBeenCalled()
+      expect(getCustomers).not.toHaveBeenCalled()
+
+      searchProducts.mockResolvedValue({ success: true, data: [{ ...product, name: '当前工作区产品' }] })
+      getCustomers.mockResolvedValue({ success: true, data: [] })
+      await input.trigger('focus')
+      await input.setValue('A001')
+      await vi.advanceTimersByTimeAsync(250)
+      await flushPromises()
+      expect(searchProducts).toHaveBeenCalledOnce()
+      expect(optionNames().join()).toContain('当前工作区产品')
+    })
+
+    it('A → B → A 后丢弃已完成一半的搜索，即使 API 已拒绝另一半旧响应', async () => {
+      let rejectOldCustomers!: (reason: Error) => void
+      getCustomers.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOldCustomers = reject }))
+      wrapper = await mountNav()
+      const input = wrapper.find('input')
+      await input.setValue('A001')
+      await vi.advanceTimersByTimeAsync(250)
+      await flushPromises()
+      expect(searchProducts).toHaveBeenCalledOnce()
+
+      productReadAccountEpoch.value++
+      productReadAccountEpoch.value++
+      rejectOldCustomers(new Error('账号已切换'))
+      await flushPromises()
+      await input.trigger('focus')
+      expect(optionNames().join()).not.toContain('旧租户产品')
+      expect((input.element as HTMLInputElement).value).toBe('')
+    })
   })
 })

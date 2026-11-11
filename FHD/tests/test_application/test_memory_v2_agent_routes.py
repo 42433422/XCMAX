@@ -5,10 +5,12 @@ import multiprocessing
 import time
 from unittest.mock import patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _client() -> TestClient:
@@ -17,6 +19,21 @@ def _client() -> TestClient:
     app = FastAPI()
     app.include_router(router)
     return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture(autouse=True)
+def authenticated_memory_client(monkeypatch, trusted_actor):
+    actor = trusted_actor(
+        user_id=7, role="admin", permissions=["memory_v2.read", "memory_v2.write"]
+    )
+    original = _client
+
+    def client():
+        result = original()
+        result.headers.update(actor.headers)
+        return result
+
+    monkeypatch.setattr(__import__(__name__, fromlist=["_client"]), "_client", client)
 
 
 def _patch_agent_repo(repo: InMemoryAgentRunRepository):
@@ -57,7 +74,7 @@ def _assert_memory_run(
 ) -> None:
     run = repo.get(run_id)
     assert run is not None
-    assert run.user_id == "u-memory"
+    assert run.user_id == "7"
     assert run.status == "completed"
     assert run.intent == f"memory_v2_{action}"
     assert run.steps[0].risk == risk
@@ -85,7 +102,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             created = client.post(
                 "/memory/v2/candidates",
                 json={
-                    "user_id": "u-memory",
+                    "user_id": "7",
                     "memory_type": "preference",
                     "key": "default_customer",
                     "value": "七彩乐园",
@@ -93,7 +110,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
                     "source": "settings_ui",
                     "evidence": [{"message": "总是给七彩乐园开单"}],
                 },
-                headers={"X-User-Id": "u-memory"},
+                headers={"X-User-Id": "7"},
             )
             assert created.status_code == 200
             created_body = created.json()
@@ -108,8 +125,8 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
 
             confirmed = client.post(
                 f"/memory/v2/{memory_id}/confirm",
-                json={"user_id": "u-memory"},
-                headers={"X-User-Id": "u-memory"},
+                json={"user_id": "7"},
+                headers={"X-User-Id": "7"},
             )
             assert confirmed.status_code == 200
             confirmed_body = confirmed.json()
@@ -117,35 +134,35 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             _assert_memory_run(repo, confirmed_body["run_id"], action="confirm", risk="high")
 
             svc = memory_mod.get_user_memory_service()
-            assert svc.get_preference("u-memory", "default_customer") == "七彩乐园"
+            assert svc.get_preference("7", "default_customer") == "七彩乐园"
 
             corrected = client.patch(
                 f"/memory/v2/{memory_id}",
                 json={
-                    "user_id": "u-memory",
+                    "user_id": "7",
                     "key": "favorite_customer",
                     "value": "彩虹乐园",
                     "reason": "用户纠正名称",
                 },
-                headers={"X-User-Id": "u-memory"},
+                headers={"X-User-Id": "7"},
             )
             assert corrected.status_code == 200
             corrected_body = corrected.json()
             assert corrected_body["memory"]["key"] == "favorite_customer"
             _assert_memory_run(repo, corrected_body["run_id"], action="correct", risk="high")
-            assert svc.get_preference("u-memory", "default_customer") is None
-            assert svc.get_preference("u-memory", "favorite_customer") == "彩虹乐园"
+            assert svc.get_preference("7", "default_customer") is None
+            assert svc.get_preference("7", "favorite_customer") == "彩虹乐园"
 
             deleted = client.delete(
                 f"/memory/v2/{memory_id}",
-                params={"user_id": "u-memory", "reason": "用户删除"},
-                headers={"X-User-Id": "u-memory"},
+                params={"user_id": "7", "reason": "用户删除"},
+                headers={"X-User-Id": "7"},
             )
             assert deleted.status_code == 200
             deleted_body = deleted.json()
             assert deleted_body["memory"]["status"] == "deleted"
             _assert_memory_run(repo, deleted_body["run_id"], action="delete", risk="high")
-            assert svc.get_preference("u-memory", "favorite_customer") is None
+            assert svc.get_preference("7", "favorite_customer") is None
     finally:
         memory_mod.reset_user_memory_service()
 
@@ -165,14 +182,14 @@ def test_memory_v2_blocked_source_confirm_route_records_failed_agent_run(
             created = client.post(
                 "/memory/v2/candidates",
                 json={
-                    "user_id": "u-memory",
+                    "user_id": "7",
                     "memory_type": "preference",
                     "key": "favorite_customer",
                     "value": "污染客户",
                     "confidence": 0.95,
                     "source": "llm_guess",
                 },
-                headers={"X-User-Id": "u-memory"},
+                headers={"X-User-Id": "7"},
             )
             assert created.status_code == 200
             candidate = created.json()["candidate"]
@@ -181,8 +198,8 @@ def test_memory_v2_blocked_source_confirm_route_records_failed_agent_run(
 
             confirm = client.post(
                 f"/memory/v2/{candidate['memory_id']}/confirm",
-                json={"user_id": "u-memory"},
-                headers={"X-User-Id": "u-memory"},
+                json={"user_id": "7"},
+                headers={"X-User-Id": "7"},
             )
             assert confirm.status_code == 404
             body = confirm.json()
@@ -251,3 +268,69 @@ def test_memory_store_keeps_concurrent_same_and_other_user_writes(tmp_path, monk
                 process.terminate()
                 process.join(5)
         memory_mod.reset_user_memory_service()
+
+
+@pytest.mark.parametrize("path", ["/memory/v2", "/memory/v2/summary"])
+def test_memory_reads_require_session_and_reject_another_owner(path):
+    client = _client()
+    assert client.get(path, params={"user_id": "other-owner"}).status_code == 403
+    assert client.get(path, headers={"X-User-Id": "other-owner"}).status_code == 403
+    client.headers.clear()
+    assert client.get(path, params={"user_id": "7"}).status_code == 401
+
+
+def test_memory_write_rejects_forged_owner_before_execution():
+    client = _client()
+    body = {"user_id": "other-owner", "memory_type": "preference", "key": "test", "value": "forged"}
+    assert client.post("/memory/v2/candidates", json=body).status_code == 403
+    client.headers.clear()
+    assert client.post("/memory/v2/candidates", json=body).status_code == 401
+
+
+def test_numeric_username_cannot_select_another_canonical_owner(trusted_actor):
+    from app.db.models.user import User
+
+    actor = trusted_actor(user_id=7)
+    with actor.factory.begin() as db:
+        db.get(User, 7).username = "8"
+    client = _client()
+    client.headers.update(actor.headers)
+    assert client.get("/memory/v2", params={"user_id": "8"}).status_code == 403
+    assert client.get("/memory/v2", params={"user_id": "7"}).status_code == 200
+
+
+@pytest.mark.parametrize("role", ["user", "admin"])
+def test_memory_tools_bind_owner_before_role_bypass(trusted_actor, role):
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+    actor = trusted_actor(user_id=7, role=role)
+    assert (
+        actor_tool_denial("memory_v2", "propose_candidate", actor.context, {"user_id": "7"}) is None
+    )
+    denied = actor_tool_denial("memory_v2", "propose_candidate", actor.context, {"user_id": "8"})
+    assert denied["reason"] == "memory_owner_mismatch"
+
+
+@pytest.mark.parametrize(
+    "tool,action",
+    [
+        ("sales", "query"),
+        ("reports", "export"),
+        ("reports", "sales_summary"),
+        ("employee", "list"),
+        ("employee", "execute"),
+        ("excel_analysis", "read"),
+        ("excel_analysis", "statistics"),
+        ("excel_analysis", "structure"),
+        ("excel_analysis", "query"),
+    ],
+)
+def test_business_role_can_execute_registered_read_report_employee_chain(
+    trusted_actor, tool, action
+):
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+    actor = trusted_actor(user_id=8, role="user")
+    assert actor_tool_denial(tool, action, actor.context, {}) is None
+    viewer = trusted_actor(user_id=9, role="viewer")
+    assert actor_tool_denial(tool, action, viewer.context, {})["reason"] == "permission_denied"

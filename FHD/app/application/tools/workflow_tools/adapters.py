@@ -34,7 +34,9 @@ def employee(call: ToolCall) -> str | None:
     from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
 
     if is_employee_tool(call.name):
-        return execute_employee_tool(call.name, call.args, call.workspace_root)
+        return execute_employee_tool(
+            call.name, call.args, call.workspace_root, runtime_context=call.runtime_context
+        )
     return None
 
 
@@ -51,7 +53,11 @@ def legacy_employee(call: ToolCall) -> str | None:
     from app.domain.app_pure.employee_pack_runner import try_execute_employee_planner_tool
 
     return try_execute_employee_planner_tool(
-        call.name, call.args, call.workspace_root, db_write_token=call.db_write_token
+        call.name,
+        call.args,
+        call.workspace_root,
+        db_write_token=call.db_write_token,
+        runtime_context=call.runtime_context,
     )
 
 

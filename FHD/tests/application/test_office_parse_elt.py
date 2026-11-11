@@ -71,6 +71,10 @@ def test_parse_office_file_goes_through_elt(tmp_path, monkeypatch):
 
 
 def _patch_save(monkeypatch, tmp_path):
+    # Resolve consumers before replacing providers: a first import while patched
+    # would retain the fake provider after monkeypatch teardown.
+    from app.application.elt import docking_approval
+
     captured: dict = {}
 
     class _Owned:
@@ -128,7 +132,7 @@ def _patch_save(monkeypatch, tmp_path):
             "success": True,
         }
 
-    monkeypatch.setattr("app.application.elt.docking_approval.submit_docking_write", _submit)
+    monkeypatch.setattr(docking_approval, "submit_docking_write", _submit)
     started = []
     monkeypatch.setattr(
         "app.application.elt.auto_ingest_service.AutoIngestService.start_background",
@@ -374,3 +378,27 @@ def test_office_elt_tool_is_not_cut_at_8s():
     assert named_tool_timeout_seconds("data_docking") is None
     assert named_tool_timeout_seconds("elt_preview") is None
     assert named_tool_timeout_seconds("other_tool") == 8
+
+
+def test_save_fixture_restores_providers_and_consumer_alias_on_failure(tmp_path, monkeypatch):
+    from app.application.elt import auto_ingest_service, docking_approval, service
+    from app.db import session
+
+    original = (
+        auto_ingest_service.get_auto_ingest_service,
+        service.get_elt_service,
+        session.get_db,
+        docking_approval.submit_docking_write,
+        docking_approval.get_auto_ingest_service,
+    )
+    with pytest.raises(RuntimeError, match="fixture interrupted"), monkeypatch.context() as scoped:
+        _patch_save(scoped, tmp_path)
+        assert docking_approval.get_auto_ingest_service is original[4]
+        raise RuntimeError("fixture interrupted")
+    assert (
+        auto_ingest_service.get_auto_ingest_service,
+        service.get_elt_service,
+        session.get_db,
+        docking_approval.submit_docking_write,
+        docking_approval.get_auto_ingest_service,
+    ) == original

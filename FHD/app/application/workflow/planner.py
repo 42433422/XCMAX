@@ -76,6 +76,24 @@ class LLMWorkflowPlanner:
             return rejected
         profile = resolve_tool_execution_profile(context)
         registry_for_plan = _filter_tool_registry_for_profile(tool_registry, profile)
+        context.pop("available_employees", None)
+        if context.get("_actor_authorization"):
+            try:
+                from app.domain.shared_services.auth_service import get_auth_service
+                from app.infrastructure.auth.agent_mod_scope import _bound_actor
+                from app.mod_sdk.employee_tool_registry import build_employee_tools_status
+
+                if get_auth_service().has_permission(_bound_actor(context), "employee.list"):
+                    context["available_employees"] = [
+                        {
+                            "employee_id": row["pack_id"],
+                            "description": str(row.get("description") or "")[:200],
+                        }
+                        for row in build_employee_tools_status().get("employee_pack_tools", [])
+                        if row.get("runtime_ok") and row.get("pack_id")
+                    ][:80]
+            except RECOVERABLE_ERRORS:
+                logger.warning("authorized employee discovery unavailable", exc_info=True)
         from app.application.ai_chat.conversation_history import authorized_memory_context
 
         authorized_memory = authorized_memory_context(user_id, context)

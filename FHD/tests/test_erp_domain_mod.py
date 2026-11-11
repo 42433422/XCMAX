@@ -330,3 +330,65 @@ def test_domain_handlers_customers_list(monkeypatch):
     assert out.get("success") is True
     assert out.get("total") == 1
     assert out.get("source") == "mod:xcagi-erp-domain-bridge"
+
+
+@pytest.mark.parametrize(
+    "allowed,tenant,record_id,status",
+    [
+        (True, 1, 7, 200),
+        (False, 1, 7, 403),
+        (True, None, 7, 403),
+        (True, 1, None, 400),
+        (True, 2, 7, 404),
+    ],
+)
+def test_shipment_record_delete_bridge_preserves_authorization(
+    monkeypatch,
+    allowed,
+    tenant,
+    record_id,
+    status,
+):
+    from types import SimpleNamespace
+
+    from fastapi import APIRouter, FastAPI, HTTPException
+    from fastapi.testclient import TestClient
+
+    from app.fastapi_routes.domains.shipment import shipment_orders
+    from app.infrastructure.tenant_scope import current_tenant_id
+    from app.mod_sdk.erp_domain_compat import register_tenant_shipment_routes
+
+    def permission(code):
+        def check():
+            assert code == "shipment.edit"
+            if not allowed:
+                raise HTTPException(status_code=403, detail="permission denied")
+            return SimpleNamespace(id=1, tenant_id=tenant)
+
+        return check
+
+    calls = []
+
+    def execute(**kwargs):
+        calls.append((current_tenant_id(), kwargs))
+        return {"success": current_tenant_id() == 1, "message": "isolated result"}
+
+    monkeypatch.setattr("app.infrastructure.auth.dependencies.require_permission", permission)
+    monkeypatch.setattr(shipment_orders, "_run_shipment_records_agent", execute)
+    app = FastAPI()
+    router = APIRouter(prefix="/api/mod/xcagi-erp-domain-bridge")
+    register_tenant_shipment_routes(router)
+    app.include_router(router)
+    response = TestClient(app).request(
+        "DELETE",
+        "/api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/record",
+        json={"id": record_id},
+    )
+    assert response.status_code == status
+    if allowed and tenant is not None and record_id:
+        assert len(calls) == 1
+        assert calls[0][0] == tenant
+        assert calls[0][1]["action"] == "delete"
+        assert calls[0][1]["params"] == {"id": record_id}
+    else:
+        assert calls == []

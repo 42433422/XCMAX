@@ -1,8 +1,4 @@
-"""
-报表服务模块
-
-提供销售、库存、采购等统计报表。
-"""
+"""统计销售、库存和采购。"""
 
 from datetime import datetime
 from decimal import Decimal
@@ -22,33 +18,16 @@ from app.db.models import (
     ShipmentRecord,
     Supplier,
 )
+from app.db.models.sales import inclusive_order_bound, sales_status_predicate
 from app.db.session import get_db
 from app.domain.shared_services.report_export import export_report_to_excel
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 
 
-def _inclusive_bound(value: Any, *, end: bool) -> datetime | None:
-    if value is None or isinstance(value, datetime):
-        return value
-    text = str(value).strip()
-    if not text:
-        return None
-    if len(text) == 10:
-        day = datetime.fromisoformat(text)
-        if end:
-            return day.replace(hour=23, minute=59, second=59)
-        return day
-    return datetime.fromisoformat(text)
-
-
 class ReportService(NeuroEventPublisherMixin):
-    """报表服务类"""
-
     @staticmethod
     def _decimal_to_float(value: Any) -> Any:
-        if isinstance(value, Decimal):
-            return float(value)
-        return value
+        return float(value) if isinstance(value, Decimal) else value
 
     def get_sales_report(
         self,
@@ -60,45 +39,16 @@ class ReportService(NeuroEventPublisherMixin):
         payment_state: str | None = None,
         min_amount_exclusive: Any = None,
         region: str | None = None,
+        status: str | None = None,
+        customer_name: str | None = None,
     ) -> dict[str, Any]:
-        """销售报表。
-
-        ``source`` 决定数据源：
-        - ``"sales_order"``（默认）：**主源**，按 ``SalesOrderItem`` 正交读模型聚合
-          （产品 / 客户 / 日期），``summary.total_amount`` 与 ``SalesOrder.total_amount`` 一致。
-        - ``"shipment"``：遗留 ``ShipmentRecord`` **兼容路径**，仅作兼容保留，
-          不再作为销售主源。
-        """
+        """按订单汇总销售，兼容指定来源的历史发货报表。"""
         if source == "shipment":
             return self._get_sales_report_from_shipments(
                 start_date, end_date, group_by, customer_id
             )
-        return self._get_sales_report_from_orders(
-            _inclusive_bound(start_date, end=False),
-            _inclusive_bound(end_date, end=True),
-            group_by,
-            customer_id,
-            payment_state,
-            min_amount_exclusive,
-            region,
-        )
-
-    def _get_sales_report_from_orders(
-        self,
-        start_date: datetime | None,
-        end_date: datetime | None,
-        group_by: str,
-        customer_id: int | None,
-        payment_state: str | None = None,
-        min_amount_exclusive: Any = None,
-        region: str | None = None,
-    ) -> dict[str, Any]:
-        """SalesOrder 正交读模型聚合（主源）。
-
-        按 ``SalesOrderItem`` 在产品 / 客户 / 日期维度聚合，金额用 ``Decimal`` 累加
-        保证确定性；``summary.total_amount`` 等于被纳入订单的 ``SalesOrder.total_amount`` 之和。
-        多租户隔离由 ``TenantScopedMixin`` + 全局 tenant filter 自动生效。
-        """
+        start_date = inclusive_order_bound(start_date, end=False)
+        end_date = inclusive_order_bound(end_date, end=True)
         with get_db() as db:
             query = db.query(SalesOrderItem, SalesOrder).join(
                 SalesOrder, SalesOrderItem.order_id == SalesOrder.id
@@ -110,6 +60,10 @@ class ReportService(NeuroEventPublisherMixin):
                 query = query.filter(SalesOrder.created_at <= end_date)
             if customer_id:
                 query = query.filter(SalesOrder.customer_id == customer_id)
+            if customer_name:
+                query = query.filter(SalesOrder.customer_name == customer_name)
+            if status:
+                query = query.filter(sales_status_predicate(status))
             if payment_state:
                 query = query.filter(SalesOrder.payment_state == payment_state)
             if min_amount_exclusive is not None:
@@ -121,12 +75,8 @@ class ReportService(NeuroEventPublisherMixin):
 
             pairs = [(item, order) for item, order in query.all()]
 
-            # 权威汇总：summary.total_amount 以纳入订单的 SalesOrder.total_amount 之和为准
-            # （与订单总额一致），各维度明细 amount 仍按 SalesOrderItem.amount 聚合。
-            _zero = Decimal("0")
-            order_totals: dict[int, Decimal] = {}
-            for _item, order in pairs:
-                order_totals[order.id] = order.total_amount or _zero
+            # 汇总采用订单总额，分组明细按订单行聚合。
+            order_totals = {order.id: order.total_amount or Decimal("0") for _, order in pairs}
             summary_total = sum(order_totals.values())
 
             if group_by == "product":
@@ -157,15 +107,19 @@ class ReportService(NeuroEventPublisherMixin):
                     },
                 }
 
-            elif group_by == "customer":
-                customer_stats: dict[str, dict] = {}
+            if group_by in {"customer", "date"}:
+                by_customer = group_by == "customer"
+                field = "customer_name" if by_customer else "date"
+                stats: dict[str, dict] = {}
                 zero = Decimal("0")
                 for item, order in pairs:
-                    key = order.customer_name or f"客户{order.customer_id or order.id}"
-                    entry = customer_stats.setdefault(
-                        key,
-                        {"customer_name": key, "order_ids": set(), "amount": zero},
-                    )
+                    if by_customer:
+                        key = order.customer_name or f"客户{order.customer_id or order.id}"
+                    else:
+                        key = (
+                            order.created_at.strftime("%Y-%m-%d") if order.created_at else "unknown"
+                        )
+                    entry = stats.setdefault(key, {"order_ids": set(), "amount": zero})
                     entry["order_ids"].add(order.id)
                     entry["amount"] += item.amount or zero
 
@@ -173,48 +127,18 @@ class ReportService(NeuroEventPublisherMixin):
                     "success": True,
                     "data": [
                         {
-                            "customer_name": key,
+                            field: key,
                             "order_count": len(entry["order_ids"]),
                             "amount": float(entry["amount"]),
                         }
-                        for key, entry in sorted(customer_stats.items())
+                        for key, entry in sorted(stats.items())
                     ],
                     "summary": {
-                        "total_customers": len(customer_stats),
+                        ("total_customers" if by_customer else "total_days"): len(stats),
                         "total_amount": float(summary_total),
                     },
                 }
 
-            elif group_by == "date":
-                date_stats: dict[str, dict] = {}
-                zero = Decimal("0")
-                for item, order in pairs:
-                    created_at = order.created_at
-                    date_key = created_at.strftime("%Y-%m-%d") if created_at else "unknown"
-                    entry = date_stats.setdefault(
-                        date_key,
-                        {"date": date_key, "order_ids": set(), "amount": zero},
-                    )
-                    entry["order_ids"].add(order.id)
-                    entry["amount"] += item.amount or zero
-
-                return {
-                    "success": True,
-                    "data": [
-                        {
-                            "date": key,
-                            "order_count": len(entry["order_ids"]),
-                            "amount": float(entry["amount"]),
-                        }
-                        for key, entry in sorted(date_stats.items())
-                    ],
-                    "summary": {
-                        "total_days": len(date_stats),
-                        "total_amount": float(summary_total),
-                    },
-                }
-
-            # fail-closed：主源（sales_order）不支持未知 group_by，避免返回误导性空报表
             return {"success": False, "message": f"不支持的 group_by: {group_by}"}
 
     def _get_sales_report_from_shipments(
@@ -224,10 +148,7 @@ class ReportService(NeuroEventPublisherMixin):
         group_by: str,
         customer_id: int | None,
     ) -> dict[str, Any]:
-        """遗留 ``ShipmentRecord`` 销售报表（兼容路径，非主源）。
-
-        保留仅供历史兼容读取；新销售数据一律走 ``_get_sales_report_from_orders``。
-        """
+        """读取历史发货记录的销售汇总。"""
         with get_db() as db:
             query = db.query(ShipmentRecord, func.count(ShipmentRecord.id).label("record_count"))
 

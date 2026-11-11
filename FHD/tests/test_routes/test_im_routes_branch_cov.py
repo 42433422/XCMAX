@@ -35,6 +35,7 @@ from app.fastapi_routes.im_routes import (
     router,
 )
 from app.utils.operational_errors import BOUNDARY_ERRORS
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # autouse fixture: reset schema state
@@ -1451,7 +1452,9 @@ class TestAiGroupsRoutes:
             resp = client.get("/api/admin/ai-groups/g1/messages")
         assert resp.status_code == 500
 
-    def test_post_message_admin_success(self, client: TestClient) -> None:
+    def test_post_message_admin_success(self, client: TestClient, trusted_actor) -> None:
+        actor = trusted_actor(user_id=1, role="admin", tier="admin")
+        client.headers.update(actor.headers)
         with (
             patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
             patch(
@@ -1471,7 +1474,9 @@ class TestAiGroupsRoutes:
             )
         assert resp.status_code == 200
 
-    def test_post_message_value_error_400(self, client: TestClient) -> None:
+    def test_post_message_value_error_400(self, client: TestClient, trusted_actor) -> None:
+        actor = trusted_actor(user_id=1, role="admin", tier="admin")
+        client.headers.update(actor.headers)
         with (
             patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
             patch(
@@ -1491,7 +1496,9 @@ class TestAiGroupsRoutes:
             )
         assert resp.status_code == 400
 
-    def test_post_message_recoverable_error_500(self, client: TestClient) -> None:
+    def test_post_message_recoverable_error_500(self, client: TestClient, trusted_actor) -> None:
+        actor = trusted_actor(user_id=1, role="admin", tier="admin")
+        client.headers.update(actor.headers)
         with (
             patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
             patch(

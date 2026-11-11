@@ -403,7 +403,6 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "propose_candidate").strip().lower()
     body = dict(task.get("body") or {})
-    user_id = str(task.get("user_id") or body.get("user_id") or "eval-memory-user")
     method = "POST"
     path = "/memory/v2/candidates"
 
@@ -421,6 +420,7 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            user_id = str(stack.enter_context(_authenticated_route_fixture(client)))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(patch.object(memory_mod, "MEMORY_DIR", str(memory_dir)))
             stack.enter_context(
@@ -471,7 +471,6 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                     else:
                         path = f"/memory/v2/{memory_id}/confirm"
 
-                headers = {"X-User-Id": user_id}
                 if method == "DELETE":
                     response = client.delete(
                         path,
@@ -479,12 +478,9 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                             "user_id": user_id,
                             "reason": str(body.get("reason") or "user removed memory"),
                         },
-                        headers=headers,
                     )
-                elif method == "PATCH":
-                    response = client.patch(path, json=body, headers=headers)
                 else:
-                    response = client.post(path, json=body, headers=headers)
+                    response = client.request(method, path, json=body)
             finally:
                 memory_mod.reset_user_memory_service()
 

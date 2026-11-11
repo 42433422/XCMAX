@@ -54,6 +54,27 @@ def _record_to_dict(record: Any) -> dict[str, Any]:
 class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
     """shipment_records 表的只读查询实现（Read side）。"""
 
+    def find_document_by_order_number(self, order_number: str) -> dict[str, Any] | None:
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        tenant_id = current_tenant_id()
+        if tenant_id is None:
+            raise ValueError("Shipment document lookup requires tenant scope")
+        with get_db() as db:
+            # parsed_data is legacy Text on both SQLite and PostgreSQL. Stream the
+            # tenant's rows rather than relying on dialect-specific JSON casts.
+            records = (
+                db.query(ShipmentRecord)
+                .filter(ShipmentRecord.tenant_id == tenant_id)
+                .order_by(ShipmentRecord.id)
+                .yield_per(200)
+            )
+            for record in records:
+                row = _record_to_dict(record)
+                if str(row.get("order_number") or "").strip() == order_number:
+                    return row
+        return None
+
     def query_shipments(
         self,
         *,

@@ -1,5 +1,6 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import templatePreviewApi from '@/api/templatePreview'
+import { approveDockingIfAutomatic } from '@/composables/useAutomaticDockingApproval'
 import { eltApi, type EltRun } from '@/api/elt'
 import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
 
@@ -11,12 +12,13 @@ export type DocumentReview = { review_id: string; sha256: string; proposal: Docu
 export type DocumentSlice = { index: number; basis: string; confirmed: boolean; sha256?: string; selection_id?: string; filename: string; display_name?: string; type_label?: string; fragments: { sheet: string; range: string }[] }
 export function sliceIdentity(slice: DocumentSlice) { return slice.selection_id || slice.sha256 || '' }
 type Intake = { run_id: string; mod_id: string; candidate_sha256: string; detection?: { degraded?: boolean }; knowledge: { action: string; documents: number; degraded?: boolean }; business: EltRun }
+type AutoIngest = { success?: boolean; status?: string; batch_id?: string; error?: string; approval_id?: number; approval_request_id?: string }
 type Receipt = { review_id: string; proposal_version: string; template_id: string; candidate_id: string }
 export type ReviewedDocument = {
   key: string; classificationId: string; classificationVersion: string; slice: DocumentSlice; source: File; displayName: string; typeLabel: string
   review: DocumentReview | null; proposals: DocumentProposal[]; selectedVersion: number; candidateIndex: number
   phase: '' | 'generating' | 'refining' | 'saving'; error: string; unknown: boolean; dirty: boolean; generation: number
-  requirements: string[]; receipts: Receipt[]; intake: Intake | null; intakePending: boolean; intakeError: string; intakeUnknown: boolean; intakeKey: string; intakeGeneration: number
+  requirements: string[]; receipts: Receipt[]; intake: Intake | null; intakePending: boolean; intakeError: string; intakeUnknown: boolean; intakeKey: string; intakeGeneration: number; ingestStatus?: string; ingestBatchId?: string; ingestPending?: boolean
 }
 
 export function useReviewedDocuments(options: { capture: () => () => boolean; outcomeUnknown: (error: unknown) => boolean; saved: () => void; recovered?: (doc: ReviewedDocument) => void }) {
@@ -41,6 +43,7 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
   function clearIntake(doc: ReviewedDocument) {
     doc.intakeGeneration++; const timer = timers.get(doc.key); if (timer) clearTimeout(timer); timers.delete(doc.key)
     doc.intake = null; doc.intakePending = false; doc.intakeError = ''; doc.intakeUnknown = false; doc.intakeKey = ''
+    doc.ingestStatus = ''; doc.ingestBatchId = ''; doc.ingestPending = false
   }
   function reset() { timers.forEach(clearTimeout); timers.clear(); candidateTimers.forEach(clearTimeout); candidateTimers.clear(); records.value = {} }
   onBeforeUnmount(reset)
@@ -131,22 +134,28 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
   }
   async function restoreIntake(doc: ReviewedDocument) {
     if (!doc.review || !saved(doc) || doc.intakePending) return
-    const session = options.capture(), reviewId = doc.review.review_id, generation = doc.intakeGeneration
+    const session = options.capture(), reviewId = doc.review.review_id, generation = doc.intakeGeneration, modId = readActiveExtensionModIdFromStorage()
     if (!session()) return
-    const valid = () => owned(doc) && session() && doc.intakeGeneration === generation && doc.review?.review_id === reviewId
+    const valid = () => owned(doc) && session() && doc.intakeGeneration === generation && doc.review?.review_id === reviewId && modId === readActiveExtensionModIdFromStorage()
     doc.intakePending = true; doc.intakeError = ''
     const poll = async () => {
       try {
-        const result = await templatePreviewApi.reviewedIntakeStatus(reviewId) as { status: string; intake?: Intake }
+        const result = await templatePreviewApi.reviewedIntakeStatus(reviewId) as { status: string; intake?: Intake; auto_ingest?: AutoIngest }
         if (!valid()) return
         if (result.status === 'running') { timers.set(doc.key, setTimeout(() => { void poll() }, 2000)); return }
         if (result.status === 'created' && result.intake?.run_id && result.intake.mod_id === readActiveExtensionModIdFromStorage() && result.intake.business?.id === result.intake.run_id) {
           doc.intake = result.intake
+          if (result.auto_ingest && result.auto_ingest.error !== 'confirmation_required') {
+            doc.intakePending = false
+            void followIngest(doc, result.auto_ingest, valid)
+            return
+          }
           const run = result.intake.business
           if (['queued', 'previewing'].includes(run.status)) { timers.set(doc.key, setTimeout(() => { void poll() }, 2000)); return }
-          if (run.status === 'preview_ready' && run.preview_revision) { doc.intakeKey = intakeSelection(doc); doc.intakePending = false; doc.intakeError = intakeWarning(result.intake); return }
+          if (run.status === 'preview_ready' && run.preview_revision) { doc.intakeKey = intakeSelection(doc); doc.intakePending = false; doc.intakeError = intakeWarning(result.intake); void submitIntake(doc); return }
           doc.intakeError = run.error?.message || '入库预演未完成。'
         } else {
+          if (result.status === 'not_started') { doc.intakePending = false; void prepare(doc); return }
           doc.intakeUnknown = result.status === 'outcome_unknown'
           doc.intakeError = result.status === 'not_started' ? '模板已保存，入库预演尚未开始。' : '后台入库预演结果待核对，请勿重复提交。'
         }
@@ -179,7 +188,8 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
       && p.model.status === 'returned' && p.result_previews?.length === 3 && doc.selectedVersion === doc.proposals.length - 1
   }
   async function prepare(doc: ReviewedDocument) {
-    if (!canPrepare(doc) || doc.intakePending || doc.intakeKey === intakeSelection(doc)) return
+    if (!canPrepare(doc) || doc.intakePending) return
+    if (doc.intakeKey === intakeSelection(doc)) { void submitIntake(doc); return }
     const session = options.capture()
     if (!session()) return
     clearIntake(doc)
@@ -189,7 +199,7 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
     const accept = (run: EltRun) => {
       if (!valid()) return
       doc.intake!.business = run
-      if (run.status === 'preview_ready' && run.preview_revision) { doc.intakeKey = selection; doc.intakePending = false; doc.intakeError = intakeWarning(doc.intake!) }
+      if (run.status === 'preview_ready' && run.preview_revision) { doc.intakeKey = selection; doc.intakePending = false; doc.intakeError = intakeWarning(doc.intake!); void submitIntake(doc) }
       else if (['queued', 'previewing'].includes(run.status)) timers.set(doc.key, setTimeout(() => { void poll() }, 800))
       else { doc.intakePending = false; doc.intakeError = run.error?.message || '入库预演未完成。' }
     }
@@ -215,6 +225,54 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
         else doc.intakeError = message(error, '入库预演失败。')
       }
     }
+  }
+  async function followIngest(doc: ReviewedDocument, ingest: AutoIngest | undefined, valid: () => boolean) {
+      doc.ingestBatchId = ingest?.batch_id
+      doc.ingestStatus = ingest?.success ? ingest.status || 'queued' : 'outcome_unknown'
+      if (!ingest?.success) doc.intakeError = '模板已保存，入库提交结果待核对，未重复提交。'
+      else if (ingest.batch_id) {
+        const approval = await approveDockingIfAutomatic(ingest, valid)
+        if (!valid()) return
+        if (approval.message) doc.intakeError = approval.message
+        const poll = async () => {
+          if (!valid()) return
+          try {
+            const progress = await eltApi.autoIngestProgress(ingest.batch_id!)
+            if (!valid()) return
+            doc.ingestStatus = progress.status || doc.ingestStatus
+            doc.intakeError = progress.business_progress?.error || progress.kb_progress?.error || doc.intakeError
+            if (['queued', 'running', 'awaiting_approval', 'retrying'].includes(doc.ingestStatus || '')) timers.set(doc.key, setTimeout(() => { void poll() }, 2000))
+          } catch (error) { if (valid()) doc.intakeError = message(error, '入库进度暂不可用，请在审批工作台查看原任务。') }
+        }
+        if (approval.accepted) await poll()
+        else timers.set(doc.key, setTimeout(() => { void poll() }, 2000))
+      }
+  }
+  async function submitIntake(doc: ReviewedDocument) {
+    const plan = doc.intake
+    if (!owned(doc) || !saved(doc) || !plan || doc.intakePending || doc.ingestPending || doc.ingestStatus
+      || doc.intakeKey !== intakeSelection(doc) || plan.mod_id !== readActiveExtensionModIdFromStorage()
+      || plan.detection?.degraded || plan.knowledge.degraded || plan.business.status !== 'preview_ready' || !plan.business.preview_revision) return
+    const generation = doc.intakeGeneration
+    const session = options.capture(), selection = intakeSelection(doc), p = proposal(doc), candidate = p.candidates[doc.candidateIndex]
+    if (!session()) return
+    const valid = () => owned(doc) && session() && doc.intakeGeneration === generation && doc.intake === plan && intakeSelection(doc) === selection && plan.mod_id === readActiveExtensionModIdFromStorage()
+    doc.ingestPending = true; doc.ingestStatus = 'submitting'
+    try {
+      const form = new FormData()
+      form.append('review_id', doc.review!.review_id); form.append('proposal_version', p.version); form.append('candidate_id', candidate.id)
+      form.append('selections', JSON.stringify(candidate.clear)); form.append('name', doc.displayName)
+      form.append('private_intake', 'true'); form.append('publish_to_tenant', 'false')
+      form.append('composer_note', doc.requirements.join('\n').slice(0, 4000))
+      form.append('intake_run_id', plan.run_id); form.append('preview_revision', plan.business.preview_revision)
+      form.append('valid_rows_only', String(Number(plan.business.summary.error || 0) > 0))
+      const result = await templatePreviewApi.saveReviewedExcel(form) as { auto_ingest?: AutoIngest }
+      if (!valid()) return
+      const ingest = result.auto_ingest
+      await followIngest(doc, ingest, valid)
+    } catch (error) {
+      if (valid()) { doc.ingestStatus = 'outcome_unknown'; doc.intakeError = message(error, '入库提交结果待核对，未重复提交。'); void restoreIntake(doc) }
+    } finally { if (valid()) doc.ingestPending = false }
   }
   function choose(doc: ReviewedDocument, index: number) {
     if (!owned(doc) || doc.phase || doc.unknown || saved(doc) || !Number.isInteger(index) || !proposal(doc)?.candidates[index]) return

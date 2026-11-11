@@ -29,11 +29,13 @@ class TemplateApplicationService:
         Returns:
             模板列表
         """
+        from app.application.reviewed_excel_template_blocks import collapse_listed_templates
+
         if category and category != "all":
             rows = self._template_service.list_by_type(category) or []
-            return {"templates": merge_starter_templates(rows, category)}
+            return {"templates": collapse_listed_templates(merge_starter_templates(rows, category))}
         rows = self._template_service.list_templates() or []
-        return {"templates": merge_starter_templates(rows)}
+        return {"templates": collapse_listed_templates(merge_starter_templates(rows))}
 
     def get_template(self, template_id: int) -> dict[str, Any]:
         """

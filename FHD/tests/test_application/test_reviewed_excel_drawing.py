@@ -173,7 +173,38 @@ def test_classifier_sends_distinct_drawing_evidence_and_rejects_forged_reference
         _classify_semantic_batch(batch_review)
 
 
-def synthetic_workbook_with_shape(*, extra_rows=False, unread_tail=False, end_row=1):
+@pytest.mark.parametrize("hidden_state", ["hidden", "veryHidden"])
+@pytest.mark.parametrize("coverage_scope", ["visible", "full"])
+def test_drawing_export_uses_visible_sheet_coverage(hidden_state, coverage_scope):
+    from app.application.reviewed_excel_auto_slice import derive_classified_documents
+    from app.application.reviewed_excel_template import inspect_workbook
+
+    body = synthetic_workbook_with_shape(hidden_state=hidden_state)
+    review = inspect_workbook(body)
+    part = {"sheet": "表", "range": "A1:B2"}
+    coverage = [{"sheet": "表", "unread": [], "drawing_unread": []}]
+    if coverage_scope == "full":
+        coverage.append({"sheet": "Internal", "unread": ["A1"], "drawing_unread": ["hidden"]})
+    classification = {
+        "source_sha256": review["sha256"],
+        "model_status": "returned",
+        "regions": [{**part, "dependencies": []}],
+        "coverage": coverage,
+        "suggested_documents": [{"fragments": [part]}],
+    }
+    result = derive_classified_documents(body, classification)
+    assert len(result) == 1 and result[0]["fragments"] == [part]
+    with ZipFile(BytesIO(result[0]["workbook"])) as book:
+        assert b"wsDr" in book.read("xl/drawings/drawing1.xml")
+    assert inspect_workbook(body)["sha256"] == review["sha256"]
+    coverage[0]["drawing_unread"] = ["visible"]
+    with pytest.raises(ReviewedExcelError, match="绘图证据覆盖不完整"):
+        derive_classified_documents(body, classification)
+
+
+def synthetic_workbook_with_shape(
+    *, extra_rows=False, unread_tail=False, end_row=1, hidden_state=None
+):
     from xml.etree import ElementTree as ET
 
     from openpyxl import Workbook
@@ -188,6 +219,10 @@ def synthetic_workbook_with_shape(*, extra_rows=False, unread_tail=False, end_ro
         ws["A4"] = "末尾"
     if extra_rows:
         ws.print_area = "A1:B2"
+    if hidden_state:
+        hidden = wb.create_sheet("Internal")
+        hidden.append(["Synthetic internal", 1])
+        hidden.sheet_state = hidden_state
     original = BytesIO()
     wb.save(original)
     with ZipFile(package()) as fixture:

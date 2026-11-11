@@ -220,13 +220,7 @@ class ModstorePlatformAdapter:
                     await client.aclose()
                 except RuntimeError:
                     pass
-            client = httpx.AsyncClient(
-                timeout=httpx.Timeout(self.timeout, connect=10.0),
-                limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
-                headers={"Content-Type": "application/json", "Accept": "application/json"},
-                trust_env=False,
-                proxy=(os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None,
-            )
+            client = _transport.httpx_async_client(timeout=self.timeout)
             self._client = client
             self._client_loop_id = loop_id
         return client

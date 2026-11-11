@@ -19,7 +19,7 @@ def download_agent_artifact(
 ) -> Response:
     from urllib.parse import quote
 
-    from app.application.agent_orchestrator.artifact_files import read_verified_spreadsheet
+    from app.application.agent_orchestrator.artifact_files import read_verified_run_file
 
     run, error = _owned_run(AgentOrchestrator(), run_id, principal)
     if error is not None:
@@ -32,7 +32,7 @@ def download_agent_artifact(
     if artifact is None or artifact.artifact_type != "file":
         return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
     try:
-        content = read_verified_spreadsheet(run_id, artifact.to_dict())
+        content = read_verified_run_file(run_id, artifact.to_dict())
     except (OSError, ValueError, KeyError):
         return JSONResponse(
             {"success": False, "message": "文件不可用，请重新导出"}, status_code=410

@@ -16,6 +16,78 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 # ========================= get_tool_registry =============================
 
 
+def test_planner_does_not_mix_global_history_into_an_explicit_conversation():
+    captured = {}
+    ai = Mock()
+    ai.get_context.return_value.conversation_history = [
+        {"role": "assistant", "content": "FOREIGN_SESSION_MARKER"}
+    ]
+
+    def completion(**kwargs):
+        captured.update(json.loads(kwargs["messages"][1]["content"]))
+        return {"choices": [{"message": {"content": '{"mode":"reply","reply":"ready"}'}}]}
+
+    LLMWorkflowPlanner(ai_service=ai, completion=completion).plan(
+        "7", "hello", get_tool_registry(), context={"session_id": "isolated-conversation"}
+    )
+    assert "FOREIGN_SESSION_MARKER" not in json.dumps(captured["recent_messages"])
+
+
+def test_employee_discovery_uses_verified_actor_and_replaces_client_catalog(
+    monkeypatch, trusted_actor
+):
+    actor = trusted_actor(user_id=77, role="user")
+    monkeypatch.setattr(
+        "app.mod_sdk.employee_tool_registry.build_employee_tools_status",
+        lambda: {
+            "employee_pack_tools": [
+                {"pack_id": "known-report-worker", "runtime_ok": True},
+                {"pack_id": "broken-worker", "runtime_ok": False},
+            ]
+        },
+    )
+    captured = {}
+    ai = Mock()
+    ai.get_context.return_value = None
+    planner = LLMWorkflowPlanner(ai_service=ai)
+
+    def model(plan_id, user_id, message, registry, context):
+        captured.update(context)
+        return PlanGraph(
+            plan_id=plan_id,
+            intent="conversation_reply",
+            nodes=[
+                WorkflowNode(
+                    node_id="reply",
+                    tool_id="conversation",
+                    action="reply",
+                    params={"response": "ready"},
+                )
+            ],
+            metadata={"response_mode": "reply", "reply": "ready"},
+        )
+
+    monkeypatch.setattr(planner, "_plan_with_llm", model)
+    planner.plan(
+        "77",
+        "请处理报表",
+        get_tool_registry(),
+        context={**actor.context, "available_employees": [{"employee_id": "forged-worker"}]},
+    )
+    assert [row["employee_id"] for row in captured["available_employees"]] == [
+        "known-report-worker"
+    ]
+    captured.clear()
+    planner.plan(
+        "untrusted",
+        "请处理报表",
+        get_tool_registry(),
+        context={"available_employees": [{"employee_id": "forged-worker"}]},
+    )
+    # The second prompt must not receive either a forged catalog or an unauthenticated discovery.
+    assert "available_employees" not in captured
+
+
 class TestGetToolRegistry:
     def test_returns_dict(self):
         reg = get_tool_registry()

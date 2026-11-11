@@ -53,7 +53,9 @@ class SuperEmployeePort(Protocol):
 
 
 class AiGroupChatServiceFactory(Protocol):
-    def __call__(self, *, mode: str) -> AiGroupChatService: ...
+    def __call__(
+        self, *, mode: str, runtime_context: dict[str, Any] | None = None
+    ) -> AiGroupChatService: ...
 
 
 class ClaudeSuperEmployeeServiceFactory(Protocol):
@@ -433,6 +435,7 @@ class ExecuteEmployeeCall(Protocol):
         user_id: int,
         workspace_root: str | None,
         session_id: str | None,
+        runtime_context: dict[str, Any],
     ) -> dict[str, Any]: ...
 
 

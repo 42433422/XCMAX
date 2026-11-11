@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from io import BytesIO
+from xml.etree.ElementTree import tostring
 
 from openpyxl import load_workbook
 from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
@@ -29,11 +30,60 @@ def _collect_evidence(
     try:
         for index, item in enumerate(slices):
             fragments = item.get("fragments") or []
-            selected, merges = [], []
+            selected, merges, layout = [], [], []
+            text_truncated = False
             for part in fragments:
                 c1, r1, c2, r2 = bounded_range(part["range"])
                 sheet = workbook[part["sheet"]] if workbook else None
                 if sheet is not None:
+                    layout.append(
+                        {
+                            "defaults": tostring(sheet.sheet_format.to_tree(), encoding="unicode"),
+                            "columns": [
+                                [
+                                    max(c1, left) - c1,
+                                    min(c2, right) - c1,
+                                    dim.width,
+                                    dim.hidden,
+                                    dim.style,
+                                ]
+                                for name, dim in sheet.column_dimensions.items()
+                                for left, right in [
+                                    (
+                                        dim.min or column_index_from_string(name),
+                                        dim.max or column_index_from_string(name),
+                                    )
+                                ]
+                                if left <= c2 and right >= c1
+                            ],
+                            "rows": [
+                                [row - r1, dim.height, dim.hidden, dim.style]
+                                for row, dim in sheet.row_dimensions.items()
+                                if r1 <= row <= r2
+                            ],
+                            "styles": sorted(
+                                [row - r1, col - c1, cell.style_id]
+                                for (row, col), cell in sheet._cells.items()
+                                if r1 <= row <= r2 and c1 <= col <= c2 and cell.has_style
+                            ),
+                            "print": [
+                                tostring(part.to_tree(), encoding="unicode")
+                                for part in (
+                                    sheet.page_setup,
+                                    sheet.page_margins,
+                                    sheet.print_options,
+                                    sheet.HeaderFooter,
+                                    sheet.row_breaks,
+                                    sheet.col_breaks,
+                                )
+                            ],
+                            "print_ranges": [
+                                str(sheet.print_area),
+                                sheet.print_title_rows,
+                                sheet.print_title_cols,
+                            ],
+                        }
+                    )
                     for merged in sheet.merged_cells.ranges:
                         if (
                             c1 <= merged.min_col <= merged.max_col <= c2
@@ -53,11 +103,13 @@ def _collect_evidence(
                     column_name, row = coordinate_from_string(cell["cell"])
                     col = column_index_from_string(column_name)
                     if c1 <= col <= c2 and r1 <= row <= r2:
+                        value = str(cell.get("value") or "")
+                        text_truncated = text_truncated or len(value) > 60
                         selected.append(
                             {
                                 "row": row - r1,
                                 "column": col - c1,
-                                "value": str(cell.get("value") or "")[:60],
+                                "value": value[:60],
                                 "kind": cell.get("kind"),
                                 "style": sheet.cell(row, col).style_id
                                 if sheet is not None
@@ -72,7 +124,8 @@ def _collect_evidence(
                     "cells": selected[:120],
                     "merged": merges,
                     "layout_available": workbook is not None,
-                    "truncated": len(selected) > 120,
+                    "layout": layout,
+                    "truncated": len(selected) > 120 or text_truncated,
                 }
             )
     finally:
@@ -157,4 +210,7 @@ def suggest_template_families(
         for group in groups
     ):
         raise ReviewedExcelError("模板复用证据不完整，不能合并")
+    from app.application.reviewed_excel_template_blocks import merge_same_layout_families
+
+    groups = merge_same_layout_families(groups, evidence)
     return [{"members": group["members"], "reason": group["reason"][:1000]} for group in groups]
