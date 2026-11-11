@@ -300,14 +300,20 @@
       "requirement_id": "R06",
       "scenario_id": "R06-unauthorized-no-write",
       "rule": "没有审批权限的人不能让受保护写入发生。",
-      "source": "现有非审批人用例使用了替身，尚未作为真实执行接入。",
+      "source": "FHD/tests/test_application/test_approval_workspace.py 的 denied 实例。审批人不在列表中时返回 403，审批单保持 pending，没有审批记录，探测价格保持 13.50。",
       "preconditions": ["审批单处于待审", "操作者不在审批人列表"],
       "inputs": ["拒绝或批准"],
       "allowed": ["请求被拒绝"],
       "forbidden_effects": ["无权限造成库存、订单或审批状态写入"],
       "oracle": "操作前的业务行与审批状态",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "tests": [
+        "tests/test_application/test_approval_workspace.py::test_configured_restore_approval_restores_wal_and_retains_audit[False-denied]"
+      ],
+      "boundary": {
+        "real": ["sqlite", "approval request", "approval record", "restore_probe.price"],
+        "doubles": ["actor resolver returns user 41"],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "无权限审批仍写入",
       "platforms": ["linux"],
