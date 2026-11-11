@@ -119,7 +119,7 @@ const routeReadinessHandlers = computed(() => {
 
 <template>
   <section v-if="startupVisible" ref="startupPanel" class="startup-readiness" tabindex="-1"
-    :role="startupError ? 'dialog' : 'status'" :aria-modal="startupError ? 'true' : undefined" aria-labelledby="startup-title" aria-describedby="startup-status"
+    role="dialog" aria-modal="true" aria-labelledby="startup-title" aria-describedby="startup-status"
     data-testid="startup-readiness" :data-state="startupError ? 'error' : 'loading'">
     <div class="startup-readiness__panel">
       <h1 id="startup-title">{{ startupError ? '工作台暂未就绪' : '正在进入工作台' }}</h1>
@@ -131,8 +131,8 @@ const routeReadinessHandlers = computed(() => {
       </div>
     </div>
   </section>
-  <div class="app-shell" data-testid="startup-workspace" :inert="startupError ? true : undefined"
-    :aria-hidden="startupError ? true : undefined" :aria-busy="startupVisible && !startupError ? true : undefined"
+  <div class="app-shell" data-testid="startup-workspace" :inert="startupVisible || undefined"
+    :aria-hidden="startupVisible || undefined" :aria-busy="startupVisible || undefined"
     :class="{ 'is-ready': appReady || hideChrome, 'app-shell--bare': hideChrome }">
     <LegacyFloatPanels v-if="!hideChrome" />
     <AppGlobalProviders :show-lan-gate="!isAdminConsoleSpa()" />
