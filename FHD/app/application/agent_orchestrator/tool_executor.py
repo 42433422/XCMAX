@@ -41,6 +41,7 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         "purchase",
         "finance",
         "excel_analysis",
+        "employee",
     }
 )
 

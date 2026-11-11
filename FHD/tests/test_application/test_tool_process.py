@@ -550,3 +550,4 @@ def test_finance_writes_restore_the_task_tenant():
 
     assert "finance" in _SQL_TENANT_SCOPED_TOOL_IDS
     assert "excel_analysis" in _SQL_TENANT_SCOPED_TOOL_IDS
+    assert "employee" in _SQL_TENANT_SCOPED_TOOL_IDS
