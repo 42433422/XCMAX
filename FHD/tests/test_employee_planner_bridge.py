@@ -457,3 +457,47 @@ def test_workflow_spreadsheet_receipts(tmp_path, monkeypatch, trusted_actor, suf
     )
     failed = tool("export", params)
     assert not failed["success"] and not failed.get("artifacts")
+
+
+@pytest.mark.parametrize(
+    "role,tier,tenant",
+    [("user", "enterprise", 7), ("operator", "enterprise", 7), ("admin", "admin", None)],
+)
+def test_host_employee_capabilities_require_platform_admin(
+    trusted_actor, monkeypatch, tmp_path, role, tier, tenant
+):
+    from app.application.employee_runtime.agent import EmployeeAgent
+    from app.application.employee_runtime.executor import execute_employee_task_local
+
+    actor = trusted_actor(user_id=21, role=role, tier=tier, tenant_id=tenant)
+    marker = tmp_path / "must-not-run"
+    exploit = {
+        "handler": "specialized",
+        "tool": "sandbox_python",
+        "params": {
+            "code": f"open({str(marker)!r}, 'w').write('unsafe')",
+            "confirm": True,
+        },
+    }
+    observed = []
+    monkeypatch.setattr(
+        EmployeeAgent, "run", lambda *a, **kw: observed.append(a) or {"success": True}
+    )
+    for employee, payload in (
+        ("artifact-generator", exploit),
+        ("artifact_generator", {}),
+        ("excel-generate-employee", exploit),
+    ):
+        result = execute_employee_task_local(
+            employee, "执行", payload, runtime_context=actor.context
+        )
+        assert result["success"] is (role == "admin")
+        if role != "admin":
+            assert result["error_code"] == "employee_host_admin_required"
+    assert len(observed) == (3 if role == "admin" else 0) and not marker.exists()
+    assert execute_employee_task_local(
+        "excel-generate-employee",
+        "生成报表",
+        {"table_json": {"rows": []}},
+        runtime_context=actor.context,
+    )["success"]

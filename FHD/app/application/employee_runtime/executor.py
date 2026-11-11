@@ -466,11 +466,14 @@ def execute_employee_task_local(
 
     from app.application.employee_runtime.agent import EmployeeAgent
     from app.application.employee_runtime.loader import candidate_pack_ids
+    from app.application.employee_runtime.tool_scope import host_employee_denial
     from app.application.office_parse_app_service import EMPLOYEE_BY_SUFFIX
     from app.application.tools.workflow_spreadsheet_scope import office_reader_input
 
     context = runtime_context or {}
     candidates = candidate_pack_ids(employee_id) if "_actor_authorization" in context else []
+    if denial := host_employee_denial(candidates, input_data or {}, context):
+        return denial
     reader = next((pack for pack in candidates if pack in EMPLOYEE_BY_SUFFIX.values()), None)
     if (
         reader
