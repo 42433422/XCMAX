@@ -592,16 +592,16 @@ volumes:
 
 ```bash
 # 构建镜像
-docker-compose build
+docker compose -f docker/docker-compose.fhd-full.yml build
 
 # 启动服务
-docker-compose up -d
+docker compose -f docker/docker-compose.fhd-full.yml --env-file .env.fhd-docker up -d
 
 # 查看日志
-docker-compose logs -f
+docker compose -f docker/docker-compose.fhd-full.yml logs -f
 
 # 停止服务
-docker-compose down
+docker compose -f docker/docker-compose.fhd-full.yml down
 ```
 
 ---

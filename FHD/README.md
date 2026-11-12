@@ -432,8 +432,9 @@ cd XCMAX/FHD
 ### 方式 1：Docker（若提供 compose）
 
 ```bash
-docker-compose up -d --build
-docker-compose ps
+cp .env.fhd-docker.example .env.fhd-docker   # 编辑 DATABASE_URL / SECRET_KEY
+docker compose -f docker/docker-compose.fhd-full.yml --env-file .env.fhd-docker up -d --build
+docker compose -f docker/docker-compose.fhd-full.yml ps
 ```
 
 ### 方式 2：本地 Python
@@ -446,9 +447,9 @@ cd XCAGI && python run.py
 
 浏览器打开：**[http://127.0.0.1:5000/docs](http://127.0.0.1:5000/docs)**。（`backend.http_app:8000` 已于 2026-04-20 随 `backend/` 一同下线,备份在 `.archive/legacy-backend-2026-04-final/`。）
 
-### 方式 3：Windows 部署脚本
+### 方式 3：Windows 桌面版
 
-若仓库根目录提供 `deploy.bat` / `deploy-release.bat`，可按脚本菜单选择生产或开发配置。
+双击仓库根目录的 `start-desktop-sqlite.bat`；生产与打包统一走 `scripts/deploy/fhd-pack-release.sh` 与 `docker/docker-compose.fhd-prod.yml`。
 
 ---
 
