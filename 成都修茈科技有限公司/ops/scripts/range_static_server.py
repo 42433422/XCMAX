@@ -66,6 +66,11 @@ class RangeHandler(SimpleHTTPRequestHandler):
                     def read(self, n=-1):
                         return f.read(min(n if n > 0 else rest, rest))
 
+                    def close(self):
+                        # http.server 的 copyfile 结束会调用 close()；
+                        # 缺少该方法会在日志里抛 AttributeError（响应已发出但噪声大）。
+                        f.close()
+
                 return _Partial()
         self.send_response(200)
         self.send_header("Content-Type", ctype)
