@@ -526,5 +526,6 @@ onBeforeUnmount(() => {
 <style scoped src="./MainLayoutActions.css"></style>
 
 <style scoped>
-.route-content { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+/* .route-content-slot 必须同约束：否则被页面内容撑高，视口底部的输入区会被推出屏外。 */
+.route-content, .route-content-slot { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 </style>
