@@ -50,6 +50,7 @@ SCENARIO_RULES: dict[str, tuple[str, ...]] = {
     ),
     "document": (
         "要求核对明细与合计时，读取明细后必须增加 excel_analysis.statistics，expected_row_count 引用销售查询 summary.count，expected_totals.total_amount 引用销售查询 summary.amount，并声明这些直接依赖。仅 read 不代表合计已核验。",
+        "查看模板库用 template_preview.list；清理/清空模板库用 document_template.clear（不需要参数），不要用 document_template.delete 传「全部」之类的占位 id。",
     ),
     "knowledge": (
         "企业知识问答优先依据 chat_knowledge_evidence（可能来自 Persy 记忆图谱）作答；chat_knowledge_dataset_ids 为空只表示没有可检索的文档索引，不代表账户未授权，禁止据此声称「未授权知识库」。只有确实需要检索知识库文档且 chat_knowledge_dataset_ids 非空时才使用 dataset_rag.query，dataset_id 必须来自该列表或用户明确提供；资料不足时如实说明知识库暂无相关内容。清理/清空/删除知识库使用 dataset_rag.clear_dataset，dataset_id 必须来自 chat_clearable_dataset_ids；用户说「全部」时对列表中的每个 id 各生成一个节点，不要反问，也不要编造 dataset_id。",
@@ -68,7 +69,7 @@ _SCENARIO_KEYWORDS: dict[str, tuple[str, ...]] = {
     "customer": ("客户", "客户名", "联系人", "往来单位", "这家公司"),
     "sales": ("销售", "订单", "出货", "报价", "收款", "付款", "应收", "发货单"),
     "database": ("数据库", "查库", "入库", "新增", "更新", "删除", "修改", "改一下"),
-    "document": ("excel", "表格", "导出", "报表", "pdf", "ppt", "word", "文档", "打印", "合计", "明细"),
+    "document": ("excel", "表格", "导出", "报表", "pdf", "ppt", "word", "文档", "打印", "合计", "明细", "模板", "模板库"),
     "knowledge": ("知识库", "资料", "文档库", "dataset", "检索资料"),
     "employee": ("员工", "派活", "专员", "助手", "交接", "让谁", "哪个员工"),
     "memory": ("记住", "偏好", "习惯", "上次说"),

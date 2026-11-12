@@ -611,18 +611,22 @@ class WorkflowSession:
             if success
             else f"自动审批未完成执行：{message or '请到任务中核对结果'}"
         )
-        return _control_reply(
+        run_id = str(getattr(agent_run, "run_id", "") or "")
+        reply = _control_reply(
             text,
             "workflow_done" if success else "workflow_failed",
             {
                 "plan_id": str(getattr(plan, "plan_id", "") or ""),
-                "agent_run_id": str(getattr(agent_run, "run_id", "") or ""),
+                "agent_run_id": run_id,
                 "approval_request_id": request_id,
                 "auto_approved": True,
             },
             success=success,
             message="自动审批已完成" if success else "自动审批执行未完成",
         )[1]
+        reply["run_id"] = run_id
+        reply["agent_run_id"] = run_id
+        return reply
 
     def _clarification_answer(
         self, run: AgentRun, waiting: Any, text: str

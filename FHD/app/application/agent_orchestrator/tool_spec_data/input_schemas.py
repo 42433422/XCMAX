@@ -833,6 +833,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         },
     ),
     ("document_template", "delete"): _object_schema(["id"], {"id": {}}),
+    ("document_template", "clear"): _object_schema([], {}),
     ("document_template", "ingest"): _DOCUMENT_TEMPLATE_INGEST_INPUT,
     ("document_template", "upload"): _DOCUMENT_TEMPLATE_INGEST_INPUT,
     ("dataset_rag", "query"): _object_schema(

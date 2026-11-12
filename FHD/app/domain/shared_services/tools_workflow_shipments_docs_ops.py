@@ -102,6 +102,41 @@ def _registered_router_document_template(
         data, status_code = run_archive_template_delete(
             payload, base_dir=str(runtime_context.get("template_base_dir") or "") or None
         )
+    elif action == "clear":
+        from app.application import get_template_app_service
+        from app.legacy.routes.document_templates_compat import run_archive_template_delete
+
+        listed = get_template_app_service().get_templates() or {}
+        rows = listed.get("templates") if isinstance(listed, dict) else None
+        deleted = skipped = 0
+        base_dir = str(runtime_context.get("template_base_dir") or "") or None
+        for item in rows or []:
+            if not isinstance(item, dict):
+                continue
+            template_id = str(item.get("id") or "").strip()
+            if not (
+                template_id.startswith("fs:")
+                or template_id.startswith("db:")
+                or template_id.isdigit()
+            ):
+                skipped += 1
+                continue
+            item_data, item_status = run_archive_template_delete(
+                {"id": template_id}, base_dir=base_dir
+            )
+            if item_status == 200 and item_data.get("success"):
+                deleted += 1
+            else:
+                skipped += 1
+        data, status_code = (
+            {
+                "success": True,
+                "message": f"已清空 {deleted} 个模板",
+                "deleted_templates": deleted,
+                "skipped_templates": skipped,
+            },
+            200,
+        )
     elif action in ("ingest", "upload"):
         from app.application.office_template_ingest_app_service import (
             ingest_office_bytes_to_template_library,

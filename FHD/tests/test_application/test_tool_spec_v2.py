@@ -751,6 +751,14 @@ def test_materials_permissions_use_business_codes(monkeypatch):
     assert get_tool_action_spec("materials", "batch_delete").permission == "material.edit"
 
 
+def test_template_permissions_use_etl_codes(monkeypatch):
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    assert get_tool_action_spec("template_preview", "list").permission == "etl.read"
+    assert get_tool_action_spec("template_preview", "create").permission == "etl.template.manage"
+    assert get_tool_action_spec("document_template", "delete").permission == "etl.template.manage"
+    assert get_tool_action_spec("document_template", "clear").permission == "etl.template.manage"
+
+
 def test_business_db_read_materials_accepts_material_view(trusted_actor, monkeypatch):
     from app.application.agent_orchestrator.tool_permission import actor_tool_denial
 

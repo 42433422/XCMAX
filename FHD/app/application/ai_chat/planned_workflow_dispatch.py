@@ -312,8 +312,13 @@ class PlannedWorkflowDispatch:
         # analysis must execute that same durable AgentRun graph as every other
         # workflow; the former second, model-directed tool loop had no complete
         # approval/permission/receipt boundary and is retired.
-        if not has_approval_requirement or any(
-            node.tool_id == "clarify" and node.action == "ask" for node in plan.nodes
+        auto_approval = (
+            str(runtime_ctx.get("chat_approval_mode") or "").strip().lower() == "auto"
+        )
+        if (
+            not has_approval_requirement
+            or auto_approval
+            or any(node.tool_id == "clarify" and node.action == "ask" for node in plan.nodes)
         ):
             from app.application.agent_orchestrator import AgentOrchestrator
 
