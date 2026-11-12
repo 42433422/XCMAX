@@ -1889,6 +1889,22 @@
         }
       }
     },
+    "import_excel_to_database": {
+      "description": "把已分析的 Excel 数据导入业务数据库：按表头映射写入产品、客户或订单，写入前需审批。",
+      "availability": "shared",
+      "actions": {
+        "import": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared",
+          "action_class": "bulk_import",
+          "timeout_seconds": 180
+        }
+      }
+    },
     "client_product_issue": {
       "description": "客户明确要求反馈或上报软件故障时，使用原始请求提交产品问题；缺少证据时请求补充，受理结果不明时不得重复提交。",
       "availability": "shared",

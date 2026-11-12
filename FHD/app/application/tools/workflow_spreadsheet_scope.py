@@ -27,6 +27,7 @@ from app.domain.context.session_excel_context import excel_analysis_from_runtime
 from app.infrastructure.auth.agent_mod_scope import _bound_actor
 from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.path_io.path_utils import get_app_data_dir
+from app.utils.time import utc_now_naive
 
 
 def _run_file(file_path: str, context: dict[str, Any]) -> tuple[bytes, str] | None:
@@ -70,6 +71,43 @@ def _staging_root() -> Path:
     return root
 
 
+def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
+    """把用户可见的文件名换成当前账号自己的上传存储路径。
+
+    后续轮次只说「导入」时，模型只能看到「宗南.xlsx」这类展示名；
+    直接按展示名查库会命中不到归属记录，这里仅在当前账号与租户范围内解析。
+    """
+    value = str(file_path or "").strip()
+    if not value:
+        return value
+    try:
+        actor = _bound_actor(context)
+        with get_db() as db:
+            query = db.query(EltUpload).filter(
+                EltUpload.owner_user_id == actor.id,
+                EltUpload.tenant_id == tenant_id_for_write(),
+            )
+            exact = query.filter(
+                or_(EltUpload.id == value, EltUpload.storage_path == value)
+            ).first()
+            if exact is not None:
+                return str(exact.storage_path or exact.id)
+            by_name = (
+                query.filter(
+                    EltUpload.file_name == Path(value).name,
+                    EltUpload.storage_path != "",
+                    EltUpload.expires_at > utc_now_naive(),
+                )
+                .order_by(EltUpload.id.desc())
+                .first()
+            )
+            if by_name is not None:
+                return str(by_name.storage_path)
+    except (PermissionError, ValueError):
+        return value
+    return value
+
+
 @contextmanager
 def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[Path]:
     actor = _bound_actor(context)
@@ -77,6 +115,7 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
     if prior is not None:
         content, suffix = prior
     else:
+        file_path = resolve_owned_upload_path(file_path, context)
         analysis = excel_analysis_from_runtime(context) or {}
         reference = analysis.get("upload_id")
         if isinstance(reference, str) and reference and file_path == analysis.get("file_path"):

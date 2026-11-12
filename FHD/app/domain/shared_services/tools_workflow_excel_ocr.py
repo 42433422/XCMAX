@@ -9,6 +9,38 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _registered_router_import_excel_to_database(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    """把已分析的 Excel 写入业务库；文件名按当前账号解析成自己的上传文件。"""
+    if action != "import":
+        return {"success": False, "message": "不支持的 Excel 导入操作"}
+    import json
+
+    payload = dict(params or {})
+    file_path = str(payload.get("file_path") or "").strip()
+    if file_path:
+        from app.application.tools.workflow_spreadsheet_scope import resolve_owned_upload_path
+
+        payload["file_path"] = resolve_owned_upload_path(file_path, runtime_context)
+    if not str(payload.get("file_path") or "").strip():
+        return {"success": False, "message": "import_excel_to_database 缺少 file_path 参数"}
+    try:
+        from app.application.tools.workflow import _handle_import_excel_to_database
+
+        workspace_root = runtime_context.get("workspace_root")
+        raw = _handle_import_excel_to_database(
+            payload, str(workspace_root) if workspace_root else None
+        )
+        parsed = json.loads(raw) if isinstance(raw, str) else raw
+        return parsed if isinstance(parsed, dict) else {"success": False, "message": str(raw)}
+    except PermissionError as err:
+        return {"success": False, "error_code": "spreadsheet_access_denied", "message": str(err)}
+    except RECOVERABLE_ERRORS as err:
+        logger.error("import_excel_to_database 执行失败: %s", err, exc_info=True)
+        return {"success": False, "message": f"Excel 导入失败：{str(err)}"}
+
+
 def _registered_router_excel_analysis(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:

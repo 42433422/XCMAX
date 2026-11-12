@@ -286,3 +286,22 @@ def test_auto_approval_mode_skips_plan_confirmation_and_starts_run():
     orchestrator.return_value.start_run_from_plan.assert_called_once()
     callbacks._capture_agent_run_interaction.assert_called_once()
     assert "owner" not in dispatch.pending
+
+
+def test_import_request_exposes_import_tool_and_directive():
+    from app.application.workflow.planner_prompt_profile import (
+        detect_intents,
+        select_rules_for_prompt,
+        select_tools_for_prompt,
+    )
+
+    registry = {
+        "excel_analysis": {"available": "shared"},
+        "import_excel_to_database": {"available": "shared"},
+        "generate_office_document": {"available": "shared"},
+    }
+    assert "document" in detect_intents("导入")
+    assert "import_excel_to_database" in select_tools_for_prompt(registry, "导入")
+    assert any("import_excel_to_database" in rule for rule in select_rules_for_prompt("导入"))
+    assert "import_excel_to_database" not in select_tools_for_prompt(registry, "查询客户")
+

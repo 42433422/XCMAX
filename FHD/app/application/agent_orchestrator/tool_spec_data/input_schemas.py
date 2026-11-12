@@ -775,6 +775,19 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "max_rows": {"type": "integer"},
         },
     ),
+    ("import_excel_to_database", "import"): _object_schema(
+        ["file_path"],
+        {
+            "file_path": {"type": "string"},
+            "import_type": {"type": "string", "enum": ["products", "customers", "orders"]},
+            "sheet_name": {"type": "string"},
+            "header_row": {"type": "integer"},
+            "last_data_row_1based": {"type": "integer"},
+            "unit_name": {"type": "string"},
+            "price_column": {"type": "string"},
+            "confirm": {"type": "boolean"},
+        },
+    ),
     ("excel_import", "execute_import"): _object_schema(
         ["pending_import_id"], {"pending_import_id": {"type": "string"}}
     ),
