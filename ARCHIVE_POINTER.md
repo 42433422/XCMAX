@@ -44,6 +44,7 @@
 | **根目录证据/构建产物外置（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/` | 迁出 9 个未入库目录：`windows-evidence-1.0.0.5`、`windows-evidence-20260926/27/28`、`windows-acceptance-r2`、`xcagi-src-e3ac9f`、`xcagi-tmp`、`xcagi-w06-data`、`xcagi-nsis-bcj`，以及 `_archive/{branch-retirement-20261106,devfleet-comm}`；共约 1.7GB，逐目录文件数与字节总量核对一致。同时删除空壳 `cache-spill/`、`saved_analyses/`、`xcagi-release-c46f938/` 与 0 字节 `modstore-test.db`。`_archive/windows-closeout-20261007` 因权限（`xcshare` 独占）未能读取，保留原地。 |
 | **outputs 打包产物外置（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/outputs/` | 迁出未入库的 `FHD-src-1.0.0.5-20261110.tar.gz`（78MB 源码包）、`byok-auto-match-module/` 与同名 `.zip`，字节核对一致；`outputs/` 仅保留已入库的 `01a05bb6-…/` 交付表。 |
 | **临时报告与锁文件清理（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/reports/` | 未入库的根 `reports/` 两份诊断（`ticket-triage-20261022.md`、`ci-acceleration/2026-10-12-ci-acceleration.md`，零入链）已外置；`test_reports/` 仅含运行锁 `.work_orders.lock`，已删除并移除空目录。 |
+| **release/ 过期打包桩移除（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/release/` | `release/` 仅含 v10.0.0 的 `README.txt`/`MOBILE_VERSION.md` 桩与陈旧 `release/VERSION`(`0.0.1`)，实际 APK/HAP 从未入库，且与 `FHD/VERSION.md`（`1.0.0.5`）构成版本漂移。已外置并 `git rm`；版本唯一权威来源为 `FHD/VERSION.md`。 |
 
 ## 恢复示例
 
