@@ -431,8 +431,8 @@ exit /b 0
         )
     )
 
-    REM Start postgres container with docker compose
-    if defined DOCKER_EXE (
+    REM Start postgres container with docker compose（仅在编排文件存在时）
+    if defined DOCKER_EXE if exist "%XCAGI_DIR%\docker-compose.yml" (
         echo [INFO] Found Docker at: !DOCKER_EXE!
         pushd "%XCAGI_DIR%"
         echo [INFO] Starting postgres container...
