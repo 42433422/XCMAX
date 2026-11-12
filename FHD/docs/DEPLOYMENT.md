@@ -592,16 +592,16 @@ volumes:
 
 ```bash
 # 构建镜像
-docker compose -f docker/docker-compose.fhd-full.yml build
+docker compose -f ops/docker/docker-compose.fhd-full.yml build
 
 # 启动服务
-docker compose -f docker/docker-compose.fhd-full.yml --env-file .env.fhd-docker up -d
+docker compose -f ops/docker/docker-compose.fhd-full.yml --env-file .env.fhd-docker up -d
 
 # 查看日志
-docker compose -f docker/docker-compose.fhd-full.yml logs -f
+docker compose -f ops/docker/docker-compose.fhd-full.yml logs -f
 
 # 停止服务
-docker compose -f docker/docker-compose.fhd-full.yml down
+docker compose -f ops/docker/docker-compose.fhd-full.yml down
 ```
 
 ---
@@ -721,7 +721,7 @@ export default {
 生产监控 = 仓库根 `ops/` 哨兵（cron + stdlib，无守护依赖）+ GitHub Actions
 站外拨测（`ops-uptime.yml`），检查项/告警/处置见 [ops/README.md](../../ops/README.md)。
 （原 Prometheus/Grafana/Loki compose 从未接真实告警，已随假 k8s 路径退役；
-MODstore 本地开发仍可用其 `monitoring/` compose profile。）
+MODstore 本地开发仍可用其 `ops/monitoring/` compose profile。）
 
 ### 2. 日志收集
 

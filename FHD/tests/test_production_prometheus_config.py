@@ -9,7 +9,7 @@ FHD_ROOT = Path(__file__).resolve().parents[1]
 
 def test_production_prometheus_scrapes_every_slo_runtime_with_truth_labels() -> None:
     payload = yaml.safe_load(
-        (FHD_ROOT / "monitoring/prometheus.production.yml").read_text(encoding="utf-8")
+        (FHD_ROOT / "ops/monitoring/prometheus.production.yml").read_text(encoding="utf-8")
     )
     jobs = {row["job_name"]: row for row in payload["scrape_configs"]}
     assert set(jobs) == {

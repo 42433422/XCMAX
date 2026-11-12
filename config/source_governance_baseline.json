@@ -50,7 +50,7 @@
     "FHD/XCAGI/mods/",
     "FHD/packages/xcagi_langgraph_",
     "FHD/templates/",
-    "FHD/third_party/langgraph/",
+    "FHD/assets/third_party/langgraph/",
     "FHD/frontend/src/domain/yuangonDutyRoster.ts",
     "成都修茈科技有限公司/MODstore_deploy/market/src/domain/yuangonDutyRoster.ts",
     "FHD/frontend/src/domain/butlerEmployeeProfile.ts",

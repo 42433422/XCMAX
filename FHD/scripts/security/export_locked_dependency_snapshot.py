@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 LOCKFILES = (
     "FHD/XCAGI/requirements.lock.txt",
-    "FHD/deploy/requirements-server-api.lock.txt",
+    "FHD/ops/deploy/requirements-server-api.lock.txt",
 )
 DETECTOR = "xcmax-locked-python"
 CORRELATOR = "xcmax-locked-python-main"

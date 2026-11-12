@@ -5,7 +5,7 @@
 
 使用方法:
     # 训练模型
-    python -m app.services.train_intent --mode train --data rasa/data/nlu.yml --model bert-base-chinese
+    python -m app.services.train_intent --mode train --data assets/rasa/data/nlu.yml --model bert-base-chinese
 
     # 评估模型
     python -m app.services.train_intent --mode evaluate --model models/intent_bert/final

@@ -433,8 +433,8 @@ cd XCMAX/FHD
 
 ```bash
 cp .env.fhd-docker.example .env.fhd-docker   # 编辑 DATABASE_URL / SECRET_KEY
-docker compose -f docker/docker-compose.fhd-full.yml --env-file .env.fhd-docker up -d --build
-docker compose -f docker/docker-compose.fhd-full.yml ps
+docker compose -f ops/docker/docker-compose.fhd-full.yml --env-file .env.fhd-docker up -d --build
+docker compose -f ops/docker/docker-compose.fhd-full.yml ps
 ```
 
 ### 方式 2：本地 Python
@@ -449,7 +449,7 @@ cd XCAGI && python run.py
 
 ### 方式 3：Windows 桌面版
 
-双击仓库根目录的 `start-desktop-sqlite.bat`；生产与打包统一走 `scripts/deploy/fhd-pack-release.sh` 与 `docker/docker-compose.fhd-prod.yml`。
+双击仓库根目录的 `start-desktop-sqlite.bat`；生产与打包统一走 `scripts/deploy/fhd-pack-release.sh` 与 `ops/docker/docker-compose.fhd-prod.yml`。
 
 ---
 

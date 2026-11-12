@@ -94,7 +94,7 @@
 | 技术 | 用途 |
 |------|------|
 | Docker | 容器化 |
-| Docker Compose | 本地全栈（`docker/docker-compose.fhd-full.yml`） |
+| Docker Compose | 本地全栈（`ops/docker/docker-compose.fhd-full.yml`） |
 | 不可变发布 + systemd | 生产：`scripts/deploy/fhd-pack-release.sh` 打包，CVM 自动更新 |
 | Nginx | 反向代理 |
 | GitHub Actions | CI/CD |
@@ -104,7 +104,7 @@
 | 技术 | 用途 |
 |------|------|
 | 结构化日志 | 应用日志 |
-| Prometheus | 指标采集（`monitoring/` 配置，SLO 每日采集） |
+| Prometheus | 指标采集（`ops/monitoring/` 配置，SLO 每日采集） |
 | Loki | 日志聚合（规划中） |
 
 ---

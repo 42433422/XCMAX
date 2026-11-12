@@ -220,7 +220,7 @@ mods/<mod_id>/
 
 ## 4b. 行业包 manifest（`*-industry`）
 
-中性行业包（如 `coating-industry`、`attendance-industry`）除 §4 通用字段外，须满足 **七段契约**，JSON Schema 见 [`contracts/industry_package.schema.json`](../../contracts/industry_package.schema.json)。发版前由 `tests/release_gate/test_industry_package_contract.py` 校验。
+中性行业包（如 `coating-industry`、`attendance-industry`）除 §4 通用字段外，须满足 **七段契约**，JSON Schema 见 [`assets/contracts/industry_package.schema.json`](../../assets/contracts/industry_package.schema.json)。发版前由 `tests/release_gate/test_industry_package_contract.py` 校验。
 
 | 契约段 | manifest 字段 | 说明 |
 |---|---|---|

@@ -14,7 +14,7 @@ SCRIPT = FHD / "scripts" / "dev" / "neuro_bus_events_ssot.py"
 SOURCE = FHD / "config" / "neuro_bus_events.yaml"
 DERIVED_PY = FHD / "app" / "neuro_bus" / "event_types_generated.py"
 DERIVED_TS = FHD / "frontend" / "src" / "types" / "agentRunEvents.generated.ts"
-OPENAPI = FHD / "contracts" / "openapi.json"
+OPENAPI = FHD / "assets" / "contracts" / "openapi.json"
 
 
 def _run_check() -> subprocess.CompletedProcess:

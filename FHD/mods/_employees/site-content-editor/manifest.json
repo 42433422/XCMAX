@@ -141,8 +141,8 @@
         "MODstore_deploy/**",
         "vibe-coding/**",
         "_local_secrets/**",
-        "deploy/**",
-        "docker/**",
+        "ops/deploy/**",
+        "ops/docker/**",
         "sitemap.xml",
         "robots.txt"
       ]

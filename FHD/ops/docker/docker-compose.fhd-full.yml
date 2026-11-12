@@ -2,7 +2,7 @@
 #
 # From repository root (FHD/):
 #   cp .env.fhd-docker.example .env.fhd-docker   # edit DATABASE_URL / SECRET_KEY
-#   docker compose -f docker/docker-compose.fhd-full.yml --env-file .env.fhd-docker up -d --build
+#   docker compose -f ops/docker/docker-compose.fhd-full.yml --env-file .env.fhd-docker up -d --build
 #
 # Use host Postgres (e.g. modstore container on 5433): set in .env.fhd-docker
 #   DATABASE_URL=postgresql+psycopg://USER:PASS@host.docker.internal:5433/DB
@@ -20,8 +20,8 @@ services:
 
   fhd-api:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile.fhd-api
+      context: ../..
+      dockerfile: ops/docker/Dockerfile.fhd-api
     image: xcagi-fhd-api:${XCAGI_VERSION:-latest}
     container_name: fhd-api
     restart: unless-stopped
@@ -51,7 +51,7 @@ services:
       XCAGI_NEURO_BUS_DLQ_AUTO: "1"
       XCAGI_NEURO_BUS_SLA_LOG: "1"
     env_file:
-      - ../.env.fhd-docker
+      - ../../.env.fhd-docker
     volumes:
       - fhd-api-data:/app/data
       - fhd-api-uploads:/app/uploads

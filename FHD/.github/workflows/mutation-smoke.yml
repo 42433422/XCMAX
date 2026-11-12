@@ -77,7 +77,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
-          pip install -r deploy/requirements-dev.txt
+          pip install -r ops/deploy/requirements-dev.txt
           pip install mutmut
 
       - name: Run mutmut

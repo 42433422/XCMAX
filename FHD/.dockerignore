@@ -93,7 +93,7 @@ Thumbs.db
 *.btw
 resources/wechat-decrypt/decrypted/
 
-# Full API image / CI: shrink context (see docker/Dockerfile.fhd-api)
+# Full API image / CI: shrink context (see ops/docker/Dockerfile.fhd-api)
 MODstore/
 XCAGI/node_modules/
 XCAGI/mods/

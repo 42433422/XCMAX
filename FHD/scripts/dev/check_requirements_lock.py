@@ -64,7 +64,7 @@ def main() -> int:
         for name in missing:
             print(f"  - {name}", file=sys.stderr)
         print(
-            "Regenerate: pip install -r requirements-server-api.txt && pip freeze > deploy/requirements-server-api.lock.txt",
+            "Regenerate: pip install -r requirements-server-api.txt && pip freeze > ops/deploy/requirements-server-api.lock.txt",
             file=sys.stderr,
         )
         return 1

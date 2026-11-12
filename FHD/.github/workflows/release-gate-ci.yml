@@ -46,7 +46,7 @@ jobs:
         run: |
           python -m pip install -U pip
           pip install -r requirements-server-api.txt
-          pip install -r deploy/requirements-dev.txt
+          pip install -r ops/deploy/requirements-dev.txt
       - name: Release contract tests (isolated conftest)
         if: steps.paths.outputs.skip != 'true'
         run: |

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 从公网 MODstore 服务器拉取 SMTP 相关 .env 行 → 本机 FHD/XCAGI/.env.smtp.local
-# 凭据：deploy/.env.deploy.local（DEPLOY_SSH_PASSWORD）
+# 凭据：ops/deploy/.env.deploy.local（DEPLOY_SSH_PASSWORD）
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -5,7 +5,7 @@
 ## 目录结构
 
 ```
-rasa/
+assets/rasa/
 ├── config.yml          # RASA NLU 配置
 ├── domain.yml          # RASA 领域定义
 ├── data/
@@ -26,7 +26,7 @@ pip install rasa
 
 ```bash
 cd e:\FHD\XCAGI
-python rasa/train_rasa_model.py
+python assets/rasa/train_rasa_model.py
 ```
 
 ### 3. 使用混合意图识别
@@ -45,7 +45,7 @@ print(result)
 ```python
 from app.services import RasaNLUService
 
-service = RasaNLUService(model_path="rasa/models/nlu-20240101-xxxx.tar.gz")
+service = RasaNLUService(model_path="assets/rasa/models/nlu-20240101-xxxx.tar.gz")
 result = service.get_intent_with_confidence("生成发货单")
 ```
 
@@ -53,7 +53,7 @@ result = service.get_intent_with_confidence("生成发货单")
 
 ```bash
 # 启动 RASA 服务器
-rasa run --enable-api --models rasa/models/
+rasa run --enable-api --models assets/rasa/models/
 ```
 
 ```python

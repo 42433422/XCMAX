@@ -46,7 +46,7 @@ jobs:
           remote="${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}"
           ssh "${ssh_opts[@]}" "$remote" "install -d -m 700 '${remote_dir}'"
           scp "${ssh_opts[@]}" \
-            monitoring/prometheus.production.yml \
+            ops/monitoring/prometheus.production.yml \
             scripts/observability/install_production_prometheus_config.sh \
             "${remote}:${remote_dir}/"
           ssh "${ssh_opts[@]}" "$remote" \

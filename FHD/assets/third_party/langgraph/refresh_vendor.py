@@ -2,7 +2,7 @@
 """langgraph vendor 源码刷新脚本 (W0-01).
 
 从 PROVENANCE.json 锁定的上游 tag/SHA 拉取核心包源码与 LICENSE 落盘到
-FHD/third_party/langgraph/。全部用 Python 原生实现:
+FHD/assets/third_party/langgraph/。全部用 Python 原生实现:
 
   - 克隆与校验在 tempfile.TemporaryDirectory 中完成, 结束自动清理, 不在仓库残留。
   - 源码落盘用 pathlib + shutil.copytree(..., dirs_exist_ok=True) 幂等合并,

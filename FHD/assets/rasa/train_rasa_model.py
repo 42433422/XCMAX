@@ -4,7 +4,7 @@ RASA NLU 模型训练脚本
 使用方法:
     python train_rasa_model.py
 
-训练完成后，模型会保存在 rasa/models/ 目录下
+训练完成后，模型会保存在 assets/rasa/models/ 目录下
 """
 
 import logging

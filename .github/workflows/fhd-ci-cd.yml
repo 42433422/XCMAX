@@ -219,7 +219,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
-          pip install -r deploy/requirements-dev.txt
+          pip install -r ops/deploy/requirements-dev.txt
 
       - name: Set up the real private Mod frontend compiler
         if: steps.paths.outputs.skip != 'true'
@@ -606,7 +606,7 @@ jobs:
             --expected-git-sha "${XCAGI_RELEASE_SHA}"
 
       - name: Build image for scanning
-        run: docker build --target production -f docker/Dockerfile.fhd-api -t xcagi-ci-scan:local .
+        run: docker build --target production -f ops/docker/Dockerfile.fhd-api -t xcagi-ci-scan:local .
 
       - name: Smoke test production image
         run: |
@@ -694,7 +694,7 @@ jobs:
     needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
     if: github.event_name != 'schedule' && needs.backend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
-    # image_tag: 用 metadata-action outputs.version（勿手搓短 sha）— docker/metadata-action#479
+    # image_tag: 用 metadata-action outputs.version（勿手搓短 sha）— ops/docker/metadata-action#479
     outputs:
       image_tag: ${{ steps.meta_fhd.outputs.version }}
     permissions:
@@ -758,7 +758,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: FHD
-          file: FHD/docker/Dockerfile.fhd-api
+          file: FHD/ops/docker/Dockerfile.fhd-api
           push: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v') }}
           tags: ${{ steps.meta_fhd.outputs.tags }}
           labels: ${{ steps.meta_fhd.outputs.labels }}
@@ -1029,7 +1029,7 @@ jobs:
       - name: Install backend test deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-server-api.txt -r deploy/requirements-dev.txt
+          pip install -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt
 
       - name: Install frontend deps
         working-directory: FHD/frontend

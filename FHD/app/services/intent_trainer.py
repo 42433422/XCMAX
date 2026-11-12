@@ -7,7 +7,7 @@
 - hfl/chinese-roberta-wwm-ext
 
 使用方法：
-    python -m app.services.intent_trainer --data rasa/data/nlu.yml --model bert-base-chinese --epochs 5
+    python -m app.services.intent_trainer --data assets/rasa/data/nlu.yml --model bert-base-chinese --epochs 5
 """
 
 import argparse

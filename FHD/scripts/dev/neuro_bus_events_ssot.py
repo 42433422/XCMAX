@@ -54,7 +54,7 @@ APP_BRIDGE_FILES = [
     ROOT / "app" / "fastapi_routes" / "template_api.py",
 ]
 FRONTEND_COMPOSABLE = ROOT / "frontend" / "src" / "composables" / "useAgentRunEvents.ts"
-OPENAPI_FILE = ROOT / "contracts" / "openapi.json"
+OPENAPI_FILE = ROOT / "assets" / "contracts" / "openapi.json"
 
 # 正则: 捕获 event_type: str = "xxx" / 'xxx'
 RE_DATACLASS_DEFAULT = re.compile(r'event_type:\s*str\s*=\s*["\']([^"\']+)["\']')
@@ -432,7 +432,7 @@ def scan_frontend_composable_strings() -> set[str]:
 
 # ──────────────────────────── OpenAPI patch ────────────────────────────
 def patch_openapi(m: dict[str, Any], *, apply: bool) -> tuple[bool, str]:
-    """在 contracts/openapi.json 注入 AgentRunEvent schema component,
+    """在 assets/contracts/openapi.json 注入 AgentRunEvent schema component,
     并把 /api/agent/runs/{run_id}/events 200 响应的空 schema 替换为 $ref。
 
     返回 (changed, message)。change=True 表示有改动待写入。

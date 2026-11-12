@@ -19,7 +19,7 @@ import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-VENDOR_BASELINES = {"FHD/third_party/langgraph": 56}
+VENDOR_BASELINES = {"FHD/assets/third_party/langgraph": 56}
 # FHD/docs/evidence/audit-benchmark|e2e/ 为外部标杆实测与发版验收复验脚本存档（随版本入库，见 MACOS_RELEASE_SSOT §8-T6），非运行时代码；其 broad except 是"任何异常如实记录"的测量设计，属有意豁免。
 OWNED_EXCLUDED_PREFIXES = ("FHD/docs/evidence/audit-benchmark/", "FHD/docs/evidence/e2e/")
 

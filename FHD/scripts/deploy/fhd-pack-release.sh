@@ -177,7 +177,7 @@ cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
   "$SCRIPT_DIR/lib/verify_release_archive.py" \
   "$SCRIPT_DIR/lib/verify_release_identity.sh" \
   "$STAGING/scripts/deploy/lib/"
-cp "$FHD_ROOT/docker/docker-compose.fhd-prod.yml" "$STAGING/docker/"
+cp "$FHD_ROOT/ops/docker/docker-compose.fhd-prod.yml" "$STAGING/docker/"
 
 # The scheduled CVM watcher must execute the exact autonomy code shipped by
 # this release.  Falling back to an unrelated server-side Git worktree makes a

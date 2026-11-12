@@ -2,7 +2,7 @@
 
 此模块是 RASA 能力在 FHD 里的 **真实落地点**，提供：
 
-1. **嵌入式** 加载 `rasa/models/*.tar.gz`（通过 ``rasa.core.agent.Agent``）。
+1. **嵌入式** 加载 `assets/rasa/models/*.tar.gz`（通过 ``rasa.core.agent.Agent``）。
 2. **服务器** 模式通过 HTTP 调用远端 ``rasa run --enable-api``。
 3. **健康探针** ``is_available()``：不仅检查变量是否设置，还会做一次
    握手（加载结果或 ``/status`` 请求）。
@@ -57,7 +57,7 @@ def _find_latest_local_model() -> str | None:
     here = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.abspath(os.path.join(here, "..", "..", ".."))
     candidates: list[str] = [
-        os.path.join(repo_root, "rasa", "models"),
+        os.path.join(repo_root, "assets", "rasa", "models"),
         os.path.join(repo_root, "XCAGI", "rasa", "models"),
     ]
     for folder in candidates:

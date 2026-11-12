@@ -150,7 +150,7 @@ class SourceGovernanceEvaluateTests(unittest.TestCase):
             tracked = [
                 "FHD/app/runtime.py",
                 "FHD/packages/xcagi_langgraph_core/langgraph/runtime.py",
-                "FHD/third_party/langgraph/libs/langgraph/langgraph/runtime.py",
+                "FHD/assets/third_party/langgraph/libs/langgraph/langgraph/runtime.py",
             ]
             for rel in tracked:
                 path = repo_root / rel

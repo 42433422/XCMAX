@@ -15172,7 +15172,7 @@
           "created_at": 1784878379.4086661,
           "updated_at": 1786356936.045878,
           "chunk_count": 156,
-          "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
+          "path": "/Users/a4243342/Desktop/XCMAX/FHD/assets/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },
@@ -27661,7 +27661,7 @@
           "created_at": 1784878379.412129,
           "updated_at": 1786356935.7492962,
           "chunk_count": 245,
-          "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
+          "path": "/Users/a4243342/Desktop/XCMAX/FHD/assets/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },
@@ -52993,7 +52993,7 @@
           "created_at": 1784878379.423192,
           "updated_at": 1786356935.7565708,
           "chunk_count": 496,
-          "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
+          "path": "/Users/a4243342/Desktop/XCMAX/FHD/assets/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },
@@ -57313,7 +57313,7 @@
           "created_at": 1784878379.433908,
           "updated_at": 1786356935.767231,
           "chunk_count": 84,
-          "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
+          "path": "/Users/a4243342/Desktop/XCMAX/FHD/assets/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },
@@ -66937,7 +66937,7 @@
           "created_at": 1784878379.4390662,
           "updated_at": 1786356935.769108,
           "chunk_count": 188,
-          "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
+          "path": "/Users/a4243342/Desktop/XCMAX/FHD/assets/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },
@@ -66971,7 +66971,7 @@
           "created_at": 1784878379.443906,
           "updated_at": 1786356935.77186,
           "chunk_count": 0,
-          "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
+          "path": "/Users/a4243342/Desktop/XCMAX/FHD/assets/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },

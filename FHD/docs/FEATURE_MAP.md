@@ -22,7 +22,9 @@
 | [XCAGI/mods/](../XCAGI/mods/) | Mod 导出副本 | 由 `scripts/dev/mods_ssot.py sync` 从 `mods/` 同步；供 Docker/打包路径，**禁止手改**。 |
 | `../MODstore/` | 独立产品子线 | MOD 市场,单独部署,不是主应用的一部分。 |
 | [mobile-flutter-poc/](../mobile-flutter-poc/) | 移动端唯一实现 | Flutter Android+iOS；`lib/` 共用业务，平台 Runner 只做系统能力与发版。见 [guides/MOBILE_FLUTTER.md](./guides/MOBILE_FLUTTER.md)。 |
-| [rasa/](../rasa/) | NLU 训练数据 | 训练 Rasa 模型用,非运行时代码。 |
+| [assets/rasa/](../assets/rasa/) | NLU 训练数据 | 训练 Rasa 模型用,非运行时代码。 |
+| [assets/](../assets/) | 数据/契约/第三方 | `contracts/` 生成契约快照、`evals/` 评测脚本、`dataset_rag/` 数据集、`third_party/` vendored 源码。 |
+| [ops/](../ops/) | 运维资产 | `docker/` 容器构建、`deploy/` 依赖锁、`monitoring/` Prometheus/Grafana 配置。 |
 | [scripts/](../scripts/) | 运维/开发脚本 | `dev/` 开发调试,`launchers/` 辅助启动,`backend-legacy/` 历史脚本。 |
 | [tests/](../tests/) | 正式测试 | `pytest.ini testpaths=tests`。 |
 | [docs/](../docs/) | 文档 | `reports/` 历史迁移/评估报告,`guides/` 操作指南,`user-guides/` 用户手册。 |
@@ -87,7 +89,7 @@
 - OCR 服务:[app/services/ocr_service.py](../app/services/ocr_service.py) + [app/application/ocr_app_service.py](../app/application/ocr_app_service.py)
 - 神经域:[app/neuro_bus/domains/ocr_domain.py](../app/neuro_bus/domains/ocr_domain.py)
 - Rasa 包装:[app/services/rasa_nlu_service.py](../app/services/rasa_nlu_service.py) + [app/services/train_intent.py](../app/services/train_intent.py)
-- Rasa 数据:[rasa/](../rasa/)
+- Rasa 数据:[assets/rasa/](../assets/rasa/)
 
 ### Mods / 模块市场
 

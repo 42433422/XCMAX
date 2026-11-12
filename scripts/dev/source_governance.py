@@ -61,7 +61,7 @@ DUPLICATE_EXCLUDED_PREFIXES = (
     "FHD/XCAGI/mods/",
     "FHD/packages/xcagi_langgraph_",
     "FHD/templates/",
-    "FHD/third_party/langgraph/",
+    "FHD/assets/third_party/langgraph/",
     # Generated dual-target pair: scripts/dev/sync_duty_roster.py renders
     # FHD/config/duty_roster.json (SSOT) into two independently deployed Vue
     # apps; both copies are generator outputs and live import targets.

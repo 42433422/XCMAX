@@ -1,5 +1,5 @@
 ﻿# Assembles a minimal build context (no --ignorefile required) and builds xcagi-mod-sandbox.
-# Run from repository root:  powershell -File docker/build-mod-sandbox.ps1
+# Run from repository root:  powershell -File ops/docker/build-mod-sandbox.ps1
 
 $ErrorActionPreference = "Stop"
 # 脚本位于 <repo>/docker/

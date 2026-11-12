@@ -14,10 +14,10 @@
 #   FHD_API_PORT         宿主机端口，默认 5100（容器内恒 5000）
 #
 # 启动（digest 已由 apply 脚本注入）:
-#   docker compose -f docker/docker-compose.fhd-prod.yml up -d
+#   docker compose -f ops/docker/docker-compose.fhd-prod.yml up -d
 #
 #  bundled Redis（仅当 env 未指向外部 Redis 时）:
-#   docker compose -f docker/docker-compose.fhd-prod.yml --profile bundled-redis up -d
+#   docker compose -f ops/docker/docker-compose.fhd-prod.yml --profile bundled-redis up -d
 
 services:
   fhd-redis:

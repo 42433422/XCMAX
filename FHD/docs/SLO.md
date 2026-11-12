@@ -75,9 +75,9 @@ except Exception:
 | 层 | 路径 |
 |----|------|
 | 应用指标 | `GET /metrics` — [`app/utils/metrics.py`](../app/utils/metrics.py) |
-| Prometheus | `FHD/monitoring/prometheus.yml`（生产 `prometheus.production.yml`） |
-| 告警规则 | `FHD/monitoring/alerts.yml` + `alertmanager.yml`（K8s Operator 已退役） |
-| Grafana 看板 | `FHD/monitoring/grafana/provisioning/dashboards/fhd.json` |
+| Prometheus | `FHD/ops/monitoring/prometheus.yml`（生产 `prometheus.production.yml`） |
+| 告警规则 | `FHD/ops/monitoring/alerts.yml` + `alertmanager.yml`（K8s Operator 已退役） |
+| Grafana 看板 | `FHD/ops/monitoring/grafana/provisioning/dashboards/fhd.json` |
 | 本地栈 | `bash scripts/observability/local_stack_up.sh` |
 | Staging 采集 | `FHD/scripts/observability/collect_slo_metrics.py` + `fhd-slo-metrics-collect.yml` |
 

@@ -1,10 +1,10 @@
 # XCAGI Mod 沙箱镜像
 
-**位置：仓库根下 `docker/` 目录**（本机例：`E:\FHD\docker`）。本目录内为 Mod 沙箱「最小镜像」的 **Dockerfile、构建脚本、说明**；构建上下文仍须为**仓库根**（脚本会拼装最小临时目录后 `docker build`）。
+**位置：仓库根下 `ops/docker/` 目录**（本机例：`E:\FHD\docker`）。本目录内为 Mod 沙箱「最小镜像」的 **Dockerfile、构建脚本、说明**；构建上下文仍须为**仓库根**（脚本会拼装最小临时目录后 `docker build`）。
 
 用于在**单容器**内验证 Mod 能否被扫描、加载并挂载路由；镜像层仅包含运行主栈所需文件（不含 `frontend/`、`MODstore/`、`docs/` 等）。主程序仍为明文 `app/**/*.py`；更强防护见仓库内 Mod 沙箱方案说明（字节码 / Nuitka 等为后续阶段）。
 
-## `docker/` 内相关文件
+## `ops/docker/` 内相关文件
 
 | 文件 | 说明 |
 |------|------|
@@ -20,11 +20,11 @@
 在**仓库根**（`E:\FHD`）执行；脚本会拼装最小 context 再 `docker build`，无需 `--ignorefile`：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File docker/build-mod-sandbox.ps1
+powershell -ExecutionPolicy Bypass -File ops/docker/build-mod-sandbox.ps1
 ```
 
 ```bash
-bash docker/build-mod-sandbox.sh
+bash ops/docker/build-mod-sandbox.sh
 ```
 
 ### 方式 B（Docker 23+ 且支持 `--ignorefile`）
@@ -32,7 +32,7 @@ bash docker/build-mod-sandbox.sh
 在仓库根（`E:\FHD`）执行：
 
 ```bash
-docker build --ignorefile docker/mod-sandbox.dockerignore -f docker/Dockerfile.mod-sandbox -t xcagi-mod-sandbox .
+docker build --ignorefile ops/docker/mod-sandbox.dockerignore -f ops/docker/Dockerfile.mod-sandbox -t xcagi-mod-sandbox .
 ```
 
 ## 运行（SQLite + 挂载 mods）

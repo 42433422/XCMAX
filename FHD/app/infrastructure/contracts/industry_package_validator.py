@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 _FHD_ROOT = Path(__file__).resolve().parents[3]
-_SCHEMA_PATH = _FHD_ROOT / "contracts" / "industry_package.schema.json"
+_SCHEMA_PATH = _FHD_ROOT / "assets" / "contracts" / "industry_package.schema.json"
 _BASELINE_PATH = _FHD_ROOT / "config" / "industry_baseline.json"
 # 编辑源与导出副本双路径：FHD/mods/ 为 SSOT 编辑源，FHD/XCAGI/mods/ 为运行时导出副本。
 # 与 app/infrastructure/mods/mod_manager.py "开发树常见双份 mods" 双份查找一致。

@@ -107,8 +107,8 @@
         "MODstore_deploy/**",
         "vibe-coding/**",
         "_local_secrets/**",
-        "docker/**",
-        "deploy/**"
+        "ops/docker/**",
+        "ops/deploy/**"
       ]
     }
   },
