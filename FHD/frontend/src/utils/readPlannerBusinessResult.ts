@@ -33,10 +33,16 @@ function completedToolCount(result: Record<string, unknown>): number {
   return Number.isFinite(count) ? count : 0
 }
 
+function hasVisibleArtifactValue(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0
+  if (value && typeof value === 'object') return Object.keys(value as object).length > 0
+  return Boolean(value)
+}
+
 function hasVisibleBusinessArtifacts(result: Record<string, unknown>): boolean {
   const artifactIds = asRecord(result.evidence).artifact_ids
   if (Array.isArray(artifactIds) && artifactIds.some((item) => String(item || '').trim())) return true
-  return Boolean(result.artifacts)
+  return hasVisibleArtifactValue(result.artifacts)
 }
 
 function payloadHasBusinessExecution(payload: ChatPlannerPayload): boolean {
@@ -52,12 +58,12 @@ export function isVisibleChatBusinessResult(result: unknown, payload?: ChatPlann
   const summary = typeof row.summary === 'string' ? row.summary.trim() : ''
   return Boolean(
     hasVisibleBusinessFacts(row.facts) ||
-      hasVisibleBusinessArtifacts(row) ||
-      completedToolCount(row) > 0 ||
-      row.pending_approval ||
-      row.requires_reconciliation ||
-      VISIBLE_BUSINESS_RESULT_STATUSES.has(status) ||
-      (status === 'completed' && summary && payload && payloadHasBusinessExecution(payload)),
+    hasVisibleBusinessArtifacts(row) ||
+    completedToolCount(row) > 0 ||
+    row.pending_approval ||
+    row.requires_reconciliation ||
+    VISIBLE_BUSINESS_RESULT_STATUSES.has(status) ||
+    (status === 'completed' && summary && payload && payloadHasBusinessExecution(payload)),
   )
 }
 
@@ -65,7 +71,12 @@ export function readPlannerBusinessResult(data: ChatPlannerPayload): Record<stri
   const inner = nestedData(data)
   const envelope = asRecord(data.data)
   const businessResult = asRecord(
-    data.businessResult || data.business_result || envelope.businessResult || envelope.business_result || inner.businessResult || inner.business_result,
+    data.businessResult ||
+      data.business_result ||
+      envelope.businessResult ||
+      envelope.business_result ||
+      inner.businessResult ||
+      inner.business_result,
   )
   if (!Object.keys(businessResult).length) return undefined
   return isVisibleChatBusinessResult(businessResult, data) ? businessResult : undefined

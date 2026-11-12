@@ -41,4 +41,58 @@ describe('readPlannerBusinessResult', () => {
       ),
     ).toBe(true)
   })
+
+  it('hides casual completed aliases whose only artifact signal is an empty collection', () => {
+    expect(
+      readPlannerBusinessResult({
+        success: true,
+        response: '你好，需要我做什么？',
+        business_result: { status: 'completed', summary: '你好，需要我做什么？', facts: {}, artifacts: [] },
+      }),
+    ).toBeUndefined()
+    expect(
+      readPlannerBusinessResult({
+        success: true,
+        business_result: {
+          status: 'completed',
+          summary: '你好，需要我做什么？',
+          facts: {},
+          artifacts: {},
+          evidence: { artifact_ids: [] },
+        },
+      }),
+    ).toBeUndefined()
+  })
+
+  it('keeps results with real artifact lists or evidence.artifact_ids', () => {
+    const artifacts = [
+      {
+        artifact_id: 'xlsx-1',
+        artifact_type: 'file',
+        name: '销售报表.xlsx',
+        uri: '/api/agent/runs/run-1/artifacts/xlsx-1',
+      },
+    ]
+    expect(
+      readPlannerBusinessResult({
+        success: true,
+        businessResult: { status: 'completed', summary: '已导出', facts: {}, artifacts },
+      }),
+    ).toEqual({ status: 'completed', summary: '已导出', facts: {}, artifacts })
+    expect(
+      readPlannerBusinessResult({
+        success: true,
+        businessResult: { status: 'completed', summary: '已导出', facts: {}, evidence: { artifact_ids: ['xlsx-1'] } },
+      }),
+    ).toEqual({ status: 'completed', summary: '已导出', facts: {}, evidence: { artifact_ids: ['xlsx-1'] } })
+    expect(
+      isVisibleChatBusinessResult({
+        status: 'completed',
+        summary: '已删除',
+        facts: {},
+        artifacts: [],
+        evidence: { completed_tool_count: 1 },
+      }),
+    ).toBe(true)
+  })
 })
