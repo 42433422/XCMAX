@@ -108,7 +108,7 @@
 ## 非代码功能澄清
 
 - **"商标监控"**:原仓根 `监控/商标监控使用说明.txt`——BarTender 用户手册,**没有代码**。已整合到 [docs/user-guides/bartender/](./user-guides/bartender/)。
-- **"软著申请"**:软件著作权申请资料,**没有代码**。位于仓根 `软著申请/`,建议归档到 `docs/legal/`(本次未动,以免丢失原始路径)。
+- **"软著申请"**:软件著作权申请资料,**没有代码**。原 `FHD/docs/legal/` 已于 2026-11-12 整体外置到私有迁移仓 [`42433422/xcmax-Li`](https://github.com/42433422/xcmax-Li) `sources/xcmax/FHD/docs/legal/`（台账 `ledger/MIGRATION_LEDGER.csv` A14 逐文件校验），本仓不再保留。
 
 ## 待归并项(未来 PR)
 

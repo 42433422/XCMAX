@@ -47,6 +47,7 @@
 | **release/ 过期打包桩移除（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/release/` | `release/` 仅含 v10.0.0 的 `README.txt`/`MOBILE_VERSION.md` 桩与陈旧 `release/VERSION`(`0.0.1`)，实际 APK/HAP 从未入库，且与 `FHD/VERSION.md`（`1.0.0.5`）构成版本漂移。已外置并 `git rm`；版本唯一权威来源为 `FHD/VERSION.md`。 |
 | **过期 runbook 回流清理（2026-11-12）** | `~/XCMAX-archives/docs-20260927-modstore-immutable/`、`~/XCMAX-archives/docs-20260927-mac-release-obsolete/` | `MODstore_deploy/docs/runbooks/` 下 `local-to-remote-push-flow.md`、`remote-server-operations.md`、`xcagi-software-download.md` 三份未跟踪文件属 2026-09-27 已归档的旧部署指引回流（推荐 Docker/tar 覆盖生产），归档区已有副本，本次直接删除。`成都修茈科技有限公司/ops/scripts/__pycache__/` 一并清除。 |
 | **App Store 截图素材外置（2026-11-12）** | 私有迁移仓 [`42433422/xcmax-Li`](https://github.com/42433422/xcmax-Li) `sources/xcmax/appstore-screenshots/` | 整个 `appstore-screenshots/`（26 文件 / 12.2MB：`live/`、`2.3.3-accurate-metadata/`、`upload/`、`upload-ipad-13/` 与 4 张手机标准图）迁入私有仓并按台账 A13-001…026 逐文件校验（status `verified`）；本仓已 `git rm`，README 头部引用同步移除。 |
+| **软著申请材料外置（2026-11-12）** | 私有迁移仓 [`42433422/xcmax-Li`](https://github.com/42433422/xcmax-Li) `sources/xcmax/FHD/docs/legal/` | `FHD/docs/legal/`（46MB / 53 文件：软著 V10 鉴别材料、用户手册、完整源代码 dump 与生成脚本）迁入私有仓，台账 A14-001 记录变更后的源码 dump（13,616,052B / SHA256 `a0728eba…`），全目录 53 文件复比 0 不匹配；本仓已 `git rm`，`check_net_deletion.py` 与 `check_broad_except_gate.py` 的 legal 排除项同步移除。 |
 
 ## 恢复示例
 
