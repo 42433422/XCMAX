@@ -1358,6 +1358,12 @@
           ],
           "availability": "shared"
         },
+        "clear": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
         "ingest": {
           "risk": "medium",
           "idempotent": false,

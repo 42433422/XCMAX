@@ -385,6 +385,11 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("document_template", "create"): _result(template="object", http_status_code="integer"),
     ("document_template", "update"): _result(template="object", http_status_code="integer"),
     ("document_template", "delete"): _result(deleted="object", http_status_code="integer"),
+    ("document_template", "clear"): _result(
+        deleted_templates="integer",
+        skipped_templates="integer",
+        http_status_code="integer",
+    ),
     ("document_template", "ingest"): _result(
         ingested="boolean",
         template="object",

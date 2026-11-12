@@ -524,6 +524,34 @@ class TestDocumentTemplateRouter:
         mock.assert_called_once()
         assert result["http_status_code"] == 400
 
+    def test_clear_deletes_every_deletable_template(self):
+        templates = [
+            {"id": "db:1"},
+            {"id": "fs:custom.xlsx"},
+            {"id": "starter:builtin"},
+            {"id": "db:2"},
+        ]
+        delete_results = [
+            ({"success": True}, 200),
+            ({"success": False, "message": "内置模板不可删除"}, 403),
+            ({"success": True}, 200),
+        ]
+        with (
+            patch(
+                "app.application.get_template_app_service",
+                return_value=MagicMock(get_templates=lambda: {"templates": templates}),
+            ),
+            patch(
+                "app.legacy.routes.document_templates_compat.run_archive_template_delete",
+                side_effect=delete_results,
+            ) as delete,
+        ):
+            result = _registered_router_document_template("clear", {}, {}, "admin", "")
+        assert delete.call_count == 3
+        assert result["success"] is True
+        assert result["deleted_templates"] == 2
+        assert result["skipped_templates"] == 2
+
     def test_unknown_action(self):
         result = _registered_router_document_template("fly", {}, {}, "admin", "")
         assert result["success"] is False
@@ -569,7 +597,7 @@ class TestTemplatePreviewRouter:
         with patch("app.application.get_template_app_service", return_value=mock_svc):
             result = _registered_router_template_preview("query", {}, {}, "admin", "")
         assert result["success"] is True
-        assert result["data"] == [{"id": 1}]
+        assert result["templates"] == [{"id": 1}]
 
     def test_query_alias(self):
         mock_svc = MagicMock()

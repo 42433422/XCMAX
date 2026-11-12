@@ -38,8 +38,14 @@ def _registered_router_template_preview(
     if action in ("list", "query"):
         result = svc.get_templates()
         if isinstance(result, dict):
-            return result
-        return {"success": True, "data": result}
+            templates = result.get("templates")
+            return {
+                **result,
+                "success": True,
+                "templates": templates if isinstance(templates, list) else [],
+                "count": len(templates) if isinstance(templates, list) else 0,
+            }
+        return {"success": True, "templates": list(result or []), "count": len(result or [])}
     if action == "create":
         import json
         import re
