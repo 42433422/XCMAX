@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-void import('@/views/im/ImMessengerEntry.vue')
-void import('@/views/ImMessengerView.vue')
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { authApi } from '@/api/auth'

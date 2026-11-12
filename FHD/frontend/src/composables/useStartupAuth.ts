@@ -7,7 +7,7 @@ import type { useModsStore } from '@/stores/mods'
 import { buildLoginLocation } from '@/utils/startupRedirect'
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate'
 import { asRecord, asString } from '@/utils/typeGuards'
-import { getAuthSessionEpoch, readValid } from '@/utils/authSessionCache'
+import { getAuthSessionEpoch, hasRememberedEnterpriseSession, readValid } from '@/utils/authSessionCache'
 
 export type StartupAuthResult = {
   ok: boolean
@@ -38,7 +38,7 @@ export function useStartupAuth(options: {
     const current = () => epoch === getAuthSessionEpoch() && isAttemptCurrent()
     try {
       const profile = (await import('@/stores/accountProfile')).useAccountProfileStore()
-      if (profile.workspaceReady && profile.workspaceHydrationReady) {
+      if (profile.workspaceReady && profile.workspaceHydrationReady && hasRememberedEnterpriseSession()) {
         clearHostPackSkippedSession()
         void profile.refreshFromServer({ keepVisible: true })
         void syncMarketTokensFromSession(current)
