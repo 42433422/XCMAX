@@ -71,7 +71,7 @@ jobs:
         with:
           node-version: '22.13.0'
           cache: 'npm'
-          cache-dependency-path: 成都修茈科技有限公司/package-lock.json
+          cache-dependency-path: 成都修茈科技有限公司/frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -95,7 +95,7 @@ jobs:
         id: pw-cache-root
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-root-${{ hashFiles('成都修茈科技有限公司/package-lock.json') }}
+          key: pw-${{ runner.os }}-root-${{ hashFiles('成都修茈科技有限公司/frontend/package-lock.json') }}
           restore-keys: |
             pw-${{ runner.os }}-root-
 
@@ -115,7 +115,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: root-coverage
-          path: 成都修茈科技有限公司/coverage/
+          path: 成都修茈科技有限公司/frontend/coverage/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -124,6 +124,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: root-playwright-report
-          path: 成都修茈科技有限公司/playwright-report/
+          path: 成都修茈科技有限公司/frontend/playwright-report/
           if-no-files-found: ignore
           retention-days: 14

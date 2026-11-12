@@ -1,4 +1,3 @@
-# CI SSOT: generated from FHD/.github/workflows/cvm-autonomy-watcher.yml
 # Phase 2：服务器端自治 watcher（cron 每 10 分钟 SSH 触发）
 # 与 fhd-deploy.yml break-glass 模式一致：SSH 到 CVM 执行 watcher，不常驻 systemd
 # open_incident_issue：优先 CVM_INCIDENT_PAT；缺省回退 github.token（job 期内有效，可经 SSH 带到 CVM）

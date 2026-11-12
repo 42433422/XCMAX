@@ -30,7 +30,7 @@ jobs:
 
       - name: Forbidden path check (tracked files)
         # 已经在 git 索引里的禁止路径：这些文件不应存在于仓库中。
-        # 失败说明历史里已经提交了运行期产物，需要跑 scripts/cleanup-committed-runtime-artifacts.sh 清理。
+        # 失败说明历史里已经提交了运行期产物，需要跑 成都修茈科技有限公司/ops/scripts/cleanup-committed-runtime-artifacts.sh 清理。
         run: |
           set -euo pipefail
           FORBIDDEN_PATTERNS=(
@@ -54,7 +54,7 @@ jobs:
             echo ""
             echo "运行期产物（outbox / webhook 投递 JSON / payment_orders / chroma）不应进入 git。"
             echo "请在生产 / compose 里用 MODSTORE_RUNTIME_DIR 指向数据盘，并运行"
-            echo "  bash scripts/cleanup-committed-runtime-artifacts.sh"
+            echo "  bash 成都修茈科技有限公司/ops/scripts/cleanup-committed-runtime-artifacts.sh"
             echo "从历史中清掉这些文件。"
             exit 1
           fi

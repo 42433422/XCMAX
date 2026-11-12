@@ -44,7 +44,6 @@ on:
       - '成都修茈科技有限公司/web/download-company-hall.json'
       - '成都修茈科技有限公司/MODstore_deploy/market/public/download-action-board.json'
       - '成都修茈科技有限公司/MODstore_deploy/market/public/download-company-hall.json'
-      - '成都修茈科技有限公司/MODstore_deploy/market/src/views/SoftwareDownloadView.vue'
       - '.github/workflows/corp-site-deploy.yml'
 
 concurrency:

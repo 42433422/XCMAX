@@ -336,18 +336,22 @@ def _render_corp(src: Path) -> tuple[str, str] | None:
         "working-directory: 成都修茈科技有限公司/MODstore_deploy/java_payment_service",
     )
     if src.name == "ci-root-frontend.yml":
+        # 该 workflow 的 working-directory 已是 成都修茈科技有限公司/frontend，
+        # 但 setup-node 的 cache 与 upload-artifact 的 path 都以仓库根为基准解析，
+        # 必须补全到 frontend/ 而不是只补站点根。
+        frontend = "成都修茈科技有限公司/frontend/"
         body = body.replace(
             "cache-dependency-path: package-lock.json",
-            "cache-dependency-path: 成都修茈科技有限公司/package-lock.json",
+            f"cache-dependency-path: {frontend}package-lock.json",
         )
         body = body.replace(
             "hashFiles('package-lock.json')",
-            "hashFiles('成都修茈科技有限公司/package-lock.json')",
+            f"hashFiles('{frontend}package-lock.json')",
         )
-        body = body.replace("path: coverage/", "path: 成都修茈科技有限公司/coverage/")
+        body = body.replace("path: coverage/", f"path: {frontend}coverage/")
         body = body.replace(
             "path: playwright-report/",
-            "path: 成都修茈科技有限公司/playwright-report/",
+            f"path: {frontend}playwright-report/",
         )
     if src.name == "ci-runtime-artifacts-guard.yml":
         body = body.replace(

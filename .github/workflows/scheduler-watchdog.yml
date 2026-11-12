@@ -190,7 +190,7 @@ jobs:
         run: |
           set -uo pipefail
           gh label create scheduler-watchdog --description "调度器卡死自动重启事故" --color B60205 --force || true
-          BODY="$(printf 'modstore-scheduler 探测失败，已自动重启。\n\n- **服务**: %s\n- **原因**: %s\n- **健康端点**: %s\n- **运行**: %s/%s/actions/runs/%s\n\n处置手册: 见 docs/runbooks/release-checklist.md 调度器章节' \
+          BODY="$(printf 'modstore-scheduler 探测失败，已自动重启。\n\n- **服务**: %s\n- **原因**: %s\n- **健康端点**: %s\n- **运行**: %s/%s/actions/runs/%s\n\n处置手册: 见 成都修茈科技有限公司/MODstore_deploy/docs/runbooks/release-checklist.md 调度器章节' \
             "$SERVICE_NAME" "$REASON" "${HEALTH_URL}" "$GITHUB_SERVER_URL" "$GH_REPO" "$GITHUB_RUN_ID")"
           EXISTING="$(gh issue list --label scheduler-watchdog --state open --json number --jq '.[0].number // ""')"
           if [ -n "$EXISTING" ]; then
