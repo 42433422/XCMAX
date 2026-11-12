@@ -118,6 +118,10 @@ def _special_permission(tool_id: str, action: str) -> str:
         return "product.view"
     if tool_id == "shipment_records" and action in {"query", "list"}:
         return "shipment.view"
+    if tool_id == "materials" and action in {"list", "query"}:
+        return "material.view"
+    if tool_id == "materials" and action in {"create", "update", "delete", "batch_delete"}:
+        return "material.edit"
     if (tool_id, action) == ("customers", "query"):
         return "customer.view"
     if tool_id == "customers" and action in {"ensure_exists", "delete", "batch_delete"}:

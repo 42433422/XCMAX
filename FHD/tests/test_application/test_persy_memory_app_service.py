@@ -129,6 +129,36 @@ def test_confirm_query_reinforces_and_projects_entity_graph() -> None:
     assert any(edge["label"] == "主体" for edge in graph["edges"])
 
 
+def test_query_recalls_pending_memories_shown_in_knowledge_base() -> None:
+    service = _service()
+    service.capture_conversation_turn(
+        access_context=_access(),
+        user_message="客户北辰科技的负责人是李明",
+        session_id="chat-1",
+    )
+
+    queried = service.query(access_context=_access(), query="北辰科技负责人", top_k=3)
+
+    assert queried["success"] is True
+    assert queried["chunks"][0]["metadata"]["status"] == "pending"
+
+
+def test_clear_memories_removes_all_visible_records() -> None:
+    service = _service()
+    service.capture_conversation_turn(
+        access_context=_access(),
+        user_message="客户北辰科技的负责人是李明",
+        session_id="chat-1",
+    )
+
+    cleared = service.clear_memories(access_context=_access())
+
+    assert cleared["success"] is True
+    assert cleared["deleted_memories"] == 1
+    remaining = service.list_memories(access_context=_access())["memories"]
+    assert [row for row in remaining if row.get("status") in {"pending", "active"}] == []
+
+
 def test_user_memory_is_private_while_tenant_memory_is_shared() -> None:
     service = _service()
     alice = _access(actor="alice", tenant="2")

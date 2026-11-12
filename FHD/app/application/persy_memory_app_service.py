@@ -17,6 +17,9 @@ from app.application.persy_memory_utils import (
     PERSY_MEMORY_PENDING as PERSY_MEMORY_PENDING,
 )
 from app.application.persy_memory_utils import (
+    _VISIBLE_MEMORY_STATUSES as _VISIBLE_MEMORY_STATUSES,
+)
+from app.application.persy_memory_utils import (
     _coerce_access_context as _coerce_access_context,
 )
 from app.application.persy_memory_utils import (
@@ -205,6 +208,44 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             },
         }
 
+    def clear_memories(
+        self,
+        *,
+        access_context: DatasetAccessContext | dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Delete every memory visible in the knowledge base for this owner/tenant."""
+        access = _coerce_access_context(access_context)
+        if access is None or not access.actor_id or not access.tenant_id:
+            return {**_scope_denied(), "deleted_memories": 0}
+        denied = _permission_denied(access, DATASET_WRITE_PERMISSION)
+        if denied is not None:
+            return {**denied, "deleted_memories": 0}
+        listed = self.list_memories(access_context=access, limit=1000)
+        rows = [
+            row
+            for row in (listed.get("memories") if isinstance(listed.get("memories"), list) else [])
+            if isinstance(row, dict) and row.get("status") in _VISIBLE_MEMORY_STATUSES
+        ]
+        deleted = 0
+        for row in rows:
+            memory_id = str(row.get("memory_id") or "").strip()
+            if not memory_id:
+                continue
+            result = self.mutate(
+                access_context=access,
+                memory_id=memory_id,
+                action="delete",
+                reason="clear knowledge base",
+            )
+            if not result.get("success"):
+                return result
+            deleted += 1
+        return {
+            "success": True,
+            "dataset_id": "persy-knowledge",
+            "deleted_memories": deleted,
+        }
+
     def query(
         self,
         *,
@@ -228,8 +269,14 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                 "memories": [],
                 "chunks": [],
             }
-        listed = self.list_memories(access_context=access, status=PERSY_MEMORY_ACTIVE, limit=1000)
-        rows = listed.get("memories") if isinstance(listed.get("memories"), list) else []
+        # 知识库页面展示的是 pending + active 记忆，对话检索同一份内容，
+        # 否则页面上能看到的记忆在对话里永远检索不到。
+        listed = self.list_memories(access_context=access, limit=1000)
+        rows = [
+            row
+            for row in (listed.get("memories") if isinstance(listed.get("memories"), list) else [])
+            if isinstance(row, dict) and row.get("status") in _VISIBLE_MEMORY_STATUSES
+        ]
         scored: list[tuple[float, dict[str, Any]]] = []
         query_tokens = _search_tokens(query_text)
         for row in rows or []:
@@ -239,8 +286,9 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             lexical = _lexical_score(query_text, query_tokens, statement)
             if lexical <= 0:
                 continue
+            status_factor = 1.0 if row.get("status") == PERSY_MEMORY_ACTIVE else 0.85
             score = min(1.0, lexical * 0.72 + float(row.get("strength") or 0.0) * 0.28)
-            scored.append((score, row))
+            scored.append((score * status_factor, row))
         scored.sort(key=lambda item: item[0], reverse=True)
         selected = scored[: max(1, min(int(top_k or 5), 20))]
 
