@@ -938,6 +938,34 @@ class TestDatasetRagRouter:
         assert result["success"] is False
         assert "dataset_id" in result["message"]
 
+    def test_clear_dataset_uses_persy_memory_for_persy_knowledge(self):
+        with patch(
+            "app.application.persy_memory_app_service.get_persy_memory_app_service"
+        ) as mock_get:
+            mock_get.return_value.clear_memories.return_value = {
+                "success": True,
+                "deleted_memories": 2,
+            }
+            result = _registered_router_dataset_rag(
+                "clear_dataset", {"dataset_id": "persy-knowledge"}, {}, "admin", ""
+            )
+        assert result["success"] is True
+        assert result["deleted_memories"] == 2
+
+    def test_clear_dataset_delegates_for_document_dataset(self):
+        with patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service"
+        ) as mock_get:
+            mock_get.return_value.clear_dataset.return_value = {
+                "success": True,
+                "deleted_documents": 3,
+            }
+            result = _registered_router_dataset_rag(
+                "clear_dataset", {"dataset_id": "docs"}, {}, "admin", ""
+            )
+        assert result["success"] is True
+        assert result["deleted_documents"] == 3
+
     def test_ingest_document(self):
         with patch(
             "app.application.dataset_rag_app_service.get_dataset_rag_app_service"

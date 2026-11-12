@@ -742,3 +742,27 @@ def test_email_contract_rejects_long_invalid_input_without_backtracking():
     started = perf_counter()
     assert _string_constraint_error("email", "x@" + "!" * 50_000, {"format": "email"})
     assert perf_counter() - started < 1
+
+
+def test_materials_permissions_use_business_codes(monkeypatch):
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    assert get_tool_action_spec("materials", "list").permission == "material.view"
+    assert get_tool_action_spec("materials", "query").permission == "material.view"
+    assert get_tool_action_spec("materials", "batch_delete").permission == "material.edit"
+
+
+def test_business_db_read_materials_accepts_material_view(trusted_actor, monkeypatch):
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(permissions=["material.view"])
+
+    allowed = actor_tool_denial(
+        "business_db", "read", actor.context, {"entity": "materials"}
+    )
+    denied = actor_tool_denial(
+        "business_db", "read", actor.context, {"entity": "customers"}
+    )
+
+    assert allowed is None
+    assert denied is not None and denied["error_code"] == "tool_permission_denied"

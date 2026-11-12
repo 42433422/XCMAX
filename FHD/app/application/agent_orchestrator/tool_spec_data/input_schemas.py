@@ -916,6 +916,14 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "access_context": {"type": "object"},
         },
     ),
+    ("dataset_rag", "clear_dataset"): _object_schema(
+        ["dataset_id"],
+        {
+            "dataset_id": {"type": "string"},
+            "tenant_id": {"type": "string"},
+            "access_context": {"type": "object"},
+        },
+    ),
     ("memory_v2", "propose_candidate"): _object_schema(
         ["user_id", "memory_type", "key", "value"],
         {

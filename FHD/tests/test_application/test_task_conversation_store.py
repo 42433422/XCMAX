@@ -232,6 +232,43 @@ def test_chat_evidence_reads_only_current_owner_and_tenant(store, monkeypatch, t
     assert filtered["chat_independent_knowledge_query"] is True
 
 
+def test_chat_evidence_lists_clearable_datasets_for_clear_request(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.application.ai_chat.chat_evidence import prepare_chat_evidence
+    from app.application.dataset_rag_app_service import (
+        DatasetAccessContext,
+        DatasetRagApplicationService,
+    )
+
+    service = DatasetRagApplicationService(embedder=None, storage_path=tmp_path / "rag.json")
+    assert service.ingest_document(
+        dataset_id="office-docking", text="宗南产品是蓝色油漆", tenant_id="2"
+    )["success"]
+    access = DatasetAccessContext(
+        actor_id="41", tenant_id="2", permissions=frozenset({"dataset.read", "dataset.write"})
+    )
+    monkeypatch.setattr(
+        "app.fastapi_routes.dataset_access.dataset_access_context_from_request", lambda *_: access
+    )
+    monkeypatch.setattr(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service", lambda: service
+    )
+    monkeypatch.setattr(
+        "app.application.ai_chat.conversation_history.authorized_memory_context", lambda *_: None
+    )
+    monkeypatch.setattr(
+        "app.application.persy_memory_app_service.get_persy_memory_app_service",
+        lambda: SimpleNamespace(query=lambda **_: {"success": True, "memories": []}),
+    )
+
+    result = prepare_chat_evidence(
+        object(), {"local_user_id": 41, "tenant_id": 2}, "清理知识库 全部"
+    )
+
+    assert result["chat_clearable_dataset_ids"] == ["office-docking", "persy-knowledge"]
+
+
 def test_chat_evidence_recovers_active_session_when_request_omits_session_id(store, monkeypatch):
     from app.application.ai_chat import active_conversation
     from app.application.ai_chat.chat_evidence import prepare_chat_evidence

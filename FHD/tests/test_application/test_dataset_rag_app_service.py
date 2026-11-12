@@ -185,6 +185,26 @@ def test_dataset_document_delete_removes_chunks(tmp_path: Path) -> None:
     assert reloaded.status("delete-me")["document_count"] == 0
 
 
+def test_clear_dataset_removes_every_document(tmp_path: Path) -> None:
+    svc = DatasetRagApplicationService(
+        embedder=None,
+        allowed_roots=[tmp_path],
+        storage_path=tmp_path / "dataset_store.json",
+    )
+    for source, text in [("a.md", "alpha document"), ("b.md", "beta document")]:
+        svc.ingest_document(
+            dataset_id="clear-me", text=text, source=source, chunk_strategy="fixed"
+        )
+
+    cleared = svc.clear_dataset("clear-me")
+    status = svc.status("clear-me")
+
+    assert cleared["success"] is True
+    assert cleared["deleted_documents"] == 2
+    assert status["document_count"] == 0
+    assert status["chunk_count"] == 0
+
+
 def test_dataset_persists_and_reloads_documents(tmp_path: Path) -> None:
     storage_path = tmp_path / "dataset_store.json"
     svc = DatasetRagApplicationService(
