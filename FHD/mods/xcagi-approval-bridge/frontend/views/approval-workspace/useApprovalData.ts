@@ -140,7 +140,7 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
   const reloadAccount = async () => {
     const scope = accountScope(), request = ++sessionRequest
     const isCurrent = () => request === sessionRequest && isCurrentAccount(scope)
-    fullListLoading.value = true
+    if (fullListType.value) fullListLoading.value = true
     fullListError.value = ''
     try {
       await resolveCurrentUserId()
