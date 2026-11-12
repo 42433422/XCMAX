@@ -77,6 +77,18 @@ make e2e                        # Playwright（见 frontend/e2e/）
 | 16 | [`guides/ALEMBIC_MIGRATION_GUIDE.md`](guides/ALEMBIC_MIGRATION_GUIDE.md) | 数据库迁移 |
 | 17 | [`reports/COVERAGE_RAMP.md`](reports/COVERAGE_RAMP.md) | 覆盖率目标与补测清单 |
 
+### 按需查阅
+
+| 文档 | 用途 |
+|------|------|
+| [`SLO.md`](SLO.md) | SLO 指标、采集与告警配置 |
+| [`PERFORMANCE_LOAD_TESTING.md`](PERFORMANCE_LOAD_TESTING.md) | k6 压测与容量基线 |
+| [`guides/OPENAPI_CONSISTENCY.md`](guides/OPENAPI_CONSISTENCY.md) | OpenAPI 一致性 strict 基线与豁免 |
+| [`TEMPLATE_UPLOAD_GUIDE.md`](TEMPLATE_UPLOAD_GUIDE.md) | 模板上传/解析 API 使用说明 |
+| [`guides/国内镜像配置指南.md`](guides/国内镜像配置指南.md) | Docker 镜像加速与国内部署 |
+| [`aiopen.md`](aiopen.md) | AIOPEN：外部 Agent 的 MCP / REST 接入 |
+| [`architecture/langgraph-absorption/10-runtime-migration.md`](architecture/langgraph-absorption/10-runtime-migration.md) | LangGraph 运行时迁移设计与吸收基线 |
+
 ---
 
 ## 覆盖率：从 CI Artifact 下载
@@ -118,7 +130,7 @@ python3 -m pytest tests/ --cov=app --cov-fail-under=35 -q
 cd frontend && npm run lint && npm run type-check && npm run type-check:build && npm run test:unit
 ```
 
-**CD 稳定版验证**：打 tag `FHD/v1.0.0.0` 后按 [`docs/deploy/RELEASE_CHECKLIST.md`](deploy/RELEASE_CHECKLIST.md) 验证 orchestrator（需对应发布 Secrets）。
+**CD 稳定版验证**：打 tag `FHD/v1.0.0.5` 后按 [`docs/deploy/RELEASE_CHECKLIST.md`](deploy/RELEASE_CHECKLIST.md) 验证 orchestrator（需对应发布 Secrets）。
 
 ---
 
