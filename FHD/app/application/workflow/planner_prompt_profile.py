@@ -62,6 +62,9 @@ SCENARIO_RULES: dict[str, tuple[str, ...]] = {
     "memory": (
         "如果 context 中包含 memory_v2.summary，只能把其中已确认 active 记忆用于补全偏好、客户别名、产品习惯或任务上下文；禁止使用未确认候选或编造记忆。",
     ),
+    "reset": (
+        "清空/初始化本工作台的业务数据时，为每个实体生成一个 clear 节点并按依赖排序：先 shipment_records.clear，再 customers.clear、products.clear、materials.clear；clear 不需要参数，禁止用 query 结果拼 id 或只生成查询。只清理这四类业务数据，不要动模板库、知识库、审批记录和系统配置。",
+    ),
 }
 
 # 场景关键词：命中即追加对应规则组，并参与工具预筛。
@@ -73,6 +76,7 @@ _SCENARIO_KEYWORDS: dict[str, tuple[str, ...]] = {
     "knowledge": ("知识库", "资料", "文档库", "dataset", "检索资料"),
     "employee": ("员工", "派活", "专员", "助手", "交接", "让谁", "哪个员工"),
     "memory": ("记住", "偏好", "习惯", "上次说"),
+    "reset": ("初始化", "全部业务数据", "业务数据清空", "清空业务数据", "重置业务"),
 }
 
 # 员工包工具：仅在员工意图下注入。

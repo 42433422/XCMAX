@@ -163,6 +163,29 @@ class TestCustomersRouterMissingBranches:
             _registered_router_customers("batch_delete", {"ids": [1]}, {"force": True}, "admin", "")
         svc.batch_delete.assert_called_once()
 
+    def test_clear_collects_and_deletes_all_customers(self):
+        svc = self._mock_svc()
+        svc.get_all.return_value = {
+            "success": True,
+            "data": [{"id": 1}, {"id": 2}],
+            "total": 2,
+        }
+        svc.batch_delete.return_value = {"success": True, "deleted_count": 2}
+        with patch("app.application.get_customer_app_service", return_value=svc):
+            result = _registered_router_customers("clear", {}, {}, "admin", "")
+        svc.batch_delete.assert_called_once()
+        assert svc.batch_delete.call_args.args[0] == [1, 2]
+        assert result["success"] is True
+        assert result["deleted_count"] == 2
+
+    def test_clear_with_empty_library(self):
+        svc = self._mock_svc()
+        svc.get_all.return_value = {"success": True, "data": [], "total": 0}
+        with patch("app.application.get_customer_app_service", return_value=svc):
+            result = _registered_router_customers("clear", {}, {}, "admin", "")
+        svc.batch_delete.assert_not_called()
+        assert result["deleted_count"] == 0
+
     def test_unknown_action(self):
         result = _registered_router_customers("fly", {}, {}, "admin", "")
         assert result["success"] is False
@@ -306,6 +329,16 @@ class TestProductsRouterMissingBranches:
             _registered_router_products("batch_delete", {"product_ids": [5]}, {}, "admin", "")
         svc.batch_delete_products.assert_called_once_with([5])
 
+    def test_clear_collects_and_deletes_all_products(self):
+        svc = self._svc()
+        svc.get_products.return_value = {"success": True, "data": [{"id": 3}, {"id": 4}]}
+        svc.batch_delete_products.return_value = {"success": True}
+        with patch("app.services.get_products_service", return_value=svc):
+            result = _registered_router_products("clear", {}, {}, "admin", "")
+        svc.batch_delete_products.assert_called_once_with([3, 4])
+        assert result["success"] is True
+        assert result["deleted_count"] == 2
+
     def test_exists_model_in_list_but_name_matches(self):
         svc = self._svc()
         svc.get_products.return_value = {
@@ -351,6 +384,19 @@ class TestShipmentRecordsRouterCreate:
     def test_unknown_action(self):
         result = _registered_router_shipment_records("fly", {}, {}, "admin", "")
         assert result["success"] is False
+
+    def test_clear_deletes_every_shipment_record(self):
+        svc = MagicMock()
+        svc.get_shipment_records.return_value = {
+            "success": True,
+            "data": [{"id": 11}, {"id": 12}],
+        }
+        svc.delete_shipment_record.return_value = {"success": True}
+        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+            result = _registered_router_shipment_records("clear", {}, {}, "admin", "")
+        assert svc.delete_shipment_record.call_count == 2
+        assert result["success"] is True
+        assert result["deleted_count"] == 2
 
 
 class TestShipmentOrdersRouterBranches:
@@ -739,5 +785,19 @@ class TestMaterialsRouterBranches:
         svc.batch_delete_materials.return_value = None
         with patch("app.application.get_material_application_service", return_value=svc):
             result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "admin", "")
+        assert result["success"] is True
+        assert result["deleted_count"] == 2
+
+    def test_clear_collects_and_deletes_all_materials(self):
+        svc = MagicMock()
+        svc.get_all_materials.return_value = {
+            "success": True,
+            "data": [{"id": 8}, {"id": 9}],
+            "total": 2,
+        }
+        svc.batch_delete_materials.return_value = {"success": True}
+        with patch("app.application.get_material_application_service", return_value=svc):
+            result = _registered_router_materials("clear", {}, {}, "admin", "")
+        svc.batch_delete_materials.assert_called_once_with([8, 9])
         assert result["success"] is True
         assert result["deleted_count"] == 2

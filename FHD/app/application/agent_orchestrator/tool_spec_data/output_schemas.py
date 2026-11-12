@@ -72,6 +72,7 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         data="object",
         error="string",
     ),
+    ("customers", "clear"): _result(deleted_count="integer", error="string"),
     ("products", "create"): _result(
         created="boolean",
         raw="object",
@@ -90,6 +91,7 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         error_code="string",
         error="string",
     ),
+    ("products", "clear"): _result(deleted_count="integer", error="string"),
     ("materials", "create"): _result(data="object", created="boolean", error="string"),
     ("materials", "update"): _result(data="object", error="string"),
     ("materials", "delete"): _result(data="object", deleted_count="integer", error="string"),
@@ -99,6 +101,7 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         warning="string",
         error="string",
     ),
+    ("materials", "clear"): _result(deleted_count="integer", error="string"),
     ("inventory", "create_storage_location"): _result(id="integer", data="object", error="string"),
     ("inventory", "update_storage_location"): _result(data="object", error="string"),
     ("inventory", "create_warehouse"): _result(id="integer", data="object", error="string"),
@@ -200,6 +203,9 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ),
     ("shipment_records", "update"): _result(data="object", error="string"),
     ("shipment_records", "delete"): _result(deleted_count="integer", data="object", error="string"),
+    ("shipment_records", "clear"): _result(
+        deleted_count="integer", failed_count="integer", error="string"
+    ),
     ("shipment_orders", "generate"): _result(
         file_path="string",
         doc_name="string",
