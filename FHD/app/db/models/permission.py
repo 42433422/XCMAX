@@ -94,6 +94,7 @@ DEFAULT_PERMISSIONS: list[_PermissionSeed] = [
     {"name": "执行 ELT", "code": "etl.execute", "module": "etl"},
     {"name": "撤销 ELT", "code": "etl.rollback", "module": "etl"},
     {"name": "管理 ELT 目标", "code": "etl.target.manage", "module": "etl"},
+    {"name": "审批 AI 工作流", "code": "approval.workflow", "module": "approval"},
 ]
 
 DEFAULT_ROLES: list[_RoleSeed] = [
@@ -123,6 +124,7 @@ DEFAULT_ROLES: list[_RoleSeed] = [
             "etl.read",
             "etl.template.manage",
             "etl.execute",
+            "approval.workflow",
         ],
     },
     {
@@ -163,6 +165,7 @@ DEFAULT_ROLES: list[_RoleSeed] = [
             "etl.read",
             "etl.template.manage",
             "etl.execute",
+            "approval.workflow",
         ],
     },
     {
@@ -197,6 +200,7 @@ DEFAULT_ROLES: list[_RoleSeed] = [
             "etl.execute",
             "etl.rollback",
             "etl.target.manage",
+            "approval.workflow",
         ],
     },
 ]

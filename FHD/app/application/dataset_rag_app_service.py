@@ -331,10 +331,20 @@ class DatasetRagApplicationService:
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Remove every document in one dataset for the caller's tenant."""
+        access = access_context if isinstance(access_context, DatasetAccessContext) else None
+        list_context = access_context
+        if access is not None and DATASET_READ_PERMISSION not in access.permissions:
+            # 列举待删文档需要读权限，真正的删除仍由 delete_document 校验写权限。
+            list_context = DatasetAccessContext(
+                actor_id=access.actor_id,
+                tenant_id=access.tenant_id,
+                permissions=frozenset(set(access.permissions) | {DATASET_READ_PERMISSION}),
+                is_admin=access.is_admin,
+            )
         status = self.status(
             dataset_id,
             tenant_id=tenant_id,
-            access_context=access_context,
+            access_context=list_context,
             include_documents=True,
         )
         if not status.get("success"):

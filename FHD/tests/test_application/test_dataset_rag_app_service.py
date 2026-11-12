@@ -205,6 +205,29 @@ def test_clear_dataset_removes_every_document(tmp_path: Path) -> None:
     assert status["chunk_count"] == 0
 
 
+def test_clear_dataset_accepts_write_only_permission(tmp_path: Path) -> None:
+    svc = DatasetRagApplicationService(
+        embedder=None,
+        allowed_roots=[tmp_path],
+        storage_path=tmp_path / "dataset_store.json",
+    )
+    svc.ingest_document(
+        dataset_id="clear-me",
+        text="alpha",
+        source="a.md",
+        chunk_strategy="fixed",
+        tenant_id="2",
+    )
+    write_only = DatasetAccessContext(
+        actor_id="7", tenant_id="2", permissions=frozenset({"dataset.write"})
+    )
+
+    cleared = svc.clear_dataset("clear-me", access_context=write_only)
+
+    assert cleared["success"] is True
+    assert cleared["deleted_documents"] == 1
+
+
 def test_dataset_persists_and_reloads_documents(tmp_path: Path) -> None:
     storage_path = tmp_path / "dataset_store.json"
     svc = DatasetRagApplicationService(
