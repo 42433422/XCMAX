@@ -300,3 +300,55 @@ def test_history_persists_summary_only_tool_business_result() -> None:
     )
     metadata = json.loads(store.save_message.call_args_list[1].kwargs["metadata"])
     assert metadata["ui"]["businessResult"]["summary"] == "已删除"
+
+
+def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn():
+    from contextlib import contextmanager
+
+    callbacks = Mock(spec=SessionCallbacks)
+    session = WorkflowSession({}, callbacks)
+    db = Mock()
+    db.query.return_value.filter.return_value.first.return_value = Mock()
+
+    @contextmanager
+    def fake_get_db():
+        yield db
+
+    with (
+        patch("app.db.session.get_db", fake_get_db),
+        patch(
+            "app.application.approval_workspace_app_service."
+            "_approve_ai_workflow_request_without_node",
+            return_value={
+                "success": True,
+                "data": {"workflow_execution": {"success": True, "message": "清理完成"}},
+            },
+        ) as approve,
+    ):
+        reply = session._auto_approve_waiting_request(
+            request_id="req-auto",
+            user_id="chat:scoped-conversation",
+            runtime_context={"actor_id": 7, "user_id": "7"},
+            plan=_plan(),
+            agent_run=AgentRun(user_id="7", message="清理知识库"),
+        )
+
+    assert approve.call_args.kwargs["actor"] == 7
+    assert reply["success"] is True
+    assert reply["data"]["action"] == "workflow_done"
+    assert reply["data"]["data"]["auto_approved"] is True
+    assert "自动审批已通过并执行完成" in reply["response"]
+
+
+def test_auto_approval_without_authenticated_actor_falls_back_to_manual_approval():
+    session = WorkflowSession({}, Mock(spec=SessionCallbacks))
+
+    reply = session._auto_approve_waiting_request(
+        request_id="req-auto",
+        user_id="chat:scoped-conversation",
+        runtime_context={},
+        plan=_plan(),
+        agent_run=AgentRun(user_id="7", message="清理知识库"),
+    )
+
+    assert reply is None

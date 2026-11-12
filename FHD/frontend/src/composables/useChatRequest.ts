@@ -6,6 +6,7 @@ import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 import { isWorkflowControlMessage } from '@/utils/chatSseStream'
+import { useApprovalMode } from './useApprovalMode'
 export type ChatRequestScope = {
   signal?: AbortSignal
   isCurrent?: () => boolean
@@ -46,6 +47,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
 
   const progressBySession = ref<Record<string, string>>({})
   const waitProgressTickers = new Map<string, number>()
+  const { state: approvalModeState } = useApprovalMode()
   const progressKey = (target?: string) => String(target || sessionId?.value || '').trim() || 'default'
   const loadingProgressText = computed(() => progressBySession.value[progressKey()] || '处理中...')
   let chatBatchTimer: number | null = null
@@ -75,6 +77,9 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       task_title: String(message || '')
         .trim()
         .slice(0, 80),
+      ...(approvalModeState.enabled && approvalModeState.mode === 'auto'
+        ? { chat_approval_mode: 'auto' }
+        : {}),
       ...(plannerOpts?.expectedWorkflowPlanId ? { expected_workflow_plan_id: plannerOpts.expectedWorkflowPlanId } : {}),
       ...(plannerOpts?.retryOf ? { retry_of: plannerOpts.retryOf, idempotency_key: plannerOpts.idempotencyKey || plannerOpts.retryOf } : {}),
       ...(plannerOpts?.destructiveConfirmed ? { destructive_confirmed: true, idempotency_key: plannerOpts.idempotencyKey || turnId } : {}),

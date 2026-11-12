@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import time
 import uuid
@@ -516,6 +517,16 @@ class WorkflowSession:
         approval_info = self.approval.get_request_metadata(request_id) or {"request_no": request_id}
         approval_info["agent_run_id"] = agent_run.run_id
         self.pending.pop(user_id, None)
+        if str(runtime_context.get("chat_approval_mode") or "").strip().lower() == "auto":
+            auto_reply = self._auto_approve_waiting_request(
+                request_id=request_id,
+                user_id=user_id,
+                runtime_context=runtime_context,
+                plan=plan,
+                agent_run=agent_run,
+            )
+            if auto_reply is not None:
+                return auto_reply
         return _control_reply(
             f"已提交审批请求：{request_id}。请前往审批工作台逐笔处理。",
             "approval_pending",
@@ -531,6 +542,86 @@ class WorkflowSession:
                 },
                 action="approval_pending",
             ),
+        )[1]
+
+    def _auto_approve_waiting_request(
+        self,
+        *,
+        request_id: str,
+        user_id: str,
+        runtime_context: dict[str, Any],
+        plan: PlanGraph,
+        agent_run: AgentRun,
+    ) -> dict[str, Any] | None:
+        """「审批·自动」档：创建审批记录后立即批准并执行，同一轮返回结果。"""
+        raw_actor = (
+            runtime_context.get("actor_id")
+            or runtime_context.get("user_id")
+            or runtime_context.get("local_user_id")
+            or user_id
+        )
+        try:
+            actor = int(str(raw_actor).strip())
+        except (TypeError, ValueError):
+            logger.warning("auto approve actor unavailable user=%r ctx_actor=%r", user_id, raw_actor)
+            return None
+        try:
+            from app.application.approval_workspace_app_service import (
+                _approve_ai_workflow_request_without_node,
+            )
+            from app.db.models.approval import ApprovalRequest
+            from app.db.session import get_db
+
+            with get_db() as db:
+                request_row = (
+                    db.query(ApprovalRequest)
+                    .filter(ApprovalRequest.request_no == request_id)
+                    .first()
+                )
+                if request_row is None:
+                    logger.warning("auto approve request row missing request=%s", request_id)
+                    return None
+                result = _approve_ai_workflow_request_without_node(
+                    db,
+                    req=request_row,
+                    actor=actor,
+                    approver_name=None,
+                    opinion="自动审批模式：确认本轮 AI 工作流写入",
+                )
+        except RECOVERABLE_ERRORS:
+            logger.warning("auto approve AI workflow request failed", exc_info=True)
+            return None
+        if hasattr(result, "body"):
+            try:
+                result = json.loads(bytes(result.body).decode("utf-8"))
+            except (TypeError, ValueError):
+                return None
+        if not isinstance(result, dict):
+            return None
+        data = result.get("data") if isinstance(result.get("data"), dict) else {}
+        execution = data.get("workflow_execution") if isinstance(data, dict) else None
+        execution = execution if isinstance(execution, dict) else {}
+        success = bool(result.get("success")) and bool(
+            execution.get("success") or execution.get("execution_accepted")
+        )
+        logger.info("auto approve finished request=%s success=%s", request_id, success)
+        message = str(result.get("message") or execution.get("message") or "").strip()
+        text = (
+            f"自动审批已通过并执行完成。{message}"
+            if success
+            else f"自动审批未完成执行：{message or '请到任务中核对结果'}"
+        )
+        return _control_reply(
+            text,
+            "workflow_done" if success else "workflow_failed",
+            {
+                "plan_id": str(getattr(plan, "plan_id", "") or ""),
+                "agent_run_id": str(getattr(agent_run, "run_id", "") or ""),
+                "approval_request_id": request_id,
+                "auto_approved": True,
+            },
+            success=success,
+            message="自动审批已完成" if success else "自动审批执行未完成",
         )[1]
 
     def _clarification_answer(
