@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import struct
 import sys
@@ -31,6 +32,10 @@ from pathlib import Path
 SITE_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = SITE_ROOT.parent
 FHD_ROOT = REPO_ROOT / "FHD"
+# 原始验收证据已外置到私有仓（根 ARCHIVE_POINTER.md）；设置该变量即可读回归档。
+EVIDENCE_ROOT = Path(
+    os.environ.get("XCAGI_EVIDENCE_ROOT", "").strip() or REPO_ROOT
+).expanduser().resolve()
 OUTPUT = SITE_ROOT / "web" / "site" / "data" / "public-site.json"
 EVIDENCE_DIR = SITE_ROOT / "web" / "capabilities" / "assets" / "evidence"
 
@@ -245,7 +250,7 @@ def build_evidence(cases_cfg: dict) -> dict:
 
     # 追溯链：FHD 验收目录中的 videos-manifest.json（原始录像 → 原始 SHA256）
     original_map: dict[str, dict] = {}
-    for mf in (FHD_ROOT / "docs" / "evidence" / "e2e").glob("*/base-login/*/videos-manifest.json"):
+    for mf in (EVIDENCE_ROOT / "FHD" / "docs" / "evidence" / "e2e").glob("*/base-login/*/videos-manifest.json"):
         try:
             for item in json.loads(mf.read_text(encoding="utf-8")):
                 stem = Path(item["name"]).stem

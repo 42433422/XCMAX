@@ -1,3 +1,0 @@
-size_ok=True
-sha_ok=True
-size=236693837

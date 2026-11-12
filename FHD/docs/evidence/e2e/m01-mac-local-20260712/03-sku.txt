@@ -1,5 +1,0 @@
-product_sku=enterprise
-edition=full
-deliverable=True
-blockers=[]
-mods=16

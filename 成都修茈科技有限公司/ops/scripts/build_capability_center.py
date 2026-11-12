@@ -7,6 +7,7 @@ import argparse
 import html
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -21,6 +22,14 @@ CATALOG_PATH = WEBSITE_DIR / "data" / "capabilities" / "catalog.json"
 OUT_DIR = WEBSITE_DIR / "web" / "capabilities"
 PUBLIC_DATA_PATH = WEBSITE_DIR / "data" / "capabilities.json"
 EVIDENCE_ASSET_DIR = OUT_DIR / "assets" / "evidence"
+EVIDENCE_PREFIX = "FHD/docs/evidence/"
+_EVIDENCE_ROOT_ENV = os.environ.get("XCAGI_EVIDENCE_ROOT", "").strip()
+EVIDENCE_ROOT = (
+    Path(_EVIDENCE_ROOT_ENV).expanduser().resolve() if _EVIDENCE_ROOT_ENV else REPO_ROOT
+)
+# 证据素材已外置到私有仓（见根 ARCHIVE_POINTER.md）；仓库内无源素材时不可重新推导验收状态。
+# 以 e2e 子目录为哨兵：FHD/docs/evidence/ 仅剩 README 指针时不算可用。
+EVIDENCE_AVAILABLE = (EVIDENCE_ROOT / EVIDENCE_PREFIX / "e2e").is_dir()
 PROJECT_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 STATUS_META = {
@@ -81,6 +90,9 @@ def catalog_payload(data: dict) -> str:
 
 
 def e(path: str) -> Path:
+    # 证据素材已外置到私有仓；设置 XCAGI_EVIDENCE_ROOT 即可从归档目录解析。
+    if path.startswith(EVIDENCE_PREFIX):
+        return EVIDENCE_ROOT / path
     return REPO_ROOT / path
 
 
@@ -1324,6 +1336,18 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="校验已提交文件与目录一致（CI 漂移门禁）")
     args = ap.parse_args()
+
+    if not EVIDENCE_AVAILABLE:
+        hint = (
+            "证据源不可用：FHD/docs/evidence 已外置到私有仓 42433422/xcmax-Li "
+            "（sources/xcmax/FHD/docs/evidence）。需要重新推导验收状态时，"
+            "先恢复该目录或设置 XCAGI_EVIDENCE_ROOT 指向归档根。"
+        )
+        if args.check:
+            print(f"WARN {hint} 本次跳过证据校验。")
+            return 0
+        print(f"ERROR {hint}")
+        return 1
 
     data, warnings, domains_full = build()
     evidence_errors = [w for w in warnings if w.startswith("ERROR ")]

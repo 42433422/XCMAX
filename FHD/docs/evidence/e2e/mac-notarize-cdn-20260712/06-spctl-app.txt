@@ -1,3 +1,0 @@
-/Volumes/XCAGI 10.0.0-arm64/XCAGI.app: accepted
-source=Notarized Developer ID
-origin=Developer ID Application: jialong Li (G26WSH472M)

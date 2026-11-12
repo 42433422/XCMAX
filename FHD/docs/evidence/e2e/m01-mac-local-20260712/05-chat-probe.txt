@@ -1,4 +1,0 @@
-403 /api/ai/chat
-403 /api/conversation/chat
-403 /api/messages
-403 /api/assistant/chat

@@ -17,7 +17,6 @@ on:
       - 'web/assets/**'
       - 'web/new/**'
       - 'web/site/**'
-      - 'FHD/docs/evidence/**'
       - '.github/workflows/ci-marketing-site.yml'
   push:
     branches: [main]
@@ -31,7 +30,6 @@ on:
       - 'web/assets/**'
       - 'web/new/**'
       - 'web/site/**'
-      - 'FHD/docs/evidence/**'
       - '.github/workflows/ci-marketing-site.yml'
   workflow_dispatch:
 

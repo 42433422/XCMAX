@@ -19,7 +19,6 @@ on:
       - '成都修茈科技有限公司/web/assets/**'
       - '成都修茈科技有限公司/web/new/**'
       - '成都修茈科技有限公司/web/site/**'
-      - 'FHD/docs/evidence/**'
       - '.github/workflows/corp-marketing-site.yml'
   push:
     branches: [main]
@@ -33,7 +32,6 @@ on:
       - '成都修茈科技有限公司/web/assets/**'
       - '成都修茈科技有限公司/web/new/**'
       - '成都修茈科技有限公司/web/site/**'
-      - 'FHD/docs/evidence/**'
       - '.github/workflows/corp-marketing-site.yml'
   workflow_dispatch:
 
