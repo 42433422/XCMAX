@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-09-29 10:06 UTC",
+  "generated_at": "2026-11-12 07:17 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -102,7 +102,7 @@
     "domains": 10,
     "modules": 28,
     "verified_total": 54,
-    "last_verified_at": "2026-09-29",
+    "last_verified_at": "2026-10-06",
     "platform_counts": {
       "windows": 99,
       "macos": 100,
@@ -127,10 +127,10 @@
       },
       "web": {
         "applicable": 128,
-        "verified": 52,
+        "verified": 55,
         "partial": 0,
-        "pending": 76,
-        "last_verified_at": "2026-09-29"
+        "pending": 73,
+        "last_verified_at": "2026-10-06"
       },
       "android": {
         "applicable": 8,
@@ -318,17 +318,11 @@
       "level": "info",
       "source": "download_release.release_ready=false",
       "detail": "1.0.0.5 发布面未闭环：下载/更新指针未推进到产品版本"
-    },
-    {
-      "id": "declared-mirror",
-      "level": "info",
-      "source": "成都修茈科技有限公司/FHD/config/release_train.json",
-      "detail": "已声明镜像且版本身份字段与 canonical 一致（epoch, product_version, current）；MODstore 独立运行时的运行时 SSOT 路径，由日更对齐脚本从 canonical 覆写； 保留是有意决定，day_index / last_bump_at 为各自运行时状态，不参与身份比对"
     }
   ],
   "drift_summary": {
     "error": 0,
-    "info": 2
+    "info": 1
   },
   "script_hardcode_census": {
     "files": 0,

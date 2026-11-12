@@ -61,7 +61,6 @@ domains:
       - FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart#versionName
       - FHD/config/download_release.json#marketing_version
       - FHD/config/release_train.json#product_version
-      - 成都修茈科技有限公司/FHD/config/release_train.json#product_version
       - FHD/contracts/openapi.json#info.version
       - FHD/setup.iss#MyAppVersion
       - FHD/tools/XcagiDownloader/Models/AppSettings.cs#fallback-version

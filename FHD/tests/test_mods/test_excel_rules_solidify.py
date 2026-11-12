@@ -33,7 +33,7 @@ SUNBIRD_DIR = Path(
 )
 SUNBIRD_TEMPLATE = SUNBIRD_DIR / "00_考勤-2026-3月份考勤统计表.xlsx"
 SUNBIRD_SOURCE = SUNBIRD_DIR / "01_钉钉导出来的考勤数据.xlsx"
-SUNBIRD_VENDOR = Path("/workspace/成都修茈科技有限公司/taiyangniao-pro/backend")
+SUNBIRD_VENDOR = Path("/workspace/FHD/taiyangniao-pro/backend")
 
 
 def _load_module(name: str, path: Path) -> ModuleType:

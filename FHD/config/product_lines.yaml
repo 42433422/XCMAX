@@ -113,20 +113,12 @@ version_scan:
 # 独立部署时的解析目标，由 `FHD/scripts/dev/align_server_daily_automation.sh`
 # 在每次日更对齐时从 canonical 覆写（远端 `${MODSTORE_ROOT}/../FHD/config/release_train.json`，
 # 并把 `MODSTORE_RELEASE_TRAIN_JSON` 指向它）。
-# 删除 mirror 会让独立运行的 MODstore 找不到 SSOT 而回落到
-# `default_state()`（1.0.0.0 陈旧默认），因此**决定保留**，不是「另开 PR 的遗留」。
+# 2026-11-12：库内镜像 `成都修茈科技有限公司/FHD/config/release_train.json` 已移除
+# （该目录已并入 `FHD/`），canonical `FHD/config/release_train.json` 成为唯一来源；
+# 服务端独立运行时仍由日更对齐脚本首次落盘生成，不再声明为库内镜像。
 # 门禁是二值的：identity_fields 全部与 canonical 一致 ⇒ 通过（留一条 info 记录核对结果）；
 # 任一项分叉 ⇒ error 阻断；出现未声明的同名副本 ⇒ error 阻断。
-mirrors:
-  - canonical: FHD/config/release_train.json
-    mirror: 成都修茈科技有限公司/FHD/config/release_train.json
-    identity_fields:
-      - epoch
-      - product_version
-      - current
-    reason: >-
-      MODstore 独立运行时的运行时 SSOT 路径，由日更对齐脚本从 canonical 覆写；
-      保留是有意决定，day_index / last_bump_at 为各自运行时状态，不参与身份比对
+mirrors: []
 
 # 打包/发布脚本写死版本默认值即漂移：应为动态读取（`FHD/scripts/deploy/lib/version.sh`
 # 或读 VERSION.md）。bash 与 PowerShell 两侧均已整改完毕，默认级别即 error：

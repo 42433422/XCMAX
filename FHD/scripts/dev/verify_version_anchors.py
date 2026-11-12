@@ -43,11 +43,6 @@ ANCHORS: list[tuple[str, str, str]] = [
     ),
     ("config/download_release.json", r'"marketing_version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
     ("config/release_train.json", r'"product_version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
-    (
-        "../成都修茈科技有限公司/FHD/config/release_train.json",
-        r'"product_version"\s*:\s*"([\d.]+)"',
-        PRODUCT_VERSION,
-    ),
     ("contracts/openapi.json", r'"info"[\s\S]*?"version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
     ("setup.iss", r'#define\s+MyAppVersion\s+"([\d.]+)"', PRODUCT_VERSION),
     ("tools/XcagiDownloader/Models/AppSettings.cs", r'return\s+"([\d.]+)";', PRODUCT_VERSION),
