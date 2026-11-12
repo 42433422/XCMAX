@@ -38,10 +38,12 @@ describe('useChatResponseAttach', () => {
         businessResult: { status: 'failed', summary: '写入失败' },
       }),
     ).toEqual({ status: 'failed', summary: '写入失败' })
-    expect(readPlannerBusinessResult({ success: true, data: { business_result: { status: 'completed', summary: '已删除' } } })).toEqual({
-      status: 'completed',
-      summary: '已删除',
-    })
+    expect(
+      readPlannerBusinessResult({
+        success: true,
+        data: { business_result: { status: 'completed', summary: '已删除', evidence: { completed_tool_count: 1 } } },
+      }),
+    ).toEqual({ status: 'completed', summary: '已删除', evidence: { completed_tool_count: 1 } })
     expect(readPlannerBusinessResult({ success: true, data: { business_result: {} } })).toBeUndefined()
   })
 

@@ -468,19 +468,24 @@ def _has_visible_business_facts(facts: Any) -> bool:
     return any(value not in (None, "", [], {}) for value in facts.values())
 
 
+def _result_evidence(result: dict[str, Any]) -> dict[str, Any]:
+    evidence = result.get("evidence")
+    if isinstance(evidence, dict):
+        return evidence
+    return {}
+
+
 def _has_visible_business_artifacts(result: dict[str, Any]) -> bool:
-    evidence = result.get("evidence") if isinstance(result.get("evidence"), dict) else {}
-    artifact_ids = evidence.get("artifact_ids") if isinstance(evidence, dict) else None
+    artifact_ids = _result_evidence(result).get("artifact_ids")
     if isinstance(artifact_ids, list) and any(str(item).strip() for item in artifact_ids):
         return True
-    artifacts = result.get("artifacts")
-    return bool(artifacts)
+    return bool(result.get("artifacts"))
 
 
 def _completed_tool_count(result: dict[str, Any]) -> int:
-    evidence = result.get("evidence") if isinstance(result.get("evidence"), dict) else {}
+    raw = _result_evidence(result).get("completed_tool_count")
     try:
-        return int(evidence.get("completed_tool_count") or 0)
+        return int(raw or 0)
     except (TypeError, ValueError):
         return 0
 
