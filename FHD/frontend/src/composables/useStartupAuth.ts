@@ -45,14 +45,10 @@ export function useStartupAuth(options: {
       if (valid) {
         clearHostPackSkippedSession()
         const profile = (await import('@/stores/accountProfile')).useAccountProfileStore()
-        // Login already hydrated this account. A second remote profile read must not
-        // keep the shell locked; RBAC refresh continues behind the workspace.
-        if (profile.workspaceReady && profile.workspaceHydrationReady) void profile.refreshFromServer()
-        else {
-          await profile.refreshFromServer().catch(() => {
-            /* ignore */
-          })
-        }
+        const keepVisible = profile.workspaceReady && profile.workspaceHydrationReady
+        await profile.refreshFromServer(keepVisible ? { keepVisible: true } : undefined).catch(() => {
+          /* ignore */
+        })
         if (!current()) return { ok: false, entitledModIds: [] }
         // Optional token synchronization must not block the authenticated workspace.
         void syncMarketTokensFromSession(current)
