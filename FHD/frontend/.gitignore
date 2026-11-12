@@ -1,3 +1,8 @@
 node_modules
 dist
 *.local
+coverage
+coverage-*
+test-results
+playwright-report
+*.tsbuildinfo
