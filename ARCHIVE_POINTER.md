@@ -45,6 +45,7 @@
 | **outputs 打包产物外置（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/outputs/` | 迁出未入库的 `FHD-src-1.0.0.5-20261110.tar.gz`（78MB 源码包）、`byok-auto-match-module/` 与同名 `.zip`，字节核对一致；`outputs/` 仅保留已入库的 `01a05bb6-…/` 交付表。 |
 | **临时报告与锁文件清理（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/reports/` | 未入库的根 `reports/` 两份诊断（`ticket-triage-20261022.md`、`ci-acceleration/2026-10-12-ci-acceleration.md`，零入链）已外置；`test_reports/` 仅含运行锁 `.work_orders.lock`，已删除并移除空目录。 |
 | **release/ 过期打包桩移除（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/release/` | `release/` 仅含 v10.0.0 的 `README.txt`/`MOBILE_VERSION.md` 桩与陈旧 `release/VERSION`(`0.0.1`)，实际 APK/HAP 从未入库，且与 `FHD/VERSION.md`（`1.0.0.5`）构成版本漂移。已外置并 `git rm`；版本唯一权威来源为 `FHD/VERSION.md`。 |
+| **过期 runbook 回流清理（2026-11-12）** | `~/XCMAX-archives/docs-20260927-modstore-immutable/`、`~/XCMAX-archives/docs-20260927-mac-release-obsolete/` | `MODstore_deploy/docs/runbooks/` 下 `local-to-remote-push-flow.md`、`remote-server-operations.md`、`xcagi-software-download.md` 三份未跟踪文件属 2026-09-27 已归档的旧部署指引回流（推荐 Docker/tar 覆盖生产），归档区已有副本，本次直接删除。`成都修茈科技有限公司/scripts/__pycache__/` 一并清除。 |
 
 ## 恢复示例
 
