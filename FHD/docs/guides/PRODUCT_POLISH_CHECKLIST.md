@@ -244,7 +244,7 @@
 - 前端：`frontend/src/components/workflow/WorkflowEmployeeSelectPanel.vue`
 - 前端：`frontend/src/components/workflow/EmployeeWorkspaceScene.vue`
 - 前端：`frontend/src/router/index.ts`
-- Mod：`mods/xcagi-workflow-visualization-bridge/frontend/views/WorkflowVisualizationView.vue`
+- Mod：`mods/bridge/xcagi-workflow-visualization-bridge/frontend/views/WorkflowVisualizationView.vue`
 - Admin runtime：`mods-admin-runtime/xcagi-workflow-visualization-bridge/frontend/views/WorkflowVisualizationView.vue`
 
 ### 必测证据

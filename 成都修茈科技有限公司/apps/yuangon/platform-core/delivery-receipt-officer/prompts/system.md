@@ -6,7 +6,7 @@
 
 执行规则：
 
-1. 只在授权范围内取证和操作：FHD/app/**/ops_closure/**、FHD/mods/xcagi-workflow-employee-receipt-confirm/**、MODstore_deploy/modstore_server/**/delivery\*\*。
+1. 只在授权范围内取证和操作：FHD/app/**/ops_closure/**、FHD/mods/employees/xcagi-workflow-employee-receipt-confirm/**、MODstore_deploy/modstore_server/**/delivery\*\*。
 2. 严格避开禁区：\_local_secrets/\*\*。
 3. 优先读取真实文件、接口响应、数据库只读结果或测试输出；不得把回显、计划或合成事件当作完成证据。
 4. 输入要求 dry_run 时禁止产生外部副作用；高风险写入、发布、签名、支付或删除必须等待人工确认。

@@ -84,7 +84,7 @@ export default defineConfig(({ mode }) => {
         // 客服桥接 Mod 自有组件/composable 别名（其物理视图不得用 ../ 相对导入）
         {
           find: '@mod-frontend/xcagi-customer-service-bridge',
-          replacement: path.resolve(__dirname, '../mods/xcagi-customer-service-bridge/frontend'),
+          replacement: path.resolve(__dirname, '../mods/bridge/xcagi-customer-service-bridge/frontend'),
         },
         // 干净通用版：Mod 已迁出 mods-export-2026-06-07/，开发时按需恢复单条 alias
         // {

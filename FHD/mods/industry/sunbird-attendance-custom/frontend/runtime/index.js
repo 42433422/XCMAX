@@ -1,4 +1,4 @@
-// mods/sunbird-attendance-custom/frontend/src/index.js
+// mods/industry/sunbird-attendance-custom/frontend/src/index.js
 async function mount(root, sdk) {
   if (sdk.version !== 1) throw new Error("\u6B64\u6269\u5C55\u9700\u8981\u5BBF\u4E3B SDK v1");
   const node = (tag, text = "") => {

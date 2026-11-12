@@ -5,7 +5,7 @@
 | 项 | 说明 |
 |----|------|
 | 源码 | `sunbird-console/src`（账号绑定、ERP 路由、太阳鸟 Mod 策略等） |
-| Mod 页面 | `mods/taiyangniao-pro/frontend`（考勤表转换等） |
+| Mod 页面 | `mods/industry/taiyangniao-pro/frontend`（考勤表转换等） |
 | 共用 | `frontend/src`（布局、登录、stores） |
 | 开发 | `npm run dev` → 默认 **:5012** |
 | 构建 | `npm run build` → `FHD/templates/sunbird-vue-dist/` |

@@ -7,12 +7,12 @@
 | **Mod（房子）** | `xcagi-core-workflow-employees` | 可安装包：`manifest.json` + `backend/blueprints.py` |
 | **员工（家具）** | `label_print`、`shipment_mgmt`、`receipt_confirm`、`wechat_msg` | 声明在 `manifest.workflow_employees[]`，实现在 `backend/employees/<id>.py` |
 
-源码主库：`../../成都修茈科技有限公司/mods/xcagi-core-workflow-employees/README.md`
+源码主库：`../../成都修茈科技有限公司/mods/employees/xcagi-core-workflow-employees/README.md`
 
 ## 宿主安装位置
 
-- `mods/xcagi-core-workflow-employees/`
-- `XCAGI/mods/xcagi-core-workflow-employees/`（运行时挂载）
+- `mods/employees/xcagi-core-workflow-employees/`
+- `XCAGI/mods/employees/xcagi-core-workflow-employees/`（运行时挂载）
 
 未安装时，副窗不再显示四名内置员工；请从 MODstore 同步或运行 `scripts/sync_core_workflow_mod_to_fhd.ps1`（平台侧）。
 
@@ -23,4 +23,4 @@
 
 ## 验收
 
-见平台包内 `../../成都修茈科技有限公司/mods/xcagi-core-workflow-employees/docs/ACCEPTANCE.md`
+见平台包内 `../../成都修茈科技有限公司/mods/employees/xcagi-core-workflow-employees/docs/ACCEPTANCE.md`

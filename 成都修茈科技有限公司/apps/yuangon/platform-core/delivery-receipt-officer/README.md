@@ -23,7 +23,7 @@
 
         - `FHD/app/**/ops_closure/**`
 
-- `FHD/mods/xcagi-workflow-employee-receipt-confirm/**`
+- `FHD/mods/employees/xcagi-workflow-employee-receipt-confirm/**`
 - `MODstore_deploy/modstore_server/**/delivery**`
 - `yuangon/platform-core/delivery-receipt-officer/**`
 

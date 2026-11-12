@@ -87,19 +87,25 @@ def _discover_mod_ids() -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
     for child in sorted(mods_dir.iterdir()):
-        if not child.is_dir():
+        if not child.is_dir() or child.name.startswith(("_", ".")):
             continue
-        mf = child / "manifest.json"
-        if not mf.is_file():
-            continue
-        try:
-            data = json.loads(mf.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        mid = str((data or {}).get("id") or "").strip()
-        if mid and mid not in seen:
-            seen.add(mid)
-            out.append(mid)
+        candidates = [child] if (child / "manifest.json").is_file() else [
+            sub
+            for sub in sorted(child.iterdir())
+            if sub.is_dir() and not sub.name.startswith(("_", "."))
+        ]
+        for mod_path in candidates:
+            mf = mod_path / "manifest.json"
+            if not mf.is_file():
+                continue
+            try:
+                data = json.loads(mf.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            mid = str((data or {}).get("id") or "").strip()
+            if mid and mid not in seen:
+                seen.add(mid)
+                out.append(mid)
     return out
 
 

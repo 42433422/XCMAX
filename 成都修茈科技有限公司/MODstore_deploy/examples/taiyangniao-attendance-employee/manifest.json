@@ -114,7 +114,7 @@
       "handlers": ["direct_python"],
       "direct_python": {
         "mod_id": "taiyangniao-pro",
-        "default_backend_path": "e:/FHD/mods/taiyangniao-pro/backend",
+        "default_backend_path": "e:/FHD/mods/industry/taiyangniao-pro/backend",
         "default_output_relpath": "424/考勤转换输出.xlsx",
         "default_template_relpath": "424/考勤-2026-3月份考勤统计表.xlsx",
         "default_use_personnel_roster": true

@@ -3,10 +3,10 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, RouterView, type Router } from 'vue-router'
 import { defineComponent, KeepAlive } from 'vue'
 import { LS_ERP_DOMAIN_MOD_FACADE_ENABLED } from '@/constants/erpDomainMod'
-import PrintView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue'
+import PrintView from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/PrintView.vue'
 import HostPrintView from './PrintView.vue'
-import LabelEditorView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/LabelEditorView.vue'
-import { modRoutes, modMenu } from '../../../mods/xcagi-erp-domain-bridge/frontend/routes.js'
+import LabelEditorView from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/LabelEditorView.vue'
+import { modRoutes, modMenu } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/routes.js'
 
 vi.mock('@/utils/appDialog', () => ({ appAlert: vi.fn().mockResolvedValue(undefined) }))
 // Resolve only the Mod asset boundary; keep the real host bridge and physical views.

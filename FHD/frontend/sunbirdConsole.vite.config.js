@@ -153,7 +153,7 @@ export default defineConfig(() => ({
       },
       {
         find: '@mod-frontend/xcagi-customer-service-bridge',
-        replacement: path.resolve(__dirname, '../mods/xcagi-customer-service-bridge/frontend'),
+        replacement: path.resolve(__dirname, '../mods/bridge/xcagi-customer-service-bridge/frontend'),
       },
       {
         find: '@mod-views/xcagi-approval-bridge',

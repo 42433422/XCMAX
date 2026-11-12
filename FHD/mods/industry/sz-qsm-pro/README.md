@@ -15,4 +15,4 @@
 | 涂料 AI 员工、`wechat_phone` | `sz-qsm-pro` `workflow_employees` |
 | phone-agent API | `sz-qsm-pro` `/api/mod/sz-qsm-pro/phone-agent/*` |
 
-完整生产包解压到 `FHD/mods/sz-qsm-pro/` 后执行 `python FHD/scripts/dev/mods_ssot.py sync`。
+完整生产包解压到 `FHD/mods/industry/sz-qsm-pro/` 后执行 `python FHD/scripts/dev/mods_ssot.py sync`。

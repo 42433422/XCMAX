@@ -53,8 +53,15 @@ def read_aux_employee_pack_manifest(pack_id: str) -> dict[str, Any] | None:
     if not pid or not is_aux_employee_pack_mod_id(pid):
         return None
     for root in _repo_mod_seed_dirs():
-        mf = root / pid / "manifest.json"
-        if not mf.is_file():
+        candidates = [root / pid / "manifest.json"]
+        if root.is_dir():
+            candidates.extend(
+                sub / pid / "manifest.json"
+                for sub in sorted(root.iterdir())
+                if sub.is_dir() and not sub.name.startswith(("_", "."))
+            )
+        mf = next((p for p in candidates if p.is_file()), None)
+        if mf is None:
             continue
         try:
             raw = json.loads(mf.read_text(encoding="utf-8"))

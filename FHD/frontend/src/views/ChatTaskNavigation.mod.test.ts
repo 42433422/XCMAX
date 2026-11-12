@@ -38,7 +38,7 @@ vi.mock('@/composables/useChatOfficeDocking', () => ({ useChatOfficeDocking: () 
 }) }))
 
 // Import the shipped Mod directly. The host ChatView and Vitest Mod alias cannot mask missing desktop wiring.
-import ModChatView from '../../../mods/xcagi-planner-bridge/frontend/views/ChatView.vue'
+import ModChatView from '../../../mods/bridge/xcagi-planner-bridge/frontend/views/ChatView.vue'
 
 const taskList = ref<TaskItem[]>([])
 const activeTaskId = ref('')

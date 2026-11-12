@@ -3,7 +3,7 @@
 ## Mod（房子）
 
 - id：`xcagi-erp-domain-bridge`
-- 安装：`mods/xcagi-erp-domain-bridge/`
+- 安装：`mods/bridge/xcagi-erp-domain-bridge/`
 - v1.4.0：里程碑 H — 客户 `CustomerApplicationService` + `wechat_contacts` 门面代理
 
 ## 覆盖领域

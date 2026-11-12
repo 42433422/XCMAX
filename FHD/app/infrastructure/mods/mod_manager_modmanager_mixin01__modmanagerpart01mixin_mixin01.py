@@ -56,6 +56,27 @@ class __ModManagerPart01MixinPart01Mixin:
                         parts.append(f"{entry}:{_facade().os.path.getmtime(manifest_path):.6f}")
                     except OSError:
                         parts.append(entry)
+                    continue
+                # 分层容器目录：把下一级 manifest 的 mtime 纳入指纹
+                layer_dir = _facade().os.path.join(root, entry)
+                if not _facade().os.path.isdir(layer_dir):
+                    continue
+                try:
+                    sub_entries = sorted(_facade().os.listdir(layer_dir))
+                except OSError:
+                    continue
+                for sub in sub_entries:
+                    if sub.startswith(("_", ".")):
+                        continue
+                    sub_manifest = _facade().os.path.join(layer_dir, sub, "manifest.json")
+                    if not _facade().os.path.isfile(sub_manifest):
+                        continue
+                    try:
+                        parts.append(
+                            f"{entry}/{sub}:{_facade().os.path.getmtime(sub_manifest):.6f}"
+                        )
+                    except OSError:
+                        parts.append(f"{entry}/{sub}")
         return "|".join(parts)
 
     def _refresh_mods_root_if_needed(self) -> None:
@@ -259,49 +280,60 @@ class __ModManagerPart01MixinPart01Mixin:
             for entry in _facade().os.listdir(mods_root):
                 if entry.startswith(("_", ".")):
                     continue
-                mod_path = _facade().os.path.join(mods_root, entry)
-                if not _facade().os.path.isdir(mod_path):
+                base_path = _facade().os.path.join(mods_root, entry)
+                if not _facade().os.path.isdir(base_path):
                     continue
-                manifest_path = _facade().os.path.join(mod_path, "manifest.json")
-                _facade().logger.debug(
-                    "[ModManager] Checking %s/%s, manifest exists: %s",
-                    mods_root,
-                    entry,
-                    _facade().os.path.isfile(manifest_path),
-                )
-                metadata = _facade().parse_manifest(mod_path)
-                if metadata:
-                    from app.mod_sdk.industry_mod_aliases import is_retired_runtime_mod_id
-
-                    if is_retired_runtime_mod_id(metadata.id):
-                        _facade().logger.info(
-                            "[ModManager] Skip retired runtime mod: %s", metadata.id
-                        )
-                        continue
-                    if metadata.id in seen_ids:
-                        continue
-                    seen_ids.add(metadata.id)
-                    mods.append(metadata)
-                    _facade().logger.debug(
-                        "[ModManager] Found mod: %s (%s) v%s @ %s",
-                        metadata.id,
-                        metadata.name,
-                        metadata.version,
-                        mod_path,
-                    )
+                # 分层容器目录（industry/ bridge/ employees/ tools/）本身没有 manifest，
+                # 其下一级才是各自的 Mod；平铺安装的 Mod 仍直接命中。
+                if _facade().os.path.isfile(_facade().os.path.join(base_path, "manifest.json")):
+                    candidates = [base_path]
                 else:
-                    _facade().logger.warning(
-                        "[ModManager] Failed to parse manifest for mod entry: %s/%s",
-                        mods_root,
-                        entry,
+                    candidates = [
+                        _facade().os.path.join(base_path, sub)
+                        for sub in sorted(_facade().os.listdir(base_path))
+                        if not sub.startswith(("_", "."))
+                        and _facade().os.path.isdir(_facade().os.path.join(base_path, sub))
+                    ]
+                for mod_path in candidates:
+                    entry_name = _facade().os.path.basename(mod_path)
+                    manifest_path = _facade().os.path.join(mod_path, "manifest.json")
+                    _facade().logger.debug(
+                        "[ModManager] Checking %s, manifest exists: %s",
+                        mod_path,
+                        _facade().os.path.isfile(manifest_path),
                     )
-                    self._scan_manifest_errors.append(
-                        {
-                            "entry": entry,
-                            "mods_root": mods_root,
-                            "message": "manifest.json 缺失或无法解析（检查 JSON 与必填字段 id）",
-                        }
-                    )
+                    metadata = _facade().parse_manifest(mod_path)
+                    if metadata:
+                        from app.mod_sdk.industry_mod_aliases import is_retired_runtime_mod_id
+
+                        if is_retired_runtime_mod_id(metadata.id):
+                            _facade().logger.info(
+                                "[ModManager] Skip retired runtime mod: %s", metadata.id
+                            )
+                            continue
+                        if metadata.id in seen_ids:
+                            continue
+                        seen_ids.add(metadata.id)
+                        mods.append(metadata)
+                        _facade().logger.debug(
+                            "[ModManager] Found mod: %s (%s) v%s @ %s",
+                            metadata.id,
+                            metadata.name,
+                            metadata.version,
+                            mod_path,
+                        )
+                    else:
+                        _facade().logger.warning(
+                            "[ModManager] Failed to parse manifest for mod entry: %s",
+                            mod_path,
+                        )
+                        self._scan_manifest_errors.append(
+                            {
+                                "entry": entry_name,
+                                "mods_root": mods_root,
+                                "message": "manifest.json 缺失或无法解析（检查 JSON 与必填字段 id）",
+                            }
+                        )
         _facade().logger.info("[ModManager] Total mods found: %s", len(mods))
         self._scan_cache_fp = fp
         self._scan_cache_mods = mods

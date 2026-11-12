@@ -5,7 +5,7 @@ Voice / ASR Routes - FastAPI Implementation
 - POST /api/voice/transcribe      短录音（MediaRecorder blob）→ 文本
 - POST /api/voice/command         语音 → ASR → 意图识别 → 可选自动执行（端到端语音指令）
 
-与 mods/sz-qsm-pro/phone_agent/asr_processor.py 的差异：
+与 mods/industry/sz-qsm-pro/phone_agent/asr_processor.py 的差异：
 - 那边针对电话采音流（float32 numpy + 双阈值 VAD 分段），这里直接接受 webm/ogg/wav 文件。
 - 为避免互相污染模型实例和环境变量，这里使用独立的 XCAGI_CHAT_ASR_* 命名空间。
 """

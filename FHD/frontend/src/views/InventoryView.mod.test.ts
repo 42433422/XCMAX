@@ -29,7 +29,7 @@ vi.mock('@/utils/appDialog', () => ({
   appAlert: vi.fn(),
 }))
 
-import InventoryView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/InventoryView.vue'
+import InventoryView from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/InventoryView.vue'
 
 describe('ERP domain bridge InventoryView', () => {
   beforeEach(() => {

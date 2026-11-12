@@ -22,7 +22,7 @@ def pinned_source(tmp_path, monkeypatch):
         root / "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_delivery_versioned.py"
     )
     monkeypatch.setattr(versioned, "__file__", str(module))
-    source = root / "FHD/mods/sunbird-attendance-custom"
+    source = root / "FHD/mods/industry/sunbird-attendance-custom"
     (source / "backend").mkdir(parents=True)
     (source / "backend/probe.py").write_text(
         "def verify_delivery(request): return {'passed': True}\n"

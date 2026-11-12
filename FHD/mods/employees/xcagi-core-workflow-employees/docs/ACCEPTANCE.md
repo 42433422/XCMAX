@@ -3,7 +3,7 @@
 > **Mod（房子）**：`xcagi-core-workflow-employees`  
 > **员工（家具）**：下表四个 `id`，须全部出现在已安装 Mod 的 `workflow_employees` 中。
 
-前置：FHD 已启动；本 Mod 已同步到 `XCAGI/mods/xcagi-core-workflow-employees/` 并重新加载 Mod；智能对话页可打开副窗。
+前置：FHD 已启动；本 Mod 已同步到 `XCAGI/mods/employees/xcagi-core-workflow-employees/` 并重新加载 Mod；智能对话页可打开副窗。
 
 ---
 

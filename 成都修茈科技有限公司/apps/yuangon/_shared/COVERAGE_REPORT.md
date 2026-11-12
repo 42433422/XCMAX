@@ -57,16 +57,16 @@
 - `.github/workflows/ci-runtime-artifacts-guard.yml`：test-qa-runner, push-update-context-officer
 - `.github/workflows/ci-vibe-coding.yml`：test-qa-runner, push-update-context-officer
 - `ESkill.md`：mods-and-eskill-curator, doc-knowledge-curator
-- `FHD/mods/xcagi-workflow-employee-label-print/README.md`：mods-and-eskill-curator, doc-knowledge-curator
-- `FHD/mods/xcagi-workflow-employee-real-phone/README.md`：mods-and-eskill-curator, doc-knowledge-curator
-- `FHD/mods/xcagi-workflow-employee-receipt-confirm/README.md`：delivery-receipt-officer, mods-and-eskill-curator, doc-knowledge-curator
-- `FHD/mods/xcagi-workflow-employee-receipt-confirm/backend/__init__.py`：delivery-receipt-officer, mods-and-eskill-curator
-- `FHD/mods/xcagi-workflow-employee-receipt-confirm/backend/blueprints.py`：delivery-receipt-officer, mods-and-eskill-curator
-- `FHD/mods/xcagi-workflow-employee-receipt-confirm/backend/employees/__init__.py`：delivery-receipt-officer, mods-and-eskill-curator
-- `FHD/mods/xcagi-workflow-employee-receipt-confirm/backend/employees/receipt_confirm.py`：delivery-receipt-officer, mods-and-eskill-curator
-- `FHD/mods/xcagi-workflow-employee-receipt-confirm/frontend/routes.js`：delivery-receipt-officer, mods-and-eskill-curator
-- `FHD/mods/xcagi-workflow-employee-receipt-confirm/manifest.json`：delivery-receipt-officer, mods-and-eskill-curator
-- `FHD/mods/xcagi-workflow-employee-shipment-mgmt/README.md`：mods-and-eskill-curator, doc-knowledge-curator
+- `FHD/mods/employees/xcagi-workflow-employee-label-print/README.md`：mods-and-eskill-curator, doc-knowledge-curator
+- `FHD/mods/employees/xcagi-workflow-employee-real-phone/README.md`：mods-and-eskill-curator, doc-knowledge-curator
+- `FHD/mods/employees/xcagi-workflow-employee-receipt-confirm/README.md`：delivery-receipt-officer, mods-and-eskill-curator, doc-knowledge-curator
+- `FHD/mods/employees/xcagi-workflow-employee-receipt-confirm/backend/__init__.py`：delivery-receipt-officer, mods-and-eskill-curator
+- `FHD/mods/employees/xcagi-workflow-employee-receipt-confirm/backend/blueprints.py`：delivery-receipt-officer, mods-and-eskill-curator
+- `FHD/mods/employees/xcagi-workflow-employee-receipt-confirm/backend/employees/__init__.py`：delivery-receipt-officer, mods-and-eskill-curator
+- `FHD/mods/employees/xcagi-workflow-employee-receipt-confirm/backend/employees/receipt_confirm.py`：delivery-receipt-officer, mods-and-eskill-curator
+- `FHD/mods/employees/xcagi-workflow-employee-receipt-confirm/frontend/routes.js`：delivery-receipt-officer, mods-and-eskill-curator
+- `FHD/mods/employees/xcagi-workflow-employee-receipt-confirm/manifest.json`：delivery-receipt-officer, mods-and-eskill-curator
+- `FHD/mods/employees/xcagi-workflow-employee-shipment-mgmt/README.md`：mods-and-eskill-curator, doc-knowledge-curator
 - `FHD/mods/xcagi-workflow-employee-wechat-msg/README.md`：mods-and-eskill-curator, doc-knowledge-curator
 - `FHD/mods/xcagi-workflow-employee-wechat-phone/README.md`：mods-and-eskill-curator, doc-knowledge-curator
 - `MODstore_deploy/.github/workflows/README.md`：doc-knowledge-curator, push-update-context-officer

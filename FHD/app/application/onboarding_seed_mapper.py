@@ -58,6 +58,13 @@ def _resolve_mod_manifest_root(mod_id: str) -> Path | None:
     for candidate in (fhd_root / "mods", fhd_root / "XCAGI" / "mods"):
         if (candidate / mod_id / "manifest.json").is_file():
             return candidate
+        # 分层容器目录（industry/ bridge/ employees/ tools/）
+        if candidate.is_dir():
+            for sub in sorted(candidate.iterdir()):
+                if not sub.is_dir() or sub.name.startswith(("_", ".")):
+                    continue
+                if (sub / mod_id / "manifest.json").is_file():
+                    return sub
     return None
 
 

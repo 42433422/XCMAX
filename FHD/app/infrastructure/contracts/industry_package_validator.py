@@ -84,12 +84,24 @@ def iter_industry_package_manifests() -> list[Path]:
         for child in sorted(mods_root.iterdir()):
             if not child.is_dir() or child.name in seen:
                 continue
-            manifest = child / "manifest.json"
-            if not manifest.is_file():
-                continue
-            if child.name.endswith("-industry"):
-                out.append(manifest)
-                seen.add(child.name)
+            if (child / "manifest.json").is_file():
+                candidates = [child]
+            else:
+                # 分层容器目录（industry/ bridge/ employees/ tools/）
+                candidates = [
+                    sub
+                    for sub in sorted(child.iterdir())
+                    if sub.is_dir() and not sub.name.startswith(("_", "."))
+                ]
+            for mod_dir in candidates:
+                if mod_dir.name in seen:
+                    continue
+                manifest = mod_dir / "manifest.json"
+                if not manifest.is_file():
+                    continue
+                if mod_dir.name.endswith("-industry"):
+                    out.append(manifest)
+                    seen.add(mod_dir.name)
     return out
 
 

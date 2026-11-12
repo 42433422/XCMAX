@@ -8,8 +8,8 @@ security_level: personal
 is_public: true
 
 scope_globs:
-  - FHD-个人/mods/taiyangniao-pro/manifest.json
-  - FHD-个人/XCAGI/mods/taiyangniao-pro/manifest.json
+  - FHD-个人/mods/industry/taiyangniao-pro/manifest.json
+  - FHD-个人/XCAGI/mods/industry/taiyangniao-pro/manifest.json
 
 forbidden_globs:
   - FHD-个人/app/fastapi_routes/xcagi_compat_chat_helpers.py
