@@ -433,7 +433,6 @@ def test_statistics_receipt_exposes_actual_rows_and_amount_without_recalculation
     assert "200" in text
 
 
-
 def test_visible_chat_business_result_hides_completed_casual_turns() -> None:
     assert (
         visible_chat_business_result(
@@ -504,3 +503,35 @@ def test_attach_visible_business_result_uses_payload_or_saved_run() -> None:
     )
     assert attached["businessResult"]["facts"]["customer_id"] == 23
     repo.get.assert_called_once_with("run-facts")
+
+
+def test_visible_chat_business_result_keeps_summary_only_tool_completions() -> None:
+    visible = visible_chat_business_result(
+        {
+            "status": "completed",
+            "summary": "已删除",
+            "facts": {},
+            "evidence": {"completed_tool_count": 1},
+        }
+    )
+    assert visible is not None and visible["summary"] == "已删除"
+
+
+def test_visible_chat_business_result_keeps_summary_only_toolcall_payloads() -> None:
+    visible = visible_chat_business_result(
+        {"status": "completed", "summary": "已删除", "facts": {}},
+        payload={"success": True, "toolCall": {"tool_id": "customers", "action": "delete"}},
+    )
+    assert visible is not None and visible["summary"] == "已删除"
+
+
+def test_attach_visible_business_result_keeps_failed_terminal_payload() -> None:
+    payload = attach_visible_business_result_to_chat_payload(
+        {
+            "success": False,
+            "message": "写入失败",
+            "businessResult": {"status": "failed", "summary": "写入失败", "facts": {}},
+        }
+    )
+    assert payload["businessResult"]["status"] == "failed"
+    assert payload["success"] is False

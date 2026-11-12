@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { ref } from 'vue'
 import { useChatResponseAttach } from './useChatResponseAttach'
+import { readPlannerBusinessResult } from '@/utils/readPlannerBusinessResult'
 import type { TaskItem } from './useChatPersistence'
 
 function makeDeps() {
@@ -30,6 +31,20 @@ function makeDeps() {
 }
 
 describe('useChatResponseAttach', () => {
+  it('readPlannerBusinessResult accepts camel or nested snake_case results', () => {
+    expect(
+      readPlannerBusinessResult({
+        success: false,
+        businessResult: { status: 'failed', summary: '写入失败' },
+      }),
+    ).toEqual({ status: 'failed', summary: '写入失败' })
+    expect(readPlannerBusinessResult({ success: true, data: { business_result: { status: 'completed', summary: '已删除' } } })).toEqual({
+      status: 'completed',
+      summary: '已删除',
+    })
+    expect(readPlannerBusinessResult({ success: true, data: { business_result: {} } })).toBeUndefined()
+  })
+
   it('attachBusinessResultToLastAiMessage sets a visible business result on last ai', () => {
     const { messages, attachBusinessResultToLastAiMessage } = makeDeps()
     attachBusinessResultToLastAiMessage({

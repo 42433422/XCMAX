@@ -451,7 +451,6 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     return result
 
 
-
 _VISIBLE_BUSINESS_RESULT_STATUSES = {
     "failed",
     "cancelled",
@@ -478,7 +477,29 @@ def _has_visible_business_artifacts(result: dict[str, Any]) -> bool:
     return bool(artifacts)
 
 
-def visible_chat_business_result(result: Any) -> dict[str, Any] | None:
+def _completed_tool_count(result: dict[str, Any]) -> int:
+    evidence = result.get("evidence") if isinstance(result.get("evidence"), dict) else {}
+    try:
+        return int(evidence.get("completed_tool_count") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _payload_has_business_execution(payload: Any) -> bool:
+    """True when the chat envelope itself recorded a tool or business action."""
+    if not isinstance(payload, dict):
+        return False
+    tool = payload.get("toolCall")
+    if isinstance(tool, dict) and any(
+        str(value).strip() for value in tool.values() if value is not None
+    ):
+        return True
+    return False
+
+
+def visible_chat_business_result(
+    result: Any, *, payload: Any | None = None
+) -> dict[str, Any] | None:
     """Return a UI-visible business result; hide completed casual turns with no facts."""
     if not isinstance(result, dict) or not result:
         return None
@@ -486,9 +507,15 @@ def visible_chat_business_result(result: Any) -> dict[str, Any] | None:
     if (
         _has_visible_business_facts(result.get("facts"))
         or _has_visible_business_artifacts(result)
+        or _completed_tool_count(result) > 0
         or result.get("pending_approval")
         or result.get("requires_reconciliation")
         or status in _VISIBLE_BUSINESS_RESULT_STATUSES
+        or (
+            status == "completed"
+            and _text(result.get("summary"))
+            and _payload_has_business_execution(payload)
+        )
     ):
         return dict(result)
     return None
@@ -508,7 +535,8 @@ def extract_payload_business_result(payload: Any) -> dict[str, Any] | None:
         if not isinstance(source, dict):
             continue
         visible = visible_chat_business_result(
-            source.get("businessResult") or source.get("business_result")
+            source.get("businessResult") or source.get("business_result"),
+            payload=payload,
         )
         if visible is not None:
             return visible
@@ -524,9 +552,7 @@ def _payload_has_explicit_business_result(payload: dict[str, Any]) -> bool:
         if isinstance(inner, dict):
             sources.append(inner)
     for source in sources:
-        if isinstance(source, dict) and (
-            "businessResult" in source or "business_result" in source
-        ):
+        if isinstance(source, dict) and ("businessResult" in source or "business_result" in source):
             return True
     return False
 
@@ -567,11 +593,7 @@ def attach_visible_business_result_to_chat_payload(
             target = repo.get(run_id) if repo is not None else None
     if visible is None and target is not None:
         final_output = getattr(target, "final_output", {})
-        raw = (
-            final_output.get("business_result")
-            if isinstance(final_output, dict)
-            else None
-        )
+        raw = final_output.get("business_result") if isinstance(final_output, dict) else None
         if not isinstance(raw, dict):
             raw = ensure_terminal_business_result(target)
         visible = visible_chat_business_result(raw)
