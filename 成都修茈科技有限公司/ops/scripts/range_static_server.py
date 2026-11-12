@@ -32,6 +32,14 @@ class RangeHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "public, max-age=300")
         super().end_headers()
 
+    def copyfile(self, source, outputfile):
+        # 客户端中断（浏览器 seek / curl 提前断开）属正常现象，
+        # 捕获 BrokenPipe/ConnectionReset 以免刷出误导性的异常堆栈。
+        try:
+            super().copyfile(source, outputfile)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def send_head(self):
         path = self.translate_path(self.path)
         if os.path.isdir(path):
