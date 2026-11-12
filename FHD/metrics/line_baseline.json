@@ -1,5 +1,5 @@
 {
-  "lines": 2397555,
+  "lines": 2397586,
   "updated": "2026-11-12",
-  "note": "修复审批工作台无法滚动：审批中心内容区补齐 flex 高度约束与独立滚动，ApprovalHubView +4 行、approval-workspace.css +2 行，净增5行；用户报告审批工作台无法滚动并确认修复"
+  "note": "修复对话导入 Excel 读取阶段缺少租户上下文：tool_executor 将 excel_analysis 纳入租户恢复并新增回归测试，净增31行；用户报告导入失败并要求排查链路"
 }

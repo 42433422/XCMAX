@@ -39,6 +39,9 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         "shipment_orders",
         "document_template",
         "purchase",
+        # 表格读取会在任务快照阶段查询上传记录并按租户校验归属，
+        # 后台/持久化运行必须从 runtime_context 恢复租户上下文。
+        "excel_analysis",
     }
 )
 
