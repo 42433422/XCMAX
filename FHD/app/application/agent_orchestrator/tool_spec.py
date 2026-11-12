@@ -120,12 +120,21 @@ def _special_permission(tool_id: str, action: str) -> str:
         return "shipment.view"
     if tool_id == "materials" and action in {"list", "query"}:
         return "material.view"
-    if tool_id == "materials" and action in {"create", "update", "delete", "batch_delete"}:
+    if tool_id == "materials" and action in {"create", "update", "delete", "batch_delete", "clear"}:
         return "material.edit"
     if (tool_id, action) == ("customers", "query"):
         return "customer.view"
-    if tool_id == "customers" and action in {"ensure_exists", "delete", "batch_delete"}:
+    if tool_id == "customers" and action in {
+        "ensure_exists",
+        "delete",
+        "batch_delete",
+        "clear",
+    }:
         return "customer.edit"
+    if tool_id == "products" and action == "clear":
+        return "product.edit"
+    if tool_id == "shipment_records" and action == "clear":
+        return "shipment.edit"
     if tool_id in PERMISSION_BARE_PREFIX_TOOLS:
         if (tool_id, action) == ("employee", "context"):
             return "employee.execute"

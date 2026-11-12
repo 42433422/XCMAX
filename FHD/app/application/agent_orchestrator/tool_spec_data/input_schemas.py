@@ -211,6 +211,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             },
         },
     ),
+    ("customers", "clear"): _object_schema([], {}),
     ("products", "create"): _object_schema(
         ["name_or_model"],
         {
@@ -246,6 +247,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("products", "batch_delete"): _object_schema(
         ["ids"], {"ids": {"type": "array"}, "product_ids": {"type": "array"}}
     ),
+    ("products", "clear"): _object_schema([], {}),
     ("materials", "create"): _object_schema(
         ["name"],
         {
@@ -274,6 +276,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("materials", "batch_delete"): _object_schema(
         [], {"ids": {"type": "array"}, "material_ids": {"type": "array"}}
     ),
+    ("materials", "clear"): _object_schema([], {}),
     ("inventory", "create_storage_location"): _object_schema(
         [],
         {
@@ -660,6 +663,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         },
     ),
     ("shipment_records", "delete"): _PRODUCTS_DELETE_INPUT,
+    ("shipment_records", "clear"): _object_schema([], {}),
     ("shipment_orders", "generate"): _object_schema(
         ["unit_name", "products"],
         {

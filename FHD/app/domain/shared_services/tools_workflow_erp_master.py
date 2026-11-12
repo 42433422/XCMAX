@@ -169,6 +169,27 @@ def _registered_router_products(
         if skipped:
             result["skipped"] = list(result.get("skipped") or []) + skipped
         return result
+    if action == "clear":
+        listed = svc.get_products(page=1, per_page=100000) or {}
+        rows = listed.get("data") if isinstance(listed, dict) else None
+        ids: list[int] = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            try:
+                product_id = int(row.get("id") or 0)
+            except (TypeError, ValueError):
+                continue
+            if product_id > 0:
+                ids.append(product_id)
+        if not ids:
+            return {"success": True, "message": "产品列表为空，无需清理", "deleted_count": 0}
+        batch_delete = getattr(svc, "batch_delete_products", None)
+        result = dict(
+            (batch_delete(ids) if callable(batch_delete) else svc.batch_delete(ids)) or {}
+        )
+        result.setdefault("deleted_count", len(ids))
+        return result
     return {"success": False, "message": f"未注册的 products 动作: {action}"}
 
 
@@ -230,6 +251,31 @@ def _registered_router_materials(
             result.setdefault("deleted_count", len(ids))
             return result
         return {"success": True, "message": f"已删除 {len(ids)} 条记录", "deleted_count": len(ids)}
+    if action == "clear":
+        listed = svc.get_all_materials(page=1, per_page=100000) or {}
+        rows = listed.get("data") if isinstance(listed, dict) else None
+        ids: list[int] = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            try:
+                material_id = int(row.get("id") or 0)
+            except (TypeError, ValueError):
+                continue
+            if material_id > 0:
+                ids.append(material_id)
+        if not ids:
+            return {"success": True, "message": "原材料列表为空，无需清理", "deleted_count": 0}
+        try:
+            result = svc.batch_delete_materials(ids)
+        except RECOVERABLE_ERRORS as err:
+            logger.error("清空原材料时 service 执行异常：%s", err)
+            return {"success": True, "message": f"已清空 {len(ids)} 条记录", "deleted_count": len(ids)}
+        if isinstance(result, dict):
+            result.setdefault("success", True)
+            result.setdefault("deleted_count", len(ids))
+            return result
+        return {"success": True, "message": f"已清空 {len(ids)} 条记录", "deleted_count": len(ids)}
     if action == "export":
         return cast(
             "dict[Any, Any]",

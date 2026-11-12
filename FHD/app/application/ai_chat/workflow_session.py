@@ -565,47 +565,64 @@ class WorkflowSession:
         except (TypeError, ValueError):
             logger.warning("auto approve actor unavailable user=%r ctx_actor=%r", user_id, raw_actor)
             return None
-        try:
-            from app.application.approval_workspace_app_service import (
-                _approve_ai_workflow_request_without_node,
-            )
-            from app.db.models.approval import ApprovalRequest
-            from app.db.session import get_db
-
-            with get_db() as db:
-                request_row = (
-                    db.query(ApprovalRequest)
-                    .filter(ApprovalRequest.request_no == request_id)
-                    .first()
-                )
-                if request_row is None:
-                    logger.warning("auto approve request row missing request=%s", request_id)
-                    return None
-                result = _approve_ai_workflow_request_without_node(
-                    db,
-                    req=request_row,
-                    actor=actor,
-                    approver_name=None,
-                    opinion="自动审批模式：确认本轮 AI 工作流写入",
-                )
-        except RECOVERABLE_ERRORS:
-            logger.warning("auto approve AI workflow request failed", exc_info=True)
-            return None
-        if hasattr(result, "body"):
-            try:
-                result = json.loads(bytes(result.body).decode("utf-8"))
-            except (TypeError, ValueError):
-                return None
-        if not isinstance(result, dict):
-            return None
-        data = result.get("data") if isinstance(result.get("data"), dict) else {}
-        execution = data.get("workflow_execution") if isinstance(data, dict) else None
-        execution = execution if isinstance(execution, dict) else {}
-        success = bool(result.get("success")) and bool(
-            execution.get("success") or execution.get("execution_accepted")
+        from app.application.approval_workspace_app_service import (
+            _approve_ai_workflow_request_without_node,
         )
-        logger.info("auto approve finished request=%s success=%s", request_id, success)
-        message = str(result.get("message") or execution.get("message") or "").strip()
+        from app.db.models.approval import ApprovalRequest
+        from app.db.session import get_db
+
+        current_id = request_id
+        result: dict[str, Any] | None = None
+        execution: dict[str, Any] = {}
+        messages: list[str] = []
+        # 一个计划可能有多个需要审批的节点：每批准一步后，若还有下一步审批，
+        # 自动档继续批准，直到工作流结束或没有后续审批。
+        for _ in range(20):
+            try:
+                with get_db() as db:
+                    request_row = (
+                        db.query(ApprovalRequest)
+                        .filter(ApprovalRequest.request_no == current_id)
+                        .first()
+                    )
+                    if request_row is None:
+                        logger.warning("auto approve request row missing request=%s", current_id)
+                        return None
+                    result = _approve_ai_workflow_request_without_node(
+                        db,
+                        req=request_row,
+                        actor=actor,
+                        approver_name=None,
+                        opinion="自动审批模式：确认本轮 AI 工作流写入",
+                    )
+            except RECOVERABLE_ERRORS:
+                logger.warning("auto approve AI workflow request failed", exc_info=True)
+                return None
+            if hasattr(result, "body"):
+                try:
+                    result = json.loads(bytes(result.body).decode("utf-8"))
+                except (TypeError, ValueError):
+                    return None
+            if not isinstance(result, dict):
+                return None
+            data = result.get("data") if isinstance(result.get("data"), dict) else {}
+            execution = data.get("workflow_execution") if isinstance(data, dict) else None
+            execution = execution if isinstance(execution, dict) else {}
+            message = str(result.get("message") or execution.get("message") or "").strip()
+            if message:
+                messages.append(message)
+            next_id = str(execution.get("next_approval_request_id") or "").strip()
+            if next_id and next_id != current_id:
+                current_id = next_id
+                continue
+            break
+        if result is None:
+            return None
+        success = bool(result.get("success")) and bool(execution.get("success"))
+        logger.info(
+            "auto approve finished request=%s last=%s success=%s", request_id, current_id, success
+        )
+        message = messages[-1] if messages else ""
         text = (
             f"自动审批已通过并执行完成。{message}"
             if success

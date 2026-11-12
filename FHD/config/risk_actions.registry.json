@@ -297,6 +297,13 @@
           "availability": "shared",
           "action_class": "delete.batch"
         },
+        "clear": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared",
+          "action_class": "delete.batch"
+        },
         "add_address": {
           "risk": "medium",
           "idempotent": false,
@@ -405,6 +412,13 @@
           ],
           "availability": "shared",
           "action_class": "delete.batch"
+        },
+        "clear": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared",
+          "action_class": "delete.batch"
         }
       }
     },
@@ -449,6 +463,12 @@
           "availability": "shared"
         },
         "batch_delete": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "clear": {
           "risk": "high",
           "idempotent": false,
           "required_params": [],
@@ -502,6 +522,12 @@
           "required_params": [
             "id"
           ],
+          "availability": "shared"
+        },
+        "clear": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
           "availability": "shared"
         },
         "export": {
