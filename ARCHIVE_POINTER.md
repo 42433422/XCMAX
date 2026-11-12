@@ -46,6 +46,7 @@
 | **临时报告与锁文件清理（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/reports/` | 未入库的根 `reports/` 两份诊断（`ticket-triage-20261022.md`、`ci-acceleration/2026-10-12-ci-acceleration.md`，零入链）已外置；`test_reports/` 仅含运行锁 `.work_orders.lock`，已删除并移除空目录。 |
 | **release/ 过期打包桩移除（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/release/` | `release/` 仅含 v10.0.0 的 `README.txt`/`MOBILE_VERSION.md` 桩与陈旧 `release/VERSION`(`0.0.1`)，实际 APK/HAP 从未入库，且与 `FHD/VERSION.md`（`1.0.0.5`）构成版本漂移。已外置并 `git rm`；版本唯一权威来源为 `FHD/VERSION.md`。 |
 | **过期 runbook 回流清理（2026-11-12）** | `~/XCMAX-archives/docs-20260927-modstore-immutable/`、`~/XCMAX-archives/docs-20260927-mac-release-obsolete/` | `MODstore_deploy/docs/runbooks/` 下 `local-to-remote-push-flow.md`、`remote-server-operations.md`、`xcagi-software-download.md` 三份未跟踪文件属 2026-09-27 已归档的旧部署指引回流（推荐 Docker/tar 覆盖生产），归档区已有副本，本次直接删除。`成都修茈科技有限公司/ops/scripts/__pycache__/` 一并清除。 |
+| **App Store 截图素材外置（2026-11-12）** | 私有迁移仓 [`42433422/xcmax-Li`](https://github.com/42433422/xcmax-Li) `sources/xcmax/appstore-screenshots/` | 整个 `appstore-screenshots/`（26 文件 / 12.2MB：`live/`、`2.3.3-accurate-metadata/`、`upload/`、`upload-ipad-13/` 与 4 张手机标准图）迁入私有仓并按台账 A13-001…026 逐文件校验（status `verified`）；本仓已 `git rm`，README 头部引用同步移除。 |
 
 ## 恢复示例
 

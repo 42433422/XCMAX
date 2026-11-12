@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="appstore-screenshots/live/ipad-01-messages-live.png" alt="XCAGI · AI 员工桌面平台" width="60%" />
-</p>
-
 <h1 align="center">XCAGI · AI 员工桌面平台</h1>
 
 <p align="center">
