@@ -233,3 +233,44 @@ async def test_sync_error_receipt_preserves_status_and_safe_history_for_any_deta
         body,
         {"success": False, "response": message, "route_metadata": route, "turn_id": None},
     )
+
+
+
+def test_history_persists_visible_business_result_on_assistant_ui() -> None:
+    store = Mock(spec=ConversationStore)
+    persist_chat_turn(
+        "web_normal_untrusted",
+        "新增客户",
+        {"session_id": "session-1", "turn_id": "turn-1", "local_user_id": 42},
+        {
+            "success": True,
+            "response": "客户创建成功",
+            "run_id": "run-1",
+            "businessResult": {
+                "status": "completed",
+                "summary": "客户创建成功",
+                "facts": {"customer_id": 23},
+            },
+        },
+        store=store,
+    )
+    metadata = json.loads(store.save_message.call_args_list[1].kwargs["metadata"])
+    assert metadata["ui"]["businessResult"]["facts"]["customer_id"] == 23
+
+
+def test_history_does_not_persist_casual_completed_business_result() -> None:
+    store = Mock(spec=ConversationStore)
+    persist_chat_turn(
+        "web_normal_untrusted",
+        "你好",
+        {"session_id": "session-1", "turn_id": "turn-1", "local_user_id": 42},
+        {
+            "success": True,
+            "response": "你好，需要我做什么？",
+            "run_id": "run-casual",
+            "business_result": {"status": "completed", "summary": "你好，需要我做什么？", "facts": {}},
+        },
+        store=store,
+    )
+    metadata = json.loads(store.save_message.call_args_list[1].kwargs["metadata"])
+    assert "businessResult" not in metadata["ui"]

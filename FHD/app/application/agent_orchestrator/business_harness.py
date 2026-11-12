@@ -451,15 +451,149 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     return result
 
 
+
+_VISIBLE_BUSINESS_RESULT_STATUSES = {
+    "failed",
+    "cancelled",
+    "blocked",
+    "unknown",
+    "pending_approval",
+    "waiting_user",
+    "waiting_approval",
+}
+
+
+def _has_visible_business_facts(facts: Any) -> bool:
+    if not isinstance(facts, dict):
+        return False
+    return any(value not in (None, "", [], {}) for value in facts.values())
+
+
+def _has_visible_business_artifacts(result: dict[str, Any]) -> bool:
+    evidence = result.get("evidence") if isinstance(result.get("evidence"), dict) else {}
+    artifact_ids = evidence.get("artifact_ids") if isinstance(evidence, dict) else None
+    if isinstance(artifact_ids, list) and any(str(item).strip() for item in artifact_ids):
+        return True
+    artifacts = result.get("artifacts")
+    return bool(artifacts)
+
+
+def visible_chat_business_result(result: Any) -> dict[str, Any] | None:
+    """Return a UI-visible business result; hide completed casual turns with no facts."""
+    if not isinstance(result, dict) or not result:
+        return None
+    status = _text(result.get("status"), limit=32)
+    if (
+        _has_visible_business_facts(result.get("facts"))
+        or _has_visible_business_artifacts(result)
+        or result.get("pending_approval")
+        or result.get("requires_reconciliation")
+        or status in _VISIBLE_BUSINESS_RESULT_STATUSES
+    ):
+        return dict(result)
+    return None
+
+
+def extract_payload_business_result(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    sources: list[Any] = [payload]
+    data = payload.get("data")
+    if isinstance(data, dict):
+        sources.append(data)
+        inner = data.get("data")
+        if isinstance(inner, dict):
+            sources.append(inner)
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        visible = visible_chat_business_result(
+            source.get("businessResult") or source.get("business_result")
+        )
+        if visible is not None:
+            return visible
+    return None
+
+
+def _payload_has_explicit_business_result(payload: dict[str, Any]) -> bool:
+    sources: list[Any] = [payload]
+    data = payload.get("data")
+    if isinstance(data, dict):
+        sources.append(data)
+        inner = data.get("data")
+        if isinstance(inner, dict):
+            sources.append(inner)
+    for source in sources:
+        if isinstance(source, dict) and (
+            "businessResult" in source or "business_result" in source
+        ):
+            return True
+    return False
+
+
+def _run_id_from_payload(payload: dict[str, Any]) -> str:
+    for source in (payload, payload.get("data") if isinstance(payload.get("data"), dict) else {}):
+        if not isinstance(source, dict):
+            continue
+        run_id = _text(source.get("run_id") or source.get("agent_run_id"), limit=96)
+        if run_id:
+            return run_id
+    return ""
+
+
+def attach_visible_business_result_to_chat_payload(
+    payload: dict[str, Any],
+    *,
+    run: Any | None = None,
+    repository: Any | None = None,
+) -> dict[str, Any]:
+    """Copy a meaningful terminal business result onto the live chat payload."""
+    if not isinstance(payload, dict):
+        return payload
+    visible = extract_payload_business_result(payload)
+    target = run
+    if visible is None and target is None and _payload_has_explicit_business_result(payload):
+        return payload
+    if visible is None and target is None:
+        run_id = _run_id_from_payload(payload)
+        if run_id:
+            repo = repository
+            if repo is None:
+                from app.application.agent_orchestrator.run_repository import (
+                    get_agent_run_repository,
+                )
+
+                repo = get_agent_run_repository()
+            target = repo.get(run_id) if repo is not None else None
+    if visible is None and target is not None:
+        final_output = getattr(target, "final_output", {})
+        raw = (
+            final_output.get("business_result")
+            if isinstance(final_output, dict)
+            else None
+        )
+        if not isinstance(raw, dict):
+            raw = ensure_terminal_business_result(target)
+        visible = visible_chat_business_result(raw)
+    if visible is None:
+        return payload
+    attached = dict(payload)
+    attached["businessResult"] = visible
+    return attached
+
+
 __all__ = [
     "BUSINESS_HARNESS_PROTOCOL",
     "TERMINAL_RUN_STATUSES",
     "ERP_ORDER_TOOL_NAME",
     "UNEXECUTED_ORDER_ERROR",
+    "attach_visible_business_result_to_chat_payload",
     "ensure_business_harness_context",
     "ensure_terminal_business_result",
+    "extract_payload_business_result",
     "forced_order_tool_choice",
     "harness_event_context",
     "mark_unexecuted_order_run",
     "order_write_requested",
+    "visible_chat_business_result",
 ]

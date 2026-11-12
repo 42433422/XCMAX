@@ -60,6 +60,7 @@ export interface ChatOrchestrationRemoteRoundDeps {
   attachTodoStepsToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachTodoStepsToLastAiMessage']
   attachWorkflowTraceToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachWorkflowTraceToLastAiMessage']
   attachApprovalCardToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachApprovalCardToLastAiMessage']
+  attachBusinessResultToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachBusinessResultToLastAiMessage']
   attachAgentRunTraceToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachAgentRunTraceToLastAiMessage']
   attachContextSummaryToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachContextSummaryToLastAiMessage']
   syncAgentRunFromPayload: ReturnType<typeof useAgentRunEventSync>['syncAgentRunFromPayload']
@@ -93,6 +94,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     attachTodoStepsToLastAiMessage,
     attachWorkflowTraceToLastAiMessage,
     attachApprovalCardToLastAiMessage,
+    attachBusinessResultToLastAiMessage,
     attachAgentRunTraceToLastAiMessage,
     attachContextSummaryToLastAiMessage,
     syncAgentRunFromPayload,
@@ -302,6 +304,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         attachTodoStepsToLastAiMessage(payload)
         attachWorkflowTraceToLastAiMessage(payload)
         attachApprovalCardToLastAiMessage(payload)
+        attachBusinessResultToLastAiMessage(payload)
         if (!payload.task && (payload.autoAction?.type === 'show_products_float' || payload.autoAction?.type === 'show_products')) {
           currentTask.value = null
         }
@@ -490,6 +493,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         attachTodoStepsToLastAiMessage(wrap)
         attachWorkflowTraceToLastAiMessage(wrap)
         attachApprovalCardToLastAiMessage(wrap)
+        attachBusinessResultToLastAiMessage(wrap)
         if (requiresTurnReconciliation(wrap)) return
         if (wrap.task) {
           showTaskConfirm(wrap.task)
@@ -663,6 +667,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           attachTodoStepsToLastAiMessage(lastOk)
           attachWorkflowTraceToLastAiMessage(lastOk)
           attachApprovalCardToLastAiMessage(lastOk)
+          attachBusinessResultToLastAiMessage(lastOk)
         }
         if (results.some(requiresTurnReconciliation)) return
         const lastTask = [...results].reverse().find((p) => p.task)
@@ -710,6 +715,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       attachTodoStepsToLastAiMessage(data)
       attachWorkflowTraceToLastAiMessage(data)
       attachApprovalCardToLastAiMessage(data)
+      attachBusinessResultToLastAiMessage(data)
       if (requiresTurnReconciliation(data)) return
 
       if (data.task) {

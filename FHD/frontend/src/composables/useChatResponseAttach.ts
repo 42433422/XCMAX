@@ -119,6 +119,22 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     }
   }
 
+  function attachBusinessResultToLastAiMessage(data: ChatPlannerPayload): void {
+    const inner = nestedData(data)
+    const envelope = asRecord(data.data)
+    const businessResult = asRecord(
+      data.businessResult || data.business_result || envelope.businessResult || envelope.business_result || inner.businessResult || inner.business_result,
+    )
+    if (!Object.keys(businessResult).length) return
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const msg = messages.value[i]
+      if (msg?.role === 'ai') {
+        msg.businessResult = businessResult
+        break
+      }
+    }
+  }
+
   /**
    * 把最近 agent_run task 的 RunEvent[] 重建为 Codex 风格执行流 trace，
    * 挂到最近一条 AI 消息上（在 ChatMessageList 内联渲染）。
@@ -244,6 +260,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     attachTodoStepsToLastAiMessage,
     attachWorkflowTraceToLastAiMessage,
     attachApprovalCardToLastAiMessage,
+    attachBusinessResultToLastAiMessage,
     attachContextSummaryToLastAiMessage,
     attachAgentRunTraceToLastAiMessage,
     syncTaskFromChatResponse,

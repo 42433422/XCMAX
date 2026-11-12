@@ -30,6 +30,33 @@ function makeDeps() {
 }
 
 describe('useChatResponseAttach', () => {
+  it('attachBusinessResultToLastAiMessage sets a visible business result on last ai', () => {
+    const { messages, attachBusinessResultToLastAiMessage } = makeDeps()
+    attachBusinessResultToLastAiMessage({
+      success: true,
+      businessResult: { status: 'completed', summary: '客户创建成功', facts: { customer_id: 23 } },
+    })
+    expect(messages.value[1].businessResult).toEqual({
+      status: 'completed',
+      summary: '客户创建成功',
+      facts: { customer_id: 23 },
+    })
+  })
+
+  it('attachBusinessResultToLastAiMessage accepts nested business_result and skips empty objects', () => {
+    const { messages, attachBusinessResultToLastAiMessage } = makeDeps()
+    attachBusinessResultToLastAiMessage({
+      success: true,
+      data: { business_result: {} },
+    })
+    expect(messages.value[1].businessResult).toBeUndefined()
+    attachBusinessResultToLastAiMessage({
+      success: true,
+      data: { business_result: { status: 'failed', summary: '写入失败' } },
+    })
+    expect(messages.value[1].businessResult?.status).toBe('failed')
+  })
+
   it('attachThinkingStepsToLastAiMessage sets thinking on last ai', () => {
     const { messages, attachThinkingStepsToLastAiMessage } = makeDeps()
     attachThinkingStepsToLastAiMessage({
