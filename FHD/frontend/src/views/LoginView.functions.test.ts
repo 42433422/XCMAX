@@ -111,7 +111,6 @@ const mockCanResumeRecentDesktopSession = vi.fn(async (isDesktop: boolean, isEnt
 vi.mock('@/utils/authSessionCache', () => ({
   canResumeRecentDesktopSession: (...args: [boolean, boolean, Record<string, unknown>]) => mockCanResumeRecentDesktopSession(...args),
   rememberEnterpriseSessionValid: () => undefined,
-  hasRememberedEnterpriseSession: () => false,
 }))
 
 const mockIsDesktopShell = vi.fn(() => false)

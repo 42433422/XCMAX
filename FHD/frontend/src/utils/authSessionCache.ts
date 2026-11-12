@@ -141,13 +141,6 @@ export function rememberEnterpriseSessionValid(): void {
   writeEnterpriseSessionHint(cachedAt)
 }
 
-/** True only for the login that just succeeded in this page. A reload starts cold. */
-export function hasRememberedEnterpriseSession(): boolean {
-  return cachedValid === true
-    && cachedAccountEpoch === productReadAccountEpoch.value
-    && Date.now() - cachedAt < SESSION_TTL_MS
-}
-
 export async function validateEnterpriseSessionCached(force = false): Promise<boolean> {
   if (cachedAccountEpoch !== productReadAccountEpoch.value) {
     cachedAccountEpoch = productReadAccountEpoch.value
