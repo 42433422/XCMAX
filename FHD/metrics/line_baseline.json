@@ -1,5 +1,5 @@
 {
-  "lines": 2397550,
+  "lines": 2397555,
   "updated": "2026-11-12",
-  "note": "新增本工作台业务数据整表清空能力：customers/products/materials/shipment_records 各增 clear 动作及规格、风险注册、规划规则与测试，工具规格+51、工具路由+103、测试+66、规划规则+2、注册表+27，净增166行；用户要求清空客户/产品/原材料/出货记录并确认执行"
+  "note": "修复审批工作台无法滚动：审批中心内容区补齐 flex 高度约束与独立滚动，ApprovalHubView +4 行、approval-workspace.css +2 行，净增5行；用户报告审批工作台无法滚动并确认修复"
 }
