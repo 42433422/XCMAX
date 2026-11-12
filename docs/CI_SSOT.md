@@ -195,9 +195,7 @@ PR Fast CI
 
 > **生成 vs 手写**：根仓 `fhd-*.yml` / `modstore-*.yml` 由 publish 脚本从实现源生成，文件头为
 > `# CI SSOT: generated from … — DO NOT edit here`。**请改实现源后重跑 publish**，勿直接改根副本。
-> 以下 **6 个根仓 workflow 为手写**（无生成头，直接在根仓维护）：
-> `archive-hygiene.yml`、`corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
-> `e2e.yml`、`e2e-playwright-reusable.yml`、`frontend-unit.yml`。
+> 判定规则只有一条：**文件头带 `# CI SSOT: generated from …` 即为生成副本，否则为根仓手写、直接在此维护**。不再维护手写文件清单（旧清单已多次漏项）。
 
 ## 常用 workflow
 

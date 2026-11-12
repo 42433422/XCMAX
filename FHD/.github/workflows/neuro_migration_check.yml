@@ -6,8 +6,20 @@ env:
 on:
   push:
     branches: [ main, develop, feature/neuro-migration ]
+    paths:
+      - "FHD/app/**"
+      - "FHD/scripts/detect_migration_status.py"
+      - "FHD/scripts/cleanup_legacy_code.py"
+      - "FHD/tests/**"
+      - ".github/workflows/fhd-neuro-migration-check.yml"
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - "FHD/app/**"
+      - "FHD/scripts/detect_migration_status.py"
+      - "FHD/scripts/cleanup_legacy_code.py"
+      - "FHD/tests/**"
+      - ".github/workflows/fhd-neuro-migration-check.yml"
   schedule:
     # 每天凌晨 2 点运行
     - cron: '0 2 * * *'

@@ -56,7 +56,6 @@ jobs:
           for wf in \
             fhd-release-gate-ci.yml \
             fhd-mutation-smoke.yml \
-            codeql.yml \
             fhd-security-full-scan.yml \
             fhd-alembic-ssot.yml \
             desktop-macos-smoke.yml \

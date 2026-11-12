@@ -3,8 +3,6 @@ name: Source Governance
 on:
   pull_request:
     branches: [main, develop, master]
-  push:
-    branches: [main, develop, master]
   workflow_dispatch:
 
 permissions:

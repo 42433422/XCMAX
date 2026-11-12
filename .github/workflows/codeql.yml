@@ -7,8 +7,7 @@ name: CodeQL
 # 精确匹配 branch protection 的 required contexts。
 
 on:
-  push:
-    branches: [main]
+  # 不在 push 上重复跑：PR 已有 required 的 analyze 检查，main 的扫描由每日 cron 刷新。
   pull_request:
     branches: [main]
   workflow_dispatch:
