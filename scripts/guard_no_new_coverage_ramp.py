@@ -11,7 +11,7 @@ BANNED = re.compile(r"test_coverage_ramp_phase\d+", re.IGNORECASE)
 ALLOWED_PREFIXES = (
     "FHD/tests/",
     "成都修茈科技有限公司/MODstore_deploy/tests/",
-    "成都修茈科技有限公司/vibe-coding/tests/",
+    "成都修茈科技有限公司/apps/vibe-coding/tests/",
     "packages/",
 )
 

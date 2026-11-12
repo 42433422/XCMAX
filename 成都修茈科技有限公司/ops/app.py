@@ -23,7 +23,7 @@ from werkzeug.utils import secure_filename
 
 BOUNDARY_ERRORS = (Exception,)
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parents[1] / "web"
 UPLOAD_DIR = BASE_DIR / "uploads"
 ASSETS_DIR = BASE_DIR / "assets"
 DATA_FILE = BASE_DIR / "activities.json"

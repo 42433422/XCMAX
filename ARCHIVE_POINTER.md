@@ -36,7 +36,7 @@
 | **文档收敛归档（第五批·营销）** | `~/XCMAX-archives/docs-20260910-batch5/` | `docs/marketing/` 未跟踪营销内容（2 篇 md + 封面 png + `gen_cover.py`）：非活文档且触发 `docs-ssot` WARN，移出工作区；校验和见 `.../docs-20260910-batch5/MANIFEST.txt`。 |
 | **文档收敛归档（第六批·控制面收敛）** | `~/XCMAX-archives/docs-20260917-batch6/` | `specs/` 死树 8 篇（839 行，规格已被 [product-lines-3-plus-2.md](specs/product-lines-3-plus-2.md) 与三产品线控制面取代）+ 仓内只读运维归档 `archive/ops/` 10 文件（2,617 行，从未接通真实集群）。已 `git rm`；校验和见 `.../docs-20260917-batch6/MANIFEST.txt`。 |
 | **文档收敛归档（第七批·过期架构计划）** | `~/XCMAX-archives/docs-20260925-self-heal/` | `FHD/docs/architecture/REFACTOR_DECOMPOSITION_PLAN.md` 与已标陈旧的 `ddd-refactoring-plan.md` 均未登记为 SSOT；恢复副本与 SHA256 见 `MANIFEST.txt`。 |
-| **官网陈旧快照归档（2026-09-26）** | `~/XCMAX-archives/site-stale-20260926/` | `成都修茈科技有限公司/site/` 下 11 个 2026-09-09 官网旧版页面快照（约 1,100 行；内容定位停留在旧版官网，与根目录活页面重复且零引用）。已从工作区删除；`site/` 目录现仅保留 `site/data/`（SSOT 聚合产物）。校验和见 `.../site-stale-20260926/MANIFEST.txt`。 |
+| **官网陈旧快照归档（2026-09-26）** | `~/XCMAX-archives/site-stale-20260926/` | `成都修茈科技有限公司/web/site/` 下 11 个 2026-09-09 官网旧版页面快照（约 1,100 行；内容定位停留在旧版官网，与根目录活页面重复且零引用）。已从工作区删除；`site/` 目录现仅保留 `site/data/`（SSOT 聚合产物）。校验和见 `.../site-stale-20260926/MANIFEST.txt`。 |
 | **MODstore 旧部署指引归档（2026-09-27）** | `~/XCMAX-archives/docs-20260927-modstore-immutable/` | `local-to-remote-push-flow.md` 和 `remote-server-operations.md` 仍推荐 Docker/tar 覆盖生产，与当前 immutable release systemd 链冲突；原文及 SHA256 见 `MANIFEST.txt`。 |
 | **Mac 发布旧部署指引归档（2026-09-27）** | `~/XCMAX-archives/docs-20260927-mac-release-obsolete/` | 旧版 `FHD/docs/guides/DEPLOYMENT_GUIDE.md` 和 MODstore 的 `xcagi-software-download.md` 已失效；原文及 SHA256 见 `MANIFEST.txt`。 |
 | **客户/品牌资料外置（2026-11-12）** | 私有迁移仓 [`42433422/xcmax-Li`](https://github.com/42433422/xcmax-Li) `sources/xcmax/` | `太阳鸟/`（README、安装说明）与 `宣传资料/`（企业介绍 PPT、路演流程清单图）已迁入该仓并按 `ledger/MIGRATION_LEDGER.csv` A12 逐文件校验（状态 `verified`），本仓已 `git rm`。 |
@@ -45,7 +45,7 @@
 | **outputs 打包产物外置（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/outputs/` | 迁出未入库的 `FHD-src-1.0.0.5-20261110.tar.gz`（78MB 源码包）、`byok-auto-match-module/` 与同名 `.zip`，字节核对一致；`outputs/` 仅保留已入库的 `01a05bb6-…/` 交付表。 |
 | **临时报告与锁文件清理（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/reports/` | 未入库的根 `reports/` 两份诊断（`ticket-triage-20261022.md`、`ci-acceleration/2026-10-12-ci-acceleration.md`，零入链）已外置；`test_reports/` 仅含运行锁 `.work_orders.lock`，已删除并移除空目录。 |
 | **release/ 过期打包桩移除（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/release/` | `release/` 仅含 v10.0.0 的 `README.txt`/`MOBILE_VERSION.md` 桩与陈旧 `release/VERSION`(`0.0.1`)，实际 APK/HAP 从未入库，且与 `FHD/VERSION.md`（`1.0.0.5`）构成版本漂移。已外置并 `git rm`；版本唯一权威来源为 `FHD/VERSION.md`。 |
-| **过期 runbook 回流清理（2026-11-12）** | `~/XCMAX-archives/docs-20260927-modstore-immutable/`、`~/XCMAX-archives/docs-20260927-mac-release-obsolete/` | `MODstore_deploy/docs/runbooks/` 下 `local-to-remote-push-flow.md`、`remote-server-operations.md`、`xcagi-software-download.md` 三份未跟踪文件属 2026-09-27 已归档的旧部署指引回流（推荐 Docker/tar 覆盖生产），归档区已有副本，本次直接删除。`成都修茈科技有限公司/scripts/__pycache__/` 一并清除。 |
+| **过期 runbook 回流清理（2026-11-12）** | `~/XCMAX-archives/docs-20260927-modstore-immutable/`、`~/XCMAX-archives/docs-20260927-mac-release-obsolete/` | `MODstore_deploy/docs/runbooks/` 下 `local-to-remote-push-flow.md`、`remote-server-operations.md`、`xcagi-software-download.md` 三份未跟踪文件属 2026-09-27 已归档的旧部署指引回流（推荐 Docker/tar 覆盖生产），归档区已有副本，本次直接删除。`成都修茈科技有限公司/ops/scripts/__pycache__/` 一并清除。 |
 
 ## 恢复示例
 

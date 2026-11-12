@@ -329,7 +329,7 @@ def _render_corp(src: Path) -> tuple[str, str] | None:
         body = _insert_defaults(body, DEFAULTS_CORP)
     body = body.replace(
         "working-directory: vibe-coding",
-        "working-directory: 成都修茈科技有限公司/vibe-coding",
+        "working-directory: 成都修茈科技有限公司/apps/vibe-coding",
     )
     body = body.replace(
         "working-directory: MODstore_deploy/java_payment_service",

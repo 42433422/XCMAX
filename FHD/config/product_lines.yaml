@@ -68,7 +68,7 @@ lines:
       - pay
       - industry
     releases:
-      web: 成都修茈科技有限公司/release/VERSION
+      web: FHD/VERSION.md
     entry: 成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md
     workflows:
       - .github/workflows/modstore-ci-backend-python.yml

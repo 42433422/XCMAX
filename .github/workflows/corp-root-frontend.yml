@@ -13,36 +13,36 @@ name: CI - Root Frontend
 on:
   pull_request:
     paths:
-      - '成都修茈科技有限公司/src/**'
-      - '成都修茈科技有限公司/public/**'
-      - '成都修茈科技有限公司/app.html'
-      - '成都修茈科技有限公司/package.json'
-      - '成都修茈科技有限公司/package-lock.json'
-      - '成都修茈科技有限公司/vite.config.*'
-      - '成都修茈科技有限公司/tsconfig*.json'
-      - '成都修茈科技有限公司/vitest.config.*'
-      - '成都修茈科技有限公司/playwright.config.*'
-      - '成都修茈科技有限公司/.prettierrc*'
-      - '成都修茈科技有限公司/.prettierignore'
-      - '成都修茈科技有限公司/eslint.config.*'
-      - '成都修茈科技有限公司/.eslintrc*'
+      - '成都修茈科技有限公司/frontend/src/**'
+      - '成都修茈科技有限公司/frontend/public/**'
+      - '成都修茈科技有限公司/frontend/app.html'
+      - '成都修茈科技有限公司/frontend/package.json'
+      - '成都修茈科技有限公司/frontend/package-lock.json'
+      - '成都修茈科技有限公司/frontend/vite.config.*'
+      - '成都修茈科技有限公司/frontend/tsconfig*.json'
+      - '成都修茈科技有限公司/frontend/vitest.config.*'
+      - '成都修茈科技有限公司/frontend/playwright.config.*'
+      - '成都修茈科技有限公司/frontend/.prettierrc*'
+      - '成都修茈科技有限公司/frontend/.prettierignore'
+      - '成都修茈科技有限公司/frontend/eslint.config.*'
+      - '成都修茈科技有限公司/frontend/.eslintrc*'
       - '.github/workflows/corp-root-frontend.yml'
   push:
     branches: [main]
     paths:
-      - '成都修茈科技有限公司/src/**'
-      - '成都修茈科技有限公司/public/**'
-      - '成都修茈科技有限公司/app.html'
-      - '成都修茈科技有限公司/package.json'
-      - '成都修茈科技有限公司/package-lock.json'
-      - '成都修茈科技有限公司/vite.config.*'
-      - '成都修茈科技有限公司/tsconfig*.json'
-      - '成都修茈科技有限公司/vitest.config.*'
-      - '成都修茈科技有限公司/playwright.config.*'
-      - '成都修茈科技有限公司/.prettierrc*'
-      - '成都修茈科技有限公司/.prettierignore'
-      - '成都修茈科技有限公司/eslint.config.*'
-      - '成都修茈科技有限公司/.eslintrc*'
+      - '成都修茈科技有限公司/frontend/src/**'
+      - '成都修茈科技有限公司/frontend/public/**'
+      - '成都修茈科技有限公司/frontend/app.html'
+      - '成都修茈科技有限公司/frontend/package.json'
+      - '成都修茈科技有限公司/frontend/package-lock.json'
+      - '成都修茈科技有限公司/frontend/vite.config.*'
+      - '成都修茈科技有限公司/frontend/tsconfig*.json'
+      - '成都修茈科技有限公司/frontend/vitest.config.*'
+      - '成都修茈科技有限公司/frontend/playwright.config.*'
+      - '成都修茈科技有限公司/frontend/.prettierrc*'
+      - '成都修茈科技有限公司/frontend/.prettierignore'
+      - '成都修茈科技有限公司/frontend/eslint.config.*'
+      - '成都修茈科技有限公司/frontend/.eslintrc*'
       - '.github/workflows/corp-root-frontend.yml'
   workflow_dispatch:
 
@@ -53,10 +53,9 @@ concurrency:
 permissions:
   contents: read
 
-
 defaults:
   run:
-    working-directory: 成都修茈科技有限公司
+    working-directory: 成都修茈科技有限公司/frontend
 
 jobs:
   root-frontend-ci:

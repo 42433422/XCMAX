@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # Prefer in-repo MODstore; fall back to archive only if missing.
 _REPO_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
-_WS_MODSTORE="$(ls -d "${_REPO_ROOT}"/*修*/MODstore_deploy 2>/dev/null | head -1 || true)"
+_WS_MODSTORE="$(ls -d "${_REPO_ROOT}"/*修*/apps/modstore 2>/dev/null | head -1 || true)"
 if [[ -z "${MODSTORE_DEPLOY_ROOT:-}" ]]; then
   if [[ -n "${_WS_MODSTORE}" && -d "${_WS_MODSTORE}/modstore_server" ]]; then
     MODSTORE_DEPLOY_ROOT="${_WS_MODSTORE}"

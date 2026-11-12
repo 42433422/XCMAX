@@ -78,5 +78,5 @@ def test_corporate_component_workflows_are_published_with_root_paths() -> None:
     assert vibe is not None
     assert "working-directory: 成都修茈科技有限公司" in root_frontend[1]
     assert "cache-dependency-path: 成都修茈科技有限公司/package-lock.json" in root_frontend[1]
-    assert "working-directory: 成都修茈科技有限公司/vibe-coding" in vibe[1]
-    assert "- '成都修茈科技有限公司/vibe-coding/**'" in vibe[1]
+    assert "working-directory: 成都修茈科技有限公司/apps/vibe-coding" in vibe[1]
+    assert "- '成都修茈科技有限公司/apps/vibe-coding/**'" in vibe[1]

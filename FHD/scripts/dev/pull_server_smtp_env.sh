@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-DEPLOY_ENV="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/deploy/.env.deploy.local"
+DEPLOY_ENV="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/ops/deploy/.env.deploy.local"
 OUT="${FHD_ROOT}/XCAGI/.env.smtp.local"
 MODSTORE_ROOT="${MODSTORE_API_ROOT:-/root/modstore-git/MODstore_deploy}"
 

@@ -11,36 +11,36 @@ name: CI - Root Frontend
 on:
   pull_request:
     paths:
-      - 'src/**'
-      - 'public/**'
-      - 'app.html'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'vite.config.*'
-      - 'tsconfig*.json'
-      - 'vitest.config.*'
-      - 'playwright.config.*'
-      - '.prettierrc*'
-      - '.prettierignore'
-      - 'eslint.config.*'
-      - '.eslintrc*'
+      - 'frontend/src/**'
+      - 'frontend/public/**'
+      - 'frontend/app.html'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'frontend/vite.config.*'
+      - 'frontend/tsconfig*.json'
+      - 'frontend/vitest.config.*'
+      - 'frontend/playwright.config.*'
+      - 'frontend/.prettierrc*'
+      - 'frontend/.prettierignore'
+      - 'frontend/eslint.config.*'
+      - 'frontend/.eslintrc*'
       - '.github/workflows/ci-root-frontend.yml'
   push:
     branches: [main]
     paths:
-      - 'src/**'
-      - 'public/**'
-      - 'app.html'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'vite.config.*'
-      - 'tsconfig*.json'
-      - 'vitest.config.*'
-      - 'playwright.config.*'
-      - '.prettierrc*'
-      - '.prettierignore'
-      - 'eslint.config.*'
-      - '.eslintrc*'
+      - 'frontend/src/**'
+      - 'frontend/public/**'
+      - 'frontend/app.html'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'frontend/vite.config.*'
+      - 'frontend/tsconfig*.json'
+      - 'frontend/vitest.config.*'
+      - 'frontend/playwright.config.*'
+      - 'frontend/.prettierrc*'
+      - 'frontend/.prettierignore'
+      - 'frontend/eslint.config.*'
+      - 'frontend/.eslintrc*'
       - '.github/workflows/ci-root-frontend.yml'
   workflow_dispatch:
 
@@ -50,6 +50,10 @@ concurrency:
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    working-directory: 成都修茈科技有限公司/frontend
 
 jobs:
   root-frontend-ci:

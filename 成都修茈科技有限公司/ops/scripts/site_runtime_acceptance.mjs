@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
-const SITE = join(dirname(fileURLToPath(import.meta.url)), '..')
+const SITE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web')
 const BASE = process.argv[2] || 'http://127.0.0.1:8123'
 const OUT = join(SITE, 'site/data/runtime-results.json')
 const EVID = join(SITE, 'site/data/runtime-evidence')

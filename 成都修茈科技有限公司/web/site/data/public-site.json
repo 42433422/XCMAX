@@ -6,7 +6,7 @@
     "pricing": "FHD/config/saas_plans.json",
     "cases": "FHD/config/public_cases.json",
     "capabilities": "data/capabilities.json",
-    "release": "download-release.json",
+    "release": "web/download-release.json",
     "evidence": "capabilities/assets/evidence/"
   },
   "product": {
@@ -16,7 +16,7 @@
     "version": "1.0.0.5",
     "toolchain_version": "1.0.0"
   },
-  "data_updated_at": "2026-09-29",
+  "data_updated_at": "2026-10-06",
   "pricing": {
     "trial": {
       "id": "saas-trial-30",
@@ -184,10 +184,10 @@
     {
       "key": "web",
       "applicable": 128,
-      "verified": 52,
+      "verified": 55,
       "partial": 0,
-      "pending": 76,
-      "last_verified_at": "2026-09-29",
+      "pending": 73,
+      "last_verified_at": "2026-10-06",
       "label": "Web / 后端",
       "level": "签约级"
     },
@@ -248,10 +248,10 @@
       {
         "key": "web",
         "applicable": 128,
-        "verified": 52,
+        "verified": 55,
         "partial": 0,
-        "pending": 76,
-        "last_verified_at": "2026-09-29",
+        "pending": 73,
+        "last_verified_at": "2026-10-06",
         "label": "Web / 后端",
         "level": "签约级"
       },
@@ -1510,31 +1510,39 @@
       },
       {
         "feature": "base-health",
-        "platform": "macos",
+        "platform": "web",
         "status": "passed",
-        "passed": 4,
+        "passed": 2,
         "failed": 0,
-        "verified_at": "2026-09-29",
+        "verified_at": "2026-10-05",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "3ab4874b17974fae2b52dcabc033f07092206771",
         "media": [
           {
-            "file": "base-health-result.png",
-            "sha256": "5edcc79f5e41d724ed00182cc2fde18418d9b42c45643d3bce9ab69e25ae9fa9",
+            "file": "base-health-01-login-wall.png",
+            "sha256": "faa33929d28464ede300be4fe0ace08bb18afccc278d1988a56e0094aad1ddf2",
             "visual_review": "accepted",
-            "visible_result": "系统设置页（左下角「系统正常」状态）：个人主页、模型服务与余额卡片。",
+            "visible_result": "未登录时页面是企业账号登录，没有运行状态",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/base-health-result.png"
+            "public_path": "/capabilities/assets/evidence/base-health-01-login-wall.png"
           },
           {
-            "file": "base-health-operation.webm",
-            "sha256": "65a0106b6a554cf18e9011217a4358db120269ba782226c94f46e64c40877e55",
+            "file": "base-health-02-runtime-status.png",
+            "sha256": "75a233ce64fc1c970092f6f8ed0758ce111958eb80da7830e2b3ae7144cf79d0",
             "visual_review": "accepted",
-            "visible_result": "录屏为系统设置页，左下系统状态灯为「系统正常」。",
+            "visible_result": "已登录后桌面模式为是，并显示本机数据目录",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-health-02-runtime-status.png"
+          },
+          {
+            "file": "base-health-operation.mov",
+            "sha256": "35ba6f84ff462e21f47ed1e9df2698be05a3007b5b8253cef5986ad12018e109",
+            "visual_review": "accepted",
+            "visible_result": "先是登录墙，接着是桌面运行时状态",
             "kind": "video",
-            "size_bytes": 338832,
-            "duration_seconds": null,
-            "codec": "webm",
+            "size_bytes": 60749,
+            "duration_seconds": 2.0,
+            "codec": null,
             "public_path": null
           }
         ],
@@ -1544,7 +1552,7 @@
           "sha256": "30315d70535732527bb0ae4210e46ab5b993ef48dd2c58ae5c30d7348c01e104",
           "size_bytes": 1261
         },
-        "source_run": "/capabilities/assets/evidence/base-health-base-health-macos-run.json"
+        "source_run": "/capabilities/assets/evidence/base-health-web-run.json"
       },
       {
         "feature": "base-help",
@@ -1778,31 +1786,31 @@
       },
       {
         "feature": "base-rbac",
-        "platform": "macos",
+        "platform": "web",
         "status": "passed",
-        "passed": 4,
+        "passed": 2,
         "failed": 0,
-        "verified_at": "2026-09-29",
+        "verified_at": "2026-10-05",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "3ab4874b17974fae2b52dcabc033f07092206771",
         "media": [
           {
-            "file": "base-rbac-result.png",
-            "sha256": "0169747ae76f7fb24c948bea91bc853acfaaf1b77a2765ab499a7355dc031059",
+            "file": "base-rbac-01-roles.png",
+            "sha256": "1298a207cbd614ef488689f2d0190e0ecfc5495d40aa05aaa191035a961f6e21",
             "visual_review": "accepted",
-            "visible_result": "「角色与权限」页：角色列表含 MAC验收0929角色（新建），右侧权限勾选项（执行 ETL / 查看数据对接 / 回滚 ETL / 管理 ETL 目标 等）与「保存角色」、用户角色分配区。",
+            "visible_result": "角色与权限页已打开，当前没有选中角色",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/base-rbac-result.png"
+            "public_path": "/capabilities/assets/evidence/base-rbac-01-roles.png"
           },
           {
-            "file": "base-rbac-operation.webm",
-            "sha256": "b4e0597acad57a2c0b3aead3e33c7fca6e7e15524ae3a02d1857be85f2466632",
+            "file": "base-rbac-operation.mov",
+            "sha256": "261da8e7d6245b91ba4c65e01cbea7376f0232625d88b38c7dc982a3f03df7b9",
             "visual_review": "accepted",
-            "visible_result": "录屏为角色与权限页，新建角色出现在左侧列表并被选中。",
+            "visible_result": "角色与权限页，编辑区停留在选择角色",
             "kind": "video",
-            "size_bytes": 300521,
-            "duration_seconds": null,
-            "codec": "webm",
+            "size_bytes": 43712,
+            "duration_seconds": 2.0,
+            "codec": null,
             "public_path": null
           }
         ],
@@ -1812,7 +1820,7 @@
           "sha256": "d12c4fa5351e76511688c6ba56177b64f42e4273473bac99e0a3aa3c9a8b0773",
           "size_bytes": 1356
         },
-        "source_run": "/capabilities/assets/evidence/base-rbac-base-rbac-macos-run.json"
+        "source_run": "/capabilities/assets/evidence/base-rbac-web-run.json"
       },
       {
         "feature": "base-register",
@@ -1873,31 +1881,39 @@
       },
       {
         "feature": "base-settings",
-        "platform": "macos",
-        "status": "failed",
-        "passed": 3,
-        "failed": 1,
-        "verified_at": "2026-09-29",
+        "platform": "web",
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "verified_at": "2026-10-06",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "3ab4874b17974fae2b52dcabc033f07092206771",
         "media": [
           {
-            "file": "base-settings-result.png",
-            "sha256": "6bbcbc2685cfdaad5cd5bfee6a816589c87357f126211642b4833b1b5a1e76b1",
+            "file": "base-settings-01-login-wall.png",
+            "sha256": "5dfd2c685a2dcebea2f397529ecb4504d3aa4e2894d5069d47c980bd46f71da3",
             "visual_review": "accepted",
-            "visible_result": "系统设置页：个人主页 SUNBIRD、角色与权限、模型服务与账户余额 ¥97.60。",
+            "visible_result": "未登录时页面是企业账号登录，没有系统设置",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/base-settings-result.png"
+            "public_path": "/capabilities/assets/evidence/base-settings-01-login-wall.png"
           },
           {
-            "file": "base-settings-operation.webm",
-            "sha256": "3a4055c73eb7dfc44d161df2c61fc0590342112aee0eab09b7664ff677754701",
+            "file": "base-settings-02-settings.png",
+            "sha256": "39cec1ded52521fa4b3a90aaff3650f1b1f851d2a4394432fe7d48c635b99cd6",
             "visual_review": "accepted",
-            "visible_result": "录屏为系统设置页，各帧一致。",
+            "visible_result": "已登录后是系统设置，个人主页显示当前登录名",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-settings-02-settings.png"
+          },
+          {
+            "file": "base-settings-operation.mov",
+            "sha256": "7fa4bca734fc6e0a958a41fe0c4c31ce28e9c648857db10b1dbbc195406646eb",
+            "visual_review": "accepted",
+            "visible_result": "先是登录墙，接着是已登录的系统设置",
             "kind": "video",
-            "size_bytes": 280156,
-            "duration_seconds": null,
-            "codec": "webm",
+            "size_bytes": 28298,
+            "duration_seconds": 2.0,
+            "codec": null,
             "public_path": null
           }
         ],
@@ -1907,7 +1923,7 @@
           "sha256": "3f3609165ca671e322a525e6a557228aba15c5d9f71374389a1926ba7b9ecc8a",
           "size_bytes": 1379
         },
-        "source_run": "/capabilities/assets/evidence/base-settings-base-settings-macos-run.json"
+        "source_run": "/capabilities/assets/evidence/base-settings-web-run.json"
       },
       {
         "feature": "base-update-mgmt",
@@ -7640,6 +7656,14 @@
         "action": "not-published"
       },
       {
+        "feature": "base-health",
+        "file": "base-health-operation.mov",
+        "issues": [
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "base-help",
         "file": "base-help-base-help-web-20260929-082538.webm",
         "issues": [
@@ -7715,6 +7739,14 @@
       },
       {
         "feature": "base-rbac",
+        "file": "base-rbac-operation.mov",
+        "issues": [
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-rbac",
         "file": "base-rbac-base-rbac.mp4",
         "issues": [
           "原始录像不可追溯"
@@ -7737,6 +7769,14 @@
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-settings",
+        "file": "base-settings-operation.mov",
+        "issues": [
           "原始录像不可追溯"
         ],
         "action": "not-published"
@@ -8884,9 +8924,9 @@
     ],
     "summary": {
       "total": 149,
-      "passed": 119,
-      "failed": 29,
-      "last_verified_at": "2026-09-29"
+      "passed": 120,
+      "failed": 28,
+      "last_verified_at": "2026-10-06"
     }
   },
   "hero_media": null

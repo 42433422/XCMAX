@@ -76,7 +76,7 @@ make -f Makefile.win dev
 |------|----------|----------|-----|
 | FHD / XCAGI | [`FHD/tests/`](../FHD/tests/)（索引：[`FHD/tests/INDEX.md`](../FHD/tests/INDEX.md)） | `cd FHD && python -m pytest tests/ -q` | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) |
 | MODstore | [`MODstore_deploy/tests/`](../成都修茈科技有限公司/MODstore_deploy/tests/) | `cd 成都修茈科技有限公司/MODstore_deploy && python -m pytest tests/ -q` | [`modstore-ci-backend-python.yml`](../.github/workflows/modstore-ci-backend-python.yml) |
-| vibe-coding | [`vibe-coding/tests/`](../成都修茈科技有限公司/vibe-coding/tests/) | `cd 成都修茈科技有限公司/vibe-coding && python -m pytest tests/agent/ -q` | 见 yuangon test-qa-runner |
+| vibe-coding | [`vibe-coding/tests/`](../成都修茈科技有限公司/apps/vibe-coding/tests/) | `cd 成都修茈科技有限公司/apps/vibe-coding && python -m pytest tests/agent/ -q` | 见 yuangon test-qa-runner |
 | xcagi_common | [`packages/xcagi_common/tests/`](../packages/xcagi_common/tests/) | `cd packages/xcagi_common && python -m pytest tests/ -q` | 随 FHD 变更 |
 
 **测试命名 SSOT**：[`specs/test-naming.md`](../specs/test-naming.md)（禁止新增 `test_coverage_ramp_phase*`；pre-commit 钩子 `guard-no-new-coverage-ramp`）。

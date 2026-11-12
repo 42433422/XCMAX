@@ -15,10 +15,10 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-WEBSITE_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = Path(__file__).resolve().parents[2]
+WEBSITE_DIR = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 CATALOG_PATH = WEBSITE_DIR / "data" / "capabilities" / "catalog.json"
-OUT_DIR = WEBSITE_DIR / "capabilities"
+OUT_DIR = WEBSITE_DIR / "web" / "capabilities"
 PUBLIC_DATA_PATH = WEBSITE_DIR / "data" / "capabilities.json"
 EVIDENCE_ASSET_DIR = OUT_DIR / "assets" / "evidence"
 PROJECT_TIMEZONE = ZoneInfo("Asia/Shanghai")
@@ -1232,6 +1232,11 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
 {footer_html()}"""
 
 
+def _out_path(rel: str) -> Path:
+    """能力页在 web/ 下，其余（data/*.json）在站点根。"""
+    return WEBSITE_DIR / "web" / rel if rel.startswith("capabilities/") else WEBSITE_DIR / rel
+
+
 def write_outputs(data: dict, domains_full: list[dict]) -> dict[str, str]:
     outputs: dict[str, str] = {}
     outputs["capabilities/index.html"] = render_index(data, domains_full)
@@ -1331,7 +1336,7 @@ def main() -> int:
     if args.check:
         drift = []
         for rel, content in outputs.items():
-            f = WEBSITE_DIR / rel
+            f = _out_path(rel)
             if not f.exists():
                 drift.append(f"缺失: {rel}")
                 continue
@@ -1362,7 +1367,7 @@ def main() -> int:
         return 0
 
     for rel, content in outputs.items():
-        target = WEBSITE_DIR / rel
+        target = _out_path(rel)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
     copied = copy_evidence_assets(domains_full)

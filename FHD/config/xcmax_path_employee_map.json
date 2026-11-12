@@ -33,7 +33,7 @@
       "step": "P1f"
     },
     {
-      "prefix": "成都修茈科技有限公司/marketing-site/",
+      "prefix": "成都修茈科技有限公司/frontend/marketing-site/",
       "department": "prod_web",
       "primary": ["marketing-site-builder", "site-content-editor"],
       "step": "P1a"
@@ -137,19 +137,19 @@
       "domain": "db"
     },
     {
-      "prefix": "成都修茈科技有限公司/yuangon/partner-ecosystem/",
+      "prefix": "成都修茈科技有限公司/apps/yuangon/partner-ecosystem/",
       "department": "ops_partner",
       "primary": ["ecosystem-partner-onboard-officer"],
       "step": "B1"
     },
     {
-      "prefix": "成都修茈科技有限公司/yuangon/",
+      "prefix": "成都修茈科技有限公司/apps/yuangon/",
       "department": "prod_mod",
       "primary": ["employee-pack-curator"],
       "step": "P2"
     },
     {
-      "prefix": "成都修茈科技有限公司/vibe-coding/",
+      "prefix": "成都修茈科技有限公司/apps/vibe-coding/",
       "department": "prod_web",
       "primary": ["vibe-coding-maintainer"],
       "step": "P1c"

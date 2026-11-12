@@ -11,7 +11,7 @@ import json
 import sys
 from pathlib import Path
 
-SITE_ROOT = Path(__file__).resolve().parent.parent
+SITE_ROOT = Path(__file__).resolve().parents[2] / "web"
 OUT_DIR = SITE_ROOT / "assets" / "optimized"
 
 

@@ -516,7 +516,7 @@ XCMAX 范围：`packages/retort_engine/`。
 
 ### 16 Vibe 编码与沙箱 (`coding-sandbox`)
 
-XCMAX 范围：`成都修茈科技有限公司/vibe-coding/`。
+XCMAX 范围：`成都修茈科技有限公司/apps/vibe-coding/`。
 
 只取开源授权部分；禁止用模型自评分、演示视频或同实现镜像测试替代任务结果。
 

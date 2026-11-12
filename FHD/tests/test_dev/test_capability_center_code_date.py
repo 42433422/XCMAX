@@ -6,7 +6,7 @@ import importlib.util
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-SCRIPT = ROOT / "成都修茈科技有限公司/scripts/build_capability_center.py"
+SCRIPT = ROOT / "成都修茈科技有限公司/ops/scripts/build_capability_center.py"
 SPEC = importlib.util.spec_from_file_location("build_capability_center", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)

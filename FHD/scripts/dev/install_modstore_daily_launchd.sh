@@ -115,7 +115,7 @@ if [[ "${MODSTORE_DAILY_SKIP_RUNTIME_SYNC:-0}" != "1" ]]; then
   rsync -a --delete "${XCMAX_ROOT}/packages/" "${RUNTIME_PACKAGES_ROOT}/"
   log "同步元工定义 → ${RUNTIME_YUANGON_ROOT}"
   mkdir -p "${RUNTIME_YUANGON_ROOT}"
-  rsync -a --delete "${XCMAX_ROOT}/成都修茈科技有限公司/yuangon/" "${RUNTIME_YUANGON_ROOT}/"
+  rsync -a --delete "${XCMAX_ROOT}/成都修茈科技有限公司/apps/yuangon/" "${RUNTIME_YUANGON_ROOT}/"
   if command -v git >/dev/null 2>&1; then
     if [[ -d "${RUNTIME_GIT_MIRROR}/objects" ]]; then
       log "同步 git mirror → ${RUNTIME_GIT_MIRROR}"

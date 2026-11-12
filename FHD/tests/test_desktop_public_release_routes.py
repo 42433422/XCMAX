@@ -48,10 +48,10 @@ def test_corporate_deploy_syncs_the_versioned_download_snippet_before_nginx_relo
         encoding="utf-8"
     )
     sync_script = (
-        REPO_ROOT / "成都修茈科技有限公司" / "deploy" / "scripts" / "sync-nginx-xiu-ci-snippets.sh"
+        REPO_ROOT / "成都修茈科技有限公司" / "ops" / "deploy" / "scripts" / "sync-nginx-xiu-ci-snippets.sh"
     ).read_text(encoding="utf-8")
 
-    assert 'bash "${SITE_ROOT}/deploy/scripts/sync-nginx-xiu-ci-snippets.sh"' in workflow
+    assert 'bash "${SITE_ROOT}/ops/deploy/scripts/sync-nginx-xiu-ci-snippets.sh"' in workflow
     assert 'git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"' in workflow
     assert "exact server worktree sha=${DEPLOY_SHA}" in workflow
     assert "xcagi-cos-alias.inc.conf" in sync_script
@@ -65,7 +65,8 @@ def test_site_refreshes_preserve_a_verified_desktop_release_pointer() -> None:
     auto_update = (
         REPO_ROOT
         / "成都修茈科技有限公司"
-        / "MODstore_deploy"
+        / "apps"
+        / "modstore"
         / "scripts"
         / "xcmax-site-auto-update.sh"
     ).read_text(encoding="utf-8")

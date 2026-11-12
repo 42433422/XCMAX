@@ -8,29 +8,29 @@ name: CI - Marketing Site
 on:
   pull_request:
     paths:
-      - '*.html'
-      - 'capabilities/**'
+      - 'web/*.html'
+      - 'web/capabilities/**'
       - 'data/capabilities/**'
-      - 'scripts/build_capability_center.py'
-      - 'styles.css'
-      - 'main.js'
-      - 'assets/**'
-      - 'new/**'
-      - 'site/**'
+      - 'ops/scripts/build_capability_center.py'
+      - 'web/styles.css'
+      - 'web/main.js'
+      - 'web/assets/**'
+      - 'web/new/**'
+      - 'web/site/**'
       - 'FHD/docs/evidence/**'
       - '.github/workflows/ci-marketing-site.yml'
   push:
     branches: [main]
     paths:
-      - '*.html'
-      - 'capabilities/**'
+      - 'web/*.html'
+      - 'web/capabilities/**'
       - 'data/capabilities/**'
-      - 'scripts/build_capability_center.py'
-      - 'styles.css'
-      - 'main.js'
-      - 'assets/**'
-      - 'new/**'
-      - 'site/**'
+      - 'ops/scripts/build_capability_center.py'
+      - 'web/styles.css'
+      - 'web/main.js'
+      - 'web/assets/**'
+      - 'web/new/**'
+      - 'web/site/**'
       - 'FHD/docs/evidence/**'
       - '.github/workflows/ci-marketing-site.yml'
   workflow_dispatch:
@@ -68,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          files=( *.html site/*.html new/*.html )
+          files=( web/*.html web/site/*.html web/new/*.html )
           filtered=()
           for file in "${files[@]}"; do
             # 百度站点所有权验证文件按协议必须是裸 token，并不是 HTML 文档。
@@ -88,7 +88,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          files=( capabilities/*.html capabilities/feature/*.html )
+          files=( web/capabilities/*.html web/capabilities/feature/*.html )
           if [ ${#files[@]} -eq 0 ]; then
             echo "No capability HTML files to validate."
             exit 0
@@ -99,7 +99,7 @@ jobs:
       # No Evidence, No Claim：目录与已提交页面必须一致，公开数字无法手写
       # 注：发布副本带 defaults.run.working-directory=本目录，源文件亦按该语义书写相对路径
       - name: Capability acceptance completeness and page integrity gate
-        run: python3 scripts/build_capability_center.py --check
+        run: python3 ops/scripts/build_capability_center.py --check
 
       # 官网「当前版本」只有一个来源：发布清单 /download-release.json（发布流程在 Windows/macOS
       # 双平台产物通过验证后原子写入）。页面里写死的版本兜底值会与指针冲突，并让本门禁在每次
@@ -110,14 +110,14 @@ jobs:
           pub="$(curl -fsS --retry 3 --retry-delay 5 -m 20 https://xiu-ci.com/download-release.json \
             | python3 -c 'import json,sys;print(json.load(sys.stdin)["download_version"])')" \
             || { echo "::error::无法从线上发布指针获取已发布版本"; exit 1; }
-          grep -F -q "fetch('/download-release.json'" download.html \
+          grep -F -q "fetch('/download-release.json'" web/download.html \
             || { echo "::error::download.html 未从发布清单读取当前版本"; exit 1; }
-          grep -F -q "fetchJson('/download-release.json')" download-releases.html \
+          grep -F -q "fetchJson('/download-release.json')" web/download-releases.html \
             || { echo "::error::download-releases.html 未从发布清单读取版本时间线"; exit 1; }
-          if grep -E -q "DEFAULT_VERSION *= *['\"][0-9]" download.html; then
+          if grep -E -q "DEFAULT_VERSION *= *['\"][0-9]" web/download.html; then
             echo "::error::download.html 仍写死版本兜底值；当前版本只能来自发布清单"; exit 1
           fi
-          if grep -E -q 'id="summary-version">[v0-9]' download-releases.html; then
+          if grep -E -q 'id="summary-version">[v0-9]' web/download-releases.html; then
             echo "::error::download-releases.html 仍写死当前版本；当前版本只能来自发布清单"; exit 1
           fi
           next="$(sed -n 's/.*XCAGI 稳定产品版本[^`]*`\([0-9.]*\)`.*/\1/p' ../FHD/VERSION.md | head -1)"

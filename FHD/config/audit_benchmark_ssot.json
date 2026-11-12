@@ -1512,7 +1512,7 @@
       "id": "coding-sandbox",
       "number": 16,
       "name": "Vibe 编码与沙箱",
-      "xcmax_scope": "成都修茈科技有限公司/vibe-coding/",
+      "xcmax_scope": "成都修茈科技有限公司/apps/vibe-coding/",
       "commercial_90": [
         {
           "id": "github-copilot",

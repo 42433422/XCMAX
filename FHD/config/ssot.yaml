@@ -103,14 +103,14 @@ domains:
     enabled: true
     ssot: FHD/config/public_cases.json
     derived:
-      - 成都修茈科技有限公司/site/data/public-site.json
-      - 成都修茈科技有限公司/site/data/site-release-acceptance.json
-      - 成都修茈科技有限公司/scripts/build_public_site.py
-      - 成都修茈科技有限公司/scripts/site_acceptance.py
+      - 成都修茈科技有限公司/web/site/data/public-site.json
+      - 成都修茈科技有限公司/web/site/data/site-release-acceptance.json
+      - 成都修茈科技有限公司/ops/scripts/build_public_site.py
+      - 成都修茈科技有限公司/ops/scripts/site_acceptance.py
     mode: verify
     # fail-closed：SSOT（案例/版本/价格/证据）更新而官网数据未再生成 → 非 0 退出
-    check: python ../成都修茈科技有限公司/scripts/build_public_site.py --check
-    sync: python ../成都修茈科技有限公司/scripts/build_public_site.py
+    check: python ../成都修茈科技有限公司/ops/scripts/build_public_site.py --check
+    sync: python ../成都修茈科技有限公司/ops/scripts/build_public_site.py
 
   # ===== 已启用域（lint/verify；ssot_cli gate 全量阻断）=====
   - name: test-files
@@ -388,11 +388,11 @@ domains:
     # No Evidence, No Claim：check 会逐项校验证据并拒绝目录与页面漂移。
     ssot: 成都修茈科技有限公司/data/capabilities/catalog.json
     derived:
-      - 成都修茈科技有限公司/capabilities/
+      - 成都修茈科技有限公司/web/capabilities/
       - 成都修茈科技有限公司/data/capabilities.json
     mode: generate
-    check: python "../成都修茈科技有限公司/scripts/build_capability_center.py" --check
-    sync: python "../成都修茈科技有限公司/scripts/build_capability_center.py"
+    check: python "../成都修茈科技有限公司/ops/scripts/build_capability_center.py" --check
+    sync: python "../成都修茈科技有限公司/ops/scripts/build_capability_center.py"
 
   - name: product-lines
     owner: release

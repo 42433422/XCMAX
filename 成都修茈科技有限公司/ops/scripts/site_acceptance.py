@@ -15,8 +15,8 @@ result 规则：
 只有 result=PASS 才允许发布。
 
 用法：
-  python3 scripts/site_acceptance.py                    # 静态检查并写出验收 JSON
-  python3 scripts/site_acceptance.py --runtime f.json   # 合并 Playwright 运行时结果后重判
+  python3 ops/scripts/site_acceptance.py                # 静态检查并写出验收 JSON
+  python3 ops/scripts/site_acceptance.py --runtime f.json   # 合并 Playwright 运行时结果后重判
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-SITE_ROOT = Path(__file__).resolve().parent.parent
-REPO_ROOT = SITE_ROOT.parent
+SITE_ROOT = Path(__file__).resolve().parents[2] / "web"
+REPO_ROOT = SITE_ROOT.parents[1]
 DATA_DIR = SITE_ROOT / "site" / "data"
 ACCEPTANCE_OUT = DATA_DIR / "site-release-acceptance.json"
 
@@ -151,7 +151,7 @@ def check_links(public_site: dict) -> list[str]:
 
 
 def check_ssot_drift() -> tuple[bool, str]:
-    r = subprocess.run([sys.executable, str(SITE_ROOT / "scripts" / "build_public_site.py"), "--check"], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(Path(__file__).resolve().parent / "build_public_site.py"), "--check"], capture_output=True, text=True)
     return r.returncode == 0, (r.stdout + r.stderr).strip()[-500:]
 
 

@@ -116,9 +116,9 @@ def module_for_path(path: str) -> str:
         return "fhd-other"
     if path.startswith("成都修茈科技有限公司/MODstore_deploy/"):
         return "modstore-deploy"
-    if path.startswith("成都修茈科技有限公司/yuangon/"):
+    if path.startswith("成都修茈科技有限公司/apps/yuangon/"):
         return "yuangon"
-    if path.startswith("成都修茈科技有限公司/deploy/") or path.endswith(".conf"):
+    if path.startswith("成都修茈科技有限公司/ops/deploy/") or path.endswith(".conf"):
         return "deploy-nginx"
     if path.startswith(".github/"):
         return "ci"

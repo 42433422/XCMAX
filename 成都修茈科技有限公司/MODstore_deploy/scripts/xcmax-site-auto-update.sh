@@ -21,7 +21,7 @@ BRANCH="${XCMAX_GIT_BRANCH:-main}"
 LOG="${XCMAX_DEPLOY_LOG:-/var/log/xcmax-site-auto-update.log}"
 LOCK="${XCMAX_AUTO_UPDATE_LOCK:-/tmp/xcmax-site-auto-update.lock}"
 STATE_DIR="${XCMAX_STATE_DIR:-/var/lib/xcmax-site-auto-update}"
-MODSTORE_PREFIX="${SITE_SUBDIR}/MODstore_deploy"
+MODSTORE_PREFIX="${SITE_SUBDIR}/apps/modstore"
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >>"$LOG"
@@ -126,7 +126,7 @@ sync_corp_pages_to_dist_fallback() {
 
 # 官网 widget：nginx alias /corp-butler/ → 成都修茈科技有限公司/corp-butler/
 sync_corp_butler_assets() {
-  local corp_dir="${XCMAX_ROOT}/${SITE_SUBDIR}/corp-butler"
+  local corp_dir="${XCMAX_ROOT}/${SITE_SUBDIR}/web/corp-butler"
   # Build from the Git worktree. MODSTORE_ROOT may point at the immutable live
   # release, which is published only after this function completes.
   local repo_market_root="${XCMAX_ROOT}/${MODSTORE_PREFIX}/market"
@@ -299,7 +299,7 @@ sync_site_static() {
     'images' 'site' 'assets' 'corp-butler' 'partials'
   )
   for p in "${paths[@]}"; do
-    git -C "$XCMAX_ROOT" checkout "origin/${BRANCH}" -- "${SITE_SUBDIR}/${p}" >>"$LOG" 2>&1 || true
+    git -C "$XCMAX_ROOT" checkout "origin/${BRANCH}" -- "${SITE_SUBDIR}/web/${p}" >>"$LOG" 2>&1 || true
   done
   publish_site_static_to_live
   log "官网静态文件已同步"
@@ -309,7 +309,7 @@ sync_site_static() {
 # immutable-release symlink at $SITE_ROOT (/root/成都修茈科技有限公司). Without this
 # publish step, homepage/nav fixes never become visible on xiu-ci.com.
 publish_site_static_to_live() {
-  local git_site="${XCMAX_ROOT}/${SITE_SUBDIR}"
+  local git_site="${XCMAX_ROOT}/${SITE_SUBDIR}/web"
   local live_site
   live_site="$(readlink -f "$SITE_ROOT" 2>/dev/null || printf '%s' "$SITE_ROOT")"
   local git_real

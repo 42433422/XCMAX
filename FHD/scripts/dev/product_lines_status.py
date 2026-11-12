@@ -43,7 +43,7 @@ sys.path.insert(0, str(HERE))
 from verify_version_anchors import canonical_version, toolchain_version  # noqa: E402
 
 CONFIG_PATH = FHD_ROOT / "config" / "product_lines.yaml"
-CAPABILITY_BUILDER = REPO_ROOT / "成都修茈科技有限公司" / "scripts" / "build_capability_center.py"
+CAPABILITY_BUILDER = REPO_ROOT / "成都修茈科技有限公司" / "ops" / "scripts" / "build_capability_center.py"
 
 GATE_STATUSES = {"GREEN", "YELLOW", "RED", "UNKNOWN", "NOT RUN", "NOTRUN"}
 _GATE_ROW = re.compile(r"^\|\s*(G\d+)\s*\|([^|]*)\|([^|]*)\|")

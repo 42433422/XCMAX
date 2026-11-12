@@ -28,11 +28,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-SITE_ROOT = Path(__file__).resolve().parent.parent
+SITE_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = SITE_ROOT.parent
 FHD_ROOT = REPO_ROOT / "FHD"
-OUTPUT = SITE_ROOT / "site" / "data" / "public-site.json"
-EVIDENCE_DIR = SITE_ROOT / "capabilities" / "assets" / "evidence"
+OUTPUT = SITE_ROOT / "web" / "site" / "data" / "public-site.json"
+EVIDENCE_DIR = SITE_ROOT / "web" / "capabilities" / "assets" / "evidence"
 
 SCHEMA = "xcagi.public_site/v1"
 
@@ -415,12 +415,17 @@ def build_evidence(cases_cfg: dict) -> dict:
     }
 
 
+def _asset_path(rel: str) -> Path:
+    """案例媒体存于 web/ 下的站点静态树。"""
+    return SITE_ROOT / "web" / rel
+
+
 def attach_case_media(cases: list[dict], evidence: dict) -> None:
     """案例截图/视频绑定公开路径、SHA256 与验收状态（fail-closed：文件缺失即失败）。"""
     feat_idx = {f["feature"]: f for f in evidence["features"]}
     for case in cases:
         for shot in case.get("screenshots", []):
-            local = SITE_ROOT / shot["file"]
+            local = _asset_path(shot["file"])
             if not local.exists():
                 die(f"案例 {case['case_id']} 截图缺失: {local}")
             shot["public_path"] = f"/{shot['file']}"
@@ -429,7 +434,7 @@ def attach_case_media(cases: list[dict], evidence: dict) -> None:
             shot["acceptance_status"] = (ref or {}).get("status") or "no-acceptance-record"
             shot["verified_at"] = (ref or {}).get("verified_at")
         for vid in case.get("videos", []):
-            local = SITE_ROOT / vid["file"]
+            local = _asset_path(vid["file"])
             if not local.exists():
                 die(f"案例 {case['case_id']} 视频缺失: {local}")
             dur = mp4_duration_seconds(local)
@@ -461,7 +466,7 @@ def build() -> dict:
     plans_cfg = read_json(FHD_ROOT / "config" / "saas_plans.json")
     cases_cfg = read_json(FHD_ROOT / "config" / "public_cases.json")
     caps = read_json(SITE_ROOT / "data" / "capabilities.json")
-    release = read_json(SITE_ROOT / "download-release.json")
+    release = read_json(SITE_ROOT / "web" / "download-release.json")
 
     cases = cases_cfg.get("cases")
     if not cases:
@@ -491,7 +496,7 @@ def build() -> dict:
             "pricing": "FHD/config/saas_plans.json",
             "cases": "FHD/config/public_cases.json",
             "capabilities": "data/capabilities.json",
-            "release": "download-release.json",
+            "release": "web/download-release.json",
             "evidence": "capabilities/assets/evidence/",
         },
         "product": {

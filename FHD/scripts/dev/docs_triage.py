@@ -70,7 +70,7 @@ ENTRY_BASENAMES = {
 # 运行时资产前缀（AI 员工运行时、mod 包、生成镜像）。
 PROTECTED_PREFIXES = (
     "FHD/mods/",
-    "成都修茈科技有限公司/yuangon/",
+    "成都修茈科技有限公司/apps/yuangon/",
     "FHD/AMIN/",
     "FHD/.github/",
     ".github/",
