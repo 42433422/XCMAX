@@ -14,6 +14,7 @@ import httpx
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .protocols import CacheKey, Connection, Payload, SyncClientFactory
+from .protocols import preflight_timeout as _preflight_timeout
 
 _VISION_HINT_RE = re.compile(
     r"vision|vl-|vlm|deepseek-vl|qwen-vl|llava|omni|gpt-4o|gpt-4\.1|"
@@ -64,7 +65,7 @@ class CatalogGateway:
             return cached
         try:
             with self.sync_client(
-                timeout=httpx.Timeout(min(self.connection.timeout, 15.0), connect=5.0),
+                timeout=_preflight_timeout(self.connection),
                 headers=self.connection.headers(),
             ) as client:
                 response = client.get(f"{self.connection.platform_url}/api/llm/catalog")
@@ -87,6 +88,7 @@ class CatalogGateway:
             response = await client.get(
                 f"{self.connection.platform_url}/api/llm/catalog",
                 headers=self.connection.headers(),
+                timeout=_preflight_timeout(self.connection),
             )
             response.raise_for_status()
             raw = response.json()

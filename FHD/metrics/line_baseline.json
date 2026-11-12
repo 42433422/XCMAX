@@ -1,5 +1,5 @@
 {
-  "lines": 2397586,
+  "lines": 2397594,
   "updated": "2026-11-12",
-  "note": "修复对话导入 Excel 读取阶段缺少租户上下文：tool_executor 将 excel_analysis 纳入租户恢复并新增回归测试，净增31行；用户报告导入失败并要求排查链路"
+  "note": "修复智能对话误报模型超时：市场路由/目录预检超时改为 5s/3s（routing.py+catalog.py+protocols.py 共约 +6 行），桌面后端首包时限 45→35（backend-process.ts +2 行），CHANGELOG +1 行；用户要求排查并修复超时根因后批准抬高基线"
 }
