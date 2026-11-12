@@ -43,6 +43,9 @@ concurrency:
   group: corp-site-ssot-gate
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   gate:
     runs-on: ubuntu-latest

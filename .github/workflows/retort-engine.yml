@@ -4,6 +4,9 @@ on:
     paths: ["packages/retort_engine/**", ".github/workflows/retort-engine.yml"]
   push:
     paths: ["packages/retort_engine/**", ".github/workflows/retort-engine.yml"]
+permissions:
+  contents: read
+
 jobs:
   retort_engine:
     runs-on: ubuntu-latest

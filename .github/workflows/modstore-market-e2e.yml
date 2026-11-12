@@ -13,6 +13,9 @@ on:
       - "成都修茈科技有限公司/MODstore_deploy/market/**"
       - ".github/workflows/modstore-market-e2e.yml"
 
+permissions:
+  contents: read
+
 
 defaults:
   run:
@@ -21,6 +24,7 @@ defaults:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: 成都修茈科技有限公司/MODstore_deploy/market

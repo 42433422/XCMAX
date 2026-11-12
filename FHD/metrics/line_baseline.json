@@ -1,5 +1,5 @@
 {
-  "lines": 2295801,
+  "lines": 2295887,
   "updated": "2026-11-12",
-  "note": "棘轮下调"
+  "note": "CI 加固：19 个 workflow 补最小 permissions，27 个 job 补 timeout-minutes（与生成副本同步），属安全元数据而非文档膨胀"
 }

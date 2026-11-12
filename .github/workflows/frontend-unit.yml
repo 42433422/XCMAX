@@ -25,6 +25,9 @@ concurrency:
 env:
   NODE_VERSION: "20"
 
+permissions:
+  contents: read
+
 jobs:
   vitest:
     name: Vitest (173 文件 · jsdom)

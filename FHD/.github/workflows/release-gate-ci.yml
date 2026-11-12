@@ -10,6 +10,9 @@ on:
 env:
   PYTHON_VERSION: "3.11"
 
+permissions:
+  contents: read
+
 jobs:
   release-gate:
     name: Release gate (hard block)

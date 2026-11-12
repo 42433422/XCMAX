@@ -1,3 +1,6 @@
+# 定位：**报告型 workflow**，不是门禁。迁移率低于阈值只输出 ::warning::，
+# 5 处 continue-on-error 属有意设计（历史债务量化，不阻断 PR）。
+# 真正的阻断检查在 backend-test / release-gate-ci，不要把本 workflow 当作质量门。
 name: Neuro-DDD Migration Check
 
 env:
@@ -23,6 +26,10 @@ on:
   schedule:
     # 每天凌晨 2 点运行
     - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+  pull-requests: write  # PR 迁移率报告评论
 
 jobs:
   # 统一 changed-path 分类（SSOT: scripts/dev/change_classifier.py）——docs/前端改动不跑迁移检查。

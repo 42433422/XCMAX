@@ -11,6 +11,9 @@ concurrency:
   group: capacity-staging-monthly
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 
 defaults:
   run:

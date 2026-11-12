@@ -9,6 +9,9 @@ concurrency:
   group: capacity-staging-monthly
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   k6-load:
     runs-on: ubuntu-latest

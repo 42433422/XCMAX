@@ -22,6 +22,9 @@ concurrency:
   group: e2e-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   # Every run gates both fast mock contracts and a real FastAPI + browser path.
   playwright-p0-paths:

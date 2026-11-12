@@ -24,6 +24,9 @@ concurrency:
   group: desktop-macos-smoke-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   electron-smoke:
     name: Electron build + launch (macOS)

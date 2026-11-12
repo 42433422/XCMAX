@@ -11,9 +11,13 @@ on:
       - "market/**"
       - ".github/workflows/market-e2e.yml"
 
+permissions:
+  contents: read
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: market

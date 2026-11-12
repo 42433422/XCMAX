@@ -165,6 +165,7 @@ jobs:
           Write-Host "::warning::$n"; "### 未执行正式发布链`n$n" | Add-Content $env:GITHUB_STEP_SUMMARY
 
   publish-interim-windows-pointer:
+    timeout-minutes: 15
     # Windows 临时下载通道只发布经过安装冒烟的精确构建，不写更新元数据。
     # 未签名包须有业主风险接受；签名包须由前置 Windows 验收证明签名有效。
     needs: [windows-installer-delivery]
@@ -314,6 +315,7 @@ jobs:
           echo "Windows interim download is publicly available; the Windows stable update feed was not touched."
 
   release-preflight:
+    timeout-minutes: 20
     if: ${{ inputs.verify_only != true && inputs.windows_installer_only != true }}
     runs-on: ubuntu-latest
     # Security evidence lives at repository root; do not inherit FHD working directory.
@@ -394,6 +396,7 @@ jobs:
           echo "Stable desktop release preflight passed for Windows + macOS."
 
   windows:
+    timeout-minutes: 120
     needs: [release-preflight]
     if: ${{ inputs.verify_only != true }}
     runs-on: windows-latest
@@ -518,6 +521,7 @@ jobs:
             FHD/release/xcagi-v*/enterprise/latest*.yml
 
   macos:
+    timeout-minutes: 120
     needs: [release-preflight]
     if: ${{ inputs.verify_only != true }}
     runs-on: macos-latest
@@ -633,6 +637,7 @@ jobs:
             FHD/release/xcagi-v*/enterprise/latest*.yml
 
   generate-manifest:
+    timeout-minutes: 20
     needs: [release-preflight, windows, macos]
     if: >-
       always() &&
@@ -898,6 +903,7 @@ jobs:
           echo "Unified Windows + macOS release published to official and stable paths."
 
   cross-platform-parity:
+    timeout-minutes: 30
     needs: [generate-manifest]
     if: >-
       always() &&
@@ -1020,6 +1026,7 @@ jobs:
           echo "Windows + macOS parity OK: ${expected_version} @ ${expected_sha}"
 
   verify-download:
+    timeout-minutes: 20
     needs: [generate-manifest]
     if: >-
       always() &&
@@ -1087,6 +1094,7 @@ jobs:
           done
 
   verify-public-windows-signature:
+    timeout-minutes: 20
     needs: [verify-download, cross-platform-parity]
     if: >-
       always() &&
@@ -1153,6 +1161,7 @@ jobs:
             -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME
 
   publish-website-pointer:
+    timeout-minutes: 20
     needs: [generate-manifest, cross-platform-parity, verify-download, verify-public-windows-signature]
     if: >-
       always() &&
@@ -1227,6 +1236,7 @@ jobs:
           REMOTE
 
   verify-download-center:
+    timeout-minutes: 15
     needs: [generate-manifest, verify-download, publish-website-pointer]
     if: >-
       always() &&
@@ -1311,6 +1321,7 @@ jobs:
           echo "Download center, changelog and capability center verified for ${version} @ ${expected_sha}."
 
   rollback-stable-pointers:
+    timeout-minutes: 15
     name: Restore previous stable pointers on failed acceptance
     needs:
       - generate-manifest
@@ -1360,6 +1371,7 @@ jobs:
           echo "Restored stable and public pointers; immutable failed-build payload retained for audit."
 
   github-release:
+    timeout-minutes: 20
     needs: [release-preflight, windows, macos, cross-platform-parity, verify-download, verify-public-windows-signature, verify-download-center]
     runs-on: ubuntu-latest
     if: >-

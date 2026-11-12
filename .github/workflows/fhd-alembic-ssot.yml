@@ -21,6 +21,9 @@ name: FHD Alembic SSOT
       - "scripts/guard_alembic_single_head.py"
       - ".github/workflows/fhd-alembic-ssot.yml"
 
+permissions:
+  contents: read
+
 jobs:
   # 统一 changed-path 分类（SSOT: scripts/dev/change_classifier.py）——docs/前端改动不跑迁移重活。
   classify:

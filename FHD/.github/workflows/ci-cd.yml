@@ -56,6 +56,9 @@ env:
   IMAGE_NAME_FHD_API: ${{ github.repository }}/xcagi-fhd-api
   XCAGI_RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
 
+permissions:
+  contents: read
+
 jobs:
   agent-postgres-transactions:
     name: Agent PostgreSQL transactions
@@ -101,6 +104,7 @@ jobs:
           if-no-files-found: warn
   # Guard against temporary scripts in business directories
   guard-temp-scripts:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -138,6 +142,7 @@ jobs:
           echo "✅ Temporary script location guard passed."
 
   classify:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     outputs:
       macos: ${{ steps.c.outputs.run }}
@@ -161,6 +166,7 @@ jobs:
             --head "${{ github.event.pull_request.head.sha }}"
 
   backend-test:
+    timeout-minutes: 60
     needs: guard-temp-scripts
     runs-on: ubuntu-latest
     outputs:
@@ -335,6 +341,7 @@ jobs:
           python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
 
   frontend-test:
+    timeout-minutes: 40
     needs: guard-temp-scripts
     runs-on: ubuntu-latest
     outputs:
@@ -419,6 +426,7 @@ jobs:
   # (smoke 3 pass + 1 skip, critical-paths 5 pass, plan2026-skeleton 5 skip w/o E2E_FULL_STACK).
   # Full-stack 14/14: root e2e.yml on schedule or workflow_dispatch (see e2e-playwright-reusable.yml).
   frontend-e2e:
+    timeout-minutes: 45
     needs: [backend-test, frontend-test]
     if: needs.backend-test.outputs.skip != 'true' || needs.frontend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
@@ -489,6 +497,7 @@ jobs:
         run: npm run test:e2e:p0 -- --reporter=line
 
   arch-fitness:
+    timeout-minutes: 15
     needs: guard-temp-scripts
     runs-on: ubuntu-latest
     steps:
@@ -536,6 +545,7 @@ jobs:
         run: python scripts/dev/gen_claimed_vs_actual.py --check
 
   security-scan:
+    timeout-minutes: 25
     needs: guard-temp-scripts
     runs-on: ubuntu-latest
     steps:
@@ -563,6 +573,7 @@ jobs:
 
   # Container image vulnerability scan (built image from CI Dockerfile)
   container-scan:
+    timeout-minutes: 30
     needs: [backend-test, frontend-test, frontend-e2e, security-scan, pack-verify]
     if: needs.backend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
@@ -627,6 +638,7 @@ jobs:
 
   # FHD 服务器 API 发布包（tarball + manifest；不含生产 SSH 部署）
   pack-verify:
+    timeout-minutes: 30
     needs: [backend-test, frontend-test]
     if: needs.backend-test.outputs.skip != 'true' || needs.frontend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
@@ -671,6 +683,7 @@ jobs:
 
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
+    timeout-minutes: 60
     needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
     if: github.event_name != 'schedule' && needs.backend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
@@ -946,6 +959,7 @@ jobs:
   # event. Dispatch Evolution with the repository PAT only after the exact CVM
   # release and DR receipt have succeeded.
   dispatch-evolution-after-cvm:
+    timeout-minutes: 10
     needs: [cvm-push-release]
     if: >-
       github.event_name == 'workflow_dispatch' &&
@@ -1022,6 +1036,7 @@ jobs:
         run: bash scripts/dev/release_verify.sh
 
   desktop-build-smoke:
+    timeout-minutes: 40
     name: desktop-build-smoke
     needs: [frontend-test, classify]
     # 仅 desktop/runtime/updater/打包/签名相关改动才跑（日常前端/后端改动不触发）。
@@ -1043,6 +1058,7 @@ jobs:
           npm run build
 
   desktop-test:
+    timeout-minutes: 40
     name: desktop-test
     needs: [frontend-test, classify]
     # 仅 desktop/runtime/updater/打包/签名相关改动才跑（日常前端/后端改动不触发）。
@@ -1065,6 +1081,7 @@ jobs:
         run: npm test
 
   desktop-windows-release-script-smoke:
+    timeout-minutes: 40
     name: desktop-windows-release-script-smoke
     needs: [guard-temp-scripts, classify]
     # 仅 Windows 打包/发布脚本（.ps1、windows/win32、Authenticode）相关改动才跑。
@@ -1130,6 +1147,7 @@ jobs:
   # deps/k8s drift cleared + employee-roster/db-schema registered 2026-06-23 + service-topology 2026-06-24.
   # dev-inventory / dev-guards (统一入口) registered 2026-08-07 — 收编分散规范性守卫/棘轮脚本入 SSOT 工程。
   ssot-drift-gate:
+    timeout-minutes: 20
     name: SSOT Drift Gate
     needs: guard-temp-scripts
     runs-on: ubuntu-latest

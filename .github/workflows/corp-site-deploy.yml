@@ -50,6 +50,9 @@ concurrency:
   group: corp-site-deploy
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
