@@ -1,7 +1,7 @@
 import type { Router } from 'vue-router'
 import { authApi } from '@/api/auth'
 import { applyMarketTokensAfterFhdLogin, LS_MARKET_ACCESS_TOKEN, LS_MARKET_REFRESH_TOKEN, LS_MARKET_USER_JSON } from '@/api/marketAccount'
-import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
+import { invalidateEnterpriseSessionCache, rememberEnterpriseSessionValid } from '@/utils/authSessionCache'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { DESKTOP_ADMIN_FORBIDDEN_MESSAGE, isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
@@ -19,7 +19,21 @@ export function useLoginViewSession(state: LoginViewState, options: { router: Ro
   async function completeLoginSuccess(raw: Record<string, unknown>) {
     clearHostPackSkippedSession()
     const attempt = ++latestLoginAttempt
+    rememberEnterpriseSessionValid()
     const hydration = accountProfileStore.applyFromLoginPayload(raw)
+    if (isEnterpriseEdition.value) {
+      void import('@/stores/mods').then(async ({ readEntitledModIdsFromAuthPayload, useModsStore }) => {
+        const loginUser = raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? (raw.data as Record<string, unknown>) : raw
+        const entitled = readEntitledModIdsFromAuthPayload(raw)
+        await useModsStore().initialize(true, {
+          entitledModIds: entitled,
+          forceFromEntitlements: entitled.length > 0,
+          accountUsername: String(loginUser?.username || username.value || '').trim(),
+        })
+      }).catch((modErr) => {
+        console.warn('[Login] mods refresh after auth:', modErr)
+      })
+    }
     const epoch = productReadAccountEpoch.value
     const currentAttempt = () => attempt === latestLoginAttempt && epoch === productReadAccountEpoch.value
     try {
@@ -39,6 +53,7 @@ export function useLoginViewSession(state: LoginViewState, options: { router: Ro
       return
     }
     if (!currentAttempt()) return
+    rememberEnterpriseSessionValid()
     // SSOT：桌面壳禁止管理员会话（派生 account_kind=admin 时拒入）。
     // 管理端 SPA（:5011）本身就是网页运维台，不得套用桌面禁令。
     if (!isAdminConsoleSpa() && isDesktopShell() && accountProfileStore.isAdminAccount) {
@@ -50,14 +65,12 @@ export function useLoginViewSession(state: LoginViewState, options: { router: Ro
       errorMessage.value = DESKTOP_ADMIN_FORBIDDEN_MESSAGE
       return
     }
-    const loginUser = raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? (raw.data as Record<string, unknown>) : raw
-    const accountUsername = String(loginUser?.username || username.value || '').trim()
     await router.replace(
       isAdminConsoleSpa() && (redirectPath.value === '/' || !redirectPath.value) ? `/${ADMIN_OPERATOR_HOME_ROUTE}` : redirectPath.value,
     )
     if (!currentAttempt()) return
     // The login payload does not include effective RBAC permissions.
-    void accountProfileStore.refreshFromServer()
+    void accountProfileStore.refreshFromServer({ keepVisible: true })
 
     // Token handoff and MOD discovery are optional post-login bootstrap work.
     // They must never hold the login button in "正在登录" or delay the first
@@ -65,22 +78,6 @@ export function useLoginViewSession(state: LoginViewState, options: { router: Ro
     void applyMarketTokensAfterFhdLogin(raw).catch((marketErr) => {
       console.warn('[Login] market token handoff after auth:', marketErr)
     })
-    if (isEnterpriseEdition.value) {
-      void (async () => {
-        try {
-          const { readEntitledModIdsFromAuthPayload, useModsStore } = await import('@/stores/mods')
-          if (!currentAttempt()) return
-          const entitled = readEntitledModIdsFromAuthPayload(raw)
-          await useModsStore().initialize(true, {
-            entitledModIds: entitled,
-            forceFromEntitlements: entitled.length > 0,
-            accountUsername,
-          })
-        } catch (modErr) {
-          console.warn('[Login] mods refresh after auth:', modErr)
-        }
-      })()
-    }
   }
 
   return { completeLoginSuccess }

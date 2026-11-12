@@ -9,6 +9,7 @@ import { startupReadyKey, startupPageReadyKey, useStartupSplash, waitForCritical
 import { useAppShellBridge } from '@/composables/useAppShellBridge'
 import { useXcmaxSync } from '@/composables/useXcmaxSync'
 import { getAuthSessionEpoch } from '@/utils/authSessionCache'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { buildLoginLocation } from '@/utils/startupRedirect'
 
 export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
@@ -90,6 +91,7 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
     if (publicEntry.value) { splash.dismissStartupSplashImmediate(); return }
     void splash.runStartup(async (current, stage, signal) => {
       stage('正在确认登录和工作空间…')
+      void import('@/views/ImMessengerView.vue')
       let fontError: unknown
       const fontsReady = waitForCriticalFonts().catch(error => { fontError = error })
       const auth = await authenticate(current, signal)
@@ -103,11 +105,14 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
       // A shared request from an earlier account must not satisfy a new startup attempt.
       await modsStore.initialize()
       if (!current()) return
-      await modsStore.initialize(true, {
-        entitledModIds: auth.entitledModIds,
-        forceFromEntitlements: auth.entitledModIds.length > 0,
-        accountUsername: auth.accountUsername,
-      })
+      const catalogEpoch = Number(modsStore.loadedAccountEpoch)
+      if (!modsStore.isLoaded || catalogEpoch !== productReadAccountEpoch.value) {
+        await modsStore.initialize(true, {
+          entitledModIds: auth.entitledModIds,
+          forceFromEntitlements: auth.entitledModIds.length > 0,
+          accountUsername: auth.accountUsername,
+        })
+      }
       if (!current()) return
       if (!modsStore.isLoaded) throw new Error(modsStore.loadError || '侧栏配置未就绪，请重试')
       if (modsStore.clientModsUiOff) useWorkflowAiEmployeesStore().stripModWorkflowEmployeeKeys()
