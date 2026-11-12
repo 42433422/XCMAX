@@ -17,7 +17,7 @@
 | 覆盖率趋势（最新 2026-06-26） | 趋势上行 | 后端行 90.69% / 前端行 93.21% | coverage-history.jsonl（最后一行） | 🟡 |
 | 健康探针 /api/health | P50 < 500ms 预算 | 11.23ms（status 200） | sla-snapshot.json#probe.probe_result.health | 🟢 |
 | DORA 部署频率 | 持续交付 | 环境 production / 窗口 7d / 事件 0 / 频率 0.0/d / 采集日 2026-11-11 | dora-20261111.json | 🟡 |
-| 前端 E2E spec 数 | 有 E2E 套件 | 18 个 spec | frontend/e2e/*.spec.ts | 🟢 |
+| 前端 E2E spec 数 | 有 E2E 套件 | 19 个 spec | frontend/e2e/*.spec.ts | 🟢 |
 | Android 端交付等级 | 实验骨架 | 实验骨架·非签约级 | VERSION.md『各端交付等级』vs docs/guides/MOBILE_ANDROID.md | 🟢 |
 
 **状态图例**：🟢 实测 ≥ 目标 · 🟡 floor ≤ 实测 < 目标 · 🔴 实测 < floor 或 声称≠实测 · ⛔ 已退役口径
