@@ -8,13 +8,17 @@
  *   baseURL 默认 http://127.0.0.1:8123（先用 range_static_server.py 起服务）
  * 环境变量 XC_BROWSER_EXEC：指定浏览器可执行文件（本地 Edge/Chrome）；缺省用 Playwright chromium。
  */
-import { chromium } from 'playwright'
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
-const SITE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web')
+const SELF_DIR = dirname(fileURLToPath(import.meta.url))
+// 依赖装在 frontend/node_modules（Vite 工程根），脚本位于 ops/scripts。
+const { chromium } = createRequire(join(SELF_DIR, '..', '..', 'frontend', 'package.json'))('playwright')
+
+const SITE = join(SELF_DIR, '..', '..', 'web')
 const BASE = process.argv[2] || 'http://127.0.0.1:8123'
 const OUT = join(SITE, 'site/data/runtime-results.json')
 const EVID = join(SITE, 'site/data/runtime-evidence')

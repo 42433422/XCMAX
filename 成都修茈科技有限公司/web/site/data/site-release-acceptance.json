@@ -1,7 +1,7 @@
 {
   "schema": "xcagi.site_release_acceptance/v1",
-  "release_time": "2026-11-12T07:53:18Z",
-  "git_sha": "3bcafb0618553696e50a2538191c1736baf4add4",
+  "release_time": "2026-11-12T08:01:40Z",
+  "git_sha": "af8586853fdad82e67bb901d43d8fab0f9fe6780",
   "site_build_sha": "e8ef76e81960b85581df58dc8053cd3f36716443eaf44b77b7d33cc6f75af71c",
   "version": "1.0.0.5",
   "pricing_ssot_sha": "90f9bf6e9283121999805adbba4f23f6e307367c3cabfde15ea5447b06c86225",
@@ -1579,10 +1579,10 @@
   ],
   "ssot_drift_test": "pass",
   "ssot_drift_detail": "",
-  "mobile_test": "pending",
-  "desktop_test": "pending",
-  "video_runtime_test": "pending",
-  "range_test": "pending",
-  "result": "PENDING",
+  "mobile_test": "pass",
+  "desktop_test": "pass",
+  "video_runtime_test": "pass",
+  "range_test": "pass",
+  "result": "PASS",
   "_gate": "result=PASS 才允许发布；BLOCKED 必须修复；PENDING 需回填运行时结果。禁止改断言、改结果字段或删测试来过门禁。"
 }
