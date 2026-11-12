@@ -550,7 +550,7 @@ curl -sf https://xiu-ci.com/fhd-api/api/health
 | 端 | 实现 | 触发方式 | 主要职责 |
 |---|---|---|---|
 | 桌面 | `FHD/desktop/autonomy/controller.ts` | main.ts start() + backend exit ingest | backend 崩溃回滚 / 降级状态修复 / OTA 失败回滚 |
-| 服务器 | `FHD/scripts/autonomy/cvm_autonomy_watcher.py` | GitHub Actions cron `*/10 * * * *` SSH 触发 | health_down / manifest_drift / disk_full / compose_unhealthy |
+| 服务器 | `FHD/scripts/autonomy/cvm_autonomy_watcher.py` | GitHub Actions cron `*/15 * * * *` SSH 触发 | health_down / manifest_drift / disk_full / compose_unhealthy |
 | CI | `FHD/scripts/ci/ai_self_heal.py` + `ai_review.py` | `workflow_run(failure)` + `pull_request(opened/synchronize)` | CI 失败自愈 + PR 自动 review |
 
 ### CI Workflows
@@ -559,7 +559,7 @@ curl -sf https://xiu-ci.com/fhd-api/api/health
 |---|---|---|
 | `fhd-ai-self-heal.yml` | `workflow_run` completed(failure) | `.github/workflows/fhd-ai-self-heal.yml` |
 | `fhd-ai-review.yml` | `pull_request` opened/synchronize | `.github/workflows/fhd-ai-review.yml` |
-| `fhd-cvm-autonomy-watcher.yml` | `schedule(*/10 * * * *)` + workflow_dispatch | `.github/workflows/fhd-cvm-autonomy-watcher.yml` |
+| `fhd-cvm-autonomy-watcher.yml` | `schedule(*/15 * * * *)` + workflow_dispatch | `.github/workflows/fhd-cvm-autonomy-watcher.yml` |
 
 ### 关键约束
 

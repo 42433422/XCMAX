@@ -2,18 +2,15 @@
 # 与 ops-uptime.yml 同级：站外拨测 + 自动处置。
 #
 # 目的：防止 APScheduler 卡死（collector 实例堆积 / 线程池耗尽）导致整个
-# modstore-scheduler.service 停摆。每 10 分钟探测一次 /api/xcmax/scheduler/health，
+# modstore-scheduler.service 停摆。每 15 分钟探测一次 /api/xcmax/scheduler/health，
 # 失败即 SSH 进 CVM 重启 modstore-scheduler.service。
 #
-# 适用范围：生产 CVM（119.27.178.147）的 systemd modstore-scheduler.service。
-# 本地 macOS launchd modstore-daily 不在此 workflow 范围内（GitHub Actions 无法 SSH 到
-# 笔记本）；如需本地 watchdog，复制本脚本到 ~/bin/scheduler-watchdog.sh 并注册为
-# launchd plist（每 10 分钟跑一次，curl 失败时 launchctl kickstart -k <service>）。
+# 适用范围：仅生产 CVM（119.27.178.147）的 systemd modstore-scheduler.service。
 name: Scheduler Watchdog
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:

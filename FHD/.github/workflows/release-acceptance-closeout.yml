@@ -5,8 +5,8 @@ name: release-acceptance-closeout
 
 on:
   schedule:
-    # 每 30 分钟轮询一次市场端验收判定
-    - cron: '*/30 * * * *'
+    # 每小时轮询一次市场端验收判定（脚本对 pending/无 linked_issues 已短路）
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       version:

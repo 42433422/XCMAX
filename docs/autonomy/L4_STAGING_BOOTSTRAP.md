@@ -53,7 +53,7 @@ cp 成都修茈科技有限公司/MODstore_deploy/scripts/staging-autonomy.env.e
 
 ## 步骤 6：验证 autonomy watcher
 
-下次 GitHub Actions cvm-autonomy-watcher.yml 跑（每 10 分钟），观察 staging matrix 项不再 skip。
+下次 GitHub Actions cvm-autonomy-watcher.yml 跑（每 15 分钟），观察 staging matrix 项不再 skip。
 
 ## 回滚
 

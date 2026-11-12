@@ -228,7 +228,7 @@ Policy 决策的输出，由 Adapter 执行。`type` / `params` / `idempotency_k
 | `FHD/scripts/autonomy/policies/*.py` | 4 个 policy |
 | `FHD/tests/test_autonomy/*.py` | 7 个测试文件，132 pass |
 
-**触发方式**：GitHub Actions cron `*/10 * * * *` SSH 到 CVM 触发 `cvm_autonomy_watcher.py`，非常驻进程。
+**触发方式**：GitHub Actions cron `*/15 * * * *` SSH 到 CVM 触发 `cvm_autonomy_watcher.py`，非常驻进程。
 
 ### 4.3 CI 端（GitHub Actions）
 
@@ -240,7 +240,7 @@ Policy 决策的输出，由 Adapter 执行。`type` / `params` / `idempotency_k
 | `FHD/tests/test_ci/*.py` | 2 个测试文件，78 pass |
 | `FHD/.github/workflows/ai-self-heal.yml` | workflow_run(failure) 触发 |
 | `FHD/.github/workflows/ai-review.yml` | pull_request(opened/synchronize) 触发 |
-| `FHD/.github/workflows/cvm-autonomy-watcher.yml` | cron `*/10 * * * *` + SSH 触发 |
+| `FHD/.github/workflows/cvm-autonomy-watcher.yml` | cron `*/15 * * * *` + SSH 触发 |
 
 ---
 
