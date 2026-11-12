@@ -39,6 +39,8 @@
 | **官网陈旧快照归档（2026-09-26）** | `~/XCMAX-archives/site-stale-20260926/` | `成都修茈科技有限公司/site/` 下 11 个 2026-09-09 官网旧版页面快照（约 1,100 行；内容定位停留在旧版官网，与根目录活页面重复且零引用）。已从工作区删除；`site/` 目录现仅保留 `site/data/`（SSOT 聚合产物）。校验和见 `.../site-stale-20260926/MANIFEST.txt`。 |
 | **MODstore 旧部署指引归档（2026-09-27）** | `~/XCMAX-archives/docs-20260927-modstore-immutable/` | `local-to-remote-push-flow.md` 和 `remote-server-operations.md` 仍推荐 Docker/tar 覆盖生产，与当前 immutable release systemd 链冲突；原文及 SHA256 见 `MANIFEST.txt`。 |
 | **Mac 发布旧部署指引归档（2026-09-27）** | `~/XCMAX-archives/docs-20260927-mac-release-obsolete/` | 旧版 `FHD/docs/guides/DEPLOYMENT_GUIDE.md` 和 MODstore 的 `xcagi-software-download.md` 已失效；原文及 SHA256 见 `MANIFEST.txt`。 |
+| **客户/品牌资料外置（2026-11-12）** | 私有迁移仓 [`42433422/xcmax-Li`](https://github.com/42433422/xcmax-Li) `sources/xcmax/` | `太阳鸟/`（README、安装说明）与 `宣传资料/`（企业介绍 PPT、路演流程清单图）已迁入该仓并按 `ledger/MIGRATION_LEDGER.csv` A12 逐文件校验（状态 `verified`），本仓已 `git rm`。 |
+| **docs 冗余快照清理（2026-11-12）** | 同上 `sources/xcmax/`（`SECURITY_CLEANUP_REPORT.md` 见 A10） | 已删 `docs/reports/FIXES.md`、`docs/reports/git_hygiene_intake_2026-06-29.json`、`docs/roadmap/AI_PLATFORM_9_SCORE_ROADMAP.md`（零入链历史快照）；`docs/reports/SECURITY_CLEANUP_REPORT.md` 私有副本已在 xcmax-Li。 |
 
 ## 恢复示例
 

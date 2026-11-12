@@ -4,7 +4,7 @@
 > 若你是潜在用户或合作方，请前往官网 <https://xiu-ci.com> 了解 XCAGI 产品与下载。
 > 历史 README 工程内容迁于此，以保持对外首页为纯产品叙事。
 
-**最后更新**：2026-07-18
+**最后更新**：2026-11-12
 
 > **版本控制**：**`XCMAX/` 根目录为 SSOT 单仓**（`git clone` 即得 FHD + MODstore + specs 全栈）。历史子仓 `.git` 备份于 `~/XCMAX-archives/nested-git-backup-20260608/`。远程：**[`42433422/XCMAX`](https://github.com/42433422/XCMAX)**。CI 入口见 [`docs/CI_SSOT.md`](CI_SSOT.md)。
 >
@@ -20,8 +20,8 @@
 | **AI 员工商店** | [`成都修茈科技有限公司/`](../成都修茈科技有限公司/) | **P1 商业化线** — 员工 / Mod 目录、授权、支付、下载、更新 | [`MODstore_deploy/docs/developer/README.md`](../成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md) | [`modstore-ci-backend-python.yml`](../.github/workflows/modstore-ci-backend-python.yml) |
 | **移动 AI 协同 App** | [`FHD/mobile-flutter-poc/`](../FHD/mobile-flutter-poc/) | **P2 配套线** — Flutter 统一 Android/iOS · 登录 / 扫码 / 对话 / 审批 / 通知 | [`FHD/mobile-flutter-poc/README.md`](../FHD/mobile-flutter-poc/README.md) | [`fhd-ci-mobile-flutter.yml`](../.github/workflows/fhd-ci-mobile-flutter.yml) |
 | **跨线规范** | [`specs/`](../specs/) | **活跃** — 仅存跨线策略与测试命名两条 | [`specs/product-lines-3-plus-2.md`](../specs/product-lines-3-plus-2.md) | — |
-| **个人版** | [`FHD/docs/_archive/FHD-个人/`](../FHD/docs/_archive/FHD-个人/) | **冻结** — 暂停新增投入，仅保留兼容、归档和未来恢复入口 | [`FHD/docs/_archive/FHD-个人/ARCHIVED.md`](../FHD/docs/_archive/FHD-个人/ARCHIVED.md) | 不进入当前版本目标 |
-| **工作区归档** | [`_archive/`](../_archive/) | **只读** | 各目录 `ARCHIVED.md` | — |
+| **个人版** | `FHD-个人`（已外置归档） | **冻结** — 暂停新增投入，仅保留兼容、归档和未来恢复入口 | [`ARCHIVE_POINTER.md`](../ARCHIVE_POINTER.md) | 不进入当前版本目标 |
+| **工作区归档** | 仅留指针 [`ARCHIVE_POINTER.md`](../ARCHIVE_POINTER.md) | **只读** | 归档实体在 `~/XCMAX-archives/` | — |
 
 > 声称 vs 实测差距跟踪：[`FHD/docs/CLAIMED_VS_ACTUAL.md`](../FHD/docs/CLAIMED_VS_ACTUAL.md) · 历史计划/阻塞记录已外置归档（见 [`ARCHIVE_POINTER.md`](../ARCHIVE_POINTER.md)）
 
@@ -57,13 +57,13 @@ make -f Makefile.win dev
 
 ### 发版口径
 
-当前主发版目标是 **企业桌面端可交付**。双 SKU 打包能力仍保留，见 [`FHD/docs/guides/RELEASE_TWO_SKUS.md`](../FHD/docs/guides/RELEASE_TWO_SKUS.md)；个人版处于冻结状态，不进入当前路线图承诺。
+当前主发版目标是 **企业桌面端可交付**。发版口径以 [`FHD/docs/WINDOWS_RELEASE_SSOT.md`](../FHD/docs/WINDOWS_RELEASE_SSOT.md) 与 [`FHD/docs/MACOS_RELEASE_SSOT.md`](../FHD/docs/MACOS_RELEASE_SSOT.md) 为准；个人版处于冻结状态，不进入当前路线图承诺。
 
 ## 只读归档（勿作日常入口）
 
-已迁入 [`_archive/`](../_archive/)，各目录含 `ARCHIVED.md`：
+已外置归档（实体在 `~/XCMAX-archives/`，工作区仅留指针 [`ARCHIVE_POINTER.md`](../ARCHIVE_POINTER.md)）：
 
-- SKU 拆仓外壳：[`_archive/sku-repos-20260527/`](../_archive/sku-repos-20260527/)（`xcagi-enterprise`、`xcagi-personal`、`xcagi-offline`）
+- SKU 拆仓外壳：`sku-repos-20260527`（`xcagi-enterprise`、`xcagi-personal`、`xcagi-offline`）
 - 历史 core 快照：`xcagi-core-20260526-223646`
 - 并行实例 / 副本：`FHD-个人`、`_personal_sync_bak`、`面试区域`
 - 旧 FHD 内 MODstore 历史副本已物理移除；MODstore 唯一活跃源码为 `成都修茈科技有限公司/MODstore_deploy/`。
