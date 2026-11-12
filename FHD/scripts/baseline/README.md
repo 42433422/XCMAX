@@ -38,7 +38,9 @@ python3 FHD/scripts/baseline/measure.py --only runtime_perf
 
 ## 输出在哪
 
-- `FHD/baselines/latest.md` —— 人读报告(每次覆盖,提交它看趋势)
+`FHD/baselines/` 由脚本按需生成、**不入库**（历史快照仅反映采集当天的分支状态，入库即过期）：
+
+- `FHD/baselines/latest.md` —— 人读报告(每次覆盖)
 - `FHD/baselines/latest.json` —— 最近一次机读快照(diff 的基准)
 - `FHD/baselines/snapshots/<UTC>.json` —— 历史快照(每次追加,可回溯任意时点)
 

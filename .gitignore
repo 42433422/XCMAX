@@ -224,3 +224,6 @@ FHD/admin-console/.vite-bak/
 
 # 本地审计报告工作区（222MB+，永不入库；锚定根目录，避免误伤 FHD/docs/reports/）
 /reports/
+
+# 观察基线快照（由 FHD/scripts/baseline/measure.py 按需生成，入库即过期）
+FHD/baselines/
