@@ -45,7 +45,7 @@ export const SHELL_ROUTES: RouteRecordRaw[] = [
   {
     path: '/im',
     name: 'im',
-    component: () => import('../../views/ImMessengerView.vue'),
+    component: () => import('../../views/im/ImMessengerEntry.vue'),
     meta: { title: '信息' },
   },
   {
