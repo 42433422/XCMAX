@@ -76,7 +76,6 @@ make e2e                        # Playwright（见 frontend/e2e/）
 | 15 | [`guides/DEPENDENCY_LOCKS.md`](guides/DEPENDENCY_LOCKS.md) | uv / pip 锁定与 CI 安装 |
 | 16 | [`guides/ALEMBIC_MIGRATION_GUIDE.md`](guides/ALEMBIC_MIGRATION_GUIDE.md) | 数据库迁移 |
 | 17 | [`reports/COVERAGE_RAMP.md`](reports/COVERAGE_RAMP.md) | 覆盖率目标与补测清单 |
-| 18 | [`MIGRATION_v2_DROP_PLAN.md`](MIGRATION_v2_DROP_PLAN.md) | `*_v2` 应用服务收敛策略 |
 
 ---
 

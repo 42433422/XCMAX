@@ -8,7 +8,7 @@
 
 ## Directory Responsibilities
 
-- `app/routes/`
+- `app/fastapi_routes/`
   - HTTP layer only (request parsing, response mapping, status codes).
   - No direct DB access and no heavy business rules.
   - Depend on `app/application/*`.

@@ -7,7 +7,7 @@
 | 无因果推理 | SCM lite + 反事实探针 | `app/domain/neuro/cognition/causal_graph.py` / `counterfactual.py` |
 | 绑死业务意图 | 技能契约 + 开放世界提案 | `skill_contract.py` + `resources/neuro/skill_contracts.json` |
 | 无持续学习 | 三类反馈 → 路由策略通道 | `evolution/learning_feedback.py`（不在线改分类器） |
-| 硬编码阈值 | 软约束代价函数 | `plan_constraints.py` + `soft_constraints.json` |
+| 硬编码阈值 | 软约束代价函数 | `app/domain/neuro/cognition/plan_constraints.py` + `soft_constraints.json` |
 | 无自我反思 | 白名单 critique→shadow→canary→promote | `evolution/self_reflection.py` + `evolution.reflect` |
 
 ## 安全边界

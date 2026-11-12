@@ -1,7 +1,7 @@
 # FHD (XCAGI) 技术栈
 
-> 本文件为 XCAGI v10.0 项目的权威技术栈说明。其它位置若出现不一致描述，以本文为准。
-> 更新日期：2026-05-26
+> 本文件为 XCAGI 项目的权威技术栈说明。其它位置若出现不一致描述，以本文为准。
+> 更新日期：2026-11-12
 
 ---
 
@@ -11,7 +11,7 @@
 |------|------|------|
 | 架构模式 | Neuro-DDD | 领域驱动设计 + AI 用例编排 |
 | 交付形态 | 桌面版 + Web 版 | Electron 桌面壳 + FastAPI 子进程 / Nginx + FastAPI |
-| 部署方式 | Docker / K8s / 桌面安装包 | 灵活部署选项 |
+| 部署方式 | 桌面安装包 / Docker（单机 CVM）/ 官网静态站 | K8s 已于 2026-07 退役 |
 
 ---
 
@@ -24,7 +24,7 @@
 | HTTP 框架 | FastAPI | 0.100+ | REST API 服务，自动 OpenAPI 文档 |
 | ASGI 服务器 | Uvicorn | 0.20+ | 异步 WSGI 服务器 |
 | 生产服务器 | Gunicorn | 21.0+ | 进程管理 + Uvicorn worker |
-| Python | Python | 3.10+ | 运行环境 |
+| Python | Python | 3.11 | 运行环境 |
 
 ### 2.2 数据库
 
@@ -94,8 +94,8 @@
 | 技术 | 用途 |
 |------|------|
 | Docker | 容器化 |
-| Docker Compose | 本地开发环境 |
-| Kubernetes | 生产编排 |
+| Docker Compose | 本地全栈（`docker/docker-compose.fhd-full.yml`） |
+| 不可变发布 + systemd | 生产：`scripts/deploy/fhd-pack-release.sh` 打包，CVM 自动更新 |
 | Nginx | 反向代理 |
 | GitHub Actions | CI/CD |
 
@@ -104,7 +104,7 @@
 | 技术 | 用途 |
 |------|------|
 | 结构化日志 | 应用日志 |
-| Prometheus | 指标采集（规划中） |
+| Prometheus | 指标采集（`monitoring/` 配置，SLO 每日采集） |
 | Loki | 日志聚合（规划中） |
 
 ---

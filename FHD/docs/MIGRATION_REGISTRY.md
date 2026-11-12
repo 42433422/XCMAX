@@ -93,7 +93,7 @@
 
 **专项（子项目迁入 XCAGI）**
 
-- `docs/migration_report.md`（例：原「AI 助手」Excel 等能力并入 XCAGI 的记录）
+- `docs/migration_report.md`（原「AI 助手」Excel 等能力并入 XCAGI 的记录；已外置到私有仓 xcmax-Li `sources/xcmax/FHD/docs/historical/`，台账 A18-001）
 
 ---
 
