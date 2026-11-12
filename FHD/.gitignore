@@ -307,3 +307,6 @@ test_reports/*
 # .NET build artifacts (IDE-generated; was misdetected as code changes by dispatch pipeline)
 tools/**/obj/
 tools/**/bin/
+
+# Mod 安装回执（运行时由 install_receipts.py 写入）
+mods/.install-receipts/
