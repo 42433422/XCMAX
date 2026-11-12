@@ -1,7 +1,7 @@
 # XCAGI 架构设计文档
 
 > Neuro-DDD（分层 + AI 用例编排）架构详解  
-> 稳定产品版本：1.0.0.0
+> 稳定产品版本：1.0.0.5
 
 ---
 
@@ -870,9 +870,9 @@ DATABASE_URL = "mysql://..."
 
 - [快速开始指南](QUICK_START.md)
 - [部署指南](DEPLOYMENT.md)
-- [API 参考](API_REFERENCE.md)
+- API 参考（`API_REFERENCE.md`）
 - [开发规范](../.github/CONTRIBUTING.md)
 
 ---
 
-*最后更新：2026-07-12 - 稳定产品版本对齐 1.0.0.0*
+*最后更新：2026-11-12 - 稳定产品版本对齐 1.0.0.5*

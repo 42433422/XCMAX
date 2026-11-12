@@ -54,7 +54,7 @@
 - 日常入口：`FHD/docs/START_HERE.md`（存在：是）
 - 能力域：`base`、`ai`、`erp`、`desktop`、`sec`、`ops`
 - CI 主 workflow：`.github/workflows/fhd-ci-cd.yml`、`.github/workflows/fhd-release-desktop.yml`、`.github/workflows/fhd-release-desktop-mac-ota.yml`
-- macos Release Gate（来源 `FHD/docs/MACOS_RELEASE_SSOT.md`，小节「6. Release Gate 状态（2026-09-18 实跑 1.0.0.5 @ `54325894c`；证据目录 [evidence/e2e/macos-release-1.0.0.5/](evidence/e2e/macos-release-1.0.0.5/)）」）：G1 YELLOW、G10 GREEN、G11 GREEN、G12 GREEN、G13 GREEN、G2 YELLOW、G3 GREEN、G4 YELLOW、G5 GREEN、G6 GREEN、G7 GREEN、G8 GREEN、G9 GREEN
+- macos Release Gate（来源 `FHD/docs/MACOS_RELEASE_SSOT.md`，小节「6. Release Gate 状态（2026-09-18 实跑 1.0.0.5 @ `54325894c`；证据目录 `evidence/e2e/macos-release-1.0.0.5/`）」）：G1 YELLOW、G10 GREEN、G11 GREEN、G12 GREEN、G13 GREEN、G2 YELLOW、G3 GREEN、G4 YELLOW、G5 GREEN、G6 GREEN、G7 GREEN、G8 GREEN、G9 GREEN
 - windows Release Gate（来源 `FHD/docs/WINDOWS_RELEASE_SSOT.md`，小节「4. Release Gate 状态（2026-09-14 实跑，round-1 闭环全过；T9 最终收口见文末小节）」）：G1 GREEN、G10 GREEN、G11 GREEN、G12 GREEN、G13 GREEN、G2 GREEN、G3 GREEN、G4 GREEN、G5 GREEN、G6 GREEN、G7 GREEN、G8 GREEN、G9 GREEN
 
 #### AI 员工商店（`ai-store` · P1 · 商业化线）

@@ -1,7 +1,7 @@
 # AI Agent 平台 V1 实施计划 — AI 全自动全流程
 
 > **范围**：从 V0（1 条只读链 demo）升级到 V1（**多场景写操作 + 审批门控 + RAG + 端到端业务**）。  
-> **依赖**：[`ai-agent-v0-plan.md`](ai-agent-v0-plan.md) 闭环（✅ 2026-06-05）。  
+> **依赖**：`ai-agent-v0-plan.md` 闭环（✅ 2026-06-05）。  
 > **声称对照**：[`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACTUAL.md) V1 段（✅ 2026-06-05 已写入）。  
 > **状态（2026-06-05）**：Phase 1-4 全部代码 + 留证闭环。Phase 4.1 Mod 商店 + Phase 4.2 ERP 端到端 JSON 已落盘 `docs/evidence/ai-agent-v1/`。
 
@@ -75,7 +75,7 @@
 
 ### Phase 3：RAG + 工作流节点（3-4 周）
 
-**3.1 RAG 能力（见 [`../../.trae/documents/补齐RAG与工作流能力.md`](../../.trae/documents/补齐RAG与工作流能力.md)）**
+**3.1 RAG 能力（见 `../../.trae/documents/补齐RAG与工作流能力.md`）**
 - 语义分块（`SemanticChunker`）
 - 混合检索（BM25 + 向量 RRF）
 - 引用溯源（`[1][2]` → `citations`）
@@ -218,8 +218,8 @@ bash scripts/ai_agent_v1/v1-checklist.sh --verify
 
 ## 7. 相关文档
 
-- V0：[`ai-agent-v0-plan.md`](ai-agent-v0-plan.md)
-- RAG/工作流能力补齐：[`../../.trae/documents/补齐RAG与工作流能力.md`](../../.trae/documents/补齐RAG与工作流能力.md)
+- V0：`ai-agent-v0-plan.md`
+- RAG/工作流能力补齐：`../../.trae/documents/补齐RAG与工作流能力.md`
 - 声称对照：[`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACTUAL.md)
 - 审批服务：[`../app/application/workflow/approval_service.py`](../app/application/workflow/approval_service.py)
 - 审批配置：[`../resources/config/approval_config.yaml`](../resources/config/approval_config.yaml)

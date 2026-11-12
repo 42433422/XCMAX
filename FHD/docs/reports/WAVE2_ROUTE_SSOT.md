@@ -1,6 +1,6 @@
 # Wave 2 路由 SSOT 进度
 
-> v10 线内迭代 · 对齐 [COMPAT_LAYER_INVENTORY.md](COMPAT_LAYER_INVENTORY.md)
+> v10 线内迭代 · 对齐 `COMPAT_LAYER_INVENTORY.md`
 
 | 优先级 | 域 | 状态 | SSOT 路径 |
 |--------|-----|------|-----------|

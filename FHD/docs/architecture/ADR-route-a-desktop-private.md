@@ -23,11 +23,11 @@ XCAGI 同时交付 Web、Electron 桌面、Android 与 Mod 生态。需在「多
 
 - SQLite + `sqlite_write_guard`：**单机写并发**，不承诺多副本写同一 Mod 库。
 - 私有化扩容：**垂直扩容**（CPU/RAM）+ 多桌面节点；非 HPA 水平写扩展。
-- 云端 staging/production API：可按 [`k8s/deployment.yaml`](../../k8s/deployment.yaml) 水平扩展 **读与无状态 API**；Mod 业务写仍在桌面侧。
+- 云端 staging/production API：可按 `../../k8s/deployment.yaml` 水平扩展 **读与无状态 API**；Mod 业务写仍在桌面侧。
 
 ## Staging 定位
 
-`119.27.178.147` staging 用于：**云侧 API、Prometheus/Grafana、k6 合同流量、SLO 证据**。不模拟桌面 SQLite 全量负载；容量分表见 [`capacity-planning.md`](../reports/capacity-planning.md)。
+`119.27.178.147` staging 用于：**云侧 API、Prometheus/Grafana、k6 合同流量、SLO 证据**。不模拟桌面 SQLite 全量负载；容量分表见 `../reports/capacity-planning.md`。
 
 ## 必须在云 vs 必须在本地
 
@@ -49,5 +49,5 @@ XCAGI 同时交付 Web、Electron 桌面、Android 与 Mod 生态。需在「多
 ## 相关文档
 
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md) §1.4
-- [`STAGING_RUNBOOK.md`](../../k8s/monitoring/STAGING_RUNBOOK.md)
+- `../../k8s/monitoring/STAGING_RUNBOOK.md`
 - [`acceptance-round1-invalid-20260612.yaml`](../evidence/slo/acceptance-round1-invalid-20260612.yaml)

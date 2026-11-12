@@ -75,17 +75,17 @@ except Exception:
 | 层 | 路径 |
 |----|------|
 | 应用指标 | `GET /metrics` — [`app/utils/metrics.py`](../app/utils/metrics.py) |
-| Prometheus | [`k8s/monitoring/prometheus/`](../k8s/monitoring/prometheus/)（静态 ConfigMap） |
-| Prometheus Operator | [`k8s/monitoring/servicemonitor-xcagi-backend.yaml`](../k8s/monitoring/servicemonitor-xcagi-backend.yaml) · [`prometheusrule-xcagi-alerts.yaml`](../k8s/monitoring/prometheusrule-xcagi-alerts.yaml) — `kubectl apply -k k8s/monitoring/` |
-| Grafana 看板 | [`k8s/monitoring/grafana/dashboards/xcagi-slo.json`](../k8s/monitoring/grafana/dashboards/xcagi-slo.json) |
+| Prometheus | `../k8s/monitoring/prometheus/`（静态 ConfigMap） |
+| Prometheus Operator | `../k8s/monitoring/servicemonitor-xcagi-backend.yaml` · `../k8s/monitoring/prometheusrule-xcagi-alerts.yaml` — `kubectl apply -k k8s/monitoring/` |
+| Grafana 看板 | `../k8s/monitoring/grafana/dashboards/xcagi-slo.json` |
 | 本地栈 | `bash scripts/observability/local_stack_up.sh` |
-| Staging runbook | [`k8s/monitoring/STAGING_RUNBOOK.md`](../k8s/monitoring/STAGING_RUNBOOK.md) |
+| Staging runbook | `../k8s/monitoring/STAGING_RUNBOOK.md` |
 
 ## 探针与 CI
 
 | 探针 | 命令 |
 |------|------|
-| Health 延迟 | `pytest tests/test_sla_health_probe.py`（nightly [`sla-probe.yml`](../.github/workflows/sla-probe.yml)） |
+| Health 延迟 | `pytest tests/test_sla_health_probe.py`（nightly `../.github/workflows/sla-probe.yml`） |
 | 前端 SLA | `npm run test:e2e:sla` |
 | Prometheus 采集 | `python scripts/observability/collect_slo_metrics.py --window 30d` |
 | 7 天验收 | `bash scripts/observability/run_staging_7d_acceptance.sh` |

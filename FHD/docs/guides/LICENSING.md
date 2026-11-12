@@ -91,7 +91,7 @@
 
 ## 4. Mod 商店与第三方 Mod 的许可证
 
-4.1 **平台默认**：[`manifest.json`](../../MODstore/modman/catalog_publish.md) 中 `license.type` 字段默认 `Apache-2.0`；Mod 作者可选择 `MIT` / `BSD-3-Clause` / `GPL-2.0` / `MPL-2.0` / `商业专有` / `自定义` 等。
+4.1 **平台默认**：`../../MODstore/modman/catalog_publish.md` 中 `license.type` 字段默认 `Apache-2.0`；Mod 作者可选择 `MIT` / `BSD-3-Clause` / `GPL-2.0` / `MPL-2.0` / `商业专有` / `自定义` 等。
 
 4.2 **官方认证 Mod（OAC）**：由许可方（成都修茈科技）进行安全审计与兼容性测试，提供有限瑕疵担保（详见 EULA 附件 B）；OAC 状态显示在 Mod 商店页面徽标上。
 

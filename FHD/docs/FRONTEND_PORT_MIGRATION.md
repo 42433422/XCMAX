@@ -1,7 +1,7 @@
 # 前端端口与 API 代理迁移记录（历史）
 
 > **归档说明**：前端源码唯一维护目录为仓库根 [`frontend/`](../frontend/)（与 CI、根目录 `docker-compose.yml` 一致）。  
-> 原 `XCAGI/frontend/` 已迁入 [`.archive/xcagi-frontend-dup-2026-04/`](../.archive/xcagi-frontend-dup-2026-04/)，下文路径保留当时语境，供对照。
+> 原 `XCAGI/frontend/` 已迁入 `../.archive/xcagi-frontend-dup-2026-04/`，下文路径保留当时语境，供对照。
 
 **修复日期**: 2026-04-17  
 **问题**: Mod 和前端 API 请求仍尝试连接 8000 端口  

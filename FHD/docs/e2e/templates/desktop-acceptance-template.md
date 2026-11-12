@@ -1,9 +1,9 @@
 # XCAGI 桌面端真实机验收证据 — <版本号> — <平台：win10 / win11 / macos>
 
 > **填写说明**（提交前删除本说明块）：
-> - 复制本模板为 `FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本号>-<平台>.md`，逐项填写真实值；
+> - 复制本模板为私有仓 `42433422/xcmax-Li` 的 `sources/xcmax/FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本号>-<平台>.md`，逐项填写真实值；
 > - 所有 `<尖括号>` 占位必须替换；未执行的步骤标 `SKIP` + 原因，部分执行标 `PARTIAL` + 替代证据说明，**不允许留空**；
-> - 截图放同目录 `assets/` 子目录，文中用相对路径引用（如 `![主窗口](assets/<版本号>-<平台>-main.png>)`）；
+> - 截图放同目录 `assets/` 子目录，文中用相对路径引用（如 `!主窗口（`assets/<版本号>-<平台>-main.png>`）`）；
 > - 协议见 [desktop-real-machine-acceptance-protocol.md](../../e2e/desktop-real-machine-acceptance-protocol.md)（各步判据以此为准）。
 > - 结果标记只允许：PASS / FAIL / PARTIAL / SKIP。
 

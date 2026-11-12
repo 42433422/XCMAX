@@ -48,7 +48,7 @@ WIP 数字仅供内部跟踪；对外材料、棘轮 `--bump`、发版门禁仍�
 | 前端 branches | **81%** | 同上 |
 | 前端 functions | **90%** | 同上 |
 
-详见 [`COVERAGE_GAP.md`](COVERAGE_GAP.md)（Top-N 未覆盖清单）。
+详见 `COVERAGE_GAP.md`（Top-N 未覆盖清单）。
 
 ## 铁律6：行/分支独立统计的工程取舍
 

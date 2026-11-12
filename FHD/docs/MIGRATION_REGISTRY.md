@@ -28,14 +28,14 @@
 
 | 条线                                           | 状态                                           | 权威落点                                                                                                         | 遗留 / 归档                                                                                   | 详细文档                                                                                                                                                |
 | -------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **A. 主 API 入口统一**（`backend/http_app` → 主栈）   | **已完成**(2026-04-20 `backend/` 目录整体删除)        | `**XCAGI/run.py`**、仓库根 `**app/fastapi_app.py**`、`**app/fastapi_routes/**`、`**app/legacy/**`、`**app/shell/**` | 备份见 `[.archive/legacy-backend-2026-04-final/](../.archive/legacy-backend-2026-04-final/)` | 本登记册 §5                                                                                                                                             |
-| **B. Flask 路由拆除**（`app/routes` → FastAPI）    | **已完成**（目录已删，已归档）                            | `**app/fastapi_routes/`**                                                                                    | `.archive/flask-routes-2026-04/`                                                          | `[MIGRATION_CLEANUP_COMPLETE.md](reports/_completed/MIGRATION_CLEANUP_COMPLETE.md)`、`[FLASK_TO_FASTAPI_MIGRATION_FINAL.md](reports/_completed/FLASK_TO_FASTAPI_MIGRATION_FINAL.md)` |
-| **C. Neuro-DDD 接入**（事件/领域/服务instrumentation） | 报告声明 Routes+Services 等范围已完成；路线图保留「质量定义」      | `**app/domain/`**、`**app/application/**`、`**app/infrastructure/**`、`**app/neuro_bus/**`                      | 评估/路线图文档                                                                                  | `[NEURO_MIGRATION_FINAL_COMPLETE.md](../NEURO_MIGRATION_FINAL_COMPLETE.md)`、`[NEURO_MIGRATION_ROADMAP.md](../NEURO_MIGRATION_ROADMAP.md)`           |
+| **A. 主 API 入口统一**（`backend/http_app` → 主栈）   | **已完成**(2026-04-20 `backend/` 目录整体删除)        | `**XCAGI/run.py`**、仓库根 `**app/fastapi_app.py**`、`**app/fastapi_routes/**`、`**app/legacy/**`、`**app/shell/**` | 备份见 ``../.archive/legacy-backend-2026-04-final/`` | 本登记册 §5                                                                                                                                             |
+| **B. Flask 路由拆除**（`app/routes` → FastAPI）    | **已完成**（目录已删，已归档）                            | `**app/fastapi_routes/`**                                                                                    | `.archive/flask-routes-2026-04/`                                                          | ``reports/_completed/MIGRATION_CLEANUP_COMPLETE.md``、``reports/_completed/FLASK_TO_FASTAPI_MIGRATION_FINAL.md`` |
+| **C. Neuro-DDD 接入**（事件/领域/服务instrumentation） | 报告声明 Routes+Services 等范围已完成；路线图保留「质量定义」      | `**app/domain/`**、`**app/application/**`、`**app/infrastructure/**`、`**app/neuro_bus/**`                      | 评估/路线图文档                                                                                  | ``../NEURO_MIGRATION_FINAL_COMPLETE.md``、``../NEURO_MIGRATION_ROADMAP.md``           |
 | **D. 数据库 schema（Alembic）**                   | 单一活链 + 漂移门禁已接入 CI（观察期）                                | `**alembic/versions/`**、`**scripts/dev/check_schema_drift.py**`                                                          | 旧迁移归档于 `versions/_archive_pre_baseline_2026_06_22/`                                                                                        | `[ALEMBIC_MIGRATION_GUIDE.md](guides/ALEMBIC_MIGRATION_GUIDE.md)`「现状与公约」节（以此为准）             |
 | **E. 前端 dev 端口 / API 基址**                    | 已统一到后端 5000 叙事；**唯一前端根**为仓库根 `**frontend/`** | `**frontend/vite.config.js**`、`**frontend/.env.example**`                                                    | 历史副本：`.archive/xcagi-frontend-dup-2026-04/frontend`                                       | `[FRONTEND_PORT_MIGRATION.md](FRONTEND_PORT_MIGRATION.md)`、`[XCAGI/FRONTEND.md](../XCAGI/FRONTEND.md)`                                              |
 
 
-**说明**:条线 A 的「端点级别」清单以本登记册 §5 与 OpenAPI(`/docs`)为准。历史的 `backend/DEPRECATED.md`、`backend/INVENTORY.md`、`backend/MIGRATION_SUMMARY.md` 已随目录下线归档至 [.archive/legacy-backend-2026-04-final/](../.archive/legacy-backend-2026-04-final/)。
+**说明**:条线 A 的「端点级别」清单以本登记册 §5 与 OpenAPI(`/docs`)为准。历史的 `backend/DEPRECATED.md`、`backend/INVENTORY.md`、`backend/MIGRATION_SUMMARY.md` 已随目录下线归档至 `../.archive/legacy-backend-2026-04-final/`。
 
 ---
 
@@ -100,7 +100,7 @@
 ## 5. `backend/` → `app/` 全量迁移(2026-04-20 **已完成**)
 
 **状态**:阶段 0–5 全部落地,`backend/` 目录已物理删除,备份保留在
-[.archive/legacy-backend-2026-04-final/](../.archive/legacy-backend-2026-04-final/)
+`../.archive/legacy-backend-2026-04-final/`
 (含 `DEPRECATED.md`、`INVENTORY.md`、`MIGRATION_SUMMARY.md`、`__init__.py`)。
 路由注册与支持模块均以 `app/` 为权威落点,FastAPI 启动冒烟通过(535 条路由)。
 
@@ -165,9 +165,9 @@
 | --- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0   | 预备包与文档修正                                                                                   | 本表落地、README ASCII 对齐 12 域、XCAGI 次级文档"11→12"                                                                                                          |
 | 1   | 迁走所有被 `app/` 硬依赖的支持模块                                                                      | `rg "from backend\\." app/ --glob '!app/fastapi_compat_routes/**'` 为 0                                                                               |
-| 2   | 12 个小路由 + `template_api` 搬家                                                                | `fastapi_compat_routes/__init__.py` 不再 `from backend.routers.<小路由>`,[app/routes/state.py](../app/routes/state.py) 不再引 `backend.routers.state_compat` |
+| 2   | 12 个小路由 + `template_api` 搬家                                                                | `fastapi_compat_routes/__init__.py` 不再 `from backend.routers.<小路由>`,`../app/routes/state.py` 不再引 `backend.routers.state_compat` |
 | 3   | 8 个中等路由 + `shell/` + 删 payment shim                                                        | `mods/taiyangniao-pro`、`XCAGI/mods/taiyangniao-pro` 的 `from backend.*` 清空                                                                            |
-| 4   | 3 个大路由(含 147KB `xcagi_compat`)                                                             | [app/fastapi_app.py](../app/fastapi_app.py) 中 `archive_explicit_proxy_routes`、`gap_batch2` 引用改为 `app.*`                                              |
+| 4   | 3 个大路由(含 147KB `xcagi_compat`)                                                             | `../app/fastapi_app.py` 中 `archive_explicit_proxy_routes`、`gap_batch2` 引用改为 `app.*`                                              |
 | 5   | `app/fastapi_compat_routes/` 并入 `register_all_routes`、删 `backend/` 整目录、tests 迁入、scripts 更新 | `rg "backend\\." app/ scripts/ tests/ XCAGI/ mods/` 为 0,pytest 全绿,`/api/startup/status` 烟雾通过                                                         |
 
 

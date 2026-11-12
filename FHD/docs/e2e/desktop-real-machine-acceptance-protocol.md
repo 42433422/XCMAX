@@ -4,10 +4,10 @@
 >
 > **适用范围**：每次桌面正式发布（tag `FHD/v*`）完成后一周内，在 Win10、Win11、macOS 三台真实机器上各执行一轮，并按
 > [desktop-acceptance-template.md](./templates/desktop-acceptance-template.md) 留痕到
-> `FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本号>-<win10|win11|macos>.md`。
+> 私有仓 `42433422/xcmax-Li` 的 `sources/xcmax/FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本号>-<win10|win11|macos>.md`。
 >
 > **关联规格**：`.trae/specs/converge-desktop-acceptance-tech-debt/spec.md` D1-2 / D1-3
-> **历史参考**：[desktop-real-machine-acceptance-2026-07-05.md](../evidence/e2e/desktop-real-machine-acceptance-2026-07-05.md)
+> **历史参考**：`../evidence/e2e/desktop-real-machine-acceptance-2026-07-05.md`
 
 ---
 
@@ -226,7 +226,7 @@ NSIS 静默安装可加 `/LOG=安装日志.txt` 参数留存。
 当前已是线上最新版本时，无法完成"升级"动作。此时本步记录为：
 `SKIP（当前版本 X 已是 latest*.yml 最新版本 productVersion=Y，无升级目标）`，并至少完成：
 - 更新通道可达性检查（latest*.yml 能打开、`signature: ed25519:` 字段存在）；
-- 引用最近一次 OTA 闭环证据（如 `FHD/docs/evidence/e2e/desktop-ota-closed-loop-20260724/`）。
+- 引用最近一次 OTA 闭环证据（如 私有仓 `42433422/xcmax-Li` 的 `sources/xcmax/FHD/docs/evidence/e2e/desktop-ota-closed-loop-20260724/`）。
 
 ---
 
@@ -290,7 +290,7 @@ NSIS 静默安装可加 `/LOG=安装日志.txt` 参数留存。
 
 - **签字发布**：三台机器（Win10 / Win11 / macOS）安装+冷启动均 PASS，OTA 与回滚合计无 FAIL（PARTIAL/SKIP 需附替代证据）；
 - **任一平台存在 FAIL 或 P0**：该版本桌面验收未闭环，不得对外宣称"三平台可用"；
-- 证据文件命名：`FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本号>-<win10|win11|macos>.md`，
+- 证据文件命名：私有仓 `42433422/xcmax-Li` 的 `sources/xcmax/FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本号>-<win10|win11|macos>.md`，
   按模板填写，截图放同目录 `assets/` 子目录并在文中引用相对路径。
 
 ### 6.3 引导脚本速查

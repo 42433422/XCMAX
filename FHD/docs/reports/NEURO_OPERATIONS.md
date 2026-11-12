@@ -20,7 +20,7 @@
 
 ## NeuroBus 可靠性层（生产全开）
 
-生产/K8s 建议启用下列变量（与 [`k8s/configmap.yaml`](../../k8s/configmap.yaml)、`deploy-production` 一致）：
+生产/K8s 建议启用下列变量（与 `../../k8s/configmap.yaml`、`deploy-production` 一致）：
 
 | 变量 | 生产建议 |
 |------|----------|

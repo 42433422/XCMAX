@@ -25,7 +25,7 @@
 
 ## 受保护客户 Mod
 
-`taiyangniao-pro`、`sz-qsm-pro` — 见平台 [PROTECTED_MODS.md](../../../成都修茈科技有限公司/mods/PROTECTED_MODS.md)。
+`taiyangniao-pro`、`sz-qsm-pro` — 见平台 `../../../成都修茈科技有限公司/mods/PROTECTED_MODS.md`。
 
 ## 查询能力清单
 

@@ -13,7 +13,7 @@
 | `e2e-modstore-*-auto.json` | `run_e2e_modstore.py --strategy auto` | Mod 商店端到端：mock 全部跑通 |
 | `e2e-modstore-*-interactive.json` | `run_e2e_modstore.py --strategy interactive` | Mod 商店端到端：挂起审批 |
 | `e2e-modstore-*-reject.json` | `run_e2e_modstore.py --strategy reject` | Mod 商店端到端：自动拒绝 |
-| `e2e-modstore-*-live-real-order.json` | Mod 商店端到端 live | 真实 Mod 订单 `MOD17806547526741` ¥9.90 走通（详见 [`mod-pilot-blockers.md`](../../mod-pilot-blockers.md)） |
+| `e2e-modstore-*-live-real-order.json` | Mod 商店端到端 live | 真实 Mod 订单 `MOD17806547526741` ¥9.90 走通（详见 `../../mod-pilot-blockers.md`） |
 | `e2e-erp-*-auto.json` | `run_e2e_erp.py --strategy auto` | ERP 端到端：客户下单 → 审单 → 发货 → 通知 → Excel |
 | `e2e-erp-*-interactive.json` | `run_e2e_erp.py --strategy interactive` | ERP 端到端：挂起审批 |
 

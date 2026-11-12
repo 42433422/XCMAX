@@ -60,4 +60,4 @@ curl -X POST http://127.0.0.1:5000/api/mod-store/bootstrap-edition-pack?edition=
 
 ---
 
-*与 [PLATFORM_SHELL.md](./PLATFORM_SHELL.md)、[DELIVERABLE_PRODUCT.md](../DELIVERABLE_PRODUCT.md)、[DECOUPLING_ROADMAP.md](../../../成都修茈科技有限公司/docs/DECOUPLING_ROADMAP.md) 配套。*
+*与 [PLATFORM_SHELL.md](./PLATFORM_SHELL.md)、[DELIVERABLE_PRODUCT.md](../DELIVERABLE_PRODUCT.md)、`../../../成都修茈科技有限公司/docs/DECOUPLING_ROADMAP.md` 配套。*

@@ -33,7 +33,7 @@
 - 📖 [快速开始指南](docs/QUICK_START.md)
 - 🏗️ [架构设计文档](docs/ARCHITECTURE.md)
 - 🗺️ [功能边界图 / 目录职责(Feature Map)](docs/FEATURE_MAP.md) ← **必读**
-- 🤖 [AI 员工配置指南](docs/AI_EMPLOYEE.md)
+- 🤖 AI 员工配置指南（见 `docs/ai-agent-v1-plan.md`）
 - 🧩 [MOD 作者指南](docs/guides/MOD_AUTHORING_GUIDE.md)（manifest / SDK / hook / comms / workflow_employees / 打包与冒烟）
 - 🧭 [迁移总登记册](docs/MIGRATION_REGISTRY.md)(入口统一 / Flask 拆除 / Neuro / 归档索引)
 - 📚 [完整文档](docs/)
@@ -108,7 +108,7 @@ rg -n 'version\s*=\s*"[0-9]' app/fastapi_app/factory.py app/infrastructure/mods/
 | **历史仓库** | **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)** / **[XCMAX-roadmap](https://github.com/42433422/XCMAX-roadmap)** 已归档；旧 commit 备份于本机 `~/XCMAX-archives/nested-git-backup-20260608/`。 |
 | **Git 标签** | 稳定版标签 **`FHD/v<VERSION.md 产品版本>`** 与产品版本对齐（发版时打在根仓 `main`）。 |
 | **与 xcagi 发行说明** | 历史仍可与 **[xcagi/releases](https://github.com/42433422/xcagi/releases)** 对照；[`CHANGELOG.md`](CHANGELOG.md) 为主变更记录。 |
-| **CI 入口** | 仓根 [`.github/workflows/`](../../.github/workflows/)（见 [`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)），**非** `FHD/.github/workflows/`。 |
+| **CI 入口** | 仓根 [`.github/workflows/`](../.github/workflows/)（见 [`docs/CI_SSOT.md`](../docs/CI_SSOT.md)），**非** `FHD/.github/workflows/`。 |
 
 ---
 
@@ -125,7 +125,7 @@ rg -n 'version\s*=\s*"[0-9]' app/fastapi_app/factory.py app/infrastructure/mods/
 
 新的代码/文件落点有三条 **硬约束**,PR 不遵守将被拒:
 
-1. **服务端代码只许新写到 `app/`**。`backend/` 目录已于 **2026-04-20** 全量迁出并删除(迁移登记见 [docs/MIGRATION_REGISTRY.md §5](docs/MIGRATION_REGISTRY.md))。历史文件备份在 [.archive/legacy-backend-2026-04-final/](.archive/legacy-backend-2026-04-final/)。
+1. **服务端代码只许新写到 `app/`**。`backend/` 目录已于 **2026-04-20** 全量迁出并删除(迁移登记见 [docs/MIGRATION_REGISTRY.md §5](docs/MIGRATION_REGISTRY.md))。历史文件备份在 `.archive/legacy-backend-2026-04-final/`（已外置，见根 `ARCHIVE_POINTER.md`）。
 2. **前端代码只许写到 `frontend/`**。`static/`、`templates/vue-dist/` 是构建产物,不是源;不要往里改东西。
 3. **服务启动只用 `XCAGI/run.py`(端口 5000)**。`backend/http_app.py`(历史 8000 端口)已删除;禁止新增任何其它 HTTP 入口。
 
@@ -576,7 +576,7 @@ cd XCAGI && python run.py
 - **Mod 生态**：员工商店、Manifest v2、热插拔、行业配置覆盖；已有 `sz-qsm-pro`、`taiyangniao-pro` 等行业包  
 - **Token 钱包 / 防绕过**：核心 AI 能力云端化、License 验证、API 签名校验  
 - **可观测与并发**：目标 ~~0.6s 前端加载、~~99.5% 意图准确率、99.9% 可用性、2000 QPS 目标  
-- **文档体系统一**：`[BUSINESS_MODEL.md](BUSINESS_MODEL.md)`（如提供）、`[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)`、本 `README.md` 与 `[CHANGELOG.md](CHANGELOG.md)` 同口径
+- **文档体系统一**：`XCAGI/BUSINESS_MODEL.md`、`[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)`、本 `README.md` 与 `[CHANGELOG.md](CHANGELOG.md)` 同口径
 
 ### v5.0
 
@@ -638,7 +638,7 @@ pytest
 
 - [快速开始](docs/QUICK_START.md)  
 - [架构](docs/ARCHITECTURE.md)  
-- [AI 员工配置](docs/AI_EMPLOYEE.md)  
+- AI 员工配置（见 `docs/ai-agent-v1-plan.md`）  
 - [CHANGELOG](CHANGELOG.md)  
 - [SECURITY](SECURITY.md)  
 - [部署](docs/DEPLOYMENT.md)  

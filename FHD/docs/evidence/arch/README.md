@@ -25,4 +25,4 @@ python scripts/arch_fitness.py
 
 ## 关联
 
-- [`docs/reports/COMPAT_LAYER_INVENTORY.md`](../../reports/COMPAT_LAYER_INVENTORY.md)
+- `../../reports/COMPAT_LAYER_INVENTORY.md`

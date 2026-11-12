@@ -13,8 +13,8 @@
 | [MIGRATION_REGISTRY.md](MIGRATION_REGISTRY.md) | 迁移与入口统一登记 |
 | [TECH_STACK.md](TECH_STACK.md) | 技术栈摘要 |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | 部署相关 |
-| [reports/capacity-planning.md](reports/capacity-planning.md) | 容量规划、k6 `scripts/loadtest` 基线与目标 SLO；MODstore 全链路数字见姊妹仓 `MODstore_deploy/docs/perf-benchmark-public.md` |
-| [reports/FHD_DEPTH_ASSESSMENT_REVISED_2026-05-03.md](reports/FHD_DEPTH_ASSESSMENT_REVISED_2026-05-03.md) | FHD/XCAGI 深度评估（修订版，与源码核实对齐） |
+| `reports/capacity-planning.md` | 容量规划、k6 `scripts/loadtest` 基线与目标 SLO；MODstore 全链路数字见姊妹仓 `MODstore_deploy/docs/perf-benchmark-public.md` |
+| `reports/FHD_DEPTH_ASSESSMENT_REVISED_2026-05-03.md` | FHD/XCAGI 深度评估（修订版，与源码核实对齐） |
 | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 覆盖率 `fail_under` 分阶段目标与补测清单 |
 | [guides/RATE_LIMITING.md](guides/RATE_LIMITING.md) | 全站 / 路由级 / Redis 限流并存策略 |
 | [guides/DEPENDENCY_LOCKS.md](guides/DEPENDENCY_LOCKS.md) | uv / Poetry 依赖锁定与 CI 安装说明 |
@@ -34,7 +34,7 @@
 
 | 位置 | 内容 |
 |------|------|
-| [wxcc/](wxcc/) | 小程序历史修复笔记：`FIXES.md`、`IMAGE_FIX.md`、`IMAGE_FIX_V2.md`、`PATH_FIX.md` |
+| `wxcc/` | 小程序历史修复笔记：`FIXES.md`、`IMAGE_FIX.md`、`IMAGE_FIX_V2.md`、`PATH_FIX.md` |
 | [reports/](reports/) | 迁移、测试、Neuro、Flask→FastAPI 等阶段性报告与评估（偏考古，非日常必读）；**容量与性能基线**见 `reports/capacity-planning.md` |
 
 ## 工具与调试脚本说明
