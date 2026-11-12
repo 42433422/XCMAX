@@ -77,7 +77,7 @@
 -- `reports/_completed/NEURO_CORE_MIGRATION_COMPLETE.md`
 -- `reports/_completed/NEURO_MIGRATION_COMPLETE_SUMMARY.md`
 -- `reports/_completed/NEURO_MIGRATION_EXECUTION_SUMMARY.md`
--- `reports/_completed/NEURO_MIGRATION_EXECUTION_REPORT.md`
+-- `reports/_completed/NEURO_MIGRATION_EXECUTION_REPORT.md`（仅 54 字节归档存根，已删除）
 - `NEURO_DDD_MIGRATION_COMPLETE_DEFINITION.md`
 - `NEURO_DDD_MIGRATION_ASSESSMENT.md`
 

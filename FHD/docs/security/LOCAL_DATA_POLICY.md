@@ -1,7 +1,7 @@
 # 本地数据安全策略（Wave 0 SSOT）
 
 > v10 线内迭代 · 桌面私有化与 Web 企业版共用原则  
-> 关联：[SECURITY.md](../../SECURITY.md) · [ENTERPRISE_AUDIT.md](../ENTERPRISE_AUDIT.md) · [CUSTOMER_SUPPORT.md](../customer/CUSTOMER_SUPPORT.md)
+> 关联：[SECURITY.md](../../SECURITY.md) · [AUDIT_BENCHMARK_SSOT.md](../AUDIT_BENCHMARK_SSOT.md) · [CUSTOMER_SUPPORT.md](../customer/CUSTOMER_SUPPORT.md)
 
 ## 1. 数据分类
 
@@ -34,7 +34,7 @@
 
 - **诊断包**：`app/security/log_redaction.py` 对日志 tail 脱敏 Bearer/JWT/Cookie/API key/邮箱/手机号后再写入 ZIP。
 - **诊断包 manifest**：不含数据库正文；`databaseUrl` 使用 `redact_database_url()`。
-- **企业审计 JSONL**：刻意不记录 chat body（见 ENTERPRISE_AUDIT.md）。
+- **企业审计 JSONL**：刻意不记录 chat body（见 `AUDIT_BENCHMARK_SSOT.md` 审计口径）。
 - **HTTP trace**：Neuro 中间件脱敏 Authorization/Cookie 头。
 
 ## 4. 清理策略

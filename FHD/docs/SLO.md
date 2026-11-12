@@ -75,11 +75,11 @@ except Exception:
 | 层 | 路径 |
 |----|------|
 | 应用指标 | `GET /metrics` — [`app/utils/metrics.py`](../app/utils/metrics.py) |
-| Prometheus | `../k8s/monitoring/prometheus/`（静态 ConfigMap） |
-| Prometheus Operator | `../k8s/monitoring/servicemonitor-xcagi-backend.yaml` · `../k8s/monitoring/prometheusrule-xcagi-alerts.yaml` — `kubectl apply -k k8s/monitoring/` |
-| Grafana 看板 | `../k8s/monitoring/grafana/dashboards/xcagi-slo.json` |
+| Prometheus | `FHD/monitoring/prometheus.yml`（生产 `prometheus.production.yml`） |
+| 告警规则 | `FHD/monitoring/alerts.yml` + `alertmanager.yml`（K8s Operator 已退役） |
+| Grafana 看板 | `FHD/monitoring/grafana/provisioning/dashboards/fhd.json` |
 | 本地栈 | `bash scripts/observability/local_stack_up.sh` |
-| Staging runbook | `../k8s/monitoring/STAGING_RUNBOOK.md` |
+| Staging 采集 | `FHD/scripts/observability/collect_slo_metrics.py` + `fhd-slo-metrics-collect.yml` |
 
 ## 探针与 CI
 
@@ -105,7 +105,7 @@ except Exception:
 | `ab_supplement` | 内部 demo | `acceptance-20260605.yaml` |
 | `k6_7d` / `staging_natural` | **合同签署** | `docs/evidence/slo/grafana-staging-m0-*.png` + `reading_7d` 非 null |
 
-`ab_supplement` **不适用** 99.9% SLA 合同（见 [`M0-remaining-gaps.md`](M0-remaining-gaps.md)）。
+`ab_supplement` **不适用** 99.9% SLA 合同（M0 缺口清单已归档到私有仓 xcmax-Li `sources/xcmax/FHD/docs/historical/`）。
 
 ## Tier C 压测 SLO（高并发验收）
 
@@ -119,7 +119,7 @@ except Exception:
 | SLO-TIER-C-04 | AI 流式并发 | ≥200 路并发流 × 15min | `scripts/loadtest/tier_c_chat_streams.js` | `tier-c/chat-streams-report.json` |
 | SLO-TIER-C-05 | AI 首包 P95 | < 1500ms（SLO-AI-01） | 同上 | Grafana `xcagi-slo:3` |
 | SLO-TIER-C-06 | Celery 队列延迟 | OCR/导出 P95 < 60s | Prometheus `celery_task_duration` | `tier-c/celery-latency.png` |
-| SLO-TIER-C-07 | 7 天自然流量 | k6 阶梯流量 + M0 全绿 | `k8s/monitoring/k6-configmap.yaml` `tier_c_ramp` | `docs/evidence/slo/` |
+| SLO-TIER-C-07 | 7 天自然流量 | k6 阶梯流量 + M0 全绿 | `FHD/scripts/loadtest/` k6 阶梯脚本 | `docs/evidence/slo/` |
 
 本地冒烟：
 

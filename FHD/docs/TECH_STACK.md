@@ -130,4 +130,4 @@
 - [架构设计](./ARCHITECTURE.md)
 - [部署指南](./DEPLOYMENT.md)
 - [快速开始](./QUICK_START.md)
-- [企业级能力](./ENTERPRISE_AUDIT.md)
+- [审计与成熟度基准](./AUDIT_BENCHMARK_SSOT.md)

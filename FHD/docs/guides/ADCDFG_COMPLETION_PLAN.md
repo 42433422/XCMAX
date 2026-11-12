@@ -21,7 +21,7 @@
 
 ## 不在本轮（明确边界）
 
-- `legacy_gaps_batch1/2` 按域拆成 14+ 模块（需 3～5 迭代，见 `LEGACY_CLEANUP_TRACKING.md` Phase 2D）
+- `legacy_gaps_batch1/2` 按域拆成 14+ 模块（需 3～5 迭代，遗留清理清单已全部执行完毕，档案见私有仓 xcmax-Li `sources/xcmax/FHD/docs/historical/LEGACY_CLEANUP_TRACKING.md`）
 - `app/legacy/planner.py` / `tools.py` 枢纽迁移（Phase 4）
 - 覆盖率 80%+（单独质量专项）
 - MODstore 公网高可用与签名强制（运维专项）

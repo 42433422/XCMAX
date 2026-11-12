@@ -302,10 +302,10 @@ fetch('http://localhost:8000/api/templates/upload', {
 
 ## 开发信息
 
-- **模块位置**: `backend/template_upload.py`, `backend/template_api.py`
-- **解析器**: `backend/excel_template_parser.py`, `backend/word_template_parser.py`
-- **数据库模型**: `backend/template_database.py`
-- **测试**: `backend/tests/test_template_upload.py`
+- **模块位置**: `app/fastapi_routes/template_api.py`
+- **解析器**: `app/application/office_template_ingest_app_service.py`
+- **数据库模型**: `app/db/models/etl.py`（`etl_templates` / `etl_template_versions`）
+- **测试**: `FHD/tests/routes/`（模板上传/分析相关用例）
 
 ## 更新日志
 
