@@ -42,6 +42,7 @@
 | **客户/品牌资料外置（2026-11-12）** | 私有迁移仓 [`42433422/xcmax-Li`](https://github.com/42433422/xcmax-Li) `sources/xcmax/` | `太阳鸟/`（README、安装说明）与 `宣传资料/`（企业介绍 PPT、路演流程清单图）已迁入该仓并按 `ledger/MIGRATION_LEDGER.csv` A12 逐文件校验（状态 `verified`），本仓已 `git rm`。 |
 | **docs 冗余快照清理（2026-11-12）** | 同上 `sources/xcmax/`（`SECURITY_CLEANUP_REPORT.md` 见 A10） | 已删 `docs/reports/FIXES.md`、`docs/reports/git_hygiene_intake_2026-06-29.json`、`docs/roadmap/AI_PLATFORM_9_SCORE_ROADMAP.md`（零入链历史快照）；`docs/reports/SECURITY_CLEANUP_REPORT.md` 私有副本已在 xcmax-Li。 |
 | **根目录证据/构建产物外置（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/` | 迁出 9 个未入库目录：`windows-evidence-1.0.0.5`、`windows-evidence-20260926/27/28`、`windows-acceptance-r2`、`xcagi-src-e3ac9f`、`xcagi-tmp`、`xcagi-w06-data`、`xcagi-nsis-bcj`，以及 `_archive/{branch-retirement-20261106,devfleet-comm}`；共约 1.7GB，逐目录文件数与字节总量核对一致。同时删除空壳 `cache-spill/`、`saved_analyses/`、`xcagi-release-c46f938/` 与 0 字节 `modstore-test.db`。`_archive/windows-closeout-20261007` 因权限（`xcshare` 独占）未能读取，保留原地。 |
+| **outputs 打包产物外置（2026-11-12）** | `~/XCMAX-archives/xcmax-root-evidence-20261112/outputs/` | 迁出未入库的 `FHD-src-1.0.0.5-20261110.tar.gz`（78MB 源码包）、`byok-auto-match-module/` 与同名 `.zip`，字节核对一致；`outputs/` 仅保留已入库的 `01a05bb6-…/` 交付表。 |
 
 ## 恢复示例
 
