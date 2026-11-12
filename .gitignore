@@ -227,3 +227,6 @@ FHD/admin-console/.vite-bak/
 
 # 观察基线快照（由 FHD/scripts/baseline/measure.py 按需生成，入库即过期）
 FHD/baselines/
+
+# 蒸馏运行时数据（checkpoints/logs/training_data.jsonl 由 app 侧按需生成）
+FHD/distillation/
