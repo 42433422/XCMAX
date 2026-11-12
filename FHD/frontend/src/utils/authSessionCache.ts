@@ -133,6 +133,14 @@ export function readValid(res: unknown): boolean {
   throw new Error('会话校验暂不可用，请稍后重试')
 }
 
+/** Login just returned a session cookie. The next navigation may trust it until the TTL. */
+export function rememberEnterpriseSessionValid(): void {
+  cachedAccountEpoch = productReadAccountEpoch.value
+  cachedValid = true
+  cachedAt = Date.now()
+  writeEnterpriseSessionHint(cachedAt)
+}
+
 export async function validateEnterpriseSessionCached(force = false): Promise<boolean> {
   if (cachedAccountEpoch !== productReadAccountEpoch.value) {
     cachedAccountEpoch = productReadAccountEpoch.value

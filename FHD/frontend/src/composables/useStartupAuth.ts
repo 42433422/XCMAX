@@ -37,6 +37,13 @@ export function useStartupAuth(options: {
     const epoch = getAuthSessionEpoch()
     const current = () => epoch === getAuthSessionEpoch() && isAttemptCurrent()
     try {
+      const profile = (await import('@/stores/accountProfile')).useAccountProfileStore()
+      if (profile.workspaceReady && profile.workspaceHydrationReady) {
+        clearHostPackSkippedSession()
+        void profile.refreshFromServer({ keepVisible: true })
+        void syncMarketTokensFromSession(current)
+        return { ok: true, entitledModIds: [], accountUsername: '' }
+      }
       const res = await authApi.validateSession()
       if (!current()) return { ok: false, entitledModIds: [] }
       const resRow = asRecord(res)
@@ -44,12 +51,15 @@ export function useStartupAuth(options: {
       try { valid = readValid(res) } catch { valid = false }
       if (valid) {
         clearHostPackSkippedSession()
-        // Establish the trusted owner before taking a market credential snapshot.
-        await import('@/stores/accountProfile')
-          .then((m) => m.useAccountProfileStore().refreshFromServer())
-          .catch(() => {
+        const profile = (await import('@/stores/accountProfile')).useAccountProfileStore()
+        // Login already hydrated this account. A second remote profile read must not
+        // keep the shell locked; RBAC refresh continues behind the workspace.
+        if (profile.workspaceReady && profile.workspaceHydrationReady) void profile.refreshFromServer()
+        else {
+          await profile.refreshFromServer().catch(() => {
             /* ignore */
           })
+        }
         if (!current()) return { ok: false, entitledModIds: [] }
         // Optional token synchronization must not block the authenticated workspace.
         void syncMarketTokensFromSession(current)
