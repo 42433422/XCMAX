@@ -220,7 +220,20 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         denied = _permission_denied(access, DATASET_WRITE_PERMISSION)
         if denied is not None:
             return {**denied, "deleted_memories": 0}
-        listed = self.list_memories(access_context=access, limit=1000)
+        # 列举待删记忆需要读权限，删除本身仍由 mutate 校验写权限。
+        list_access = (
+            access
+            if DATASET_READ_PERMISSION in access.permissions
+            else DatasetAccessContext(
+                actor_id=access.actor_id,
+                tenant_id=access.tenant_id,
+                permissions=frozenset(set(access.permissions) | {DATASET_READ_PERMISSION}),
+                is_admin=access.is_admin,
+            )
+        )
+        listed = self.list_memories(access_context=list_access, limit=1000)
+        if not listed.get("success"):
+            return {**listed, "deleted_memories": 0}
         rows = [
             row
             for row in (listed.get("memories") if isinstance(listed.get("memories"), list) else [])

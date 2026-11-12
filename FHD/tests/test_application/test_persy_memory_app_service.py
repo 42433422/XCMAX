@@ -151,7 +151,11 @@ def test_clear_memories_removes_all_visible_records() -> None:
         session_id="chat-1",
     )
 
-    cleared = service.clear_memories(access_context=_access())
+    cleared = service.clear_memories(
+        access_context=DatasetAccessContext(
+            actor_id="7", tenant_id="2", permissions=frozenset({"dataset.write"})
+        )
+    )
 
     assert cleared["success"] is True
     assert cleared["deleted_memories"] == 1

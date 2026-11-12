@@ -40,10 +40,12 @@ import { useChatOrchestrationPrintFlow } from './chat-orchestration/useChatOrche
 import { useChatOrchestrationExcelTasks } from './chat-orchestration/useChatOrchestrationExcelTasks'
 import { useChatOrchestrationRemoteRound } from './chat-orchestration/useChatOrchestrationRemoteRound'
 import { useOnboardingFirstOrderRun } from './useOnboardingFirstOrderRun'
-import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
+import { APPROVAL_GRANT_MISSING_MESSAGE, approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import agentRunsApi from '@/api/agentRuns'
 import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
-import { asRecord } from '@/utils/typeGuards'
+import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { approvalApi } from '@/api/approval'
+import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { lastChatModelRoute } from '@/utils/chatModelRoute'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 
@@ -552,6 +554,33 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
   }
 
+  /**
+   * 自动审批档：计划确认后若后端生成了审批请求，用同一账号身份提交审批并留痕，
+   * 避免「自动」只自动点了确认卡、又把人拦在审批工作台。
+   */
+  async function approveChatRequestIfAutomatic(payload: Record<string, unknown>, isCurrent: () => boolean) {
+    if (!approvalModeState.enabled || approvalModeState.mode !== 'auto') return
+    const envelope = asRecord(payload.data)
+    if (asString(envelope.action).trim() !== 'approval_pending') return
+    const targetNos = new Set(
+      asArray(asRecord(envelope.data).approval_request_ids).map((value) => asString(value)).filter(Boolean),
+    )
+    if (!targetNos.size) return
+    const userId = Number(getRuntimeTenantStorageScopeInput()?.localUserId)
+    if (!Number.isSafeInteger(userId) || userId <= 0) return
+    const listed = await approvalApi.getMyRequests(userId)
+    const requests = Array.isArray(listed?.data?.requests) ? listed.data.requests : []
+    for (const request of requests) {
+      if (!targetNos.has(String(request.request_no || ''))) continue
+      if (String(request.status || '') !== 'pending') continue
+      if (Number(request.applicant_id) !== userId) continue
+      if (String(request.business_type || '') !== 'workflow_tool') continue
+      if (!isCurrent()) return
+      await approvalApi.approve(Number(request.id), userId, '自动审批模式：确认本轮 AI 工作流写入')
+      if (!isCurrent()) return
+    }
+  }
+
   async function controlWorkflowFromCard(cardId: string, action: 'confirm' | 'cancel') {
     if (!cardId || isLoading.value) return
     const card = messages.value.find(msg => msg.role === 'ai' && msg.approvalCard
@@ -566,17 +595,26 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const control = action === 'confirm' ? '确认' : '取消'
     try {
       const runId = String(card.run_id || card.agent_run_id || '').trim()
+      let runHandled = false
       if (runId) {
-        const receipt = action === 'confirm'
-          ? await approveRunWithFreshGrant(runId, { isCurrent, runtimeContext: { source: 'chat_approval_card', ...dbGate.resolveChatDbTokensForPayload() } })
-          : await agentRunsApi.cancelRun(runId)
-        if (!isCurrent() || !receipt) return
-        if (!receipt.success || receipt.data?.run_id !== runId) throw new Error(receipt.message || '未收到原任务的操作回执，请核对后重试')
-        if (action === 'cancel' && receipt.data.status !== 'cancelled') throw new Error('取消请求已提交，任务尚未确认取消。请在原任务中核对状态。')
-        card.status = action === 'confirm' ? 'confirmed' : 'cancelled'
-        await addAndSaveMessage(action === 'confirm' ? '已收到确认回执，任务已提交执行，请在任务中查看实际结果。' : '已收到取消回执，任务已取消。', 'ai', undefined, scope.sessionId)
-        if (isCurrent()) await syncAgentRunFromPayload({ run_id: runId }, control, isCurrent).catch(() => undefined)
-      } else {
+        try {
+          const receipt = action === 'confirm'
+            ? await approveRunWithFreshGrant(runId, { isCurrent, runtimeContext: { source: 'chat_approval_card', ...dbGate.resolveChatDbTokensForPayload() } })
+            : await agentRunsApi.cancelRun(runId)
+          if (!isCurrent() || !receipt) return
+          if (!receipt.success || receipt.data?.run_id !== runId) throw new Error(receipt.message || '未收到原任务的操作回执，请核对后重试')
+          if (action === 'cancel' && receipt.data.status !== 'cancelled') throw new Error('取消请求已提交，任务尚未确认取消。请在原任务中核对状态。')
+          card.status = action === 'confirm' ? 'confirmed' : 'cancelled'
+          await addAndSaveMessage(action === 'confirm' ? '已收到确认回执，任务已提交执行，请在任务中查看实际结果。' : '已收到取消回执，任务已取消。', 'ai', undefined, scope.sessionId)
+          if (isCurrent()) await syncAgentRunFromPayload({ run_id: runId }, control, isCurrent).catch(() => undefined)
+          runHandled = true
+        } catch (error) {
+          // 计划级审批的 run 没有可续跑的等待步骤，后端不会签发 approval_grant；
+          // 这类卡片按 plan_id 走原计划确认，而不是停在「没有可用的审批凭证」。
+          if (!(error instanceof Error) || error.message !== APPROVAL_GRANT_MISSING_MESSAGE) throw error
+        }
+      }
+      if (!runHandled) {
         const planId = String(card.plan_id || '').trim()
         if (!planId) throw new Error('确认卡缺少任务标识，请返回原任务核对后重试')
         const payload = await chatRequest.requestChatByModeWithTimeout(control, chatRequest.resolveChatTimeoutMs(control), { expectedWorkflowPlanId: planId }, {
@@ -600,6 +638,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         if (payload.task) showTaskConfirm(payload.task)
         if (payload.autoAction) handleAutoAction(payload.autoAction, control)
         await syncAgentRunFromPayload(payload, control, isCurrent).catch(() => undefined)
+        if (action === 'confirm') await approveChatRequestIfAutomatic(payload, isCurrent)
       }
       if (isCurrent()) await agentTaskRuntime.refreshTasks().catch(() => undefined)
     } catch (error) {
