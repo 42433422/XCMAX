@@ -1,6 +1,7 @@
 # XCAGI v10.0 快速开始（可交付宿主）
 
-> 约 5 分钟跑通：**独立宿主 + 装 MOD 变系统**。主入口 `XCAGI/run.py` → `http://127.0.0.1:5000`
+> 约 5 分钟跑通：**独立宿主 + 装 MOD 变系统**。主入口 `XCAGI/run.py`。
+> 桌面壳默认端口 `17500`，Web/源码直连默认 `5000`。
 
 ---
 
@@ -14,8 +15,8 @@
 
 ## 前置条件
 
-- **Python** 3.11+
-- **Node.js** 18+（仅前端开发或重编 UI 时需要）
+- **Python** 3.11+（代码使用 `str | None` 等 3.10+ 语法，3.9 无法导入）
+- **Node.js** 22.12+（`FHD/desktop/package.json` 的 `engines` 要求；低于此版本 Electron 安装脚本会报 `ERR_REQUIRE_ESM`）
 - **操作系统**：Windows 10/11、Linux macOS
 
 ---
@@ -24,7 +25,7 @@
 
 1. 运行供应商提供的 **XCAGI Setup 1.0.0.0**（generic 壳）。
 2. 首次启动：若提示装 Mod 包，在 **扩展市场** 点 **一键装齐通用包**。
-3. 验证：浏览器或壳内打开 → **智能对话** 可用；`GET http://127.0.0.1:5000/api/platform-shell/deliverable-status` 中 `"deliverable": true`。
+3. 验证：浏览器或壳内打开 → **智能对话** 可用；`GET http://127.0.0.1:17500/api/platform-shell/deliverable-status` 中 `"deliverable": true`。
 
 详见 [security/LOCAL_DATA_POLICY.md](security/LOCAL_DATA_POLICY.md)。
 
@@ -64,7 +65,8 @@ start-xcagi.bat        # 或 xcagi-backend.cmd，读取 .env 中的 DATABASE_URL
 
 ### 3. 验证
 
-- 桌面：`GET http://127.0.0.1:5000/api/desktop/status` → `storageMode: local_sqlite`
+- 桌面（Electron 壳）：`GET http://127.0.0.1:17500/api/desktop/status` → `storageMode: local_sqlite`
+- 桌面（源码直跑 `python run.py`，默认 5000）：`GET http://127.0.0.1:5000/api/desktop/status`
 - 通用：打开 **http://127.0.0.1:5000/** ，API 文档 **/docs**
 
 ### 4. 前端（可选，开发）
@@ -72,10 +74,72 @@ start-xcagi.bat        # 或 xcagi-backend.cmd，读取 .env 中的 DATABASE_URL
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run build:full   # 桌面/企业：含 Mod 路由与业务页
+npm run dev          # 或跑 Vite dev server
 ```
 
-默认构建为 **generic 壳**：`npm run build`；完整 ERP 侧栏：`npm run build:full`。
+> **必须区分构建模式**：`npm run build`（= `--mode generic`）会产出「干净通用宿主」，
+> `modRouteGlob.generic.ts` / `modPhysicalViewGlob.generic.ts` 都是空对象，
+> **所有 Mod 路由与业务页不会进 bundle**，界面表现为「没有找到这个页面」和空壳页。
+> 桌面/企业开发一律用 `build:full`（配 `VITE_XCAGI_PRODUCT_SKU=enterprise`）。
+
+---
+
+## 方式 C：桌面壳（Electron）开发态
+
+改完前端或桌面壳后，在本机跑真实 Electron 窗口。与方式 B 的区别：
+后端由 Electron 主进程拉起（含迁移与健康检查），前端用 `templates/vue-dist` 产物供后端挂载。
+
+### 1. 构建前端
+
+```bash
+cd FHD/frontend
+VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full
+```
+
+产物落在 `FHD/templates/vue-dist/`，后端从此目录提供页面。
+
+### 2. 编译桌面壳
+
+```bash
+cd FHD/desktop
+npm install     # 首次
+npm run build   # tsc -> dist/
+```
+
+### 3. 启动
+
+```bash
+cd FHD/desktop
+PYTHON=<python3.11+ 解释器路径> \
+XCAGI_PRODUCT_SKU=enterprise \
+XCAGI_DESKTOP_USER_DATA_DIR="<数据目录>" \
+./node_modules/.bin/electron .
+```
+
+- **前后端 SKU 必须一致**：`XCAGI_PRODUCT_SKU=enterprise` 对应 full 前端；不一致会触发路由守卫误跳
+- 默认端口 **17500**（不是 Web 端的 5000），可用 `XCAGI_DESKTOP_PORT` 覆盖
+- 数据目录默认 macOS `~/Library/Application Support/XCAGI`、Windows `%APPDATA%\XCAGI`
+- Electron 主进程会自动 spawn 后端：`python XCAGI/run.py --desktop --headless --port <端口> --data-dir <数据目录>`
+
+### 4. 验证
+
+```bash
+curl --noproxy '*' http://127.0.0.1:17500/api/ping
+curl --noproxy '*' http://127.0.0.1:17500/api/desktop/status   # storageMode: local_sqlite
+```
+
+后端自身启动约 2–3 秒（`routes_ready` 埋点）；窗口到可交互还要等登录时的市场权益同步。
+
+### 本机已知问题
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| `electron` 安装报 `ERR_REQUIRE_ESM` | Node < 22.12 | 升级 Node，或复用已有 `node_modules/electron/dist` |
+| 启动后报「找不到后端程序：.../resources/backend/xcagi-backend」 | 某些 Electron 版本在 `electron .` 开发态仍报 `isPackaged=true`，走了打包后端路径 | 用 `-r` 注入 shim 把 `app.isPackaged` 还原为 `false`（与 `desktop/e2e/patch-backend.cjs` 同法） |
+| 后端 `TypeError: unsupported operand type(s) for \|` | 用了系统 Python 3.9 | 用 3.11+ 解释器，经 `PYTHON=` 注入 |
+| `curl 127.0.0.1` 超时 / 502 | 本机 HTTP 代理拦截回环请求 | 加 `--noproxy '*'` |
+| Mod 全部消失、页面「没有找到这个页面」 | 前端用了 generic 构建 | 改用 `build:full` + `XCAGI_PRODUCT_SKU=enterprise` |
 
 ---
 
