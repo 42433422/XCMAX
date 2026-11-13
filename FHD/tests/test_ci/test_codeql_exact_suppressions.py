@@ -205,6 +205,74 @@ def test_ast_fingerprint_normalizes_only_empty_new_type_parameters():
     assert fingerprint(legacy) != fingerprint(modern)
 
 
+# Reviewed 2026-11-13 against exact main 25ed2151: single-component / dir_fd
+# sinks whose guards CodeQL cannot model.
+_REVIEWED_FILE_SINKS = {
+    "FHD/app/application/agent_orchestrator/artifact_files.py": (73, 96, 97, 105, 107, 129),
+    "FHD/app/application/employee_runtime/workspace_io.py": (57, 91),
+    "FHD/app/application/tools/workflow_spreadsheet_scope.py": (107,),
+    "FHD/app/application/shipment_excel_etl_security.py": (459,),
+}
+
+
+@pytest.mark.parametrize(
+    ("path", "line"),
+    [(path, line) for path, lines in _REVIEWED_FILE_SINKS.items() for line in lines],
+)
+def test_reviewed_file_sink_lines_are_suppressed(path, line):
+    assert keep_result(_finding(uri=path, line=line)) is False
+
+
+def _unreviewed_neighbor(lines, line):
+    candidate = line + 1
+    while candidate in lines:
+        candidate += 1
+    return candidate
+
+
+@pytest.mark.parametrize(
+    ("path", "line"),
+    [
+        (path, _unreviewed_neighbor(lines, line))
+        for path, lines in _REVIEWED_FILE_SINKS.items()
+        for line in lines
+    ],
+)
+def test_unreviewed_neighbor_lines_are_preserved(path, line):
+    assert keep_result(_finding(uri=path, line=line)) is True
+
+
+@pytest.mark.parametrize("path", _REVIEWED_FILE_SINKS)
+def test_prefixed_uri_cannot_reuse_file_suppression(path):
+    assert keep_result(_finding(uri="other/" + path, line=_REVIEWED_FILE_SINKS[path][0]))
+
+
+def _sink_source_tree(tmp_path, uri, source):
+    destination = tmp_path / uri
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(source, encoding="utf-8")
+    return tmp_path
+
+
+def test_file_suppression_fails_closed_after_semantic_change(tmp_path):
+    path = "FHD/app/application/agent_orchestrator/artifact_files.py"
+    source = (_SCRIPT.parents[2] / path).read_text(encoding="utf-8")
+    changed = source.replace(
+        "if root.is_symlink() or folder.is_symlink() or path.is_symlink():",
+        "if False:",
+    )
+    assert changed != source
+    root = _sink_source_tree(tmp_path, path, changed)
+    assert keep_result(_finding(uri=path, line=73), source_root=root) is True
+
+
+def test_file_suppression_requires_parseable_source(tmp_path):
+    path = "FHD/app/application/employee_runtime/workspace_io.py"
+    root = _sink_source_tree(tmp_path, path, "def broken(:")
+    assert keep_result(_finding(uri=path, line=57), source_root=root) is True
+
+
+
 def test_stable_fingerprint_does_not_depend_on_ast_dump(monkeypatch):
     import ast
 
