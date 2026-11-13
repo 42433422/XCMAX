@@ -13,6 +13,8 @@ class _AuthScreenState extends State<AuthScreen> {
   var _rememberPass = false;
   var _autoLogin = false;
   var _loggingIn = false;
+  var _modeTapCount = 0;
+  var _lastModeTapAt = DateTime.fromMillisecondsSinceEpoch(0);
   String? _error;
 
   @override
@@ -69,13 +71,6 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            if (isEnterprise) ...[
-              _AccountKindSegment(
-                adminMode: _adminMode,
-                onChanged: (value) => setState(() => _adminMode = value),
-              ),
-              const SizedBox(height: 14),
-            ],
             _AuthTextField(
               controller: _usernameController,
               hintText: _adminMode
@@ -169,10 +164,39 @@ class _AuthScreenState extends State<AuthScreen> {
               onToggle: () => setState(() => _agreed = !_agreed),
               openExternalUrl: _openExternalUrl,
             ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _handleVersionTap,
+              child: Text(
+                MobileBuildConfig.profileVersionText,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colors.textTertiary,
+                  fontSize: 11,
+                  height: 1.27,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0,
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  // 连点系统版本号 5 下在企业工作台与服务器后台之间切换。
+  void _handleVersionTap() {
+    final now = DateTime.now();
+    if (now.difference(_lastModeTapAt) > const Duration(seconds: 2)) {
+      _modeTapCount = 0;
+    }
+    _lastModeTapAt = now;
+    _modeTapCount += 1;
+    if (_modeTapCount < 5) return;
+    _modeTapCount = 0;
+    setState(() => _adminMode = !_adminMode);
   }
 
   bool get _canLogin =>
