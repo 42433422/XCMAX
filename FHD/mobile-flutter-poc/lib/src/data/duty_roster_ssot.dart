@@ -331,7 +331,7 @@ List<ConversationItem> adminDutyRosterConversationItems() {
       id: 'employee:$adminDutyModId:${employee.id}',
       type: ConversationType.aiTask,
       title: employee.label,
-      subtitle: '',
+      subtitle: employee.summary,
       timestampText: '',
     );
   }).toList(growable: false);
