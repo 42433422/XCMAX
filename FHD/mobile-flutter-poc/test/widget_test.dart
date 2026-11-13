@@ -194,11 +194,11 @@ void main() {
     final headerPadding = tester.widget<Padding>(
       find.byKey(const ValueKey('message_home_header_padding')),
     );
-    expect(headerPadding.padding, const EdgeInsets.fromLTRB(16, 8, 16, 10));
+    expect(headerPadding.padding, const EdgeInsets.fromLTRB(16, 0, 16, 6));
     final searchGap = tester.widget<SizedBox>(
       find.byKey(const ValueKey('message_home_header_search_gap')),
     );
-    expect(searchGap.height, 12);
+    expect(searchGap.height, 8);
     final rowDividers = tester.widgetList<Divider>(find.byType(Divider)).where(
           (divider) =>
               divider.indent == MessageAvatarLayout.conversationDividerStart,
@@ -309,7 +309,7 @@ void main() {
     expect(menuButton.menuPadding, EdgeInsets.zero);
     expect(
       tester.getSize(find.byKey(const ValueKey('message_header_plus_button'))),
-      const Size(48, 48),
+      const Size(40, 40),
     );
     final headerPlusIcon = tester.widget<Icon>(
       find.descendant(

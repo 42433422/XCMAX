@@ -110,7 +110,7 @@ class _HeaderPlusMenu extends StatelessWidget {
       ],
       child: SizedBox.square(
         key: const ValueKey('message_header_plus_button'),
-        dimension: 48,
+        dimension: 40,
         child: Icon(Icons.add, color: colors.textPrimary, size: 24),
       ),
     );

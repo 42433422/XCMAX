@@ -107,7 +107,7 @@ class _MessageHomeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       key: const ValueKey('message_home_header_padding'),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
       child: Column(
         children: [
           Row(
@@ -118,7 +118,7 @@ class _MessageHomeHeader extends StatelessWidget {
           ),
           const SizedBox(
             key: ValueKey('message_home_header_search_gap'),
-            height: 12,
+            height: 8,
           ),
           _SearchBarField(
             value: query,
