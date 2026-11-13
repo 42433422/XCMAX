@@ -14,7 +14,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
-FHD_ROOT = Path(__file__).resolve().parents[1]
+FHD_ROOT = Path(__file__).resolve().parents[2]
 if str(FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(FHD_ROOT))
 

@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import httpx
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 FHD_ROOT = REPO_ROOT / "FHD"
 MARKET_ROOT = REPO_ROOT / "成都修茈科技有限公司" / "MODstore_deploy"
 XIUCI_COMMON_ROOT = REPO_ROOT / "packages" / "xcagi_common"
