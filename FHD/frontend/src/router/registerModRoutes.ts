@@ -132,10 +132,10 @@ async function replaceWithRefreshTarget(router: Router): Promise<void> {
 }
 
 function findGlobKeyForMod(modId: string): string | undefined {
-  // 兼容平铺 `mods/<id>/` 与分层 `mods/<layer>/<id>/`
-  const dir = `/mods/${modId}/frontend/routes.js`
-  const norm = (s: string) => s.replace(/\\/g, '/')
-  return Object.keys(modRouteLoaders).find((k) => norm(k).endsWith(dir))
+  // 兼容平铺 `mods/<id>/` 与分层 `mods/<layer>/<id>/`：按从 key 解析出的 id 比对
+  const want = String(modId || '').trim()
+  if (!want) return undefined
+  return Object.keys(modRouteLoaders).find((k) => modIdFromGlobKey(k) === want)
 }
 
 function modIdFromGlobKey(key: string): string | null {
