@@ -93,7 +93,7 @@ class _GroupEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     return Center(
-      child: Text('暂无群聊，点右上角创建', style: TextStyle(color: colors.textSecondary)),
+      child: Text('暂无群聊', style: TextStyle(color: colors.textSecondary)),
     );
   }
 }

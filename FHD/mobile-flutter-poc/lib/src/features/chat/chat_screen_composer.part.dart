@@ -49,17 +49,18 @@ class _Composer extends StatelessWidget {
               child: Row(
                 children: [
                   _ComposerIconButton(
-                    icon: Icons.mic,
+                    icon: AppIcons.mic,
                     onPressed: onVoice,
                     tooltip: '语音',
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Container(
-                      height: 38,
+                      height: 40,
                       decoration: BoxDecoration(
                         color: colors.surface,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: colors.divider),
                       ),
                       alignment: Alignment.center,
                       child: TextField(
@@ -86,7 +87,7 @@ class _Composer extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   _ComposerIconButton(
-                    icon: Icons.add,
+                    icon: AppIcons.add,
                     iconSize: 26,
                     selected: showTools,
                     onPressed: onToggleTools,

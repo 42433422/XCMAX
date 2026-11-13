@@ -769,6 +769,7 @@ def test_desktop_components_round_trip_through_local_asgi_and_sqlite(relay, monk
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
+    from app.application.desktop_relay import e2ee
     from app.fastapi_routes import mobile_api_extensions as routes
     from app.services import mobile_relay_service as cloud
 
@@ -831,6 +832,10 @@ def test_desktop_components_round_trip_through_local_asgi_and_sqlite(relay, monk
             clients = fake_transport(relay, monkeypatch, bridge)
             registered = relay.register_desktop_relay(host="127.0.0.1", port=17500, force_new=True)
             assert registered is not None
+            config = relay._read_config()
+            desktop_public = str(config.get("e2ee_public_key") or "")
+            assert desktop_public
+            envelope, ephemeral_private, _ = e2ee.seal_payload({"message": "hello"}, desktop_public)
             start.assert_called_once_with()
             bound = server.post(
                 "/api/mobile/v1/relay/mobile/bind-account",
@@ -842,7 +847,7 @@ def test_desktop_components_round_trip_through_local_asgi_and_sqlite(relay, monk
                 json={
                     "relay_id": registered["relay_id"],
                     "kind": "codex.invoke",
-                    "payload": {"message": "hello"},
+                    "payload": envelope,
                 },
             )
             assert created.status_code == 200
@@ -855,8 +860,10 @@ def test_desktop_components_round_trip_through_local_asgi_and_sqlite(relay, monk
             assert status.status_code == 200
             final_task = status.json()["data"]["task"]
             assert final_task["status"] == "completed"
-            assert final_task["result"]["answer"] == "local result"
+            final_result = e2ee.open_result(final_task["result"], ephemeral_private, desktop_public)
+            assert final_result["answer"] == "local result"
             execute.assert_called_once()
+            assert execute.call_args.args[0]["payload"]["message"] == "hello"
             assert execute.call_args.args[0]["created_by_user_id"] == 7
             assert set() == relay._INFLIGHT
             cached = relay.cached_desktop_relay_payload()

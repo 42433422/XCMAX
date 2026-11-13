@@ -1,30 +1,5 @@
 part of 'mobile_repository.dart';
 
-extension on WorkflowEmployeeInfo {
-  String contactSubtitle(String source) {
-    final summary = panelSummary.trim();
-    if (summary.isNotEmpty) return summary;
-    if (source.trim().isNotEmpty) return '来自 ${source.trim()}';
-    return phoneChannel.contactChannelLabel();
-  }
-}
-
-extension on String {
-  String contactChannelLabel() {
-    switch (trim()) {
-      case 'admin-duty':
-        return '服务器后台';
-      case 'mobile':
-      case 'mobile-chat':
-        return '手机端会话';
-      case '':
-        return '';
-      default:
-        return trim();
-    }
-  }
-}
-
 extension on int {
   int ifZero(int fallback) => this == 0 ? fallback : this;
 
