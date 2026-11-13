@@ -194,21 +194,7 @@ async function assertCurrentBrowserSession(page: Page, base: string): Promise<vo
 }
 
 export async function loginBrowserSession(page: Page, apiBase = ''): Promise<void> {
-  // 临时诊断：把浏览器控制台/失败请求带到 CI 日志（定位启动卡住）
-  page.on('console', (msg) => {
-    if (msg.type() === 'error' || msg.type() === 'warning') {
-      console.log(`[e2e-console:${msg.type()}] ${msg.text()}`)
-    }
-  })
-  page.on('pageerror', (err) => console.log(`[e2e-pageerror] ${err.message}`))
-  page.on('requestfailed', (req) =>
-    console.log(`[e2e-reqfail] ${req.method()} ${req.url()} ${req.failure()?.errorText || ''}`),
-  )
-  const base = (
-    apiBase ||
-    process.env.PLAYWRIGHT_BASE_URL ||
-    'http://127.0.0.1:5001'
-  ).replace(/\/$/, '')
+  const base = (apiBase || process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5001').replace(/\/$/, '')
   let cookiePromise = loginCookieCache.get(base)
   if (!cookiePromise) {
     cookiePromise = createLoginCookies(page.request, base)
