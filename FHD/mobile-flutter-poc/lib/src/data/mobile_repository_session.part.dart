@@ -48,10 +48,10 @@ abstract class _RepoSessionBase extends _RepoRootBase {
     )..addAll(await _loadConversationListStates(_client,
         openStore: openOfflineStore));
     final fixed = _fixedConversationItems(
-      showCodex: enterpriseMode || adminMode,
-      showCursor: enterpriseMode || adminMode,
-      showClaude: enterpriseMode || adminMode,
-      showTrae: enterpriseMode || adminMode,
+      showCodex: adminMode,
+      showCursor: adminMode,
+      showClaude: adminMode,
+      showTrae: adminMode,
       showCustomerService: enterpriseMode && !adminMode,
       states: conversationStates,
     );
@@ -79,10 +79,10 @@ abstract class _RepoSessionBase extends _RepoRootBase {
       openStore: openOfflineStore,
     );
     final fixed = _fixedConversationItems(
-      showCodex: enterpriseMode || adminMode,
-      showCursor: enterpriseMode || adminMode,
-      showClaude: enterpriseMode || adminMode,
-      showTrae: enterpriseMode || adminMode,
+      showCodex: adminMode,
+      showCursor: adminMode,
+      showClaude: adminMode,
+      showTrae: adminMode,
       showCustomerService: enterpriseMode && !adminMode,
       states: conversationStates,
     );

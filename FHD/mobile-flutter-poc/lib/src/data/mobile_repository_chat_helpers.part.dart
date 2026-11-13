@@ -20,10 +20,10 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
   }) {
     return _sortConversationItems([
       ..._fixedConversationItems(
-        showCodex: enterpriseMode || adminMode,
-        showCursor: enterpriseMode || adminMode,
-        showClaude: enterpriseMode || adminMode,
-        showTrae: enterpriseMode || adminMode,
+        showCodex: adminMode,
+        showCursor: adminMode,
+        showClaude: adminMode,
+        showTrae: adminMode,
         showCustomerService: enterpriseMode && !adminMode,
         states: _emptyConversationStates,
       ),
