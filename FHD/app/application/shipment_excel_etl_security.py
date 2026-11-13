@@ -439,6 +439,15 @@ def _open_windows_etl_output_file(path: Path, parent_fd: int) -> Iterator[Binary
 def _reject_output_symlink(name: str, parent_fd: int, parent_path: Path) -> None:
     """Reject an existing leaf link immediately before atomic publication."""
     name = _validated_path_component(name)
+    safe_name = os.path.basename(name)
+    if (
+        safe_name != name
+        or not safe_name
+        or safe_name in (".", "..")
+        or "\x00" in safe_name
+    ):
+        raise ShipmentEtlPathError("output file must be one path component")
+    name = safe_name
     candidate_text = os.path.normpath(os.path.join(str(parent_path), name))
     parent_text = os.path.normpath(str(parent_path))
     try:

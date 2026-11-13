@@ -60,12 +60,18 @@ def _verify_office_content(content: bytes, suffix: str) -> None:
 
 
 def artifact_path(run_id: str, artifact_id: str) -> Path:
-    # 内联字面量正则（与 label_job_service 同款）：CodeQL 将 fullmatch 校验识别为
-    # 路径注入屏障；预编译对象不被识别，会导致 py/path-injection 误报。
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", run_id):
+    # os.path.basename is modeled as a path-injection barrier by CodeQL; the
+    # equality check rejects any input containing a directory component. The
+    # inline fullmatch remains as defense in depth for the allowed charset.
+    safe_run_id = os.path.basename(run_id)
+    if safe_run_id != run_id or not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", safe_run_id):
         raise ValueError("invalid run artifact identity")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", artifact_id):
+    safe_artifact_id = os.path.basename(artifact_id)
+    if safe_artifact_id != artifact_id or not re.fullmatch(
+        r"[A-Za-z0-9_-]{1,160}", safe_artifact_id
+    ):
         raise ValueError("invalid run artifact identity")
+    run_id, artifact_id = safe_run_id, safe_artifact_id
     root = Path(get_app_data_dir()).resolve() / "agent-artifacts"
     folder = root / run_id
     suffix = "." + artifact_id.partition("_")[0]

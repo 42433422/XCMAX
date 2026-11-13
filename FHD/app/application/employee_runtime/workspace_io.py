@@ -54,7 +54,9 @@ def workspace_directory(workspace: str | Path, directory: str | Path, *, create=
         return
     _require_secure_handles()
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
-    fd = os.open(root.anchor, flags)
+    # POSIX absolute paths always anchor at the filesystem root; use a constant
+    # so no caller-provided string reaches os.open.
+    fd = os.open(os.sep, flags)
     try:
         for part in root.parts[1:]:
             next_fd = os.open(component(part), flags, dir_fd=fd)
@@ -87,8 +89,16 @@ def workspace_file(parent_fd: int, name: str, flags: int, mode: str):
         )
     else:
         _require_secure_handles()
+        safe_name = os.path.basename(name)
+        if (
+            safe_name != name
+            or not safe_name
+            or safe_name in (".", "..")
+            or "\x00" in safe_name
+        ):
+            raise ValueError("workspace filename must be one component")
         fd = os.open(
-            component(name),
+            safe_name,
             flags | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
             0o600,
             dir_fd=parent_fd,

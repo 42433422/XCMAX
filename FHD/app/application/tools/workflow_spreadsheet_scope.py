@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -102,8 +104,15 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
                 or hashlib.sha256(content).hexdigest() != upload.sha256
             ):
                 raise PermissionError("上传文件与保存回执不一致")
+    safe_suffix = os.path.basename(suffix)
+    if (
+        safe_suffix != suffix
+        or not safe_suffix
+        or not re.fullmatch(r"\.[A-Za-z0-9]{1,10}", safe_suffix)
+    ):
+        raise PermissionError("文件类型无效")
     with TemporaryDirectory(prefix="workflow-input-", dir=_staging_root()) as directory:
-        path = Path(directory) / ("input" + suffix)
+        path = Path(directory) / ("input" + safe_suffix)
         path.write_bytes(content)
         yield path
 
