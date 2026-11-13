@@ -1329,7 +1329,7 @@ void main() {
 
     expect(repository.employeeLoads, 1);
     expect(find.text('同源仓库员工'), findsOneWidget);
-    expect(find.textContaining('AI号 home-shell-employee'), findsOneWidget);
+    expect(find.textContaining('AI号 home-shell-employee'), findsNothing);
   });
 
   testWidgets('home shell shares repository API with profile tab', (
@@ -1547,14 +1547,14 @@ void main() {
     );
     expect(aiEmployeeTitle.style?.fontSize, 18);
     expect(aiEmployeeTitle.style?.fontWeight, FontWeight.w600);
-    expect(find.text('查找会话或伙伴'), findsOneWidget);
+    expect(find.text('查找员工'), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const ValueKey('ai_employee_search_bar'))),
       const Size(406, 38),
     );
     expect(find.text('静态站内容编辑员'), findsOneWidget);
     expect(find.text('SEO 站点地图管理员'), findsOneWidget);
-    expect(find.textContaining('AI号 site-content-editor'), findsOneWidget);
+    expect(find.textContaining('AI号 site-content-editor'), findsNothing);
 
     await tester.tap(find.text('静态站内容编辑员'));
     await tester.pumpAndSettle();
