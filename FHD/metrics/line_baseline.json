@@ -1,5 +1,5 @@
 {
-  "lines": 2392204,
+  "lines": 2392205,
   "updated": "2026-11-13",
-  "note": "棘轮下调"
+  "note": "新增移动端工具链升级的 CHANGELOG 条目（changelog gate 必填），无等价可删内容"
 }
