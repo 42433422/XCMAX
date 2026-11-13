@@ -14,6 +14,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       if (!mounted) return;
       if (remoteMessages.isNotEmpty) {
         setState(() => _messages = remoteMessages);
+        _syncFlyerChat();
       }
     } catch (_) {
       // Keep the mobile empty state when auth/network is unavailable.
@@ -54,6 +55,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         ),
       );
     });
+    _syncFlyerChat();
 
     try {
       final reply = await repository.resumeRelayTask(
@@ -192,6 +194,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         ),
       ]);
     });
+    _syncFlyerChat();
     _controller.clear();
 
     await _streamAssistantReply(
@@ -293,6 +296,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       _showToolPanel = false;
       _replyTo = null;
     });
+    _syncFlyerChat();
     _controller.clear();
   }
 
@@ -395,6 +399,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       _messages = [..._messages]..removeAt(index);
       if (_replyTo?.id == removed.id) _replyTo = null;
     });
+    _syncFlyerChat();
     _repository
         ?.deleteCachedChatMessage(
           conversationId: widget.conversation.id,

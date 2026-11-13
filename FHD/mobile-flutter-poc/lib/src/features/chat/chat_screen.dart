@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
+import 'package:flutter_chat_core/flutter_chat_core.dart';
 
 import '../../api/mobile_models.dart' show MobileMeData;
 import '../../data/ai_employee_profile.dart';
@@ -52,6 +56,7 @@ class _ChatScreenState extends _ChatStateActions {
   void initState() {
     super.initState();
     _messages = [...widget.initialMessages];
+    _syncFlyerChat();
     _repository = widget.repository ?? MobileRepositoryScope.maybeRead(context);
     _employeeRef = _parseEmployeeConversationRef(widget.conversation.id);
     _loadRemoteMessages();
@@ -61,8 +66,47 @@ class _ChatScreenState extends _ChatStateActions {
 
   @override
   void dispose() {
+    _flyerChatController.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  Widget _buildFlyerTextMessage(
+    BuildContext context,
+    TextMessage message,
+    int index, {
+    required bool isSentByMe,
+    MessageGroupStatus? groupStatus,
+  }) {
+    final originalIndex =
+        _messages.indexWhere((item) => item.id == message.id);
+    if (originalIndex < 0) return const SizedBox.shrink();
+    final original = _messages[originalIndex];
+    final isActiveRelay = _sending &&
+        _activeAssistantId == original.id &&
+        _activeRelayProgress != null;
+    final toolCalls = _toolCallsFor(original);
+    return MessageBubble(
+      message: original,
+      conversation: widget.conversation,
+      showAvatar: _showAvatarAt(originalIndex),
+      userAvatarUrl: _userAvatarSource,
+      aiAvatarUrl: _employeeProfile?.avatarUrl,
+      aiContentDescription: _resolvedTitle,
+      hasEmployeeProfile: _employeeProfile != null,
+      relayProgress: isActiveRelay ? _activeRelayProgress : null,
+      cancellingRelay: _cancellingRelay,
+      onCancelRelay: _cancellingRelay ? null : () => _stopChat(),
+      onReply: () => setState(() => _replyTo = original),
+      onDelete: () => _deleteMessageAt(originalIndex),
+      onResend: original.status == ChatDeliveryStatus.failed
+          ? _resendLastChat
+          : null,
+      toolCalls: toolCalls,
+      onShowTimeline: toolCalls.isEmpty
+          ? null
+          : () => _openTimelineForMessage(original),
+    );
   }
 
   @override
@@ -104,44 +148,22 @@ class _ChatScreenState extends _ChatStateActions {
                 backgroundColor: colors.surfaceHigh,
               ),
             Expanded(
-              child: _messages.isEmpty
-                  ? const SizedBox.expand()
-                  : ListView.builder(
-                      reverse: true,
-                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
-                      itemBuilder: (context, index) {
-                        final originalIndex = _messages.length - index - 1;
-                        final message = _messages[originalIndex];
-                        final isActiveRelay = _sending &&
-                            _activeAssistantId == message.id &&
-                            _activeRelayProgress != null;
-                        final toolCalls = _toolCallsFor(message);
-                        return MessageBubble(
-                          message: message,
-                          conversation: widget.conversation,
-                          showAvatar: _showAvatarAt(originalIndex),
-                          userAvatarUrl: _userAvatarSource,
-                          aiAvatarUrl: employeeProfile?.avatarUrl,
-                          aiContentDescription: _resolvedTitle,
-                          hasEmployeeProfile: employeeProfile != null,
-                          relayProgress:
-                              isActiveRelay ? _activeRelayProgress : null,
-                          cancellingRelay: _cancellingRelay,
-                          onCancelRelay:
-                              _cancellingRelay ? null : () => _stopChat(),
-                          onReply: () => setState(() => _replyTo = message),
-                          onDelete: () => _deleteMessageAt(originalIndex),
-                          onResend: message.status == ChatDeliveryStatus.failed
-                              ? _resendLastChat
-                              : null,
-                          toolCalls: toolCalls,
-                          onShowTimeline: toolCalls.isEmpty
-                              ? null
-                              : () => _openTimelineForMessage(message),
-                        );
-                      },
-                      itemCount: _messages.length,
-                    ),
+              child: Chat(
+                chatController: _flyerChatController,
+                currentUserId: _flyerMeId,
+                resolveUser: _resolveFlyerUser,
+                backgroundColor: Colors.transparent,
+                // 发送仍走现有链路：输入区由外层 Column 提供。
+                onMessageSend: (_) {},
+                builders: Builders(
+                  textMessageBuilder: _buildFlyerTextMessage,
+                  // 与微信/Telegram 一致：消息从底部向上生长。
+                  chatAnimatedListBuilder: (context, itemBuilder) =>
+                      ChatAnimatedList(itemBuilder: itemBuilder, reversed: true),
+                  // 输入区由外层 Column 提供，Chat 只负责消息列表。
+                  composerBuilder: (context) => const SizedBox.shrink(),
+                ),
+              ),
             ),
             _Composer(
               controller: _controller,

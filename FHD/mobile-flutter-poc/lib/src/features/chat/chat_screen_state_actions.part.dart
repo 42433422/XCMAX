@@ -104,6 +104,7 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
         ),
       );
     });
+    _syncFlyerChat();
     try {
       final result = await repository.runGitOperation(branch: branch, op: op);
       if (!mounted) return;
