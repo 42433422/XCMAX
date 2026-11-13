@@ -91,7 +91,7 @@ class ConnectScreen extends StatelessWidget {
                         const SizedBox(height: 20),
                         Text(
                           key: const ValueKey('connect_title'),
-                          'XCAGI 手机控制端',
+                          'XCAGI 修茈企业版',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: colors.textPrimary,

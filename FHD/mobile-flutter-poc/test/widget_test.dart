@@ -2838,7 +2838,7 @@ void main() {
       MaterialApp(theme: AppTheme.light(), home: const AuthScreen()),
     );
 
-    expect(find.text('XCAGI 手机控制端'), findsOneWidget);
+    expect(find.text('XCAGI 修茈企业版'), findsOneWidget);
     expect(
       find.image(const AssetImage(appLauncherForegroundAsset)),
       findsOneWidget,
@@ -2894,7 +2894,7 @@ void main() {
 
     final colors = AppTheme.colors(tester.element(find.byType(AuthScreen)));
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    final title = tester.widget<Text>(find.text('XCAGI 手机控制端'));
+    final title = tester.widget<Text>(find.text('XCAGI 修茈企业版'));
     final subtitle = tester.widget<Text>(find.text('连接服务器后台、企业工作台和电脑执行端'));
     final selectedTab = tester.widget<Text>(find.text('密码登录'));
     await tester.drag(find.byType(ListView), const Offset(0, -500));
@@ -4699,7 +4699,7 @@ void main() {
       find.image(const AssetImage(appLauncherForegroundAsset)),
       findsOneWidget,
     );
-    expect(find.text('XCAGI 手机控制端'), findsOneWidget);
+    expect(find.text('XCAGI 修茈企业版'), findsOneWidget);
     expect(find.text('扫描绑定'), findsOneWidget);
     expect(find.text('返回'), findsWidgets);
   });
@@ -5167,7 +5167,7 @@ void main() {
       find.image(const AssetImage(appLauncherForegroundAsset)),
       findsOneWidget,
     );
-    expect(find.text('XCAGI 手机控制端'), findsOneWidget);
+    expect(find.text('XCAGI 修茈企业版'), findsOneWidget);
     final connectTitle = tester.widget<Text>(
       find.byKey(const ValueKey('connect_title')),
     );

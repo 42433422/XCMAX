@@ -66,7 +66,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           const Center(child: _AuthLogo()),
                           const SizedBox(height: 16),
                           Text(
-                            isEnterprise ? 'XCAGI 手机控制端' : 'XCAGI 个人版',
+                            isEnterprise ? 'XCAGI 修茈企业版' : 'XCAGI 个人版',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: colors.textPrimary,
