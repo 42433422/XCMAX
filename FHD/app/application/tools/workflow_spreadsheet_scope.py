@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -94,7 +95,13 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
             if upload_id is None:
                 raise PermissionError("文件不属于当前账号或当前任务")
             upload = get_elt_service()._owned_upload(db, upload_id, actor.id)
-            suffix = Path(upload.file_name).suffix.lower()
+            # 上传文件名来自用户，只在格式白名单内取回正则匹配值再拼暂存路径。
+            suffix_match = re.fullmatch(
+                r"\.[A-Za-z0-9]{1,8}", Path(upload.file_name).suffix.lower()
+            )
+            if suffix_match is None or suffix_match.group(0) not in RUN_FILE_MIME_TYPES:
+                raise PermissionError("不支持的文件格式")
+            suffix = suffix_match.group(0)
             with open_etl_input_file(upload.storage_path, owner_user_id=actor.id) as source:
                 content = source.read(upload.size_bytes + 1)
             if (

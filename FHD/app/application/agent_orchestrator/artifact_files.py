@@ -62,10 +62,13 @@ def _verify_office_content(content: bytes, suffix: str) -> None:
 def artifact_path(run_id: str, artifact_id: str) -> Path:
     # 内联字面量正则（与 label_job_service 同款）：CodeQL 将 fullmatch 校验识别为
     # 路径注入屏障；预编译对象不被识别，会导致 py/path-injection 误报。
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", run_id):
+    # 从 match.group(0) 取回值，静态分析才把后续路径视为已净化。
+    run_match = re.fullmatch(r"[A-Za-z0-9_-]{1,160}", run_id)
+    artifact_match = re.fullmatch(r"[A-Za-z0-9_-]{1,160}", artifact_id)
+    if run_match is None or artifact_match is None:
         raise ValueError("invalid run artifact identity")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", artifact_id):
-        raise ValueError("invalid run artifact identity")
+    run_id = run_match.group(0)
+    artifact_id = artifact_match.group(0)
     root = Path(get_app_data_dir()).resolve() / "agent-artifacts"
     folder = root / run_id
     suffix = "." + artifact_id.partition("_")[0]

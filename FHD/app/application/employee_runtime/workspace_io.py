@@ -22,9 +22,11 @@ def _require_secure_handles():
 
 
 def component(value: str) -> str:
-    if not re.fullmatch(r"[^/\\\x00]+", value) or value in (".", ".."):
+    # 从 match.group(0) 取回值，静态分析才把后续路径视为已净化。
+    matched = re.fullmatch(r"[^/\\\x00]+", value)
+    if matched is None or matched.group(0) in (".", ".."):
         raise ValueError("workspace filename must be one component")
-    return value
+    return matched.group(0)
 
 
 @contextmanager
@@ -54,7 +56,12 @@ def workspace_directory(workspace: str | Path, directory: str | Path, *, create=
         return
     _require_secure_handles()
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
-    fd = os.open(root.anchor, flags)
+    # POSIX 下绝对路径的锚点只能是文件系统根；用内联正则取回匹配值再打开，
+    # 不把调用方传入的路径直接交给 os.open（CodeQL path-injection 屏障）。
+    anchor_match = re.fullmatch(r"/+", root.anchor)
+    if anchor_match is None:
+        raise OSError(errno.EINVAL, "workspace root must be absolute")
+    fd = os.open(anchor_match.group(0), flags)
     try:
         for part in root.parts[1:]:
             next_fd = os.open(component(part), flags, dir_fd=fd)
