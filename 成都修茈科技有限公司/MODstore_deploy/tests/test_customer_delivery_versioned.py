@@ -15,6 +15,24 @@ from pathlib import Path
 
 import pytest
 
+_MOD_LAYERS = ("industry", "bridge", "employees", "tools")
+
+
+def _mod_source_dir(mod_id: str) -> Path:
+    """定位 FHD 编辑源 Mod 目录（兼容分层 industry/bridge/employees/tools 与 XCAGI 平铺）。"""
+    fhd = Path(__file__).resolve().parents[3] / "FHD"
+    direct = fhd / "mods" / mod_id
+    if (direct / "manifest.json").is_file():
+        return direct
+    for layer in _MOD_LAYERS:
+        layered = fhd / "mods" / layer / mod_id
+        if (layered / "manifest.json").is_file():
+            return layered
+    xcagi = fhd / "XCAGI" / "mods" / mod_id
+    if (xcagi / "manifest.json").is_file():
+        return xcagi
+    return direct
+
 
 def test_workbench_sessions_survive_release_directory_change(tmp_path, monkeypatch):
     from modman.repo_config import RepoConfig
@@ -569,8 +587,7 @@ def test_versioned_run_reaches_quality_gate_through_real_snapshot(
     )
     root, source, _ = pinned_source
     (source / "backend/probe.py").unlink()
-    fhd = Path(__file__).resolve().parents[3] / "FHD"
-    shutil.copytree(fhd / "mods" / versioned.MOD_ID, source, dirs_exist_ok=True)
+    shutil.copytree(_mod_source_dir(versioned.MOD_ID), source, dirs_exist_ok=True)
     files, digest = versioned.source_fingerprints(source)
     release_path = root / ".xcmax-release.json"
     release = json.loads(release_path.read_text())
@@ -697,7 +714,7 @@ def test_sunbird_signed_package_preserves_legacy_entitlement_and_source_hash(tmp
     from tests.customer_delivery_fixture import persist_private_source, signed_artifact
 
     signed_artifact(tmp_path, monkeypatch, owner=81, ticket=82)
-    source = Path(__file__).resolve().parents[3] / "FHD/mods" / MOD_ID
+    source = _mod_source_dir(MOD_ID)
     generation = uuid.uuid4().hex
     copied, snapshot = persist_private_source(
         tmp_path,
@@ -877,7 +894,7 @@ def test_signed_sunbird_probe_executes_real_probe_and_binds_report(
     monkeypatch.setattr(customer_delivery_sources, "public_library", lambda: library)
     mod_id = "sunbird-attendance-custom"
     source = library / mod_id
-    shutil.copytree(fhd / "mods" / mod_id, source)
+    shutil.copytree(_mod_source_dir(mod_id), source)
     generation = "c" * 32
     manifest_path = source / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

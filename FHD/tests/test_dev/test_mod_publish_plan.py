@@ -55,8 +55,12 @@ def repository(tmp_path):
     "path,expected",
     [
         ("FHD/mods/_employees/worker/backend/nested/task.py", "FHD/mods/_employees/worker"),
-        ("FHD/mods/bridge/frontend/pages/index.vue", "FHD/mods/bridge"),
-        ("FHD/XCAGI/mods/industry/backend/routes.py", "FHD/XCAGI/mods/industry"),
+        ("FHD/mods/host-one/frontend/pages/index.vue", "FHD/mods/host-one"),
+        (
+            "FHD/mods/bridge/xcagi-lan-license-bridge/backend/routes.py",
+            "FHD/mods/bridge/xcagi-lan-license-bridge",
+        ),
+        ("FHD/XCAGI/mods/industry-one/backend/routes.py", "FHD/XCAGI/mods/industry-one"),
         ("FHD/mods/_employees/manifest.json", None),
         ("FHD/mods/../../secrets/file", None),
         ("unrelated/FHD/mods/test/source", None),
