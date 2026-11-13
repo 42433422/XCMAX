@@ -15,6 +15,7 @@ import '../../policy/mobile_error_policy.dart';
 import '../../policy/avatar_policy.dart';
 import '../../platform/android_record_audio_permission.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_icons.dart';
 import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
@@ -129,13 +130,13 @@ class _ChatScreenState extends _ChatStateActions {
               actions: [
                 IconButton(
                   onPressed: () => _showMessage('视频通话功能即将上线'),
-                  icon: const Icon(Icons.videocam_outlined, size: 22),
+                  icon: const Icon(AppIcons.video, size: 22),
                   tooltip: '视频',
                   color: colors.textPrimary,
                 ),
                 IconButton(
                   onPressed: _openProfileOrTools,
-                  icon: const Icon(Icons.more_horiz, size: 22),
+                  icon: const Icon(AppIcons.more, size: 22),
                   tooltip: '更多',
                   color: colors.textPrimary,
                 ),

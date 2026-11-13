@@ -69,7 +69,14 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
-        indicatorColor: page,
+        indicatorColor: brandContainer,
+        height: 66,
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            size: 24,
+            color: states.contains(WidgetState.selected) ? brand : textSecondary,
+          ),
+        ),
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
             fontSize: 11,

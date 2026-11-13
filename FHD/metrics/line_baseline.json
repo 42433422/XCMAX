@@ -1,5 +1,5 @@
 {
-  "lines": 2398361,
+  "lines": 2398402,
   "updated": "2026-11-13",
-  "note": "聊天消息列表接入flutter_chat_ui（成熟开源组件）替换自绘列表，功能性新增"
+  "note": "移动端图标与样式统一（Material Symbols语义图标表+导航/输入区样式）"
 }

@@ -1,4 +1,5 @@
 ## Unreleased
+- 移动端图标与样式统一：引入 Material Symbols（Apache-2.0）并新增语义图标表，底部导航、聊天顶栏与输入区改用 Rounded 图标与品牌色选中态；输入框改为胶囊圆角，底部导航栏加高并使用品牌色指示器。
 - 移动端聊天界面改用开源 flutter_chat_ui（Apache-2.0）：消息列表改为底部锚定的动画列表，保留原有气泡、员工头像、失败/排队状态、中继进度与工具面板；输入区仍用现有组件，模拟器实测在线发送与回复正常。
 - 移动端离线能力：消息缓存、会话列表状态与进行中任务从会话 JSON 拆出到 SQLite（drift，首次启动自动迁移并清空旧字段）；新增待发送队列，断网发送自动排队，恢复连接后按账号重放，重试 5 次后标记失败，手动重发会清除同内容排队记录。
 - 移动端（Flutter）加固：锁定 Flutter 3.44.7（新增 `.flutter-version`，CI 按版本文件安装并对 Android/iOS 执行 release 构建），新增 `flutter analyze` 门禁；会话落盘时 access/refresh/market/relay/fcm 等凭证统一经平台密钥库加密（新增 `EncryptedMobileSessionStore`），修复此前仅登录密码加密、访问令牌明文存储的问题，历史明文会话仍可平滑读取。

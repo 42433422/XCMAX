@@ -178,7 +178,7 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
         },
       ),
       _ChatToolAction(
-        icon: Icons.mic,
+        icon: AppIcons.mic,
         title: '语音输入',
         subtitle: '手机语音转文字',
         onTap: _startVoiceInput,
