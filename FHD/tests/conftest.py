@@ -130,6 +130,7 @@ def _default_enterprise_tenant_scope_for_tests(request):
         "test_tenant_scope.py",
         "test_document_templates_tenant_isolation.py",
         "test_inventory_background_tenant.py",
+        "test_ai_group_chat_tenant_isolation.py",
     }:
         yield
         return

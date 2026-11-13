@@ -115,10 +115,10 @@ from app.application.group_chat.protocols import (
     SuperEmployee,
 )
 from app.application.group_chat.replies import ChatReplies
-from app.application.group_chat.storage import GroupChatRepository
+from app.application.group_chat.storage import GroupChatRepository, resolve_group_chat_parent
 from app.application.group_chat.work_dispatch import WorkDispatch
 from app.application.group_chat.work_reports import WorkReports
-from app.utils.path_io.path_utils import get_app_data_dir
+from app.infrastructure.tenant_scope import current_tenant_id
 
 
 class AiGroupChatService:
@@ -156,9 +156,10 @@ class AiGroupChatService:
             if self._mode == "enterprise"
             else _default_duty_employee_loader
         )
-        self._storage = GroupChatRepository(
-            Path(storage_root) if storage_root is not None else Path(get_app_data_dir())
-        )
+        parent, unscoped_compat = resolve_group_chat_parent(storage_root)
+        self._unscoped_compat = unscoped_compat
+        self._unscoped_denied = not unscoped_compat and current_tenant_id() is None
+        self._storage = GroupChatRepository(parent)
         self._root = self._storage.root
         self._groups_path = self._storage._groups_path
         self._messages_path = self._storage._messages_path
@@ -250,6 +251,9 @@ class AiGroupChatService:
             make_row,
         )
 
+    def _deny_unscoped(self) -> bool:
+        return bool(getattr(self, "_unscoped_denied", False))
+
     async def _execute_employee_work(
         self,
         *,
@@ -302,6 +306,8 @@ class AiGroupChatService:
     _format_work_order_message = staticmethod(ChatFormatting.format_work_order_message)
 
     def list_groups(self, *, user_id: int, include_hidden: bool = False) -> list[dict[str, Any]]:
+        if self._deny_unscoped():
+            return []
         return self._catalog.list_groups(user_id=user_id, include_hidden=include_hidden)
 
     def _ensure_required_members(self, user_id: int) -> None:
@@ -322,37 +328,57 @@ class AiGroupChatService:
         return self._directory.list_member_candidates()
 
     def create_group(self, *, user_id: int, name: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.create_group(user_id=user_id, name=name)
 
     def add_member(self, *, user_id: int, group_id: str, member: dict[str, Any]) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.add_member(user_id=user_id, group_id=group_id, member=member)
 
     def remove_member(self, *, user_id: int, group_id: str, employee_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.remove_member(
             user_id=user_id, group_id=group_id, employee_id=employee_id
         )
 
     def toggle_pinned(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.toggle_pinned(user_id=user_id, group_id=group_id)
 
     def mark_unread(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.mark_unread(user_id=user_id, group_id=group_id)
 
     def mark_read(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.mark_read(user_id=user_id, group_id=group_id)
 
     def toggle_followed(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.toggle_followed(user_id=user_id, group_id=group_id)
 
     def toggle_hidden(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.toggle_hidden(user_id=user_id, group_id=group_id)
 
     def delete_group(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.delete_group(user_id=user_id, group_id=group_id)
 
     def get_messages(
         self, *, user_id: int, group_id: str, limit: int = 100
     ) -> list[dict[str, Any]]:
+        if self._deny_unscoped():
+            return []
         return self._conversation.get_messages(user_id=user_id, group_id=group_id, limit=limit)
 
     def _sync_relay_progress_for_group(self, *, user_id: int, group_id: str) -> None:
@@ -370,6 +396,8 @@ class AiGroupChatService:
         branch_context: str = "",
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return await self._conversation.post_message(
             user_id=user_id,
             group_id=group_id,
@@ -416,6 +444,8 @@ class AiGroupChatService:
     _format_relay_progress_message = staticmethod(ChatFormatting.format_relay_progress_message)
 
     def delete_message(self, *, user_id: int, group_id: str, message_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._conversation.delete_message(
             user_id=user_id, group_id=group_id, message_id=message_id
         )

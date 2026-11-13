@@ -14,6 +14,51 @@ from typing import Any
 from cryptography.fernet import Fernet, InvalidToken
 
 from app.application.group_chat.employee_registry import _safe_json_line
+from app.infrastructure.tenant_scope import current_tenant_id
+from app.utils.path_io.path_utils import get_app_data_dir
+
+_UNSCOPED_DENIED_DIR = "tenants/_unscoped_denied"
+
+
+def resolve_group_chat_parent(storage_root: str | Path | None) -> tuple[Path, bool]:
+    """Resolve the repository parent directory and whether unscoped access is allowed.
+
+    When ``current_tenant_id()`` is set, data lives under ``<base>/tenants/<id>``.
+    Legacy ``<base>/ai_group_chat`` is not opened, migrated, or rewritten.
+    An explicit ``storage_root`` without a tenant keeps the historical path so
+    existing single-tenant unit tests stay on one folder.
+    Production default with no tenant is fail-closed and must not use the legacy file.
+    """
+    explicit = Path(storage_root) if storage_root is not None else None
+    base = explicit if explicit is not None else Path(get_app_data_dir())
+    tid = current_tenant_id()
+    if tid is not None:
+        return base / "tenants" / str(int(tid)), False
+    if explicit is not None:
+        return base, True
+    return base / _UNSCOPED_DENIED_DIR, False
+
+
+def group_row_visible(row: dict[str, Any]) -> bool:
+    """Rows without a matching tenant_id are invisible; do not leak existence."""
+    tid = current_tenant_id()
+    if tid is None:
+        return True
+    raw = row.get("tenant_id") if isinstance(row, dict) else None
+    if raw is None:
+        return False
+    try:
+        return int(raw) == int(tid)
+    except (TypeError, ValueError):
+        return False
+
+
+def stamp_group_chat_tenant(row: dict[str, Any]) -> dict[str, Any]:
+    tid = current_tenant_id()
+    if tid is None or row.get("tenant_id") is not None:
+        return row
+    row["tenant_id"] = int(tid)
+    return row
 
 
 class GroupChatRepository:
@@ -28,7 +73,11 @@ class GroupChatRepository:
         self._messages_path = self.root / "messages.jsonl"
 
     def user_groups(self, user_id: int) -> list[dict[str, Any]]:
-        rows = [g for g in self.all_groups() if int(g.get("user_id") or 0) == int(user_id)]
+        rows = [
+            g
+            for g in self.all_groups()
+            if int(g.get("user_id") or 0) == int(user_id) and group_row_visible(g)
+        ]
         return GroupChatRepository.dedupe_groups_by_id(rows)
 
     @staticmethod
@@ -248,7 +297,7 @@ class GroupChatRepository:
 
     def append_group(self, group: dict[str, Any]) -> None:
         with self._groups_path.open("a", encoding="utf-8") as fh:
-            fh.write(_safe_json_line(group))
+            fh.write(_safe_json_line(stamp_group_chat_tenant(group)))
 
     def rewrite_groups(self, groups: list[dict[str, Any]]) -> None:
         with self._groups_path.open("w", encoding="utf-8") as fh:
@@ -258,7 +307,7 @@ class GroupChatRepository:
     def append_messages(self, messages: list[dict[str, Any]]) -> None:
         with self._messages_path.open("a", encoding="utf-8") as fh:
             for m in messages:
-                fh.write(self.encrypted_message_line(m))
+                fh.write(self.encrypted_message_line(stamp_group_chat_tenant(m)))
 
     def rewrite_messages(self, messages: list[dict[str, Any]]) -> None:
         with self._messages_path.open("w", encoding="utf-8") as fh:
