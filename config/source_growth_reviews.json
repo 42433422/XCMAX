@@ -324,6 +324,18 @@
       "validation": "29 drawing regression tests and context-only scope regression independently passed on 25ccc86d; full template regression and exact-head CI are required before merge.",
       "follow_up": "Human architecture review of this exact bounded growth is still required. This record requests review, does not grant approval, and does not weaken the original cell/drawing scope checks.",
       "review_owner": "@42433422"
+    },
+    "FHD/app/fastapi_routes/mobile_api_extensions.py": {
+      "base_file": "FHD/app/fastapi_routes/mobile_api_extensions.py",
+      "base_blob": "9eb3caec9d6d55cd43c03a45218c6165504d712a",
+      "head_blob": "6c7f42237b799a605c1507d793851293ef8602be",
+      "before_lines": 759,
+      "after_lines": 915,
+      "reason": "Review request only: register the mobile unified-task, desktop-device heartbeat and end-to-end encrypted relay routers in the existing mobile extension assembly module.",
+      "boundary": "Route assembly and late-bound port callbacks only; task, device and encryption behavior live in dedicated mobile_extensions and shared_services modules. Authentication and tenant scoping are unchanged.",
+      "validation": "512 relay and mobile route tests passed, including encrypted roundtrip, ciphertext-at-rest, desktop heartbeat and plaintext rejection; Flutter analyze has no errors. Full integration CI and human architecture review remain outstanding; this request is not approval.",
+      "follow_up": "Split the mobile extension assembly into per-domain registries in the next structure pass instead of accumulating more registrations here.",
+      "review_owner": "@42433422"
     }
   }
 }
