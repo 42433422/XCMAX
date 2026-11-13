@@ -73,6 +73,7 @@ class RelayRoutes:
                     device_id=body.device_id,
                     capabilities=body.capabilities,
                     relay_base_url=body.relay_base_url,
+                    public_key=getattr(body, "public_key", ""),
                 )
                 return format_mobile_response(data=data)
             except RECOVERABLE_ERRORS:
@@ -101,7 +102,9 @@ class RelayRoutes:
                 )
             try:
                 data = ports.mobile_relay_service().renew_desktop_pairing(
-                    relay_id=body.relay_id, desktop_token=body.desktop_token
+                    relay_id=body.relay_id,
+                    desktop_token=body.desktop_token,
+                    public_key=getattr(body, "public_key", ""),
                 )
                 if data:
                     return format_mobile_response(data=data)
@@ -214,6 +217,13 @@ class RelayRoutes:
                         status_code=404,
                     )
                 return format_mobile_response(data={"task": task})
+            except ValueError:
+                return JSONResponse(
+                    format_mobile_response(
+                        None, "任务内容必须端到端加密后发送", success=False, code=400
+                    ),
+                    status_code=400,
+                )
             except RECOVERABLE_ERRORS:
                 logger.exception("mobile_relay_create_task")
                 return JSONResponse(
@@ -304,6 +314,13 @@ class RelayRoutes:
                         status_code=404,
                     )
                 return format_mobile_response(data={"task": task})
+            except ValueError:
+                return JSONResponse(
+                    format_mobile_response(
+                        None, "任务结果必须端到端加密后回传", success=False, code=400
+                    ),
+                    status_code=400,
+                )
             except RECOVERABLE_ERRORS:
                 logger.exception("mobile_relay_desktop_complete")
                 return JSONResponse(

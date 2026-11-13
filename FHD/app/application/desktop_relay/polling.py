@@ -8,6 +8,7 @@ from _thread import LockType
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from app.application.desktop_relay import e2ee
 from app.application.desktop_relay.messages import _BLOCKED_STATUSES, _FAILED_STATUSES
 from app.application.desktop_relay.protocols import (
     ApiUrlCall,
@@ -159,31 +160,124 @@ class RelayTaskDelivery:
             if not started:
                 self._release(task_id, claim)
 
+    def _post_result(
+        self,
+        task_id: str,
+        relay_id: str,
+        desktop_token: str,
+        base_url: str,
+        result: JsonObject,
+        started: float,
+        *,
+        shared: bytes | None,
+        ref: str = "",
+    ) -> None:
+        relay_status = str(result.pop("_relay_status", "") or "").strip()
+        if not relay_status:
+            relay_status = "failed" if result.get("error") else "completed"
+        result["elapsed_seconds"] = round(max(0.0, self.ports.monotonic() - started), 1)
+        if relay_status in _FAILED_STATUSES or relay_status in _BLOCKED_STATUSES:
+            result.setdefault("error_code", relay_status)
+            result.setdefault("error_message", str(result.get("error") or "").strip())
+        body = e2ee.seal_result(result, shared, ref=ref) if shared else result
+        with self.ports.http_client(self.ports.timeout()) as client:
+            client.post(
+                self.ports.api_url(
+                    f"/api/mobile/v1/relay/desktop/tasks/{task_id}/complete", base_url
+                ),
+                json={
+                    "relay_id": relay_id,
+                    "desktop_token": desktop_token,
+                    "status": relay_status,
+                    "result": body,
+                },
+            ).raise_for_status()
+
     def complete(self, task: JsonObject, relay_id: str, desktop_token: str, base_url: str) -> None:
         task_id = str(task.get("task_id") or "")
         started = self.ports.monotonic()
         try:
-            result = self.ports.execute_task(task)
-            relay_status = str(result.pop("_relay_status", "") or "").strip()
-            if not relay_status:
-                relay_status = "failed" if result.get("error") else "completed"
-            result["elapsed_seconds"] = round(max(0.0, self.ports.monotonic() - started), 1)
-            if relay_status in _FAILED_STATUSES or relay_status in _BLOCKED_STATUSES:
-                result.setdefault("error_code", relay_status)
-                result.setdefault("error_message", str(result.get("error") or "").strip())
-            with self.ports.http_client(self.ports.timeout()) as client:
-                client.post(
-                    self.ports.api_url(
-                        f"/api/mobile/v1/relay/desktop/tasks/{task_id}/complete", base_url
-                    ),
-                    json={
-                        "relay_id": relay_id,
-                        "desktop_token": desktop_token,
-                        "status": relay_status,
-                        "result": result,
-                    },
-                ).raise_for_status()
-        except RECOVERABLE_ERRORS:
-            self.logger.warning("mobile relay task %s failed", task_id, exc_info=True)
+            config = self.ports.read_config()
+            private_key = str(config.get("e2ee_private_key") or "").strip()
+            envelope = task.get("payload")
+            if not e2ee.is_envelope(envelope) or not private_key:
+                # 兼容尚未生成密钥的旧执行端（服务端对其不强制加密）。
+                try:
+                    result = self.ports.execute_task(task)
+                except RECOVERABLE_ERRORS:
+                    self.logger.warning("mobile relay task %s failed", task_id, exc_info=True)
+                    return
+                self._safe_post(
+                    task_id, relay_id, desktop_token, base_url, result, started, shared=None
+                )
+                return
+            ref = str(envelope.get("ref") or "")
+            try:
+                payload, shared = e2ee.open_envelope(envelope, private_key)
+                result = self.ports.execute_task({**task, "payload": payload})
+            except RECOVERABLE_ERRORS:
+                self.logger.warning("mobile relay task %s failed", task_id, exc_info=True)
+                # 解密或执行失败时只回传错误标记，绝不把明文内容带到云端。
+                self._safe_post(
+                    task_id,
+                    relay_id,
+                    desktop_token,
+                    base_url,
+                    {"e2ee_error": True},
+                    started,
+                    shared=None,
+                    status="failed",
+                )
+                return
+            self._safe_post(
+                task_id, relay_id, desktop_token, base_url, result, started, shared=shared, ref=ref
+            )
         finally:
             self._release(task_id)
+
+    def _safe_post(
+        self,
+        task_id: str,
+        relay_id: str,
+        desktop_token: str,
+        base_url: str,
+        result: JsonObject,
+        started: float,
+        *,
+        shared: bytes | None,
+        ref: str = "",
+        status: str = "",
+    ) -> None:
+        try:
+            if status:
+                self._post_raw_result(
+                    task_id, relay_id, desktop_token, base_url, status, result
+                )
+                return
+            self._post_result(
+                task_id, relay_id, desktop_token, base_url, result, started, shared=shared, ref=ref
+            )
+        except RECOVERABLE_ERRORS:
+            self.logger.warning("mobile relay task %s result report failed", task_id)
+
+    def _post_raw_result(
+        self,
+        task_id: str,
+        relay_id: str,
+        desktop_token: str,
+        base_url: str,
+        status: str,
+        result: JsonObject,
+    ) -> None:
+        with self.ports.http_client(self.ports.timeout()) as client:
+            client.post(
+                self.ports.api_url(
+                    f"/api/mobile/v1/relay/desktop/tasks/{task_id}/complete", base_url
+                ),
+                json={
+                    "relay_id": relay_id,
+                    "desktop_token": desktop_token,
+                    "status": status,
+                    "result": result,
+                },
+            ).raise_for_status()

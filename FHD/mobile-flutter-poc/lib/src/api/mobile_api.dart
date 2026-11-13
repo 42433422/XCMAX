@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../platform/credential_cipher.dart';
+import '../security/relay_e2ee.dart';
 import '../data/service_topology_ssot.dart';
 import '../policy/mobile_runtime_policy.dart';
 import 'mobile_models.dart';
