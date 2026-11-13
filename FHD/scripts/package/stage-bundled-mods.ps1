@@ -28,6 +28,11 @@ New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
 foreach ($modId in $ids) {
   if ($excludeAlways -contains $modId) { continue }
   $src = Join-Path $modsRoot $modId
+  # 编辑源按 industry/ bridge/ employees/ tools/ 分层
+  foreach ($layer in @("industry", "bridge", "employees", "tools")) {
+    $layered = Join-Path (Join-Path $modsRoot $layer) $modId
+    if (Test-Path $layered) { $src = $layered; break }
+  }
   $runtimeExportSrc = Join-Path (Join-Path $Root "XCAGI\mods") $modId
   if (-not (Test-Path $src) -and (Test-Path $runtimeExportSrc)) {
     # EXPORT_ONLY mod（mods_ssot.py）：编辑源不在 mods/，运行时副本 SSOT 在 XCAGI/mods/。
@@ -45,7 +50,7 @@ foreach ($modId in $ids) {
 # docking bridge is part of the host UI, so bundle only the employee packs in
 # its catalog, plus executors staged bridges declare via `bundled_employees`;
 # otherwise a clean install exposes controls with no executor.
-$officeCatalog = Join-Path $modsRoot "xcagi-office-employee-pack-bridge\config\office_pack_catalog.json"
+$officeCatalog = Join-Path $modsRoot "bridge\xcagi-office-employee-pack-bridge\config\office_pack_catalog.json"
 $employeeSourceRoot = Join-Path $modsRoot "_employees"
 $employeeStageRoot = Join-Path $stageDir "_employees"
 if (-not (Test-Path $officeCatalog)) {
