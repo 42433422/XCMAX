@@ -179,17 +179,17 @@ def _candidate_backend_dirs(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Lis
         out.append(Path(str(explicit)).expanduser())
     if repo_root:
         r = Path(repo_root).expanduser()
-        out.append(r / "mods" / "taiyangniao-pro" / "backend")
+        out.append(r / "mods" / "industry" / "taiyangniao-pro" / "backend")
         out.append(r / "XCAGI" / "mods" / "taiyangniao-pro" / "backend")
     for root in roots:
         if not root:
             continue
         r = Path(str(root)).expanduser()
-        out.append(r / "mods" / "taiyangniao-pro" / "backend")
+        out.append(r / "mods" / "industry" / "taiyangniao-pro" / "backend")
         out.append(r / "XCAGI" / "mods" / "taiyangniao-pro" / "backend")
     for parent in here.parents:
-        out.append(parent / "mods" / "taiyangniao-pro" / "backend")
-        out.append(parent / "FHD" / "mods" / "taiyangniao-pro" / "backend")
+        out.append(parent / "mods" / "industry" / "taiyangniao-pro" / "backend")
+        out.append(parent / "FHD" / "mods" / "industry" / "taiyangniao-pro" / "backend")
     dedup: List[Path] = []
     seen = set()
     for p in out:

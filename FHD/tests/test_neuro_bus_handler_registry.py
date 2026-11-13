@@ -7,8 +7,6 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 MOD_DIR = REPO / "mods" / "bridge" / "xcagi-neuro-bus-bridge"
-if not MOD_DIR.is_dir():
-    MOD_DIR = REPO / "mods" / "xcagi-neuro-bus-bridge"
 
 
 def test_handler_catalog_has_core_domains():

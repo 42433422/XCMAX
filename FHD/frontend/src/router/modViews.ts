@@ -7,16 +7,18 @@ function normalizePath(p: string): string {
   return p.replace(/\\/g, '/')
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function findModViewKey(modId: string, viewFile: string): string | undefined {
   // glob key 始终带 `.vue`，而调用方有的传 `OrdersView`、有的传 `OrdersView.vue`，
   // 因此两种后缀都要匹配，否则 HostModBridgeView 加载 mod 视图会回退 ModRequiredView。
-  // 编辑源分层后 key 形如 `.../mods/bridge/<id>/frontend/views/`，故用「包含 + 结尾」匹配。
-  const dir = `/mods/${modId}/frontend/views/`
-  const files = [`${dir}${viewFile}`, `${dir}${viewFile}.vue`]
-  return Object.keys(modPhysicalViewGlob).find((k) => {
-    const nk = normalizePath(k)
-    return nk.includes(dir) && files.some((suffix) => nk.endsWith(suffix))
-  })
+  // 编辑源分层后 key 形如 `.../mods/bridge/<id>/frontend/views/`，允许一层分层目录。
+  const pattern = new RegExp(
+    `/mods/(?:[^/]+/)?${escapeRegExp(modId)}/frontend/views/(?:.*/)?${escapeRegExp(viewFile)}(?:\\.vue)?$`,
+  )
+  return Object.keys(modPhysicalViewGlob).find((k) => pattern.test(normalizePath(k)))
 }
 
 function findHostViewKey(viewFile: string): string | undefined {

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-lan-license-bridge"
+MOD_DIR = REPO / "mods" / "bridge" / "xcagi-lan-license-bridge"
 
 
 def test_lan_manifest_pages_flag():

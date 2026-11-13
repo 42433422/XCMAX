@@ -46,15 +46,15 @@ def _resolve_taiyangniao_backend(input_data: Dict[str, Any]) -> None:
     if not tb:
         rr = (os.environ.get("MODSTORE_REPO_ROOT") or "").strip()
         if rr:
-            cand = Path(rr).expanduser() / "mods" / "taiyangniao-pro" / "backend"
+            cand = Path(rr).expanduser() / "mods" / "industry" / "taiyangniao-pro" / "backend"
             if cand.is_dir():
                 tb = str(cand)
     if not tb:
         here = Path(__file__).resolve().parent
         deploy_root = here.parent
         for cand in (
-            deploy_root.parent / "mods" / "taiyangniao-pro" / "backend",
-            deploy_root / "mods" / "taiyangniao-pro" / "backend",
+            deploy_root.parent / "mods" / "industry" / "taiyangniao-pro" / "backend",
+            deploy_root / "mods" / "industry" / "taiyangniao-pro" / "backend",
         ):
             if cand.is_dir():
                 tb = str(cand)
