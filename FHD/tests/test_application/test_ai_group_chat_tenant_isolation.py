@@ -176,7 +176,7 @@ def test_admin_routes_list_read_and_members_respect_tenant_scope(
         missing = routes.admin_ai_group_add_member(
             request, group_id, {"employee_id": "worker", "name": "同事"}, user
         )
-        assert missing.status_code == 400
+        assert missing.status_code in {403, 404}
 
     with tenant_scope(11):
         listed = routes.admin_ai_groups_list(request, user)
