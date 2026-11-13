@@ -17,18 +17,18 @@ from app.domain.shared_services.mobile_relay_utils import _row_dict, _token_hash
 
 def _ensure_public_key_column(db: Session) -> None:
     """旧库补列：公钥只增不改，缺列时按空串补齐。"""
-    bind = db.get_bind()
-    try:
-        columns = {str(c["name"]) for c in sa_inspect(bind).get_columns("mobile_relay_desktops")}
-    except Exception:  # noqa: BLE001 - 表不存在时由后续 CREATE 处理
+    inspector = sa_inspect(db.get_bind())
+    if not inspector.has_table("mobile_relay_desktops"):
         return
-    if "desktop_public_key" not in columns:
-        db.execute(
-            text(
-                "ALTER TABLE mobile_relay_desktops "
-                "ADD COLUMN desktop_public_key VARCHAR(256) NOT NULL DEFAULT ''"
-            )
+    columns = {str(c["name"]) for c in inspector.get_columns("mobile_relay_desktops")}
+    if "desktop_public_key" in columns:
+        return
+    db.execute(
+        text(
+            "ALTER TABLE mobile_relay_desktops "
+            "ADD COLUMN desktop_public_key VARCHAR(256) NOT NULL DEFAULT ''"
         )
+    )
 
 
 def ensure_tables(db: Session) -> None:
