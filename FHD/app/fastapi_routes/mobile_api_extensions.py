@@ -542,11 +542,13 @@ def _mobile_task_orchestrator() -> Any:
 def _mobile_tasks_list(
     *, user_id: str, tenant_id: str, limit: int, include_archived: bool
 ) -> list[Any]:
-    return _mobile_task_orchestrator().list_tasks(
-        user_id=user_id,
-        tenant_id=tenant_id or None,
-        limit=limit,
-        include_archived=include_archived,
+    return list(
+        _mobile_task_orchestrator().list_tasks(
+            user_id=user_id,
+            tenant_id=tenant_id or None,
+            limit=limit,
+            include_archived=include_archived,
+        )
     )
 
 
@@ -571,7 +573,7 @@ extension_router.include_router(_tasks.router)
 
 
 def _ensure_desktop_device_table() -> None:
-    from sqlalchemy import inspect
+    from sqlalchemy import Table, inspect
 
     from app.db.models.desktop_device import DesktopDeviceRecord
 
@@ -579,7 +581,7 @@ def _ensure_desktop_device_table() -> None:
         bind = db.get_bind()
         insp = inspect(bind)
         if not insp.has_table(DesktopDeviceRecord.__tablename__):
-            DesktopDeviceRecord.__table__.create(bind, checkfirst=True)
+            cast("Table", DesktopDeviceRecord.__table__).create(bind, checkfirst=True)
 
 
 def _desktop_device_heartbeat(
