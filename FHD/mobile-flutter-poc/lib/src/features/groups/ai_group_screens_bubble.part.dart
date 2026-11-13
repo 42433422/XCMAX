@@ -15,11 +15,7 @@ class _GroupRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
-    final preview = group.preview.trim().isEmpty
-        ? group.memberCount == 0
-            ? '还没有成员，进群把 AI 拉进来'
-            : '${group.memberCount} 个 AI 成员在群里'
-        : group.preview;
+    final preview = group.preview.trim();
     final dimmed = group.isHidden || !group.isFollowed;
     return Material(
       color: group.isPinned ? colors.surfaceHigh : colors.surface,

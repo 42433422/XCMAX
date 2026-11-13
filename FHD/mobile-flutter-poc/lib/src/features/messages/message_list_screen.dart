@@ -74,12 +74,7 @@ class GroupConversationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     final textTheme = Theme.of(context).textTheme;
-    final preview = _textOrFallback(
-      group.preview,
-      group.memberCount == 0
-          ? '还没有成员，进群把 AI 拉进来'
-          : '${group.memberCount} 个 AI 成员在群里',
-    );
+    final preview = group.preview.trim();
 
     return Material(
       color: group.isPinned
