@@ -1,0 +1,83 @@
+# experimental — 非签约部署主路径（主路径=桌面私有化 + 现网单 CVM 滚动；见 FHD/docs/architecture/DEPLOY_PATH_SSOT.md / ADR-route-a）。本文件保留供容器实验；阶段三前不删、不强制迁 extras。
+# Full-stack FHD / XCAGI API (FastAPI via Gunicorn + UvicornWorker).
+# Build from repository root (uses root .dockerignore):
+#   docker build -f ops/docker/Dockerfile.fhd-api -t xcagi-fhd-api .
+
+# syntax=docker/dockerfile:1
+
+FROM python:3.11-slim@sha256:9534e5a8e315485d4061ed659af0fd78a284c015f9b73661b41d6bab25604534 AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    portaudio19-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 生产镜像用 server-api 锁定依赖。其 LangGraph 条目指向仓库内受管源码，
+# 构建 wheels 前必须把这些本地项目放进与 requirements 相同的相对路径。
+COPY requirements-server-api.txt requirements.txt
+COPY packages /build/packages
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt \
+    && pip install --no-cache-dir --no-deps --target /opt/site-packages /wheels/* \
+    && pip install --no-cache-dir --target /opt/site-packages --upgrade \
+        'wheel>=0.46.2' 'jaraco.context>=6.1.0' 'setuptools>=78.0.0'
+
+FROM cgr.dev/chainguard/wolfi-base@sha256:81211e15a86ea1d5357f284482af45730c51de45eaf10ad9ce205d6bfc2df323 AS production
+
+ARG XCAGI_GIT_SHA=""
+
+LABEL org.opencontainers.image.title="xcagi-fhd-api" \
+    org.opencontainers.image.description="XCAGI FastAPI production image (PostgreSQL + Redis via env)"
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONUTF8=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/opt/site-packages \
+    XCAGI_GIT_SHA=${XCAGI_GIT_SHA}
+
+RUN for attempt in 1 2 3; do \
+      apk upgrade --no-cache \
+        && apk add --no-cache python-3.11 curl 'ca-certificates-bundle>=20260909-r3' \
+          'libbrotlicommon1>=1.2.0-r7' 'libbrotlidec1>=1.2.0-r7' 'libbrotlienc1>=1.2.0-r7' \
+        && break; \
+      if [ "$attempt" -eq 3 ]; then exit 1; fi; sleep "$((attempt * 5))"; \
+    done \
+    && addgroup -S appuser \
+    && adduser -S -G appuser -h /home/appuser -s /bin/sh appuser
+
+ENV PYTHONPATH=/app/packages/xcagi_langgraph_core:/app/packages/xcagi_langgraph_checkpoint:/app/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite:/app/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres:/app/packages/xcagi_langgraph_prebuilt:/app/packages/xcagi_langgraph_sdk:/opt/site-packages
+
+COPY --from=builder /opt/site-packages /opt/site-packages
+
+COPY --chown=appuser:appuser app /app/app
+COPY --chown=appuser:appuser packages /app/packages
+COPY --chown=appuser:appuser XCAGI /app/XCAGI
+COPY --chown=appuser:appuser alembic /app/alembic
+COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
+COPY --chown=appuser:appuser resources /app/resources
+COPY --chown=appuser:appuser templates/admin-vue-dist /app/templates/admin-vue-dist
+
+COPY --chown=appuser:appuser gunicorn_config.py /app/gunicorn_config.py
+COPY --chown=appuser:appuser ops/docker/docker-entrypoint-fhd-api.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+RUN mkdir -p /app/data /app/uploads /app/logs /app/config /app/templates /app/XCAGI/mods \
+    && chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 5000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:5000/api/health >/dev/null || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python3.11", "-m", "gunicorn", "app.fastapi_app:create_fastapi_app()", "-c", "/app/gunicorn_config.py"]

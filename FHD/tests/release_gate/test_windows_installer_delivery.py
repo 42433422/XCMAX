@@ -8,7 +8,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scripts.dev.mods_ssot import EXPORT_ONLY_MODS, EXPORT_ROOT, SSOT_ROOT
+from scripts.dev.mods_ssot import EXPORT_ONLY_MODS, EXPORT_ROOT, find_source_dir
 
 
 def test_enterprise_bundle_covers_required_host_bridges():
@@ -23,7 +23,7 @@ def _mod_manifest_exists(mod_id: str) -> bool:
     """双路径解析：编辑源 SSOT 优先；EXPORT_ONLY mod 落在运行时副本 SSOT。"""
     if mod_id in EXPORT_ONLY_MODS:
         return (EXPORT_ROOT / mod_id / "manifest.json").is_file()
-    return (SSOT_ROOT / mod_id / "manifest.json").is_file()
+    return find_source_dir(mod_id) is not None
 
 
 def test_attendance_workspace_open_to_generic_users():

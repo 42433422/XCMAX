@@ -27,6 +27,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# 编辑源分层容器（运行时导出仍平铺）
+MOD_SOURCE_LAYERS = ("industry", "bridge", "employees", "tools")
 _ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
 
@@ -45,6 +47,7 @@ def _resolve_src(mod_id: str | None, src: Path | None) -> Path:
     candidates = [
         REPO_ROOT / "mods" / "_employees" / mod_id,
         REPO_ROOT / "mods" / mod_id,
+        *(REPO_ROOT / "mods" / layer / mod_id for layer in MOD_SOURCE_LAYERS),
     ]
     for c in candidates:
         if c.is_dir():

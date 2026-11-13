@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 STORE_COLLECTION_WORKFLOW_EMPLOYEE = "workflow_employee"
 
 AUX_EMPLOYEE_PACK_MOD_IDS: tuple[str, ...] = ("lan-gate-ai-employee",)
+MOD_SOURCE_LAYERS = ("industry", "bridge", "employees", "tools")
 
 
 def is_aux_employee_pack_mod_id(mod_id: str) -> bool:
@@ -48,19 +49,30 @@ def _repo_mod_seed_dirs() -> list[Path]:
     return out
 
 
+def _mod_seed_bases(root: Path) -> list[Path]:
+    """平铺 mods 根 + 一层分层容器（industry/bridge/employees/tools）。"""
+    bases = [root]
+    for layer in MOD_SOURCE_LAYERS:
+        sub = root / layer
+        if sub.is_dir():
+            bases.append(sub)
+    return bases
+
+
 def read_aux_employee_pack_manifest(pack_id: str) -> dict[str, Any] | None:
     pid = str(pack_id or "").strip()
     if not pid or not is_aux_employee_pack_mod_id(pid):
         return None
     for root in _repo_mod_seed_dirs():
-        mf = root / pid / "manifest.json"
-        if not mf.is_file():
-            continue
-        try:
-            raw = json.loads(mf.read_text(encoding="utf-8"))
-            return raw if isinstance(raw, dict) else None
-        except (OSError, json.JSONDecodeError) as e:
-            logger.warning("read_aux_employee_pack_manifest %s: %s", mf, e)
+        for base in _mod_seed_bases(root):
+            mf = base / pid / "manifest.json"
+            if not mf.is_file():
+                continue
+            try:
+                raw = json.loads(mf.read_text(encoding="utf-8"))
+                return raw if isinstance(raw, dict) else None
+            except (OSError, json.JSONDecodeError) as e:
+                logger.warning("read_aux_employee_pack_manifest %s: %s", mf, e)
     return None
 
 
@@ -118,9 +130,12 @@ def install_aux_employee_pack_from_repo_seed(
         return False, "非触点员工包"
     src: Path | None = None
     for root in _repo_mod_seed_dirs():
-        candidate = root / pid
-        if (candidate / "manifest.json").is_file():
-            src = candidate
+        for base in _mod_seed_bases(root):
+            candidate = base / pid
+            if (candidate / "manifest.json").is_file():
+                src = candidate
+                break
+        if src is not None:
             break
     if src is None:
         return False, f"未找到内置员工包：{pid}"

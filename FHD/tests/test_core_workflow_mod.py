@@ -9,13 +9,14 @@ from pathlib import Path
 import pytest
 
 from app.http.response_envelope import read_success
+from app.mod_sdk.mod_source_paths import mod_source_dir
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOD_ID = "xcagi-core-workflow-employees"
 EMPLOYEE_IDS = ("label_print", "shipment_mgmt", "receipt_confirm")
 
 MOD_DIRS = [
-    REPO_ROOT / "mods" / MOD_ID,
+    mod_source_dir(MOD_ID) or (REPO_ROOT / "mods" / MOD_ID),
     REPO_ROOT / "XCAGI" / "mods" / MOD_ID,
 ]
 

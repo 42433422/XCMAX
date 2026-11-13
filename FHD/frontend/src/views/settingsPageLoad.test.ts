@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, onMounted } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
-import { assembleMpModelPayment } from '../../../mods/xcagi-model-payment-bridge/frontend/views/model-payment/assemble'
+import { assembleMpModelPayment } from '../../../mods/bridge/xcagi-model-payment-bridge/frontend/views/model-payment/assemble'
 import { useSettingsAccount } from '@/composables/settings/useSettingsAccount'
 import { appAlert } from '@/utils/appDialog'
 

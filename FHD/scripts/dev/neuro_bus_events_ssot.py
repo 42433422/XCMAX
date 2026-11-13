@@ -432,7 +432,7 @@ def scan_frontend_composable_strings() -> set[str]:
 
 # ──────────────────────────── OpenAPI patch ────────────────────────────
 def patch_openapi(m: dict[str, Any], *, apply: bool) -> tuple[bool, str]:
-    """在 contracts/openapi.json 注入 AgentRunEvent schema component,
+    """在 assets/contracts/openapi.json 注入 AgentRunEvent schema component,
     并把 /api/agent/runs/{run_id}/events 200 响应的空 schema 替换为 $ref。
 
     返回 (changed, message)。change=True 表示有改动待写入。
