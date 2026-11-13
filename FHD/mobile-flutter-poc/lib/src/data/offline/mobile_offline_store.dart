@@ -45,7 +45,8 @@ class MobileOfflineStore {
 
   // ── 消息缓存 ────────────────────────────────────────────────
 
-  Future<List<Map<String, Object?>>> cachedMessages(String conversationId) async {
+  Future<List<Map<String, Object?>>> cachedMessages(
+      String conversationId) async {
     final rows = await _db.customSelect(
       'SELECT * FROM chat_messages WHERE conversation_id = ? '
       'ORDER BY ts ASC, message_id ASC',
@@ -97,7 +98,10 @@ class MobileOfflineStore {
       'DELETE FROM chat_messages WHERE conversation_id = ? AND message_id NOT IN ('
       'SELECT message_id FROM chat_messages WHERE conversation_id = ? '
       'ORDER BY ts DESC, message_id DESC LIMIT $_maxMessagesPerConversation)',
-      variables: [Variable<String>(conversationId), Variable<String>(conversationId)],
+      variables: [
+        Variable<String>(conversationId),
+        Variable<String>(conversationId)
+      ],
     );
   }
 
@@ -123,6 +127,25 @@ class MobileOfflineStore {
     return {
       'preview': data['preview'] ?? '',
       'timestamp_ms': data['timestamp_ms'] ?? 0,
+    };
+  }
+
+  /// 一次读取全部会话的最近消息，供消息列表显示预览与时间。
+  Future<Map<String, Map<String, Object?>>> latestMessagePreviews() async {
+    final rows = await _db
+        .customSelect(
+          'SELECT conversation_id, body, role, MAX(ts) AS ts FROM chat_messages '
+          'GROUP BY conversation_id',
+        )
+        .get();
+    return {
+      for (final row in rows)
+        if ((row.data['conversation_id'] as String? ?? '').trim().isNotEmpty)
+          row.data['conversation_id'] as String: {
+            'body': row.data['body'] ?? '',
+            'role': row.data['role'] ?? '',
+            'ts': row.data['ts'] ?? 0,
+          },
     };
   }
 
@@ -230,9 +253,11 @@ class MobileOfflineStore {
   }
 
   Future<int> pendingMessageCount() async {
-    final rows = await _db.customSelect(
-      "SELECT COUNT(*) AS total FROM outbox_messages WHERE status = 'pending'",
-    ).get();
+    final rows = await _db
+        .customSelect(
+          "SELECT COUNT(*) AS total FROM outbox_messages WHERE status = 'pending'",
+        )
+        .get();
     return _asInt(rows.first.data['total']);
   }
 
@@ -261,14 +286,20 @@ class MobileOfflineStore {
   Future<void> removePendingByBody(String conversationId, String body) async {
     await _db.customUpdate(
       "DELETE FROM outbox_messages WHERE conversation_id = ? AND body = ? AND status = 'pending'",
-      variables: [Variable<String>(conversationId), Variable<String>(body.trim())],
+      variables: [
+        Variable<String>(conversationId),
+        Variable<String>(body.trim())
+      ],
     );
   }
 
   Future<void> _updateOutbox(int id, String assignment) async {
     await _db.customUpdate(
       'UPDATE outbox_messages SET $assignment, updated_at = ? WHERE id = ?',
-      variables: [Variable<int>(DateTime.now().millisecondsSinceEpoch), Variable<int>(id)],
+      variables: [
+        Variable<int>(DateTime.now().millisecondsSinceEpoch),
+        Variable<int>(id)
+      ],
     );
   }
 
@@ -276,9 +307,11 @@ class MobileOfflineStore {
 
   /// 首次启动时把会话 JSON 里的历史缓存搬到 SQLite；成功后由调用方清空会话字段。
   Future<bool> importFromSession(MobileSessionData session) async {
-    final marker = await _db.customSelect(
-      "SELECT value FROM meta WHERE key = 'session_imported'",
-    ).get();
+    final marker = await _db
+        .customSelect(
+          "SELECT value FROM meta WHERE key = 'session_imported'",
+        )
+        .get();
     if (marker.isNotEmpty) return false;
 
     for (final entry in session.cachedChatMessages.entries) {

@@ -45,7 +45,8 @@ abstract class _RepoSessionBase extends _RepoRootBase {
   }) async {
     final conversationStates = Map<String, _ConversationListState>.of(
       _emptyConversationStates,
-    )..addAll(await _loadConversationListStates(_client));
+    )..addAll(await _loadConversationListStates(_client,
+        openStore: openOfflineStore));
     final fixed = _fixedConversationItems(
       showCodex: enterpriseMode || adminMode,
       showCursor: enterpriseMode || adminMode,
@@ -73,7 +74,10 @@ abstract class _RepoSessionBase extends _RepoRootBase {
     bool adminMode = true,
     bool enterpriseMode = true,
   }) async {
-    final conversationStates = await _loadConversationListStates(_client);
+    final conversationStates = await _loadConversationListStates(
+      _client,
+      openStore: openOfflineStore,
+    );
     final fixed = _fixedConversationItems(
       showCodex: enterpriseMode || adminMode,
       showCursor: enterpriseMode || adminMode,
@@ -149,5 +153,4 @@ abstract class _RepoSessionBase extends _RepoRootBase {
       // Cache write failure must not block the live Flutter UI.
     }
   }
-
 }

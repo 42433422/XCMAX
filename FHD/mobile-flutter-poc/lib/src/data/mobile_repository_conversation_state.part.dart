@@ -161,8 +161,9 @@ class _ConversationListState {
 }
 
 Future<Map<String, _ConversationListState>> _loadConversationListStates(
-  MobileApiClient client,
-) async {
+  MobileApiClient client, {
+  Future<MobileOfflineStore?> Function()? openStore,
+}) async {
   final session = await client.loadSession();
   final result = <String, _ConversationListState>{};
   for (final entry in session.conversationListStates.entries) {
@@ -170,6 +171,26 @@ Future<Map<String, _ConversationListState>> _loadConversationListStates(
     if (key.isEmpty) continue;
     final state = _ConversationListState.fromJson(entry.value);
     if (state != null) result[key] = state;
+  }
+  final store = await openStore?.call();
+  if (store == null) return result;
+
+  for (final entry in (await store.latestMessagePreviews()).entries) {
+    final existing = result[entry.key];
+    if (existing != null && existing.preview.isNotEmpty) continue;
+    final role = entry.value['role'] == ChatRole.user.name
+        ? ChatRole.user
+        : ChatRole.assistant;
+    final preview = _conversationPreviewForRole(
+      role,
+      '${entry.value['body'] ?? ''}',
+    );
+    final timestampMs = _firstPositiveInt([entry.value['ts']]);
+    if (preview.isEmpty && timestampMs <= 0) continue;
+    result[entry.key] = _ConversationListState(
+      preview: preview,
+      timestampMs: timestampMs,
+    );
   }
   return result;
 }
