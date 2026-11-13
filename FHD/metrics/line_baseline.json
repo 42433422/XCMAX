@@ -1,5 +1,5 @@
 {
-  "lines": 2392207,
+  "lines": 2392205,
   "updated": "2026-11-13",
-  "note": "Mod 源分层目录 industry/bridge/employees/tools 的发现/指纹解析兼容层（host_foundation、aux_employee_store、mod_publish_plan、MODstore release_source）为必要路径解析代码，无等价可删死代码；本 PR 累计净删除远大于此增量"
+  "note": "棘轮下调"
 }
