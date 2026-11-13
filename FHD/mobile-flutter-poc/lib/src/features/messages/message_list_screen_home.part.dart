@@ -92,14 +92,12 @@ class _ConversationActionSheet extends StatelessWidget {
 
 class _MessageHomeHeader extends StatelessWidget {
   const _MessageHomeHeader({
-    required this.account,
     required this.query,
     required this.onQueryChanged,
     required this.onClearQuery,
     required this.onMenuSelected,
   });
 
-  final MobileMeData account;
   final String query;
   final ValueChanged<String> onQueryChanged;
   final VoidCallback onClearQuery;
@@ -107,9 +105,6 @@ class _MessageHomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
     return Padding(
       key: const ValueKey('message_home_header_padding'),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
@@ -117,25 +112,7 @@ class _MessageHomeHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              AppAvatar(
-                imageSource: account.avatarSource,
-                fallback: AppAvatarFallback.user,
-                size: MessageAvatarLayout.headerAvatarSize,
-                borderRadius: MessageAvatarLayout.headerAvatarRadius,
-                contentDescription: account.displayName.ifEmpty('admin'),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  account.displayName.ifEmpty('admin'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: textTheme.titleLarge?.copyWith(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+              const Spacer(),
               _HeaderPlusMenu(onSelected: onMenuSelected),
             ],
           ),

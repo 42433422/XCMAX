@@ -30,7 +30,6 @@ class _MessageListScreenState extends State<MessageListScreen> {
         child: Column(
           children: [
             _MessageHomeHeader(
-              account: widget.account ?? MobileMeData.adminFallback(),
               query: _query,
               onQueryChanged: (value) => setState(() => _query = value),
               onClearQuery: () => setState(() => _query = ''),

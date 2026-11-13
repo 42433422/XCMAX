@@ -180,7 +180,7 @@ void main() {
       ),
     );
 
-    expect(find.text('admin'), findsOneWidget);
+    expect(find.text('admin'), findsNothing);
     expect(find.textContaining('位AI员工'), findsNothing);
     expect(find.text('查找会话或伙伴'), findsOneWidget);
     expect(find.text('超级开发部'), findsOneWidget);
@@ -235,11 +235,6 @@ void main() {
         ),
       ),
     );
-
-    final headerTitle = tester.widget<Text>(find.text('admin'));
-    expect(headerTitle.style?.fontSize, typography.titleLarge?.fontSize);
-    expect(headerTitle.style?.height, typography.titleLarge?.height);
-    expect(headerTitle.style?.fontWeight, FontWeight.w600);
 
     final searchField = tester.widget<TextField>(find.byType(TextField));
     expect(searchField.style?.fontSize, typography.bodyMedium?.fontSize);
@@ -1433,8 +1428,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    final headerAvatar = tester.widget<AppAvatar>(find.byType(AppAvatar).first);
-    expect(headerAvatar.imageSource, '/tmp/android-local-avatar.jpg');
+    expect(find.text('admin'), findsNothing);
     expect(repository.loadMeCalls, 1);
   });
 
@@ -1522,7 +1516,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.accountLoads, 1);
-    expect(find.text('fallback-name'), findsOneWidget);
+    expect(find.text('fallback-name'), findsNothing);
     expect(find.textContaining('位AI员工'), findsNothing);
     expect(find.text('admin'), findsNothing);
   });
