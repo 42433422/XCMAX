@@ -36,6 +36,15 @@ class MobileOfflineStore {
   static MobileOfflineStore forExecutor(QueryExecutor executor) =>
       MobileOfflineStore._(_MobileOfflineDatabase(executor));
 
+  /// 单元测试注入内存库，避免依赖 path_provider 平台通道。
+  static void installSharedForTest(MobileOfflineStore store) {
+    _shared = store;
+  }
+
+  static void resetSharedForTest() {
+    _shared = null;
+  }
+
   Future<void> ensureReady() => _db.ensureReady();
 
   Future<void> close() async {

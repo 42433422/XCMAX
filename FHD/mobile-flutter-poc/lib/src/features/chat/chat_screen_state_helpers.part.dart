@@ -5,6 +5,9 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
   String get _flyerMeId => 'me';
 
   late List<ChatMessage> _messages;
+  /// 没有缓存时间戳的消息（本地新建/测试注入）首次渲染时固定 createdAt，
+  /// 避免每次同步都换时间导致 flutter_chat_ui 的动画列表重排断言。
+  final _flyerCreatedAt = <String, DateTime>{};
   late final InMemoryChatController _flyerChatController =
       InMemoryChatController();
   final _controller = TextEditingController();
@@ -49,10 +52,14 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
     unawaited(_flyerChatController.setMessages(messages));
   }
 
+  /// 没有缓存时间戳的消息（本地新建/测试注入）首次渲染时固定 createdAt，
+  /// 避免每次同步都换时间导致 flutter_chat_ui 的动画列表重排断言。
   Message _toFlyerMessage(ChatMessage message) {
     final createdMs = message.cacheTimestampMs > 0
         ? message.cacheTimestampMs
-        : DateTime.now().millisecondsSinceEpoch;
+        : _flyerCreatedAt
+            .putIfAbsent(message.id, DateTime.now)
+            .millisecondsSinceEpoch;
     return TextMessage(
       id: message.id,
       authorId:

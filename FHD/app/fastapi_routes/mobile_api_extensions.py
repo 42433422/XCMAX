@@ -223,15 +223,15 @@ from app.fastapi_routes.mobile_extensions.routes_cs_contacts import ContactRoute
 from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
     ContactRoutesPorts as ContactRoutesPorts,
 )
-from app.fastapi_routes.mobile_extensions.routes_devices import DeviceRoutes as DeviceRoutes
-from app.fastapi_routes.mobile_extensions.routes_devices import (
-    DeviceRoutesPorts as DeviceRoutesPorts,
-)
 from app.fastapi_routes.mobile_extensions.routes_desktop_devices import (
     DesktopDeviceRoutes as DesktopDeviceRoutes,
 )
 from app.fastapi_routes.mobile_extensions.routes_desktop_devices import (
     DesktopDeviceRoutesPorts as DesktopDeviceRoutesPorts,
+)
+from app.fastapi_routes.mobile_extensions.routes_devices import DeviceRoutes as DeviceRoutes
+from app.fastapi_routes.mobile_extensions.routes_devices import (
+    DeviceRoutesPorts as DeviceRoutesPorts,
 )
 from app.fastapi_routes.mobile_extensions.routes_employee_chat import (
     EmployeeChatRoutes as EmployeeChatRoutes,

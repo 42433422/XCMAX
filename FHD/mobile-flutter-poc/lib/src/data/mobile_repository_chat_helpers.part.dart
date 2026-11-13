@@ -175,9 +175,9 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     }
     await _client.saveSession(
       session.copyWith(
-        cachedChatMessages: const {},
-        conversationListStates: const {},
-        inflightRelayTasks: const {},
+        cachedChatMessages: const <String, List<Map<String, Object?>>>{},
+        conversationListStates: const <String, Map<String, Object?>>{},
+        inflightRelayTasks: const <String, String>{},
       ),
       authGeneration: generation,
     );
