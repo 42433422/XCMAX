@@ -46,3 +46,34 @@ def test_task_scope_still_rejects_runs_bound_to_another_mod(monkeypatch) -> None
     task = SimpleNamespace(user_id="u1", tenant_id="t1", task_id="task-1")
 
     assert not route_support.task_scope_matches(orchestrator, task, _principal("my-mod"))
+
+
+def test_scoped_tasks_scans_runs_once_for_the_whole_page(monkeypatch) -> None:
+    monkeypatch.setattr(route_support, "tenant_id_of_run", lambda run: "t1")
+
+    class _PagedOrchestrator(_Orchestrator):
+        def __init__(self) -> None:
+            super().__init__([_run("r1")])
+            self.scope_calls = 0
+
+        def list_tasks(self, *, user_id, tenant_id, limit, offset, include_archived):
+            tasks = [
+                SimpleNamespace(user_id="u1", tenant_id="t1", task_id=f"task-{i}")
+                for i in range(150)
+            ]
+            return tasks[offset : offset + limit]
+
+        def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
+            self.scope_calls += 1
+            return {"task-0": [("u1", "t1", "")]}
+
+        def list_task_runs(self, *, user_id: str, task_id: str) -> list[Any]:
+            raise AssertionError("list_tasks 列表不应逐任务重扫运行")
+
+    orchestrator = _PagedOrchestrator()
+    result = route_support.scoped_tasks(
+        orchestrator, principal=_principal(), limit=200
+    )
+
+    assert len(result) == 150
+    assert orchestrator.scope_calls == 1

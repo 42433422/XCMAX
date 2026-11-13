@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,6 +63,25 @@ def read_excel_dataframe(
     if header_row_1based is not None:
         options["header"] = header_row_1based - 1
     return cast(pd.DataFrame, pd.read_excel(p, **options))
+
+
+def first_sheet_name(path: Path) -> str | None:
+    """未指定工作表时返回默认打开的工作表名，供后续步骤引用。"""
+    if path.suffix.lower() not in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
+        return None
+    if not zipfile.is_zipfile(path):
+        return None
+    try:
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(str(path), read_only=True)
+        try:
+            names = list(workbook.sheetnames)
+        finally:
+            workbook.close()
+        return str(names[0]) if names else None
+    except RECOVERABLE_ERRORS:
+        return None
 
 
 def frame_records(df: pd.DataFrame, limit: int = 200) -> list[Payload]:
@@ -216,7 +236,7 @@ class ExcelAnalysis:
         if action == "read":
             out = {
                 **base,
-                "sheet_name": sheet,
+                "sheet_name": str(sheet).strip() if sheet else first_sheet_name(path),
                 **table_result(df, offset=offset, max_rows=max_rows),
             }
             if path.suffix.lower() in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
@@ -228,8 +248,8 @@ class ExcelAnalysis:
                         out["customer_hint"] = hint
                 except RECOVERABLE_ERRORS:
                     self.logger.debug("suppressed exception", exc_info=True)
-            if header is not None:
-                out["header_row"] = header
+            # 始终回写实际使用的工作表与表头（默认第 1 行），后续导入步骤才能安全引用。
+            out["header_row"] = header if header is not None else 1
             return out
         if action == "query":
             result = self.filter_frame(df, str(args.get("query_expression") or "").strip())

@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.application.shipment_excel_etl_security import (
-    ShipmentEtlPathError,
+from app.application.shipment_excel_elt_security import (
+    ShipmentEltPathError,
     open_shipment_result_file,
 )
 
@@ -18,40 +18,40 @@ def app_data(tmp_path, monkeypatch):
 
 
 def test_managed_result_creates_parents(app_data):
-    destination = app_data / "etl" / "exports" / "run.xlsx"
+    destination = app_data / "elt" / "exports" / "run.xlsx"
     with open_shipment_result_file(destination) as stream:
         stream.write(b"result")
     assert destination.read_bytes() == b"result"
 
 
 def test_failed_write_preserves_previous_result(app_data):
-    destination = app_data / "etl" / "exports" / "run.xlsx"
+    destination = app_data / "elt" / "exports" / "run.xlsx"
     destination.parent.mkdir(parents=True)
     destination.write_bytes(b"previous")
     with pytest.raises(RuntimeError), open_shipment_result_file(destination) as stream:
         stream.write(b"partial")
         raise RuntimeError("interrupted")
     assert destination.read_bytes() == b"previous"
-    assert list(destination.parent.glob(".etl-*.tmp")) == []
+    assert list(destination.parent.glob(".elt-*.tmp")) == []
 
 
 def test_untrusted_result_rejected(app_data, tmp_path):
     destination = tmp_path / "outside" / "run.xlsx"
-    with pytest.raises(ShipmentEtlPathError), open_shipment_result_file(destination):
+    with pytest.raises(ShipmentEltPathError), open_shipment_result_file(destination):
         pytest.fail("untrusted output opened")
     assert not destination.parent.exists()
 
 
-@pytest.mark.parametrize("position", ["etl", "exports", "leaf"])
+@pytest.mark.parametrize("position", ["elt", "exports", "leaf"])
 def test_result_links_rejected(app_data, tmp_path, position):
     outside = tmp_path / "outside"
     outside.mkdir()
     protected = outside / "run.xlsx"
     protected.write_bytes(b"protected")
-    target = app_data / "etl" / "exports" / "run.xlsx"
+    target = app_data / "elt" / "exports" / "run.xlsx"
     link = (
-        app_data / "etl"
-        if position == "etl"
+        app_data / "elt"
+        if position == "elt"
         else target.parent
         if position == "exports"
         else target
@@ -60,16 +60,16 @@ def test_result_links_rejected(app_data, tmp_path, position):
     link.symlink_to(
         protected if position == "leaf" else outside, target_is_directory=position != "leaf"
     )
-    with pytest.raises(ShipmentEtlPathError), open_shipment_result_file(target):
+    with pytest.raises(ShipmentEltPathError), open_shipment_result_file(target):
         pytest.fail("linked output opened")
     assert protected.read_bytes() == b"protected"
 
 
 def test_parent_swap_cannot_redirect_write(app_data, tmp_path):
-    destination = app_data / "etl" / "exports" / "run.xlsx"
+    destination = app_data / "elt" / "exports" / "run.xlsx"
     outside = tmp_path / "outside"
     outside.mkdir()
-    moved = app_data / "etl" / "pinned-exports"
+    moved = app_data / "elt" / "pinned-exports"
     with open_shipment_result_file(destination) as stream:
         destination.parent.rename(moved)
         destination.parent.symlink_to(outside, target_is_directory=True)
@@ -79,7 +79,7 @@ def test_parent_swap_cannot_redirect_write(app_data, tmp_path):
 
 
 def test_managed_traversal_rejected(app_data):
-    destination = app_data / "etl" / "exports" / "unused" / ".." / "run.xlsx"
-    with pytest.raises(ShipmentEtlPathError), open_shipment_result_file(destination):
+    destination = app_data / "elt" / "exports" / "unused" / ".." / "run.xlsx"
+    with pytest.raises(ShipmentEltPathError), open_shipment_result_file(destination):
         pytest.fail("traversal opened")
-    assert not (app_data / "etl").exists()
+    assert not (app_data / "elt").exists()

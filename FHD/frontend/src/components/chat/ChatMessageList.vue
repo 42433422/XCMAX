@@ -477,9 +477,50 @@ watch(
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 6px;
+  gap: 2px;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  margin: 6px auto;
+  padding: 3px 6px;
   font-size: 12px;
+  line-height: 1.6;
+  color: var(--app-text-muted, #64748b);
+  background: var(--app-surface-muted, rgba(248, 250, 252, 0.96));
+  border: 1px solid var(--app-border-subtle, rgba(226, 232, 240, 0.82));
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.chat-history-navigation span[role='status'] {
+  padding: 0 6px;
+  color: var(--app-text-muted, #64748b);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-history-navigation button {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--xc-color-primary, #0d47a1);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 1px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.chat-history-navigation button:hover:not(:disabled) {
+  background: var(--xc-color-primary-soft, #e3eaf8);
+  border-color: var(--app-border-default, rgba(203, 213, 225, 0.8));
+}
+
+.chat-history-navigation button:disabled {
+  color: var(--app-text-muted, #64748b);
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .message-save-status { font-size: 12px; }
 .message-save-error { display: block; color: var(--app-text-danger, #b42318); }

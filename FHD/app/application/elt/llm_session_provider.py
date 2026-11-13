@@ -7,7 +7,7 @@ import os
 from contextvars import ContextVar, Token
 from typing import Any, cast
 
-_OWNER_USER_ID: ContextVar[int | None] = ContextVar("etl_llm_owner_user_id", default=None)
+_OWNER_USER_ID: ContextVar[int | None] = ContextVar("elt_llm_owner_user_id", default=None)
 
 
 class SessionMarketProvider:
@@ -210,20 +210,20 @@ class SessionMarketProvider:
             await adapter.close()
 
 
-def bind_etl_llm_owner(owner_user_id: int) -> Token[int | None]:
+def bind_elt_llm_owner(owner_user_id: int) -> Token[int | None]:
     return _OWNER_USER_ID.set(int(owner_user_id))
 
 
-def reset_etl_llm_owner(token: Token[int | None]) -> None:
+def reset_elt_llm_owner(token: Token[int | None]) -> None:
     _OWNER_USER_ID.reset(token)
 
 
-def current_etl_llm_owner() -> int | None:
+def current_elt_llm_owner() -> int | None:
     return _OWNER_USER_ID.get()
 
 
 def current_owner_market_provider(*, timeout_seconds: float) -> SessionMarketProvider | None:
-    owner_user_id = current_etl_llm_owner()
+    owner_user_id = current_elt_llm_owner()
     if owner_user_id is None:
         return None
     from app.application.elt_login_authorization import current_model_session_id
@@ -245,8 +245,8 @@ def current_owner_market_provider(*, timeout_seconds: float) -> SessionMarketPro
 
 __all__ = [
     "SessionMarketProvider",
-    "bind_etl_llm_owner",
-    "current_etl_llm_owner",
+    "bind_elt_llm_owner",
+    "current_elt_llm_owner",
     "current_owner_market_provider",
-    "reset_etl_llm_owner",
+    "reset_elt_llm_owner",
 ]

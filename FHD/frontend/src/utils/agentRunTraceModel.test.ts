@@ -106,6 +106,31 @@ describe('buildAgentRunTraceFromEvents', () => {
     }
   })
 
+  it('shows the concrete failure reason instead of the generic event title', () => {
+    const events: AgentRunEvent[] = [
+      ev('tool.started', { data: { node_id: 'n1', tool_id: 'elt_import', action: 'execute' } }),
+      ev('tool.failed', {
+        message: 'elt_import.execute 执行失败',
+        data: {
+          node_id: 'n1',
+          tool_id: 'elt_import',
+          action: 'execute',
+          error: '预演存在错误行；默认阻断整批。',
+          reason: '预演存在错误行；默认阻断整批。',
+        },
+      }),
+    ]
+
+    const trace = buildAgentRunTraceFromEvents(events, 'run_elt')
+
+    const tool = trace.phases[0]
+    if (tool.kind === 'tool') {
+      expect(tool.status).toBe('failed')
+      expect(tool.error).toContain('预演存在错误行')
+      expect(tool.error).not.toBe('elt_import.execute 执行失败')
+    }
+  })
+
   it('sets waiting status when step.waiting_user arrives without terminal', () => {
     const events: AgentRunEvent[] = [
       ev('planner.started'),

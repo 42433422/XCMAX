@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from app.application import shipment_excel_etl_security as etl_security
+from app.application import shipment_excel_elt_security as elt_security
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_shipment_output_dir
 
@@ -88,10 +88,10 @@ def handle_price_list_export(
             if workspace_root
             else Path(get_shipment_output_dir())
         )
-        out_path = etl_security.resolve_etl_output_path(
+        out_path = elt_security.resolve_elt_output_path(
             out_dir / suffix, workspace_root=workspace_root
         )
-        with etl_security.open_etl_output_file(
+        with elt_security.open_elt_output_file(
             out_path, workspace_root=workspace_root
         ) as output_file:
             output_file.write(doc_bytes)
@@ -103,7 +103,7 @@ def handle_price_list_export(
             "customer_name": customer_name,
             "product_count": len(products),
         }
-    except etl_security.ShipmentEtlPathError:
+    except elt_security.ShipmentEltPathError:
         return {"success": False, "message": "非法输出路径", "error_code": "unsafe_path"}
     except RECOVERABLE_ERRORS:
         logger.exception("price_list_export: 写文件失败")

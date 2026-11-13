@@ -35,7 +35,7 @@ BASELINE = {
     # aiopen_access_dependency.py (trusted ScreenPrincipal binding helper).
     # Raised 2026-10-29 Asia/Shanghai for #2733: reviewed Excel archive/classify
     # package (reviewed_excel/) + top-level reviewed_excel_template.py adapters.
-    # Raised 2026-10-31 Asia/Shanghai for #2858: etl_auto_ingest.py
+    # Raised 2026-10-31 Asia/Shanghai for #2858: elt_auto_ingest.py
     # (progress API + route split so etl.py stays ≤20 @router).
     "routes_total": 304,
     "routes_top_level": 119,

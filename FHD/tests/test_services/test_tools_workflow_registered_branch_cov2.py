@@ -1337,6 +1337,25 @@ class TestExcelAnalysisRouter:
         assert result["success"] is False
         assert "file_path" in result["message"]
 
+    def test_read_data_exposes_sheet_name_and_header_row(self):
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={
+                "success": True,
+                "sheet_name": "25年",
+                "header_row": 1,
+                "row_count": 3,
+                "columns": ["型号"],
+                "records": [],
+                "file_path": "宗南.xlsx",
+            },
+        ):
+            result = _registered_router_excel_analysis(
+                "read", {"file_path": "宗南.xlsx"}, {}, "admin", ""
+            )
+        assert result["data"]["sheet_name"] == "25年"
+        assert result["data"]["header_row"] == 1
+
     def test_delegates_action_and_params(self):
         with patch(
             "app.application.tools.workflow.handle_excel_analysis",

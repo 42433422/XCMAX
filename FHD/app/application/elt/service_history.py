@@ -99,7 +99,7 @@ class HistoryServiceMixin:
 
     def cleanup_retention(self, db: Session, *, owner_user_id: int) -> dict[str, int]:
         now = utcnow()
-        upload_root = (Path(get_app_data_dir()).resolve() / "etl" / "uploads").resolve()
+        upload_root = (Path(get_app_data_dir()).resolve() / "elt" / "uploads").resolve()
         removed_files = 0
         expired_uploads = (
             db.query(EltUpload)

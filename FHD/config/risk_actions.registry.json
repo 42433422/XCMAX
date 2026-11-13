@@ -1905,6 +1905,31 @@
         }
       }
     },
+    "elt_import": {
+      "description": "通过数据对接中心（ELT）导入 Excel：先自动识别目标并预演，再按预演编号确认入库，保留源快照、回执与回滚记录。",
+      "availability": "shared",
+      "actions": {
+        "preview": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared",
+          "timeout_seconds": 180
+        },
+        "execute": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "run_id"
+          ],
+          "availability": "shared",
+          "action_class": "bulk_import",
+          "timeout_seconds": 300
+        }
+      }
+    },
     "client_product_issue": {
       "description": "客户明确要求反馈或上报软件故障时，使用原始请求提交产品问题；缺少证据时请求补充，受理结果不明时不得重复提交。",
       "availability": "shared",

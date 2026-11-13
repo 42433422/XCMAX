@@ -32,7 +32,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 FORMS = ROOT / "tests" / "fixtures" / "network_forms"
-CLOSED = ROOT / "tests" / "fixtures" / "shipment_etl" / "闭环测试_送货单模板.xlsx"
+CLOSED = ROOT / "tests" / "fixtures" / "shipment_elt" / "闭环测试_送货单模板.xlsx"
 
 
 def _item_usable(item: dict) -> bool:
@@ -128,7 +128,7 @@ def _promote(notes: list[dict]) -> list[dict]:
 def _eval_one(path: Path) -> dict:
     from app.application.excel_template_http_app_service import _decompose_template
     from app.application.shipment_app_service import ShipmentApplicationService
-    from app.application.shipment_excel_etl_app_service import (
+    from app.application.shipment_excel_elt_app_service import (
         execute_shipment_excel_etl,
         preview_shipment_excel_etl,
     )
@@ -190,11 +190,11 @@ def _eval_one(path: Path) -> dict:
                     return_value={"success": True, "imported": 1},
                 ),
                 patch(
-                    "app.application.shipment_excel_etl_fingerprint_store._legacy_db_path",
+                    "app.application.shipment_excel_elt_fingerprint_store._legacy_db_path",
                     return_value=fp_db,
                 ),
                 patch(
-                    "app.application.shipment_excel_etl_fingerprint_store._db_path",
+                    "app.application.shipment_excel_elt_fingerprint_store._db_path",
                     return_value=fp_db,
                 ),
             ):

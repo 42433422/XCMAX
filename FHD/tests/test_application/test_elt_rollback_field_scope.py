@@ -1,0 +1,363 @@
+"""Rollback owns only the fields changed by its import, using isolated SQLite."""
+
+from __future__ import annotations
+
+import warnings
+from datetime import UTC, datetime
+from decimal import Decimal
+from unittest.mock import MagicMock
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.application.elt.errors import EltError
+from app.application.elt.service import EltService
+from app.application.elt.service_support import dump_json
+from app.application.elt.targets import get_adapter
+from app.application.elt.targets.customer_product_support import customer_values
+from app.application.elt.targets.helpers import model_values
+from app.application.elt.targets.products import ProductAdapter
+from app.db.db_base import Base
+from app.db.models.elt import EltRun, EltRunRow, EltTemplateVersion, EltUpload
+from app.db.models.product import Product
+from app.db.models.purchase_unit import PurchaseUnit
+from tests.test_application.test_elt_auto_ingest_service import ledger_root as ledger_root
+from tests.test_application.test_elt_auto_ingest_service import rag_service as rag_service
+
+
+@pytest.fixture
+def db():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with sessionmaker(bind=engine)() as session:
+        yield session
+    engine.dispose()
+
+
+def seed_business_rows(db):
+    customer = PurchaseUnit(
+        tenant_id=1,
+        unit_name="回滚测试客户",
+        contact_person="原联系人",
+        contact_phone="100",
+        address="原地址",
+        is_active=True,
+    )
+    product = Product(
+        tenant_id=1,
+        unit=customer.unit_name,
+        name="回滚测试产品",
+        model_number="ROLLBACK-1",
+        price=Decimal("10"),
+        specification="原规格",
+        description="原备注",
+    )
+    db.add_all([customer, product])
+    db.commit()
+    return customer, product
+
+
+def apply_import(db, target, customer, *, phone="200", price="20"):
+    adapter = get_adapter(target)
+    data = {
+        "customer_name": customer.unit_name,
+        "contact_phone": phone,
+        "unit": customer.unit_name,
+        "name": "回滚测试产品",
+        "model_number": "ROLLBACK-1",
+        "price": price,
+    }
+    allowed = {"contact_phone"} if target == "customers" else {"price"}
+    if target == "customer_products":
+        allowed.add("contact_phone")
+    preview = adapter.preview(db, data, allowed_update_fields=allowed, context={})
+    assert preview.action == "update"
+    result = adapter.execute_row(
+        db,
+        data,
+        action="update",
+        match_ref=preview.match_ref,
+        allowed_update_fields=allowed,
+        context={},
+    )
+    db.commit()
+    return {
+        "match_ref": result["match_ref"],
+        "before": preview.before,
+        "after": result["after"],
+        "context": {},
+    }
+
+
+@pytest.mark.parametrize("target", ["customers", "products", "customer_products"])
+def test_rollback_preserves_later_manual_edits_to_other_fields(db, target):
+    customer, product = seed_business_rows(db)
+    receipt = apply_import(db, target, customer)
+    customer.contact_person = "人工新联系人"
+    product.description = "人工新备注"
+    db.commit()
+
+    get_adapter(target).rollback_row(db, **receipt)
+    db.commit()
+    db.expire_all()
+
+    assert customer.contact_phone == "100"
+    assert product.price == Decimal("10")
+    assert customer.contact_person == "人工新联系人"
+    assert product.description == "人工新备注"
+
+
+@pytest.mark.parametrize("target", ["customers", "products", "customer_products"])
+def test_rollback_rejects_touched_field_conflict_without_partial_restore(db, target):
+    customer, product = seed_business_rows(db)
+    receipt = apply_import(db, target, customer)
+    if target == "products":
+        product.price = Decimal("30")
+    else:
+        # For the aggregate this conflicts after the product rollback is attempted.
+        customer.contact_phone = "300"
+    db.commit()
+    current_customer = customer_values(customer)
+    current_product = model_values(product, ProductAdapter.fields)
+
+    with pytest.raises(EltError) as error, db.begin_nested():
+        get_adapter(target).rollback_row(db, **receipt)
+
+    assert error.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
+    db.expire_all()
+    assert customer_values(customer) == current_customer
+    assert model_values(product, ProductAdapter.fields) == current_product
+
+
+@pytest.mark.parametrize("target", ["customers", "products"])
+def test_unchanged_import_snapshot_has_nothing_to_restore(db, target):
+    customer, product = seed_business_rows(db)
+    obj = customer if target == "customers" else product
+    snapshot = (
+        customer_values(customer)
+        if target == "customers"
+        else model_values(product, ProductAdapter.fields)
+    )
+    customer.contact_person = "人工新联系人"
+    product.description = "人工新备注"
+    db.commit()
+
+    get_adapter(target).rollback_row(
+        db, match_ref=str(obj.id), before=snapshot, after=snapshot, context={}
+    )
+    db.commit()
+
+    assert customer.contact_person == "人工新联系人"
+    assert product.description == "人工新备注"
+
+
+def persist_run(db, target, receipts):
+    upload = EltUpload(
+        id="rollback-upload",
+        tenant_id=1,
+        owner_user_id=1,
+        file_name="sanitized.csv",
+        suffix=".csv",
+        size_bytes=1,
+        sha256="a" * 64,
+        storage_path="unused-synthetic-source.csv",
+    )
+    run = EltRun(
+        id="rollback-run",
+        tenant_id=1,
+        owner_user_id=1,
+        upload_id=upload.id,
+        target_type=target,
+        status="completed",
+        stage="completed",
+        file_sha256=upload.sha256,
+        reversible=True,
+    )
+    db.add(upload)
+    db.flush()
+    db.add(run)
+    db.flush()
+    rows = []
+    for source_row, receipt in enumerate(receipts, 1):
+        row = EltRunRow(
+            tenant_id=1,
+            owner_user_id=1,
+            run_id=run.id,
+            source_row=source_row,
+            final_action="update",
+            match_ref=receipt["match_ref"],
+            before_json=dump_json(receipt["before"]),
+            after_json=dump_json(receipt["after"]),
+            execution_status="success",
+        )
+        db.add(row)
+        rows.append(row)
+    db.commit()
+    return run, rows
+
+
+def test_service_reverses_row_order_and_never_replays_completed_rollback(db):
+    customer, product = seed_business_rows(db)
+    first = apply_import(db, "customer_products", customer)
+    second = apply_import(db, "customer_products", customer, phone="300", price="30")
+    run, rows = persist_run(db, "customer_products", [first, second])
+    customer.contact_person = "人工新联系人"
+    product.description = "人工新备注"
+    db.commit()
+    service = EltService(adviser=MagicMock())
+
+    service.rollback(db, run_id=run.id, owner_user_id=1)
+
+    assert run.rollback_status == "completed"
+    assert [row.execution_status for row in rows] == ["rolled_back", "rolled_back"]
+    assert customer.contact_phone == "100"
+    assert product.price == Decimal("10")
+    assert customer.contact_person == "人工新联系人"
+    assert product.description == "人工新备注"
+    customer.contact_phone = "400"
+    db.commit()
+    with pytest.raises(EltError) as error:
+        service.rollback(db, run_id=run.id, owner_user_id=1)
+    assert error.value.code == "ELT_ALREADY_ROLLED_BACK"
+    assert customer.contact_phone == "400"
+
+
+def test_failed_rollback_retry_skips_previously_restored_rows(db):
+    customer, product = seed_business_rows(db)
+    first = apply_import(db, "customer_products", customer, price="10")
+    second = apply_import(db, "customer_products", customer)
+    run, rows = persist_run(db, "customer_products", [first, second])
+    customer.contact_phone = "300"
+    db.commit()
+    service = EltService(adviser=MagicMock())
+
+    with pytest.raises(EltError) as error:
+        service.rollback(db, run_id=run.id, owner_user_id=1)
+    assert error.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
+    assert error.value.status_code == 409
+    assert run.rollback_status == "failed"
+    assert [row.execution_status for row in rows] == ["success", "rolled_back"]
+    assert customer.contact_phone == "300"
+    assert product.price == Decimal("10")
+
+    # Resolve the conflicting phone and make a new edit to the already restored row.
+    customer.contact_phone = "200"
+    customer.contact_person = "人工新联系人"
+    product.price = Decimal("40")
+    db.commit()
+    service.rollback(db, run_id=run.id, owner_user_id=1)
+
+    assert run.rollback_status == "completed"
+    assert [row.execution_status for row in rows] == ["rolled_back", "rolled_back"]
+    assert customer.contact_phone == "100"
+    assert customer.contact_person == "人工新联系人"
+    assert product.price == Decimal("40")
+
+
+def test_aggregate_rollback_removes_created_products_before_created_customer(db):
+    adapter = get_adapter("customer_products")
+    receipts = []
+    for model in ("CREATED-1", "CREATED-2"):
+        result = adapter.execute_row(
+            db,
+            {"customer_name": "本次创建客户", "name": "本次创建产品", "model_number": model},
+            action="new",
+            match_ref="",
+            allowed_update_fields=set(),
+            context={},
+        )
+        receipts.append({"match_ref": result["match_ref"], "before": {}, "after": result["after"]})
+        db.commit()
+    run, rows = persist_run(db, "customer_products", receipts)
+    assert db.query(Product).count() == 2
+    assert db.query(PurchaseUnit).count() == 1
+
+    EltService(adviser=MagicMock()).rollback(db, run_id=run.id, owner_user_id=1)
+
+    assert db.query(Product).count() == 0
+    assert db.query(PurchaseUnit).count() == 0
+    assert [row.execution_status for row in rows] == ["rolled_back", "rolled_back"]
+
+
+@pytest.mark.parametrize(
+    ("model", "field", "hook"),
+    [
+        (EltTemplateVersion, "created_at", "default"),
+        (EltRunRow, "created_at", "default"),
+        (EltRunRow, "updated_at", "default"),
+        (EltRunRow, "updated_at", "onupdate"),
+    ],
+)
+def test_elt_timestamp_hooks_keep_utc_naive_without_deprecated_calls(model, field, hook):
+    before = datetime.now(UTC).replace(tzinfo=None)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        value = getattr(model.__table__.c[field], hook).arg(None)
+    after = datetime.now(UTC).replace(tzinfo=None)
+    assert value.tzinfo is None
+    assert before <= value <= after
+
+
+@pytest.mark.usefixtures("ledger_root")
+def test_auto_ingest_withdraw_retries_failed_rows_before_deleting_knowledge(
+    db, monkeypatch, rag_service
+):
+    from app.application.elt import auto_ingest_service as ais
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    customer, product = seed_business_rows(db)
+    first = apply_import(db, "customer_products", customer, price="10")
+    second = apply_import(db, "customer_products", customer)
+    run, rows = persist_run(db, "customer_products", [first, second])
+    run.executed_rows = run.update_rows = 2
+    run.receipt_json = dump_json({"rows_written": True})
+    customer.contact_phone = "300"
+    db.commit()
+    monkeypatch.setattr(
+        "app.application.elt.service.get_elt_service", lambda: EltService(adviser=MagicMock())
+    )
+    monkeypatch.setattr(ais, "get_request_active_mod_id", lambda: "m")
+    service = ais.AutoIngestService()
+    kb = service._ingest_knowledge(
+        text="Synthetic rollback recovery document",
+        source_key="recovery.txt",
+        run_id="recovery-kb",
+        owner_user_id=1,
+        content_hash="a" * 64,
+        note="",
+        tenant_id=1,
+    )
+    batch = {
+        "batch_id": "retry",
+        "tenant_id": 1,
+        "owner_user_id": 1,
+        "mod_id": "m",
+        "status": "applied",
+        "business": {"run_id": run.id},
+        "knowledge": kb,
+    }
+    ais._save_ledger(1, {"batches": {"retry": batch}})
+
+    def documents():
+        return rag_service.status(dataset_id="office-docking", tenant_id="1")["documents"]
+
+    with tenant_scope(1):
+        with pytest.raises(EltError) as error:
+            service.withdraw(db, tenant_id=1, owner_user_id=1, batch_id="retry")
+        assert error.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
+        assert run.rollback_status == "failed"
+        assert [row.execution_status for row in rows] == ["success", "rolled_back"]
+        assert run.operation_token is None
+        assert any(doc["document_id"] == kb["match_ref"] for doc in documents())
+        customer.contact_phone = "200"
+        product.price = Decimal("40")
+        db.commit()
+        result = service.withdraw(db, tenant_id=1, owner_user_id=1, batch_id="retry")
+        assert result["status"] == "withdrawn"
+        assert result["withdraw"]["business"]["rollback_status"] == "completed"
+        assert [row.execution_status for row in rows] == ["rolled_back", "rolled_back"]
+        assert customer.contact_phone == "100"
+        assert product.price == Decimal("40")
+        assert not any(doc["document_id"] == kb["match_ref"] for doc in documents())
+        assert service.withdraw(db, tenant_id=1, owner_user_id=1, batch_id="retry") == result

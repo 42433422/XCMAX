@@ -12,7 +12,7 @@ import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute
 import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
-import { restoreApprovalCard } from '@/utils/chatApprovalCard'
+import { reconcileApprovalCards, restoreApprovalCard } from '@/utils/chatApprovalCard'
 import { captureAuthSession } from '@/utils/authSessionCache'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
@@ -236,7 +236,8 @@ export function useChatMessages(sessionId: Ref<string>) {
   }
   restoreModelRoute()
   const bootSanitized = sanitizeMessagesList(messages.value)
-  if (bootSanitized.length !== messages.value.length) {
+  const bootReconciled = reconcileApprovalCards(bootSanitized)
+  if (bootSanitized.length !== messages.value.length || bootReconciled) {
     messages.value = bootSanitized.length ? bootSanitized : getDefaultWelcome()
     try {
       localStorage.setItem(storageKey.value, JSON.stringify(messages.value))
@@ -481,7 +482,9 @@ export function useChatMessages(sessionId: Ref<string>) {
   }
 
   function loadMessages(newMessages: ChatMessage[]) {
-    messages.value = sanitizeMessagesList(newMessages)
+    const sanitized = sanitizeMessagesList(newMessages)
+    reconcileApprovalCards(sanitized)
+    messages.value = sanitized
     restoreModelRoute()
     persistMessagesCache()
   }

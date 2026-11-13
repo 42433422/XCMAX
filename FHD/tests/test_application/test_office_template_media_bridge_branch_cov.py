@@ -5,7 +5,7 @@
 VLM 增强、pptx/pdf 模板 analyze 载荷构建。
 
 策略：用 fake 模块替换 sys.modules 中的重依赖（pptx/pypdf/openpyxl/PIL 及
-shipment_excel_etl_ocr/vlm_route/mod_employee_llm），避免真实文件/网络/LLM 调用，
+shipment_excel_elt_ocr/vlm_route/mod_employee_llm），避免真实文件/网络/LLM 调用，
 保证快速且确定。
 """
 
@@ -363,7 +363,7 @@ class TestExtractPdfDocumentText:
 class TestOcrPdfPlaintext:
     def test_ocr_failure(self, monkeypatch):
         fake = _fake_ocr_module(ocr_result={"success": False, "message": "no text"})
-        _install_fake_module(monkeypatch, "app.application.shipment_excel_etl_ocr", fake)
+        _install_fake_module(monkeypatch, "app.application.shipment_excel_elt_ocr", fake)
         out = bridge._ocr_pdf_plaintext("x.pdf")
         assert out["success"] is False
         assert out["engine"] == "ocr"
@@ -377,7 +377,7 @@ class TestOcrPdfPlaintext:
                 "message": "ok",
             }
         )
-        _install_fake_module(monkeypatch, "app.application.shipment_excel_etl_ocr", fake)
+        _install_fake_module(monkeypatch, "app.application.shipment_excel_elt_ocr", fake)
         openpyxl = _fake_openpyxl_module()
         _install_fake_module(monkeypatch, "openpyxl", openpyxl)
         wb = MagicMock()
@@ -394,7 +394,7 @@ class TestOcrPdfPlaintext:
 
     def test_ocr_workbook_read_failure(self, monkeypatch):
         fake = _fake_ocr_module(ocr_result={"success": True, "workbook_path": "/tmp/out.xlsx"})
-        _install_fake_module(monkeypatch, "app.application.shipment_excel_etl_ocr", fake)
+        _install_fake_module(monkeypatch, "app.application.shipment_excel_elt_ocr", fake)
 
         def _boom(*a, **k):
             raise OSError("read fail")
@@ -514,12 +514,12 @@ class TestSyncVlmDescribe:
 class TestMaybePdfPageImageBytes:
     def test_no_images_returns_none(self, monkeypatch):
         fake = _fake_ocr_module(load_images=[])
-        _install_fake_module(monkeypatch, "app.application.shipment_excel_etl_ocr", fake)
+        _install_fake_module(monkeypatch, "app.application.shipment_excel_elt_ocr", fake)
         assert bridge._maybe_pdf_page_image_bytes("x.pdf") is None
 
     def test_returns_png_bytes(self, monkeypatch):
         fake = _fake_ocr_module(load_images=[MagicMock()])
-        _install_fake_module(monkeypatch, "app.application.shipment_excel_etl_ocr", fake)
+        _install_fake_module(monkeypatch, "app.application.shipment_excel_elt_ocr", fake)
         pil = _fake_pil_module()
         img = MagicMock()
         img.save = lambda buf, format: buf.write(b"PNGDATA")
@@ -531,7 +531,7 @@ class TestMaybePdfPageImageBytes:
     def test_recoverable_error_returns_none(self, monkeypatch):
         fake = _fake_ocr_module(load_images=[])
         fake._load_image_arrays.side_effect = OSError("boom")
-        _install_fake_module(monkeypatch, "app.application.shipment_excel_etl_ocr", fake)
+        _install_fake_module(monkeypatch, "app.application.shipment_excel_elt_ocr", fake)
         assert bridge._maybe_pdf_page_image_bytes("x.pdf") is None
 
 

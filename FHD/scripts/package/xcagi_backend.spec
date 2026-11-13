@@ -158,7 +158,7 @@ hiddenimports.extend(
         "app.application.mobile_extensions.protocols",
         "app.application.mod_store.protocols",
         "app.application.planner_compat.protocols",
-        "app.application.shipment_etl.protocols",
+        "app.application.shipment_elt.protocols",
         "app.application.super_employee.protocols",
         "app.application.user_memory.protocols",
     ]

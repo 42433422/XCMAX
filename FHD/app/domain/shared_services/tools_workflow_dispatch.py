@@ -7,6 +7,9 @@ from collections.abc import Callable
 from app.domain.shared_services.tools_workflow_business_db import (
     _registered_router_business_db,
 )
+from app.domain.shared_services.tools_workflow_elt import (
+    _registered_router_elt_import,
+)
 from app.domain.shared_services.tools_workflow_erp import (
     _registered_router_customers,
     _registered_router_finance,
@@ -107,6 +110,7 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "memory_v2": _registered_router_memory_v2,
         "excel_analysis": _registered_router_excel_analysis,
         "import_excel_to_database": _registered_router_import_excel_to_database,
+        "elt_import": _registered_router_elt_import,
         "generate_office_document": _registered_router_generate_office_document,
         "excel_vector_index": _registered_router_excel_vector_index,
         "ocr": _registered_router_ocr,

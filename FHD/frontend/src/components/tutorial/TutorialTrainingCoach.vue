@@ -209,7 +209,7 @@ const countLabels: Record<string, string> = {
 const entityLabels: Record<string, string> = {
   agent_task: '任务', customer: '客户', product: '产品', approval_request: '审批申请',
   sales_order: '销售订单', sales_order_item: '订单明细', receivable_allocation: '收款对应记录',
-  journal_entry: '记账凭证', etl_run: '导入任务',
+  journal_entry: '记账凭证', elt_run: '导入任务',
 }
 const valueLabels: Record<string, string> = {
   invoiced: '已开票', paid: '已收款', pending: '待处理', approved: '已通过',

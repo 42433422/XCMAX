@@ -52,6 +52,8 @@ class AgentRunRepository(Protocol):
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]: ...
 
+    def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]: ...
+
     def save_task(self, task: AgentTask) -> AgentTask: ...
 
     def get_task(
@@ -193,6 +195,24 @@ class InMemoryAgentRunRepository:
             ]
         runs.sort(key=lambda run: (run.created_at, run.run_id))
         return runs
+
+    def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
+        """One pass over the principal's runs for list filtering (no full run hydration)."""
+        wanted_user = str(user_id or "")
+        scopes: dict[str, list[tuple[str, str, str]]] = {}
+        with self._lock:
+            runs = [run for run in self._runs.values() if run.user_id == wanted_user]
+        for run in runs:
+            context = run.metadata.get("task_context")
+            if not isinstance(context, dict):
+                continue
+            task_id = str(context.get("task_id") or "")
+            if not task_id:
+                continue
+            scopes.setdefault(task_id, []).append(
+                (run.user_id, tenant_id_of_run(run), mod_id_of_run(run))
+            )
+        return scopes
 
     def save_task(self, task: AgentTask) -> AgentTask:
         with self._lock:

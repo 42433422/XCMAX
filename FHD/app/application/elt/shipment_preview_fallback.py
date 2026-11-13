@@ -61,7 +61,7 @@ from app.utils.path_io.path_utils import get_app_data_dir
 
 _PREVIEW_READY = "preview_ready"
 _LAYOUT_SUFFIXES = frozenset({".xlsx", ".xlsm"})
-_TEMP_PREFIX = "fhd-etl-preview-layout-"
+_TEMP_PREFIX = "fhd-elt-preview-layout-"
 
 LAYOUT_PREVIEW_WARNING = (
     "发货单版式来自尚未保存的 ETL 预演候选，仅用于本次已确认的发货单；未写入模板库。"
@@ -199,7 +199,7 @@ def _layout_candidate_for_run(
         return None
     return {
         "run_id": str(run.id),
-        "template_id": f"etl-preview:{run.id}",
+        "template_id": f"elt-preview:{run.id}",
         "name": str(candidate.get("name") or f"{customer_name}-发货单版式").strip(),
         "customer_name": customer_name,
         "source_region_id": source_region_id,
@@ -230,7 +230,7 @@ def _public_layout_candidate(record: dict[str, Any]) -> dict[str, Any]:
         "file_name": record["file_name"],
         "warning": LAYOUT_PREVIEW_WARNING,
         "provenance": {
-            "kind": "etl_preview_layout_candidate",
+            "kind": "elt_preview_layout_candidate",
             "run_id": record["run_id"],
             "source_region_id": record["source_region_id"],
             "source_sheet": record["sheet"],
@@ -324,7 +324,7 @@ def _safe_owned_upload_path(
     try:
         root = (
             Path(get_app_data_dir()).resolve()
-            / "etl"
+            / "elt"
             / "uploads"
             / str(tenant_id)
             / str(owner_user_id)
@@ -396,7 +396,7 @@ def materialize_preview_layout_candidate(
             {
                 "path": str(destination),
                 "cleanup_path": str(destination),
-                "source": "etl_preview_candidate",
+                "source": "elt_preview_candidate",
             }
         )
         return public

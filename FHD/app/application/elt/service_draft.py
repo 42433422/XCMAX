@@ -155,12 +155,12 @@ class DraftServiceMixin:
     @staticmethod
     def _record_correction_metrics(*, mapping_changed: bool, overrides: dict[str, Any]) -> None:
         try:
-            from app.utils.metrics import etl_manual_corrections_total
+            from app.utils.metrics import elt_manual_corrections_total
 
             if mapping_changed:
-                etl_manual_corrections_total.labels("mapping").inc()
+                elt_manual_corrections_total.labels("mapping").inc()
             if overrides:
-                etl_manual_corrections_total.labels("row_action").inc(len(overrides))
+                elt_manual_corrections_total.labels("row_action").inc(len(overrides))
         except RECOVERABLE_ERRORS:
             logger.debug("ETL correction metrics unavailable", exc_info=True)
 
@@ -180,11 +180,11 @@ class DraftServiceMixin:
 
         def work() -> None:
             from app.application.elt.llm_session_provider import (
-                bind_etl_llm_owner,
-                reset_etl_llm_owner,
+                bind_elt_llm_owner,
+                reset_elt_llm_owner,
             )
 
-            llm_owner_token = bind_etl_llm_owner(owner_user_id)
+            llm_owner_token = bind_elt_llm_owner(owner_user_id)
             db = new_session()
             operation = None
             try:
@@ -224,7 +224,7 @@ class DraftServiceMixin:
             finally:
                 unbind_owner(db)
                 db.close()
-                reset_etl_llm_owner(llm_owner_token)
+                reset_elt_llm_owner(llm_owner_token)
                 with SUBMITTED_LOCK:
                     SUBMITTED.discard(run_id)
 
@@ -307,9 +307,9 @@ class DraftServiceMixin:
         llm_degraded = False
         preview_cache: dict[str, Any] = {}
         advisory_jobs: list[tuple[EltRunRow, dict[str, Any]]] = []
-        from app.application.elt.llm_assist import etl_row_advice_limit
+        from app.application.elt.llm_assist import elt_row_advice_limit
 
-        advisory_limit = etl_row_advice_limit()
+        advisory_limit = elt_row_advice_limit()
         last_id = 0
         processed = 0
         page_size = 500

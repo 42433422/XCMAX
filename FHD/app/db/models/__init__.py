@@ -82,7 +82,7 @@ from app.db.models.sales import SALES_ORDER_STATUS_FLOW, SalesOrder, SalesOrderI
 from app.db.models.receivable_allocation import ReceivableAllocation
 from app.db.models.service_request import ServiceBridgeConfig, ServiceRequest
 from app.db.models.shipment import ShipmentRecord
-from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 from app.db.models.tenant import Tenant
 from app.db.models.tenant_invitation import TenantInvitation
 from app.db.models.user import Session as UserSession
@@ -129,7 +129,7 @@ __all__ = [
     "WechatMessage",
     "Product",
     "ShipmentRecord",
-    "ShipmentEtlImportFingerprint",
+    "ShipmentEltImportFingerprint",
     "Customer",
     "CustomerAddress",
     "Bom",

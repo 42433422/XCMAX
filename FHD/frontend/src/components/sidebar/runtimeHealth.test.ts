@@ -347,6 +347,21 @@ it('clears false offline after xcagi:api-reachable (e.g. successful voice)', asy
   sidebar.stopHealthPolling()
 })
 
+it('does not re-probe health when an API success arrives while health is already confirmed', async () => {
+  vi.useFakeTimers()
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'healthy', version: '1.0.0.7' }) })
+  vi.stubGlobal('fetch', fetchMock)
+  const sidebar = useSidebarAppVersion({ shouldShowAdminDeployStatus: ref(false) })
+  sidebar.startHealthPolling()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+  window.dispatchEvent(new CustomEvent('xcagi:api-reachable', { detail: { source: 'api' } }))
+  await vi.advanceTimersByTimeAsync(0)
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+  expect(sidebar.runtimeHealth.value.text).toBe('系统正常')
+  sidebar.stopHealthPolling()
+})
+
 it('a successful voice API cannot certify overall health while health checks fail', async () => {
   vi.useFakeTimers()
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('health unavailable')))

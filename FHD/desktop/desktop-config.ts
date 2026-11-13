@@ -139,7 +139,7 @@ export function backendEditionEnv(): Record<string, string> {
       XCAGI_GENERIC_EDITION: '1',
       XCAGI_PLATFORM_SHELL: '1',
       XCAGI_DEFAULT_EDITION: 'generic',
-      FHD_ETL_CENTER_ENABLED: process.env.FHD_ETL_CENTER_ENABLED || '0'
+      FHD_ELT_CENTER_ENABLED: process.env.FHD_ELT_CENTER_ENABLED || '0'
     }
   }
   const edition = SKU_RUNTIME_EDITION[sku]
@@ -149,8 +149,8 @@ export function backendEditionEnv(): Record<string, string> {
     XCAGI_DEFAULT_EDITION: edition,
     XCAGI_EDITION: edition,
     // 数据对接中心（通用 ETL）仅企业版默认开启；可用环境变量覆盖。
-    FHD_ETL_CENTER_ENABLED:
-      process.env.FHD_ETL_CENTER_ENABLED || (sku === 'enterprise' ? '1' : '0')
+    FHD_ELT_CENTER_ENABLED:
+      process.env.FHD_ELT_CENTER_ENABLED || (sku === 'enterprise' ? '1' : '0')
   }
   if (sku === 'enterprise') {
     env.XCAGI_MARKET_BASE_URL = process.env.XCAGI_MARKET_BASE_URL?.trim() || 'https://xiu-ci.com'

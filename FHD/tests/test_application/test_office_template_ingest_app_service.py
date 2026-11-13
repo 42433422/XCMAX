@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.application.office_template_ingest_app_service import (
-    attach_template_ingest_to_etl_result,
+    attach_template_ingest_to_elt_result,
     ingest_office_bytes_to_template_library,
     ingest_office_path_to_template_library,
 )
@@ -81,7 +81,7 @@ def test_ingest_path_missing_file(tmp_path: Path) -> None:
 
 
 def test_attach_template_ingest_skipped_when_flag_off() -> None:
-    result = attach_template_ingest_to_etl_result(
+    result = attach_template_ingest_to_elt_result(
         {"success": True},
         file_path="/tmp/a.xlsx",
         save_as_template=False,
@@ -89,27 +89,27 @@ def test_attach_template_ingest_skipped_when_flag_off() -> None:
     assert "template_ingest" not in result
 
 
-def test_attach_template_ingest_on_etl_success(tmp_path: Path) -> None:
+def test_attach_template_ingest_on_elt_success(tmp_path: Path) -> None:
     src = tmp_path / "ship.xlsx"
     src.write_bytes(b"xlsx")
     with patch(
         "app.application.office_template_ingest_app_service.ingest_office_path_to_template_library",
         return_value=({"success": True, "ingested": True, "template": {"id": "db:9"}}, 200),
     ):
-        out = attach_template_ingest_to_etl_result(
+        out = attach_template_ingest_to_elt_result(
             {"success": True, "notes": []},
             file_path=src,
             save_as_template=True,
             template_name="送货单版式",
-            source="shipment_excel_etl_preview",
+            source="shipment_excel_elt_preview",
         )
     assert out["success"] is True
     assert out["template_ingest"]["ingested"] is True
     assert out["template_ingest"]["template"]["id"] == "db:9"
 
 
-def test_attach_template_ingest_skips_when_etl_failed() -> None:
-    out = attach_template_ingest_to_etl_result(
+def test_attach_template_ingest_skips_when_elt_failed() -> None:
+    out = attach_template_ingest_to_elt_result(
         {"success": False, "message": "parse fail"},
         file_path="/tmp/a.xlsx",
         save_as_template=True,
@@ -118,7 +118,7 @@ def test_attach_template_ingest_skips_when_etl_failed() -> None:
     assert out["template_ingest"]["ingested"] is False
 
 
-def test_shipment_etl_source_tags_template_type_as_shipment() -> None:
+def test_shipment_elt_source_tags_template_type_as_shipment() -> None:
     analyzed = {
         "success": True,
         "template_name": "送货单",

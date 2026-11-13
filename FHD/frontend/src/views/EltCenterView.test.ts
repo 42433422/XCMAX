@@ -23,7 +23,7 @@ const { archive, legacy } = vi.hoisted(() => ({
 }))
 vi.mock('@/api/templatePreview', () => ({ default: archive }))
 vi.mock('@/api/elt', () => ({ eltApi: legacy }))
-vi.mock('@/api/auth', () => ({ authApi: { getCurrentUser: vi.fn().mockResolvedValue({ success: true, data: { permissions: ['etl.read'] } }) } }))
+vi.mock('@/api/auth', () => ({ authApi: { getCurrentUser: vi.fn().mockResolvedValue({ success: true, data: { permissions: ['elt.read'] } }) } }))
 vi.mock('@/api/xcmaxMarketProxy', () => ({ default: { llmResolveChatDefault: vi.fn().mockResolvedValue({ ok: true, provider: 'platform', model: 'default-chat' }) } }))
 
 function region(range: string, label = 'unknown') {

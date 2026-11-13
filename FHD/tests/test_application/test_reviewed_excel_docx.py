@@ -223,7 +223,7 @@ def test_archive_classify_accepts_synthetic_docx(review_store):
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) "
+                "INSERT INTO elt_archive_quotas (tenant_id, limit_bytes, reserved_bytes) "
                 "VALUES (1, 1000000, 0)"
             )
         )
@@ -262,7 +262,7 @@ def test_missing_model_session_cannot_execute_docx_writes(
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) "
+                "INSERT INTO elt_archive_quotas (tenant_id, limit_bytes, reserved_bytes) "
                 "VALUES (1, 1000000, 0)"
             )
         )
@@ -303,12 +303,12 @@ def test_missing_model_session_cannot_execute_docx_writes(
     with review_store.engine.begin() as conn:
         stored = json.loads(
             conn.execute(
-                text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": review_id}
+                text("SELECT draft_json FROM elt_runs WHERE id=:id"), {"id": review_id}
             ).scalar_one()
         )
         stored["versions"][-1]["model"]["status"] = "not_called"
         conn.execute(
-            text("UPDATE etl_runs SET draft_json=:draft WHERE id=:id"),
+            text("UPDATE elt_runs SET draft_json=:draft WHERE id=:id"),
             {"id": review_id, "draft": json.dumps(stored)},
         )
     saved = client.post(
@@ -335,7 +335,7 @@ def test_confirmed_model_template_path_still_saves(review_store, account_session
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) "
+                "INSERT INTO elt_archive_quotas (tenant_id, limit_bytes, reserved_bytes) "
                 "VALUES (1, 1000000, 0)"
             )
         )

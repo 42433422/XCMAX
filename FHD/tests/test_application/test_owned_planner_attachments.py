@@ -35,7 +35,7 @@ def owned(monkeypatch, tmp_path):
         context = authenticated_runtime_context(
             {"attachment_upload_ids": ["owned-file"]}, principal
         )
-        root = tmp_path / "etl" / "uploads" / principal.tenant_id / principal.user_id
+        root = tmp_path / "elt" / "uploads" / principal.tenant_id / principal.user_id
         root.mkdir(parents=True)
         file = root / "owned-file.csv"
         raw = b"product,price\npaint,120\n"

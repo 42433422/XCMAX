@@ -1,21 +1,21 @@
 <template>
-  <div class="page-view etl-docking" id="view-etl-docking">
+  <div class="page-view elt-docking" id="view-elt-docking">
     <div class="page-content">
       <div class="page-header">
         <h2>送货单 ETL 对接</h2>
         <p class="muted">上传送货单 / 发货单 Excel，识别抬头与明细后确认，自动写入客户、产品与发货单。</p>
       </div>
 
-      <div class="etl-card dock-card">
+      <div class="elt-card dock-card">
         <div class="dock-card-title">选择文件</div>
-        <div class="etl-actions">
-          <button type="button" class="btn btn-primary etl-upload-btn" :disabled="processing" @click="triggerOfficeDocking">
+        <div class="elt-actions">
+          <button type="button" class="btn btn-primary elt-upload-btn" :disabled="processing" @click="triggerOfficeDocking">
             <i class="fa fa-upload" aria-hidden="true"></i>
             {{ processing ? '识别中...' : '选择并上传文件' }}
           </button>
-          <span class="muted etl-hint">支持 .xlsx / .xls / .csv / .pdf / .docx / .pptx</span>
+          <span class="muted elt-hint">支持 .xlsx / .xls / .csv / .pdf / .docx / .pptx</span>
         </div>
-        <p class="muted etl-lead">上传后用数据对接 ELT 解析。工作表模板可选，保存后提交入库审批，通过后才写入。</p>
+        <p class="muted elt-lead">上传后用数据对接 ELT 解析。工作表模板可选，保存后提交入库审批，通过后才写入。</p>
       </div>
 
       <input
@@ -37,7 +37,7 @@
         @close="clearOfficeDockingReview"
       />
 
-      <div v-if="!officeDockingPanelOpen && !officeDockingReviewItems.length" class="etl-empty muted">
+      <div v-if="!officeDockingPanelOpen && !officeDockingReviewItems.length" class="elt-empty muted">
         尚未上传文件。选择并上传后，此处将出现「送货单识别审核」区块。
       </div>
     </div>
@@ -70,38 +70,38 @@ const processing = officeDockingProcessing
 </script>
 
 <style scoped>
-.etl-docking {
+.elt-docking {
   padding: 12px;
 }
 
-.etl-card {
+.elt-card {
   margin-bottom: 16px;
 }
 
-.etl-actions {
+.elt-actions {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-.etl-upload-btn {
+.elt-upload-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.etl-hint {
+.elt-hint {
   font-size: 12px;
 }
 
-.etl-lead {
+.elt-lead {
   margin: 10px 0 0;
   font-size: 13px;
   line-height: 1.5;
 }
 
-.etl-empty {
+.elt-empty {
   padding: 16px;
   border: 1px dashed #c5d4dc;
   border-radius: 8px;

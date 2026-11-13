@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from app.application.reviewed_excel_template import clean_workbook, inspect_workbook
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.infrastructure.auth.dependencies import get_logged_in_user
-from tests.fixtures.etl_template.sources.generate import large_quotation, sample
+from tests.fixtures.elt_template.sources.generate import large_quotation, sample
 from tests.test_application.test_reviewed_excel_boundaries import synthetic_document_answer
 
 
@@ -107,11 +107,11 @@ def test_invalid_shared_string_is_a_file_error_in_all_intake_routes(review_store
     with review_store.engine.connect() as conn:
         assert (
             conn.execute(
-                text("SELECT count(*) FROM etl_runs WHERE target_type='template_review'")
+                text("SELECT count(*) FROM elt_runs WHERE target_type='template_review'")
             ).scalar_one()
             == 0
         )
-        assert conn.execute(text("SELECT count(*) FROM etl_archive_assets")).scalar_one() == 0
+        assert conn.execute(text("SELECT count(*) FROM elt_archive_assets")).scalar_one() == 0
 
 
 def test_unexpected_candidate_failure_is_correlated_without_source_logging(
@@ -134,7 +134,7 @@ def test_unexpected_candidate_failure_is_correlated_without_source_logging(
     with review_store.engine.connect() as conn:
         assert (
             conn.execute(
-                text("SELECT count(*) FROM etl_runs WHERE target_type='template_review'")
+                text("SELECT count(*) FROM elt_runs WHERE target_type='template_review'")
             ).scalar_one()
             == 0
         )
@@ -162,7 +162,7 @@ def test_clean_formula_workbook_without_calculation_properties():
 
 
 def test_clean_copy_preserves_layout_and_ambiguous_cells():
-    fixture = Path(__file__).parents[1] / "fixtures" / "etl_template"
+    fixture = Path(__file__).parents[1] / "fixtures" / "elt_template"
     expected = json.loads((fixture / "expected" / "quotation.json").read_text(encoding="utf-8"))
     source = (fixture / "sources" / "synthetic_quotation.xlsx").read_bytes()
     info = inspect_workbook(source)
@@ -284,7 +284,7 @@ def test_template_platform_uses_account_provider_once_and_never_retries(monkeypa
     from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.application.reviewed_excel_template import make_proposals, refine_proposal
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     provider = SessionMarketProvider(7, "synthetic-market", timeout_seconds=1)
     monkeypatch.setattr(
@@ -477,7 +477,7 @@ def test_platform_fenced_three_plans_and_strict_nested_contract(monkeypatch):
         "FHD_TEMPLATE_MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
         "FHD_TEMPLATE_MIMO_MODEL": "mimo-v2.6-flash",
         "MIMO_API_KEY": "synthetic-placeholder",
-        "FHD_ETL_LLM": "on",
+        "FHD_ELT_LLM": "on",
     }.items():
         monkeypatch.setenv(name, value)
     responses = []
@@ -808,7 +808,7 @@ def test_classification_multiple_files_sheets_neutral_and_no_write(review_store)
     with review_store.engine.connect() as conn:
         assert (
             conn.execute(
-                text("SELECT count(*) FROM etl_runs WHERE target_type='template_classification'")
+                text("SELECT count(*) FROM elt_runs WHERE target_type='template_classification'")
             ).scalar_one()
             == 2
         )
@@ -843,7 +843,7 @@ def test_production_archive_slices_keep_thirteen_rows_without_business_import(
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+                "INSERT INTO elt_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
             )
         )
     client = review_store.client
@@ -903,7 +903,7 @@ def test_production_archive_slices_keep_thirteen_rows_without_business_import(
         assert (
             conn.execute(
                 text(
-                    "SELECT count(*) FROM etl_runs WHERE target_type NOT IN ('template_classification', 'template_review')"
+                    "SELECT count(*) FROM elt_runs WHERE target_type NOT IN ('template_classification', 'template_review')"
                 )
             ).scalar_one()
             == 0
@@ -965,7 +965,7 @@ def test_initial_rule_continuation_requires_explicit_selection_and_replays_state
         with review_store.engine.begin() as conn:
             conn.execute(
                 text(
-                    "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+                    "INSERT INTO elt_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
                 )
             )
         response = client.post(
@@ -1039,12 +1039,12 @@ def test_initial_rule_continuation_requires_explicit_selection_and_replays_state
         )
         assert original.status_code == 200 and original.content == body
         with review_store.engine.connect() as conn:
-            assert conn.execute(text("SELECT count(*) FROM etl_archive_assets")).scalar_one() == 1
-            assert conn.execute(text("SELECT count(*) FROM etl_archive_versions")).scalar_one() == 1
+            assert conn.execute(text("SELECT count(*) FROM elt_archive_assets")).scalar_one() == 1
+            assert conn.execute(text("SELECT count(*) FROM elt_archive_versions")).scalar_one() == 1
             assert (
                 conn.execute(
                     text(
-                        "SELECT count(*) FROM etl_runs WHERE target_type='template_classification'"
+                        "SELECT count(*) FROM elt_runs WHERE target_type='template_classification'"
                     )
                 ).scalar_one()
                 == 1
@@ -1124,7 +1124,7 @@ def test_manual_split_requires_new_version_second_confirmation_and_scoped_access
         with review_store.engine.begin() as conn:
             conn.execute(
                 text(
-                    "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+                    "INSERT INTO elt_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
                 )
             )
         item = client.post(
@@ -1393,7 +1393,7 @@ def test_archive_classification_receipt_survives_expired_temporary_upload(review
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+                "INSERT INTO elt_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
             )
         )
     response = client.post(url, data=data, files={"file": ("sample.xlsx", body)})
@@ -1413,7 +1413,7 @@ def test_archive_classification_receipt_survives_expired_temporary_upload(review
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "UPDATE etl_uploads SET expires_at=:expiry WHERE id=(SELECT upload_id FROM etl_runs WHERE id=:id)"
+                "UPDATE elt_uploads SET expires_at=:expiry WHERE id=(SELECT upload_id FROM elt_runs WHERE id=:id)"
             ),
             {
                 "expiry": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
@@ -1464,7 +1464,7 @@ def test_archive_classification_receipt_survives_expired_temporary_upload(review
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "UPDATE etl_uploads SET expires_at=:expiry WHERE id=(SELECT upload_id FROM etl_runs WHERE id=:id)"
+                "UPDATE elt_uploads SET expires_at=:expiry WHERE id=(SELECT upload_id FROM elt_runs WHERE id=:id)"
             ),
             {
                 "expiry": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
@@ -1774,7 +1774,7 @@ def test_semantic_classification_persists_versions_and_links_source(review_store
     assert "input_messages" not in json.dumps(client.get(url).json(), ensure_ascii=False)
     with review_store.engine.connect() as conn:
         persisted = conn.execute(
-            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": cid}
+            text("SELECT draft_json FROM elt_runs WHERE id=:id"), {"id": cid}
         ).scalar_one()
     assert '"input_messages"' not in persisted
     assert all(len(c["value"]) <= 160 for c in sent[0]["cells"])
@@ -1860,7 +1860,7 @@ def test_semantic_classification_persists_versions_and_links_source(review_store
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "UPDATE etl_uploads SET expires_at=:expiry WHERE id=(SELECT upload_id FROM etl_runs WHERE id=:id)"
+                "UPDATE elt_uploads SET expires_at=:expiry WHERE id=(SELECT upload_id FROM elt_runs WHERE id=:id)"
             ),
             {"expiry": (datetime.now(UTC) - timedelta(days=1)).isoformat(), "id": cid},
         )
@@ -1951,7 +1951,7 @@ def test_semantic_classification_uses_bounded_fenced_model_output(monkeypatch):
         "FHD_TEMPLATE_MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
         "FHD_TEMPLATE_MIMO_MODEL": "mimo-v2.6-flash",
         "MIMO_API_KEY": "synthetic-placeholder",
-        "FHD_ETL_LLM": "on",
+        "FHD_ELT_LLM": "on",
     }.items():
         monkeypatch.setenv(name, value)
     wb = Workbook()
@@ -2168,7 +2168,7 @@ def test_save_replay_scope_expiry_and_history(review_store):
     with store.engine.begin() as conn:
         row = conn.execute(
             text(
-                "SELECT u.storage_path, u.id FROM etl_uploads u JOIN etl_runs r ON r.upload_id=u.id WHERE r.id=:id"
+                "SELECT u.storage_path, u.id FROM elt_uploads u JOIN elt_runs r ON r.upload_id=u.id WHERE r.id=:id"
             ),
             {"id": review_id},
         ).first()
@@ -2184,13 +2184,13 @@ def test_save_replay_scope_expiry_and_history(review_store):
     path.write_bytes(original)
     with store.engine.begin() as conn:
         conn.execute(
-            text("UPDATE etl_uploads SET expires_at=:expiry WHERE id=:id"),
+            text("UPDATE elt_uploads SET expires_at=:expiry WHERE id=:id"),
             {"expiry": (datetime.now(UTC) - timedelta(days=1)).isoformat(), "id": row.id},
         )
     assert client.post("/api/templates/reviewed-excel/save", data=data).status_code == 410
     with store.engine.begin() as conn:
         conn.execute(
-            text("UPDATE etl_uploads SET expires_at=:expiry WHERE id=:id"),
+            text("UPDATE elt_uploads SET expires_at=:expiry WHERE id=:id"),
             {"expiry": (datetime.now(UTC) + timedelta(days=1)).isoformat(), "id": row.id},
         )
     existing_source = store.root / "templates" / "reviewed_excel" / "1" / "preexisting.source"
@@ -2248,12 +2248,12 @@ def test_private_intake_requires_model_before_a_business_plan(
     with review_store.engine.begin() as conn:
         stored = json.loads(
             conn.execute(
-                text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": preview["review_id"]}
+                text("SELECT draft_json FROM elt_runs WHERE id=:id"), {"id": preview["review_id"]}
             ).scalar_one()
         )
         stored["versions"][-1]["model"]["status"] = "not_called"
         conn.execute(
-            text("UPDATE etl_runs SET draft_json=:draft WHERE id=:id"),
+            text("UPDATE elt_runs SET draft_json=:draft WHERE id=:id"),
             {"id": preview["review_id"], "draft": json.dumps(stored)},
         )
     response = client.post(
@@ -2478,7 +2478,7 @@ def test_platform_initialization_outage_returns_failure_without_rule_candidates(
     def unavailable(**_):
         raise RuntimeError("synthetic-private-provider-initialization")
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     monkeypatch.setattr(sessions, "current_owner_market_provider", unavailable)
     monkeypatch.setattr(
         "app.application.reviewed_excel_template._template_llm_complete",
@@ -2590,7 +2590,7 @@ def test_model_routes_require_authenticated_session_even_with_legacy_consent_fie
     assert rejected.status_code == 401
     send.assert_not_called()
     with review_store.engine.connect() as conn:
-        assert conn.execute(text("SELECT count(*) FROM etl_runs")).scalar_one() == 0
+        assert conn.execute(text("SELECT count(*) FROM elt_runs")).scalar_one() == 0
 
 
 @pytest.fixture
@@ -2651,7 +2651,7 @@ def test_preview_requires_classification_before_model_dispatch(review_store, mon
     assert response.status_code == 409, response.text
     send.assert_not_called()
     with review_store.engine.connect() as conn:
-        assert conn.execute(text("SELECT count(*) FROM etl_runs")).scalar_one() == 0
+        assert conn.execute(text("SELECT count(*) FROM elt_runs")).scalar_one() == 0
 
 
 @pytest.mark.parametrize("multibatch", [False, True])
@@ -3098,7 +3098,7 @@ def test_local_save_failure_releases_only_own_locks_and_can_retry(
     with review_store.engine.connect() as conn:
         statuses = dict(
             conn.execute(
-                text("SELECT id, status FROM etl_runs WHERE id IN (:review, :classification)"),
+                text("SELECT id, status FROM elt_runs WHERE id IN (:review, :classification)"),
                 {"review": review["review_id"], "classification": item["classification_id"]},
             ).all()
         )
@@ -3130,12 +3130,12 @@ def test_failed_save_does_not_unlock_another_review_owner(review_store):
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "UPDATE etl_runs SET status='template_review_saving', draft_json='new-owner' WHERE id=:id"
+                "UPDATE elt_runs SET status='template_review_saving', draft_json='new-owner' WHERE id=:id"
             ),
             {"id": review_id},
         )
         conn.execute(
-            text("UPDATE etl_runs SET status='classification_template_saving' WHERE id=:id"),
+            text("UPDATE elt_runs SET status='classification_template_saving' WHERE id=:id"),
             {"id": classification_id},
         )
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
@@ -3147,7 +3147,7 @@ def test_failed_save_does_not_unlock_another_review_owner(review_store):
     with review_store.engine.connect() as conn:
         statuses = dict(
             conn.execute(
-                text("SELECT id, status FROM etl_runs WHERE id IN (:review, :classification)"),
+                text("SELECT id, status FROM elt_runs WHERE id IN (:review, :classification)"),
                 {"review": review_id, "classification": classification_id},
             ).all()
         )
@@ -3211,7 +3211,7 @@ def test_classification_batch_file_limit(review_store, count):
             assert (
                 conn.execute(
                     text(
-                        "SELECT count(*) FROM etl_runs WHERE target_type='template_classification'"
+                        "SELECT count(*) FROM elt_runs WHERE target_type='template_classification'"
                     )
                 ).scalar_one()
                 == 0
@@ -3544,7 +3544,7 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
     assert first.status_code == 200 and first.json()["checkpoint"]["completed"] == 1
     with review_store.engine.connect() as conn:
         persisted = conn.execute(
-            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+            text("SELECT draft_json FROM elt_runs WHERE id=:id"), {"id": item["classification_id"]}
         ).scalar_one()
     checkpoint_state = json.loads(persisted)["analysis_checkpoint"]
     assert '"input_messages"' not in persisted
@@ -3577,7 +3577,7 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "UPDATE etl_uploads SET expires_at=:expiry WHERE id=(SELECT upload_id FROM etl_runs WHERE id=:id)"
+                "UPDATE elt_uploads SET expires_at=:expiry WHERE id=(SELECT upload_id FROM elt_runs WHERE id=:id)"
             ),
             {
                 "expiry": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
@@ -3729,7 +3729,7 @@ def test_semantic_finish_length_rejected_without_retry(monkeypatch):
         "FHD_TEMPLATE_MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
         "FHD_TEMPLATE_MIMO_MODEL": "mimo-v2.6-flash",
         "MIMO_API_KEY": "synthetic-placeholder",
-        "FHD_ETL_LLM": "on",
+        "FHD_ELT_LLM": "on",
     }.items():
         monkeypatch.setenv(name, value)
     seen = []
@@ -3757,7 +3757,7 @@ def test_preview_budget_covers_the_worst_case_and_length_is_not_resent(monkeypat
     from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.application.reviewed_excel_template import make_proposals, refine_proposal
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     seen = []
 
     async def fake(self, messages, **kwargs):
@@ -5277,7 +5277,7 @@ def test_provider_accepts_explicit_empty_document_and_layout_arrays(monkeypatch)
         "FHD_TEMPLATE_MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
         "FHD_TEMPLATE_MIMO_MODEL": "mimo-v2.6-flash",
         "MIMO_API_KEY": "synthetic-placeholder",
-        "FHD_ETL_LLM": "on",
+        "FHD_ELT_LLM": "on",
     }.items():
         monkeypatch.setenv(name, value)
 
@@ -5349,7 +5349,7 @@ def test_classification_provider_schema_with_empty_layout_and_strict_region(monk
         "FHD_TEMPLATE_MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
         "FHD_TEMPLATE_MIMO_MODEL": "mimo-v2.6-flash",
         "MIMO_API_KEY": "synthetic-placeholder",
-        "FHD_ETL_LLM": "on",
+        "FHD_ELT_LLM": "on",
     }.items():
         monkeypatch.setenv(name, value)
     review = inspect_workbook(sample())
@@ -5575,7 +5575,7 @@ def test_model_document_to_template_library_roundtrip(review_store, monkeypatch)
     # Simulate classification changing after the review lease commits but before the library write.
     with review_store.engine.begin() as conn:
         original_draft = conn.execute(
-            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+            text("SELECT draft_json FROM elt_runs WHERE id=:id"), {"id": item["classification_id"]}
         ).scalar_one()
     recheck = routes._recheck
 
@@ -5585,7 +5585,7 @@ def test_model_document_to_template_library_roundtrip(review_store, monkeypatch)
         changed["versions"][-1]["version"] = "changed-after-review-lease"
         with review_store.engine.begin() as conn:
             conn.execute(
-                text("UPDATE etl_runs SET draft_json=:draft WHERE id=:id"),
+                text("UPDATE elt_runs SET draft_json=:draft WHERE id=:id"),
                 {"id": item["classification_id"], "draft": json.dumps(changed, ensure_ascii=False)},
             )
 
@@ -5595,7 +5595,7 @@ def test_model_document_to_template_library_roundtrip(review_store, monkeypatch)
     with review_store.engine.begin() as conn:
         assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 0
         conn.execute(
-            text("UPDATE etl_runs SET draft_json=:draft WHERE id=:id"),
+            text("UPDATE elt_runs SET draft_json=:draft WHERE id=:id"),
             {"id": item["classification_id"], "draft": original_draft},
         )
     monkeypatch.setattr(routes, "_recheck", recheck)
@@ -5677,7 +5677,7 @@ def test_model_document_to_template_library_roundtrip(review_store, monkeypatch)
     with review_store.engine.connect() as conn:
         assert (
             conn.execute(
-                text("SELECT status FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+                text("SELECT status FROM elt_runs WHERE id=:id"), {"id": item["classification_id"]}
             ).scalar_one()
             == "classification_template_saving"
         )
@@ -5785,12 +5785,12 @@ def test_legacy_prompt_history_remains_but_is_not_copied_to_new_confirmation(rev
     ).json()["files"][0]
     with review_store.engine.begin() as conn:
         raw = conn.execute(
-            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+            text("SELECT draft_json FROM elt_runs WHERE id=:id"), {"id": item["classification_id"]}
         ).scalar_one()
         state = json.loads(raw)
         state["versions"][0]["input_messages"] = [{"role": "user", "content": "旧历史合成内容"}]
         conn.execute(
-            text("UPDATE etl_runs SET draft_json=:draft WHERE id=:id"),
+            text("UPDATE elt_runs SET draft_json=:draft WHERE id=:id"),
             {"draft": json.dumps(state, ensure_ascii=False), "id": item["classification_id"]},
         )
     labels = [
@@ -5854,7 +5854,7 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
     else:
         response = client.post(url, data=data, files={"file": ("sample.xlsx", body)})
         assert response.status_code == 400
-    copies = list((review_store.root / "etl" / "uploads").rglob("*.xlsx"))
+    copies = list((review_store.root / "elt" / "uploads").rglob("*.xlsx"))
     assert len(copies) == int(commit_unknown)
     originals = list((review_store.root / "business-archive" / "1" / "7").iterdir())
     assert len(originals) == 1
@@ -5865,7 +5865,7 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
     assert disk.startswith(_ENVELOPE_MAGIC) and body not in disk
     with review_store.engine.connect() as connection:
         row = connection.execute(
-            text("SELECT size_bytes, sha256 FROM etl_archive_versions WHERE storage_path = :p"),
+            text("SELECT size_bytes, sha256 FROM elt_archive_versions WHERE storage_path = :p"),
             {"p": str(originals[0])},
         ).one()
     version = EltArchiveVersion(size_bytes=row.size_bytes, sha256=row.sha256)
@@ -5877,11 +5877,11 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
     )
     assert plain == body
     with review_store.engine.connect() as connection:
-        assert connection.execute(text("SELECT count(*) FROM etl_uploads")).scalar_one() == int(
+        assert connection.execute(text("SELECT count(*) FROM elt_uploads")).scalar_one() == int(
             commit_unknown
         )
         classification_id = connection.execute(
-            text("SELECT classification_id FROM etl_archive_versions")
+            text("SELECT classification_id FROM elt_archive_versions")
         ).scalar_one()
         assert bool(classification_id) is commit_unknown
     if commit_unknown:
@@ -6149,7 +6149,7 @@ def test_audit_response_is_committed_before_parsing_and_is_owner_scoped(review_s
     assert result.json()["structure_map_source"] == "program_observation_not_sent_to_model"
     with review_store.engine.connect() as conn:
         persisted = conn.execute(
-            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+            text("SELECT draft_json FROM elt_runs WHERE id=:id"), {"id": item["classification_id"]}
         ).scalar_one()
     record = json.loads(persisted)["model_audit"][0]
     assert record["state"] == "answered_valid" and record["request_id"] == "synthetic-req"
@@ -6196,7 +6196,7 @@ def test_audit_write_failure_blocks_replay(review_store, monkeypatch):
     assert len(calls) == 1
     with review_store.engine.connect() as conn:
         persisted = conn.execute(
-            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+            text("SELECT draft_json FROM elt_runs WHERE id=:id"), {"id": item["classification_id"]}
         ).scalar_one()
     assert json.loads(persisted)["model_audit"][-1]["state"] == "sent"
 
@@ -6277,7 +6277,7 @@ def test_completed_invalid_response_is_counted_and_next_request_retries_without_
     audit = json.loads(
         review_store.engine.connect()
         .execute(
-            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+            text("SELECT draft_json FROM elt_runs WHERE id=:id"), {"id": item["classification_id"]}
         )
         .scalar_one()
     )["model_audit"]
@@ -6294,7 +6294,7 @@ def test_archived_model_slice_can_be_selected_for_template_without_coordinate_co
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+                "INSERT INTO elt_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
             )
         )
     body = sample()
@@ -6428,7 +6428,7 @@ def test_unsent_model_configuration_does_not_lock_classification(review_store, m
     from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_audit import ModelRequestNotSent, response_capture
 
-    monkeypatch.setenv("FHD_ETL_LLM", "off" if fault == "off" else "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "off" if fault == "off" else "on")
     monkeypatch.setattr(
         "app.application.reviewed_excel_template._template_platform_complete",
         review_store.platform_complete,
@@ -6464,7 +6464,7 @@ def test_unsent_model_configuration_does_not_lock_classification(review_store, m
     with review_store.engine.connect() as conn:
         state = json.loads(
             conn.execute(
-                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                text("SELECT draft_json FROM elt_runs WHERE id=:id"),
                 {"id": item["classification_id"]},
             ).scalar_one()
         )
@@ -6491,7 +6491,7 @@ def test_unsent_model_configuration_does_not_lock_classification(review_store, m
             },
         )
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     monkeypatch.setattr(
         "app.application.reviewed_excel_template._template_platform_complete", repaired
     )
@@ -6526,7 +6526,7 @@ def test_checkpoint_budget_change_is_409_preserving_original_audit(
     assert client.post(url, data=data).status_code == 503
     with review_store.engine.begin() as conn:
         raw = conn.execute(
-            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+            text("SELECT draft_json FROM elt_runs WHERE id=:id"), {"id": item["classification_id"]}
         ).scalar_one()
         state = json.loads(raw)
         if budget_version == "missing-plan":
@@ -6541,7 +6541,7 @@ def test_checkpoint_budget_change_is_409_preserving_original_audit(
             state["analysis_checkpoint"]["budget_version"] = budget_version
         original = json.dumps(state, ensure_ascii=False)
         conn.execute(
-            text("UPDATE etl_runs SET draft_json=:draft WHERE id=:id"),
+            text("UPDATE elt_runs SET draft_json=:draft WHERE id=:id"),
             {"draft": original, "id": item["classification_id"]},
         )
     result = client.post(
@@ -6555,7 +6555,7 @@ def test_checkpoint_budget_change_is_409_preserving_original_audit(
     with review_store.engine.connect() as conn:
         assert (
             conn.execute(
-                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                text("SELECT draft_json FROM elt_runs WHERE id=:id"),
                 {"id": item["classification_id"]},
             ).scalar_one()
             == original
@@ -6628,7 +6628,7 @@ def test_required_model_failure_has_no_success_or_saved_rule_candidates(
     with review_store.engine.connect() as conn:
         assert (
             conn.execute(
-                text("SELECT count(*) FROM etl_runs WHERE target_type='template_review'")
+                text("SELECT count(*) FROM elt_runs WHERE target_type='template_review'")
             ).scalar_one()
             == 0
         )
@@ -6780,7 +6780,7 @@ def test_document_review_has_three_model_candidates_and_unchanged_scoped_origina
         with review_store.engine.connect() as db:
             source_path = db.execute(
                 text(
-                    "SELECT storage_path FROM etl_uploads JOIN etl_runs ON etl_runs.upload_id=etl_uploads.id WHERE etl_runs.id=:id"
+                    "SELECT storage_path FROM elt_uploads JOIN elt_runs ON elt_runs.upload_id=elt_uploads.id WHERE elt_runs.id=:id"
                 ),
                 {"id": response["review_id"]},
             ).scalar_one()
@@ -6875,17 +6875,17 @@ def test_saved_review_refinement_forks_immutable_version_and_replays_canonical_c
         if restricted:
             summary = json.loads(
                 db.execute(
-                    text("SELECT summary_json FROM etl_runs WHERE id=:id"), {"id": parent_id}
+                    text("SELECT summary_json FROM elt_runs WHERE id=:id"), {"id": parent_id}
                 ).scalar_one()
             )
             summary["usage_restrictions"] = [
                 "仅供数据/模板测试；打印版式未验证，不得发布到企业模板库"
             ]
             db.execute(
-                text("UPDATE etl_runs SET summary_json=:summary WHERE id=:id"),
+                text("UPDATE elt_runs SET summary_json=:summary WHERE id=:id"),
                 {"summary": json.dumps(summary), "id": parent_id},
             )
-        before = stored_row_snapshot(db, "etl_runs", parent_id)
+        before = stored_row_snapshot(db, "elt_runs", parent_id)
         template_before = stored_row_snapshot(db, "templates", template_id)
         template_bytes = Path(template_before["original_file_path"]).read_bytes()
     payload = {
@@ -6942,7 +6942,7 @@ def test_saved_review_refinement_forks_immutable_version_and_replays_canonical_c
     )
     assert saved_child.status_code == (409 if restricted else 200), saved_child.text
     with review_store.engine.connect() as db:
-        assert stored_row_snapshot(db, "etl_runs", parent_id) == before
+        assert stored_row_snapshot(db, "elt_runs", parent_id) == before
         template_after = stored_row_snapshot(db, "templates", template_id)
         assert template_after == template_before
         assert Path(template_after["original_file_path"]).read_bytes() == template_bytes
@@ -6976,7 +6976,7 @@ def test_saved_review_refinement_failure_keeps_parent_and_deduplicates_child(
     parent, _ = saved_model_review(client, monkeypatch)
     parent_id = parent["review_id"]
     with review_store.engine.connect() as db:
-        before = stored_row_snapshot(db, "etl_runs", parent_id)
+        before = stored_row_snapshot(db, "elt_runs", parent_id)
     model = Mock(
         side_effect=ModelRequestNotSent("synthetic unsent")
         if not_sent
@@ -6996,10 +6996,10 @@ def test_saved_review_refinement_failure_keeps_parent_and_deduplicates_child(
     assert replay.status_code == (503 if not_sent else 409), replay.text
     assert model.call_count == (2 if not_sent else 1)
     with review_store.engine.connect() as db:
-        assert stored_row_snapshot(db, "etl_runs", parent_id) == before
+        assert stored_row_snapshot(db, "elt_runs", parent_id) == before
         children = db.execute(
             text(
-                "SELECT status, summary_json FROM etl_runs WHERE target_type='template_review' AND id<>:id"
+                "SELECT status, summary_json FROM elt_runs WHERE target_type='template_review' AND id<>:id"
             ),
             {"id": parent_id},
         ).all()
@@ -7062,7 +7062,7 @@ def test_saved_refinement_concurrent_initial_insert_elects_one_child_and_model_c
     with review_store.engine.connect() as db:
         assert (
             db.execute(
-                text("SELECT count(*) FROM etl_runs WHERE target_type='template_review'")
+                text("SELECT count(*) FROM elt_runs WHERE target_type='template_review'")
             ).scalar_one()
             == 2
         )
@@ -7156,7 +7156,7 @@ def _unknown_outcome_run(review_store, monkeypatch):
     def audit():
         with review_store.engine.connect() as conn:
             persisted = conn.execute(
-                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                text("SELECT draft_json FROM elt_runs WHERE id=:id"),
                 {"id": item["classification_id"]},
             ).scalar_one()
         return json.loads(persisted)["model_audit"]
@@ -7218,7 +7218,7 @@ def test_unknown_preview_claim_locks_until_the_user_abandons_it(review_store, mo
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+                "INSERT INTO elt_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
             )
         )
     client = review_store.client
@@ -7349,7 +7349,7 @@ def test_preview_retries_only_unsent_batches_after_checkpoint(
             while time.monotonic() < deadline:
                 with review_store.engine.connect() as db:
                     raw = db.execute(
-                        text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                        text("SELECT draft_json FROM elt_runs WHERE id=:id"),
                         {"id": form["classification_id"]},
                     ).scalar_one()
                 claims = json.loads(raw).get("template_candidate_requests", {})
@@ -7388,7 +7388,7 @@ def test_preview_retries_only_unsent_batches_after_checkpoint(
     with review_store.engine.connect() as db:
         state = json.loads(
             db.execute(
-                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                text("SELECT draft_json FROM elt_runs WHERE id=:id"),
                 {"id": form["classification_id"]},
             ).scalar_one()
         )

@@ -211,9 +211,9 @@ def test_restart_and_metrics_do_not_expose_or_mutate_other_tenants(tmp_path):
 
 
 def test_windows_identity_adapter_uses_pinned_native_read_contract(tmp_path, monkeypatch):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
     from app.application.employee_runtime import workspace_io
-    from app.application.shipment_etl import directory_listing
+    from app.application.shipment_elt import directory_listing
 
     folder = tmp_path / "employees"
     folder.mkdir()

@@ -49,7 +49,7 @@ def test_minimal_read_permissions_without_write_grants_or_shared_session_state(c
         with reader.guard(), reader() as db, tenant_scope(7):
             assert db.scalars(select(Product)).one().name == "original"
             assert db.connection().exec_driver_sql("PRAGMA query_only").scalar() == 1
-            assert db.info["etl_owned_source"] == writer.binding
+            assert db.info["elt_owned_source"] == writer.binding
             if reader.knowledge:
                 assert reader.knowledge.validate()["store_id"] == writer.knowledge.store_id
         with writer() as db:
@@ -114,7 +114,7 @@ def test_read_preserves_actor_owner_and_physical_source_guards(catalog, change):
     else:
         with sqlite3.connect(writer.target) as db:
             db.execute(
-                "UPDATE etl_database_generation SET generation_id='changed'"
+                "UPDATE elt_database_generation SET generation_id='changed'"
                 if change == "epoch"
                 else "CREATE TABLE unexpected(value TEXT)"
             )

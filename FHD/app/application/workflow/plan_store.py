@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 CATALOG_OPERATION_PREFIX = "catalog-price-operation-v1:"
 CATALOG_HEAD_PREFIX = "catalog-price-active-v1:"
 CATALOG_RECEIPT_PREFIX = "catalog-price-receipt-v1:"
-OWNED_KNOWLEDGE_CONTROL_KEY = "etl-owned-knowledge-v1"
+OWNED_KNOWLEDGE_CONTROL_KEY = "elt-owned-knowledge-v1"
 _RESERVED_PLAN_KEYS = (OWNED_KNOWLEDGE_CONTROL_KEY,)
 _RESERVED_PLAN_PREFIXES = (CATALOG_OPERATION_PREFIX, CATALOG_HEAD_PREFIX, CATALOG_RECEIPT_PREFIX)
 

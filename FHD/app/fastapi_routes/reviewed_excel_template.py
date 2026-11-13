@@ -153,9 +153,9 @@ def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
 
 
 router = APIRouter(route_class=ReviewedExcelRoute)
-_manage = require_permission("etl.template.manage")
-_execute = require_permission("etl.execute")
-_read = require_permission("etl.read")
+_manage = require_permission("elt.template.manage")
+_execute = require_permission("elt.execute")
+_read = require_permission("elt.read")
 _archive_admin = require_permission("admin.manage_users")
 
 
@@ -968,12 +968,12 @@ async def _lookup_market_call(call_id, owner, model_session):
     if not call_id:
         return None
     from app.application.elt.llm_session_provider import (
-        bind_etl_llm_owner,
+        bind_elt_llm_owner,
         current_owner_market_provider,
-        reset_etl_llm_owner,
+        reset_elt_llm_owner,
     )
 
-    token = bind_etl_llm_owner(int(owner))
+    token = bind_elt_llm_owner(int(owner))
     try:
         with bind_model_session(model_session):
             provider = current_owner_market_provider(timeout_seconds=15.0)
@@ -981,7 +981,7 @@ async def _lookup_market_call(call_id, owner, model_session):
             return None
         return await provider.lookup_call(str(call_id))
     finally:
-        reset_etl_llm_owner(token)
+        reset_elt_llm_owner(token)
 
 
 def _settle_failed_step(
@@ -2488,19 +2488,19 @@ def reviewed_excel_intake_preview(
             from app.application.elt.llm_assist import (
                 advise_business_import,
                 audit_intake_calls,
-                etl_llm_enabled,
+                elt_llm_enabled,
             )
 
             original_text = workbook_text(archived)
             from app.application.elt.llm_session_provider import (
-                bind_etl_llm_owner,
-                reset_etl_llm_owner,
+                bind_elt_llm_owner,
+                reset_elt_llm_owner,
             )
 
             # Identity can already see the account model. Bind that same session
             # so these two lanes resolve it; each lane still has its own circuit.
             model_session = require_model_session(request, tenant, owner)
-            owner_token = bind_etl_llm_owner(owner)
+            owner_token = bind_elt_llm_owner(owner)
 
             def record_intake_call(call_id, lane, status):
                 nonlocal old_draft
@@ -2519,7 +2519,7 @@ def reviewed_excel_intake_preview(
                 with bind_model_session(model_session), audit_intake_calls(record_intake_call):
                     model_started = True
                     business_llm = (
-                        advise_business_import(original_text) if etl_llm_enabled() else None
+                        advise_business_import(original_text) if elt_llm_enabled() else None
                     )
                     ai_table = None
                     if (
@@ -2589,7 +2589,7 @@ def reviewed_excel_intake_preview(
                         source_text=original_text,
                     )
             finally:
-                reset_etl_llm_owner(owner_token)
+                reset_elt_llm_owner(owner_token)
             preview_started = True
             business = service.create_preview(
                 db,

@@ -371,7 +371,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   it('受保护目录必须明确选择，纠错保留未标注期间并显示冲突及只读计价单位', async () => {
     const productsApi = (await import('@/api/products')).default
-    const source = { source_id: 'protected-source', epoch: 'epoch-1', protocol: 'etl-owned-mixed-v1' }
+    const source = { source_id: 'protected-source', epoch: 'epoch-1', protocol: 'elt-owned-mixed-v1' }
     catalogApi.list.mockResolvedValue({ success: true, capability: 'catalog_prices_v1', source, data: [{
       id: 77, name: '保护产品', model_number: 'P77', unit: '客户甲', price: '12.00', currency: 'CNY', price_unit: 'kg', revision: 'a'.repeat(64), source,
       history: [
@@ -411,12 +411,12 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
   })
 
   it.each(['cancel', 'close', 'confirm'].flatMap(decision => [false, true].map(preclaim => ({ decision, preclaim }))))('original-operation reconciliation UI requires explicit $decision decision, preclaim=$preclaim', async ({ decision, preclaim }) => {
-    const source = { source_id: 'protected-source', epoch: 'epoch-1', protocol: 'etl-owned-mixed-v1' }
+    const source = { source_id: 'protected-source', epoch: 'epoch-1', protocol: 'elt-owned-mixed-v1' }
     const row = { id: 77, name: '保护产品', model_number: 'P77', unit: '客户甲', price: '12.00', currency: 'CNY', price_unit: 'kg', revision: 'a'.repeat(64), source, history: [] }
     catalogApi.list.mockResolvedValue({ success: true, capability: 'catalog_prices_v1', source, data: [row] })
     catalogApi.submit.mockResolvedValue({ success: true, data: { run_id: 'run-a' } })
     catalogApi.reconcile.mockReset()
-    vi.spyOn(authApi, 'getCurrentUser').mockResolvedValue({ success: true, data: { user: { id: 7 } as never, permissions: ['product.view', 'dataset.read', 'etl.execute', 'product.edit', 'dataset.write', 'etl.template.manage'] } })
+    vi.spyOn(authApi, 'getCurrentUser').mockResolvedValue({ success: true, data: { user: { id: 7 } as never, permissions: ['product.view', 'dataset.read', 'elt.execute', 'product.edit', 'dataset.write', 'elt.template.manage'] } })
     const { wrapper, vm } = await mountComponent()
     const catalog = (vm as unknown as { catalog: UnwrapRef<ReturnType<typeof useAssistantCatalogPrices>> }).catalog
     await wrapper.find('.assistant-float-toggle').trigger('click')

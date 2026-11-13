@@ -13,7 +13,7 @@ from sqlalchemy import text
 from app.application import label_job_service as jobs
 from app.db.init_db import init_template_tables_for_engine
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.test_application.test_etl_rollback_compare_swap import store as store
+from tests.test_application.test_elt_rollback_compare_swap import store as store
 from tests.test_application.test_label_jobs import TEMPLATE
 
 

@@ -20,7 +20,7 @@ from app.application.agent_orchestrator.artifact_files import (
 )
 from app.application.elt.service import get_elt_service
 from app.application.office_parse_app_service import EMPLOYEE_BY_SUFFIX
-from app.application.shipment_excel_etl_security import open_etl_input_file, resolve_etl_path
+from app.application.shipment_excel_elt_security import open_elt_input_file, resolve_elt_path
 from app.db.models.elt import EltUpload
 from app.db.session import get_db
 from app.domain.context.session_excel_context import excel_analysis_from_runtime
@@ -134,7 +134,7 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
                 raise PermissionError("文件不属于当前账号或当前任务")
             upload = get_elt_service()._owned_upload(db, upload_id, actor.id)
             suffix = Path(upload.file_name).suffix.lower()
-            with open_etl_input_file(upload.storage_path, owner_user_id=actor.id) as source:
+            with open_elt_input_file(upload.storage_path, owner_user_id=actor.id) as source:
                 content = source.read(upload.size_bytes + 1)
             if (
                 len(content) != upload.size_bytes
@@ -177,7 +177,7 @@ def export_workflow_spreadsheet(
         if result.get("success") is True:
             data = result["data"]
             path = Path(data["file_path"])
-            with open_etl_input_file(path, workspace_root=directory) as source:
+            with open_elt_input_file(path, workspace_root=directory) as source:
                 receipt = store_spreadsheet(run_id, source.read(), name=path.name)
             result["artifacts"] = [receipt]
             data["file_path"] = receipt["uri"]
@@ -207,11 +207,11 @@ def employee_output_receipts(
     from app.mod_sdk.employee_tool_registry import office_output_paths
 
     paths = {
-        resolve_etl_path(raw, workspace_root=workspace_root)
+        resolve_elt_path(raw, workspace_root=workspace_root)
         for raw in office_output_paths(employee_id, result)
     }
     for path in paths:
-        with open_etl_input_file(path, workspace_root=workspace_root) as source:
+        with open_elt_input_file(path, workspace_root=workspace_root) as source:
             if len(paths) != 1:
                 continue
             result["file_path"] = str(path)

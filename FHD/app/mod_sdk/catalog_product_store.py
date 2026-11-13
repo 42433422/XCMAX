@@ -82,7 +82,7 @@ def receipt_payload(db, key):
     payload = envelope["payload"]
     if not hmac.compare_digest(envelope["proof"], proof(payload)):
         raise ValueError("original catalog receipt proof differs")
-    if payload["binding"] != db.info.get("etl_owned_source"):
+    if payload["binding"] != db.info.get("elt_owned_source"):
         raise ValueError("original catalog receipt source differs")
     return payload
 
@@ -139,7 +139,7 @@ def state(db, product_id, tenant):
         "history": [image(row) for row in history],
         "dimension": image(dimension),
     }
-    revision = canonical_hash({"source": db.info["etl_owned_source"], "state": raw})
+    revision = canonical_hash({"source": db.info["elt_owned_source"], "state": raw})
     active = {row.source_key for row in effective}
     view = {
         "id": product.id,
@@ -150,7 +150,7 @@ def state(db, product_id, tenant):
         "currency": dimension.currency,
         "price_unit": dimension.price_unit,
         "revision": revision,
-        "source": source_view(db.info["etl_owned_source"]),
+        "source": source_view(db.info["elt_owned_source"]),
         "history": [
             {
                 "source_key": row.source_key,
@@ -259,7 +259,7 @@ def reviewed_params(db, tenant, product_id, body):
     }
 
 
-def factory_for(principal, *, purpose=CatalogPurpose.ETL, lock_timeout=0):
+def factory_for(principal, *, purpose=CatalogPurpose.ELT, lock_timeout=0):
     from app.application.agent_orchestrator.catalog_product_edit import scope
 
     scope(principal, writing=purpose is not CatalogPurpose.READ)
@@ -524,7 +524,7 @@ def verify_operation(principal, operation_id, *, release=False):
     run, claim, status = original(principal, operation_id)
     factory = factory_for(
         principal,
-        purpose=CatalogPurpose.ETL if release else CatalogPurpose.READ,
+        purpose=CatalogPurpose.ELT if release else CatalogPurpose.READ,
         lock_timeout=5 if release else 0,
     )
     try:

@@ -272,11 +272,11 @@ def _registered_router_excel_import(
         if not file_path and (not isinstance(notes, list)):
             return {"success": False, "message": "缺少 file_path 或 notes"}
         try:
-            from app.application.shipment_excel_etl_app_service import (
-                get_shipment_excel_etl_app_service,
+            from app.application.shipment_excel_elt_app_service import (
+                get_shipment_excel_elt_app_service,
             )
 
-            return get_shipment_excel_etl_app_service().execute(
+            return get_shipment_excel_elt_app_service().execute(
                 file_path or "",
                 import_products=bool(params.get("import_products", True)),
                 import_shipments=bool(params.get("import_shipments", True)),
@@ -290,11 +290,11 @@ def _registered_router_excel_import(
         if not file_path:
             return {"success": False, "message": "缺少 file_path"}
         try:
-            from app.application.shipment_excel_etl_app_service import (
-                get_shipment_excel_etl_app_service,
+            from app.application.shipment_excel_elt_app_service import (
+                get_shipment_excel_elt_app_service,
             )
 
-            return get_shipment_excel_etl_app_service().preview(file_path)
+            return get_shipment_excel_elt_app_service().preview(file_path)
         except RECOVERABLE_ERRORS as err:
             return {"success": False, "message": str(err)}
     if action == "execute_import":
@@ -310,11 +310,11 @@ def _registered_router_excel_import(
             return {"success": False, "message": "未找到待处理的导入数据或已过期"}
         if str(import_data.get("kind") or "") == "shipment_delivery_etl":
             try:
-                from app.application.shipment_excel_etl_app_service import (
-                    get_shipment_excel_etl_app_service,
+                from app.application.shipment_excel_elt_app_service import (
+                    get_shipment_excel_elt_app_service,
                 )
 
-                result = get_shipment_excel_etl_app_service().execute(
+                result = get_shipment_excel_elt_app_service().execute(
                     str(import_data.get("file_path") or ""),
                     notes=import_data.get("notes")
                     if isinstance(import_data.get("notes"), list)

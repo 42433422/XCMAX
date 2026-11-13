@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.application.shipment_excel_etl_security import ShipmentEtlPathError, resolve_etl_path
+from app.application.shipment_excel_elt_security import ShipmentEltPathError, resolve_elt_path
 from app.domain.employee.perception_spec import (
     PERCEPTION_AUDIO,
     PERCEPTION_DOCUMENT,
@@ -63,12 +63,12 @@ class PerceptionPipeline:
         if requested_path:
             try:
                 file_path = str(
-                    resolve_etl_path(
+                    resolve_elt_path(
                         requested_path,
                         workspace_root=str(payload.get("workspace_root") or "") or None,
                     )
                 )
-            except ShipmentEtlPathError:
+            except ShipmentEltPathError:
                 logger.warning("employee perception rejected path outside workspace")
                 path_rejected = True
         task_hint = str(

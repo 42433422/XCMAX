@@ -93,7 +93,7 @@ class OwnedKnowledge:
     """Use existing source/session authority; one pending effect blocks unrelated use."""
 
     def __init__(self, factory):
-        if factory.binding.get("protocol") != "etl-owned-mixed-v1":
+        if factory.binding.get("protocol") != "elt-owned-mixed-v1":
             raise StoreIdentityError("mixed bundle authority required")
         self.factory = factory
         self.path = knowledge_path(factory.target)

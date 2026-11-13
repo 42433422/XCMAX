@@ -10,7 +10,7 @@ import pytest
 from app.application.elt import auto_ingest_service as ais
 from app.application.elt import receipt_poll_budget as budget
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.test_application.test_etl_auto_ingest_service import ledger_root as ledger_root
+from tests.test_application.test_elt_auto_ingest_service import ledger_root as ledger_root
 
 
 def test_parallel_admission_caps_global_and_tenant():

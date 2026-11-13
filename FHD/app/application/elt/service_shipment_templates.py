@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltError
 from app.application.elt.service_support import (
-    ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
+    ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
     dump_json,
     load_json,
     new_id,
@@ -90,7 +90,7 @@ def shipment_template_candidate(
     layout is still an explicit user action, but hiding this result until the
     save button is pressed made it look as if no template had been found at
     all.  Keep the candidate metadata-only: it never exposes a path or creates
-    an ``etl_templates`` row.
+    an ``elt_templates`` row.
     """
 
     region = _selected_shipment_region(source_features, source_region_id)
@@ -311,7 +311,7 @@ class ShipmentTemplateServiceMixin:
         The generic ``templates`` table intentionally has no owner column.  It
         is therefore not a safe registry for ETL layouts, which are explicitly
         personal.  This method keeps both the metadata and file reference in
-        ``etl_templates``/``etl_template_versions`` where tenant + owner are
+        ``elt_templates``/``elt_template_versions`` where tenant + owner are
         mandatory, and creates a new immutable version when the same personal
         layout is saved again.
         """
@@ -330,7 +330,7 @@ class ShipmentTemplateServiceMixin:
             same_name
             if same_name is not None
             and same_name.target_type == "shipment_records"
-            and same_name.description == ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION
+            and same_name.description == ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION
             else None
         )
         template_name = requested_name
@@ -348,7 +348,7 @@ class ShipmentTemplateServiceMixin:
                 name=template_name,
                 target_type="shipment_records",
                 current_version=1,
-                description=ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
+                description=ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
             )
             version_number = 1
             db.add(template)
@@ -380,7 +380,7 @@ class ShipmentTemplateServiceMixin:
             match_keys_json=dump_json([]),
             allowed_update_fields_json=dump_json([]),
             action_rules_json=dump_json(
-                {"kind": "shipment_document_layout", "source": "etl_shipment_template"}
+                {"kind": "shipment_document_layout", "source": "elt_shipment_template"}
             ),
         )
         db.add(version)

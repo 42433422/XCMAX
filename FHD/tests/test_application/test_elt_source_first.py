@@ -14,11 +14,11 @@ from app.application.elt.service_support import dump_json, load_json
 from app.db.models import PurchaseUnit
 from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.test_application.test_etl_preview_task_boundaries import (
+from tests.test_application.test_elt_preview_task_boundaries import (
     create_preview,
     snapshot,
 )
-from tests.test_application.test_etl_preview_task_boundaries import (
+from tests.test_application.test_elt_preview_task_boundaries import (
     preview_store as preview_store,
 )
 
@@ -35,7 +35,7 @@ def test_complete_raw_rows_are_visible_before_mapping_and_transformation(
     preview_store, monkeypatch
 ):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     suggest = store.service._suggest_mappings
     transform = service_draft.apply_mapping
     observed = []
@@ -74,7 +74,7 @@ def test_complete_raw_rows_are_visible_before_mapping_and_transformation(
 
 def test_mapping_failure_retries_from_raw_without_the_uploaded_file(preview_store, monkeypatch):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     suggest = store.service._suggest_mappings
 
     def broken_mapping(*_args, **_kwargs):
@@ -115,7 +115,7 @@ def test_mapping_failure_retries_from_raw_without_the_uploaded_file(preview_stor
 
 def test_new_transform_preserves_raw_snapshot_and_requires_confirmation(preview_store, monkeypatch):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     run_id = create_preview(store)
     wait_for_job(store)
     with store.factory() as db:
@@ -156,7 +156,7 @@ def test_new_transform_preserves_raw_snapshot_and_requires_confirmation(preview_
 
 def test_structured_execution_uses_loaded_rows_after_upload_expiry(preview_store, monkeypatch):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     run_id = create_preview(store)
     wait_for_job(store)
     with store.factory() as db:
@@ -189,7 +189,7 @@ def test_structured_execution_uses_loaded_rows_after_upload_expiry(preview_store
 @pytest.mark.parametrize("damage", ["source", "missing_row", "profile"])
 def test_corrupt_source_snapshot_is_rejected(preview_store, monkeypatch, damage):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     run_id = create_preview(store)
     wait_for_job(store)
     with store.factory() as db:
@@ -214,7 +214,7 @@ def test_failed_raw_load_never_commits_partial_rows_or_completion_marker(
     preview_store, monkeypatch
 ):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     duplicate = ParsedRow("same-sheet", 1, {"客户名称": "raw only"})
     monkeypatch.setattr(
         service_preview,
@@ -235,7 +235,7 @@ def test_failed_raw_load_never_commits_partial_rows_or_completion_marker(
 
 def test_empty_source_has_a_completed_reusable_snapshot(preview_store, monkeypatch):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     monkeypatch.setattr(
         service_preview,
         "parse_file",
@@ -258,7 +258,7 @@ def test_loaded_source_remains_private_to_tenant_and_owner(
     preview_store, monkeypatch, tenant, owner
 ):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     run_id = create_preview(store)
     wait_for_job(store)
     with tenant_scope(tenant), store.factory() as db:
@@ -271,7 +271,7 @@ def test_preview_ready_and_owner_release_are_published_in_one_transaction(
     preview_store, monkeypatch
 ):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     finish = service_preview_worker.finish_operation
     observed = []
 

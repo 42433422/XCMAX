@@ -23,8 +23,8 @@ from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.path_io import path_utils
-from tests.test_application.test_etl_auto_ingest_service import rag_service as rag_service
-from tests.test_application.test_etl_preview_task_boundaries import ObservedExecutor
+from tests.test_application.test_elt_auto_ingest_service import rag_service as rag_service
+from tests.test_application.test_elt_preview_task_boundaries import ObservedExecutor
 from tests.test_application.test_reviewed_excel_template import (
     account_session_client as account_session_client,
 )
@@ -64,7 +64,7 @@ def intake_store(review_store, rag_service, monkeypatch, account_session_client)
         "app.application.reviewed_excel_template._template_llm_complete",
         candidate_model,
     )
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
 
     def old_parser_must_not_run(*_args, **_kwargs):
         raise AssertionError("旧解析器不能参与所选候选的入库")
@@ -660,11 +660,11 @@ def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch
     seen = {}
 
     def business(text):
-        from app.application.elt.llm_session_provider import current_etl_llm_owner
+        from app.application.elt.llm_session_provider import current_elt_llm_owner
         from app.application.elt_login_authorization import current_model_session_id
 
         seen["business"] = text
-        seen["owner"] = current_etl_llm_owner()
+        seen["owner"] = current_elt_llm_owner()
         seen["session"] = current_model_session_id(7)
         return LlmAssistResult(
             used_llm=True,
@@ -709,7 +709,7 @@ def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch
             },
         ),
     )
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     monkeypatch.setattr("app.application.elt.llm_assist.advise_business_import", business)
     monkeypatch.setattr("app.application.elt.llm_assist.advise_knowledge_import", knowledge)
     monkeypatch.setattr(candidate_table, "read_delivery_note_business", delivery)
@@ -829,7 +829,7 @@ def test_import_lanes_do_not_share_a_circuit(monkeypatch):
 
     from app.application.elt import llm_assist
 
-    with patch("app.application.elt.llm_session_provider.current_etl_llm_owner", return_value=7):
+    with patch("app.application.elt.llm_session_provider.current_elt_llm_owner", return_value=7):
         assert llm_assist._circuit_key() == "owner:7"
         assert llm_assist._circuit_key("database") == "owner:7:database"
         assert llm_assist._circuit_key("knowledge") == "owner:7:knowledge"
@@ -958,7 +958,7 @@ def test_same_archive_with_different_model_summaries_deduplicates_by_source(
 ):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     summaries = iter(["合成摘要甲", "合成摘要乙", "合成摘要丙"])
     monkeypatch.setattr(
         "app.application.elt.llm_assist.advise_knowledge_import",
@@ -1045,8 +1045,8 @@ def test_knowledge_line_calls_its_own_model(intake_store, monkeypatch, tmp_path)
             used_llm=True, data={"title": "送货单", "content": "演示客户乙 螺母 5"}
         )
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
-    monkeypatch.setattr("app.application.elt.llm_assist.etl_llm_enabled", lambda: True)
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
+    monkeypatch.setattr("app.application.elt.llm_assist.elt_llm_enabled", lambda: True)
     monkeypatch.setattr("app.application.elt.llm_assist.advise_knowledge_import", knowledge)
     with tenant_scope(1):
         plan = intake_store.intake.knowledge_plan(
@@ -1086,8 +1086,8 @@ def test_knowledge_plan_uses_archived_text_when_the_model_fails(
     def knowledge(_text):
         return LlmAssistResult(used_llm=True, degraded=True, degradation_code="ELT_LLM_UNAVAILABLE")
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
-    monkeypatch.setattr("app.application.elt.llm_assist.etl_llm_enabled", lambda: True)
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
+    monkeypatch.setattr("app.application.elt.llm_assist.elt_llm_enabled", lambda: True)
     monkeypatch.setattr("app.application.elt.llm_assist.advise_knowledge_import", knowledge)
     with tenant_scope(1):
         plan = intake_store.intake.knowledge_plan(
@@ -1147,7 +1147,7 @@ def test_intake_releases_upload_writer_before_reading_archived_workbook(intake_s
         # A different preview can write while this worker prepares model input.
         # A flushed but uncommitted upload would hold SQLite's only writer.
         with store.factory() as db:
-            db.execute(text("UPDATE etl_uploads SET file_name = file_name WHERE owner_user_id = 7"))
+            db.execute(text("UPDATE elt_uploads SET file_name = file_name WHERE owner_user_id = 7"))
             db.commit()
         writes.append(True)
         return original(body)
@@ -1197,8 +1197,8 @@ def test_intake_persists_model_request_before_call(intake_store, monkeypatch):
     store = intake_store
     data = review(store)
     seen = []
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
-    monkeypatch.setattr(llm_assist, "etl_llm_enabled", lambda: True)
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
+    monkeypatch.setattr(llm_assist, "elt_llm_enabled", lambda: True)
     monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, None, object()))
     monkeypatch.setattr(
         llm_assist, "advise_knowledge_import", lambda *_: llm_assist.LlmAssistResult()
@@ -1477,7 +1477,7 @@ def test_saved_continuation_serializes_classification_version(intake_store, monk
         with sqlite3.connect(store.engine.url.database, timeout=0) as other:
             try:
                 other.execute(
-                    "UPDATE etl_runs SET draft_json = ? WHERE id = ?",
+                    "UPDATE elt_runs SET draft_json = ? WHERE id = ?",
                     (json.dumps(changed), classification_id),
                 )
             except sqlite3.OperationalError as exc:

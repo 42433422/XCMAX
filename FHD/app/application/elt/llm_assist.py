@@ -45,10 +45,10 @@ _REGION_ROLES = frozenset(
 _ROW_ACTIONS = frozenset({"new", "update", "skip"})
 _SAFE_MAPPING_TRANSFORMS = frozenset({"trim", "number", "date"})
 _BUSINESS_DEADLINE: contextvars.ContextVar[float | None] = contextvars.ContextVar(
-    "etl_business_deadline", default=None
+    "elt_business_deadline", default=None
 )
 _CALL_AUDITOR: contextvars.ContextVar[Any | None] = contextvars.ContextVar(
-    "etl_intake_call_auditor", default=None
+    "elt_intake_call_auditor", default=None
 )
 
 
@@ -67,10 +67,10 @@ def audit_intake_calls(callback):
 # time).  Keep this process-local on purpose: account credentials and quota
 # state are not ETL business data and are never persisted with a run.
 LlmAssistResult = _runtime.LlmAssistResult
-clear_etl_llm_circuit = _runtime.clear_etl_llm_circuit
-etl_llm_mode = _runtime.etl_llm_mode
-etl_llm_timeout_seconds = _runtime.etl_llm_timeout_seconds
-etl_row_advice_limit = _runtime.etl_row_advice_limit
+clear_elt_llm_circuit = _runtime.clear_elt_llm_circuit
+elt_llm_mode = _runtime.elt_llm_mode
+elt_llm_timeout_seconds = _runtime.elt_llm_timeout_seconds
+elt_row_advice_limit = _runtime.elt_row_advice_limit
 _circuit_cooldown_seconds = _runtime.circuit_cooldown_seconds
 _circuit_degradation = _runtime.circuit_degradation
 _circuit_key = _runtime.circuit_key
@@ -113,7 +113,7 @@ def _bounded_structured_completion(
                 # deterministic without it, so never retry advisory output.
                 max_repairs=max_repairs,
                 timeout_seconds=timeout_seconds,
-                profile="etl",
+                profile="elt",
                 conversation_service=conversation_service,
                 provider=provider,
             )
@@ -123,7 +123,7 @@ def _bounded_structured_completion(
     worker = threading.Thread(
         target=contextvars.copy_context().run,
         args=(invoke,),
-        name="etl-llm-assist",
+        name="elt-llm-assist",
         daemon=True,
     )
     worker.start()
@@ -146,27 +146,27 @@ def _active_software_llm(
 
         market_provider = current_owner_market_provider(
             timeout_seconds=(
-                etl_llm_timeout_seconds() if timeout_seconds is None else timeout_seconds
+                elt_llm_timeout_seconds() if timeout_seconds is None else timeout_seconds
             )
         )
         if market_provider is not None:
             return True, None, market_provider
         from app.infrastructure.llm.providers.registry import get_active_provider
 
-        if get_active_provider(profile="etl") is not None:
+        if get_active_provider(profile="elt") is not None:
             return True, None, None
         from app.domain.shared_services.ai_conversation_service import get_ai_conversation_service
 
         service = get_ai_conversation_service()
-        if get_active_provider(conversation_service=service, profile="etl") is not None:
+        if get_active_provider(conversation_service=service, profile="elt") is not None:
             return True, service, None
         return False, None, None
     except RECOVERABLE_ERRORS:
         return False, None, None
 
 
-def etl_llm_enabled() -> bool:
-    mode = etl_llm_mode()
+def elt_llm_enabled() -> bool:
+    mode = elt_llm_mode()
     if mode == "off":
         return False
     configured, _service, _provider = _active_software_llm()
@@ -182,7 +182,7 @@ def _complete(
     max_repairs: int = 0,
     timeout_seconds: float | None = None,
 ) -> LlmAssistResult:
-    mode = etl_llm_mode()
+    mode = elt_llm_mode()
     if mode == "off":
         return LlmAssistResult()
     circuit_key = _circuit_key(lane)
@@ -198,7 +198,7 @@ def _complete(
     budget = (
         timeout_seconds
         if timeout_seconds is not None
-        else etl_llm_timeout_seconds() * (1 + max(0, max_repairs))
+        else elt_llm_timeout_seconds() * (1 + max(0, max_repairs))
     )
     business_deadline = _BUSINESS_DEADLINE.get()
     if business_deadline is not None:
@@ -293,10 +293,10 @@ def _complete(
                     lock.release()
 
                 threading.Thread(
-                    target=release_after_worker, name="etl-llm-lock-release", daemon=True
+                    target=release_after_worker, name="elt-llm-lock-release", daemon=True
                 ).start()
                 release_on_exit = False
-            _runtime.log_etl_llm_degradation(logger, code=degradation_code, lane=lane, exc=exc)
+            _runtime.log_elt_llm_degradation(logger, code=degradation_code, lane=lane, exc=exc)
             return LlmAssistResult(
                 used_llm=called,
                 degraded=True,
@@ -457,7 +457,7 @@ def advise_field_mappings(
             "role": "user",
             "content": json.dumps(
                 {
-                    "task": "suggest_etl_field_mappings",
+                    "task": "suggest_elt_field_mappings",
                     "headers": [str(item)[:160] for item in headers[:100]],
                     "samples": {
                         str(key)[:160]: [str(value)[:160] for value in values[:3]]
@@ -536,7 +536,7 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
             "before": item.get("before") or {},
             "after": item.get("after") or {},
         }
-        for index, item in enumerate(payloads[: etl_row_advice_limit()])
+        for index, item in enumerate(payloads[: elt_row_advice_limit()])
     ]
     messages = [
         {
@@ -551,7 +551,7 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
             "role": "user",
             "content": json.dumps(
                 {
-                    "task": "advise_etl_row_decisions",
+                    "task": "advise_elt_row_decisions",
                     "rules": [
                         "Prefer skip for duplicates",
                         "Update requires a visible before/after difference",
@@ -754,7 +754,7 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
         # Repairs share this unit's budget; earlier units must not consume the
         # entire deadline before later parts of the same workbook are sent.
         deadline_token = _BUSINESS_DEADLINE.set(
-            time.monotonic() + etl_llm_timeout_seconds(full_sheet=True)
+            time.monotonic() + elt_llm_timeout_seconds(full_sheet=True)
         )
         try:
             result = _advise_business_unit(unit)
@@ -806,7 +806,7 @@ def _advise_business_unit(source: str) -> LlmAssistResult:
         # A schema repair would share this call's budget and could be cut off after
         # sending; an invalid answer is a definite failure instead.
         "max_repairs": 0,
-        "timeout_seconds": etl_llm_timeout_seconds(full_sheet=True),
+        "timeout_seconds": elt_llm_timeout_seconds(full_sheet=True),
     }
     result = _complete(messages, **call)
     rows = _business_rows(result.data, cited) if result.used_llm and not result.degraded else []
@@ -880,7 +880,7 @@ def advise_knowledge_import(document_text: str) -> LlmAssistResult:
         },
         {"role": "user", "content": source},
     ]
-    deadline = time.monotonic() + etl_llm_timeout_seconds(full_sheet=True)
+    deadline = time.monotonic() + elt_llm_timeout_seconds(full_sheet=True)
     result = _complete(
         messages,
         schema=_KNOWLEDGE_IMPORT_SCHEMA,
@@ -925,9 +925,9 @@ __all__ = [
     "advise_knowledge_import",
     "advise_row_decisions",
     "advise_workbook_regions",
-    "clear_etl_llm_circuit",
-    "etl_llm_enabled",
-    "etl_llm_mode",
-    "etl_llm_timeout_seconds",
-    "etl_row_advice_limit",
+    "clear_elt_llm_circuit",
+    "elt_llm_enabled",
+    "elt_llm_mode",
+    "elt_llm_timeout_seconds",
+    "elt_row_advice_limit",
 ]

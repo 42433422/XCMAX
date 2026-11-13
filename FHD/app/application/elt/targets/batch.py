@@ -343,10 +343,10 @@ class ExportAdapter(TargetAdapter):
     def execute_batch(
         self, rows: Iterable[dict[str, Any]], context: dict[str, Any]
     ) -> dict[str, Any]:
-        root = Path(get_app_data_dir()).resolve() / "etl" / "exports"
+        root = Path(get_app_data_dir()).resolve() / "elt" / "exports"
         root.mkdir(parents=True, exist_ok=True)
         suffix = ".csv" if self.type == "export_csv" else ".xlsx"
-        path = root / f"etl-{context['run_id']}{suffix}"
+        path = root / f"elt-{context['run_id']}{suffix}"
         iterator = iter(rows)
         first = next(iterator, None)
         headers = list(context.get("output_headers") or (list(first) if first else []))

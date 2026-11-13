@@ -616,7 +616,7 @@ def parse_file(
             "兼容预设仅适用于 XLSX/XLSM 文件；OCR 文件请使用自动识别",
         )
 
-    from app.application.shipment_excel_etl_ocr import ocr_source_to_workbook
+    from app.application.shipment_excel_elt_ocr import ocr_source_to_workbook
 
     result = ocr_source_to_workbook(source)
     if not result.get("success"):

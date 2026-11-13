@@ -82,7 +82,7 @@ class UploadServiceMixin:
         upload_id = new_id()
         root = (
             Path(get_app_data_dir()).resolve()
-            / "etl"
+            / "elt"
             / "uploads"
             / str(tenant_id)
             / str(owner_user_id)

@@ -166,7 +166,7 @@ def parse_delivery_note_with_compat_profile(
     }:
         return None
     try:
-        from app.application.shipment_excel_etl_app_service import (
+        from app.application.shipment_excel_elt_app_service import (
             preview_shipment_excel_etl,
         )
 

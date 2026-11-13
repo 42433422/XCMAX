@@ -42,8 +42,8 @@ class LlmAssistResult:
         return result
 
 
-def etl_llm_mode() -> str:
-    raw = str(os.environ.get("FHD_ETL_LLM") or "auto").strip().lower()
+def elt_llm_mode() -> str:
+    raw = str(os.environ.get("FHD_ELT_LLM") or "auto").strip().lower()
     if raw in {"0", "false", "no", "off", "disabled"}:
         return "off"
     if raw in {"1", "true", "yes", "on", "enabled"}:
@@ -54,19 +54,19 @@ def etl_llm_mode() -> str:
 _ETL_LLM_TIMEOUT_CAP = 180.0
 
 
-def etl_llm_timeout_seconds(*, full_sheet: bool = False) -> float:
+def elt_llm_timeout_seconds(*, full_sheet: bool = False) -> float:
     """Probe calls stay short. A full archived sheet uses the template-analysis ceiling.
 
-    ``FHD_ETL_LLM_TIMEOUT`` defaults to 6 seconds and cannot exceed 180.
-    ``FHD_ETL_IMPORT_LLM_TIMEOUT`` bounds each database unit or knowledge import,
+    ``FHD_ELT_LLM_TIMEOUT`` defaults to 6 seconds and cannot exceed 180.
+    ``FHD_ELT_IMPORT_LLM_TIMEOUT`` bounds each database unit or knowledge import,
     default 180, same ceiling. The old 12-second clamp cut a real delivery
     note off while the remote model was still writing rows.
     """
     if full_sheet:
-        raw = str(os.environ.get("FHD_ETL_IMPORT_LLM_TIMEOUT") or "180").strip()
+        raw = str(os.environ.get("FHD_ELT_IMPORT_LLM_TIMEOUT") or "180").strip()
         fallback = _ETL_LLM_TIMEOUT_CAP
     else:
-        raw = str(os.environ.get("FHD_ETL_LLM_TIMEOUT") or "6").strip()
+        raw = str(os.environ.get("FHD_ELT_LLM_TIMEOUT") or "6").strip()
         fallback = 6.0
     try:
         return min(_ETL_LLM_TIMEOUT_CAP, max(1.0, float(raw)))
@@ -74,8 +74,8 @@ def etl_llm_timeout_seconds(*, full_sheet: bool = False) -> float:
         return fallback
 
 
-def etl_row_advice_limit() -> int:
-    raw = str(os.environ.get("FHD_ETL_LLM_ROW_ADVICE_LIMIT") or "20").strip()
+def elt_row_advice_limit() -> int:
+    raw = str(os.environ.get("FHD_ELT_LLM_ROW_ADVICE_LIMIT") or "20").strip()
     try:
         return min(100, max(0, int(raw)))
     except ValueError:
@@ -95,7 +95,7 @@ def degradation_code(exc: BaseException) -> str:
     return "ELT_LLM_UNAVAILABLE"
 
 
-def log_etl_llm_degradation(logger, *, code: str, lane: str, exc: BaseException) -> None:
+def log_elt_llm_degradation(logger, *, code: str, lane: str, exc: BaseException) -> None:
     """Log the failure class without writing workbook content to application logs."""
     logger.info(
         "general etl llm assist degraded (%s lane=%s): %s response_received=%s",
@@ -109,9 +109,9 @@ def log_etl_llm_degradation(logger, *, code: str, lane: str, exc: BaseException)
 def circuit_key(lane: str = "") -> str:
     """Template, database, and knowledge calls do not share one outage."""
     try:
-        from app.application.elt.llm_session_provider import current_etl_llm_owner
+        from app.application.elt.llm_session_provider import current_elt_llm_owner
 
-        owner_user_id = current_etl_llm_owner()
+        owner_user_id = current_elt_llm_owner()
     except RECOVERABLE_ERRORS:
         owner_user_id = None
     base = f"owner:{owner_user_id}" if owner_user_id is not None else "process"
@@ -121,9 +121,9 @@ def circuit_key(lane: str = "") -> str:
 
 def circuit_cooldown_seconds(code: str) -> float:
     env_name = (
-        "FHD_ETL_LLM_QUOTA_COOLDOWN_SECONDS"
+        "FHD_ELT_LLM_QUOTA_COOLDOWN_SECONDS"
         if code == "ELT_LLM_QUOTA_EXHAUSTED"
-        else "FHD_ETL_LLM_FAILURE_COOLDOWN_SECONDS"
+        else "FHD_ELT_LLM_FAILURE_COOLDOWN_SECONDS"
     )
     default = 300.0 if code == "ELT_LLM_QUOTA_EXHAUSTED" else 30.0
     raw = str(os.environ.get(env_name) or default).strip()
@@ -166,6 +166,6 @@ def owner_call_lock(key: str) -> threading.BoundedSemaphore:
         return lock
 
 
-def clear_etl_llm_circuit() -> None:
+def clear_elt_llm_circuit() -> None:
     with _CIRCUIT_LOCK:
         _CIRCUIT_OPEN_UNTIL.clear()

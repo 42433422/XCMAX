@@ -1057,7 +1057,7 @@ class TestEnsureSqliteRbacBootstrapCreatesTables:
         assert "permissions" in tables
         assert "roles" in tables
 
-    def test_seeds_default_user_with_etl_permissions(self):
+    def test_seeds_default_user_with_elt_permissions(self):
         from app.db.init_db import ensure_sqlite_rbac_bootstrap
 
         engine = create_engine("sqlite:///:memory:")
@@ -1074,7 +1074,7 @@ class TestEnsureSqliteRbacBootstrapCreatesTables:
                     )
                 ).scalars()
             )
-        assert {"etl.read", "etl.template.manage", "etl.execute"}.issubset(codes)
+        assert {"elt.read", "elt.template.manage", "elt.execute"}.issubset(codes)
 
     def test_swallow_errors_true(self):
         from app.db.init_db import ensure_sqlite_rbac_bootstrap

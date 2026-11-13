@@ -267,7 +267,7 @@ def persist_attendance_rows(
     from app.application.attendance_import_app_service import _ensure_schema
     from app.application.elt.attendance_rollback_scope import source_snapshot
 
-    fault = os.environ.get("FHD_ETL_ATTENDANCE_FAULT", "") if fault is None else fault
+    fault = os.environ.get("FHD_ELT_ATTENDANCE_FAULT", "") if fault is None else fault
     db_path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     skipped = 0
@@ -384,9 +384,9 @@ def persist_attendance_rows(
 def _write_output(run_id: str, rows: list[dict[str, Any]]) -> Path:
     from app.utils.path_io.path_utils import get_app_data_dir
 
-    root = Path(get_app_data_dir()).resolve() / "etl" / "exports"
+    root = Path(get_app_data_dir()).resolve() / "elt" / "exports"
     root.mkdir(parents=True, exist_ok=True)
-    path = root / f"etl-{run_id}.xlsx"
+    path = root / f"elt-{run_id}.xlsx"
     book = Workbook()
     sheet = book.worksheets[0]
     sheet.title = "考勤结果"

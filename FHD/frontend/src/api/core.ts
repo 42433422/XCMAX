@@ -32,6 +32,22 @@ function maybeNotifyLanGate(status: number, errorData: unknown): void {
   )
 }
 
+const API_REACHABLE_EVENT = 'xcagi:api-reachable'
+const API_REACHABLE_NOTIFY_INTERVAL_MS = 15_000
+let lastApiReachableNotifyAt = 0
+
+/**
+ * 任意接口返回（无论状态码）都证明业务服务可连接，用来纠正侧边栏把一次健康探针失败
+ * 误报成「健康检查未响应」。节流后只在需要时通知，避免每次轮询都触发健康复查。
+ */
+function notifyApiReachable(): void {
+  if (typeof window === 'undefined') return
+  const now = Date.now()
+  if (now - lastApiReachableNotifyAt < API_REACHABLE_NOTIFY_INTERVAL_MS) return
+  lastApiReachableNotifyAt = now
+  window.dispatchEvent(new CustomEvent(API_REACHABLE_EVENT, { detail: { source: 'api' } }))
+}
+
 function buildApiUrl(url: string): string {
   const normalizedUrl = String(url || '')
   if (/^https?:\/\//i.test(normalizedUrl)) {
@@ -301,6 +317,7 @@ async function requestOnce<T = unknown>(
   try {
     const response = await fetch(fullUrl, config)
     assertSameAccount()
+    notifyApiReachable()
     const contentType = response.headers.get('content-type') || ''
 
     if (!response.ok) {

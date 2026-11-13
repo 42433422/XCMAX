@@ -288,7 +288,7 @@ def test_auto_approval_mode_skips_plan_confirmation_and_starts_run():
     assert "owner" not in dispatch.pending
 
 
-def test_import_request_exposes_import_tool_and_directive():
+def test_import_request_exposes_elt_tool_and_hides_direct_import():
     from app.application.workflow.planner_prompt_profile import (
         detect_intents,
         select_rules_for_prompt,
@@ -298,10 +298,14 @@ def test_import_request_exposes_import_tool_and_directive():
     registry = {
         "excel_analysis": {"available": "shared"},
         "import_excel_to_database": {"available": "shared"},
+        "elt_import": {"available": "shared"},
         "generate_office_document": {"available": "shared"},
     }
     assert "document" in detect_intents("导入")
-    assert "import_excel_to_database" in select_tools_for_prompt(registry, "导入")
-    assert any("import_excel_to_database" in rule for rule in select_rules_for_prompt("导入"))
-    assert "import_excel_to_database" not in select_tools_for_prompt(registry, "查询客户")
+    tools = select_tools_for_prompt(registry, "导入")
+    assert "elt_import" in tools
+    assert "import_excel_to_database" not in tools
+    assert any("elt_import.preview" in rule for rule in select_rules_for_prompt("导入"))
+    assert any("elt_import.execute" in rule for rule in select_rules_for_prompt("导入"))
+    assert "elt_import" not in select_tools_for_prompt(registry, "查询客户")
 

@@ -173,7 +173,7 @@ def test_correction_must_reference_unique_backward_active_leaves(kind):
         {"operation_id": "not-a-uuid"},
         {"reason": " "},
         {"kind": "catalog_price_v2"},
-        {"receipt_key": "etl_batch_wrong"},
+        {"receipt_key": "elt_batch_wrong"},
         {"extra": True},
         {"supersedes": "all"},
     ],

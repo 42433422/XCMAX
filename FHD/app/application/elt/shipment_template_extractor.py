@@ -12,10 +12,10 @@ from openpyxl.utils import get_column_letter
 
 from app.application.elt.errors import EltError
 from app.application.elt.parser_structure import clean_cell_text, semantic_key
-from app.application.shipment_excel_etl_security import (
-    open_etl_output_file,
-    resolve_etl_output_path,
-    resolve_etl_path,
+from app.application.shipment_excel_elt_security import (
+    open_elt_output_file,
+    resolve_elt_output_path,
+    resolve_elt_path,
 )
 
 
@@ -160,7 +160,7 @@ def extract_shipment_template(
         regions,
         source_region_id=source_region_id,
     )
-    safe_source = resolve_etl_path(source_path)
+    safe_source = resolve_elt_path(source_path)
     workbook = load_workbook(safe_source, data_only=False, keep_links=False)
     try:
         sheet_name = str(region.get("sheet") or "")
@@ -180,8 +180,8 @@ def extract_shipment_template(
         workbook.close()
     header_row = int(region.get("header_row") or 0) - start_row + 1
     _clear_example_lines(output.active, header_row=header_row, last_col=last_col)
-    destination_path = resolve_etl_output_path(destination)
-    with open_etl_output_file(destination_path) as output_file:
+    destination_path = resolve_elt_output_path(destination)
+    with open_elt_output_file(destination_path) as output_file:
         output.save(output_file)
     output.close()
     return {

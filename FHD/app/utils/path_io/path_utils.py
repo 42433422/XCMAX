@@ -155,7 +155,7 @@ def get_business_archive_dir(*, create: bool = True) -> str:
     - 显式 ``XCAGI_DATA_DIR`` / ``XCAGI_DESKTOP_DATA_DIR`` 时：``{该目录}/business-archive``
 
     故意不用安装目录 / ``sys._MEIPASS``（只读临时解压区），也不再用历史的
-    ``{app_data}/etl/archive``。密钥文件 ``.archive.key`` 与密文同根存放。
+    ``{app_data}/elt/archive``。密钥文件 ``.archive.key`` 与密文同根存放。
     """
     root = os.path.join(get_desktop_state_dir(), "business-archive")
     if create:

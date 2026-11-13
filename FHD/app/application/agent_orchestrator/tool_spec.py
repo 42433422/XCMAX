@@ -144,9 +144,9 @@ def _special_permission(tool_id: str, action: str) -> str:
             return DATASET_RAG_READ_PERMISSION
         return DATASET_RAG_WRITE_PERMISSION
     if tool_id == "template_preview" and action in {"list", "query", "view"}:
-        return "etl.read"
+        return "elt.read"
     if tool_id in {"template_preview", "document_template"}:
-        return "etl.template.manage"
+        return "elt.template.manage"
     if tool_id == "excel_analysis" and action in {"read", "structure", "query", "statistics"}:
         return "tool.excel_analysis.read"
     fixed = PERMISSION_OVERRIDES.get(tool_id)

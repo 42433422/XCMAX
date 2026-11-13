@@ -504,10 +504,10 @@ class ExecutionServiceMixin(RollbackServiceMixin):
     @staticmethod
     def _record_execution_metrics(run: EltRun, started_at: float, status: str) -> None:
         try:
-            from app.utils.metrics import etl_run_duration_seconds, etl_runs_total
+            from app.utils.metrics import elt_run_duration_seconds, elt_runs_total
 
-            etl_runs_total.labels("execute", run.target_type, status).inc()
-            etl_run_duration_seconds.labels("execute", run.target_type).observe(
+            elt_runs_total.labels("execute", run.target_type, status).inc()
+            elt_run_duration_seconds.labels("execute", run.target_type).observe(
                 max(0.0, time.monotonic() - started_at)
             )
         except RECOVERABLE_ERRORS:
@@ -658,9 +658,9 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         db.commit()
         unbind_owner(db)
         try:
-            from app.utils.metrics import etl_retries_total
+            from app.utils.metrics import elt_retries_total
 
-            etl_retries_total.labels(run.target_type).inc()
+            elt_retries_total.labels(run.target_type).inc()
         except RECOVERABLE_ERRORS:
             logger.debug("ETL retry metrics unavailable", exc_info=True)
         if rerun_parse:

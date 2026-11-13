@@ -291,12 +291,12 @@ def _stage_bytes(path: Path, template: dict[str, Any] | None) -> tuple[bytes, st
 def parse_office_file_elt(file_path: str) -> dict[str, Any]:
     """Parse one office file with the docking ELT parser. Worksheets stay optional."""
     from app.application.elt.parsers import parse_file
-    from app.application.elt.target_detection import detect_etl_target
+    from app.application.elt.target_detection import detect_elt_target
 
     path = _resolve_office_path(file_path)
     parse_path, cleanup = _elt_parse_path(path)
     try:
-        detection = detect_etl_target(parse_path)
+        detection = detect_elt_target(parse_path)
         target = _elt_target(detection, parse_path.suffix.lower())
         dataset = parse_file(parse_path, target_type=target)
         try:

@@ -20,13 +20,13 @@ def assert_safe_webhook_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"https", "http"} or not parsed.hostname:
         raise EltError("ELT_WEBHOOK_URL_INVALID", "Webhook URL 必须是有效的 HTTP(S) 地址")
-    if parsed.scheme != "https" and not truthy_env("FHD_ETL_ALLOW_HTTP_WEBHOOK"):
+    if parsed.scheme != "https" and not truthy_env("FHD_ELT_ALLOW_HTTP_WEBHOOK"):
         raise EltError("ELT_WEBHOOK_HTTPS_REQUIRED", "Webhook 默认只允许 HTTPS")
     try:
         addresses = {item[4][0] for item in socket.getaddrinfo(parsed.hostname, parsed.port or 443)}
     except OSError as exc:
         raise EltError("ELT_WEBHOOK_DNS_FAILED", "Webhook 域名无法解析") from exc
-    if not truthy_env("FHD_ETL_ALLOW_PRIVATE_WEBHOOK"):
+    if not truthy_env("FHD_ELT_ALLOW_PRIVATE_WEBHOOK"):
         for address in addresses:
             ip = ipaddress.ip_address(address)
             if (

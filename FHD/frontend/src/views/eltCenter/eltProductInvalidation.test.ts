@@ -6,7 +6,7 @@ import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 import type { EltRun } from '@/api/elt'
 const getProducts = vi.hoisted(() => vi.fn())
 vi.mock('@/api/products', () => ({ default: { getProducts } }))
-const fixture = () => ({ id: 'etl-one', target_type: 'products', status: 'completed', summary: { executed: 1 }, receipt: {}, executed_at: '2026-09-05T12:00:00Z' } as EltRun)
+const fixture = () => ({ id: 'elt-one', target_type: 'products', status: 'completed', summary: { executed: 1 }, receipt: {}, executed_at: '2026-09-05T12:00:00Z' } as EltRun)
 beforeEach(() => {
   setActivePinia(createPinia()); updateProductReadAccountScope({ tenantId: 1, marketUserId: 11 })
   getProducts.mockResolvedValue({ success: true, data: [{ id: 1, price: 88 }] })

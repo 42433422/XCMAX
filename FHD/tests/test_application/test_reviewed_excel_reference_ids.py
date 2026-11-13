@@ -170,7 +170,7 @@ def test_independent_prompt_has_only_source_facts_and_no_program_candidates(monk
 
     from app.application import reviewed_excel_template as template
     from app.application.reviewed_excel_classification import _classify_semantic_batch
-    from tests.fixtures.etl_template.sources.generate import sample
+    from tests.fixtures.elt_template.sources.generate import sample
 
     captured = {}
 
@@ -200,7 +200,7 @@ def test_independent_prompt_has_only_source_facts_and_no_program_candidates(monk
 def test_neutral_batches_do_not_invoke_business_prefilter(monkeypatch):
     from app.application import reviewed_excel_classification as classification
     from app.application.reviewed_excel_template import inspect_workbook
-    from tests.fixtures.etl_template.sources.generate import large_quotation
+    from tests.fixtures.elt_template.sources.generate import large_quotation
 
     monkeypatch.setattr(
         classification,

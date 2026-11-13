@@ -34,8 +34,10 @@ DATASET_RAG_WRITE_PERMISSION = "dataset.write"
 PERMISSION_OVERRIDES: dict[str, str] = {
     "memory_v2": "memory_v2.write",
     "client_product_issue": "",
-    # Excel 导入属于数据对接（ELT）执行，沿用 etl.execute，而不是发明新的权限码。
-    "import_excel_to_database": "etl.execute",
+    # Excel 导入属于数据对接（ELT）执行，沿用 elt.execute，而不是发明新的权限码。
+    "import_excel_to_database": "elt.execute",
+    # ELT 预演/执行同样归入数据对接权限。
+    "elt_import": "elt.execute",
 }
 
 # --- aiopen risk ----------------------------------------------------------

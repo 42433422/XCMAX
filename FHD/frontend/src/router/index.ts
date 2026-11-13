@@ -184,7 +184,7 @@ router.beforeEach(async (to, _from, finish) => {
     }
     const member = profile.loaded && String(profile.userRole || '').startsWith('tenant:')
     const allowed = to.name === 'settings'
-      || (to.name === 'business-docking' && profile.permissions?.includes('etl.read'))
+      || (to.name === 'business-docking' && profile.permissions?.includes('elt.read'))
       || (to.name === 'tenant-roles' && profile.permissions?.includes('tenant.manage_roles'))
     if (member && !allowed) {
       next({ name: 'settings', replace: true })

@@ -20,7 +20,7 @@ def download_store(request, monkeypatch):
     store = request.getfixturevalue("source_client")
     monkeypatch.setattr(service_targets, "get_app_data_dir", lambda: str(store.root))
     run_id = "download-regression"
-    path = store.root / "etl" / "exports" / f"etl-{run_id}.xlsx"
+    path = store.root / "elt" / "exports" / f"elt-{run_id}.xlsx"
     receipt = write_xlsx_result(
         path,
         columns=[{"key": "amount", "label": "金额", "type": "money"}],
@@ -63,7 +63,7 @@ def download_store(request, monkeypatch):
 
 def test_download_returns_complete_xlsx_with_read_permission(download_store):
     store = download_store
-    store.actor.permissions = {"etl.read"}  # No execute or admin permission needed.
+    store.actor.permissions = {"elt.read"}  # No execute or admin permission needed.
     response = store.client.get(store.download_url)
     assert response.status_code == 200, response.text
     assert response.content == store.export_bytes

@@ -10,7 +10,7 @@ from sqlalchemy.pool import QueuePool
 from app.application.elt import auto_ingest_service as ais
 from app.application.elt.errors import EltConflict, EltError
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.test_application.test_etl_auto_ingest_service import ledger_root as ledger_root
+from tests.test_application.test_elt_auto_ingest_service import ledger_root as ledger_root
 
 
 @pytest.mark.usefixtures("ledger_root")

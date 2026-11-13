@@ -63,7 +63,7 @@ def business_image(c):
     with sqlite3.connect(c.factory.target) as db:
         return {
             table: db.execute("SELECT * FROM " + table).fetchall()
-            for table in ("products", "product_price_history", "etl_price_dimensions")
+            for table in ("products", "product_price_history", "elt_price_dimensions")
         }
 
 
@@ -123,7 +123,7 @@ def fail_resolution_commit(c, claim, stage):
 
     def fail(db):
         is_host = db.get_bind().engine is c.host.engine
-        is_source = db.info.get("etl_owned_source") == c.factory.binding
+        is_source = db.info.get("elt_owned_source") == c.factory.binding
         if not is_host and not is_source:
             return
         db.flush()
@@ -398,7 +398,7 @@ def test_existing_claim_or_effect_is_never_retyped_as_preclaim_absence(catalog, 
         reached = []
 
         def fail_source(db):
-            if db.info.get("etl_owned_source") == c.factory.binding:
+            if db.info.get("elt_owned_source") == c.factory.binding:
                 reached.append(True)
                 raise OSError("synthetic original source effect commit failure")
 

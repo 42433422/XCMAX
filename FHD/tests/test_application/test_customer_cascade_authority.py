@@ -10,7 +10,7 @@ from app.application.customer_app_service import CustomerApplicationService
 from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.shipment import ShipmentRecord
-from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
@@ -69,7 +69,7 @@ def deletion(trusted_actor, monkeypatch):
                 ]
             )
             db.add(
-                ShipmentEtlImportFingerprint(
+                ShipmentEltImportFingerprint(
                     tenant_key=f"tenant:{tenant}", fingerprint="one", shipment_id=1 + offset
                 )
             )
@@ -84,7 +84,7 @@ def snapshot(actor):
                 "purchase_units",
                 "products",
                 "shipment_records",
-                "shipment_etl_import_fingerprints",
+                "shipment_elt_import_fingerprints",
             )
         ]
 

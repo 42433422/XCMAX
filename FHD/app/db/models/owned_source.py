@@ -56,9 +56,9 @@ class ProductPriceHistory(
 
 
 class EltPriceDimension(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, OwnedSourceBase):
-    __tablename__ = "etl_price_dimensions"
+    __tablename__ = "elt_price_dimensions"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "product_id", name="uq_etl_price_dimensions_product"),
+        UniqueConstraint("tenant_id", "product_id", name="uq_elt_price_dimensions_product"),
     )
 
     tenant_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)

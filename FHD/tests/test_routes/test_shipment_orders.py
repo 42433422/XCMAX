@@ -172,7 +172,7 @@ class TestShipmentDownload:
         generator = legacy.ShipmentDocumentGenerator(
             db_path=str(tmp_path / "db.sqlite"), output_dir=str(outputs)
         )
-        template = Path(__file__).parents[1] / "fixtures/shipment_etl/闭环测试_送货单模板.xlsx"
+        template = Path(__file__).parents[1] / "fixtures/shipment_elt/闭环测试_送货单模板.xlsx"
         doc = generator.generate_document(
             "",
             {

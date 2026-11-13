@@ -788,6 +788,19 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "confirm": {"type": "boolean"},
         },
     ),
+    ("elt_import", "preview"): _object_schema(
+        ["file_path"],
+        {
+            "file_path": {"type": "string"},
+        },
+    ),
+    ("elt_import", "execute"): _object_schema(
+        ["run_id"],
+        {
+            "run_id": {"type": "string"},
+            "valid_rows_only": {"type": "boolean"},
+        },
+    ),
     ("excel_import", "execute_import"): _object_schema(
         ["pending_import_id"], {"pending_import_id": {"type": "string"}}
     ),

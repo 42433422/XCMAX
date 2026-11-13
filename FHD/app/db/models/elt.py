@@ -27,10 +27,10 @@ from app.utils.time import utc_now_naive
 
 
 class EltUpload(TimestampMixin, TenantScopedMixin, Base):
-    __tablename__ = "etl_uploads"
+    __tablename__ = "elt_uploads"
     __table_args__ = (
-        Index("ix_etl_upload_owner", "tenant_id", "owner_user_id"),
-        Index("ix_etl_upload_sha256", "tenant_id", "owner_user_id", "sha256"),
+        Index("ix_elt_upload_owner", "tenant_id", "owner_user_id"),
+        Index("ix_elt_upload_sha256", "tenant_id", "owner_user_id", "sha256"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -47,10 +47,10 @@ class EltUpload(TimestampMixin, TenantScopedMixin, Base):
 
 
 class EltTemplate(TimestampMixin, TenantScopedMixin, Base):
-    __tablename__ = "etl_templates"
+    __tablename__ = "elt_templates"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "owner_user_id", "name", name="uq_etl_template_owner_name"),
-        Index("ix_etl_template_owner", "tenant_id", "owner_user_id"),
+        UniqueConstraint("tenant_id", "owner_user_id", "name", name="uq_elt_template_owner_name"),
+        Index("ix_elt_template_owner", "tenant_id", "owner_user_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -63,15 +63,15 @@ class EltTemplate(TimestampMixin, TenantScopedMixin, Base):
 
 
 class EltTemplateVersion(TenantScopedMixin, Base):
-    __tablename__ = "etl_template_versions"
+    __tablename__ = "elt_template_versions"
     __table_args__ = (
-        UniqueConstraint("template_id", "version", name="uq_etl_template_version"),
-        Index("ix_etl_template_version_owner", "tenant_id", "owner_user_id"),
+        UniqueConstraint("template_id", "version", name="uq_elt_template_version"),
+        Index("ix_elt_template_version_owner", "tenant_id", "owner_user_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     template_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("etl_templates.id"), nullable=False, index=True
+        String(36), ForeignKey("elt_templates.id"), nullable=False, index=True
     )
     owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -88,22 +88,22 @@ class EltTemplateVersion(TenantScopedMixin, Base):
 
 
 class EltRun(TimestampMixin, TenantScopedMixin, Base):
-    __tablename__ = "etl_runs"
+    __tablename__ = "elt_runs"
     __table_args__ = (
-        Index("ix_etl_run_owner_created", "tenant_id", "owner_user_id", "created_at"),
-        Index("ix_etl_run_status", "status"),
+        Index("ix_elt_run_owner_created", "tenant_id", "owner_user_id", "created_at"),
+        Index("ix_elt_run_status", "status"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     upload_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("etl_uploads.id"), nullable=False, index=True
+        String(36), ForeignKey("elt_uploads.id"), nullable=False, index=True
     )
     template_id: Mapped[Optional[str]] = mapped_column(
-        String(36), ForeignKey("etl_templates.id"), index=True
+        String(36), ForeignKey("elt_templates.id"), index=True
     )
     template_version_id: Mapped[Optional[str]] = mapped_column(
-        String(36), ForeignKey("etl_template_versions.id"), index=True
+        String(36), ForeignKey("elt_template_versions.id"), index=True
     )
     target_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
@@ -134,16 +134,16 @@ class EltRun(TimestampMixin, TenantScopedMixin, Base):
 
 
 class EltRunRow(TenantScopedMixin, Base):
-    __tablename__ = "etl_run_rows"
+    __tablename__ = "elt_run_rows"
     __table_args__ = (
-        UniqueConstraint("run_id", "source_sheet", "source_row", name="uq_etl_run_source_row"),
-        Index("ix_etl_run_rows_owner", "tenant_id", "owner_user_id"),
-        Index("ix_etl_run_rows_run_action", "run_id", "final_action"),
+        UniqueConstraint("run_id", "source_sheet", "source_row", name="uq_elt_run_source_row"),
+        Index("ix_elt_run_rows_owner", "tenant_id", "owner_user_id"),
+        Index("ix_elt_run_rows_run_action", "run_id", "final_action"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     run_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("etl_runs.id"), nullable=False, index=True
+        String(36), ForeignKey("elt_runs.id"), nullable=False, index=True
     )
     owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     source_sheet: Mapped[str] = mapped_column(String(160), nullable=False, default="")
@@ -171,12 +171,12 @@ class EltRunRow(TenantScopedMixin, Base):
 
 
 class EltTargetConfig(TimestampMixin, TenantScopedMixin, Base):
-    __tablename__ = "etl_target_configs"
+    __tablename__ = "elt_target_configs"
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "owner_user_id", "name", name="uq_etl_target_config_owner_name"
+            "tenant_id", "owner_user_id", "name", name="uq_elt_target_config_owner_name"
         ),
-        Index("ix_etl_target_config_owner", "tenant_id", "owner_user_id"),
+        Index("ix_elt_target_config_owner", "tenant_id", "owner_user_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

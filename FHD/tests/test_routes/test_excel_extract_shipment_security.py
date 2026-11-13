@@ -4,13 +4,13 @@ from pathlib import Path
 
 from app.fastapi_routes import excel_extract as _excel_extract
 from app.fastapi_routes.domains.excel.excel_extract_shipment import (
-    _safe_failed_etl_result,
+    _safe_failed_elt_result,
     _temporary_upload_path,
 )
 
 
-def test_etl_failure_boundary_drops_internal_exception_text() -> None:
-    result = _safe_failed_etl_result(
+def test_elt_failure_boundary_drops_internal_exception_text() -> None:
+    result = _safe_failed_elt_result(
         {
             "success": False,
             "message": "Traceback: password=secret",
@@ -31,10 +31,10 @@ def test_etl_failure_boundary_drops_internal_exception_text() -> None:
 
 def test_temporary_upload_path_ignores_untrusted_filename() -> None:
     path = Path(
-        _temporary_upload_path("etl", "../../private/customer-secret.xlsx", {".xls", ".xlsx"})
+        _temporary_upload_path("elt", "../../private/customer-secret.xlsx", {".xls", ".xlsx"})
     )
 
     assert path.parent.name == "temp_excel"
-    assert path.name.startswith("etl_")
+    assert path.name.startswith("elt_")
     assert path.suffix == ".xlsx"
     assert "customer-secret" not in path.name

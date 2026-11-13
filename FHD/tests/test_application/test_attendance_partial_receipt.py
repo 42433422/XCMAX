@@ -9,16 +9,16 @@ from app.application.elt import auto_ingest_service as ais
 from app.application.elt.errors import EltError
 from app.application.elt.knowledge_index_meta import is_partial_business_receipt
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.test_application.test_etl_attendance_confirmation import (
+from tests.test_application.test_elt_attendance_confirmation import (
     attendance_store as attendance_store,
 )
-from tests.test_application.test_etl_attendance_confirmation import (
+from tests.test_application.test_elt_attendance_confirmation import (
     preview_store as preview_store,
 )
-from tests.test_application.test_etl_attendance_confirmation import (
+from tests.test_application.test_elt_attendance_confirmation import (
     snapshot,
 )
-from tests.test_application.test_etl_auto_ingest_service import ledger_root as ledger_root
+from tests.test_application.test_elt_auto_ingest_service import ledger_root as ledger_root
 
 
 @pytest.mark.usefixtures("ledger_root")
@@ -120,7 +120,7 @@ def test_unknown_or_unproven_partial_is_not_accepted(mutation):
 
 
 def test_real_same_source_followup_is_preserved_on_partial_rollback(attendance_store):
-    from tests.test_application.test_etl_attendance_confirmation import approve
+    from tests.test_application.test_elt_attendance_confirmation import approve
 
     store = attendance_store
     with store.factory() as db:

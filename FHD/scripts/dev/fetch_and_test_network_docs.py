@@ -56,7 +56,7 @@ def main() -> int:
         ok = _download(url, dest)
         print(f"{'ok' if ok else 'FAIL'} {name}")
 
-    from app.application.shipment_excel_etl_app_service import preview_shipment_excel_etl
+    from app.application.shipment_excel_elt_app_service import preview_shipment_excel_etl
     from app.legacy.routes.document_templates_compat import run_archive_template_analyze
 
     rows = []
@@ -74,10 +74,10 @@ def main() -> int:
             {
                 "file": path.name,
                 "bytes": path.stat().st_size,
-                "etl_success": bool((etl or {}).get("success")),
-                "etl_message": (etl or {}).get("message"),
-                "etl_unit": (first or {}).get("unit_name"),
-                "etl_items": (first or {}).get("item_count"),
+                "elt_success": bool((etl or {}).get("success")),
+                "elt_message": (etl or {}).get("message"),
+                "elt_unit": (first or {}).get("unit_name"),
+                "elt_items": (first or {}).get("item_count"),
                 "analyze_code": code,
                 "analyze_success": bool((analyzed or {}).get("success")),
                 "analyze_type": (analyzed or {}).get("template_type"),
@@ -86,9 +86,9 @@ def main() -> int:
         )
 
     print(json.dumps({"cases": rows}, ensure_ascii=False, indent=2))
-    ok_etl = sum(1 for r in rows if r["etl_success"])
+    ok_etl = sum(1 for r in rows if r["elt_success"])
     ok_an = sum(1 for r in rows if r["analyze_success"])
-    print(f"SUMMARY etl_ok={ok_etl}/{len(rows)} analyze_ok={ok_an}/{len(rows)}")
+    print(f"SUMMARY elt_ok={ok_etl}/{len(rows)} analyze_ok={ok_an}/{len(rows)}")
     return 0 if rows and ok_etl > 0 else 1
 
 

@@ -171,23 +171,43 @@ def run_owned_by(run: Any, principal: AgentPrincipal) -> bool:
     )
 
 
+RunScopeMap = dict[str, list[tuple[str, str, str]]]
+
+
 def task_scope_matches(
-    orchestrator: AgentOrchestrator, task: Any, principal: AgentPrincipal
+    orchestrator: AgentOrchestrator,
+    task: Any,
+    principal: AgentPrincipal,
+    scopes: RunScopeMap | None = None,
 ) -> bool:
     if task.user_id != principal.user_id or task.tenant_id != principal.tenant_id:
         return False
-    runs = [
-        run
-        for run in orchestrator.list_task_runs(user_id=task.user_id, task_id=task.task_id)
-        if tenant_id_of_run(run) == task.tenant_id
-    ]
+    if scopes is None:
+        # 兼容只实现 list_task_runs 的测试替身与旧调用方。
+        runs = [
+            run
+            for run in orchestrator.list_task_runs(user_id=task.user_id, task_id=task.task_id)
+            if tenant_id_of_run(run) == task.tenant_id
+        ]
+        if not runs:
+            return True
+        return all(run_owned_by(run, principal) for run in runs)
+    # 列表页只做一次运行扫描；逐任务查询会让 200 条历史各自重扫全部运行。
+    run_scopes = scopes
+    runs = [scope for scope in run_scopes.get(task.task_id, ()) if scope[1] == task.tenant_id]
     if not runs:
         # Legacy tasks without execution records have no authenticated Mod binding.
         # 任务在上方已通过「用户 + 租户」归属校验；不应仅因请求头携带 active-mod
         # 就把用户**自己**的历史任务隐藏（前端 window.fetch 补丁总会注入该头，
         # 故该分支等于让这类任务永久不可见）。此处不再据 mod 绑定额外过滤。
         return True
-    return all(run_owned_by(run, principal) for run in runs)
+    requested_mod = str((principal.mod_authorization or {}).get("mod_id") or "")
+    return all(
+        (not run_mod or run_mod == requested_mod)
+        and run_user == principal.user_id
+        and run_tenant == principal.tenant_id
+        for run_user, run_tenant, run_mod in runs
+    )
 
 
 def scoped_tasks(
@@ -198,6 +218,11 @@ def scoped_tasks(
     include_archived: bool = False,
 ) -> list[Any]:
     result: list[Any] = []
+    scopes = (
+        orchestrator.list_run_scopes(user_id=principal.user_id)
+        if hasattr(orchestrator, "list_run_scopes")
+        else None
+    )
     offset = 0
     while len(result) < limit:
         page = orchestrator.list_tasks(
@@ -207,7 +232,9 @@ def scoped_tasks(
             offset=offset,
             include_archived=include_archived,
         )
-        result.extend(task for task in page if task_scope_matches(orchestrator, task, principal))
+        result.extend(
+            task for task in page if task_scope_matches(orchestrator, task, principal, scopes)
+        )
         if len(page) < 100:
             break
         offset += len(page)

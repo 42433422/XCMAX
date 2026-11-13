@@ -50,12 +50,12 @@ def catalog(host, monkeypatch):
         role="admin",
         mod_id="test-mod",
         permissions=[
-            "etl.execute",
+            "elt.execute",
             "product.view",
             "product.edit",
             "dataset.read",
             "dataset.write",
-            "etl.template.manage",
+            "elt.template.manage",
         ],
     )
     from app.db.models.permission import Permission, Role
@@ -392,7 +392,7 @@ def test_source_transaction_rollback_keeps_claim_unknown_and_never_replays(catal
     observed = []
 
     def fail(db):
-        if db.info.get("etl_owned_source") == c.factory.binding:
+        if db.info.get("elt_owned_source") == c.factory.binding:
             observed.append(True)
             raise OSError("synthetic source commit failure")
 
@@ -432,7 +432,7 @@ def test_missing_or_rolled_back_authority_is_unknown_without_new_effect(catalog,
                 {
                     "receipt": "DELETE FROM workflow_plans WHERE intent='catalog_products_v1'",
                     "event": "DELETE FROM product_price_history WHERE id>1",
-                    "epoch": "UPDATE etl_database_generation SET generation_id='old-generation'",
+                    "epoch": "UPDATE elt_database_generation SET generation_id='old-generation'",
                 }[authority]
             )
     else:

@@ -45,10 +45,10 @@ BASE = "/api/elt/owned-mixed-v1/products"
 GRANTS = {
     "product.view",
     "product.edit",
-    "etl.execute",
+    "elt.execute",
     "dataset.read",
     "dataset.write",
-    "etl.template.manage",
+    "elt.template.manage",
 }
 
 

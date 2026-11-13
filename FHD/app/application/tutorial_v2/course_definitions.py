@@ -256,22 +256,22 @@ COURSES: tuple[dict[str, Any], ...] = (
                 why="先预览可以在数据写入前发现列对应错误或内容错误。",
                 hint="练习文件故意放了一行错误数据，用来学习怎样识别错误。",
                 route_name="business-docking",
-                target_selector="[data-tutorial-id='etl-upload']",
-                verifier="etl_preview",
+                target_selector="[data-tutorial-id='elt-upload']",
+                verifier="elt_preview",
                 location_label="左侧菜单“数据对接中心”",
                 completion_cue="进入“核对与写入”，同时看到正确行和错误行。",
                 guide_actions=(
                     _guide("先点击教练下方的“下载内置教学 Excel”。", ".tutorial-coach__asset"),
                     _guide(
-                        "点击“选择文件”，选择刚下载的 Excel。", "[data-tutorial-id='etl-upload']"
+                        "点击“选择文件”，选择刚下载的 Excel。", "[data-tutorial-id='elt-upload']"
                     ),
-                    _guide("把“目标”选为“客户及产品”。", "[data-tutorial-id='etl-target']"),
-                    _guide("点击开始预览的按钮。", "[data-tutorial-id='etl-start-preview']"),
+                    _guide("把“目标”选为“客户及产品”。", "[data-tutorial-id='elt-target']"),
+                    _guide("点击开始预览的按钮。", "[data-tutorial-id='elt-start-preview']"),
                     _guide(
-                        "打开“字段映射”，核对源字段和目标字段。", "[data-tutorial-id='etl-mapping']"
+                        "打开“字段映射”，核对源字段和目标字段。", "[data-tutorial-id='elt-mapping']"
                     ),
                     _guide(
-                        "打开“核对与写入”，查看正确行和错误行。", "[data-tutorial-id='etl-preview']"
+                        "打开“核对与写入”，查看正确行和错误行。", "[data-tutorial-id='elt-preview']"
                     ),
                 ),
                 principle="导入时始终先核对，再写入。",
@@ -285,17 +285,17 @@ COURSES: tuple[dict[str, Any], ...] = (
                 why="回执能说明每一行成功还是失败，以及成功后写到了哪里。",
                 hint="如果仍有不能写入的错误，按页面提示选择只写入正确行。",
                 route_name="business-docking",
-                target_selector="[data-tutorial-id='etl-confirm']",
-                verifier="etl_completed",
+                target_selector="[data-tutorial-id='elt-confirm']",
+                verifier="elt_completed",
                 location_label="数据对接中心的“核对与写入”",
                 completion_cue="运行历史显示本次导入“已完成”，并列出成功数和错误数。",
                 guide_actions=(
-                    _guide("最后核对一次预览结果。", "[data-tutorial-id='etl-preview']"),
-                    _guide("点击“写入数据库”。", "[data-tutorial-id='etl-confirm']"),
+                    _guide("最后核对一次预览结果。", "[data-tutorial-id='elt-preview']"),
+                    _guide("点击“写入数据库”。", "[data-tutorial-id='elt-confirm']"),
                     _guide(
-                        "打开“运行历史”，选择刚完成的记录。", "[data-tutorial-id='etl-history']"
+                        "打开“运行历史”，选择刚完成的记录。", "[data-tutorial-id='elt-history']"
                     ),
-                    _guide("查看运行回执中的成功数、错误数和写入结果。", ".etl-receipt"),
+                    _guide("查看运行回执中的成功数、错误数和写入结果。", ".elt-receipt"),
                 ),
                 principle="文件、运行回执和最终记录应该能够互相对应。",
             ),
@@ -475,14 +475,14 @@ COURSES: tuple[dict[str, Any], ...] = (
                 why="以后导入出问题时，可以用回执定位到具体哪一行。",
                 hint="选择刚才教学 Excel 对应的最新记录。",
                 route_name="business-docking",
-                target_selector="[data-tutorial-id='etl-history']",
+                target_selector="[data-tutorial-id='elt-history']",
                 verifier="trace_import",
                 location_label="数据对接中心的“运行历史”",
                 completion_cue="回执中同时显示成功行、错误行和写入结果。",
                 guide_actions=(
-                    _guide("打开“运行历史”。", "[data-tutorial-id='etl-history']"),
-                    _guide("选择刚才的教学 Excel 记录。", "[data-tutorial-id='etl-history']"),
-                    _guide("查看运行回执中的成功行、错误行和写入结果。", ".etl-receipt"),
+                    _guide("打开“运行历史”。", "[data-tutorial-id='elt-history']"),
+                    _guide("选择刚才的教学 Excel 记录。", "[data-tutorial-id='elt-history']"),
+                    _guide("查看运行回执中的成功行、错误行和写入结果。", ".elt-receipt"),
                 ),
             ),
         ],

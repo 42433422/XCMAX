@@ -210,7 +210,7 @@ def ingest_office_path_to_template_library(
     )
 
 
-def attach_template_ingest_to_etl_result(
+def attach_template_ingest_to_elt_result(
     result: dict[str, Any],
     *,
     file_path: str | Path | None,

@@ -646,8 +646,8 @@ def evaluate_workbook(
 def release_status(env: dict[str, str] | None = None) -> dict[str, Any]:
     """发布门禁入口。没有客户原件和人工基准时固定为 BLOCKED。"""
     environment = os.environ if env is None else env
-    source = str(environment.get("XCAGI_ETL_CUSTOMER_EXCEL") or "").strip()
-    oracle = str(environment.get("XCAGI_ETL_MANUAL_BASELINE") or "").strip()
+    source = str(environment.get("XCAGI_ELT_CUSTOMER_EXCEL") or "").strip()
+    oracle = str(environment.get("XCAGI_ELT_MANUAL_BASELINE") or "").strip()
     if not source or not oracle or not Path(source).is_file() or not Path(oracle).is_file():
         return {
             "id": GATE_ID,
@@ -680,6 +680,6 @@ def release_status(env: dict[str, str] | None = None) -> dict[str, Any]:
         report["release_pass"] = False
         report["reason"] = "基准未声明为客户原件"
         return report
-    data_dir = Path(str(environment.get("XCAGI_ETL_GATE_DATA_DIR") or path.parent / ".b31-gate"))
+    data_dir = Path(str(environment.get("XCAGI_ELT_GATE_DATA_DIR") or path.parent / ".b31-gate"))
     data_dir.mkdir(parents=True, exist_ok=True)
     return evaluate_workbook(path, baseline, data_dir=data_dir, evidence_class="customer_original")

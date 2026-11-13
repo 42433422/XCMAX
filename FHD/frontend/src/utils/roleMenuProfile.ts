@@ -88,7 +88,7 @@ export function buildRoleMenuProfile(source: AccountRoleSource, hasIndustryBusin
 
   if (source.localRole?.startsWith('tenant:')) {
     const visibleCoreKeys = new Set(['settings'])
-    if (source.permissions?.includes('etl.read')) visibleCoreKeys.add('business-docking')
+    if (source.permissions?.includes('elt.read')) visibleCoreKeys.add('business-docking')
     return { role: 'enterprise-user', canSeeAdminMenus: false, canSeeDeveloperMenus: false, visibleCoreKeys }
   }
 

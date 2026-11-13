@@ -9,7 +9,7 @@
 SQLite 改动用 ``op.batch_alter_table(recreate="auto")``；forward upgrade 保留全部既有数据。
 
 Revision ID: 2026_08_10_erp_absorb_orthogonal
-Revises: 2026_07_27_etl_folder_batches
+Revises: 2026_07_27_elt_folder_batches
 Create Date: 2026-08-10
 """
 

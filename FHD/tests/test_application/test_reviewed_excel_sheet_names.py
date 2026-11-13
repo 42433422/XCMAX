@@ -139,7 +139,7 @@ def test_unknown_sheet_naming_runs_inside_a_live_event_loop(monkeypatch):
         "FHD_TEMPLATE_MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
         "FHD_TEMPLATE_MIMO_MODEL": "mimo-v2.6-flash",
         "MIMO_API_KEY": "synthetic-placeholder",
-        "FHD_ETL_LLM": "on",
+        "FHD_ELT_LLM": "on",
     }.items():
         monkeypatch.setenv(name, value)
 

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application import shipment_excel_etl_security as etl_security
+from app.application import shipment_excel_elt_security as elt_security
 from app.application.tools import exports
 
 
@@ -78,8 +78,8 @@ class TestHandlePriceListExport:
                 return_value=b"doc-bytes",
             ),
             patch.object(
-                etl_security,
-                "open_etl_output_file",
+                elt_security,
+                "open_elt_output_file",
                 side_effect=OSError("disk full"),
             ),
         ):
@@ -186,7 +186,7 @@ class TestHandlePriceListExport:
         trusted_root = tmp_path / "trusted"
         trusted_root.mkdir()
         untrusted_root = tmp_path / "outside"
-        monkeypatch.setattr(etl_security, "_trusted_base_roots", lambda: [trusted_root])
+        monkeypatch.setattr(elt_security, "_trusted_base_roots", lambda: [trusted_root])
         monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
         mock_svc = MagicMock()
         mock_svc.get_all_products.return_value = []

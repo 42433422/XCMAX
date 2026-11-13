@@ -20,9 +20,9 @@ from app.fastapi_routes.domains.excel.excel_extract import (
     router,
 )
 from app.infrastructure.auth.dependencies import require_identified_user
-from app.infrastructure.auth.shipment_etl_access_gate import (
-    require_legacy_shipment_etl_access,
-    require_tenant_etl_preview,
+from app.infrastructure.auth.shipment_elt_access_gate import (
+    require_legacy_shipment_elt_access,
+    require_tenant_elt_preview,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -44,7 +44,7 @@ _PUBLIC_ETL_ERRORS = {
 }
 
 
-def _safe_failed_etl_result(result: dict[str, Any], fallback: str) -> dict[str, Any]:
+def _safe_failed_elt_result(result: dict[str, Any], fallback: str) -> dict[str, Any]:
     """Keep operational failure metadata without exposing internal exception text."""
     # Failed dry-runs still carry private paths in message/errors; only success
     # previews may pass through unchanged.
@@ -82,44 +82,44 @@ def _temporary_upload_path(prefix: str, original_name: str, allowed_suffixes: se
     return str(Path(TEMP_EXCEL_DIR) / f"{prefix}_{uuid4().hex}{suffix}")
 
 
-def _build_etl_http():
-    """Compose shipment_etl HTTP adapters (upload ownership + public errors)."""
+def _build_elt_http():
+    """Compose shipment_elt HTTP adapters (upload ownership + public errors)."""
     from datetime import datetime as _dt
 
     from app.application.office_template_ingest_app_service import (
-        attach_template_ingest_to_etl_result,
+        attach_template_ingest_to_elt_result,
     )
-    from app.application.shipment_excel_etl_app_service import (
-        get_shipment_excel_etl_app_service,
+    from app.application.shipment_excel_elt_app_service import (
+        get_shipment_excel_elt_app_service,
         preview_shipment_excel_etl,
     )
-    from app.application.shipment_excel_etl_ocr import parse_ocr_document
-    from app.application.shipment_excel_etl_security import (
-        resolve_etl_output_path,
-        resolve_etl_path,
+    from app.application.shipment_excel_elt_ocr import parse_ocr_document
+    from app.application.shipment_excel_elt_security import (
+        resolve_elt_output_path,
+        resolve_elt_path,
     )
     from app.bootstrap import get_extract_log_service
-    from app.fastapi_routes.shipment_etl.history import HistoryViews
-    from app.fastapi_routes.shipment_etl.imports import ShipmentImports
-    from app.fastapi_routes.shipment_etl.ocr import OcrPreview
-    from app.fastapi_routes.shipment_etl.responses import EltResponses
-    from app.fastapi_routes.shipment_etl.templates import TemplateOutputs
-    from app.fastapi_routes.shipment_etl.uploads import UploadStager
+    from app.fastapi_routes.shipment_elt.history import HistoryViews
+    from app.fastapi_routes.shipment_elt.imports import ShipmentImports
+    from app.fastapi_routes.shipment_elt.ocr import OcrPreview
+    from app.fastapi_routes.shipment_elt.responses import EltResponses
+    from app.fastapi_routes.shipment_elt.templates import TemplateOutputs
+    from app.fastapi_routes.shipment_elt.uploads import UploadStager
 
-    responses = EltResponses(sanitize=_safe_failed_etl_result, logger=logger)
+    responses = EltResponses(sanitize=_safe_failed_elt_result, logger=logger)
     uploads = UploadStager(_temporary_upload_path, logger)
     imports = ShipmentImports(
-        get_shipment_excel_etl_app_service,
-        attach_template_ingest_to_etl_result,
+        get_shipment_excel_elt_app_service,
+        attach_template_ingest_to_elt_result,
         uploads,
         responses,
     )
     ocr = OcrPreview(parse_ocr_document, preview_shipment_excel_etl, uploads, responses)
     history = HistoryViews(get_extract_log_service, responses)
     templates = TemplateOutputs(
-        get_shipment_excel_etl_app_service,
-        resolve_etl_path,
-        resolve_etl_output_path,
+        get_shipment_excel_elt_app_service,
+        resolve_elt_path,
+        resolve_elt_output_path,
         lambda: TEMP_EXCEL_DIR,
         _dt.now,
         responses,
@@ -129,10 +129,10 @@ def _build_etl_http():
 
 # --- shipment ETL HTTP handlers (formerly part01/part02; no dynamic facade) ---
 @router.post(
-    "/shipment-etl/preview",
-    dependencies=[Depends(require_legacy_shipment_etl_access)],
+    "/shipment-elt/preview",
+    dependencies=[Depends(require_legacy_shipment_elt_access)],
 )
-async def shipment_etl_preview(
+async def shipment_elt_preview(
     file: UploadFile | None = File(default=None),
     file_path: str = Form(""),
     workspace_root: str = Form(""),
@@ -141,9 +141,9 @@ async def shipment_etl_preview(
     template_name: str = Form(""),
     template_scope: str = Form(""),
 ):
-    from app.application.shipment_etl.protocols import TemplateCapture
+    from app.application.shipment_elt.protocols import TemplateCapture
 
-    imports, *_rest = _build_etl_http()
+    imports, *_rest = _build_elt_http()
     return await imports.preview(
         file,
         file_path,
@@ -158,10 +158,10 @@ async def shipment_etl_preview(
 
 
 @router.post(
-    "/shipment-etl/execute",
-    dependencies=[Depends(require_legacy_shipment_etl_access)],
+    "/shipment-elt/execute",
+    dependencies=[Depends(require_legacy_shipment_elt_access)],
 )
-async def shipment_etl_execute(
+async def shipment_elt_execute(
     file: UploadFile | None = File(default=None),
     file_path: str = Form(""),
     workspace_root: str = Form(""),
@@ -179,9 +179,9 @@ async def shipment_etl_execute(
     template_scope: str = Form(""),
     _user: Any = Depends(require_identified_user),
 ):
-    from app.application.shipment_etl.protocols import TemplateCapture
+    from app.application.shipment_elt.protocols import TemplateCapture
 
-    imports, *_rest = _build_etl_http()
+    imports, *_rest = _build_elt_http()
     return await imports.execute(
         file,
         file_path,
@@ -204,17 +204,17 @@ async def shipment_etl_execute(
 
 
 @router.post(
-    "/shipment-etl/ocr-preview",
-    dependencies=[Depends(require_tenant_etl_preview)],
+    "/shipment-elt/ocr-preview",
+    dependencies=[Depends(require_tenant_elt_preview)],
 )
-async def shipment_etl_ocr_preview(
+async def shipment_elt_ocr_preview(
     file: UploadFile | None = File(default=None),
     file_path: str = Form(""),
     workspace_root: str = Form(""),
     include_ledger: str = Form("auto"),
     _user: Any = Depends(require_identified_user),
 ):
-    _imports, ocr, *_rest = _build_etl_http()
+    _imports, ocr, *_rest = _build_elt_http()
     return await ocr.run(
         file,
         file_path,
@@ -224,16 +224,16 @@ async def shipment_etl_ocr_preview(
 
 
 @router.post(
-    "/shipment-etl/batch-preview",
-    dependencies=[Depends(require_legacy_shipment_etl_access)],
+    "/shipment-elt/batch-preview",
+    dependencies=[Depends(require_legacy_shipment_elt_access)],
 )
-async def shipment_etl_batch_preview(
+async def shipment_elt_batch_preview(
     directory: str = Form(""),
     workspace_root: str = Form(""),
     include_ledger: str = Form("auto"),
     _user: Any = Depends(require_identified_user),
 ):
-    imports, *_rest = _build_etl_http()
+    imports, *_rest = _build_elt_http()
     return imports.batch_preview(
         directory,
         str(workspace_root or "").strip() or None,
@@ -242,10 +242,10 @@ async def shipment_etl_batch_preview(
 
 
 @router.post(
-    "/shipment-etl/batch-execute",
-    dependencies=[Depends(require_legacy_shipment_etl_access)],
+    "/shipment-elt/batch-execute",
+    dependencies=[Depends(require_legacy_shipment_elt_access)],
 )
-async def shipment_etl_batch_execute(
+async def shipment_elt_batch_execute(
     directory: str = Form(""),
     workspace_root: str = Form(""),
     include_ledger: str = Form("0"),
@@ -256,7 +256,7 @@ async def shipment_etl_batch_execute(
     dry_run: str = Form("0"),
     _user: Any = Depends(require_identified_user),
 ):
-    imports, *_rest = _build_etl_http()
+    imports, *_rest = _build_elt_http()
     return imports.batch_execute(
         directory,
         str(workspace_root or "").strip() or None,
@@ -270,31 +270,31 @@ async def shipment_etl_batch_execute(
 
 
 @router.post(
-    "/shipment-etl/generate-template",
-    dependencies=[Depends(require_legacy_shipment_etl_access)],
+    "/shipment-elt/generate-template",
+    dependencies=[Depends(require_legacy_shipment_elt_access)],
 )
-async def shipment_etl_generate_template(
+async def shipment_elt_generate_template(
     kind: str = Form("delivery"),
     output_path: str = Form(""),
     unit_name: str = Form("闭环测试客户"),
     _user: Any = Depends(require_identified_user),
 ):
-    _i, _o, _h, templates = _build_etl_http()
+    _i, _o, _h, templates = _build_elt_http()
     return templates.generate(kind, output_path, unit_name)
 
 
 @router.post(
-    "/shipment-etl/regenerate",
-    dependencies=[Depends(require_legacy_shipment_etl_access)],
+    "/shipment-elt/regenerate",
+    dependencies=[Depends(require_legacy_shipment_elt_access)],
 )
-async def shipment_etl_regenerate(
+async def shipment_elt_regenerate(
     file_path: str = Form(""),
     output_path: str = Form(""),
     workspace_root: str = Form(""),
     include_ledger: str = Form("auto"),
     _user: Any = Depends(require_identified_user),
 ):
-    _i, _o, _h, templates = _build_etl_http()
+    _i, _o, _h, templates = _build_elt_http()
     return templates.regenerate(
         file_path,
         output_path,
@@ -310,17 +310,17 @@ def get_extract_logs(
     limit: int = Query(default=50),
     offset: int = Query(default=0),
 ):
-    _i, _o, history, _t = _build_etl_http()
+    _i, _o, history, _t = _build_elt_http()
     return history.list(data_type, status, limit, offset)
 
 
 @router.get("/logs/{log_id}")
 def get_extract_log(log_id: int):
-    _i, _o, history, _t = _build_etl_http()
+    _i, _o, history, _t = _build_elt_http()
     return history.detail(log_id)
 
 
 @router.get("/preview/{log_id}")
 def get_preview(log_id: int):
-    _i, _o, history, _t = _build_etl_http()
+    _i, _o, history, _t = _build_elt_http()
     return history.detail(log_id, preview=True)

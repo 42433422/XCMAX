@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { parseApprovalCardFromPayload, restoreApprovalCard } from '@/utils/chatApprovalCard'
+import { parseApprovalCardFromPayload, reconcileApprovalCards, restoreApprovalCard } from '@/utils/chatApprovalCard'
+import type { ChatMessage } from '@/composables/useChatMessages'
 
 describe('parseApprovalCardFromPayload', () => {
   it('parses nested approval_card from payload', () => {
@@ -51,5 +52,31 @@ describe('parseApprovalCardFromPayload', () => {
     expect(card.run_id).toBe('run-envelope')
     expect(card.id).toBeTruthy()
     expect(restoreApprovalCard({ ...card, submitting: true })).toEqual(card)
+  })
+
+  it('restores the newest snapshot without status as pending so the confirm button renders', () => {
+    const messages = [
+      { role: 'ai', time: '12:20', content: 'old plan', approvalCard: { plan_id: 'plan-old', approval_required: true } },
+      { role: 'user', time: '12:40', content: '导入' },
+      { role: 'ai', time: '12:41', content: 'new plan', approvalCard: { plan_id: 'plan-new', approval_required: true } },
+      // 服务端旧消息可能排在本地新消息之后，不能按数组下标取「最新」。
+      { role: 'ai', time: '12:25', content: 'stale receipt', approvalCard: { plan_id: 'plan-stale' } },
+    ] as unknown as ChatMessage[]
+    reconcileApprovalCards(messages)
+    expect(messages[0].approvalCard?.status).toBe('confirmed')
+    expect(messages[2].approvalCard?.status).toBe('pending')
+    expect(messages[3].approvalCard?.status).toBe('confirmed')
+  })
+
+  it('treats a restored card with persisted approval receipts as already submitted', () => {
+    const messages = [
+      {
+        role: 'ai',
+        content: 'submitted',
+        approvalCard: { plan_id: 'plan-A', approval_request_ids: ['81'], approval_path: '/approvals' },
+      },
+    ] as unknown as ChatMessage[]
+    reconcileApprovalCards(messages)
+    expect(messages[0].approvalCard.status).toBe('confirmed')
   })
 })

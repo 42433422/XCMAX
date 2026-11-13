@@ -43,13 +43,13 @@ def auth_host(tmp_path, monkeypatch):
                 "product.edit",
                 "tenant.manage_roles",
                 "admin.system_config",
-                "etl.read",
+                "elt.read",
             )
         }
         db.add_all(codes.values())
         admin = Role(name="admin", permissions=[codes["product.view"], codes["dataset.read"]])
         viewer = Role(name="viewer", permissions=[codes["product.view"]])
-        owner_role = Role(name="tenant:7:member", permissions=[codes["etl.read"]])
+        owner_role = Role(name="tenant:7:member", permissions=[codes["elt.read"]])
         db.add_all([admin, viewer, owner_role])
         platform = User(
             username="synthetic-platform",
@@ -124,7 +124,7 @@ def test_guarded_platform_admin_has_only_explicit_role_grants(service, auth_host
 
 def test_guarded_owner_does_not_receive_implicit_manage_roles(service, auth_host):
     before = images(auth_host)
-    assert service.get_user_permissions(auth_host.owner) == ["etl.read"]
+    assert service.get_user_permissions(auth_host.owner) == ["elt.read"]
     assert not service.has_permission(auth_host.owner, "tenant.manage_roles")
     assert images(auth_host) == before
 

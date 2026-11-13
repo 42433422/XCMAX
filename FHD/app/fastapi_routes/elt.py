@@ -20,7 +20,7 @@ from app.mod_sdk.product_skus import resolve_product_sku
 
 
 def _feature_gate() -> None:
-    flag = str(os.environ.get("FHD_ETL_CENTER_ENABLED") or "").strip().lower()
+    flag = str(os.environ.get("FHD_ELT_CENTER_ENABLED") or "").strip().lower()
     if flag not in {"1", "true", "yes", "on"}:
         raise HTTPException(
             status_code=403,
@@ -52,8 +52,8 @@ router = APIRouter(
     dependencies=[Depends(_feature_gate), Depends(_error_boundary)],
 )
 
-_read = require_permission("etl.read")
-_execute = require_permission("etl.execute")
+_read = require_permission("elt.read")
+_execute = require_permission("elt.execute")
 
 
 def _user_id(user: Any) -> int:

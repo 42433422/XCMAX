@@ -499,6 +499,42 @@ class SQLAlchemyAgentRunRepository:
                     runs.append(run)
             return runs
 
+    def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
+        """One scan per request: task_id → [(run user, tenant, mod)] for list filtering."""
+        from app.application.agent_orchestrator.task_models import (
+            mod_id_of_run,
+            tenant_id_of_run,
+        )
+
+        scopes: dict[str, list[tuple[str, str, str]]] = {}
+        for run in self.list_task_runs_for_user(user_id=user_id):
+            context = run.metadata.get("task_context")
+            if not isinstance(context, dict):
+                continue
+            task_id = str(context.get("task_id") or "")
+            if task_id:
+                scopes.setdefault(task_id, []).append(
+                    (run.user_id, tenant_id_of_run(run), mod_id_of_run(run))
+                )
+        return scopes
+
+    def list_task_runs_for_user(self, *, user_id: str) -> list[AgentRun]:
+        """All runs of one principal, hydrated once (used by scope filtering)."""
+        self._ensure_schema()
+        with self._session_scope(read_only=True) as db:
+            from app.db.models.agent import AgentRunRecord
+
+            records = (
+                db.query(AgentRunRecord)
+                .filter(AgentRunRecord.user_id == str(user_id or ""))
+                .all()
+            )
+            return [
+                run
+                for run in (self._record_to_run(record) for record in records)
+                if run is not None
+            ]
+
     def save_task(self, task: AgentTask) -> AgentTask:
         self._ensure_schema()
         with self._session_scope() as db:

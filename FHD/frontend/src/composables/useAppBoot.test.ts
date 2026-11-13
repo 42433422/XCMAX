@@ -426,19 +426,18 @@ describe('workspace startup readiness', () => {
     expect(boot.appReady.value).toBe(true)
   })
 
-  it('waits for the critical font instead of timing out startup', async () => {
+  it('releases the workspace after the font wait budget instead of blocking on a slow font', async () => {
     const font = deferred<unknown[]>()
     state.loadFont.mockReturnValue(font.promise)
     const boot = mountBoot()
     await settle()
-    await vi.advanceTimersByTimeAsync(30_000)
-    expect(boot.startupError.value).toBe('')
     expect(boot.appReady.value).toBe(false)
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(boot.startupError.value).toBe('')
+    expect(boot.appReady.value).toBe(true)
     font.resolve([{ status: 'loaded' }])
     await settle()
     expect(boot.startupError.value).toBe('')
-    expect(boot.appReady.value).toBe(true)
-    expect(boot.appReady.value).toBe(true)
   })
 
   it('only releases the newest of consecutive retries', async () => {

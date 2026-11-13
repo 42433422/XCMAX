@@ -113,6 +113,16 @@ function pickNumber(data: Record<string, unknown>, ...keys: string[]): number | 
   return undefined
 }
 
+const GENERIC_TOOL_FAILURE = /(执行失败|工具调用失败|工具执行失败)$/
+
+function toolFailureReason(data: Record<string, unknown>, message: unknown): string {
+  // 后端事件标题常是「工具.动作 执行失败」这类通用文案，具体原因在 data.reason / data.error。
+  const reason = asString(data.reason).trim() || asString(data.error).trim()
+  const text = asString(message).trim()
+  if (reason && (!text || GENERIC_TOOL_FAILURE.test(text))) return reason
+  return text || reason || '工具执行失败'
+}
+
 function truncate(text: string, max: number): string {
   const s = text.trim()
   return s.length > max ? s.slice(0, max) + '…' : s
@@ -312,7 +322,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
         target.status = failed ? 'failed' : 'success'
         target.duration_ms = pickNumber(data, 'duration_ms')
         if (failed) {
-          target.error = asString(ev.message).trim() || asString(data.error).trim() || '工具执行失败'
+          target.error = toolFailureReason(data, ev.message)
         } else {
           target.output_preview = safeOutputPreview(data)
         }
@@ -330,7 +340,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
           title: pickString(data, 'tool_id', 'tool') || '工具调用',
           params_json: safeParamsJson(data),
           output_preview: failed ? undefined : safeOutputPreview(data),
-          error: failed ? asString(ev.message).trim() || asString(data.error).trim() || '工具执行失败' : undefined,
+          error: failed ? toolFailureReason(data, ev.message) : undefined,
           observations: [],
           waiting_approval: false,
           retries: 0,

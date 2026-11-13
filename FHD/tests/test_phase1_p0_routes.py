@@ -186,10 +186,10 @@ def test_rbac_assign_user_role(rbac_client: TestClient) -> None:
 def test_rbac_tenant_roles_and_user_assignments_are_isolated(rbac_client: TestClient) -> None:
     service = get_rbac_app_service()
     tenant_a, tenant_b = 870001, 870002
-    code = "etl.read"
+    code = "elt.read"
     with get_host_db() as db:
         if db.query(Permission.id).filter(Permission.code == code).first() is None:
-            db.add(Permission(code=code, name="查看数据对接", module="etl"))
+            db.add(Permission(code=code, name="查看数据对接", module="elt"))
     role_a = service.create_role("Test Operator", "A", [code], tenant_id=tenant_a)
     role_b = service.create_role("Test Operator", "B", [], tenant_id=tenant_b)
     with get_host_db() as db:

@@ -200,7 +200,7 @@ class UserMemoryVectorIngestApplicationService:
                 },
                 channel=SMART_CHAT
                 if str(source or "chat").strip().lower()
-                not in {"office_docking", "chat_office_docking", "business_docking", "elt", "etl"}
+                not in {"office_docking", "chat_office_docking", "business_docking", "elt", "elt"}
                 else None,
             ),
         )

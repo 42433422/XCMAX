@@ -80,7 +80,7 @@ def test_recovery_endpoint_revalidates_once_without_model_or_cross_tenant_access
     from app.application.reviewed_excel_plan import store_coordinate_plan
     from app.application.reviewed_excel_template import inspect_workbook
     from app.fastapi_routes import reviewed_excel_template as routes
-    from tests.fixtures.etl_template.sources.generate import sample
+    from tests.fixtures.elt_template.sources.generate import sample
     from tests.test_application.test_reviewed_excel_boundaries import synthetic_document_answer
 
     body = sample()

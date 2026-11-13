@@ -1,7 +1,7 @@
 """Add wechat sync tables (contact identity + idempotent messages).
 
 Revision ID: 2026_09_06_wechat_sync
-Revises: 2026_09_05_etl_operation_lease
+Revises: 2026_09_05_elt_operation_lease
 Create Date: 2026-09-06
 """
 

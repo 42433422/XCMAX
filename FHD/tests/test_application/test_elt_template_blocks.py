@@ -612,7 +612,7 @@ def test_family_collection_preserves_dimensions_and_print_settings(monkeypatch, 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX directory-swap injection")
 def test_parent_directory_replacement_cannot_redirect_the_read(template_store, monkeypatch):
-    from app.application import shipment_excel_etl_security as secure
+    from app.application import shipment_excel_elt_security as secure
 
     _crud, _engine, root = template_store
     owned = root / "form.xlsx"

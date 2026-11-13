@@ -216,7 +216,7 @@ class AIChatApplicationService(
             "chat_office_docking",
             "business_docking",
             "elt",
-            "etl",
+            "elt",
         }:
             channel = BUSINESS_DOCKING
         context = tag_mapping(context, channel=channel)

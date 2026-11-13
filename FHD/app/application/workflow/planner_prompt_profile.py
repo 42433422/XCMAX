@@ -51,7 +51,7 @@ SCENARIO_RULES: dict[str, tuple[str, ...]] = {
     "document": (
         "要求核对明细与合计时，读取明细后必须增加 excel_analysis.statistics，expected_row_count 引用销售查询 summary.count，expected_totals.total_amount 引用销售查询 summary.amount，并声明这些直接依赖。仅 read 不代表合计已核验。",
         "查看模板库用 template_preview.list；清理/清空模板库用 document_template.clear（不需要参数），不要用 document_template.delete 传「全部」之类的占位 id。",
-        "用户要求把当前 Excel「导入/导入到数据库」时，直接生成导入计划，不要反问范围：先 excel_analysis.read 当前文件，再 import_excel_to_database.import，并让导入节点 depends_on 读取节点。file_path 取上下文 excel_analysis.file_path 或 excel_file_path（uploads 相对路径），sheet_name/header_row 与该表一致；import_type 按内容选 products/customers/orders；confirm=true。unit_name 可从上下文 excel_customer_hint 或表格「客户/购买单位」列取得的直接填写，不要为确认客户名称再输出 clarify.ask。",
+        "用户要求把当前 Excel「导入/导入到数据库」时，直接生成 ELT 导入计划，不要反问范围：先 elt_import.preview，再 elt_import.execute，并让执行节点 depends_on 预演节点、run_id 引用 {{preview.data.run_id}}。file_path 取上下文 excel_analysis.file_path 或 excel_file_path（uploads 相对路径），也可直接用用户提到的展示文件名；目标类型、工作表与表头由 ELT 自动识别，已有唯一匹配的导入模板也会自动套用，不要让用户指定，也不要再串联 excel_analysis.read 或 import_excel_to_database。预演失败或提示字段映射未确认时，如实报告，不要改走直接写库。预演返回 executable=false（存在错误行或字段映射待确认）时不要继续自动执行，先如实指出具体错误行，并询问用户是仅写入正确行（执行时 valid_rows_only=true）还是先修正源文件。",
     ),
     "knowledge": (
         "企业知识问答优先依据 chat_knowledge_evidence（可能来自 Persy 记忆图谱）作答；chat_knowledge_dataset_ids 为空只表示没有可检索的文档索引，不代表账户未授权，禁止据此声称「未授权知识库」。只有确实需要检索知识库文档且 chat_knowledge_dataset_ids 非空时才使用 dataset_rag.query，dataset_id 必须来自该列表或用户明确提供；资料不足时如实说明知识库暂无相关内容。清理/清空/删除知识库使用 dataset_rag.clear_dataset，dataset_id 必须来自 chat_clearable_dataset_ids；用户说「全部」时对列表中的每个 id 各生成一个节点，不要反问，也不要编造 dataset_id。",
@@ -122,7 +122,7 @@ _EMPLOYEE_TOOL_EXACT = frozenset(
 # 文档/表格类工具：仅在文档意图下注入。
 _DOCUMENT_TOOL_PREFIXES = (
     "excel_",
-    "import_excel_",
+    "elt_import",
     "generate_office_document",
     "template_preview",
     "pdf-",
@@ -130,6 +130,9 @@ _DOCUMENT_TOOL_PREFIXES = (
     "word-",
     "csv-",
 )
+
+# 不再向规划器暴露的工具：导入统一走 ELT，避免绕过预演与回滚。
+_PLANNER_HIDDEN_TOOLS = frozenset({"import_excel_to_database"})
 
 # 始终保留的核心工具（裁剪时不受影响，按前缀匹配）。
 _CORE_TOOL_PREFIXES = (
@@ -198,6 +201,8 @@ def select_tools_for_prompt(
     filtered: dict[str, Any] = {}
     for tool_id, spec in tool_registry.items():
         key = str(tool_id or "")
+        if key in _PLANNER_HIDDEN_TOOLS:
+            continue
         if _is_core_tool(key):
             filtered[tool_id] = spec
             continue

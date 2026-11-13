@@ -19,6 +19,25 @@ it('carries scope and decodes fragmented UTF-8 and CRLF', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/agent/tasks/events/stream', expect.objectContaining({ credentials: 'include', headers: expect.objectContaining({ 'X-XCAGI-Active-Mod-Id': 'mod-a', 'X-XCMAX-Client-Shell': 'enterprise' }) }))
   stream.close()
 })
+it('shares one physical connection between subscribers of the same URL', async () => {
+  const bytes = new TextEncoder().encode('event: task.snapshot\ndata: ["共享"]\n\n')
+  const fetchMock = vi.fn().mockResolvedValue(new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(bytes)
+  } })))
+  vi.stubGlobal('fetch', fetchMock)
+  const a = new AuthenticatedEventStream('/api/agent/tasks/events/stream')
+  const b = new AuthenticatedEventStream('/api/agent/tasks/events/stream')
+  const seenA = vi.fn()
+  const seenB = vi.fn()
+  a.addEventListener('task.snapshot', (event) => seenA((event as MessageEvent).data))
+  b.addEventListener('task.snapshot', (event) => seenB((event as MessageEvent).data))
+  await vi.waitFor(() => expect(seenA).toHaveBeenCalledWith('["共享"]'))
+  expect(seenB).toHaveBeenCalledWith('["共享"]')
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+  a.close()
+  b.close()
+})
+
 it('stops when the task stream is unauthorized', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })))
   const stream = new AuthenticatedEventStream('/api/agent/tasks/events/stream')

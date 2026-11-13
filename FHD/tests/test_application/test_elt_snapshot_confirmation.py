@@ -9,9 +9,9 @@ import pytest
 from app.application.elt.errors import EltError
 from app.application.elt.service_support import dump_json, load_json
 from app.db.models.elt import EltRun, EltUpload
-from tests.test_application.test_etl_preview_confirmation import assert_unwritten, execute
-from tests.test_application.test_etl_preview_task_boundaries import preview_store as preview_store
-from tests.test_application.test_etl_preview_task_boundaries import ready_preview, snapshot
+from tests.test_application.test_elt_preview_confirmation import assert_unwritten, execute
+from tests.test_application.test_elt_preview_task_boundaries import preview_store as preview_store
+from tests.test_application.test_elt_preview_task_boundaries import ready_preview, snapshot
 
 
 def expire_original(store, run_id, *, cleared=False):

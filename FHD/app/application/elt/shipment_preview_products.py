@@ -248,7 +248,7 @@ def resolve_product_candidate_outcome(
                     "unit_name": str(unit_name or "").strip(),
                     "warning": PRODUCT_PREVIEW_WARNING,
                     "provenance": {
-                        "kind": "etl_preview_product_candidate",
+                        "kind": "elt_preview_product_candidate",
                         "run_id": str(finalist["run"].id),
                         "source_sheet": str(row.source_sheet or ""),
                         "source_row": int(row.source_row),

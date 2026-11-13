@@ -8,17 +8,17 @@ import pytest
 from app.application.elt import auto_ingest_service as ais
 from app.application.elt.auto_ingest_service import AutoIngestService
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.test_application.test_etl_auto_ingest_service import (
+from tests.test_application.test_elt_auto_ingest_service import (
     _candidate_plan,
     _shipment_xlsx,
 )
-from tests.test_application.test_etl_auto_ingest_service import (
+from tests.test_application.test_elt_auto_ingest_service import (
     allow_tmp_ingest_paths as allow_tmp_ingest_paths,
 )
-from tests.test_application.test_etl_auto_ingest_service import (
+from tests.test_application.test_elt_auto_ingest_service import (
     ledger_root as ledger_root,
 )
-from tests.test_application.test_etl_auto_ingest_service import (
+from tests.test_application.test_elt_auto_ingest_service import (
     rag_service as rag_service,
 )
 
@@ -26,7 +26,7 @@ from tests.test_application.test_etl_auto_ingest_service import (
 @pytest.mark.usefixtures("rag_service", "ledger_root", "allow_tmp_ingest_paths")
 @pytest.mark.parametrize("terminal", ["withdrawn", "rejected", "completed_empty", "applied"])
 def test_receipt_poll_preserves_terminal_state_and_empty_outcome(tmp_path, monkeypatch, terminal):
-    source = _shipment_xlsx(tmp_path / "data/etl/uploads/42/7/receipt.xlsx")
+    source = _shipment_xlsx(tmp_path / "data/elt/uploads/42/7/receipt.xlsx")
     fake = MagicMock()
     plan = _candidate_plan(fake, monkeypatch, "run-poll", source)
     ready = fake.get_run.return_value
@@ -173,7 +173,7 @@ def test_refresh_receipt_does_not_write_or_return_changed_scope(monkeypatch, fie
     ],
 )
 def test_poll_only_completed_is_success(tmp_path, monkeypatch, status):
-    source = _shipment_xlsx(tmp_path / "data/etl/uploads/42/7/status.xlsx")
+    source = _shipment_xlsx(tmp_path / "data/elt/uploads/42/7/status.xlsx")
     fake = MagicMock()
     plan = _candidate_plan(fake, monkeypatch, "run-state", source)
     ready = fake.get_run.return_value

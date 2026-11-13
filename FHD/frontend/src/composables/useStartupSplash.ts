@@ -46,11 +46,27 @@ export function useStartupPageReady(load: (current: () => boolean) => Promise<vo
 }
 
 /** Only the local icon face is critical; unrelated fonts and business assets stay in the background. */
-export async function waitForCriticalFonts(): Promise<void> {
+const CRITICAL_FONT_TIMEOUT_MS = 2_500
+
+export async function waitForCriticalFonts(timeoutMs = CRITICAL_FONT_TIMEOUT_MS): Promise<void> {
   if (!document.fonts?.load) return
-  const faces = await document.fonts.load('14px FontAwesome', '\uf015')
-  if (!faces.length || faces.some(face => face.status !== 'loaded')) {
-    throw new Error('工作台图标未加载完成，请重试或重新加载')
+  const loading = document.fonts.load('14px FontAwesome', '\uf015')
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<null>(resolve => {
+    timer = setTimeout(() => resolve(null), timeoutMs)
+  })
+  try {
+    const faces = await Promise.race([loading, timedOut])
+    if (faces === null) {
+      // 图标字体慢时不阻塞工作台：图标在字体到位后自然出现。
+      void loading.catch(() => undefined)
+      return
+    }
+    if (!faces.length || faces.some(face => face.status !== 'loaded')) {
+      throw new Error('工作台图标未加载完成，请重试或重新加载')
+    }
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
   }
 }
 

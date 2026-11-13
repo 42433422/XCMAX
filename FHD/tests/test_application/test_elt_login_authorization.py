@@ -188,9 +188,9 @@ async def test_exact_session_propagates_to_worker_and_resets_after_failure(accou
     from starlette.concurrency import run_in_threadpool
 
     from app.application.elt.llm_session_provider import (
-        bind_etl_llm_owner,
+        bind_elt_llm_owner,
         current_owner_market_provider,
-        reset_etl_llm_owner,
+        reset_elt_llm_owner,
     )
     from app.fastapi_routes import market_account
 
@@ -199,7 +199,7 @@ async def test_exact_session_propagates_to_worker_and_resets_after_failure(accou
     exact.reset_mock()
     latest = Mock(return_value="synthetic-other-session-token")
     monkeypatch.setattr(market_account, "latest_session_market_token", latest)
-    owner = bind_etl_llm_owner(7)
+    owner = bind_elt_llm_owner(7)
     try:
         with pytest.raises(RuntimeError, match="synthetic worker failure"):
             with auth.bind_model_session(grant):
@@ -207,11 +207,11 @@ async def test_exact_session_propagates_to_worker_and_resets_after_failure(accou
                 assert auth.current_model_session_id(8) == ""
                 provider = await run_in_threadpool(current_owner_market_provider, timeout_seconds=1)
                 assert provider._token == "synthetic-current-token"
-                other = bind_etl_llm_owner(8)
+                other = bind_elt_llm_owner(8)
                 try:
                     assert current_owner_market_provider(timeout_seconds=1) is None
                 finally:
-                    reset_etl_llm_owner(other)
+                    reset_elt_llm_owner(other)
                 exact.assert_called_once_with("synthetic-session")
                 latest.assert_not_called()
                 raise RuntimeError("synthetic worker failure")
@@ -219,7 +219,7 @@ async def test_exact_session_propagates_to_worker_and_resets_after_failure(accou
         with pytest.raises(ModelRequestNotSent), auth.bind_model_session(dict(grant)):
             pytest.fail("serialized identity cannot select a credential")
     finally:
-        reset_etl_llm_owner(owner)
+        reset_elt_llm_owner(owner)
 
 
 @pytest.fixture

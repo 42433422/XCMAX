@@ -135,8 +135,8 @@ class RollbackServiceMixin:
     @staticmethod
     def _record_rollback_metric(target_type: str, status: str) -> None:
         try:
-            from app.utils.metrics import etl_rollbacks_total
+            from app.utils.metrics import elt_rollbacks_total
 
-            etl_rollbacks_total.labels(target_type, status).inc()
+            elt_rollbacks_total.labels(target_type, status).inc()
         except RECOVERABLE_ERRORS:
             logger.debug("ETL rollback metrics unavailable", exc_info=True)

@@ -262,7 +262,7 @@ class ShipmentAdapter(TargetAdapter):
             parsed = json.loads(str(record.parsed_data or "{}"))
         except (TypeError, ValueError):
             return False
-        return isinstance(parsed, dict) and str(parsed.get("etl_run_id") or "") == expected
+        return isinstance(parsed, dict) and str(parsed.get("elt_run_id") or "") == expected
 
     @staticmethod
     def _ensure_purchase_unit(db, name: str) -> None:
@@ -297,14 +297,14 @@ class ShipmentAdapter(TargetAdapter):
         if issues:
             return PreviewDecision("error", issues=issues, reason="validation_failed")
         fingerprint = self._fingerprint(data, context)
-        from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+        from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 
         tenant_key = f"tenant:{tenant_id_for_write()}"
         existing_fp = (
-            db.query(ShipmentEtlImportFingerprint)
+            db.query(ShipmentEltImportFingerprint)
             .filter(
-                ShipmentEtlImportFingerprint.tenant_key == tenant_key,
-                ShipmentEtlImportFingerprint.fingerprint == fingerprint,
+                ShipmentEltImportFingerprint.tenant_key == tenant_key,
+                ShipmentEltImportFingerprint.fingerprint == fingerprint,
             )
             .first()
         )
@@ -317,13 +317,13 @@ class ShipmentAdapter(TargetAdapter):
         legacy_note_fingerprint = str(data.get("legacy_note_fingerprint") or "").strip()
         if legacy_note_fingerprint:
             legacy_note_match = (
-                db.query(ShipmentEtlImportFingerprint)
+                db.query(ShipmentEltImportFingerprint)
                 .filter(
-                    ShipmentEtlImportFingerprint.tenant_key == tenant_key,
-                    ShipmentEtlImportFingerprint.fingerprint == legacy_note_fingerprint,
+                    ShipmentEltImportFingerprint.tenant_key == tenant_key,
+                    ShipmentEltImportFingerprint.fingerprint == legacy_note_fingerprint,
                     or_(
-                        ShipmentEtlImportFingerprint.source_kind.is_(None),
-                        ShipmentEtlImportFingerprint.source_kind != "general_etl_legacy_note",
+                        ShipmentEltImportFingerprint.source_kind.is_(None),
+                        ShipmentEltImportFingerprint.source_kind != "general_elt_legacy_note",
                     ),
                 )
                 .first()
@@ -335,21 +335,21 @@ class ShipmentAdapter(TargetAdapter):
                     reason="legacy_note_fingerprint_duplicate",
                 )
         order_no = str(data.get("external_order_no") or "").strip()
-        legacy_query = db.query(ShipmentEtlImportFingerprint).filter(
-            ShipmentEtlImportFingerprint.tenant_key == tenant_key,
+        legacy_query = db.query(ShipmentEltImportFingerprint).filter(
+            ShipmentEltImportFingerprint.tenant_key == tenant_key,
             or_(
-                ShipmentEtlImportFingerprint.source_kind.is_(None),
-                ShipmentEtlImportFingerprint.source_kind != "general_etl",
+                ShipmentEltImportFingerprint.source_kind.is_(None),
+                ShipmentEltImportFingerprint.source_kind != "general_etl",
             ),
         )
         if order_no:
             legacy_query = legacy_query.filter(
-                ShipmentEtlImportFingerprint.order_number == order_no
+                ShipmentEltImportFingerprint.order_number == order_no
             )
         else:
             legacy_query = legacy_query.filter(
-                ShipmentEtlImportFingerprint.file_name == str(context.get("file_name") or ""),
-                ShipmentEtlImportFingerprint.unit_name == str(data.get("purchase_unit") or ""),
+                ShipmentEltImportFingerprint.file_name == str(context.get("file_name") or ""),
+                ShipmentEltImportFingerprint.unit_name == str(data.get("purchase_unit") or ""),
             )
         legacy_match = legacy_query.first()
         if legacy_match:
@@ -432,8 +432,8 @@ class ShipmentAdapter(TargetAdapter):
         self._ensure_purchase_unit(db, str(data.get("purchase_unit") or ""))
         parsed = {
             "external_order_no": data.get("external_order_no"),
-            "etl_run_id": context.get("run_id"),
-            "etl_fingerprint": fingerprint,
+            "elt_run_id": context.get("run_id"),
+            "elt_fingerprint": fingerprint,
         }
         quantity_kg = float(decimal_or_zero(data.get("quantity_kg")))
         quantity_tins = integer_or_zero(data.get("quantity_tins"))
@@ -454,10 +454,10 @@ class ShipmentAdapter(TargetAdapter):
         )
         db.add(obj)
         db.flush()
-        from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+        from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 
         db.add(
-            ShipmentEtlImportFingerprint(
+            ShipmentEltImportFingerprint(
                 tenant_key=f"tenant:{tenant_id_for_write()}",
                 fingerprint=fingerprint,
                 shipment_id=obj.id,
@@ -480,8 +480,8 @@ class ShipmentAdapter(TargetAdapter):
         if obj:
             assert_snapshot_unchanged(obj, after, "发货记录")
             db.delete(obj)
-        from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+        from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 
-        db.query(ShipmentEtlImportFingerprint).filter(
-            ShipmentEtlImportFingerprint.shipment_id == int(match_ref)
+        db.query(ShipmentEltImportFingerprint).filter(
+            ShipmentEltImportFingerprint.shipment_id == int(match_ref)
         ).delete(synchronize_session=False)

@@ -8,17 +8,17 @@ from app.application.elt import auto_ingest_service as ais
 from app.application.elt.errors import EltConflict
 from app.application.elt.service import EltService
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.test_application.test_etl_auto_ingest_service import (
+from tests.test_application.test_elt_auto_ingest_service import (
     _candidate_plan,
     _shipment_xlsx,
 )
-from tests.test_application.test_etl_auto_ingest_service import (
+from tests.test_application.test_elt_auto_ingest_service import (
     allow_tmp_ingest_paths as allow_tmp_ingest_paths,
 )
-from tests.test_application.test_etl_auto_ingest_service import (
+from tests.test_application.test_elt_auto_ingest_service import (
     ledger_root as ledger_root,
 )
-from tests.test_application.test_etl_auto_ingest_service import (
+from tests.test_application.test_elt_auto_ingest_service import (
     rag_service as rag_service,
 )
 
@@ -28,7 +28,7 @@ def test_duplicate_and_invalid_rows_partial_withdraws_without_empty_rollback(
     tmp_path, monkeypatch, rag_service
 ):
     assert EltService  # Import real service before candidate path fixtures replace providers.
-    source = _shipment_xlsx(tmp_path / "data/etl/uploads/42/7/mixed.xlsx")
+    source = _shipment_xlsx(tmp_path / "data/elt/uploads/42/7/mixed.xlsx")
     fake = MagicMock()
     plan = _candidate_plan(fake, monkeypatch, "r", source)
     plan["valid_rows_only"] = True
@@ -142,7 +142,7 @@ def test_all_withdraw_states_verify_business_before_knowledge(monkeypatch, batch
 def test_withdraw_recovers_after_business_commit_without_repeating_business(
     tmp_path, monkeypatch, rag_service, failure
 ):
-    source = _shipment_xlsx(tmp_path / "data/etl/uploads/42/7/recover.xlsx")
+    source = _shipment_xlsx(tmp_path / "data/elt/uploads/42/7/recover.xlsx")
     fake = MagicMock()
     plan = _candidate_plan(fake, monkeypatch, "r", source)
     receipt = {
@@ -298,7 +298,7 @@ def test_completed_rollback_requires_strict_recovery_receipt(monkeypatch, fault)
 def test_missing_memory_is_not_proof_of_durable_knowledge_delete(
     tmp_path, monkeypatch, rag_service, disk
 ):
-    source = _shipment_xlsx(tmp_path / "data/etl/uploads/42/7/durable.xlsx")
+    source = _shipment_xlsx(tmp_path / "data/elt/uploads/42/7/durable.xlsx")
     fake = MagicMock()
     plan = _candidate_plan(fake, monkeypatch, "r", source)
     fake.execute.return_value = {
