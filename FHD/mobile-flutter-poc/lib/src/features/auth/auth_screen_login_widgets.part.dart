@@ -11,20 +11,11 @@ class _AuthLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: SizedBox(
-        width: 72,
-        height: 72,
-        child: Center(
-          child: Image.asset(
-            appLauncherForegroundAsset,
-            width: 50,
-            height: 50,
-            fit: BoxFit.contain,
-          ),
-        ),
-      ),
+    return Image.asset(
+      appLauncherForegroundAsset,
+      width: 140,
+      height: 104,
+      fit: BoxFit.contain,
     );
   }
 }
