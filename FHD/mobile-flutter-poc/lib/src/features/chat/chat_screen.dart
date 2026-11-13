@@ -176,12 +176,6 @@ class _ChatScreenState extends _ChatStateActions {
                 ),
               ],
             ),
-            if (_loadingRemoteMessages)
-              LinearProgressIndicator(
-                minHeight: 2,
-                color: colors.brand,
-                backgroundColor: colors.surfaceHigh,
-              ),
             Expanded(
               child: Chat(
                 chatController: _flyerChatController,

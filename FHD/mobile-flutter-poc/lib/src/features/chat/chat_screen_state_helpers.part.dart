@@ -8,7 +8,6 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
   late final InMemoryChatController _flyerChatController =
       InMemoryChatController();
   final _controller = TextEditingController();
-  var _loadingRemoteMessages = false;
   var _showToolPanel = false;
   var _sending = false;
   var _runningGitOp = false;

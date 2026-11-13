@@ -6,7 +6,6 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     final repository = _repository;
     if (repository == null) return;
 
-    setState(() => _loadingRemoteMessages = true);
     try {
       final remoteMessages = await repository.loadInitialMessages(
         widget.conversation,
@@ -18,8 +17,6 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       }
     } catch (_) {
       // Keep the mobile empty state when auth/network is unavailable.
-    } finally {
-      if (mounted) setState(() => _loadingRemoteMessages = false);
     }
     await _resumeInflightRelayIfNeeded();
   }
