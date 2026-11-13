@@ -73,18 +73,7 @@ class _ChatScreenState extends _ChatStateActions {
   }
 
   Widget _buildEmptyChat(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    return Center(
-      child: Container(
-        width: 64,
-        height: 64,
-        decoration: BoxDecoration(
-          color: colors.brand.withValues(alpha: 0.08),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(AppIcons.chatOutline, size: 30, color: colors.brand),
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildFlyerTextMessage(
