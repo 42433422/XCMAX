@@ -75,28 +75,14 @@ class _ChatScreenState extends _ChatStateActions {
   Widget _buildEmptyChat(BuildContext context) {
     final colors = AppTheme.colors(context);
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: colors.brand.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(AppIcons.chatOutline, size: 30, color: colors.brand),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            '开始和$_resolvedTitle对话',
-            style: TextStyle(
-              color: colors.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+      child: Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          color: colors.brand.withValues(alpha: 0.08),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(AppIcons.chatOutline, size: 30, color: colors.brand),
       ),
     );
   }
