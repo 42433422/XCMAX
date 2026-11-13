@@ -20,13 +20,24 @@ def run_owned_attachment_task(task):
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
     from app.infrastructure.tenant_scope import tenant_scope
-    from evals.run_agent_eval import (
-        _authenticated_route_fixture,
-        _check_equal,
-        _check_event_types,
-        _check_tool_calls,
-        _result,
-    )
+
+    try:
+        from evals.run_agent_eval import (
+            _authenticated_route_fixture,
+            _check_equal,
+            _check_event_types,
+            _check_tool_calls,
+            _result,
+        )
+    except ModuleNotFoundError:
+        # 脚本直跑时评测入口模块名为 __main__，避免重复执行
+        from __main__ import (
+            _authenticated_route_fixture,
+            _check_equal,
+            _check_event_types,
+            _check_tool_calls,
+            _result,
+        )
 
     expected = task["expected"]
     kind = task["attachment_kind"]

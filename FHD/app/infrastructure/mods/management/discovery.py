@@ -168,9 +168,9 @@ class ModDiscovery:
                 else:
                     # 分层：<root>/<layer>/<id>
                     layer_name = os.path.basename(direct_parent)
-                    root = allowed_roots.get(os.path.normcase(os.path.dirname(direct_parent)))
-                    if root is not None and not layer_name.startswith(("_", ".")):
-                        layer = self._ports.child(root, layer_name, directory=True)
+                    layer_root = allowed_roots.get(os.path.normcase(os.path.dirname(direct_parent)))
+                    if layer_root is not None and not layer_name.startswith(("_", ".")):
+                        layer = self._ports.child(layer_root, layer_name, directory=True)
                         if layer:
                             trusted = self._ports.child(layer, entry, directory=True)
                 if trusted is None or not self._ports.child(

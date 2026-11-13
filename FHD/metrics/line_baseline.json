@@ -1,5 +1,5 @@
 {
-  "lines": 2392085,
+  "lines": 2392096,
   "updated": "2026-11-13",
-  "note": "评测脚本导入兼容与 SSOT 索引修正新增 12 行；PR 相对 origin/main 仍净删除约 4700 行"
+  "note": "评测脚本 __main__ 兜底与 mypy 变量重命名；PR 相对 main 仍净删除约 4700 行"
 }
