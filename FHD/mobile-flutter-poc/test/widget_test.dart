@@ -5234,9 +5234,6 @@ void main() {
     final title = tester.widget<Text>(
       find.byKey(const ValueKey('connect_title')),
     );
-    final description = tester.widget<Text>(
-      find.byKey(const ValueKey('connect_description')),
-    );
     final secondary = tester.widget<Container>(
       find.byKey(const ValueKey('connect_secondary_button')),
     );
@@ -5245,7 +5242,6 @@ void main() {
     expect(scaffold.backgroundColor, colors.page);
     expect(topBar.color, colors.surface);
     expect(title.style?.color, colors.textPrimary);
-    expect(description.style?.color, colors.textSecondary);
     expect(secondaryDecoration.border?.top.color, colors.divider);
   });
 

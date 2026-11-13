@@ -353,22 +353,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
-    final before = await _api.loadSession().catchError(
-          (_) => MobileSessionData.empty,
-        );
     await _api.clearActiveAuth();
     if (!mounted) return;
-    _replaceWithMobileLogoutDestination(before);
+    _replaceWithMobileLogoutDestination();
   }
 
-  void _replaceWithMobileLogoutDestination(MobileSessionData before) {
-    final setupComplete =
-        before.setupComplete || before.fhdHost.trim().isNotEmpty;
-    final Widget destination = setupComplete
-        ? const AuthScreen()
-        : const ConnectScreen(fromProfile: true);
+  void _replaceWithMobileLogoutDestination() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => destination),
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
       (_) => false,
     );
   }

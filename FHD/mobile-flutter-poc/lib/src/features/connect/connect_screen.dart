@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_assets.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
+import '../auth/auth_screen.dart';
 import '../scan/scan_qr_screen.dart';
 
 class ConnectScreen extends StatelessWidget {
@@ -152,7 +153,14 @@ class ConnectScreen extends StatelessWidget {
       callback();
       return;
     }
-    Navigator.of(context).maybePop();
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.maybePop();
+      return;
+    }
+    navigator.pushReplacement(
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+    );
   }
 }
 
