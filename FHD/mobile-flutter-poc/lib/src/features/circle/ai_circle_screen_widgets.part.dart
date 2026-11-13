@@ -21,38 +21,21 @@ class _AiCircleHeader extends StatelessWidget {
             color: colors.textStrongSecondary,
             child: Stack(
               children: [
-                Positioned(
+                const Positioned(
                   left: 20,
                   right: 128,
                   bottom: 16,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'AI员工交流圈',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          height: 1.33,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        '${employees.length} 位智能伙伴正在账号里值守',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.86),
-                          fontSize: 14,
-                          height: 1.36,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    'AI员工交流圈',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      height: 1.33,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0,
+                    ),
                   ),
                 ),
                 Positioned(
@@ -114,18 +97,6 @@ class _AiCircleHeader extends StatelessWidget {
                           letterSpacing: 0,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '员工动态、能力更新和协同消息会在这里汇总。',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: colors.textSecondary,
-                          fontSize: 14,
-                          height: 1.36,
-                          letterSpacing: 0,
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -173,7 +144,7 @@ class _AiCircleEmptyState extends StatelessWidget {
       padding: const EdgeInsets.only(top: 56, bottom: 24),
       child: Center(
         child: Text(
-          loading ? '正在加载动态…' : '暂无动态，AI 员工的工作汇报会出现在这里',
+          loading ? '正在加载…' : '暂无动态',
           style: TextStyle(
             color: colors.textSecondary,
             fontSize: 15,

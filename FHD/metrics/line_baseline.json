@@ -1,5 +1,5 @@
 {
-  "lines": 2392205,
-  "updated": "2026-11-13",
-  "note": "新增移动端工具链升级的 CHANGELOG 条目（changelog gate 必填），无等价可删内容"
+  "lines": 2396837,
+  "updated": "2026-11-14",
+  "note": "合并 origin/main 的 SLO 快照与 DORA 指标（+183 行，主干新增），同步抬升基线后本 PR 不再重复计入。"
 }

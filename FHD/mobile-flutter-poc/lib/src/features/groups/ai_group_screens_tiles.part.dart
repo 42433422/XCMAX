@@ -42,33 +42,17 @@ class _CandidateTile extends StatelessWidget {
               width: MessageAvatarLayout.employeePickerAvatarTextGap,
             ),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    candidate.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: colors.textPrimary,
-                      fontSize: 16,
-                      height: 1.38,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                  Text(
-                    candidate.summary,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: colors.textSecondary,
-                      fontSize: 13,
-                      height: 1.31,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                ],
+              child: Text(
+                candidate.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 16,
+                  height: 1.38,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0,
+                ),
               ),
             ),
             if (locked)

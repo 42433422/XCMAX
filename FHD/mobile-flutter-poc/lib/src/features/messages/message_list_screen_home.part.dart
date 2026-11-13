@@ -92,16 +92,12 @@ class _ConversationActionSheet extends StatelessWidget {
 
 class _MessageHomeHeader extends StatelessWidget {
   const _MessageHomeHeader({
-    required this.account,
-    required this.employeeCount,
     required this.query,
     required this.onQueryChanged,
     required this.onClearQuery,
     required this.onMenuSelected,
   });
 
-  final MobileMeData account;
-  final int employeeCount;
   final String query;
   final ValueChanged<String> onQueryChanged;
   final VoidCallback onClearQuery;
@@ -109,56 +105,20 @@ class _MessageHomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
     return Padding(
       key: const ValueKey('message_home_header_padding'),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
       child: Column(
         children: [
           Row(
             children: [
-              AppAvatar(
-                imageSource: account.avatarSource,
-                fallback: AppAvatarFallback.user,
-                size: MessageAvatarLayout.headerAvatarSize,
-                borderRadius: MessageAvatarLayout.headerAvatarRadius,
-                contentDescription: account.displayName.ifEmpty('admin'),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      account.displayName.ifEmpty('admin'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.titleLarge?.copyWith(
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _messageHeaderSubtitle(account, employeeCount),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.labelMedium?.copyWith(
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              const Spacer(),
               _HeaderPlusMenu(onSelected: onMenuSelected),
             ],
           ),
           const SizedBox(
             key: ValueKey('message_home_header_search_gap'),
-            height: 12,
+            height: 8,
           ),
           _SearchBarField(
             value: query,
@@ -169,16 +129,6 @@ class _MessageHomeHeader extends StatelessWidget {
       ),
     );
   }
-}
-
-String _messageHeaderSubtitle(MobileMeData account, int employeeCount) {
-  final buffer = StringBuffer(
-    account.accountKindLabel.trim().isEmpty ? '未登录' : account.accountKindLabel,
-  );
-  if (employeeCount > 0) {
-    buffer.write(' · $employeeCount位AI员工');
-  }
-  return buffer.toString();
 }
 
 class _ConversationEmptyEntry {
@@ -214,18 +164,9 @@ class _ConversationEmptyState extends StatelessWidget {
               const SizedBox(height: 8),
             ],
             Text(
-              loading ? '正在同步会话…' : '暂无会话',
+              loading ? '正在同步…' : '暂无会话',
               style: textTheme.bodyLarge?.copyWith(color: colors.textSecondary),
             ),
-            if (!loading) ...[
-              const SizedBox(height: 8),
-              Text(
-                '下拉刷新或和小C助理聊聊吧',
-                style: textTheme.bodyMedium?.copyWith(
-                  color: colors.textTertiary,
-                ),
-              ),
-            ],
           ],
         ),
       ),

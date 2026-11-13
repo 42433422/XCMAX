@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_api.dart';
@@ -7,6 +9,7 @@ import 'package:xcagi_flutter_poc/src/api/mobile_models.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
 import 'package:xcagi_flutter_poc/src/app/mobile_startup_shell.dart';
 import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
+import 'package:xcagi_flutter_poc/src/data/offline/mobile_offline_store.dart';
 import 'package:xcagi_flutter_poc/src/features/approval/approval_screens.dart';
 import 'package:xcagi_flutter_poc/src/features/shell/home_shell.dart';
 import 'package:xcagi_flutter_poc/src/models/conversation.dart';
@@ -15,6 +18,15 @@ import 'package:xcagi_flutter_poc/src/platform/deep_link_bridge.dart';
 import 'package:xcagi_flutter_poc/src/platform/biometric_gate.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+  setUp(() async {
+    final store = MobileOfflineStore.forExecutor(NativeDatabase.memory());
+    await store.ensureReady();
+    MobileOfflineStore.installSharedForTest(store);
+  });
+  tearDown(MobileOfflineStore.resetSharedForTest);
+
   test('startup route matches the mobile AppViewModel priority', () {
     final config = _appConfig('legal-2');
 
@@ -92,8 +104,9 @@ void main() {
   });
 
   test('theme mode follows Flutter system light dark values', () {
-    expect(mobileThemeModeFromSession(''), ThemeMode.system);
-    expect(mobileThemeModeFromSession('system'), ThemeMode.system);
+    // 移动端默认暗色：空值与 system 都落到暗色。
+    expect(mobileThemeModeFromSession(''), ThemeMode.dark);
+    expect(mobileThemeModeFromSession('system'), ThemeMode.dark);
     expect(mobileThemeModeFromSession('light'), ThemeMode.light);
     expect(mobileThemeModeFromSession('dark'), ThemeMode.dark);
   });

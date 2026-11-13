@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:xcagi_flutter_poc/src/api/mobile_api.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_models.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
+import 'package:xcagi_flutter_poc/src/data/offline/mobile_offline_store.dart';
 import 'package:xcagi_flutter_poc/src/platform/credential_cipher.dart';
 import 'package:xcagi_flutter_poc/src/data/ai_group_snapshot.dart';
 import 'package:xcagi_flutter_poc/src/data/ai_employee_profile.dart';
@@ -50,13 +53,21 @@ import 'package:xcagi_flutter_poc/src/policy/avatar_policy.dart';
 import 'package:xcagi_flutter_poc/src/policy/pinned_ids.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_assets.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_theme.dart';
-import 'package:xcagi_flutter_poc/src/theme/message_avatar_layout.dart';
 import 'package:xcagi_flutter_poc/src/widgets/app_avatar.dart';
 import 'package:xcagi_flutter_poc/src/widgets/group_grid_avatar.dart';
 import 'package:xcagi_flutter_poc/src/widgets/we_ui.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   setUp(MobileProductSkuConfig.resetRemoteSku);
+  setUp(() async {
+    // 聊天缓存/待发送队列在 Drift；widget 测试注入内存库，避免真实数据库文件。
+    final store = MobileOfflineStore.forExecutor(NativeDatabase.memory());
+    await store.ensureReady();
+    MobileOfflineStore.installSharedForTest(store);
+  });
+  tearDown(MobileOfflineStore.resetSharedForTest);
 
   test('pairing QR parser follows Flutter short-code priority', () {
     final shortCode = parsePairingPayload('123456')!;
@@ -125,7 +136,7 @@ void main() {
     expect(light.colorScheme.outlineVariant, const Color(0xFFDEE0E3));
     expect(light.colorScheme.error, const Color(0xFFEF4444));
     expect(light.colorScheme.errorContainer, const Color(0xFFFFECEC));
-    expect(light.scaffoldBackgroundColor, const Color(0xFFF5F6F7));
+    expect(light.scaffoldBackgroundColor, const Color(0xFFF3F4F7));
     expect(lightExtra.brandGradientEnd, const Color(0xFF7C3AED));
     expect(lightExtra.weChatOnline, const Color(0xFF10B981));
     expect(lightExtra.chatUserBubble, const Color(0xFF6366F1));
@@ -142,13 +153,13 @@ void main() {
     expect(dark.colorScheme.secondary, const Color(0xFF10B981));
     expect(dark.colorScheme.secondaryContainer, const Color(0xFF005B3F));
     expect(dark.colorScheme.onSecondaryContainer, const Color(0xFF34D399));
-    expect(dark.colorScheme.surface, const Color(0xFF242424));
-    expect(dark.colorScheme.onSurface, const Color(0xFFE5E5E5));
-    expect(dark.colorScheme.surfaceContainerHighest, const Color(0xFF2E2E2E));
-    expect(dark.colorScheme.outlineVariant, const Color(0xFF2E2E2E));
+    expect(dark.colorScheme.surface, const Color(0xFF161719));
+    expect(dark.colorScheme.onSurface, const Color(0xFFF2F3F5));
+    expect(dark.colorScheme.surfaceContainerHighest, const Color(0xFF1F2124));
+    expect(dark.colorScheme.outlineVariant, const Color(0xFF1F2124));
     expect(dark.colorScheme.error, const Color(0xFFEF4444));
     expect(dark.colorScheme.errorContainer, const Color(0xFF5C1A1A));
-    expect(dark.scaffoldBackgroundColor, const Color(0xFF1A1A1A));
+    expect(dark.scaffoldBackgroundColor, const Color(0xFF0E0F11));
     expect(darkExtra.brandGradientEnd, const Color(0xFF3F6FD8));
     expect(darkExtra.weChatOnline, const Color(0xFF34D399));
     expect(darkExtra.chatUserBubble, const Color(0xFF4F46E5));
@@ -156,8 +167,8 @@ void main() {
     expect(darkExtra.momentAccent, const Color(0xFFA5B0FF));
     expect(darkExtra.momentChipBg, const Color(0xFF2A2A3D));
     expect(darkExtra.replyBoxBg, const Color(0xFF26262E));
-    expect(darkExtra.textSecondary, const Color(0xFF888888));
-    expect(darkExtra.textTertiary, const Color(0xFF5C5C5C));
+    expect(darkExtra.textSecondary, const Color(0xFF9AA0A6));
+    expect(darkExtra.textTertiary, const Color(0xFF7A7F87));
   });
 
   testWidgets('message list renders Flutter-first department groups', (
@@ -180,9 +191,9 @@ void main() {
       ),
     );
 
-    expect(find.text('admin'), findsOneWidget);
-    expect(find.text('账号 · 55位AI员工'), findsOneWidget);
-    expect(find.text('查找会话或伙伴'), findsOneWidget);
+    expect(find.text('admin'), findsNothing);
+    expect(find.textContaining('位AI员工'), findsNothing);
+    expect(find.text('查找会话或伙伴'), findsNothing);
     expect(find.text('超级开发部'), findsOneWidget);
     expect(find.text('(5)'), findsOneWidget);
     expect(find.textContaining('排队中'), findsNothing);
@@ -194,22 +205,13 @@ void main() {
     final headerPadding = tester.widget<Padding>(
       find.byKey(const ValueKey('message_home_header_padding')),
     );
-    expect(headerPadding.padding, const EdgeInsets.fromLTRB(16, 8, 16, 10));
+    expect(headerPadding.padding, const EdgeInsets.fromLTRB(16, 0, 16, 6));
     final searchGap = tester.widget<SizedBox>(
       find.byKey(const ValueKey('message_home_header_search_gap')),
     );
-    expect(searchGap.height, 12);
-    final rowDividers = tester.widgetList<Divider>(find.byType(Divider)).where(
-          (divider) =>
-              divider.indent == MessageAvatarLayout.conversationDividerStart,
-        );
-    expect(rowDividers, isNotEmpty);
-    expect(rowDividers.first.height, 0.5);
-    expect(rowDividers.first.thickness, 0.5);
-    expect(
-      rowDividers.first.color,
-      AppTheme.light().colorScheme.outlineVariant,
-    );
+    expect(searchGap.height, 8);
+    // 会话行已改为无分隔线的紧凑列表（ListView.separated 使用零高度间隔）。
+    expect(find.byType(Divider), findsNothing);
   });
 
   testWidgets('message list text styles use Flutter typography tokens', (
@@ -236,22 +238,12 @@ void main() {
       ),
     );
 
-    final headerTitle = tester.widget<Text>(find.text('admin'));
-    expect(headerTitle.style?.fontSize, typography.titleLarge?.fontSize);
-    expect(headerTitle.style?.height, typography.titleLarge?.height);
-    expect(headerTitle.style?.fontWeight, FontWeight.w600);
-
-    final headerSubtitle = tester.widget<Text>(find.text('账号 · 2位AI员工'));
-    expect(headerSubtitle.style?.fontSize, typography.labelMedium?.fontSize);
-    expect(headerSubtitle.style?.height, typography.labelMedium?.height);
-
     final searchField = tester.widget<TextField>(find.byType(TextField));
     expect(searchField.style?.fontSize, typography.bodyMedium?.fontSize);
     expect(searchField.style?.height, typography.bodyMedium?.height);
-    expect(
-      searchField.decoration?.hintStyle?.fontSize,
-      typography.bodyMedium?.fontSize,
-    );
+    // 搜索框不再带占位提示，保持无边框输入。
+    expect(searchField.decoration?.hintText, isNull);
+    expect(searchField.decoration?.border, InputBorder.none);
 
     final groupTitle = tester.widget<Text>(find.text('超级开发部'));
     expect(groupTitle.style?.fontSize, typography.bodyLarge?.fontSize);
@@ -271,7 +263,7 @@ void main() {
     expect(followedLabel.style?.height, typography.labelSmall?.height);
 
     final readTitle = tester.widget<Text>(find.text('已读员工样式'));
-    expect(readTitle.style?.fontSize, typography.titleMedium?.fontSize);
+    expect(readTitle.style?.fontSize, 16.5);
     expect(readTitle.style?.height, typography.titleMedium?.height);
     expect(readTitle.style?.fontWeight, FontWeight.w600);
 
@@ -284,7 +276,7 @@ void main() {
     expect(subtitle.style?.height, typography.bodyMedium?.height);
 
     final unreadTitle = tester.widget<Text>(find.text('客户会话'));
-    expect(unreadTitle.style?.fontSize, typography.titleMedium?.fontSize);
+    expect(unreadTitle.style?.fontSize, 16.5);
     expect(unreadTitle.style?.height, typography.titleMedium?.height);
     expect(unreadTitle.style?.fontWeight, FontWeight.w700);
   });
@@ -318,7 +310,7 @@ void main() {
     expect(menuButton.menuPadding, EdgeInsets.zero);
     expect(
       tester.getSize(find.byKey(const ValueKey('message_header_plus_button'))),
-      const Size(48, 48),
+      const Size(40, 40),
     );
     final headerPlusIcon = tester.widget<Icon>(
       find.descendant(
@@ -818,7 +810,7 @@ void main() {
     expect(find.text('账号生态待同步'), findsNothing);
     expect(find.text('点这里重新同步 AI 员工。'), findsNothing);
     expect(find.text('暂无会话'), findsOneWidget);
-    expect(find.text('下拉刷新或和小C助理聊聊吧'), findsOneWidget);
+    expect(find.text('下拉刷新或和小C助理聊聊吧'), findsNothing);
   });
 
   testWidgets('message list loading empty state uses Flutter wording', (
@@ -832,7 +824,7 @@ void main() {
     );
 
     expect(find.text('账号生态待同步'), findsNothing);
-    expect(find.text('正在同步会话…'), findsOneWidget);
+    expect(find.text('正在同步…'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('暂无会话'), findsNothing);
   });
@@ -847,8 +839,7 @@ void main() {
       ),
     );
 
-    expect(find.text('账号'), findsOneWidget);
-    expect(find.textContaining('56位AI员工'), findsNothing);
+    expect(find.textContaining('位AI员工'), findsNothing);
   });
 
   testWidgets('bottom nav labels match Flutter current shell', (
@@ -1020,7 +1011,7 @@ void main() {
       find.byKey(const ValueKey('bottom_nav_tile_消息')),
     );
 
-    expect(colors.surface, const Color(0xFF242424));
+    expect(colors.surface, const Color(0xFF161719));
     expect(topBar.color, colors.surface);
     expect(bottomTile.color, colors.page);
   });
@@ -1273,6 +1264,7 @@ void main() {
     expect(find.text('超级员工-Codex'), findsWidgets);
     expect(find.text('专属客服'), findsNothing);
     expect(find.text('客户客服'), findsWidgets);
+    // 管理端兜底会话仍带岗位说明副标题。
     expect(find.text('查看并回复企业客户的客服消息'), findsWidgets);
 
     await tester.tap(find.text('客户客服').first);
@@ -1339,7 +1331,7 @@ void main() {
 
     expect(repository.employeeLoads, 1);
     expect(find.text('同源仓库员工'), findsOneWidget);
-    expect(find.textContaining('AI号 home-shell-employee'), findsOneWidget);
+    expect(find.textContaining('AI号 home-shell-employee'), findsNothing);
   });
 
   testWidgets('home shell shares repository API with profile tab', (
@@ -1398,22 +1390,25 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('admin'), findsWidgets);
+    // 消息列表头部不再展示账号名，账号信息集中在「我」页。
+    expect(find.text('admin'), findsNothing);
 
     await tester.tap(find.text('我'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('个人资料与工作身份'));
+    await tester.tap(find.byKey(const ValueKey('profile_hero_card')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'admin-local');
     await tester.pump();
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
+    expect(find.text('admin-local'), findsWidgets);
+    expect(api.session.username, 'admin-local');
+
     await tester.tap(find.text('消息'));
     await tester.pumpAndSettle();
 
-    expect(find.text('admin-local'), findsOneWidget);
-    expect(api.session.username, 'admin-local');
+    expect(find.text('admin-local'), findsNothing);
   });
 
   testWidgets('home shell seeds Flutter cached avatar before network refresh', (
@@ -1438,8 +1433,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    final headerAvatar = tester.widget<AppAvatar>(find.byType(AppAvatar).first);
-    expect(headerAvatar.imageSource, '/tmp/android-local-avatar.jpg');
+    expect(find.text('admin'), findsNothing);
     expect(repository.loadMeCalls, 1);
   });
 
@@ -1527,8 +1521,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.accountLoads, 1);
-    expect(find.text('fallback-name'), findsOneWidget);
-    expect(find.text('账号 · 55位AI员工'), findsOneWidget);
+    expect(find.text('fallback-name'), findsNothing);
+    expect(find.textContaining('位AI员工'), findsNothing);
     expect(find.text('admin'), findsNothing);
   });
 
@@ -1558,14 +1552,19 @@ void main() {
     );
     expect(aiEmployeeTitle.style?.fontSize, 18);
     expect(aiEmployeeTitle.style?.fontWeight, FontWeight.w600);
-    expect(find.text('查找会话或伙伴'), findsOneWidget);
+    expect(find.text('查找员工'), findsNothing);
     expect(
       tester.getSize(find.byKey(const ValueKey('ai_employee_search_bar'))),
       const Size(406, 38),
     );
     expect(find.text('静态站内容编辑员'), findsOneWidget);
+    // 员工列表按字母分组，SEO 岗位在视口外，用搜索框定位后再清空。
+    await tester.enterText(find.byType(TextField), 'SEO');
+    await tester.pumpAndSettle();
     expect(find.text('SEO 站点地图管理员'), findsOneWidget);
-    expect(find.textContaining('AI号 site-content-editor'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+    expect(find.textContaining('AI号 site-content-editor'), findsNothing);
 
     await tester.tap(find.text('静态站内容编辑员'));
     await tester.pumpAndSettle();
@@ -1745,7 +1744,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('未找到该 AI 员工'), findsOneWidget);
-      expect(find.text('稍后刷新或从企业端同步数据'), findsOneWidget);
+      expect(find.text('稍后刷新或从企业端同步数据'), findsNothing);
       expect(find.text('刷新'), findsOneWidget);
       expect(repository.employeeLoads, 1);
 
@@ -1805,7 +1804,7 @@ void main() {
 
     expect(find.text('查找会话或伙伴'), findsNothing);
     expect(find.text('暂无 AI 员工'), findsOneWidget);
-    expect(find.text('员工会自动同步到这里；如未显示，点右上角刷新。'), findsOneWidget);
+    expect(find.text('员工会自动同步到这里；如未显示，点右上角刷新。'), findsNothing);
     expect(find.text('扫码绑定'), findsNothing);
     expect(find.byIcon(Icons.qr_code_scanner), findsNothing);
     expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
@@ -1852,12 +1851,12 @@ void main() {
     expect(find.byKey(const ValueKey('we_top_bar_divider_探索')), findsOneWidget);
     expect(find.text('AI交流'), findsOneWidget);
     expect(find.text('AI交流圈'), findsOneWidget);
-    expect(find.text('查看企业 AI 员工动态、主页和能力介绍'), findsOneWidget);
-    expect(find.text('桌面工具（与电脑端侧栏对齐）'), findsOneWidget);
+    expect(find.text('查看企业 AI 员工动态、主页和能力介绍'), findsNothing);
+    expect(find.text('桌面工具'), findsOneWidget);
     expect(find.text('扫码绑定电脑端'), findsOneWidget);
-    expect(find.text('绑定后，电脑端侧栏的工具会同步到这里'), findsOneWidget);
-    expect(find.text('绑定企业端、管理端或电脑端登录'), findsOneWidget);
-    expect(find.text('企业公告与系统通知'), findsOneWidget);
+    expect(find.text('绑定后，电脑端侧栏的工具会同步到这里'), findsNothing);
+    expect(find.text('绑定企业端、管理端或电脑端登录'), findsNothing);
+    expect(find.text('企业公告与系统通知'), findsNothing);
     expect(
       tester
           .widget<Icon>(find.byKey(const ValueKey('we_cell_icon_AI交流圈')))
@@ -2017,7 +2016,6 @@ void main() {
       expect(find.text('员工工作流'), findsOneWidget);
       expect(find.text('设置入口'), findsOneWidget);
       expect(find.text('智慧分析'), findsOneWidget);
-      expect(find.text('点击打开'), findsWidgets);
 
       await tester.tap(find.text('AI员工生态'));
       await tester.pumpAndSettle();
@@ -2053,9 +2051,9 @@ void main() {
 
     expect(find.text('AI交流圈'), findsOneWidget);
     expect(find.text('AI员工交流圈'), findsOneWidget);
-    expect(find.text('55 位智能伙伴正在账号里值守'), findsOneWidget);
+    expect(find.text('55 位智能伙伴正在账号里值守'), findsNothing);
     expect(find.text('账号生态'), findsOneWidget);
-    expect(find.text('员工动态、能力更新和协同消息会在这里汇总。'), findsOneWidget);
+    expect(find.text('员工动态、能力更新和协同消息会在这里汇总。'), findsNothing);
     expect(find.text('静态站内容编辑员'), findsOneWidget);
     expect(find.text('已完成首页内容巡检。'), findsOneWidget);
     expect(find.text('赞'), findsOneWidget);
@@ -2092,7 +2090,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('0 位智能伙伴正在账号里值守'), findsOneWidget);
+      expect(find.text('0 位智能伙伴正在账号里值守'), findsNothing);
       expect(find.text('55 位智能伙伴正在账号里值守'), findsNothing);
       expect(find.text('已完成首页内容巡检。'), findsOneWidget);
     },
@@ -2204,7 +2202,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('入口'), findsOneWidget);
-    expect(find.text('调用企业端 OCR 引擎处理图片文字'), findsOneWidget);
+    expect(find.text('调用企业端 OCR 引擎处理图片文字'), findsNothing);
     expect(find.text('从相册选择'), findsOneWidget);
     expect(find.text('批量识别'), findsOneWidget);
     expect(find.text('状态'), findsOneWidget);
@@ -2212,12 +2210,12 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.camera_alt));
     await tester.pumpAndSettle();
-    expect(find.text('移动端拍照上传正在接入，请先使用电脑端 OCR'), findsOneWidget);
+    expect(find.text('请使用电脑端 OCR'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.photo_library));
     await tester.pumpAndSettle();
-    expect(find.text('移动端相册识别正在接入，请先使用电脑端 OCR'), findsOneWidget);
+    expect(find.text('请使用电脑端 OCR'), findsOneWidget);
   });
 
   testWidgets('OCR page follows Flutter dark theme tokens', (
@@ -2272,7 +2270,7 @@ void main() {
     await tester.tap(find.text('输入设备码'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'), findsOneWidget);
+    expect(find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'), findsNothing);
     expect(find.text('连接'), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const ValueKey('we_block_button_连接'))).height,
@@ -2313,12 +2311,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     final sheetTitle = tester.widget<Text>(find.text('输入设备码').last);
-    final sheetSubtitle = tester.widget<Text>(
-      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
-    );
-
     expect(sheetTitle.style?.color, colors.textPrimary);
-    expect(sheetSubtitle.style?.color, colors.textSecondary);
+    // 手动输入面板已去掉说明性副标题。
+    expect(
+      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
+      findsNothing,
+    );
   });
 
   testWidgets('scan pairing success follows Flutter full-screen overlay', (
@@ -2402,7 +2400,7 @@ void main() {
       expect(find.text('深色'), findsOneWidget);
       expect(find.text('反馈'), findsOneWidget);
       expect(find.text('问题反馈'), findsOneWidget);
-      expect(find.text('提交后进入企业支持队列'), findsOneWidget);
+      expect(find.text('提交后进入企业支持队列'), findsNothing);
       final colors = AppTheme.colors(
         tester.element(find.byType(SettingsScreen)),
       );
@@ -2425,7 +2423,7 @@ void main() {
       );
       expect(find.text('版本'), findsOneWidget);
       expect(find.text('检查更新'), findsOneWidget);
-      expect(find.text('获取企业版移动端最新构建'), findsOneWidget);
+      expect(find.text('获取企业版移动端最新构建'), findsNothing);
     },
   );
 
@@ -2498,7 +2496,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('已开启'), findsOneWidget);
+    expect(find.text('已开启'), findsNothing);
     expect(find.text('深色'), findsWidgets);
 
     await tester.tap(find.text('浅色'));
@@ -2850,16 +2848,18 @@ void main() {
       MaterialApp(theme: AppTheme.light(), home: const AuthScreen()),
     );
 
-    expect(find.text('XCAGI 手机控制端'), findsOneWidget);
+    expect(find.text('XCAGI 修茈企业版'), findsOneWidget);
     expect(
       find.image(const AssetImage(appLauncherForegroundAsset)),
       findsOneWidget,
     );
-    expect(find.text('连接服务器后台、企业工作台和电脑执行端'), findsOneWidget);
+    // 登录页副标题与「服务器连接/企业工作台」分段已下线。
+    expect(find.text('连接服务器后台、企业工作台和电脑执行端'), findsNothing);
     expect(find.text('密码登录'), findsOneWidget);
     expect(find.text('手机号登录'), findsNothing);
-    expect(find.text('企业工作台'), findsOneWidget);
-    expect(find.text('服务器后台'), findsOneWidget);
+    expect(find.text('企业工作台'), findsNothing);
+    expect(find.text('服务器后台'), findsNothing);
+    expect(find.text(MobileBuildConfig.profileVersionText), findsOneWidget);
     expect(find.text('扫码绑定/登录'), findsOneWidget);
     expect(find.text('记住密码'), findsOneWidget);
     expect(find.text('免登录'), findsOneWidget);
@@ -2905,16 +2905,17 @@ void main() {
 
     final colors = AppTheme.colors(tester.element(find.byType(AuthScreen)));
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    final title = tester.widget<Text>(find.text('XCAGI 手机控制端'));
-    final subtitle = tester.widget<Text>(find.text('连接服务器后台、企业工作台和电脑执行端'));
+    final title = tester.widget<Text>(find.text('XCAGI 修茈企业版'));
     final selectedTab = tester.widget<Text>(find.text('密码登录'));
-    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.drag(
+      find.byType(SingleChildScrollView),
+      const Offset(0, -500),
+    );
     await tester.pumpAndSettle();
     final agreement = tester.widgetList<Text>(find.text('已阅读并同意 ')).last;
 
     expect(scaffold.backgroundColor, colors.surface);
     expect(title.style?.color, colors.textPrimary);
-    expect(subtitle.style?.color, colors.textSecondary);
     expect(selectedTab.style?.color, colors.textPrimary);
     expect(agreement.style?.color, colors.textSecondary);
   });
@@ -3033,9 +3034,9 @@ void main() {
     );
 
     expect(find.text('账号注册'), findsOneWidget);
-    expect(find.text('使用网页开户注册表单，和桌面端保持一致。'), findsOneWidget);
+    expect(find.text('使用网页开户注册表单，和桌面端保持一致。'), findsNothing);
     expect(find.text('网页登录表单'), findsOneWidget);
-    expect(find.textContaining('用户名、邮箱、行业、预算区间、密码和确认密码'), findsOneWidget);
+    expect(find.textContaining('用户名、邮箱、行业、预算区间、密码和确认密码'), findsNothing);
     expect(find.text('去网页填写注册表单'), findsOneWidget);
     expect(find.text('返回登录'), findsOneWidget);
   });
@@ -3055,12 +3056,12 @@ void main() {
     final colors = AppTheme.colors(tester.element(find.byType(RegisterScreen)));
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     final title = tester.widget<Text>(find.text('账号注册'));
-    final subtitle = tester.widget<Text>(find.text('使用网页开户注册表单，和桌面端保持一致。'));
+    final formTitle = tester.widget<Text>(find.text('网页登录表单'));
     final icon = tester.widget<Icon>(find.byIcon(Icons.language));
 
     expect(scaffold.backgroundColor, colors.page);
     expect(title.style?.color, colors.textPrimary);
-    expect(subtitle.style?.color, colors.textSecondary);
+    expect(formTitle.style?.color, colors.textPrimary);
     expect(icon.color, colors.textPrimary);
   });
 
@@ -3106,13 +3107,13 @@ void main() {
     expect(find.text('行业定型'), findsOneWidget);
     expect(find.text('补基础线'), findsOneWidget);
     expect(find.text('移动端将独立连接 XCAGI 宿主'), findsOneWidget);
-    expect(find.text('注册或登录后先同步账号、市场令牌和企业会话，再按行业装齐基础能力。'), findsOneWidget);
+    expect(find.text('注册或登录后先同步账号、市场令牌和企业会话，再按行业装齐基础能力。'), findsNothing);
     expect(find.text('开始行业配置'), findsOneWidget);
 
     await tester.tap(find.text('开始行业配置'));
     await tester.pump();
     expect(find.text('选择行业'), findsOneWidget);
-    expect(find.text('这里使用后端行业目录，和桌面端的行业筛选来源一致。'), findsOneWidget);
+    expect(find.text('这里使用后端行业目录，和桌面端的行业筛选来源一致。'), findsNothing);
     expect(find.text('通用'), findsWidgets);
     expect(find.text('继续'), findsOneWidget);
   });
@@ -3295,7 +3296,7 @@ void main() {
     expect(find.text('单号'), findsOneWidget);
     expect(find.text('AP-7'), findsOneWidget);
     expect(find.text('审批意见'), findsOneWidget);
-    expect(find.text('复杂编辑请在电脑端处理'), findsOneWidget);
+    expect(find.text('复杂编辑请在电脑端处理'), findsNothing);
     expect(find.text('通过'), findsOneWidget);
     expect(find.text('驳回'), findsOneWidget);
     expect(find.byType(WeBlockButton), findsOneWidget);
@@ -3528,7 +3529,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('暂无工单'), findsOneWidget);
-    expect(find.text('企业端有新工单后会同步到这里'), findsOneWidget);
+    expect(find.text('企业端有新工单后会同步到这里'), findsNothing);
   });
 
   testWidgets('customer service bridge filters and replies customer requests', (
@@ -3684,7 +3685,7 @@ void main() {
 
     expect(find.text('发货记录'), findsOneWidget);
     expect(find.text('暂无发货数据'), findsOneWidget);
-    expect(find.text('下拉刷新或连接电脑后重试。'), findsOneWidget);
+    expect(find.text('下拉刷新或连接电脑后重试。'), findsNothing);
     expect(find.text('刷新'), findsOneWidget);
   });
 
@@ -3799,7 +3800,7 @@ void main() {
 
     await tester.tap(find.text('凭证与收支'));
     await tester.pumpAndSettle();
-    expect(find.text('请在电脑端打开完整财务看板'), findsOneWidget);
+    expect(find.text('请在电脑端打开财务看板'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
     await tester.tap(find.text('标签打印'));
@@ -3818,7 +3819,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('暂无财务数据'), findsOneWidget);
-    expect(find.text('连接企业后端后显示收入、成本、毛利与应付摘要'), findsOneWidget);
+    expect(find.text('连接企业后端后显示收入、成本、毛利与应付摘要'), findsNothing);
   });
 
   testWidgets('longtail finance page follows Flutter dark theme tokens', (
@@ -3869,7 +3870,7 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_divider_智脑集成')),
       findsOneWidget,
     );
-    expect(find.text('员工编排由企业端模块承载'), findsOneWidget);
+    expect(find.text('员工编排由企业端模块承载'), findsNothing);
     expect(find.text('打开能力库'), findsOneWidget);
 
     await tester.pumpWidget(
@@ -3880,7 +3881,7 @@ void main() {
     );
 
     expect(find.text('能力库'), findsWidgets);
-    expect(find.text('安装与授权由企业端和管理端统一管理'), findsOneWidget);
+    expect(find.text('安装与授权由企业端和管理端统一管理'), findsNothing);
     expect(find.text('查看企业模块'), findsOneWidget);
   });
 
@@ -4283,8 +4284,8 @@ void main() {
     expect(find.text('工作分支'), findsOneWidget);
     expect(find.byTooltip('刷新分支'), findsOneWidget);
     expect(find.text('自动新建任务分支'), findsOneWidget);
-    expect(find.text('普通派工默认隔离，跑完后再合并'), findsOneWidget);
-    expect(find.text('暂无可选分支，点右上角刷新'), findsOneWidget);
+    expect(find.text('普通派工默认隔离，跑完后再合并'), findsNothing);
+    expect(find.text('暂无可选分支'), findsOneWidget);
 
     await tester.tap(find.byTooltip('刷新分支'));
     await tester.pumpAndSettle();
@@ -4603,7 +4604,7 @@ void main() {
     expect(find.text('账户余额'), findsOneWidget);
     expect(find.text('10,070.30'), findsOneWidget);
     expect(find.text('扫码绑定'), findsOneWidget);
-    expect(find.text('绑定服务器后台、企业工作台或电脑执行端'), findsOneWidget);
+    expect(find.text('绑定服务器后台、企业工作台或电脑执行端'), findsNothing);
     expect(find.text('服务'), findsOneWidget);
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
@@ -4699,7 +4700,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('安全'), findsOneWidget);
     expect(find.text('检查更新'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.arrow_back).last);
+    await tester.tap(find.byTooltip('返回').last);
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('扫码绑定'));
@@ -4710,7 +4711,7 @@ void main() {
       find.image(const AssetImage(appLauncherForegroundAsset)),
       findsOneWidget,
     );
-    expect(find.text('XCAGI 手机控制端'), findsOneWidget);
+    expect(find.text('XCAGI 修茈企业版'), findsOneWidget);
     expect(find.text('扫描绑定'), findsOneWidget);
     expect(find.text('返回'), findsWidgets);
   });
@@ -4866,7 +4867,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('个人资料与工作身份'));
+    await tester.tap(find.byKey(const ValueKey('profile_hero_card')));
     await tester.pumpAndSettle();
 
     expect(find.text('个人资料'), findsWidgets);
@@ -5178,18 +5179,16 @@ void main() {
       find.image(const AssetImage(appLauncherForegroundAsset)),
       findsOneWidget,
     );
-    expect(find.text('XCAGI 手机控制端'), findsOneWidget);
+    expect(find.text('XCAGI 修茈企业版'), findsOneWidget);
     final connectTitle = tester.widget<Text>(
       find.byKey(const ValueKey('connect_title')),
     );
-    expect(connectTitle.style?.fontSize, 24);
-    expect(connectTitle.style?.fontWeight, FontWeight.w600);
-    expect(find.text('绑定服务器后台、企业工作台或电脑执行端后，手机可远程调动员工和 Codex。'), findsOneWidget);
-    final connectDescription = tester.widget<Text>(
+    expect(connectTitle.style?.fontSize, 23);
+    expect(connectTitle.style?.fontWeight, FontWeight.w700);
+    expect(
       find.byKey(const ValueKey('connect_description')),
+      findsNothing,
     );
-    expect(connectDescription.style?.fontSize, 14);
-    expect(connectDescription.style?.fontWeight, FontWeight.w400);
     expect(find.text('扫描绑定'), findsOneWidget);
     expect(find.text('返回'), findsWidgets);
     expect(
@@ -5248,9 +5247,6 @@ void main() {
     final title = tester.widget<Text>(
       find.byKey(const ValueKey('connect_title')),
     );
-    final description = tester.widget<Text>(
-      find.byKey(const ValueKey('connect_description')),
-    );
     final secondary = tester.widget<Container>(
       find.byKey(const ValueKey('connect_secondary_button')),
     );
@@ -5259,7 +5255,6 @@ void main() {
     expect(scaffold.backgroundColor, colors.page);
     expect(topBar.color, colors.surface);
     expect(title.style?.color, colors.textPrimary);
-    expect(description.style?.color, colors.textSecondary);
     expect(secondaryDecoration.border?.top.color, colors.divider);
   });
 
@@ -5441,8 +5436,9 @@ void main() {
       );
 
       expect(find.text('超级员工-Codex'), findsWidgets);
-      expect(find.byIcon(Icons.mic), findsOneWidget);
-      expect(find.byIcon(Icons.add), findsOneWidget);
+      // 输入区图标改为 AppIcons，测试按提示语义定位。
+      expect(find.byTooltip('语音'), findsOneWidget);
+      expect(find.byTooltip('更多工具'), findsOneWidget);
       expect(find.text('发送'), findsNothing);
       expect(find.textContaining('api/mobile'), findsNothing);
       final typography = AppTheme.light().textTheme;
@@ -5668,6 +5664,7 @@ void main() {
     await tester.pump();
     await repository.firstToken.future;
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('停止'), findsOneWidget);
     expect(find.textContaining('思考中'), findsOneWidget);
@@ -6135,6 +6132,7 @@ class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
   Future<String> streamMessage({
     required ConversationItem conversation,
     required String body,
+    bool cacheUserMessage = true,
     int userId = 0,
     List<ChatMessage> recentMessages = const [],
     void Function(String token)? onToken,
@@ -6164,6 +6162,7 @@ class _FakeFailThenStreamingRepository extends _FakeRealtimeRepository {
   Future<String> streamMessage({
     required ConversationItem conversation,
     required String body,
+    bool cacheUserMessage = true,
     int userId = 0,
     List<ChatMessage> recentMessages = const [],
     void Function(String token)? onToken,

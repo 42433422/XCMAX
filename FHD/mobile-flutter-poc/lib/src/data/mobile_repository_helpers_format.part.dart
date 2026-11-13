@@ -169,7 +169,6 @@ List<ConversationItem> _employeeConversationItems(
           .trim();
       if (employeeId.isEmpty || title.isEmpty) continue;
 
-      final source = mod.name.ifEmpty(mod.id).trim();
       final conversationId = 'employee:${mod.id}:$employeeId';
       if (!seenIds.add(conversationId)) continue;
       final state = states[conversationId];
@@ -179,8 +178,7 @@ List<ConversationItem> _employeeConversationItems(
           id: conversationId,
           type: ConversationType.aiTask,
           title: title,
-          subtitle: state?.preview.ifEmpty(employee.contactSubtitle(source)) ??
-              employee.contactSubtitle(source),
+          subtitle: state?.preview ?? '',
           timestampText: state?.timestampText ?? '',
           timestampMs: state?.timestampMs ?? 0,
           avatarUrl: employee.marketAvatar ?? mod.avatarUrl,

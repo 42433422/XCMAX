@@ -35,16 +35,6 @@ class RegisterScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
-            Text(
-              '使用网页开户注册表单，和桌面端保持一致。',
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 14,
-                height: 1.36,
-                letterSpacing: 0,
-              ),
-            ),
-            const SizedBox(height: 18),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -57,30 +47,15 @@ class RegisterScreen extends StatelessWidget {
                   Icon(Icons.language, color: colors.textPrimary),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '网页登录表单',
-                          style: TextStyle(
-                            color: colors.textPrimary,
-                            fontSize: 15,
-                            height: 1.4,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '打开桌面端注册页填写用户名、邮箱、行业、预算区间、密码和确认密码。提交成功后回到 App 登录并继续启动配置。',
-                          style: TextStyle(
-                            color: colors.textSecondary,
-                            fontSize: 13,
-                            height: 1.46,
-                            letterSpacing: 0,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      '网页登录表单',
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 15,
+                        height: 1.4,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0,
+                      ),
                     ),
                   ),
                 ],
