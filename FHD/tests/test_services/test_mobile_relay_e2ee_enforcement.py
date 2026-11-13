@@ -63,9 +63,7 @@ def test_plaintext_task_is_rejected_after_public_key_registered(relay_e2ee) -> N
 
 def test_encrypted_payload_is_stored_as_ciphertext_only(relay_e2ee) -> None:
     desktop = _paired_with_public_key(relay_e2ee)
-    envelope, _, _ = e2ee.seal_payload(
-        {"message": "客户A 欠款明细"}, desktop["public_key"]
-    )
+    envelope, _, _ = e2ee.seal_payload({"message": "客户A 欠款明细"}, desktop["public_key"])
 
     task = relay_e2ee.service.create_task(
         user_id=7501,

@@ -150,9 +150,7 @@ def seal_result(result: dict[str, Any], shared: bytes, *, ref: str = "") -> dict
 
 
 def _derive(shared: bytes, info: bytes) -> bytes:
-    return HKDF(
-        algorithm=hashes.SHA256(), length=32, salt=KDF_SALT, info=info
-    ).derive(shared)
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=KDF_SALT, info=info).derive(shared)
 
 
 def _decode(value: str) -> bytes:

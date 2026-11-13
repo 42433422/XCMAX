@@ -600,9 +600,7 @@ def _desktop_device_heartbeat(
     now = datetime.now()
     with backends.database() as db:
         record = (
-            db.query(DesktopDeviceRecord)
-            .filter(DesktopDeviceRecord.device_id == device_id)
-            .first()
+            db.query(DesktopDeviceRecord).filter(DesktopDeviceRecord.device_id == device_id).first()
         )
         if record is None:
             record = DesktopDeviceRecord(device_id=device_id)
@@ -637,9 +635,7 @@ def _desktop_device_list(
     now = datetime.now()
     online_after = now - timedelta(seconds=online_within_seconds)
     with backends.database() as db:
-        query = db.query(DesktopDeviceRecord).filter(
-            DesktopDeviceRecord.user_id == user_id
-        )
+        query = db.query(DesktopDeviceRecord).filter(DesktopDeviceRecord.user_id == user_id)
         if tenant_id:
             query = query.filter(DesktopDeviceRecord.tenant_id == tenant_id)
         records = query.order_by(DesktopDeviceRecord.last_seen_at.desc()).limit(20).all()
@@ -656,12 +652,8 @@ def _desktop_device_list(
                     "platform": record.platform,
                     "app_version": record.app_version,
                     "last_seen_at": record.last_seen_at,
-                    "online": bool(
-                        record.last_seen_at and record.last_seen_at >= online_after
-                    ),
-                    "capabilities": capabilities
-                    if isinstance(capabilities, dict)
-                    else {},
+                    "online": bool(record.last_seen_at and record.last_seen_at >= online_after),
+                    "capabilities": capabilities if isinstance(capabilities, dict) else {},
                 }
             )
         return items

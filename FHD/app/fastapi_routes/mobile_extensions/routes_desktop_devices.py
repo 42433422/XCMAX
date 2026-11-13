@@ -83,9 +83,7 @@ class DesktopDeviceRoutes:
             device_id = str((body or {}).get("device_id") or "").strip()
             if not device_id:
                 return JSONResponse(
-                    format_mobile_response(
-                        None, "缺少设备标识", success=False, code=400
-                    ),
+                    format_mobile_response(None, "缺少设备标识", success=False, code=400),
                     status_code=400,
                 )
             user_id, tenant_id = _scope(user)
@@ -96,12 +94,9 @@ class DesktopDeviceRoutes:
                     tenant_id=tenant_id,
                     device_id=device_id,
                     label=str((body or {}).get("label") or "").strip(),
-                    platform=str((body or {}).get("platform") or "desktop").strip()
-                    or "desktop",
+                    platform=str((body or {}).get("platform") or "desktop").strip() or "desktop",
                     app_version=str((body or {}).get("app_version") or "").strip(),
-                    capabilities=capabilities
-                    if isinstance(capabilities, dict)
-                    else {},
+                    capabilities=capabilities if isinstance(capabilities, dict) else {},
                 )
             except RECOVERABLE_ERRORS:
                 return JSONResponse(

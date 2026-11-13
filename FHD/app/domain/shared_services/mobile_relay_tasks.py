@@ -155,16 +155,12 @@ class RelayTaskQueue:
         queued_cutoff = (current - timedelta(days=7)).isoformat()
         db.execute(
             text(
-                "DELETE FROM mobile_relay_tasks "
-                "WHERE status != 'queued' AND updated_at < :cutoff"
+                "DELETE FROM mobile_relay_tasks WHERE status != 'queued' AND updated_at < :cutoff"
             ),
             {"cutoff": cutoff},
         )
         db.execute(
-            text(
-                "DELETE FROM mobile_relay_tasks "
-                "WHERE status = 'queued' AND created_at < :cutoff"
-            ),
+            text("DELETE FROM mobile_relay_tasks WHERE status = 'queued' AND created_at < :cutoff"),
             {"cutoff": queued_cutoff},
         )
 

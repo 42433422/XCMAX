@@ -835,9 +835,7 @@ def test_desktop_components_round_trip_through_local_asgi_and_sqlite(relay, monk
             config = relay._read_config()
             desktop_public = str(config.get("e2ee_public_key") or "")
             assert desktop_public
-            envelope, ephemeral_private, _ = e2ee.seal_payload(
-                {"message": "hello"}, desktop_public
-            )
+            envelope, ephemeral_private, _ = e2ee.seal_payload({"message": "hello"}, desktop_public)
             start.assert_called_once_with()
             bound = server.post(
                 "/api/mobile/v1/relay/mobile/bind-account",
@@ -862,9 +860,7 @@ def test_desktop_components_round_trip_through_local_asgi_and_sqlite(relay, monk
             assert status.status_code == 200
             final_task = status.json()["data"]["task"]
             assert final_task["status"] == "completed"
-            final_result = e2ee.open_result(
-                final_task["result"], ephemeral_private, desktop_public
-            )
+            final_result = e2ee.open_result(final_task["result"], ephemeral_private, desktop_public)
             assert final_result["answer"] == "local result"
             execute.assert_called_once()
             assert execute.call_args.args[0]["payload"]["message"] == "hello"

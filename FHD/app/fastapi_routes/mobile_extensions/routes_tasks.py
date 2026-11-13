@@ -101,9 +101,7 @@ class TaskRoutes:
                     include_archived=include_archived,
                 )
                 items = [task_summary(task) for task in tasks]
-                return format_mobile_response(
-                    {"items": items, "count": len(items)}
-                )
+                return format_mobile_response({"items": items, "count": len(items)})
             except RECOVERABLE_ERRORS:
                 return JSONResponse(
                     format_mobile_response(
@@ -121,9 +119,7 @@ class TaskRoutes:
                 return _unauthorized()
             user_id, tenant_id = _scope(user)
             try:
-                task = ports.get_task(
-                    user_id=user_id, tenant_id=tenant_id, task_id=task_id
-                )
+                task = ports.get_task(user_id=user_id, tenant_id=tenant_id, task_id=task_id)
             except RECOVERABLE_ERRORS:
                 return JSONResponse(
                     format_mobile_response(
@@ -133,9 +129,7 @@ class TaskRoutes:
                 )
             if task is None:
                 return JSONResponse(
-                    format_mobile_response(
-                        None, "任务不存在或无权查看", success=False, code=404
-                    ),
+                    format_mobile_response(None, "任务不存在或无权查看", success=False, code=404),
                     status_code=404,
                 )
             return format_mobile_response(task_summary(task))

@@ -68,9 +68,7 @@ def test_cross_language_vector_decrypts() -> None:
         "v": 1,
         "alg": "x25519-hkdf-sha256-aesgcm",
         "nonce": "e/Ij0NKS39uWpDwG",
-        "ct": (
-            "+0C979cEanQa75dpe6v7oIquCGTl6zxSKFPT61vq8eHnlVcRjv5C21JQ0OSeSwM="
-        ),
+        "ct": ("+0C979cEanQa75dpe6v7oIquCGTl6zxSKFPT61vq8eHnlVcRjv5C21JQ0OSeSwM="),
         "ref": "0123456789abcdef",
     }
 

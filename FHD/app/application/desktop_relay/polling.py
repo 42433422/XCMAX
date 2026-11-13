@@ -250,9 +250,7 @@ class RelayTaskDelivery:
     ) -> None:
         try:
             if status:
-                self._post_raw_result(
-                    task_id, relay_id, desktop_token, base_url, status, result
-                )
+                self._post_raw_result(task_id, relay_id, desktop_token, base_url, status, result)
                 return
             self._post_result(
                 task_id, relay_id, desktop_token, base_url, result, started, shared=shared, ref=ref
