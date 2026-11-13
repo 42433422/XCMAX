@@ -82,8 +82,15 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
   }
 
   Future<String> _inflightRelayTask(String conversationId) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return '';
+    final store = await openOfflineStore();
+    if (store != null) {
+      final taskId = await store.inflightTaskId(id);
+      if (taskId.isNotEmpty) return taskId;
+    }
     final session = await _client.loadSession();
-    return session.inflightRelayTasks[conversationId.trim()]?.trim() ?? '';
+    return session.inflightRelayTasks[id]?.trim() ?? '';
   }
 
   Future<void> _setInflightRelayTask(
@@ -93,6 +100,11 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     final generation = _client.authGeneration;
     final id = conversationId.trim();
     if (id.isEmpty) return;
+    final store = await openOfflineStore();
+    if (store != null) {
+      await store.setInflightTaskId(id, taskId);
+      return;
+    }
     final session = await _client.loadSession();
     final tasks = Map<String, String>.of(session.inflightRelayTasks);
     final cleanTaskId = taskId.trim();
@@ -125,10 +137,50 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
   }
 
   Future<List<ChatMessage>> _loadCachedChat(String conversationId) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return const [];
+    final store = await openOfflineStore();
+    if (store != null) {
+      final rows = await store.cachedMessages(id);
+      if (rows.isNotEmpty) {
+        return rows.map(_chatMessageFromCache).whereType<ChatMessage>().toList();
+      }
+      final session = await _client.loadSession();
+      final legacy = session.cachedChatMessages[id];
+      if (legacy != null && legacy.isNotEmpty) {
+        await store.importFromSession(session);
+        await _clearLegacySessionCache();
+        final imported = await store.cachedMessages(id);
+        return imported
+            .map(_chatMessageFromCache)
+            .whereType<ChatMessage>()
+            .toList();
+      }
+      return const [];
+    }
     final session = await _client.loadSession();
-    final rows = session.cachedChatMessages[conversationId.trim()];
+    final rows = session.cachedChatMessages[id];
     if (rows == null || rows.isEmpty) return const [];
     return rows.map(_chatMessageFromCache).whereType<ChatMessage>().toList();
+  }
+
+  /// 历史缓存迁入 SQLite 后，会话文件不再保留聊天记录、列表状态与进行中任务。
+  Future<void> _clearLegacySessionCache() async {
+    final generation = _client.authGeneration;
+    final session = await _client.loadSession();
+    if (session.cachedChatMessages.isEmpty &&
+        session.conversationListStates.isEmpty &&
+        session.inflightRelayTasks.isEmpty) {
+      return;
+    }
+    await _client.saveSession(
+      session.copyWith(
+        cachedChatMessages: const {},
+        conversationListStates: const {},
+        inflightRelayTasks: const {},
+      ),
+      authGeneration: generation,
+    );
   }
 
   Future<void> _cacheChatMessage(
@@ -140,13 +192,33 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     final id = conversationId.trim();
     final text = body.trim();
     if (id.isEmpty || text.isEmpty) return;
+    final now = DateTime.now();
+    final timestampMs = now.millisecondsSinceEpoch;
+    final preview = _conversationPreviewForRole(role, text);
+    final store = await openOfflineStore();
+    if (store != null) {
+      await store.appendMessage(id, {
+        'id': 'cache-$timestampMs',
+        'conversation_id': id,
+        'role': role.name,
+        'body': text,
+        'time_text': now.toIso8601String(),
+        'ts': timestampMs,
+        'has_employee_profile': role == ChatRole.assistant,
+        'status': ChatDeliveryStatus.sent.name,
+      });
+      await store.saveConversationState(
+        id,
+        preview: preview,
+        timestampMs: timestampMs,
+      );
+      return;
+    }
     final session = await _client.loadSession();
     final cache = Map<String, List<Map<String, Object?>>>.of(
       session.cachedChatMessages,
     );
     final rows = [...(cache[id] ?? const <Map<String, Object?>>[])];
-    final now = DateTime.now();
-    final timestampMs = now.millisecondsSinceEpoch;
     rows.add({
       'id': 'cache-$timestampMs',
       'conversation_id': id,
@@ -164,7 +236,7 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
       session.conversationListStates,
     );
     states[id] = _ConversationListState(
-      preview: _conversationPreviewForRole(role, text),
+      preview: preview,
       timestampMs: timestampMs,
     ).toJson();
     await _client.saveSession(

@@ -5,6 +5,7 @@ import '../../api/mobile_models.dart' show MobileMeData;
 import '../../data/ai_employee_profile.dart';
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
+import '../../data/offline/mobile_offline_store.dart';
 import '../../models/conversation.dart';
 import '../../policy/mobile_error_policy.dart';
 import '../../policy/avatar_policy.dart';

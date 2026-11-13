@@ -240,6 +240,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       );
       if (!mounted) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
+      await repository.removeQueuedMessage(widget.conversation.id, outgoing);
       setState(() {
         _replaceMessage(
           assistantId,
@@ -251,14 +252,25 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     } catch (error) {
       if (!mounted) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
+      final queuedId = isOfflineError(error)
+          ? await repository.enqueuePendingMessage(
+              conversation: widget.conversation,
+              body: outgoing,
+            )
+          : 0;
+      if (!mounted) return;
       setState(() {
         _replaceMessage(
           assistantId,
-          body: mobileProductErrorMessage(
-            error.toString(),
-            '当前离线同步不可用，请连接电脑或稍后重试。',
-          ),
-          status: ChatDeliveryStatus.failed,
+          body: queuedId > 0
+              ? '网络不可用，消息已加入待发送队列，恢复连接后会自动发送。'
+              : mobileProductErrorMessage(
+                  error.toString(),
+                  '当前离线同步不可用，请连接电脑或稍后重试。',
+                ),
+          status: queuedId > 0
+              ? ChatDeliveryStatus.queued
+              : ChatDeliveryStatus.failed,
         );
         _activeRelayProgress = null;
       });
