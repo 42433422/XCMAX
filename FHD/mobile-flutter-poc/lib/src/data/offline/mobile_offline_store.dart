@@ -58,11 +58,11 @@ class MobileOfflineStore {
     String conversationId,
     Map<String, Object?> row,
   ) async {
-    await _db.customStatement(
+    await _db.customUpdate(
       'INSERT OR REPLACE INTO chat_messages '
       '(conversation_id, message_id, role, body, time_text, ts, has_employee_profile, status) '
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [
+      variables: [
         Variable<String>(conversationId),
         Variable<String>('${row['id'] ?? ''}'),
         Variable<String>('${row['role'] ?? ChatRole.user.name}'),
@@ -80,9 +80,9 @@ class MobileOfflineStore {
     String conversationId,
     List<Map<String, Object?>> rows,
   ) async {
-    await _db.customStatement(
+    await _db.customUpdate(
       'DELETE FROM chat_messages WHERE conversation_id = ?',
-      [Variable<String>(conversationId)],
+      variables: [Variable<String>(conversationId)],
     );
     final tail = rows.length > _maxMessagesPerConversation
         ? rows.sublist(rows.length - _maxMessagesPerConversation)
@@ -93,11 +93,11 @@ class MobileOfflineStore {
   }
 
   Future<void> _trimMessages(String conversationId) async {
-    await _db.customStatement(
+    await _db.customUpdate(
       'DELETE FROM chat_messages WHERE conversation_id = ? AND message_id NOT IN ('
       'SELECT message_id FROM chat_messages WHERE conversation_id = ? '
       'ORDER BY ts DESC, message_id DESC LIMIT $_maxMessagesPerConversation)',
-      [Variable<String>(conversationId), Variable<String>(conversationId)],
+      variables: [Variable<String>(conversationId), Variable<String>(conversationId)],
     );
   }
 
@@ -105,9 +105,9 @@ class MobileOfflineStore {
     String conversationId,
     int timestampMs,
   ) async {
-    await _db.customStatement(
+    await _db.customUpdate(
       'DELETE FROM chat_messages WHERE conversation_id = ? AND ts = ?',
-      [Variable<String>(conversationId), Variable<int>(timestampMs)],
+      variables: [Variable<String>(conversationId), Variable<int>(timestampMs)],
     );
   }
 
@@ -131,10 +131,10 @@ class MobileOfflineStore {
     required String preview,
     required int timestampMs,
   }) async {
-    await _db.customStatement(
+    await _db.customUpdate(
       'INSERT OR REPLACE INTO conversation_states '
       '(conversation_id, preview, timestamp_ms, updated_at) VALUES (?, ?, ?, ?)',
-      [
+      variables: [
         Variable<String>(conversationId),
         Variable<String>(preview),
         Variable<int>(timestampMs),
@@ -156,16 +156,16 @@ class MobileOfflineStore {
 
   Future<void> setInflightTaskId(String conversationId, String taskId) async {
     if (taskId.trim().isEmpty) {
-      await _db.customStatement(
+      await _db.customUpdate(
         'DELETE FROM inflight_tasks WHERE conversation_id = ?',
-        [Variable<String>(conversationId)],
+        variables: [Variable<String>(conversationId)],
       );
       return;
     }
-    await _db.customStatement(
+    await _db.customUpdate(
       'INSERT OR REPLACE INTO inflight_tasks (conversation_id, task_id, updated_at) '
       'VALUES (?, ?, ?)',
-      [
+      variables: [
         Variable<String>(conversationId),
         Variable<String>(taskId.trim()),
         Variable<int>(DateTime.now().millisecondsSinceEpoch),
@@ -239,18 +239,18 @@ class MobileOfflineStore {
   Future<void> markSending(int id) => _updateOutbox(id, "status = 'sending'");
 
   Future<void> markSent(int id) async {
-    await _db.customStatement(
+    await _db.customUpdate(
       'DELETE FROM outbox_messages WHERE id = ?',
-      [Variable<int>(id)],
+      variables: [Variable<int>(id)],
     );
   }
 
   Future<void> markFailed(int id, String error) async {
-    await _db.customStatement(
+    await _db.customUpdate(
       'UPDATE outbox_messages SET attempts = attempts + 1, '
       "status = CASE WHEN attempts + 1 >= $_maxQueuedAttempts THEN 'failed' ELSE 'pending' END, "
       'last_error = ?, updated_at = ? WHERE id = ?',
-      [
+      variables: [
         Variable<String>(error.length > 500 ? error.substring(0, 500) : error),
         Variable<int>(DateTime.now().millisecondsSinceEpoch),
         Variable<int>(id),
@@ -259,16 +259,16 @@ class MobileOfflineStore {
   }
 
   Future<void> removePendingByBody(String conversationId, String body) async {
-    await _db.customStatement(
+    await _db.customUpdate(
       "DELETE FROM outbox_messages WHERE conversation_id = ? AND body = ? AND status = 'pending'",
-      [Variable<String>(conversationId), Variable<String>(body.trim())],
+      variables: [Variable<String>(conversationId), Variable<String>(body.trim())],
     );
   }
 
   Future<void> _updateOutbox(int id, String assignment) async {
-    await _db.customStatement(
+    await _db.customUpdate(
       'UPDATE outbox_messages SET $assignment, updated_at = ? WHERE id = ?',
-      [Variable<int>(DateTime.now().millisecondsSinceEpoch), Variable<int>(id)],
+      variables: [Variable<int>(DateTime.now().millisecondsSinceEpoch), Variable<int>(id)],
     );
   }
 
@@ -297,7 +297,7 @@ class MobileOfflineStore {
       if (entry.value.trim().isEmpty) continue;
       await setInflightTaskId(entry.key, entry.value);
     }
-    await _db.customStatement(
+    await _db.customUpdate(
       "INSERT OR REPLACE INTO meta (key, value) VALUES ('session_imported', '1')",
     );
     return true;
@@ -438,7 +438,11 @@ bool isOfflineError(Object error) {
       text.contains('connection reset') ||
       text.contains('network is unreachable') ||
       text.contains('no route to host') ||
+      text.contains('no address associated') ||
+      text.contains('name or service not known') ||
+      text.contains('temporary failure in name resolution') ||
       text.contains('socketexception') ||
+      text.contains('os error') ||
       text.contains('timed out') ||
       text.contains('请求超时');
 }

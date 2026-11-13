@@ -252,7 +252,8 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     } catch (error) {
       if (!mounted) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
-      final queuedId = isOfflineError(error)
+      final offline = isOfflineError(error);
+      final queuedId = offline
           ? await repository.enqueuePendingMessage(
               conversation: widget.conversation,
               body: outgoing,
