@@ -326,19 +326,6 @@ class _AiEmployeeRow extends StatelessWidget {
                         letterSpacing: 0,
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      employee.summary,
-                      maxLines: 1,
-                      overflow: TextOverflow.clip,
-                      style: TextStyle(
-                        color: colors.textSecondary,
-                        fontSize: 13,
-                        height: 1.31,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0,
-                      ),
-                    ),
                     const SizedBox(height: 2),
                     Text(
                       employee.contactLine,

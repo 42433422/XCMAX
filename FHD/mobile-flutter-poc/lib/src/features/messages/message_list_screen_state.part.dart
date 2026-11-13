@@ -13,7 +13,6 @@ class _MessageListScreenState extends State<MessageListScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
-    final colorScheme = Theme.of(context).colorScheme;
     final groups = widget.groups.where(_matchesGroupQuery).toList();
     final items = widget.items.where(_matchesQuery).toList();
     final conversationEntries = _sortMessageEntries(groups, items);
@@ -22,9 +21,6 @@ class _MessageListScreenState extends State<MessageListScreen> {
       ...conversationEntries,
       if (showEmptyState) _ConversationEmptyEntry(loading: widget.loading),
     ];
-    final employeeCount = widget.items
-        .where((item) => item.type == ConversationType.aiTask)
-        .length;
 
     return SafeArea(
       bottom: false,
@@ -35,7 +31,6 @@ class _MessageListScreenState extends State<MessageListScreen> {
           children: [
             _MessageHomeHeader(
               account: widget.account ?? MobileMeData.adminFallback(),
-              employeeCount: employeeCount,
               query: _query,
               onQueryChanged: (value) => setState(() => _query = value),
               onClearQuery: () => setState(() => _query = ''),

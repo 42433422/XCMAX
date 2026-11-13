@@ -1349,7 +1349,7 @@ void main() {
       final codex = conversations.singleWhere(
         (item) => item.id == 'pinned:codex',
       );
-      expect(codex.subtitle, '全设备协同');
+      expect(codex.subtitle, isEmpty);
       expect(codex.timestampText, isEmpty);
       expect(codex.timestampMs, 0);
     },

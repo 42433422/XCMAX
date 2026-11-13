@@ -93,7 +93,6 @@ class _ConversationActionSheet extends StatelessWidget {
 class _MessageHomeHeader extends StatelessWidget {
   const _MessageHomeHeader({
     required this.account,
-    required this.employeeCount,
     required this.query,
     required this.onQueryChanged,
     required this.onClearQuery,
@@ -101,7 +100,6 @@ class _MessageHomeHeader extends StatelessWidget {
   });
 
   final MobileMeData account;
-  final int employeeCount;
   final String query;
   final ValueChanged<String> onQueryChanged;
   final VoidCallback onClearQuery;
@@ -109,7 +107,6 @@ class _MessageHomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
@@ -129,28 +126,14 @@ class _MessageHomeHeader extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      account.displayName.ifEmpty('admin'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.titleLarge?.copyWith(
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _messageHeaderSubtitle(account, employeeCount),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.labelMedium?.copyWith(
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  account.displayName.ifEmpty('admin'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.titleLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               _HeaderPlusMenu(onSelected: onMenuSelected),
@@ -169,16 +152,6 @@ class _MessageHomeHeader extends StatelessWidget {
       ),
     );
   }
-}
-
-String _messageHeaderSubtitle(MobileMeData account, int employeeCount) {
-  final buffer = StringBuffer(
-    account.accountKindLabel.trim().isEmpty ? '未登录' : account.accountKindLabel,
-  );
-  if (employeeCount > 0) {
-    buffer.write(' · $employeeCount位AI员工');
-  }
-  return buffer.toString();
 }
 
 class _ConversationEmptyEntry {

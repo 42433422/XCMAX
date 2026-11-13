@@ -181,7 +181,7 @@ void main() {
     );
 
     expect(find.text('admin'), findsOneWidget);
-    expect(find.text('账号 · 55位AI员工'), findsOneWidget);
+    expect(find.textContaining('位AI员工'), findsNothing);
     expect(find.text('查找会话或伙伴'), findsOneWidget);
     expect(find.text('超级开发部'), findsOneWidget);
     expect(find.text('(5)'), findsOneWidget);
@@ -240,10 +240,6 @@ void main() {
     expect(headerTitle.style?.fontSize, typography.titleLarge?.fontSize);
     expect(headerTitle.style?.height, typography.titleLarge?.height);
     expect(headerTitle.style?.fontWeight, FontWeight.w600);
-
-    final headerSubtitle = tester.widget<Text>(find.text('账号 · 2位AI员工'));
-    expect(headerSubtitle.style?.fontSize, typography.labelMedium?.fontSize);
-    expect(headerSubtitle.style?.height, typography.labelMedium?.height);
 
     final searchField = tester.widget<TextField>(find.byType(TextField));
     expect(searchField.style?.fontSize, typography.bodyMedium?.fontSize);
@@ -847,8 +843,7 @@ void main() {
       ),
     );
 
-    expect(find.text('账号'), findsOneWidget);
-    expect(find.textContaining('56位AI员工'), findsNothing);
+    expect(find.textContaining('位AI员工'), findsNothing);
   });
 
   testWidgets('bottom nav labels match Flutter current shell', (
@@ -1528,7 +1523,7 @@ void main() {
 
     expect(repository.accountLoads, 1);
     expect(find.text('fallback-name'), findsOneWidget);
-    expect(find.text('账号 · 55位AI员工'), findsOneWidget);
+    expect(find.textContaining('位AI员工'), findsNothing);
     expect(find.text('admin'), findsNothing);
   });
 
