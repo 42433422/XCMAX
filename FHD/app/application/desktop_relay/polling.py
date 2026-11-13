@@ -211,7 +211,7 @@ class RelayTaskDelivery:
                     task_id, relay_id, desktop_token, base_url, result, started, shared=None
                 )
                 return
-            ref = str(envelope.get("ref") or "")
+            ref = str(envelope.get("ref") or "") if isinstance(envelope, dict) else ""
             try:
                 payload, shared = e2ee.open_envelope(envelope, private_key)
                 result = self.ports.execute_task({**task, "payload": payload})
