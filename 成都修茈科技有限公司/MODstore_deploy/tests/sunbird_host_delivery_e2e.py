@@ -31,6 +31,21 @@ from sqlalchemy.orm import sessionmaker
 
 FHD = Path(__file__).resolve().parents[3] / "FHD"
 MID = "sunbird-attendance-custom"
+
+
+def _mod_source_dir(mod_id: str) -> Path:
+    """编辑源按 industry/bridge/employees/tools 分层，导出目录保持平铺。"""
+    root = FHD / "mods"
+    direct = root / mod_id
+    if (direct / "manifest.json").is_file():
+        return direct
+    for layer in ("industry", "bridge", "employees", "tools"):
+        candidate = root / layer / mod_id
+        if (candidate / "manifest.json").is_file():
+            return candidate
+    return direct
+
+
 HOST_SHA = "a" * 40
 GENERATION = "b" * 32
 
@@ -82,7 +97,7 @@ def delivery(tmp_path, monkeypatch, request):
     monkeypatch.setenv("XCAGI_MOD_PUBLIC_KEY", str(public))
     monkeypatch.setenv("MODSTORE_SIGNING_PRIVATE_KEY_PATH", str(private))
     library = tmp_path / "library"
-    shutil.copytree(FHD / "mods" / MID, library / MID, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(_mod_source_dir(MID), library / MID, ignore=shutil.ignore_patterns("__pycache__"))
     if getattr(request, "param", "") == "broken-probe":
         probe = library / MID / "backend/sunbird_attendance/verification.py"
         content = probe.read_text()

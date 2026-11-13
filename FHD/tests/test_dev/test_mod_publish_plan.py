@@ -43,7 +43,7 @@ def repository(tmp_path):
         "FHD/mods/_employees/employee-one",
         "FHD/mods/host-one",
         "FHD/XCAGI/mods/industry-one",
-        "FHD/mods/xcagi-customer-service-bridge",
+        "FHD/mods/bridge/xcagi-customer-service-bridge",
     ):
         write_mod(tmp_path, source)
     git(tmp_path, "add", "FHD")
@@ -73,7 +73,7 @@ def test_exact_main_ancestor_and_all_source_roots(repository):
         "FHD/XCAGI/mods/industry-one",
     ):
         write_mod(repository, source, "1.0.1")
-    canonical = "FHD/mods/xcagi-customer-service-bridge"
+    canonical = "FHD/mods/bridge/xcagi-customer-service-bridge"
     write_mod(repository, canonical, "1.0.0.1")
     sha = commit_main(repository, "versioned fixes")
     git(repository, "commit", "--allow-empty", "-qm", "unrelated metrics")

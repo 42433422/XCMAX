@@ -9,6 +9,8 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .mod_source_paths import mod_source_dir
+
 CUSTOMER_SERVICE_BRIDGE_MOD_ID = "xcagi-customer-service-bridge"
 MOD_PAGE_PREFIX = f"/mod/{CUSTOMER_SERVICE_BRIDGE_MOD_ID}"
 
@@ -32,8 +34,7 @@ def _resolve_mod_dir() -> Path | None:
             return Path(disk)
     except RECOVERABLE_ERRORS:
         pass
-    trial = Path(__file__).resolve().parents[2] / "mods" / CUSTOMER_SERVICE_BRIDGE_MOD_ID
-    return trial if (trial / "manifest.json").is_file() else None
+    return mod_source_dir(CUSTOMER_SERVICE_BRIDGE_MOD_ID)
 
 
 def is_customer_service_pages_via_mod_enabled() -> bool:
