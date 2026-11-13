@@ -63,8 +63,8 @@ abstract class _RepoSessionBase extends _RepoRootBase {
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: adminMode ? null : '已安装',
-        badgeColor: adminMode ? null : _badgeInstalledColor,
+        badgeText: null,
+        badgeColor: null,
         states: conversationStates,
       ),
     ]);
@@ -94,8 +94,8 @@ abstract class _RepoSessionBase extends _RepoRootBase {
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: adminMode ? null : '已安装',
-        badgeColor: adminMode ? null : _badgeInstalledColor,
+        badgeText: null,
+        badgeColor: null,
         states: conversationStates,
       ),
     ]);

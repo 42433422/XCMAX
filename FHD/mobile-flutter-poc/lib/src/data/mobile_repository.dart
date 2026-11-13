@@ -29,7 +29,6 @@ part 'mobile_repository_helpers_format.part.dart';
 part 'mobile_repository_conversation_state.part.dart';
 part 'mobile_repository_extensions.part.dart';
 
-const _badgeInstalledColor = 0xFF3370FF;
 const _xcmaxDefaultWorkspaceRoot = '/Users/a4243342/Desktop/XCMAX';
 
 class MobileRepository extends _RepoBusinessBase {
