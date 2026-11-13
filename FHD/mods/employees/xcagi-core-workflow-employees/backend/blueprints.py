@@ -47,8 +47,7 @@ def _load_employee_module(mod_id: str, stem: str):
     try:
         return import_mod_backend_py(mod_path, mod_id, f"employees/{stem}")
     except RECOVERABLE_ERRORS:
-        # 不记录 mod_id/stem（CodeQL: 敏感数据明文日志）
-        logger.exception("load employee module failed")
+        logger.exception("load employee module failed")  # 不记录 mod_id/stem（CodeQL）
         return None
 
 
