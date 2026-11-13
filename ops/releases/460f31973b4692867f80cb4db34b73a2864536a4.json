@@ -1,0 +1,9 @@
+{
+  "git_sha": "460f31973b4692867f80cb4db34b73a2864536a4",
+  "product_version": "1.0.0.7",
+  "expected_production_sha": "d58b3559268977f95869a15d56868dd5386ed333",
+  "ci_run_id": 43494665360,
+  "security_scan_run_id": 43497301345,
+  "approval_reference": "Owner-authorized MiMo voice production fix on 2026-11-13 Asia/Shanghai: deploy exact main 460f3197 (#3114 MiMo ASR/TTS) to restore /api/workbench/asr and MiMo TTS after the 11-05 release.",
+  "approval_scope": "Deploy the specified immutable MODstore release using the existing official workflow and its unchanged approval, CI, security and runtime-verification gates. Preserve release history and require_platform_key=true. Do not redeploy FHD or expand credential permissions."
+}
