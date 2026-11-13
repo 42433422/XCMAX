@@ -97,7 +97,9 @@ def delivery(tmp_path, monkeypatch, request):
     monkeypatch.setenv("XCAGI_MOD_PUBLIC_KEY", str(public))
     monkeypatch.setenv("MODSTORE_SIGNING_PRIVATE_KEY_PATH", str(private))
     library = tmp_path / "library"
-    shutil.copytree(_mod_source_dir(MID), library / MID, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(
+        _mod_source_dir(MID), library / MID, ignore=shutil.ignore_patterns("__pycache__")
+    )
     if getattr(request, "param", "") == "broken-probe":
         probe = library / MID / "backend/sunbird_attendance/verification.py"
         content = probe.read_text()

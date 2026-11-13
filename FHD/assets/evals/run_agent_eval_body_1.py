@@ -2189,7 +2189,11 @@ def _run_agent_run_artifact_trace_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_multimodal_autonomous_plan_task(task: dict[str, Any]) -> dict[str, Any]:
-    from evals.owned_attachment_eval import run_owned_attachment_task
+    # 脚本直跑时 sys.path[0] 为本目录，测试导入时为 assets/evals 下的 evals 包
+    try:
+        from evals.owned_attachment_eval import run_owned_attachment_task
+    except ModuleNotFoundError:
+        from owned_attachment_eval import run_owned_attachment_task
 
     return run_owned_attachment_task(task)
 

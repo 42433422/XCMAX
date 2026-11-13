@@ -17,7 +17,9 @@ def test_host_requires_explicit_staging_and_rejects_private_manifest(tmp_path):
         validate("")
     private = tmp_path / "sunbird-attendance-custom"
     private.mkdir()
-    actual = json.loads((ROOT / "mods/industry/sunbird-attendance-custom/manifest.json").read_text())
+    actual = json.loads(
+        (ROOT / "mods/industry/sunbird-attendance-custom/manifest.json").read_text()
+    )
     (private / "manifest.json").write_text(json.dumps(actual))
     with pytest.raises(ValueError, match="private Mod cannot be bundled"):
         validate(str(tmp_path))

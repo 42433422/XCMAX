@@ -204,7 +204,8 @@ def test_uv_installer_preserves_dependency_inputs_and_checks_the_target_interpre
         install = 'uv pip install --system --python "$(command -v python)"'
         check = 'uv pip check --system --python "$(command -v python)"'
         assert (
-            install + ' -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"'
+            install
+            + ' -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"'
             in command
         )
         assert command.index("--pytest-pin") < command.index(install) < command.index(check)

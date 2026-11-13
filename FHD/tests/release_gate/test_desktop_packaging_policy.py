@@ -551,7 +551,9 @@ def test_desktop_staging_bundles_visible_office_employee_executors() -> None:
     for manifest in (REPO_ROOT / "mods").glob("*/manifest.json"):
         declared = json.loads(manifest.read_text(encoding="utf-8")).get("bundled_employees", [])
         assert all((REPO_ROOT / "mods" / "_employees" / e).is_dir() for e in declared), manifest
-    cs = json.loads((REPO_ROOT / "mods/bridge/xcagi-customer-service-bridge/manifest.json").read_text())
+    cs = json.loads(
+        (REPO_ROOT / "mods/bridge/xcagi-customer-service-bridge/manifest.json").read_text()
+    )
     assert cs["bundled_employees"] == ["user-customer-service-officer"]
 
 
