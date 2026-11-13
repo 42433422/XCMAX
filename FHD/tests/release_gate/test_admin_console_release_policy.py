@@ -62,8 +62,8 @@ def test_fhd_release_chain_carries_and_verifies_admin_identity() -> None:
     apply_image = (FHD_ROOT / "scripts" / "deploy" / "fhd-apply-release-compose.sh").read_text()
     auto_update = (FHD_ROOT / "scripts" / "deploy" / "fhd-auto-update.sh").read_text()
     push = (FHD_ROOT / "scripts" / "deploy" / "fhd-push-release.sh").read_text()
-    compose = (FHD_ROOT / "docker" / "docker-compose.fhd-prod.yml").read_text()
-    dockerfile = (FHD_ROOT / "docker" / "Dockerfile.fhd-api").read_text()
+    compose = (FHD_ROOT / "ops" / "docker" / "docker-compose.fhd-prod.yml").read_text()
+    dockerfile = (FHD_ROOT / "ops" / "docker" / "Dockerfile.fhd-api").read_text()
     workflow = (FHD_ROOT / ".github" / "workflows" / "ci-cd.yml").read_text()
 
     assert 'VITE_XCAGI_GIT_SHA="$GIT_SHA" npm run build' in pack
