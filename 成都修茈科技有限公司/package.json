@@ -27,12 +27,12 @@
   },
   "dependencies": {
     "pinia": "^3.0.4",
-    "vue": "^3.5.44",
+    "vue": "^3.5.45",
     "vue-router": "^4.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.0",
     "@types/node": "^26.6.6",
     "@vitejs/plugin-vue": "^6.0.10",
     "@vitest/coverage-v8": "^5.1.0",
@@ -40,7 +40,7 @@
     "@vue/eslint-config-typescript": "^14.9.0",
     "@vue/test-utils": "^2.5.1",
     "eslint": "^10.14.0",
-    "eslint-plugin-vue": "^10.12.0",
+    "eslint-plugin-vue": "^10.12.1",
     "fast-glob": "file:../FHD/frontend/compat-resource-glob.tgz",
     "globals": "^17.14.0",
     "happy-dom": "^21.0.4",
