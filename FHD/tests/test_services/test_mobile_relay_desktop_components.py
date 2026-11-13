@@ -769,8 +769,8 @@ def test_desktop_components_round_trip_through_local_asgi_and_sqlite(relay, monk
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    from app.fastapi_routes import mobile_api_extensions as routes
     from app.application.desktop_relay import e2ee
+    from app.fastapi_routes import mobile_api_extensions as routes
     from app.services import mobile_relay_service as cloud
 
     engine = create_engine(f"sqlite:///{tmp_path / 'relay-components.db'}")
