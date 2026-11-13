@@ -170,6 +170,14 @@ abstract class _RepoServicesBase extends _RepoChatBase {
     return response.data?.items ?? const <MobileTaskSummary>[];
   }
 
+  Future<List<MobileDesktopDevice>> loadDesktopDevices() async {
+    final response = await _client.mobileDesktopDevices();
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('桌面设备加载失败'));
+    }
+    return response.data?.items ?? const <MobileDesktopDevice>[];
+  }
+
   Future<List<MarketCapability>> loadMarketCapabilities() async {
     final response = await _client.mobileMods();
     if (!response.success) {

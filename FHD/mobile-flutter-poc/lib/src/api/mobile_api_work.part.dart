@@ -190,6 +190,14 @@ abstract class _ApiWorkBase extends _ApiPairingBase {
     );
   }
 
+  Future<MobileEnvelope<MobileDesktopDeviceListData>> mobileDesktopDevices() async {
+    final json = await getJson(XcagiMobileEndpoints.desktopDevices);
+    return MobileEnvelope.fromJson(
+      json,
+      (value) => MobileDesktopDeviceListData.fromJson(_asObjectMap(value)),
+    );
+  }
+
   Future<MobileEnvelope<Map<String, Object?>>> paymentPlans() async {
     final json = await getJson(XcagiMobileEndpoints.paymentPlans);
     return MobileEnvelope.fromJson(json, _asObjectMap);

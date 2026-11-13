@@ -1,4 +1,5 @@
 ## Unreleased
+- 移动端新增「任务」页（消息页加号菜单进入）：列出桌面/云端统一任务，显示状态、进度与执行位置；有待审批任务时顶部直连审批列表；底部显示桌面端在线状态，桌面离线不阻塞界面。配套新增桌面设备心跳接口 `POST /api/mobile/v1/devices/desktop/heartbeat` 与列表 `GET /api/mobile/v1/devices/desktop`（120 秒在线窗口），桌面 Web 端启动后每 60 秒上报一次。
 - 移动端新增统一任务只读接口 `GET /api/mobile/v1/tasks`、`GET /api/mobile/v1/tasks/{id}`：直接读取桌面端同一套 `agent_tasks`，按当前账号与租户隔离，返回任务标题、状态、待办类型、进度、执行位置（cloud / desktop:<设备>）；移动端已接入模型与仓储方法，任务页与审批推送下一步接。
 - 移动端员工列表与桌面端对齐：`/api/mobile/v1/mods` 现在按企业版 Mod 权益过滤（与桌面 `/api/mods`、`loading-status` 同一套 `is_mod_visible_for_enterprise`），未授权或未加载的 Mod 及其工作流员工不再出现在移动端消息列表与 AI 员工页；该改动需要部署后端后生效。
 - 移动端群组会话行去掉「1 个 AI 成员在群里」「还没有成员，进群把 AI 拉进来」这类说明，只保留群名与最近消息。

@@ -90,6 +90,12 @@ class _HeaderPlusMenu extends StatelessWidget {
           child: _PlusMenuRow(Icons.qr_code_scanner, '扫一扫'),
         ),
         PopupMenuItem(
+          value: 'tasks',
+          padding: EdgeInsets.zero,
+          height: 43,
+          child: _PlusMenuRow(Icons.task_alt, '任务'),
+        ),
+        PopupMenuItem(
           value: 'employees',
           padding: EdgeInsets.zero,
           height: 43,

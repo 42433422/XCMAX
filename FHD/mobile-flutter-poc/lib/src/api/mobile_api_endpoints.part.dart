@@ -61,6 +61,8 @@ class XcagiMobileEndpoints {
   static const mods = '$base/mods';
   static const tasks = '$base/tasks';
   static String taskDetail(String taskId) => '$tasks/$taskId';
+  static const desktopDevices = '$base/devices/desktop';
+  static const desktopDeviceHeartbeat = '$base/devices/desktop/heartbeat';
   static const paymentPlans = '$base/payment/plans';
   static const paymentCheckout = '$base/payment/checkout';
   static const imConversations = '$base/im/conversations';

@@ -16,6 +16,7 @@ import '../cs/cs_chat_screen.dart';
 import '../discover/discover_screen.dart';
 import '../groups/ai_group_screens.dart';
 import '../scan/scan_qr_screen.dart';
+import '../tasks/task_list_screen.dart';
 import '../../policy/mobile_error_policy.dart';
 
 // 按职责拆分为 part 文件：页面 State、首页头部/空态、会话排序工具与行内组件组。

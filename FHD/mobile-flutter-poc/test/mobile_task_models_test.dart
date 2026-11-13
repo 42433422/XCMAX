@@ -40,4 +40,29 @@ void main() {
     expect(data.items.single.progressPercent, 0);
     expect(data.count, 1);
   });
+
+  test('mobile desktop device list keeps online state', () {
+    final data = MobileDesktopDeviceListData.fromJson(const {
+      'items': [
+        {
+          'device_id': 'mac-1',
+          'label': '办公室 Mac',
+          'platform': 'macos',
+          'online': true,
+          'last_seen_at': '2026-11-13T10:00:00',
+        },
+        {
+          'device_id': 'win-1',
+          'label': '家里 Windows',
+          'online': false,
+        },
+      ],
+      'online_count': 1,
+    });
+
+    expect(data.items.length, 2);
+    expect(data.onlineCount, 1);
+    expect(data.items.first.online, isTrue);
+    expect(data.items.last.label, '家里 Windows');
+  });
 }

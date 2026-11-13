@@ -94,6 +94,64 @@ class MobileTaskListData {
   }
 }
 
+class MobileDesktopDevice {
+  const MobileDesktopDevice({
+    required this.deviceId,
+    required this.label,
+    required this.platform,
+    required this.online,
+    required this.lastSeenAt,
+  });
+
+  final String deviceId;
+  final String label;
+  final String platform;
+  final bool online;
+  final String lastSeenAt;
+
+  factory MobileDesktopDevice.fromJson(Map<String, Object?> json) {
+    return MobileDesktopDevice(
+      deviceId: _readString(json, const ['device_id']),
+      label: _readString(json, const ['label']),
+      platform: _readString(json, const ['platform']),
+      online: _readBool(json, const ['online']),
+      lastSeenAt: _readString(json, const ['last_seen_at']),
+    );
+  }
+}
+
+class MobileDesktopDeviceListData {
+  const MobileDesktopDeviceListData({
+    required this.items,
+    required this.onlineCount,
+  });
+
+  final List<MobileDesktopDevice> items;
+  final int onlineCount;
+
+  factory MobileDesktopDeviceListData.fromJson(Map<String, Object?> json) {
+    final rawItems = json['items'];
+    final items = rawItems is List
+        ? rawItems
+            .whereType<Map>()
+            .map(
+              (item) => MobileDesktopDevice.fromJson(
+                Map<String, Object?>.from(item),
+              ),
+            )
+            .toList(growable: false)
+        : const <MobileDesktopDevice>[];
+    return MobileDesktopDeviceListData(
+      items: items,
+      onlineCount: _readInt(
+        json,
+        const ['online_count'],
+        items.where((item) => item.online).length,
+      ),
+    );
+  }
+}
+
 class MobileAppConfigData {
   const MobileAppConfigData({
     required this.ok,

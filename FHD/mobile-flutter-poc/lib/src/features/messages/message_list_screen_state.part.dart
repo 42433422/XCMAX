@@ -170,6 +170,13 @@ class _MessageListScreenState extends State<MessageListScreen> {
           ),
         );
         return;
+      case 'tasks':
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => TaskListScreen(repository: _repository),
+          ),
+        );
+        return;
       case 'employees':
         final callback = widget.onOpenEmployees;
         if (callback != null) {
