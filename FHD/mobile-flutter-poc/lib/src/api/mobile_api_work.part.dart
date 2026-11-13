@@ -167,6 +167,29 @@ abstract class _ApiWorkBase extends _ApiPairingBase {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
+  Future<MobileEnvelope<MobileTaskListData>> mobileTasks({
+    int limit = 50,
+  }) async {
+    final json = await getJson(
+      XcagiMobileEndpoints.tasks,
+      query: {'limit': '$limit'},
+    );
+    return MobileEnvelope.fromJson(
+      json,
+      (value) => MobileTaskListData.fromJson(_asObjectMap(value)),
+    );
+  }
+
+  Future<MobileEnvelope<MobileTaskSummary>> mobileTaskDetail(
+    String taskId,
+  ) async {
+    final json = await getJson(XcagiMobileEndpoints.taskDetail(taskId));
+    return MobileEnvelope.fromJson(
+      json,
+      (value) => MobileTaskSummary.fromJson(_asObjectMap(value)),
+    );
+  }
+
   Future<MobileEnvelope<Map<String, Object?>>> paymentPlans() async {
     final json = await getJson(XcagiMobileEndpoints.paymentPlans);
     return MobileEnvelope.fromJson(json, _asObjectMap);

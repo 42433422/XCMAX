@@ -59,6 +59,8 @@ class XcagiMobileEndpoints {
   static const adminCsInboxMessagesTemplate = '$base/im/cs/inbox/{id}/messages';
   static const adminCsInboxReplyTemplate = '$base/im/cs/inbox/{id}/reply';
   static const mods = '$base/mods';
+  static const tasks = '$base/tasks';
+  static String taskDetail(String taskId) => '$tasks/$taskId';
   static const paymentPlans = '$base/payment/plans';
   static const paymentCheckout = '$base/payment/checkout';
   static const imConversations = '$base/im/conversations';

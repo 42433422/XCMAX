@@ -28,6 +28,72 @@ class MobileEnvelope<T> {
   }
 }
 
+class MobileTaskSummary {
+  const MobileTaskSummary({
+    required this.taskId,
+    required this.title,
+    required this.status,
+    required this.attentionState,
+    required this.approvalRequired,
+    required this.executionTarget,
+    required this.progressPercent,
+    required this.workspaceId,
+    required this.conversationId,
+    required this.updatedAt,
+  });
+
+  final String taskId;
+  final String title;
+  final String status;
+  final String attentionState;
+  final bool approvalRequired;
+  final String executionTarget;
+  final int progressPercent;
+  final String workspaceId;
+  final String conversationId;
+  final String updatedAt;
+
+  factory MobileTaskSummary.fromJson(Map<String, Object?> json) {
+    return MobileTaskSummary(
+      taskId: _readString(json, const ['task_id']),
+      title: _readString(json, const ['title']),
+      status: _readString(json, const ['status']),
+      attentionState: _readString(json, const ['attention_state']),
+      approvalRequired: _readBool(json, const ['approval_required']),
+      executionTarget: _readString(json, const ['execution_target']),
+      progressPercent: _readInt(json, const ['progress_percent'], 0),
+      workspaceId: _readString(json, const ['workspace_id']),
+      conversationId: _readString(json, const ['conversation_id']),
+      updatedAt: _readString(json, const ['updated_at']),
+    );
+  }
+}
+
+class MobileTaskListData {
+  const MobileTaskListData({required this.items, required this.count});
+
+  final List<MobileTaskSummary> items;
+  final int count;
+
+  factory MobileTaskListData.fromJson(Map<String, Object?> json) {
+    final rawItems = json['items'];
+    final items = rawItems is List
+        ? rawItems
+            .whereType<Map>()
+            .map(
+              (item) => MobileTaskSummary.fromJson(
+                Map<String, Object?>.from(item),
+              ),
+            )
+            .toList(growable: false)
+        : const <MobileTaskSummary>[];
+    return MobileTaskListData(
+      items: items,
+      count: _readInt(json, const ['count'], items.length).clamp(0, items.length),
+    );
+  }
+}
+
 class MobileAppConfigData {
   const MobileAppConfigData({
     required this.ok,

@@ -255,6 +255,10 @@ from app.fastapi_routes.mobile_extensions.routes_support import (
 )
 from app.fastapi_routes.mobile_extensions.routes_sync import SyncRoutes as SyncRoutes
 from app.fastapi_routes.mobile_extensions.routes_sync import SyncRoutesPorts as SyncRoutesPorts
+from app.fastapi_routes.mobile_extensions.routes_tasks import TaskRoutes as TaskRoutes
+from app.fastapi_routes.mobile_extensions.routes_tasks import (
+    TaskRoutesPorts as TaskRoutesPorts,
+)
 from app.fastapi_routes.mobile_extensions.routes_worklists import WorklistRoutes as WorklistRoutes
 from app.fastapi_routes.mobile_extensions.routes_worklists import (
     WorklistRoutesPorts as WorklistRoutesPorts,
@@ -521,6 +525,43 @@ mobile_install_customer_delivery_seed = _workspace.mobile_install_customer_deliv
 mobile_home = _workspace.mobile_home
 mobile_nav_menu = _workspace.mobile_nav_menu
 extension_router.include_router(_workspace.router)
+
+
+def _mobile_task_orchestrator() -> Any:
+    from app.application.agent_orchestrator import AgentOrchestrator
+
+    return AgentOrchestrator()
+
+
+def _mobile_tasks_list(
+    *, user_id: str, tenant_id: str, limit: int, include_archived: bool
+) -> list[Any]:
+    return _mobile_task_orchestrator().list_tasks(
+        user_id=user_id,
+        tenant_id=tenant_id or None,
+        limit=limit,
+        include_archived=include_archived,
+    )
+
+
+def _mobile_task_get(*, user_id: str, tenant_id: str, task_id: str) -> Any | None:
+    return _mobile_task_orchestrator().get_task(
+        user_id=user_id,
+        tenant_id=tenant_id or None,
+        task_id=task_id,
+    )
+
+
+_tasks = TaskRoutes(
+    TaskRoutesPorts(
+        list_tasks=contracts.late_callback(lambda: _mobile_tasks_list),
+        get_task=contracts.late_callback(lambda: _mobile_task_get),
+    ),
+    get_mobile_user,
+)
+mobile_task_list = _tasks.mobile_task_list
+mobile_task_detail = _tasks.mobile_task_detail
+extension_router.include_router(_tasks.router)
 
 _admin = AdminRoutes(
     AdminRoutesPorts(
