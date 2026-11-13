@@ -207,13 +207,9 @@ class _SearchBarFieldState extends State<_SearchBarField> {
               maxLines: 1,
               textAlignVertical: TextAlignVertical.center,
               style: textTheme.bodyMedium?.copyWith(color: colors.textPrimary),
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 isCollapsed: true,
                 border: InputBorder.none,
-                hintText: '查找会话或伙伴',
-                hintStyle: textTheme.bodyMedium?.copyWith(
-                  color: colors.textTertiary,
-                ),
               ),
             ),
           ),

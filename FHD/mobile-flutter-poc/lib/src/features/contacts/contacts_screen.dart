@@ -211,16 +211,9 @@ class _AiEmployeeSearchBar extends StatelessWidget {
                   height: 1.2,
                   letterSpacing: 0,
                 ),
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
-                  hintText: '查找员工',
-                  hintStyle: TextStyle(
-                    color: colors.textTertiary,
-                    fontSize: 15,
-                    height: 1.2,
-                    letterSpacing: 0,
-                  ),
                 ),
               ),
             ),

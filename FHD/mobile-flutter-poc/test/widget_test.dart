@@ -182,7 +182,7 @@ void main() {
 
     expect(find.text('admin'), findsNothing);
     expect(find.textContaining('位AI员工'), findsNothing);
-    expect(find.text('查找会话或伙伴'), findsOneWidget);
+    expect(find.text('查找会话或伙伴'), findsNothing);
     expect(find.text('超级开发部'), findsOneWidget);
     expect(find.text('(5)'), findsOneWidget);
     expect(find.textContaining('排队中'), findsNothing);
@@ -1547,7 +1547,7 @@ void main() {
     );
     expect(aiEmployeeTitle.style?.fontSize, 18);
     expect(aiEmployeeTitle.style?.fontWeight, FontWeight.w600);
-    expect(find.text('查找员工'), findsOneWidget);
+    expect(find.text('查找员工'), findsNothing);
     expect(
       tester.getSize(find.byKey(const ValueKey('ai_employee_search_bar'))),
       const Size(406, 38),
