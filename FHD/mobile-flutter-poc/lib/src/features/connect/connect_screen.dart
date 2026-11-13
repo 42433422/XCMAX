@@ -26,69 +26,122 @@ class ConnectScreen extends StatelessWidget {
     final colors = AppTheme.colors(context);
     return Scaffold(
       backgroundColor: colors.page,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            WeTopBar(title: 'Agent 远程控制', onBack: () => _back(context)),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Image.asset(
-                      appLauncherForegroundAsset,
-                      width: 72,
-                      height: 72,
-                      fit: BoxFit.contain,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      key: const ValueKey('connect_title'),
-                      'XCAGI 手机控制端',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: colors.textPrimary,
-                        fontSize: 24,
-                        height: 1.33,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.center,
+            colors: [
+              colors.brand.withValues(alpha: 0.10),
+              colors.page,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              WeTopBar(title: 'Agent 远程控制', onBack: () => _back(context)),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 28),
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: colors.divider.withValues(alpha: 0.7),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
-                      child: Text(
-                        key: const ValueKey('connect_description'),
-                        '绑定服务器后台、企业工作台或电脑执行端后，手机可远程调动员工和 Codex。',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: colors.textSecondary,
-                          fontSize: 14,
-                          height: 1.36,
-                          fontWeight: FontWeight.w400,
-                          letterSpacing: 0,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
                         ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(height: 40),
-                    _LoginButton(
-                      text: '扫描绑定',
-                      kind: _LoginButtonKind.primary,
-                      onTap: () => _scan(context),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 88,
+                            height: 88,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: colors.surface,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: colors.divider),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: colors.brand.withValues(alpha: 0.18),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Image.asset(
+                              appLauncherForegroundAsset,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          key: const ValueKey('connect_title'),
+                          'XCAGI 手机控制端',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: colors.textPrimary,
+                            fontSize: 23,
+                            height: 1.3,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          key: const ValueKey('connect_description'),
+                          '绑定服务器后台、企业工作台或电脑执行端后，手机可远程调动员工和 Codex。',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontSize: 14,
+                            height: 1.5,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: const [
+                            _CapabilityChip(label: '扫码绑定'),
+                            _CapabilityChip(label: '远程派单'),
+                            _CapabilityChip(label: '审批与收产物'),
+                          ],
+                        ),
+                        const SizedBox(height: 26),
+                        _LoginButton(
+                          text: '扫描绑定',
+                          kind: _LoginButtonKind.primary,
+                          onTap: () => _scan(context),
+                        ),
+                        const SizedBox(height: 12),
+                        _LoginButton(
+                          text: '返回',
+                          kind: _LoginButtonKind.secondary,
+                          onTap: () => _back(context),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    _LoginButton(
-                      text: '返回',
-                      kind: _LoginButtonKind.secondary,
-                      onTap: () => _back(context),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -165,6 +218,32 @@ class _LoginButton extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CapabilityChip extends StatelessWidget {
+  const _CapabilityChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: colors.brand.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: colors.brand,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );

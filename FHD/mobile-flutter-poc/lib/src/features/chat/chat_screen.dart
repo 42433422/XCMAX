@@ -72,6 +72,40 @@ class _ChatScreenState extends _ChatStateActions {
     super.dispose();
   }
 
+  Widget _buildEmptyChat(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: colors.brand.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(AppIcons.chatOutline, size: 30, color: colors.brand),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            '开始和$_resolvedTitle对话',
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '消息会保存在本机，断网也能接着发',
+            style: TextStyle(color: colors.textSecondary, fontSize: 12.5),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFlyerTextMessage(
     BuildContext context,
     TextMessage message,
@@ -158,6 +192,7 @@ class _ChatScreenState extends _ChatStateActions {
                 onMessageSend: (_) {},
                 builders: Builders(
                   textMessageBuilder: _buildFlyerTextMessage,
+                  emptyChatListBuilder: _buildEmptyChat,
                   // 与微信/Telegram 一致：消息从底部向上生长。
                   chatAnimatedListBuilder: (context, itemBuilder) =>
                       ChatAnimatedList(itemBuilder: itemBuilder, reversed: true),

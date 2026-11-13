@@ -11,7 +11,7 @@ class AppTheme {
   static const momentAccent = Color(0xFF5145CD);
   static const momentChipBg = Color(0xFFECEDFE);
   static const replyBoxBg = Color(0xFFF4F5F7);
-  static const page = Color(0xFFF5F6F7);
+  static const page = Color(0xFFF3F4F7);
   static const surface = Color(0xFFFFFFFF);
   static const surfaceHigh = Color(0xFFE8E9EB);
   static const divider = Color(0xFFDEE0E3);
@@ -92,6 +92,42 @@ class AppTheme {
         color: divider,
         thickness: 0.6,
         space: 0,
+      ),
+      cardTheme: CardThemeData(
+        color: surface,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, 48),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surface,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: divider),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: divider),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: brand, width: 1.4),
+        ),
       ),
       textTheme: _typography(textPrimary),
     );
