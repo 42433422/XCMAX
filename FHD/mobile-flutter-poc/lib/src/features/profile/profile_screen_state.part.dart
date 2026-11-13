@@ -327,8 +327,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (error) {
       text = '同步失败，点「同步」重试';
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)
-            ?.showSnackBar(SnackBar(content: Text('$error')));
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(mobileErrorText(error))),
+        );
       }
     }
     if (mounted) setState(() => _syncSummary = text);
@@ -418,9 +419,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _replaceWithAuth();
     } catch (error) {
       if (!mounted) return;
-      final message = error is MobileApiException
-          ? error.message
-          : error.toString().replaceFirst('Exception: ', '');
+      final message =
+          error is MobileApiException ? error.message : mobileErrorText(error);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message.isEmpty ? '注销失败，请检查网络后重试' : message)),
       );

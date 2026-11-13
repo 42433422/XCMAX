@@ -331,7 +331,7 @@ class _MessageListScreenState extends State<MessageListScreen> {
       if (!mounted) return;
       final message = error is MobileRepositoryException
           ? error.message
-          : error.toString().replaceFirst('Exception: ', '');
+          : mobileErrorText(error);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message.isEmpty ? '操作失败' : message)),
       );

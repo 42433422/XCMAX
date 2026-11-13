@@ -4,6 +4,7 @@ import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
+import '../../policy/mobile_error_policy.dart';
 
 class MarketListScreen extends StatefulWidget {
   const MarketListScreen({
@@ -257,7 +258,7 @@ class _MarketListScreenState extends State<MarketListScreen> {
     try {
       return await loader();
     } catch (error) {
-      errors.add(error.toString());
+      errors.add(mobileErrorText(error));
       return fallback;
     }
   }
@@ -304,7 +305,7 @@ class _MarketListScreenState extends State<MarketListScreen> {
       ).showSnackBar(SnackBar(content: Text(message)));
     } catch (error) {
       if (!mounted) return;
-      setState(() => _status = error.toString());
+      setState(() => _status = mobileErrorText(error));
     } finally {
       if (mounted) setState(() => _workingId = '');
     }

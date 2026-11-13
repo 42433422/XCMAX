@@ -44,7 +44,13 @@ abstract class _ScanQrStateScan extends _ScanQrStateCamera {
       setState(() => _pickingAlbum = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('相册扫码失败：$error')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            '相册扫码失败：${mobileErrorText(error, fallback: '请重新选择图片')}',
+          ),
+        ),
+      );
     }
   }
 
@@ -162,7 +168,7 @@ abstract class _ScanQrStateScan extends _ScanQrStateCamera {
                 ScaffoldMessenger.of(sheetContext).showSnackBar(
                   SnackBar(
                     content: Text(
-                      mobileProductErrorMessage(error.toString(), '扫码登录失败，请重试'),
+                      mobileErrorText(error, fallback: '扫码登录失败，请重试'),
                     ),
                   ),
                 );
@@ -266,7 +272,7 @@ abstract class _ScanQrStateScan extends _ScanQrStateCamera {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            mobileProductErrorMessage(error.toString(), '设备配对失败，请刷新二维码或输入设备码'),
+            mobileErrorText(error, fallback: '设备配对失败，请刷新二维码或输入设备码'),
           ),
         ),
       );

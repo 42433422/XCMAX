@@ -271,10 +271,17 @@ class _AuthScreenState extends State<AuthScreen> {
       widget.onDone?.call();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
+      setState(() => _error = _loginErrorText(error));
     } finally {
       if (mounted) setState(() => _loggingIn = false);
     }
+  }
+
+  String _loginErrorText(Object error) {
+    if (error is MobileApiException && error.statusCode == 401) {
+      return '账号或密码不正确，请重新输入';
+    }
+    return mobileErrorText(error, fallback: '登录失败，请稍后重试');
   }
 
   Future<void> _loadCachedAuthState() async {

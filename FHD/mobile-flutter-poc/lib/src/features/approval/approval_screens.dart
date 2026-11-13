@@ -4,6 +4,7 @@ import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
+import '../../policy/mobile_error_policy.dart';
 
 class ApprovalListScreen extends StatefulWidget {
   const ApprovalListScreen({super.key, this.repository, this.initialItems});
@@ -329,7 +330,7 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
       setState(() => _status = approve ? '审批已通过' : '审批已驳回');
       Navigator.of(context).maybePop();
     } catch (error) {
-      if (mounted) setState(() => _status = error.toString());
+      if (mounted) setState(() => _status = mobileErrorText(error));
     } finally {
       if (mounted) setState(() => _working = false);
     }

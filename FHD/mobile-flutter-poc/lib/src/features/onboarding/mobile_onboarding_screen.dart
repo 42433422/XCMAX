@@ -4,6 +4,7 @@ import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
+import '../../policy/mobile_error_policy.dart';
 
 class MobileOnboardingScreen extends StatefulWidget {
   const MobileOnboardingScreen({
@@ -144,7 +145,7 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _status = error.toString());
+      setState(() => _status = mobileErrorText(error));
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -156,7 +157,7 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
       final result = await _repository.bootstrapIndustry(_selectedIndustryId);
       if (mounted) setState(() => _status = result);
     } catch (error) {
-      if (mounted) setState(() => _status = error.toString());
+      if (mounted) setState(() => _status = mobileErrorText(error));
     } finally {
       if (mounted) setState(() => _working = false);
     }

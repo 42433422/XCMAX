@@ -114,7 +114,7 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
       );
     } catch (error) {
       if (!mounted) return;
-      _replaceMessageBody(messageId, '（$error）');
+      _replaceMessageBody(messageId, '（${mobileErrorText(error)}）');
     } finally {
       if (mounted) setState(() => _runningGitOp = false);
     }

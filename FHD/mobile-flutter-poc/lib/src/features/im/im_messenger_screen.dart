@@ -8,6 +8,7 @@ import '../../data/mobile_repository_scope.dart';
 import '../../im/im_websocket_client.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
+import '../../policy/mobile_error_policy.dart';
 part 'im_messenger_widgets.part.dart';
 
 /// IM 实时通道状态文案：只在握手真正成功后才显示“已连接”。
@@ -319,7 +320,7 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
       await _reloadMessages();
       await _attachWebSocket();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = mobileErrorText(error));
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -336,7 +337,7 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = mobileErrorText(error));
     }
   }
 
@@ -358,7 +359,7 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
         _draftController.clear();
       });
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = mobileErrorText(error));
     } finally {
       if (mounted) setState(() => _working = false);
     }

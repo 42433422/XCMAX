@@ -45,4 +45,34 @@ void main() {
       expect(mobileProductErrorMessage('x' * 81, 'fallback'), 'fallback');
     },
   );
+
+  test('network and server failures are shown in user-facing Chinese', () {
+    expect(
+      mobileProductErrorMessage(
+        'HandshakeException: Connection terminated during handshake',
+        'fallback',
+      ),
+      '无法安全连接服务器，请检查网络后重试',
+    );
+    expect(
+      mobileProductErrorMessage('SocketException: Network is unreachable', 'fallback'),
+      '网络连接失败，请检查网络后重试',
+    );
+    expect(
+      mobileProductErrorMessage('TimeoutException after 0:00:10', 'fallback'),
+      '网络超时，请稍后重试',
+    );
+    expect(
+      mobileProductErrorMessage(
+        'MobileApiException(500): Internal Server Error',
+        'fallback',
+      ),
+      '服务器暂时不可用，请稍后重试',
+    );
+    expect(
+      mobileProductErrorMessage('Internal Server Error', 'fallback'),
+      'fallback',
+    );
+    expect(mobileErrorText(Exception('boom'), fallback: '登录失败'), '登录失败');
+  });
 }

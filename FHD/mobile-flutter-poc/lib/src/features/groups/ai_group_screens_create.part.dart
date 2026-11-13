@@ -167,7 +167,7 @@ class _AiGroupCreateScreenState extends State<AiGroupCreateScreen> {
       setState(() => _creating = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(mobileErrorText(error))));
     }
   }
 }

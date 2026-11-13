@@ -9,6 +9,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 import '../update/package_update_installer.dart';
 import '../update/app_update_check.dart';
+import '../../policy/mobile_error_policy.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -266,9 +267,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ).showSnackBar(const SnackBar(content: Text('感谢您的反馈，我们会尽快处理')));
     } catch (error) {
       if (!mounted) return;
-      final message = error is MobileApiException
-          ? error.message
-          : error.toString().replaceFirst('Exception: ', '');
+      final message =
+          error is MobileApiException ? error.message : mobileErrorText(error);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message.isEmpty ? '反馈提交失败，请稍后重试' : message)),
       );

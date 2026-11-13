@@ -89,7 +89,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       setState(() {
         _replaceMessage(
           assistantId,
-          body: '（$error）',
+          body: '（${mobileErrorText(error)}）',
           status: ChatDeliveryStatus.failed,
         );
         _activeRelayProgress = null;
@@ -266,7 +266,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
           body: queuedId > 0
               ? '网络不可用，消息已加入待发送队列，恢复连接后会自动发送。'
               : mobileProductErrorMessage(
-                  error.toString(),
+                  mobileErrorText(error),
                   '当前离线同步不可用，请连接电脑或稍后重试。',
                 ),
           status: queuedId > 0

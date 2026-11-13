@@ -8,6 +8,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
+import '../../policy/mobile_error_policy.dart';
 
 part 'admin_cs_console_conversation.part.dart';
 part 'admin_cs_console_widgets.part.dart';

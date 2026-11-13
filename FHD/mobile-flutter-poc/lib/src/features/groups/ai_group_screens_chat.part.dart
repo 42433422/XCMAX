@@ -41,7 +41,7 @@ abstract class _AiGroupChatStateBase extends State<AiGroupChatScreen> {
               });
             } catch (error) {
               if (!mounted) return;
-              _showSnack(error.toString());
+              _showSnack(mobileErrorText(error));
               if (!context.mounted) return;
               setSheetState(() => refreshing = false);
             }
@@ -215,9 +215,7 @@ abstract class _AiGroupChatStateBase extends State<AiGroupChatScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
                 child: Text(
-                  _candidates.isEmpty
-                      ? '暂无可用 AI 员工'
-                      : '已把所有 AI 员工都拉进群了',
+                  _candidates.isEmpty ? '暂无可用 AI 员工' : '已把所有 AI 员工都拉进群了',
                   style: TextStyle(
                     color: AppTheme.colors(context).textSecondary,
                     fontSize: 13,
@@ -259,7 +257,7 @@ abstract class _AiGroupChatStateBase extends State<AiGroupChatScreen> {
       if (!mounted) return;
       if (updated != null) setState(() => _group = updated);
     } catch (error) {
-      _showSnack(error.toString());
+      _showSnack(mobileErrorText(error));
     }
   }
 
@@ -273,7 +271,7 @@ abstract class _AiGroupChatStateBase extends State<AiGroupChatScreen> {
       if (!mounted) return;
       if (updated != null) setState(() => _group = updated);
     } catch (error) {
-      _showSnack(error.toString());
+      _showSnack(mobileErrorText(error));
     }
   }
 

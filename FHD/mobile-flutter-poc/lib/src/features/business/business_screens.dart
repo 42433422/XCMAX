@@ -4,6 +4,7 @@ import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
+import '../../policy/mobile_error_policy.dart';
 
 enum BusinessListKind {
   customers('客户', Icons.people),
@@ -241,7 +242,7 @@ class _BusinessListScaffoldState extends State<BusinessListScaffold> {
     } catch (error) {
       return _BusinessListResult(
         items: const [],
-        error: error.toString().replaceFirst('Exception: ', ''),
+        error: mobileErrorText(error),
       );
     }
   }
