@@ -88,7 +88,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           WeCell(
                             title: '扫码绑定',
-                            subtitle: '绑定服务器后台、企业工作台或电脑执行端',
                             icon: Icons.qr_code_2,
                             iconColor: Theme.of(context).colorScheme.secondary,
                             iconBg: Theme.of(

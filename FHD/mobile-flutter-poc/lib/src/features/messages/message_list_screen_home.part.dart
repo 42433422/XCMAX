@@ -214,18 +214,9 @@ class _ConversationEmptyState extends StatelessWidget {
               const SizedBox(height: 8),
             ],
             Text(
-              loading ? '正在同步会话…' : '暂无会话',
+              loading ? '正在同步…' : '暂无会话',
               style: textTheme.bodyLarge?.copyWith(color: colors.textSecondary),
             ),
-            if (!loading) ...[
-              const SizedBox(height: 8),
-              Text(
-                '下拉刷新或和小C助理聊聊吧',
-                style: textTheme.bodyMedium?.copyWith(
-                  color: colors.textTertiary,
-                ),
-              ),
-            ],
           ],
         ),
       ),

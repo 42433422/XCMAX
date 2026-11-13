@@ -96,11 +96,6 @@ class _ChatScreenState extends _ChatStateActions {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            '消息会保存在本机，断网也能接着发',
-            style: TextStyle(color: colors.textSecondary, fontSize: 12.5),
-          ),
         ],
       ),
     );

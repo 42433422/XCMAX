@@ -34,17 +34,6 @@ class _EmployeeNotFoundState extends StatelessWidget {
                 letterSpacing: 0,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              '稍后刷新或从企业端同步数据',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 13,
-                height: 1.38,
-                letterSpacing: 0,
-              ),
-            ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: onRetry,

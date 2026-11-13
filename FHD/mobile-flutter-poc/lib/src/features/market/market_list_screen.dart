@@ -89,7 +89,7 @@ class _MarketListScreenState extends State<MarketListScreen> {
                             if (industries.isEmpty)
                               WeCell(
                                 title: '行业目录',
-                                subtitle: industryStatus.ifEmpty('登录后自动同步可选行业'),
+                                subtitle: industryStatus,
                                 icon: Icons.extension,
                                 showArrow: false,
                               )
@@ -97,9 +97,7 @@ class _MarketListScreenState extends State<MarketListScreen> {
                               for (var i = 0; i < industries.length; i++)
                                 WeCell(
                                   title: industries[i].title,
-                                  subtitle: industries[i].subtitle.ifEmpty(
-                                        industryStatus.ifEmpty('装齐行业基础能力'),
-                                      ),
+                                  subtitle: industries[i].subtitle,
                                   icon: Icons.extension,
                                   showArrow: false,
                                   showDivider: i < industries.length - 1,
@@ -126,9 +124,6 @@ class _MarketListScreenState extends State<MarketListScreen> {
                             for (final channel in _paymentChannels)
                               WeCell(
                                 title: channel.$2,
-                                subtitle: _paymentChannel == channel.$1
-                                    ? '当前充值与购买渠道'
-                                    : '切换到${channel.$2}',
                                 icon: Icons.extension,
                                 showArrow: false,
                                 trailing: _MarketActionButton(
@@ -144,7 +139,7 @@ class _MarketListScreenState extends State<MarketListScreen> {
                               ),
                             WeCell(
                               title: '钱包充值',
-                              subtitle: paymentStatus.ifEmpty('用当前手机渠道充值 50 元'),
+                              subtitle: paymentStatus,
                               icon: Icons.extension,
                               showArrow: false,
                               trailing: _MarketActionButton(
@@ -156,9 +151,7 @@ class _MarketListScreenState extends State<MarketListScreen> {
                             if (plans.isEmpty)
                               WeCell(
                                 title: '套餐与钱包',
-                                subtitle: paymentStatus.ifEmpty(
-                                  '刷新后同步市场套餐与会员状态',
-                                ),
+                                subtitle: paymentStatus,
                                 icon: Icons.extension,
                                 showArrow: false,
                               )
@@ -166,9 +159,7 @@ class _MarketListScreenState extends State<MarketListScreen> {
                               for (var i = 0; i < plans.length; i++)
                                 WeCell(
                                   title: plans[i].title,
-                                  subtitle: plans[i].subtitle.ifEmpty(
-                                        paymentStatus.ifEmpty('市场统一收银台'),
-                                      ),
+                                  subtitle: plans[i].subtitle,
                                   icon: Icons.extension,
                                   showArrow: false,
                                   showDivider: i < plans.length - 1,
@@ -187,7 +178,6 @@ class _MarketListScreenState extends State<MarketListScreen> {
                             if (data.capabilities.isEmpty)
                               const WeCell(
                                 title: '暂无可用能力',
-                                subtitle: '先装齐行业能力或刷新市场目录',
                                 icon: Icons.extension,
                                 showArrow: false,
                               )
@@ -195,8 +185,7 @@ class _MarketListScreenState extends State<MarketListScreen> {
                               for (var i = 0; i < data.capabilities.length; i++)
                                 WeCell(
                                   title: data.capabilities[i].title,
-                                  subtitle: data.capabilities[i].subtitle
-                                      .ifEmpty('从企业端同步的能力包'),
+                                  subtitle: data.capabilities[i].subtitle,
                                   icon: Icons.extension,
                                   showArrow: false,
                                   showDivider: i < data.capabilities.length - 1,

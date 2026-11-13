@@ -276,18 +276,6 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                                 ),
                               ],
                             ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                              child: Text(
-                                '复杂编辑请在电脑端处理',
-                                style: TextStyle(
-                                  color: colors.textSecondary,
-                                  fontSize: 12,
-                                  height: 1.33,
-                                  letterSpacing: 0,
-                                ),
-                              ),
-                            ),
                             const SizedBox(height: 16),
                             WeBlockButton(
                               text: '通过',

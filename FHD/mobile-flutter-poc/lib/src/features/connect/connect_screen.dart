@@ -100,18 +100,6 @@ class ConnectScreen extends StatelessWidget {
                             letterSpacing: 0,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          key: const ValueKey('connect_description'),
-                          '绑定服务器后台、企业工作台或电脑执行端后，手机可远程调动员工和 Codex。',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: colors.textSecondary,
-                            fontSize: 14,
-                            height: 1.5,
-                            letterSpacing: 0,
-                          ),
-                        ),
                         const SizedBox(height: 22),
                         Wrap(
                           alignment: WrapAlignment.center,

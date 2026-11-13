@@ -59,19 +59,6 @@ class _AuthScreenState extends State<AuthScreen> {
                 letterSpacing: 0,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              isEnterprise
-                  ? '连接服务器后台、企业工作台和电脑执行端'
-                  : '与官网 MODstore 同一账号，登录后可同步能力。',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 13,
-                height: 1.31,
-                letterSpacing: 0,
-              ),
-            ),
             const SizedBox(height: 16),
             Text(
               '密码登录',

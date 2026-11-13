@@ -228,17 +228,6 @@ class _AdminCsEmptyInbox extends StatelessWidget {
             letterSpacing: 0,
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          '客户在「专属客服」发起咨询后会出现在这里',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: colors.textTertiary,
-            fontSize: 13,
-            height: 1.31,
-            letterSpacing: 0,
-          ),
-        ),
       ],
     );
   }

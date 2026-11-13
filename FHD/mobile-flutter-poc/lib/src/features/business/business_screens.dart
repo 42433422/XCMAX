@@ -343,17 +343,6 @@ class _EmptyState extends StatelessWidget {
               letterSpacing: 0,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '下拉刷新或连接电脑后重试。',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: colors.textSecondary,
-              fontSize: 15,
-              height: 1.4,
-              letterSpacing: 0,
-            ),
-          ),
           const SizedBox(height: 16),
           ElevatedButton(onPressed: onRetry, child: const Text('刷新')),
         ],

@@ -818,7 +818,7 @@ void main() {
     expect(find.text('账号生态待同步'), findsNothing);
     expect(find.text('点这里重新同步 AI 员工。'), findsNothing);
     expect(find.text('暂无会话'), findsOneWidget);
-    expect(find.text('下拉刷新或和小C助理聊聊吧'), findsOneWidget);
+    expect(find.text('下拉刷新或和小C助理聊聊吧'), findsNothing);
   });
 
   testWidgets('message list loading empty state uses Flutter wording', (
@@ -832,7 +832,7 @@ void main() {
     );
 
     expect(find.text('账号生态待同步'), findsNothing);
-    expect(find.text('正在同步会话…'), findsOneWidget);
+    expect(find.text('正在同步…'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('暂无会话'), findsNothing);
   });
@@ -1402,7 +1402,7 @@ void main() {
 
     await tester.tap(find.text('我'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('个人资料与工作身份'));
+    await tester.tap(find.byKey(const ValueKey('profile_hero_card')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'admin-local');
     await tester.pump();
@@ -1805,7 +1805,7 @@ void main() {
 
     expect(find.text('查找会话或伙伴'), findsNothing);
     expect(find.text('暂无 AI 员工'), findsOneWidget);
-    expect(find.text('员工会自动同步到这里；如未显示，点右上角刷新。'), findsOneWidget);
+    expect(find.text('员工会自动同步到这里；如未显示，点右上角刷新。'), findsNothing);
     expect(find.text('扫码绑定'), findsNothing);
     expect(find.byIcon(Icons.qr_code_scanner), findsNothing);
     expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
@@ -1852,12 +1852,12 @@ void main() {
     expect(find.byKey(const ValueKey('we_top_bar_divider_探索')), findsOneWidget);
     expect(find.text('AI交流'), findsOneWidget);
     expect(find.text('AI交流圈'), findsOneWidget);
-    expect(find.text('查看企业 AI 员工动态、主页和能力介绍'), findsOneWidget);
-    expect(find.text('桌面工具（与电脑端侧栏对齐）'), findsOneWidget);
+    expect(find.text('查看企业 AI 员工动态、主页和能力介绍'), findsNothing);
+    expect(find.text('桌面工具'), findsOneWidget);
     expect(find.text('扫码绑定电脑端'), findsOneWidget);
-    expect(find.text('绑定后，电脑端侧栏的工具会同步到这里'), findsOneWidget);
-    expect(find.text('绑定企业端、管理端或电脑端登录'), findsOneWidget);
-    expect(find.text('企业公告与系统通知'), findsOneWidget);
+    expect(find.text('绑定后，电脑端侧栏的工具会同步到这里'), findsNothing);
+    expect(find.text('绑定企业端、管理端或电脑端登录'), findsNothing);
+    expect(find.text('企业公告与系统通知'), findsNothing);
     expect(
       tester
           .widget<Icon>(find.byKey(const ValueKey('we_cell_icon_AI交流圈')))
@@ -2017,7 +2017,6 @@ void main() {
       expect(find.text('员工工作流'), findsOneWidget);
       expect(find.text('设置入口'), findsOneWidget);
       expect(find.text('智慧分析'), findsOneWidget);
-      expect(find.text('点击打开'), findsWidgets);
 
       await tester.tap(find.text('AI员工生态'));
       await tester.pumpAndSettle();
@@ -2053,9 +2052,9 @@ void main() {
 
     expect(find.text('AI交流圈'), findsOneWidget);
     expect(find.text('AI员工交流圈'), findsOneWidget);
-    expect(find.text('55 位智能伙伴正在账号里值守'), findsOneWidget);
+    expect(find.text('55 位智能伙伴正在账号里值守'), findsNothing);
     expect(find.text('账号生态'), findsOneWidget);
-    expect(find.text('员工动态、能力更新和协同消息会在这里汇总。'), findsOneWidget);
+    expect(find.text('员工动态、能力更新和协同消息会在这里汇总。'), findsNothing);
     expect(find.text('静态站内容编辑员'), findsOneWidget);
     expect(find.text('已完成首页内容巡检。'), findsOneWidget);
     expect(find.text('赞'), findsOneWidget);
@@ -2092,7 +2091,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('0 位智能伙伴正在账号里值守'), findsOneWidget);
+      expect(find.text('0 位智能伙伴正在账号里值守'), findsNothing);
       expect(find.text('55 位智能伙伴正在账号里值守'), findsNothing);
       expect(find.text('已完成首页内容巡检。'), findsOneWidget);
     },
@@ -2402,7 +2401,7 @@ void main() {
       expect(find.text('深色'), findsOneWidget);
       expect(find.text('反馈'), findsOneWidget);
       expect(find.text('问题反馈'), findsOneWidget);
-      expect(find.text('提交后进入企业支持队列'), findsOneWidget);
+      expect(find.text('提交后进入企业支持队列'), findsNothing);
       final colors = AppTheme.colors(
         tester.element(find.byType(SettingsScreen)),
       );
@@ -2425,7 +2424,7 @@ void main() {
       );
       expect(find.text('版本'), findsOneWidget);
       expect(find.text('检查更新'), findsOneWidget);
-      expect(find.text('获取企业版移动端最新构建'), findsOneWidget);
+      expect(find.text('获取企业版移动端最新构建'), findsNothing);
     },
   );
 
@@ -2498,7 +2497,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('已开启'), findsOneWidget);
+    expect(find.text('已开启'), findsNothing);
     expect(find.text('深色'), findsWidgets);
 
     await tester.tap(find.text('浅色'));
@@ -3528,7 +3527,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('暂无工单'), findsOneWidget);
-    expect(find.text('企业端有新工单后会同步到这里'), findsOneWidget);
+    expect(find.text('企业端有新工单后会同步到这里'), findsNothing);
   });
 
   testWidgets('customer service bridge filters and replies customer requests', (
@@ -3684,7 +3683,7 @@ void main() {
 
     expect(find.text('发货记录'), findsOneWidget);
     expect(find.text('暂无发货数据'), findsOneWidget);
-    expect(find.text('下拉刷新或连接电脑后重试。'), findsOneWidget);
+    expect(find.text('下拉刷新或连接电脑后重试。'), findsNothing);
     expect(find.text('刷新'), findsOneWidget);
   });
 
@@ -3818,7 +3817,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('暂无财务数据'), findsOneWidget);
-    expect(find.text('连接企业后端后显示收入、成本、毛利与应付摘要'), findsOneWidget);
+    expect(find.text('连接企业后端后显示收入、成本、毛利与应付摘要'), findsNothing);
   });
 
   testWidgets('longtail finance page follows Flutter dark theme tokens', (
@@ -3869,7 +3868,7 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_divider_智脑集成')),
       findsOneWidget,
     );
-    expect(find.text('员工编排由企业端模块承载'), findsOneWidget);
+    expect(find.text('员工编排由企业端模块承载'), findsNothing);
     expect(find.text('打开能力库'), findsOneWidget);
 
     await tester.pumpWidget(
@@ -3880,7 +3879,7 @@ void main() {
     );
 
     expect(find.text('能力库'), findsWidgets);
-    expect(find.text('安装与授权由企业端和管理端统一管理'), findsOneWidget);
+    expect(find.text('安装与授权由企业端和管理端统一管理'), findsNothing);
     expect(find.text('查看企业模块'), findsOneWidget);
   });
 
@@ -4283,8 +4282,8 @@ void main() {
     expect(find.text('工作分支'), findsOneWidget);
     expect(find.byTooltip('刷新分支'), findsOneWidget);
     expect(find.text('自动新建任务分支'), findsOneWidget);
-    expect(find.text('普通派工默认隔离，跑完后再合并'), findsOneWidget);
-    expect(find.text('暂无可选分支，点右上角刷新'), findsOneWidget);
+    expect(find.text('普通派工默认隔离，跑完后再合并'), findsNothing);
+    expect(find.text('暂无可选分支'), findsOneWidget);
 
     await tester.tap(find.byTooltip('刷新分支'));
     await tester.pumpAndSettle();
@@ -4603,7 +4602,7 @@ void main() {
     expect(find.text('账户余额'), findsOneWidget);
     expect(find.text('10,070.30'), findsOneWidget);
     expect(find.text('扫码绑定'), findsOneWidget);
-    expect(find.text('绑定服务器后台、企业工作台或电脑执行端'), findsOneWidget);
+    expect(find.text('绑定服务器后台、企业工作台或电脑执行端'), findsNothing);
     expect(find.text('服务'), findsOneWidget);
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
@@ -4866,7 +4865,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('个人资料与工作身份'));
+    await tester.tap(find.byKey(const ValueKey('profile_hero_card')));
     await tester.pumpAndSettle();
 
     expect(find.text('个人资料'), findsWidgets);
@@ -5184,12 +5183,10 @@ void main() {
     );
     expect(connectTitle.style?.fontSize, 24);
     expect(connectTitle.style?.fontWeight, FontWeight.w600);
-    expect(find.text('绑定服务器后台、企业工作台或电脑执行端后，手机可远程调动员工和 Codex。'), findsOneWidget);
-    final connectDescription = tester.widget<Text>(
+    expect(
       find.byKey(const ValueKey('connect_description')),
+      findsNothing,
     );
-    expect(connectDescription.style?.fontSize, 14);
-    expect(connectDescription.style?.fontWeight, FontWeight.w400);
     expect(find.text('扫描绑定'), findsOneWidget);
     expect(find.text('返回'), findsWidgets);
     expect(
@@ -6135,6 +6132,7 @@ class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
   Future<String> streamMessage({
     required ConversationItem conversation,
     required String body,
+    bool cacheUserMessage = true,
     int userId = 0,
     List<ChatMessage> recentMessages = const [],
     void Function(String token)? onToken,
@@ -6164,6 +6162,7 @@ class _FakeFailThenStreamingRepository extends _FakeRealtimeRepository {
   Future<String> streamMessage({
     required ConversationItem conversation,
     required String body,
+    bool cacheUserMessage = true,
     int userId = 0,
     List<ChatMessage> recentMessages = const [],
     void Function(String token)? onToken,

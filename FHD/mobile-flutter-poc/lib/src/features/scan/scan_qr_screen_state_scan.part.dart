@@ -104,16 +104,6 @@ abstract class _ScanQrStateScan extends _ScanQrStateCamera {
                       letterSpacing: 0,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码',
-                    style: TextStyle(
-                      color: sheetColors.textSecondary,
-                      fontSize: 13,
-                      height: 1.31,
-                      letterSpacing: 0,
-                    ),
-                  ),
                   const SizedBox(height: 20),
                   _PairingCodeInput(
                     controller: controller,

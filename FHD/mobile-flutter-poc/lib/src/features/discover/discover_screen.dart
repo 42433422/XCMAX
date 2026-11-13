@@ -52,7 +52,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     _DiscoverItem(
       key: 'pair-desktop',
       title: '扫码绑定电脑端',
-      subtitle: '绑定后，电脑端侧栏的工具会同步到这里',
       icon: Icons.qr_code_scanner,
     ),
   ];
@@ -93,7 +92,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         children: [
                           WeCell(
                             title: 'AI交流圈',
-                            subtitle: '查看企业 AI 员工动态、主页和能力介绍',
                             icon: Icons.forum,
                             iconColor: colors.brand,
                             iconBg: colors.brandContainer,
@@ -102,13 +100,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           ),
                         ],
                       ),
-                      const WeSectionCaption('桌面工具（与电脑端侧栏对齐）'),
+                      const WeSectionCaption('桌面工具'),
                       WeCellGroup(
                         children: [
                           for (var i = 0; i < desktopTools.length; i++)
                             WeCell(
                               title: desktopTools[i].title,
-                              subtitle: desktopTools[i].subtitle,
                               icon: desktopTools[i].icon,
                               iconColor: colors.brand,
                               iconBg: colors.brandContainer,
@@ -122,7 +119,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         children: [
                           WeCell(
                             title: '审批',
-                            subtitle: '待办审批通过或驳回',
                             icon: Icons.fact_check,
                             iconColor: colors.brand,
                             iconBg: colors.brandContainer,
@@ -130,7 +126,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           ),
                           WeCell(
                             title: '扫码绑定',
-                            subtitle: '绑定企业端、管理端或电脑端登录',
                             icon: Icons.qr_code_scanner,
                             iconColor: colors.brand,
                             iconBg: colors.brandContainer,
@@ -138,7 +133,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           ),
                           WeCell(
                             title: 'OCR识别',
-                            subtitle: '拍照识别文字与文档',
                             icon: Icons.camera_alt,
                             iconColor: Theme.of(context).colorScheme.tertiary,
                             iconBg: Theme.of(
@@ -148,7 +142,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           ),
                           WeCell(
                             title: '通知与公告',
-                            subtitle: '企业公告与系统通知',
                             icon: Icons.notifications,
                             iconColor: colors.danger,
                             iconBg: Theme.of(
@@ -180,9 +173,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             source: item.source,
             modId: item.modId ?? '',
             title: item.name,
-            subtitle: item.source == 'mod'
-                ? 'Mod: ${(item.modId ?? item.key).trim()}'
-                : '点击打开',
             icon: _iconForNav(item),
           ),
         )
@@ -318,7 +308,6 @@ class _DiscoverItem {
     this.source = '',
     this.modId = '',
     required this.title,
-    required this.subtitle,
     required this.icon,
   });
 
@@ -327,6 +316,5 @@ class _DiscoverItem {
   final String source;
   final String modId;
   final String title;
-  final String subtitle;
   final IconData icon;
 }

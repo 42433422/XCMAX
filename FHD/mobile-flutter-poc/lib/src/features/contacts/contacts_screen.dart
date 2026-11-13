@@ -396,17 +396,6 @@ class _AiEmployeeEmptyState extends StatelessWidget {
                 letterSpacing: 0,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              '员工会自动同步到这里；如未显示，点右上角刷新。',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 13,
-                height: 1.38,
-                letterSpacing: 0,
-              ),
-            ),
           ],
         ),
       ),
