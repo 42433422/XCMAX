@@ -272,7 +272,6 @@ def test_file_suppression_requires_parseable_source(tmp_path):
     assert keep_result(_finding(uri=path, line=57), source_root=root) is True
 
 
-
 def test_stable_fingerprint_does_not_depend_on_ast_dump(monkeypatch):
     import ast
 
