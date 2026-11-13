@@ -19,6 +19,7 @@ import '../../theme/app_icons.dart';
 import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
+import '../call/voice_call_screen.dart';
 import '../contacts/employee_profile_screen.dart';
 import '../contacts/fixed_partner_profile_screen.dart';
 import '../devtools/branch_detail_screen.dart';
@@ -70,6 +71,29 @@ class _ChatScreenState extends _ChatStateActions {
     _flyerChatController.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _openCallOptions() {
+    final repository = _repository;
+    if (repository == null) {
+      _showMessage('通话暂时不可用');
+      return;
+    }
+    showCallOptionsSheet(
+      context,
+      onVoice: () {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => VoiceCallScreen(
+              conversation: widget.conversation,
+              repository: repository,
+              title: _resolvedTitle,
+              avatarUrl: _employeeProfile?.avatarUrl,
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildEmptyChat(BuildContext context) {
@@ -133,9 +157,9 @@ class _ChatScreenState extends _ChatStateActions {
               onBack: () => Navigator.of(context).maybePop(),
               actions: [
                 IconButton(
-                  onPressed: () => _showMessage('视频通话功能即将上线'),
+                  onPressed: _openCallOptions,
                   icon: const Icon(AppIcons.video, size: 22),
-                  tooltip: '视频',
+                  tooltip: '通话',
                   color: colors.textPrimary,
                 ),
                 IconButton(
