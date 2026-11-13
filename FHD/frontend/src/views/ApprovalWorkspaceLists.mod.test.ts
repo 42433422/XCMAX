@@ -3,7 +3,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
-import ApprovalWorkspace from '../../../mods/xcagi-approval-bridge/frontend/views/ApprovalWorkspaceView.vue'
+import ApprovalWorkspace from '../../../mods/bridge/xcagi-approval-bridge/frontend/views/ApprovalWorkspaceView.vue'
 
 const { get, validateSession } = vi.hoisted(() => ({ get: vi.fn(), validateSession: vi.fn() }))
 vi.mock('@/api/core', () => ({ api: { get, post: vi.fn(), delete: vi.fn() } }))

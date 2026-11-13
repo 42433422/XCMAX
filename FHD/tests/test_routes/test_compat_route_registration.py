@@ -158,7 +158,7 @@ def test_mod_docx_export_uses_current_compat_implementation_and_read_gate(
 
     assert host_services.products_export_docx is compat_routes.products_export_docx
     source = (
-        Path(__file__).resolve().parents[2] / "mods/xcagi-erp-domain-bridge/backend/blueprints.py"
+        Path(__file__).resolve().parents[2] / "mods/bridge/xcagi-erp-domain-bridge/backend/blueprints.py"
     )
     spec = importlib.util.spec_from_file_location("compat_cleanup_erp_bridge", source)
     bridge = importlib.util.module_from_spec(spec)

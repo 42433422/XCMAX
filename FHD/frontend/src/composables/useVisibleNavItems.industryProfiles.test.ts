@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import erp from '../../../mods/xcagi-erp-domain-bridge/manifest.json'
-import planner from '../../../mods/xcagi-planner-bridge/manifest.json'
-import approval from '../../../mods/xcagi-approval-bridge/manifest.json'
-import qsm from '../../../mods/sz-qsm-pro/manifest.json'
+import erp from '../../../mods/bridge/xcagi-erp-domain-bridge/manifest.json'
+import planner from '../../../mods/bridge/xcagi-planner-bridge/manifest.json'
+import approval from '../../../mods/bridge/xcagi-approval-bridge/manifest.json'
+import qsm from '../../../mods/industry/sz-qsm-pro/manifest.json'
 import type { ModInfo } from '@/types/modInfo'
 
 const state = vi.hoisted(() => ({ industry: '制造业' }))

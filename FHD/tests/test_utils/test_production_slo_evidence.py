@@ -302,7 +302,7 @@ def test_verifier_requires_90_continuous_hash_chained_formal_days(
 
 def test_scrape_inventory_matches_production_configuration():
     mod = _module()
-    path = Path(__file__).resolve().parents[2] / "monitoring/prometheus.production.yml"
+    path = Path(__file__).resolve().parents[2] / "ops/monitoring/prometheus.production.yml"
     config = yaml.safe_load(path.read_text())
     assert config["global"]["scrape_interval"] == f"{mod.SCRAPE_INTERVAL_SECONDS}s"
     production = {

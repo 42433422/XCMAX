@@ -39,7 +39,7 @@ def _employee_download_jobs_root() -> Path:
 
 
 def _resolve_taiyangniao_backend(input_data: Dict[str, Any]) -> None:
-    """注入太阳鸟 pro 的 backend 路径（Linux 部署常用 MODSTORE_REPO_ROOT/mods/taiyangniao-pro/backend）。"""
+    """注入太阳鸟 pro 的 backend 路径（Linux 部署常用 MODSTORE_REPO_ROOT/mods/industry/taiyangniao-pro/backend）。"""
     if input_data.get("taiyangniao_backend_path") or input_data.get("source_backend_path"):
         return
     tb = (os.environ.get("TAIYANGNIAO_BACKEND_PATH") or "").strip()

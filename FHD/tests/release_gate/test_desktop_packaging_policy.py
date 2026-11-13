@@ -431,7 +431,7 @@ def test_windows_package_probes_real_elt_runtime_without_development_dependencie
         assert "$probe.WaitForExit(5000)" in script
         assert "$probe.ExitCode -ne 0" in script
     build = (REPO_ROOT / "scripts/package/build-backend.ps1").read_text(encoding="utf-8-sig")
-    assert 'pip install -c deploy/requirements-server-api.lock.txt -e ".[server-api]"' in build
+    assert 'pip install -c ops/deploy/requirements-server-api.lock.txt -e ".[server-api]"' in build
     assert build.index("PyInstaller --noconfirm") < build.index(
         "Start-Process -FilePath $backendExe"
     )
@@ -551,7 +551,7 @@ def test_desktop_staging_bundles_visible_office_employee_executors() -> None:
     for manifest in (REPO_ROOT / "mods").glob("*/manifest.json"):
         declared = json.loads(manifest.read_text(encoding="utf-8")).get("bundled_employees", [])
         assert all((REPO_ROOT / "mods" / "_employees" / e).is_dir() for e in declared), manifest
-    cs = json.loads((REPO_ROOT / "mods/xcagi-customer-service-bridge/manifest.json").read_text())
+    cs = json.loads((REPO_ROOT / "mods/bridge/xcagi-customer-service-bridge/manifest.json").read_text())
     assert cs["bundled_employees"] == ["user-customer-service-officer"]
 
 

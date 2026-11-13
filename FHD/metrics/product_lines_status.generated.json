@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-11-07 06:53 UTC",
+  "generated_at": "2026-11-13 04:35 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -353,15 +353,15 @@
   "capability_totals": {
     "total": 157,
     "by_status": {
-      "verified": 104,
-      "partial": 15,
+      "verified": 95,
+      "partial": 14,
       "implemented": 3,
-      "planned": 35
+      "planned": 45
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 104,
+    "verified_total": 95,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
       "windows": 98,
@@ -407,7 +407,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 74
+    "completion": 68
   },
   "capability_warnings": [
     "[base-account-security] 实现路径不存在: FHD/app/application/account_security.py",
@@ -418,7 +418,10 @@
     "[ai-intent] 实现路径不存在: FHD/app/domain/services/conversation/chat_tool_intent.py",
     "[ai-model-access] 实现路径不存在: FHD/app/services/conversation/llm_adapter.py",
     "[ai-multimodal] 实现路径不存在: FHD/app/services/conversation",
+    "[ai-employees-workflow] 实现路径不存在: FHD/mods/xcagi-core-workflow-employees",
+    "[ai-employee-pack] 实现路径不存在: FHD/mods/xcagi-office-employee-pack-bridge",
     "[ai-run-monitor] 实现路径不存在: FHD/app/services/task_context_service.py",
+    "[ai-excel] 实现路径不存在: FHD/mods/xcagi-planner-excel-tools",
     "[ai-csv] 实现路径不存在: FHD/app/services/report_export.py",
     "[ai-pdf] 实现路径不存在: FHD/app/services/document_templates_service.py",
     "[ai-ppt] 实现路径不存在: FHD/app/services/document_templates_service.py",
@@ -444,10 +447,23 @@
     "[ch-task-center] 实现路径不存在: FHD/app/application/approval_notifications.py",
     "[ch-mobile-pair] 实现路径不存在: FHD/app/services/mobile_relay_pairing.py",
     "[mods-pack-io] 实现路径不存在: FHD/app/services/mod_zip_normalize.py",
+    "[mods-bridge] 实现路径不存在: FHD/mods/xcagi-erp-domain-bridge",
+    "[mods-bridge] 实现路径不存在: FHD/mods/xcagi-approval-bridge",
+    "[mods-bridge] 实现路径不存在: FHD/mods/xcagi-customer-service-bridge",
+    "[mods-bridge] 实现路径不存在: FHD/mods/xcagi-neuro-bus-bridge",
     "[mods-store-sync] 实现路径不存在: FHD/app/services/modstore_library_sync.py",
     "[mods-store-sync] 实现路径不存在: FHD/app/services/catalog_visibility.py",
+    "[ind-coating] 实现路径不存在: FHD/mods/coating-industry",
+    "[ind-packaging] 实现路径不存在: FHD/mods/accessories-packaging-industry",
+    "[ind-attendance] 实现路径不存在: FHD/mods/sunbird-attendance-custom",
     "[ind-workspace] 实现路径不存在: FHD/app/application/attendance_reference_data.py",
+    "[ind-taiyangniao] 实现路径不存在: FHD/mods/taiyangniao-pro",
+    "[ind-lan-license] 实现路径不存在: FHD/mods/xcagi-lan-license-bridge",
+    "[ind-modstore-pay] 实现路径不存在: FHD/mods/xcagi-model-payment-bridge",
+    "[ind-planner] 实现路径不存在: FHD/mods/xcagi-planner-bridge",
+    "[ind-workflow-viz] 实现路径不存在: FHD/mods/xcagi-workflow-visualization-bridge",
     "[pay-refund] 实现路径不存在: FHD/app/services/reconciliation_scheduler.py",
+    "[pay-lan] 实现路径不存在: FHD/mods/lan-gate-ai-employee",
     "[pay-author-revenue] 实现路径不存在: FHD/app/services/catalog_client.py",
     "[ops-work-order] 实现路径不存在: FHD/app/services/work_order_acceptance.py",
     "[ops-work-order] 实现路径不存在: FHD/app/services/work_order_ssot.py",
@@ -485,11 +501,11 @@
         ],
         "total": 102,
         "by_status": {
-          "verified": 70,
+          "verified": 69,
           "partial": 5,
-          "planned": 27
+          "planned": 28
         },
-        "verified": 70
+        "verified": 69
       },
       "releases": {
         "macos": {
@@ -570,11 +586,11 @@
         ],
         "total": 38,
         "by_status": {
-          "verified": 31,
-          "planned": 5,
-          "partial": 2
+          "verified": 23,
+          "planned": 14,
+          "partial": 1
         },
-        "verified": 31
+        "verified": 23
       },
       "releases": {
         "web": {

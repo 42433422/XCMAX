@@ -101,7 +101,7 @@ def test_fhd_release_chain_carries_and_verifies_admin_identity() -> None:
         "arch-fitness",
     }
     scan_rendered = str(jobs["container-scan"])
-    assert "docker/Dockerfile.fhd-api" in scan_rendered
+    assert "ops/docker/Dockerfile.fhd-api" in scan_rendered
     assert "Restore CI-built admin console into scan context" in scan_rendered
 
 

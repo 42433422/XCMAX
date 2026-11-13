@@ -31,7 +31,9 @@ def _resolve_mod_dir() -> Path | None:
             return Path(meta.mod_path)
     except RECOVERABLE_ERRORS:
         pass
-    trial = Path(__file__).resolve().parents[2] / "mods" / LAN_BRIDGE_MOD_ID
+    trial = (
+        Path(__file__).resolve().parents[3] / "mods" / "bridge" / LAN_BRIDGE_MOD_ID
+    )
     return trial if (trial / "manifest.json").is_file() else None
 
 

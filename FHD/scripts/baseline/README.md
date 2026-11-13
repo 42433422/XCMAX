@@ -38,9 +38,11 @@ python3 FHD/scripts/baseline/measure.py --only runtime_perf
 
 ## 输出在哪
 
-- `FHD/baselines/latest.md` —— 人读报告(每次覆盖,提交它看趋势)
-- `FHD/baselines/latest.json` —— 最近一次机读快照(diff 的基准)
-- `FHD/baselines/snapshots/<UTC>.json` —— 历史快照(每次追加,可回溯任意时点)
+- `FHD/baselines/latest.md` —— 人读报告(每次覆盖,本地查看,不入库)
+- `FHD/baselines/latest.json` —— 最近一次机读快照(diff 的基准,本地)
+- `FHD/baselines/snapshots/<UTC>.json` —— 历史快照(每次追加,可回溯任意时点,本地)
+
+`FHD/baselines/` 是可再生成的测量输出,已加入 `.gitignore`;需要留档时外置保存。
 
 ## 数据驱动的闭环
 

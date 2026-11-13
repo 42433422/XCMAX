@@ -6,15 +6,15 @@
   "stats": {
     "total": 157,
     "by_status": {
-      "verified": 104,
-      "partial": 15,
+      "verified": 95,
+      "partial": 14,
       "implemented": 3,
-      "planned": 35
+      "planned": 45
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 104,
+    "verified_total": 95,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
       "windows": 98,
@@ -60,7 +60,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 74
+    "completion": 68
   },
   "product_version": "1.0.0.7",
   "release_ready": false,
@@ -909,7 +909,7 @@
             {
               "id": "ai-employee-pack",
               "name": "办公员工包",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -3314,7 +3314,7 @@
             {
               "id": "mods-bridge",
               "name": "桥接 Mod 族（ERP / 审批 / 客服 / 总线）",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -3433,7 +3433,7 @@
             {
               "id": "ind-coating",
               "name": "涂装行业包",
-              "status": "partial",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -3473,7 +3473,7 @@
             {
               "id": "ind-packaging",
               "name": "饰品/包装行业包",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos"
@@ -3504,7 +3504,7 @@
             {
               "id": "ind-attendance",
               "name": "考勤行业包",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -3670,7 +3670,7 @@
             {
               "id": "ind-taiyangniao",
               "name": "客户账户及业务数据已脱敏，详细内容不公开。",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos"
@@ -3741,7 +3741,7 @@
             {
               "id": "ind-lan-license",
               "name": "局域网授权桥接 Mod",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos"
@@ -3772,7 +3772,7 @@
             {
               "id": "ind-modstore-pay",
               "name": "市场支付桥接 Mod",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -3812,7 +3812,7 @@
             {
               "id": "ind-planner",
               "name": "规划器桥接 Mod",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -3852,7 +3852,7 @@
             {
               "id": "ind-workflow-viz",
               "name": "工作流可视化桥接 Mod",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",

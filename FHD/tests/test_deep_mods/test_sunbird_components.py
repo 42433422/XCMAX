@@ -10,7 +10,7 @@ from openpyxl import Workbook, load_workbook
 
 @pytest.fixture
 def converter(monkeypatch):
-    backend = Path(__file__).resolve().parents[2] / "mods/sunbird-attendance-custom/backend"
+    backend = Path(__file__).resolve().parents[2] / "mods/industry/sunbird-attendance-custom/backend"
     previous = {
         name: module
         for name, module in sys.modules.items()

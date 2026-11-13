@@ -182,7 +182,7 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
     )
     content = content.replace(
         "          context: .\n          file: ./docker/Dockerfile.fhd-api",
-        "          context: FHD\n          file: FHD/docker/Dockerfile.fhd-api",
+        "          context: FHD\n          file: FHD/ops/docker/Dockerfile.fhd-api",
     )
     content = content.replace(
         "          context: .\n          file: ./Dockerfile",
