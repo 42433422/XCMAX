@@ -67,20 +67,7 @@ class _MessageListScreenState extends State<MessageListScreen> {
                       onLongPress: () => _showConversationActions(item),
                     );
                   },
-                  separatorBuilder: (_, index) {
-                    final current = entries[index];
-                    final next = entries[index + 1];
-                    if (current is _ConversationEmptyEntry ||
-                        next is _ConversationEmptyEntry) {
-                      return const SizedBox.shrink();
-                    }
-                    return Divider(
-                      height: 0.5,
-                      thickness: 0.5,
-                      indent: MessageAvatarLayout.conversationDividerStart,
-                      color: colorScheme.outlineVariant,
-                    );
-                  },
+                  separatorBuilder: (_, index) => const SizedBox.shrink(),
                   itemCount: entries.length,
                 ),
               ),

@@ -134,12 +134,12 @@ class AppTheme {
   }
 
   static ThemeData dark() {
-    const darkBg = Color(0xFF1A1A1A);
-    const darkSurface = Color(0xFF242424);
-    const darkSurfaceVariant = Color(0xFF2E2E2E);
-    const darkBorder = Color(0xFF383838);
-    const darkTextPrimary = Color(0xFFE5E5E5);
-    const darkTextSecondary = Color(0xFF888888);
+    const darkBg = Color(0xFF0E0F11);
+    const darkSurface = Color(0xFF161719);
+    const darkSurfaceVariant = Color(0xFF1F2124);
+    const darkBorder = Color(0xFF2A2C30);
+    const darkTextPrimary = Color(0xFFF2F3F5);
+    const darkTextSecondary = Color(0xFF9AA0A6);
     const darkBrand = Color(0xFF818CF8);
 
     final scheme = ColorScheme.fromSeed(
@@ -335,14 +335,14 @@ class XcagiThemeColors extends ThemeExtension<XcagiThemeColors> {
     momentAccent: Color(0xFFA5B0FF),
     momentChipBg: Color(0xFF2A2A3D),
     replyBoxBg: Color(0xFF26262E),
-    page: Color(0xFF1A1A1A),
-    surface: Color(0xFF242424),
-    surfaceHigh: Color(0xFF2E2E2E),
-    divider: Color(0xFF383838),
-    textPrimary: Color(0xFFE5E5E5),
-    textSecondary: Color(0xFF888888),
-    textStrongSecondary: Color(0xFF5C5C5C),
-    textTertiary: Color(0xFF5C5C5C),
+    page: Color(0xFF0E0F11),
+    surface: Color(0xFF161719),
+    surfaceHigh: Color(0xFF1F2124),
+    divider: Color(0xFF2A2C30),
+    textPrimary: Color(0xFFF2F3F5),
+    textSecondary: Color(0xFF9AA0A6),
+    textStrongSecondary: Color(0xFFB6BBC2),
+    textTertiary: Color(0xFF7A7F87),
   );
 
   final Color brand;

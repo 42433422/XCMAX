@@ -86,7 +86,7 @@ ThemeMode mobileThemeModeFromSession(String rawMode) {
     case 'dark':
       return ThemeMode.dark;
     default:
-      return ThemeMode.system;
+      return ThemeMode.dark;
   }
 }
 

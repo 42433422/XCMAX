@@ -81,7 +81,9 @@ class GroupConversationRow extends StatelessWidget {
     );
 
     return Material(
-      color: group.isPinned ? colors.surfaceHigh : colors.surface,
+      color: group.isPinned
+          ? colors.brand.withValues(alpha: 0.08)
+          : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
@@ -176,7 +178,9 @@ class ConversationRowTile extends StatelessWidget {
     final colors = AppTheme.colors(context);
     final textTheme = Theme.of(context).textTheme;
     final hasUnread = item.unreadCount > 0;
-    final background = item.isPinned ? colors.surfaceHigh : colors.surface;
+    final background = item.isPinned
+        ? colors.brand.withValues(alpha: 0.08)
+        : Colors.transparent;
     final visibleBadge = _visibleConversationBadge(item);
     final titleColor = item.isHidden
         ? colors.textSecondary.withValues(alpha: 0.65)
@@ -214,6 +218,7 @@ class ConversationRowTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: textTheme.titleMedium?.copyWith(
                               color: titleColor,
+                              fontSize: 16.5,
                               fontWeight:
                                   hasUnread ? FontWeight.w700 : FontWeight.w600,
                             ),
@@ -256,6 +261,17 @@ class ConversationRowTile extends StatelessWidget {
                             color: item.badgeColor == null
                                 ? colors.weChatOnline
                                 : Color(item.badgeColor!),
+                          ),
+                        ],
+                        if (hasUnread) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: colors.brand,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ],
                       ],
