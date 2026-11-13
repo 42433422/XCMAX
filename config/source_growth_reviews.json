@@ -328,9 +328,9 @@
     "FHD/app/fastapi_routes/mobile_api_extensions.py": {
       "base_file": "FHD/app/fastapi_routes/mobile_api_extensions.py",
       "base_blob": "9eb3caec9d6d55cd43c03a45218c6165504d712a",
-      "head_blob": "8267d6fabe8a9db54f41c9d4d10f38f5b9f48f2e",
+      "head_blob": "e009f703fdff6658e87b4ccda41e167e1da8dc70",
       "before_lines": 759,
-      "after_lines": 907,
+      "after_lines": 909,
       "reason": "Review request only: register the mobile unified-task, desktop-device heartbeat and end-to-end encrypted relay routers in the existing mobile extension assembly module.",
       "boundary": "Route assembly and late-bound port callbacks only; task, device and encryption behavior live in dedicated mobile_extensions and shared_services modules. Authentication and tenant scoping are unchanged.",
       "validation": "512 relay and mobile route tests passed, including encrypted roundtrip, ciphertext-at-rest, desktop heartbeat and plaintext rejection; Flutter analyze has no errors. Full integration CI and human architecture review remain outstanding; this request is not approval.",
