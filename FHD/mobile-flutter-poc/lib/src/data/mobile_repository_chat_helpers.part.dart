@@ -194,11 +194,13 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     if (id.isEmpty || text.isEmpty) return;
     final now = DateTime.now();
     final timestampMs = now.millisecondsSinceEpoch;
+    // 微秒 + 角色保证同一毫秒内写入的用户/助手消息不会互相覆盖。
+    final messageId = 'cache-${now.microsecondsSinceEpoch}-${role.name}';
     final preview = _conversationPreviewForRole(role, text);
     final store = await openOfflineStore();
     if (store != null) {
       await store.appendMessage(id, {
-        'id': 'cache-$timestampMs',
+        'id': messageId,
         'conversation_id': id,
         'role': role.name,
         'body': text,
@@ -220,7 +222,7 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     );
     final rows = [...(cache[id] ?? const <Map<String, Object?>>[])];
     rows.add({
-      'id': 'cache-$timestampMs',
+      'id': messageId,
       'conversation_id': id,
       'role': role.name,
       'body': text,
