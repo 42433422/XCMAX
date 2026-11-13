@@ -122,4 +122,8 @@ export async function applyModFacadeFlagsFromListing(modsList: ModInfo[], active
   setOfficeEmployeePackModPagesEnabled(modsList.some((m) => m.id === OFFICE_EMPLOYEE_PACK_BRIDGE_MOD_ID))
 
   modFacadeProbesCompleted = true
+  // 临时诊断（e2e 定位）
+  console.warn(
+    `[e2e-diag] facade skip=${skipProbes} erpListed=${hasErpDomainModListed} erp=${erpFacade} active=${active} ids=${installedIds.join(',')}`,
+  )
 }

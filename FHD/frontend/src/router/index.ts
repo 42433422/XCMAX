@@ -305,6 +305,10 @@ router.beforeEach(async (to, _from, finish) => {
     !to.meta?.mod
   ) {
     const modPage = resolveHostBusinessPageRedirect(String(to.name))
+    // 临时诊断（e2e 定位）
+    console.warn(
+      `[e2e-diag] guard name=${String(to.name)} shell=${isPlatformShellModeEnabled()} -> ${modPage || 'null'}`,
+    )
     if (modPage) {
       const target = router.resolve(modPage)
       next({ path: target.path, query: { ...target.query, ...to.query }, hash: to.hash || target.hash })
