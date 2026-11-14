@@ -526,6 +526,12 @@ def test_sales_report_keeps_customer_and_confirmation_filters(report_env):
         result = ReportService().get_sales_report(customer_name="客户A", status="confirmed")
         assert result["success"]
         assert result["summary"]["total_amount"] == 200
+        single_order_no = (
+            db.query(SalesOrder).filter(SalesOrder.total_amount == Decimal("120")).one().order_no
+        )
+        one_order = ReportService().get_sales_report(order_no=single_order_no)
+        assert one_order["success"]
+        assert one_order["summary"]["total_amount"] == 120
 
         from app.application.sales.quotes import SalesQuotes
 
