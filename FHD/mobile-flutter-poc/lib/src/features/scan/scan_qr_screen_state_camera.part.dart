@@ -155,7 +155,7 @@ abstract class _ScanQrStateCamera extends State<ScanQrScreen>
       if (!mounted) return;
       setState(() {
         _cameraReady = false;
-        _cameraError = error.toString();
+        _cameraError = mobileErrorText(error, fallback: '相机不可用，请检查相机权限后重试');
       });
     }
   }
@@ -220,7 +220,12 @@ abstract class _ScanQrStateCamera extends State<ScanQrScreen>
       if (mounted) setState(() => _cameraReady = true);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _cameraError = error.toString());
+      setState(
+        () => _cameraError = mobileErrorText(
+          error,
+          fallback: '相机不可用，请检查相机权限后重试',
+        ),
+      );
     }
   }
 }

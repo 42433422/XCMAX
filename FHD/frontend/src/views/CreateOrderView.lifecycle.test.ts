@@ -1,8 +1,8 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useCreateOrder } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/create-order/useCreateOrder'
-import CreateOrderView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/CreateOrderView.vue'
+import { useCreateOrder } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/create-order/useCreateOrder'
+import CreateOrderView from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/CreateOrderView.vue'
 import type { Product } from '@/types/product'
 
 const { post, listTemplates } = vi.hoisted(() => ({ post: vi.fn(), listTemplates: vi.fn() }))

@@ -12,6 +12,8 @@ from fastapi import Request
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .mod_source_paths import mod_source_dir
+
 ERP_DOMAIN_BRIDGE_MOD_ID = "xcagi-erp-domain-bridge"
 
 logger = logging.getLogger(__name__)
@@ -65,10 +67,7 @@ def _resolve_mod_dir() -> Path | None:
             if (trial / "manifest.json").is_file():
                 return trial
 
-    repo = Path(__file__).resolve().parents[2] / "mods" / ERP_DOMAIN_BRIDGE_MOD_ID
-    if (repo / "manifest.json").is_file():
-        return repo
-    return None
+    return mod_source_dir(ERP_DOMAIN_BRIDGE_MOD_ID)
 
 
 def _read_manifest() -> dict[str, Any]:

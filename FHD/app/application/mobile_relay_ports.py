@@ -27,6 +27,10 @@ class TaskReader(Protocol):
     def __call__(self, *, user_id: int, task_id: str) -> Payload | None: ...
 
 
+class DesktopPublicKey(Protocol):
+    def __call__(self, *, user_id: int, relay_id: str) -> str: ...
+
+
 @dataclass(frozen=True)
 class PairingPorts:
     database: Database
@@ -42,6 +46,7 @@ class TaskPorts:
     database: Database
     ensure_tables: Schema
     desktop_belongs_to_user: DesktopOwnership
+    desktop_public_key: DesktopPublicKey
     desktop_for_token: DesktopAuthentication
     public_desktop: Projection
     notify_task_creator: Callable[[Payload], None]

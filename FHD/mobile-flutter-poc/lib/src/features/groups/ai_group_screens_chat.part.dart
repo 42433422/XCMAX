@@ -41,7 +41,7 @@ abstract class _AiGroupChatStateBase extends State<AiGroupChatScreen> {
               });
             } catch (error) {
               if (!mounted) return;
-              _showSnack(error.toString());
+              _showSnack(mobileErrorText(error));
               if (!context.mounted) return;
               setSheetState(() => refreshing = false);
             }
@@ -86,10 +86,6 @@ abstract class _AiGroupChatStateBase extends State<AiGroupChatScreen> {
                     '自动新建任务分支',
                     style: TextStyle(color: colors.textPrimary),
                   ),
-                  subtitle: Text(
-                    '普通派工默认隔离，跑完后再合并',
-                    style: TextStyle(color: colors.textSecondary),
-                  ),
                   leading: Icon(Icons.call_merge, color: colors.brand),
                   trailing: _selectedBranch.isEmpty
                       ? Icon(Icons.check, color: colors.textPrimary)
@@ -106,7 +102,7 @@ abstract class _AiGroupChatStateBase extends State<AiGroupChatScreen> {
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        '暂无可选分支，点右上角刷新',
+                        '暂无可选分支',
                         style: TextStyle(
                           color: colors.textSecondary,
                           fontSize: 13,
@@ -219,9 +215,7 @@ abstract class _AiGroupChatStateBase extends State<AiGroupChatScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
                 child: Text(
-                  _candidates.isEmpty
-                      ? '暂无可用 AI 员工，先在「AI员工」里同步'
-                      : '已把所有 AI 员工都拉进群了',
+                  _candidates.isEmpty ? '暂无可用 AI 员工' : '已把所有 AI 员工都拉进群了',
                   style: TextStyle(
                     color: AppTheme.colors(context).textSecondary,
                     fontSize: 13,
@@ -263,7 +257,7 @@ abstract class _AiGroupChatStateBase extends State<AiGroupChatScreen> {
       if (!mounted) return;
       if (updated != null) setState(() => _group = updated);
     } catch (error) {
-      _showSnack(error.toString());
+      _showSnack(mobileErrorText(error));
     }
   }
 
@@ -277,7 +271,7 @@ abstract class _AiGroupChatStateBase extends State<AiGroupChatScreen> {
       if (!mounted) return;
       if (updated != null) setState(() => _group = updated);
     } catch (error) {
-      _showSnack(error.toString());
+      _showSnack(mobileErrorText(error));
     }
   }
 

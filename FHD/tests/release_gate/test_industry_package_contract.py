@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_industry_package_schema_exists():
-    schema = ROOT / "contracts" / "industry_package.schema.json"
+    schema = ROOT / "assets" / "contracts" / "industry_package.schema.json"
     assert schema.is_file()
     assert "neutralIndustryPackage" in schema.read_text(encoding="utf-8")
 

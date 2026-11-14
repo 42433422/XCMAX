@@ -10,6 +10,8 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .mod_source_paths import mod_source_dir
+
 MODEL_PAYMENT_BRIDGE_MOD_ID = "xcagi-model-payment-bridge"
 
 logger = logging.getLogger(__name__)
@@ -31,8 +33,7 @@ def _resolve_mod_dir() -> Path | None:
             return Path(meta.mod_path)
     except RECOVERABLE_ERRORS:
         pass
-    trial = Path(__file__).resolve().parents[2] / "mods" / MODEL_PAYMENT_BRIDGE_MOD_ID
-    return trial if (trial / "manifest.json").is_file() else None
+    return mod_source_dir(MODEL_PAYMENT_BRIDGE_MOD_ID)
 
 
 def _read_manifest() -> dict[str, Any]:

@@ -22,7 +22,7 @@
 | version（产品版本） | [VERSION.md](../VERSION.md) | 产品版本与工具链映射唯一数字来源（`verify_version_anchors.py` 校验） |
 | release-changelog（用户更新记录） | [../CHANGELOG.md](../CHANGELOG.md) | 产品 PR 强制更新的用户修复记录 |
 | route（路由） | [reports/WAVE2_ROUTE_SSOT.md](reports/WAVE2_ROUTE_SSOT.md) | RouteRegistry + mounts/* 路由 SSOT |
-| git（Git 仓库） | [reports/GIT_WORKTREE_RECOVERY.md](reports/GIT_WORKTREE_RECOVERY.md) | 根仓 XCMAX/ 为 Git SSOT |
+| git（Git 仓库） | [../.gitattributes](../.gitattributes) | 根仓 XCMAX/ 为 Git SSOT；行尾与归档策略见 `.gitattributes` / `ARCHIVE_POINTER.md` |
 | mypy（类型检查） | [../pyproject.toml](../pyproject.toml) | [tool.mypy] 配置 |
 | deps（依赖锁定） | [guides/DEPENDENCY_LOCKS.md](guides/DEPENDENCY_LOCKS.md) | Python/Node 依赖锁定策略 |
 | auth（授权市场） | [guides/AUTH_MARKET_CONTRACT.md](guides/AUTH_MARKET_CONTRACT.md) | 授权与市场契约 |

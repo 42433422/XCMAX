@@ -5,6 +5,7 @@ import type { useChatExcelContext } from '../useChatExcelContext'
 import type { useChatMessages } from '../useChatMessages'
 import type { useChatRequest, ChatRequestScope } from '../useChatRequest'
 import type { useChatResponseAttach } from '../useChatResponseAttach'
+import { readPlannerBusinessResult } from '@/utils/readPlannerBusinessResult'
 import type { useChatSessionActivity } from '../useChatSessionActivity'
 import type { ShipmentTask } from '../useShipmentTask'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
@@ -60,6 +61,7 @@ export interface ChatOrchestrationRemoteRoundDeps {
   attachTodoStepsToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachTodoStepsToLastAiMessage']
   attachWorkflowTraceToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachWorkflowTraceToLastAiMessage']
   attachApprovalCardToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachApprovalCardToLastAiMessage']
+  attachBusinessResultToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachBusinessResultToLastAiMessage']
   attachAgentRunTraceToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachAgentRunTraceToLastAiMessage']
   attachContextSummaryToLastAiMessage: ReturnType<typeof useChatResponseAttach>['attachContextSummaryToLastAiMessage']
   syncAgentRunFromPayload: ReturnType<typeof useAgentRunEventSync>['syncAgentRunFromPayload']
@@ -93,6 +95,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     attachTodoStepsToLastAiMessage,
     attachWorkflowTraceToLastAiMessage,
     attachApprovalCardToLastAiMessage,
+    attachBusinessResultToLastAiMessage,
     attachAgentRunTraceToLastAiMessage,
     attachContextSummaryToLastAiMessage,
     syncAgentRunFromPayload,
@@ -120,11 +123,13 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
   function responseExtras(payload: ChatPlannerPayload, failed = false): UiChatMessageExtras | undefined {
     const routeMetadata = readChatModelRoute(payload.route_metadata)
     const execution = readChatExecution(payload)
+    const businessResult = readPlannerBusinessResult(payload)
     const extras = {
       ...(routeMetadata ? { routeMetadata } : {}),
       ...(requiresTurnReconciliation(payload) ? { workflowAction: 'unknown' } : failed ? { workflowAction: 'failed' } : {}),
       ...(responseCameFromCache(payload) ? { sameAsPrevious: true } : {}),
       ...(execution ? { execution } : {}),
+      ...(businessResult ? { businessResult } : {}),
     }
     return Object.keys(extras).length ? extras : undefined
   }
@@ -302,6 +307,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         attachTodoStepsToLastAiMessage(payload)
         attachWorkflowTraceToLastAiMessage(payload)
         attachApprovalCardToLastAiMessage(payload)
+        attachBusinessResultToLastAiMessage(payload)
         if (!payload.task && (payload.autoAction?.type === 'show_products_float' || payload.autoAction?.type === 'show_products')) {
           currentTask.value = null
         }
@@ -490,6 +496,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         attachTodoStepsToLastAiMessage(wrap)
         attachWorkflowTraceToLastAiMessage(wrap)
         attachApprovalCardToLastAiMessage(wrap)
+        attachBusinessResultToLastAiMessage(wrap)
         if (requiresTurnReconciliation(wrap)) return
         if (wrap.task) {
           showTaskConfirm(wrap.task)
@@ -641,6 +648,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               handleChatRequiresToken(part.token_name || '', part.token_description || '', remoteMessages)
             }
             await addRoundMessage(part.response || '', responseExtras(part))
+            attachBusinessResultToLastAiMessage(part)
             if (!round.isActive()) return
             syncTaskFromChatResponse(part, primaryText)
             await syncAgentRunFromPayload(part, primaryText, isOwnerCurrent)
@@ -648,6 +656,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             attachAgentRunTraceToLastAiMessage(extractAgentRunId(part))
           } else {
             await addRoundMessage('处理失败: ' + (part.message || '未知错误'), responseExtras(part, true))
+            attachBusinessResultToLastAiMessage(part)
             if (requiresTurnReconciliation(part)) {
               await syncAgentRunFromPayload(part, primaryText, isOwnerCurrent)
               if (!round.isActive()) return
@@ -689,6 +698,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         }
       } else {
         await addRoundMessage('处理失败: ' + (data.message || '批量请求失败'), responseExtras(data, true))
+        attachBusinessResultToLastAiMessage(data)
       }
       return
     }
@@ -710,6 +720,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       attachTodoStepsToLastAiMessage(data)
       attachWorkflowTraceToLastAiMessage(data)
       attachApprovalCardToLastAiMessage(data)
+      attachBusinessResultToLastAiMessage(data)
       if (requiresTurnReconciliation(data)) return
 
       if (data.task) {
@@ -733,6 +744,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     } else {
       const failedText = '处理失败: ' + (data.message || '未知错误')
       await addRoundMessage(failedText, responseExtras(data, true))
+      attachBusinessResultToLastAiMessage(data)
       observeModelOutcome(failedText, data)
       if (requiresTurnReconciliation(data)) {
         await syncAgentRunFromPayload(data, primaryText, isOwnerCurrent)

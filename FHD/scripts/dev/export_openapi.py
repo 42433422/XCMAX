@@ -2,11 +2,11 @@
 """从 FastAPI 应用导出 OpenAPI 3.0 spec，作为跨端契约 SSOT。
 
 用法：
-    python scripts/dev/export_openapi.py [--output contracts/openapi.json]
+    python scripts/dev/export_openapi.py [--output assets/contracts/openapi.json]
 
 生成的 openapi.json 提交到仓库，各平台通过代码生成器消费：
   - frontend: openapi-typescript → src/types/api-generated.ts
-  - Flutter: contracts/openapi.json → lib/src/api/ typed mobile client
+  - Flutter: assets/contracts/openapi.json → lib/src/api/ typed mobile client
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         default=str(FHD_ROOT / "contracts" / "openapi.json"),
-        help="输出文件路径（默认: contracts/openapi.json）",
+        help="输出文件路径（默认: assets/contracts/openapi.json）",
     )
     args = parser.parse_args()
 

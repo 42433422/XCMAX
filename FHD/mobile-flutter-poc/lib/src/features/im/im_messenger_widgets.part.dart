@@ -31,15 +31,6 @@ class _EmptyConversationHint extends StatelessWidget {
               letterSpacing: 0,
             ),
           ),
-          Text(
-            '发出第一条消息后会显示在这里',
-            style: TextStyle(
-              color: colors.textSecondary,
-              fontSize: 13,
-              height: 1.38,
-              letterSpacing: 0,
-            ),
-          ),
         ],
       ),
     );

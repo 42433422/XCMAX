@@ -15,6 +15,7 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/group_grid_avatar.dart';
 import '../../widgets/we_ui.dart';
 import '../voice/voice_input_sheet.dart';
+import '../../policy/mobile_error_policy.dart';
 
 // 按职责拆分为 part 文件：候选数据、各页面 State 与 UI 组件组。
 part 'ai_group_screens_data.part.dart';

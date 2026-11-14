@@ -101,7 +101,7 @@ class ConversationItem {
 
 enum ChatRole { assistant, user, system }
 
-enum ChatDeliveryStatus { sent, sending, failed }
+enum ChatDeliveryStatus { sent, sending, failed, queued }
 
 class ChatMessage {
   const ChatMessage({

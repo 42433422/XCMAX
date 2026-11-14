@@ -183,7 +183,7 @@ def test_mod_shipment_routes_keep_permission_and_file_tenant_scope(
         lambda request, body: calls.append(current_tenant_id()) or {"success": True},
     )
     mod = import_mod_backend_py(
-        str(Path(__file__).resolve().parents[2] / "mods" / "xcagi-erp-domain-bridge"),
+        str(Path(__file__).resolve().parents[2] / "mods" / "bridge" / "xcagi-erp-domain-bridge"),
         "xcagi-erp-domain-bridge",
         "blueprints",
     )
@@ -230,7 +230,7 @@ def test_mod_shipment_order_delete_uses_session_tenant(monkeypatch, tenant, allo
         lambda request, number: calls.append((current_tenant_id(), number)) or {"success": True},
     )
     mod = import_mod_backend_py(
-        str(Path(__file__).resolve().parents[2] / "mods" / "xcagi-erp-domain-bridge"),
+        str(Path(__file__).resolve().parents[2] / "mods" / "bridge" / "xcagi-erp-domain-bridge"),
         "xcagi-erp-domain-bridge",
         "blueprints",
     )
@@ -270,7 +270,7 @@ def test_mod_order_crud_routes_share_authenticated_tenant(monkeypatch):
     ):
         monkeypatch.setattr(shipment_orders, name, fake(name))
     mod = import_mod_backend_py(
-        str(Path(__file__).resolve().parents[2] / "mods" / "xcagi-erp-domain-bridge"),
+        str(Path(__file__).resolve().parents[2] / "mods" / "bridge" / "xcagi-erp-domain-bridge"),
         "xcagi-erp-domain-bridge",
         "blueprints",
     )
@@ -318,7 +318,7 @@ def test_mod_shipment_print_resolves_files_only_inside_the_session_tenant(
 
     monkeypatch.setattr(shipment_orders, "_run_shipment_orders_agent", fake_agent)
     mod = import_mod_backend_py(
-        str(Path(__file__).resolve().parents[2] / "mods" / "xcagi-erp-domain-bridge"),
+        str(Path(__file__).resolve().parents[2] / "mods" / "bridge" / "xcagi-erp-domain-bridge"),
         "xcagi-erp-domain-bridge",
         "blueprints",
     )
