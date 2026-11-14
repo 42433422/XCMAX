@@ -338,6 +338,33 @@ def test_excel_verification_rejects_incorrect_count_or_total(monkeypatch, count,
     assert result["success"] is ok and result["verification"]["verified"] is ok
 
 
+def test_excel_verification_accepts_amount_as_total_amount(monkeypatch):
+    from app.domain.shared_services.tools_workflow_excel_ocr import (
+        _registered_router_excel_analysis,
+    )
+
+    monkeypatch.setattr(
+        "app.application.tools.workflow.handle_excel_analysis",
+        lambda *a, **kw: {
+            "success": True,
+            "row_count": 1,
+            "numeric_summary": {"amount": {"sum": 200}, "quantity": {"sum": 2}},
+        },
+    )
+    result = _registered_router_excel_analysis(
+        "statistics",
+        {
+            "file_path": "report.xlsx",
+            "expected_row_count": 1,
+            "expected_totals": {"total_amount": 200},
+        },
+        {},
+        "normal",
+        "",
+    )
+    assert result["success"] is True and result["verification"]["verified"] is True
+
+
 @pytest.mark.parametrize(
     "action,suffix",
     [("context", "pdf"), *(("execute", ext) for ext in ("pdf", "csv", "docx", "pptx", "xlsx"))],

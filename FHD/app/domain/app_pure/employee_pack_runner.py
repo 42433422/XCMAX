@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
+from app.mod_sdk import employee_tool_registry
 
 
 def execute_employee_pack_tool(
@@ -14,7 +14,9 @@ def execute_employee_pack_tool(
     *,
     runtime_context: dict[str, Any] | None = None,
 ) -> str:
-    return execute_employee_tool(tool_name, args, workspace_root, runtime_context=runtime_context)
+    return employee_tool_registry.execute_employee_tool(
+        tool_name, args, workspace_root, runtime_context=runtime_context
+    )
 
 
 def try_execute_employee_planner_tool(
@@ -26,9 +28,11 @@ def try_execute_employee_planner_tool(
     runtime_context: dict[str, Any] | None = None,
 ) -> str | None:
     _ = db_write_token
-    if not is_employee_tool(name):
+    if not employee_tool_registry.is_employee_tool(name):
         return None
-    return execute_employee_tool(name, args, workspace_root, runtime_context=runtime_context)
+    return employee_tool_registry.execute_employee_tool(
+        name, args, workspace_root, runtime_context=runtime_context
+    )
 
 
 __all__ = ["execute_employee_pack_tool", "try_execute_employee_planner_tool"]

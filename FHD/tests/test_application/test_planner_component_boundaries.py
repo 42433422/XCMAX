@@ -177,6 +177,61 @@ def test_missing_model_result_is_not_reported_as_invalid_business_plan(monkeypat
     risk_gate.evaluate.assert_not_called()
 
 
+def test_insufficient_model_balance_tells_the_user_to_recharge(monkeypatch):
+    from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+
+    plan = finalize_planned_graph(
+        None,
+        plan_id="balance",
+        context={"planning_failure_reason": "修茈市场模型余额不足，请在「模型支付」充值后重试。"},
+        validate=lambda _: None,
+        warn=lambda _: None,
+        plan_type=PlanGraph,
+        node_type=WorkflowNode,
+    )
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    planner = Mock()
+    planner.plan.return_value = plan
+    risk_gate = Mock()
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.get_workflow_tool_registry", lambda: {}
+    )
+    result = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, Mock()).handle(
+        "owner", "给客户销售商品", "pro", {}, "给客户销售商品"
+    )
+    assert result["data"]["error_code"] == "workflow_plan_unavailable"
+    assert "余额不足" in result["response"]
+    assert "模型支付" in result["response"]
+    assert "本次没有执行任何业务操作" in result["response"]
+    assert result["data"]["execution_started"] is False
+    risk_gate.evaluate.assert_not_called()
+
+
+def test_planner_completion_surfaces_market_balance_failure(monkeypatch):
+    import pytest
+
+    from app.application.workflow.planner_llm_gateway import request_planner_completion
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    class Provider:
+        async def chat_completion(self, **_kwargs):
+            return {}
+
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider",
+        lambda **_kwargs: Provider(),
+    )
+
+    def fail(coro):
+        coro.close()
+        raise MarketModelError({"status": 402})
+
+    monkeypatch.setattr("app.application.employee_runtime.agent_runner._run_async", fail)
+    with pytest.raises(MarketModelError, match="余额不足"):
+        request_planner_completion(ai_service=object(), context={}, messages=[])
+
+
 def test_autonomy_guard_denial_stops_before_agent_run():
     from app.domain.autonomy.risk_types import RiskDecision, RiskLevel
 

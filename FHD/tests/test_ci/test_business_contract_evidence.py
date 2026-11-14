@@ -9,9 +9,11 @@ import pytest
 
 from scripts.dev.check_business_contract_evidence import (
     MINIMUM_REQUIRED,
+    REQUIRED_TESTS,
     catalog_errors,
     ci_gate,
     evidence_from_junit,
+    floor_errors,
     load_catalog,
     validate,
 )
@@ -30,7 +32,11 @@ def _case(classname: str, name: str, inner: str = "") -> str:
 
 
 def _passing_pair() -> str:
-    return _case(CLASSNAME, NAME) + _case(EXPORT_CLASS, EXPORT_NAME)
+    body = ""
+    for node_id in REQUIRED_TESTS.values():
+        module, _, name = node_id.partition("::")
+        body += _case(module[:-3].replace("/", "."), name)
+    return body
 
 
 def _xml(body: str) -> str:
@@ -55,6 +61,29 @@ def test_removing_the_required_scenario_is_rejected():
         item for item in data["contracts"] if item["scenario_id"] not in MINIMUM_REQUIRED
     ]
     assert any("required scenarios removed" in error for error in catalog_errors(data))
+
+
+def test_floor_from_main_rejects_a_shrunk_required_set():
+    assert (
+        floor_errors(
+            {
+                "required_scenarios": list(MINIMUM_REQUIRED),
+                "required_tests": dict(REQUIRED_TESTS),
+            }
+        )
+        == []
+    )
+    errors = floor_errors(
+        {
+            "required_scenarios": ["R08-e23-readback", "not-in-this-change"],
+            "required_tests": {
+                **REQUIRED_TESTS,
+                "R08-e23-readback": "tests/other.py::test_other",
+            },
+        }
+    )
+    assert any("not-in-this-change" in error for error in errors)
+    assert any("tests/other.py::test_other" in error for error in errors)
 
 
 def test_passed_junit_is_accepted(tmp_path: Path):
