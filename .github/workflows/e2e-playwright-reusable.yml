@@ -40,7 +40,7 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install \
             -r requirements-server-api.txt \
-            -r deploy/requirements-dev.txt
+            -r ops/deploy/requirements-dev.txt
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund

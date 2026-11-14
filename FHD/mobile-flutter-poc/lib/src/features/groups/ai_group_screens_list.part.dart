@@ -159,7 +159,7 @@ class _AiGroupListScreenState extends State<AiGroupListScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(mobileErrorText(error))));
     }
   }
 }

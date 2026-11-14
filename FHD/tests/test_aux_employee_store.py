@@ -19,12 +19,12 @@ MODS = REPO / "mods"
 
 
 def test_lan_bridge_manifest_menu_points_to_lan_gate() -> None:
+    from app.mod_sdk.mod_source_paths import mod_source_dir
     from tests.mod_presence import skip_if_bridge_mod_absent
 
     skip_if_bridge_mod_absent("xcagi-lan-license-bridge")
-    raw = json.loads(
-        (MODS / "xcagi-lan-license-bridge" / "manifest.json").read_text(encoding="utf-8")
-    )
+    mod_dir = mod_source_dir("xcagi-lan-license-bridge") or (MODS / "xcagi-lan-license-bridge")
+    raw = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
     menu = raw.get("frontend", {}).get("menu") or []
     assert len(menu) >= 1
     assert menu[0].get("path", "").endswith("/lan-gate")

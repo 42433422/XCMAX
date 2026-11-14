@@ -77,7 +77,7 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   'approval-flow-management': '审批流程管理',
   'approval-rules': '审批流程规则',
   'workflow-visualization': '流程可视化',
-  'workflow-employee-space': '员工空间',
+  'workflow-employee-space': '员工工作台',
   'workflow-employee-stitch-full': '员工工作流全景',
   'batch-analyze': '批量分析',
   'kitten-finance': '财务分析',

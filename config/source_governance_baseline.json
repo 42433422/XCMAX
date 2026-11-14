@@ -155,7 +155,7 @@
       "routes": 32,
       "soft_cap": 20
     },
-    "FHD/mods/xcagi-erp-domain-bridge/backend/blueprints.py": {
+    "FHD/mods/bridge/xcagi-erp-domain-bridge/backend/blueprints.py": {
       "stack": "fhd_vue",
       "routes": 24,
       "soft_cap": 20
@@ -165,7 +165,7 @@
       "routes": 23,
       "soft_cap": 20
     },
-    "FHD/mods/xcagi-lan-license-bridge/backend/blueprints.py": {
+    "FHD/mods/bridge/xcagi-lan-license-bridge/backend/blueprints.py": {
       "stack": "fhd_vue",
       "routes": 23,
       "soft_cap": 20

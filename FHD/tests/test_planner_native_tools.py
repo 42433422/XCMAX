@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-RUNTIME_MOD_DIR = REPO / "mods" / "xcagi-planner-excel-tools"
+RUNTIME_MOD_DIR = REPO / "mods" / "tools" / "xcagi-planner-excel-tools"
 SOURCE_MOD_DIR = RUNTIME_MOD_DIR
 MOD_DIR = RUNTIME_MOD_DIR if (RUNTIME_MOD_DIR / "manifest.json").is_file() else SOURCE_MOD_DIR
 if not (MOD_DIR / "manifest.json").is_file():

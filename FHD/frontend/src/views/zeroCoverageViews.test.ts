@@ -139,7 +139,7 @@ describe('EmployeeWorkspaceView', () => {
       },
     })
     expect(wrapper.find('#view-workflow-employee-space').exists()).toBe(true)
-    expect(wrapper.find('.ews-page-title').text()).toBe('员工空间')
+    expect(wrapper.find('.ews-page-title').text()).toBe('员工工作台')
     expect(wrapper.find('.ews-page-sub').text()).toContain('像素入口')
     expect(wrapper.find('.stub-scene').exists()).toBe(true)
   })

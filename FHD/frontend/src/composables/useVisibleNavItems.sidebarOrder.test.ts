@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { computed, effectScope, nextTick, ref } from 'vue'
-import plannerManifest from '../../../mods/xcagi-planner-bridge/manifest.json'
+import plannerManifest from '../../../mods/bridge/xcagi-planner-bridge/manifest.json'
 import { ADMIN_SIDEBAR_PINNED_TOP_KEYS } from '../../../admin-console/src/constants/adminOperatorNav'
 
 vi.mock('@/constants/adminOperatorNav', async () => await import('../../../admin-console/src/constants/adminOperatorNav'))

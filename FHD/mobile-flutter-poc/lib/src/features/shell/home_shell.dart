@@ -10,6 +10,7 @@ import '../../data/mobile_repository_scope.dart';
 import '../../models/conversation.dart';
 import '../../policy/mobile_runtime_policy.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_icons.dart';
 import '../contacts/contacts_screen.dart';
 import '../discover/discover_screen.dart';
 import '../groups/ai_group_screens.dart';
@@ -18,10 +19,10 @@ import '../profile/profile_screen.dart';
 import '../scan/scan_qr_screen.dart';
 
 const _bottomNavItems = [
-  _NavItem('chat', Icons.forum, Icons.forum, '消息'),
-  _NavItem('work', Icons.badge, Icons.badge, 'AI员工'),
-  _NavItem('discover', Icons.travel_explore, Icons.travel_explore, '探索'),
-  _NavItem('profile', Icons.account_circle, Icons.account_circle, '我'),
+  _NavItem('chat', AppIcons.chatOutline, AppIcons.chat, '消息'),
+  _NavItem('work', AppIcons.employeesOutline, AppIcons.employees, 'AI员工'),
+  _NavItem('discover', AppIcons.discoverOutline, AppIcons.discover, '探索'),
+  _NavItem('profile', AppIcons.profileOutline, AppIcons.profile, '我'),
 ];
 
 @visibleForTesting
