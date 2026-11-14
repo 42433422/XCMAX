@@ -410,6 +410,7 @@ class TestQuoteCallerOwnedSession:
                 assert fresh.query(Customer).count() == expected
                 if expected:
                     assert fresh.query(SalesOrder).one().state == "confirmed"
+                    assert result["data"]["order_id"] == result["data"]["id"]
                     assert float(fresh.query(SalesOrder).one().total_amount) == 500
                     item = fresh.query(SalesOrderItem).one()
                     assert item.product_id == fresh.query(Product).one().id

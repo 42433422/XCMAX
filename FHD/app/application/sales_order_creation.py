@@ -21,6 +21,10 @@ def create_confirmed_order(data: dict[str, Any]) -> dict[str, Any]:
             confirmed = service.confirm(int(quoted["data"]["id"]), db=db)
             if not confirmed.get("success"):
                 raise OrderCreationRejected(str(confirmed.get("message") or "订单确认失败"))
+            payload = confirmed.get("data")
+            if isinstance(payload, dict) and payload.get("id") is not None:
+                payload = {**payload, "order_id": payload["id"]}
+                confirmed = {**confirmed, "data": payload}
             return {**confirmed, "message": "销售订单已创建并确认"}
     except OrderCreationRejected as exc:
         return {"success": False, "message": str(exc)}
