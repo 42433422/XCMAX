@@ -66,7 +66,7 @@
 |------|----------|------|
 | audit-benchmark | `FHD/config/audit_benchmark_ssot.json` | blocking |
 | business-contracts | `FHD/config/business_contracts.json` | blocking |
-| release-scope-evidence | `FHD/scripts/dev/check_release_scope_evidence.py` | blocking |
+| release-scope-evidence | `FHD/config/release_scope_evidence.json` | blocking |
 | mods | `FHD/mods/` | blocking |
 | ci-workflows | `FHD/.github/workflows/` | blocking |
 | coverage | `FHD/metrics/coverage_ratchet_baseline.json` | blocking |
