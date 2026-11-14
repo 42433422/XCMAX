@@ -14,8 +14,8 @@
     </summary>
 
     <div class="settings-card__body">
-      <div v-if="!currentIndustryConfig" class="intent-showcase-state muted">
-        {{ $t('settings.intentNotLoaded') }}
+      <div v-if="industryStore.settled && !currentIndustryConfig" class="intent-showcase-state muted">
+        当前账号没有可用的行业配置
       </div>
       <div v-else class="intent-showcase-grid">
         <article
@@ -49,6 +49,9 @@
 </template>
 
 <script setup lang="ts">
+import { useIndustryStore } from '@/stores/industry'
+
+const industryStore = useIndustryStore()
 defineProps<{
   currentIntentIndustryLabel: string
   currentIndustryUnit: string

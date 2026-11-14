@@ -12,7 +12,10 @@ from fastapi.testclient import TestClient
 
 FHD = Path(__file__).resolve().parents[2]
 MOD_ID = "xcagi-customer-service-bridge"
-MOD_BLUEPRINTS = FHD / "mods" / MOD_ID / "backend" / "blueprints.py"
+MOD_SRC = FHD / "mods" / "bridge" / MOD_ID
+if not MOD_SRC.is_dir():
+    MOD_SRC = FHD / "mods" / MOD_ID
+MOD_BLUEPRINTS = MOD_SRC / "backend" / "blueprints.py"
 
 
 @pytest.fixture

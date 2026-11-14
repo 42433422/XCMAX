@@ -11,7 +11,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-if="loading && localData.length === 0">
+        <tr v-if="showLoadingRow && loading && localData.length === 0">
           <td :colspan="totalColumns" class="empty-state">加载中...</td>
         </tr>
         <tr v-else-if="localData.length === 0 && !loading">
@@ -74,6 +74,10 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false,
+  },
+  showLoadingRow: {
+    type: Boolean,
+    default: true,
   },
   selectable: {
     type: Boolean,

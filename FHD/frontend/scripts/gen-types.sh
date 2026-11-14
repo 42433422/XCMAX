@@ -5,7 +5,7 @@
 #   npm run gen:types
 #
 # 依赖：openapi-typescript（devDependency）
-# 输入：../contracts/openapi.json（由 scripts/dev/export_openapi.py 生成）
+# 输入：../assets/contracts/openapi.json（由 scripts/dev/export_openapi.py 生成）
 # 输出：src/types/api-generated.ts
 #
 # 生成后可与 src/types/api.ts 中的手动扩展类型共存。
@@ -15,7 +15,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_DIR="$(dirname "$SCRIPT_DIR")"
-CONTRACTS_FILE="$FRONTEND_DIR/../contracts/openapi.json"
+CONTRACTS_FILE="$FRONTEND_DIR/../assets/contracts/openapi.json"
 OUTPUT_FILE="$FRONTEND_DIR/src/types/api-generated.ts"
 
 if [ ! -f "$CONTRACTS_FILE" ]; then

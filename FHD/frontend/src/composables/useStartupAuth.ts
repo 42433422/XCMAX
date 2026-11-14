@@ -44,12 +44,11 @@ export function useStartupAuth(options: {
       try { valid = readValid(res) } catch { valid = false }
       if (valid) {
         clearHostPackSkippedSession()
-        // Establish the trusted owner before taking a market credential snapshot.
-        await import('@/stores/accountProfile')
-          .then((m) => m.useAccountProfileStore().refreshFromServer())
-          .catch(() => {
-            /* ignore */
-          })
+        const profile = (await import('@/stores/accountProfile')).useAccountProfileStore()
+        const keepVisible = profile.workspaceReady && profile.workspaceHydrationReady
+        await profile.refreshFromServer(keepVisible ? { keepVisible: true } : undefined).catch(() => {
+          /* ignore */
+        })
         if (!current()) return { ok: false, entitledModIds: [] }
         // Optional token synchronization must not block the authenticated workspace.
         void syncMarketTokensFromSession(current)

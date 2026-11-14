@@ -9,6 +9,8 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .mod_source_paths import mod_source_dir
+
 PHYSICAL_VIEW_MODS: dict[str, list[str]] = {
     "xcagi-lan-license-bridge": ["LanGateView.vue"],
     "xcagi-customer-service-bridge": [
@@ -74,8 +76,7 @@ def _resolve_mod_dir(mod_id: str) -> Path | None:
             return Path(disk)
     except RECOVERABLE_ERRORS:
         pass
-    trial = Path(__file__).resolve().parents[2] / "mods" / mod_id
-    return trial if (trial / "manifest.json").is_file() else None
+    return mod_source_dir(mod_id)
 
 
 def is_mod_views_physical_enabled(mod_id: str) -> bool:

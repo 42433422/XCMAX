@@ -118,7 +118,12 @@ def test_user_customer_service_employee_supports_acquisition_actions():
 
 def _bridge_client(module_name: str):
     module = _load_module(
-        FHD_ROOT / "mods" / "xcagi-customer-service-bridge" / "backend" / "blueprints.py",
+        FHD_ROOT
+        / "mods"
+        / "bridge"
+        / "xcagi-customer-service-bridge"
+        / "backend"
+        / "blueprints.py",
         module_name,
     )
     app = FastAPI()

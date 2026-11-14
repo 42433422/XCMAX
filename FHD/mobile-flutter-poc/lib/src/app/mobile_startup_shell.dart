@@ -86,7 +86,7 @@ ThemeMode mobileThemeModeFromSession(String rawMode) {
     case 'dark':
       return ThemeMode.dark;
     default:
-      return ThemeMode.system;
+      return ThemeMode.dark;
   }
 }
 
@@ -378,7 +378,9 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
       if (!mounted) return;
       _showMobileSnackAfterFrame(
         mobileProductErrorMessage(
-          error is MobileRepositoryException ? error.message : '$error',
+          error is MobileRepositoryException
+              ? error.message
+              : mobileErrorText(error),
           '设备配对失败，请刷新二维码或输入设备码',
         ),
       );

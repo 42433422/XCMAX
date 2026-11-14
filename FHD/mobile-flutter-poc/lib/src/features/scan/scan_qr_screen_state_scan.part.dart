@@ -44,7 +44,13 @@ abstract class _ScanQrStateScan extends _ScanQrStateCamera {
       setState(() => _pickingAlbum = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('相册扫码失败：$error')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            '相册扫码失败：${mobileErrorText(error, fallback: '请重新选择图片')}',
+          ),
+        ),
+      );
     }
   }
 
@@ -101,16 +107,6 @@ abstract class _ScanQrStateScan extends _ScanQrStateCamera {
                       fontSize: 18,
                       height: 1.33,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码',
-                    style: TextStyle(
-                      color: sheetColors.textSecondary,
-                      fontSize: 13,
-                      height: 1.31,
                       letterSpacing: 0,
                     ),
                   ),
@@ -172,7 +168,7 @@ abstract class _ScanQrStateScan extends _ScanQrStateCamera {
                 ScaffoldMessenger.of(sheetContext).showSnackBar(
                   SnackBar(
                     content: Text(
-                      mobileProductErrorMessage(error.toString(), '扫码登录失败，请重试'),
+                      mobileErrorText(error, fallback: '扫码登录失败，请重试'),
                     ),
                   ),
                 );
@@ -276,7 +272,7 @@ abstract class _ScanQrStateScan extends _ScanQrStateCamera {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            mobileProductErrorMessage(error.toString(), '设备配对失败，请刷新二维码或输入设备码'),
+            mobileErrorText(error, fallback: '设备配对失败，请刷新二维码或输入设备码'),
           ),
         ),
       );

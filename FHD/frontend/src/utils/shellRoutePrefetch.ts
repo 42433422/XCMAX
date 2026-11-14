@@ -11,6 +11,7 @@ const SHELL_ROUTE_NAMES = new Set<string>([
 ])
 
 const loaded = new Set<string>()
+const scheduledRouters = new WeakSet<Router>()
 
 function idle(task: () => void): void {
   const win = window as Window & { requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number }
@@ -45,7 +46,13 @@ export function prefetchShellRoute(router: Router, name: string): void {
 
 /** Warm primary shell pages while the shell is idle so later switches do not wait on the chunk. */
 export function prefetchShellRouteChunks(router: Router): void {
-  const jobs = [...SHELL_ROUTE_NAMES].map((name) => loaderFor(router, name)).filter((job): job is () => Promise<unknown> => Boolean(job))
-  if (!jobs.length) return
-  void prefetchRouteChunks(jobs, idle, 2)
+  if (scheduledRouters.has(router)) return
+  const im = loaderFor(router, 'im')
+  if (im) void im().catch(() => undefined)
+  const rest = [...SHELL_ROUTE_NAMES].map((name) => loaderFor(router, name)).filter((job): job is () => Promise<unknown> => Boolean(job))
+  if (!im && !rest.length) return
+  scheduledRouters.add(router)
+  // 信息 starts immediately. Other pages wait for idle, one at a time, so they do not
+  // take the browser's connections from that first open.
+  if (rest.length) void prefetchRouteChunks(rest, idle, 1)
 }
