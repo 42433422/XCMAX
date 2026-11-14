@@ -308,6 +308,14 @@ class AIChatApplicationService(
                     if business_write_requested(message):
                         resp = unknown_result(resp)
             try:
+                from app.application.agent_orchestrator.business_harness import (
+                    attach_visible_business_result_to_chat_payload,
+                )
+
+                resp = attach_visible_business_result_to_chat_payload(resp)
+            except RECOVERABLE_ERRORS:
+                logger.debug("visible business result attach skipped", exc_info=True)
+            try:
                 from app.neuro_bus.application_neuro_bridge import neuro_notify_chat_completed
 
                 neuro_notify_chat_completed(user_id, message, resp)

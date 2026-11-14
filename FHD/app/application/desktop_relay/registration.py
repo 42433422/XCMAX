@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 import httpx
 
+from app.application.desktop_relay import e2ee
 from app.application.desktop_relay.protocols import (
     ApiUrlCall,
     ConditionalConfigUpdate,
@@ -101,13 +102,19 @@ class RelayRegistration:
             "last_relay_sync_at": int(config.get("last_relay_sync_at") or 0),
         }
 
-    def _renew(self, config: JsonObject) -> RenewalResult:
+    def _renew(
+        self, config: JsonObject, public_key: str = "", private_key: str = ""
+    ) -> RenewalResult:
         binding = RelayBinding.from_config(config, self.ports.base_url())
         try:
             with self.ports.http_client(5) as client:
                 response = client.post(
                     self.ports.api_url("/api/mobile/v1/relay/desktop/renew", binding.base_url),
-                    json={"relay_id": binding.relay_id, "desktop_token": binding.desktop_token},
+                    json={
+                        "relay_id": binding.relay_id,
+                        "desktop_token": binding.desktop_token,
+                        "public_key": public_key,
+                    },
                 )
                 if response.status_code == 405:
                     return RenewalResult(supported=False)
@@ -125,7 +132,13 @@ class RelayRegistration:
         ):
             return RenewalResult(supported=True)
         updated = self.ports.update_config(
-            binding, {**data, "registered_at": int(self.ports.now())}
+            binding,
+            {
+                **data,
+                "registered_at": int(self.ports.now()),
+                "e2ee_private_key": private_key or str(config.get("e2ee_private_key") or ""),
+                "e2ee_public_key": public_key or str(config.get("e2ee_public_key") or ""),
+            },
         )
         if updated is None:
             return RenewalResult(supported=True)
@@ -136,11 +149,16 @@ class RelayRegistration:
         self, *, host: str, port: int, label: str = "", force_new: bool = False
     ) -> JsonObject | None:
         previous: RelayBinding | None = None
+        existing = self.ports.read_config()
+        stored_key = str(existing.get("e2ee_private_key") or "").strip()
+        private_key = "" if force_new else stored_key
+        if not private_key:
+            private_key = e2ee.generate_private_key_b64()
+        public_key = e2ee.public_key_b64(private_key)
         if not force_new:
-            existing = self.ports.read_config()
             previous = RelayBinding.from_config(existing, self.ports.base_url())
             if previous.valid:
-                renewed = self._renew(existing)
+                renewed = self._renew(existing, public_key, private_key)
                 if renewed.supported:
                     return renewed.payload
                 self.logger.warning("cloud relay lacks the renew endpoint; re-registering desktop")
@@ -150,6 +168,7 @@ class RelayRegistration:
             "label": device_label,
             "device_id": self.ports.device_id(),
             "relay_base_url": base_url,
+            "public_key": public_key,
             "capabilities": {
                 "codex": True,
                 "codex_cli": True,
@@ -199,6 +218,8 @@ class RelayRegistration:
             "exp": int(data.get("exp") or 0),
             "registered_at": int(self.ports.now()),
             "label": device_label,
+            "e2ee_private_key": private_key,
+            "e2ee_public_key": public_key,
         }
         if previous is None:
             self.ports.write_config(config)

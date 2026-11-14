@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
 import { nextTick, ref } from 'vue'
-import TemplatePreviewView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/TemplatePreviewView.vue'
-import { useTpGridTool } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/template-preview/useTpGridTool'
+import TemplatePreviewView from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/TemplatePreviewView.vue'
+import { useTpGridTool } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/useTpGridTool'
 
 const mocks = vi.hoisted(() => ({ assemble: vi.fn(), extractGrid: vi.fn(), alert: vi.fn() }))
-vi.mock('../../../mods/xcagi-erp-domain-bridge/frontend/views/template-preview/assemble', () => ({ assembleTemplatePreview: mocks.assemble }))
+vi.mock('../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/assemble', () => ({ assembleTemplatePreview: mocks.assemble }))
 vi.mock('@/api/templatePreview', () => ({ default: { extractGrid: mocks.extractGrid } }))
 vi.mock('@/utils/appDialog', () => ({ appAlert: mocks.alert }))
 

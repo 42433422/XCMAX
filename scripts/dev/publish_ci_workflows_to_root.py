@@ -156,6 +156,10 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: mobile-flutter-poc",
         "working-directory: FHD/mobile-flutter-poc",
     )
+    content = content.replace(
+        "flutter-version-file: mobile-flutter-poc/.flutter-version",
+        "flutter-version-file: FHD/mobile-flutter-poc/.flutter-version",
+    )
     if out_name == "fhd-langgraph-packages.yml":
         content = content.replace(
             'path: "packages/xcagi_langgraph_',
@@ -181,8 +185,8 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "path: FHD/build/ci-sunbird-artifact/**",
     )
     content = content.replace(
-        "          context: .\n          file: ./docker/Dockerfile.fhd-api",
-        "          context: FHD\n          file: FHD/docker/Dockerfile.fhd-api",
+        "          context: .\n          file: ./ops/docker/Dockerfile.fhd-api",
+        "          context: FHD\n          file: FHD/ops/docker/Dockerfile.fhd-api",
     )
     content = content.replace(
         "          context: .\n          file: ./Dockerfile",

@@ -10,35 +10,19 @@ class _CsEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
+    if (error == null) return const SizedBox.shrink();
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.support_agent, size: 48, color: colors.textTertiary),
-            const SizedBox(height: 14),
-            Text(
-              error == null ? '向专属客服提问' : '客服消息暂时无法加载',
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 15,
-                height: 1.4,
-                letterSpacing: 0,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              error == null ? '客服上线后会尽快回复您' : error!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: colors.textTertiary,
-                fontSize: 13,
-                height: 1.31,
-                letterSpacing: 0,
-              ),
-            ),
-          ],
+        child: Text(
+          error!,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: colors.textTertiary,
+            fontSize: 13,
+            height: 1.31,
+            letterSpacing: 0,
+          ),
         ),
       ),
     );

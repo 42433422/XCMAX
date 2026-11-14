@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lpinyin/lpinyin.dart';
 
 import '../../data/ai_employee_profile.dart';
 import '../../data/mobile_repository.dart';
@@ -77,20 +78,10 @@ class _AiEmployeesScreenState extends State<AiEmployeesScreen> {
                   Expanded(
                     child: employees.isEmpty
                         ? const _AiEmployeeSearchEmptyState()
-                        : ListView.separated(
-                            padding: EdgeInsets.zero,
-                            itemBuilder: (context, index) {
-                              final employee = employees[index];
-                              return _AiEmployeeRow(
-                                employee: employee,
-                                repository: _repository,
-                              );
-                            },
-                            separatorBuilder: (_, __) => const Divider(
-                              indent: MessageAvatarLayout
-                                  .employeePickerDividerStart,
-                            ),
-                            itemCount: employees.length,
+                        : _AiEmployeeIndexedList(
+                            employees: employees,
+                            repository: _repository,
+                            showIndex: _query.trim().isEmpty,
                           ),
                   ),
                 ],
@@ -220,16 +211,9 @@ class _AiEmployeeSearchBar extends StatelessWidget {
                   height: 1.2,
                   letterSpacing: 0,
                 ),
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
-                  hintText: '查找会话或伙伴',
-                  hintStyle: TextStyle(
-                    color: colors.textTertiary,
-                    fontSize: 15,
-                    height: 1.2,
-                    letterSpacing: 0,
-                  ),
                 ),
               ),
             ),
@@ -266,6 +250,216 @@ class _AiEmployeeSearchBar extends StatelessWidget {
   }
 }
 
+const _aiEmployeeIndexRowHeight = 64.0;
+const _aiEmployeeIndexSectionHeight = 28.0;
+
+class _AiEmployeeIndexedList extends StatefulWidget {
+  const _AiEmployeeIndexedList({
+    required this.employees,
+    required this.repository,
+    required this.showIndex,
+  });
+
+  final List<AiEmployeeProfile> employees;
+  final MobileRepository repository;
+  final bool showIndex;
+
+  @override
+  State<_AiEmployeeIndexedList> createState() => _AiEmployeeIndexedListState();
+}
+
+class _AiEmployeeIndexedListState extends State<_AiEmployeeIndexedList> {
+  final _scrollController = ScrollController();
+  String _activeLetter = '';
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = _groupByInitial(widget.employees);
+    final entries = <Object>[];
+    final offsets = <String, double>{};
+    var offset = 0.0;
+    for (final entry in groups.entries) {
+      offsets[entry.key] = offset;
+      entries.add(entry.key);
+      offset += _aiEmployeeIndexSectionHeight;
+      entries.addAll(entry.value);
+      offset += entry.value.length * _aiEmployeeIndexRowHeight;
+    }
+
+    final list = ListView.builder(
+      controller: _scrollController,
+      padding: EdgeInsets.only(right: widget.showIndex ? 24 : 0),
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        if (entry is String) {
+          return _AiEmployeeIndexSection(letter: entry);
+        }
+        return _AiEmployeeRow(
+          employee: entry as AiEmployeeProfile,
+          repository: widget.repository,
+        );
+      },
+    );
+
+    if (!widget.showIndex || groups.isEmpty) return list;
+
+    return Stack(
+      children: [
+        Positioned.fill(child: list),
+        Positioned(
+          top: 8,
+          bottom: 8,
+          right: 0,
+          child: _AiEmployeeIndexBar(
+            letters: groups.keys.toList(growable: false),
+            activeLetter: _activeLetter,
+            onSelected: (letter) {
+              setState(() => _activeLetter = letter);
+              _jumpTo(offsets[letter] ?? 0);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _jumpTo(double offset) {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+    );
+  }
+}
+
+Map<String, List<AiEmployeeProfile>> _groupByInitial(
+  List<AiEmployeeProfile> employees,
+) {
+  final groups = <String, List<AiEmployeeProfile>>{};
+  for (final employee in employees) {
+    groups.putIfAbsent(_pinyinInitial(employee.name), () => []).add(employee);
+  }
+  final letters = groups.keys.toList()
+    ..sort((a, b) {
+      if (a == '#') return 1;
+      if (b == '#') return -1;
+      return a.compareTo(b);
+    });
+  return {for (final letter in letters) letter: groups[letter]!};
+}
+
+String _pinyinInitial(String name) {
+  final trimmed = name.trim();
+  if (trimmed.isEmpty) return '#';
+  final first = trimmed.substring(0, 1);
+  final upper = first.toUpperCase();
+  if (upper.codeUnitAt(0) >= 0x41 && upper.codeUnitAt(0) <= 0x5A) return upper;
+  final short = PinyinHelper.getShortPinyin(first).trim().toUpperCase();
+  if (short.isEmpty) return '#';
+  final initial = short.substring(0, 1);
+  if (initial.codeUnitAt(0) >= 0x41 && initial.codeUnitAt(0) <= 0x5A) {
+    return initial;
+  }
+  return '#';
+}
+
+class _AiEmployeeIndexSection extends StatelessWidget {
+  const _AiEmployeeIndexSection({required this.letter});
+
+  final String letter;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return Container(
+      height: _aiEmployeeIndexSectionHeight,
+      color: colors.page,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Text(
+        letter,
+        style: TextStyle(
+          color: colors.textSecondary,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          height: 1.2,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+  }
+}
+
+class _AiEmployeeIndexBar extends StatelessWidget {
+  const _AiEmployeeIndexBar({
+    required this.letters,
+    required this.activeLetter,
+    required this.onSelected,
+  });
+
+  final List<String> letters;
+  final String activeLetter;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        void selectAt(double dy) {
+          if (letters.isEmpty) return;
+          final slot = constraints.maxHeight / letters.length;
+          final index = (dy / slot).floor().clamp(0, letters.length - 1);
+          final letter = letters[index];
+          if (letter != activeLetter) onSelected(letter);
+        }
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (details) => selectAt(details.localPosition.dy),
+          onVerticalDragStart: (details) => selectAt(details.localPosition.dy),
+          onVerticalDragUpdate: (details) => selectAt(details.localPosition.dy),
+          child: Container(
+            width: 26,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              children: [
+                for (final letter in letters)
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        letter,
+                        style: TextStyle(
+                          color: letter == activeLetter
+                              ? colors.brand
+                              : colors.textSecondary,
+                          fontSize: 10,
+                          height: 1,
+                          fontWeight: letter == activeLetter
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _AiEmployeeRow extends StatelessWidget {
   const _AiEmployeeRow({required this.employee, required this.repository});
 
@@ -275,88 +469,63 @@ class _AiEmployeeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
-    return Material(
-      color: colors.surface,
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => AiEmployeeProfileScreen(
-                employee: employee,
-                repository: repository,
+    return SizedBox(
+      height: _aiEmployeeIndexRowHeight,
+      child: Material(
+        color: colors.surface,
+        child: InkWell(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => AiEmployeeProfileScreen(
+                  employee: employee,
+                  repository: repository,
+                ),
+              ),
+            );
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: colors.divider, width: 0.5),
               ),
             ),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: MessageAvatarLayout.employeePickerRowHorizontalPadding,
-            vertical: MessageAvatarLayout.employeePickerRowVerticalPadding,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              AppAvatar(
-                imageSource: employee.avatarUrl,
-                fallback: employeeAvatarFallback(
-                  employeeId: employee.employeeId,
-                  name: employee.name,
+            padding: const EdgeInsets.symmetric(
+              horizontal: MessageAvatarLayout.employeePickerRowHorizontalPadding,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                AppAvatar(
+                  imageSource: employee.avatarUrl,
+                  fallback: employeeAvatarFallback(
+                    employeeId: employee.employeeId,
+                    name: employee.name,
+                  ),
+                  size: MessageAvatarLayout.employeePickerAvatarSize,
+                  borderRadius: MessageAvatarLayout.employeePickerAvatarRadius,
+                  contentDescription: employee.name,
                 ),
-                size: MessageAvatarLayout.employeePickerAvatarSize,
-                borderRadius: MessageAvatarLayout.employeePickerAvatarRadius,
-                contentDescription: employee.name,
-              ),
-              const SizedBox(
-                width: MessageAvatarLayout.employeePickerAvatarTextGap,
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      employee.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.clip,
-                      style: TextStyle(
-                        color: colors.textPrimary,
-                        fontSize: 16,
-                        height: 1.38,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      employee.summary,
-                      maxLines: 1,
-                      overflow: TextOverflow.clip,
-                      style: TextStyle(
-                        color: colors.textSecondary,
-                        fontSize: 13,
-                        height: 1.31,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      employee.contactLine,
-                      maxLines: 1,
-                      overflow: TextOverflow.clip,
-                      style: TextStyle(
-                        color: colors.brand,
-                        fontSize: 11,
-                        height: 1.27,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                  ],
+                const SizedBox(
+                  width: MessageAvatarLayout.employeePickerAvatarTextGap,
                 ),
-              ),
-              Icon(Icons.chevron_right, size: 20, color: colors.textSecondary),
-            ],
+                Expanded(
+                  child: Text(
+                    employee.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.clip,
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 16,
+                      height: 1.38,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ),
+                Icon(Icons.chevron_right, size: 20, color: colors.textSecondary),
+              ],
+            ),
           ),
         ),
       ),
@@ -393,17 +562,6 @@ class _AiEmployeeEmptyState extends StatelessWidget {
                 fontSize: 15,
                 height: 1.33,
                 fontWeight: FontWeight.w500,
-                letterSpacing: 0,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '员工会自动同步到这里；如未显示，点右上角刷新。',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 13,
-                height: 1.38,
                 letterSpacing: 0,
               ),
             ),

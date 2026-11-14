@@ -3,7 +3,7 @@
     <div class="page-content">
       <header class="ews-page-head">
         <div class="ews-page-head-text">
-          <h2 class="ews-page-title">员工空间</h2>
+          <h2 class="ews-page-title">员工工作台</h2>
           <p class="ews-page-sub">像素入口与工位实况；数据与副窗工作流开关、智能对话任务快照同步。</p>
         </div>
       </header>

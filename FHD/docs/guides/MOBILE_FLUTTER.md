@@ -24,7 +24,7 @@ flutter build apk --debug
 flutter build ios --debug --no-codesign
 ```
 
-后端契约统一使用 `/api/mobile/v1/*` 与 `FHD/contracts/openapi.json`，设计 token 使用
+后端契约统一使用 `/api/mobile/v1/*` 与 `FHD/assets/contracts/openapi.json`，设计 token 使用
 `FHD/config/mobile_design_tokens.json`。
 
 ## CI 与发版

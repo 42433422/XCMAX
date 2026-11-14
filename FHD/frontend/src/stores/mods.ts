@@ -12,6 +12,7 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { filterWorkflowRegistrySourceMods } from '@/utils/modWorkflowEmployees'
 import { CLIENT_PRIMARY_ERP_MOD_ID, isAuxEmployeePackModId } from '@/constants/genericModPack'
 import { useAccountProfileStore } from '@/stores/accountProfile'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { buildAttendanceIndustryModStub } from '@/constants/sunbirdClientMod'
 import { writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
 import { isAccountCustomModId, canonicalEntitlementId } from './mods/entitlements'
@@ -46,6 +47,7 @@ export const useModsStore = defineStore('mods', () => {
   const activeModId = ref(readActiveModId())
   /** 仅在为 true 时表示「已成功拉取过 /api/mods/」；失败时为 false，可再次 initialize */
   const isLoaded = ref(false)
+  const loadedAccountEpoch = ref(-1)
   const loadError = ref<string | null>(null)
   let initInFlight: Promise<void> | null = null
   let pendingInitOptions: ModsInitializeOptions | null = null
@@ -375,6 +377,7 @@ export const useModsStore = defineStore('mods', () => {
 
     try {
       await initInFlight
+      if (isLoaded.value) loadedAccountEpoch.value = productReadAccountEpoch.value
     } finally {
       initInFlight = null
       pendingInitOptions = null
@@ -398,6 +401,7 @@ export const useModsStore = defineStore('mods', () => {
     reloadActiveModForTenantScope,
     setClientModsUiOff,
     isLoaded,
+    loadedAccountEpoch,
     loadError,
     fetchMods: fetchModsWithRetry,
     fetchModRoutes,

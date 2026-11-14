@@ -179,6 +179,8 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
         values = list(workbook.active.values)
         workbook.close()
         assert "验收产品" in str(values) and "更新产品" not in str(values)
+        summary = next(row for row in values if row and row[0] == "合计")
+        assert summary[8] in (500, 500.0)
         with tenant_scope(8):
             assert (
                 service.export_shipment_records()["file_path"]
@@ -208,6 +210,10 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
     import logging
     from pathlib import Path
     from unittest.mock import Mock, patch
+
+    from app.application.agent_orchestrator.tool_permission import clear_idempotent_replay_for_tests
+
+    clear_idempotent_replay_for_tests()
 
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
@@ -358,6 +364,57 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
         path = output.get("file_path") or (output.get("data") or {}).get("file_path")
         assert path and Path(path).is_file(), output
         book = load_workbook(path, read_only=True)
-        assert "隔离测试产品" in str(list(book.active.values))
+        rows = list(book.active.iter_rows(values_only=True))
         book.close()
+        cells = [cell for row in rows for cell in row]
+        text = {str(cell) for cell in cells}
+        assert "隔离测试产品" in text
+        assert 2 in cells or "2" in text
+        assert 500 in cells or "500" in text
+        summary = next(row for row in rows if row and row[0] == "合计")
+        assert summary[8] in (500, 500.0)
     engine.dispose()
+
+
+def test_r05_export_without_a_file_fails_the_business_assertion(
+    tmp_path, monkeypatch, trusted_actor
+):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from app.application.shipment_document_workflows import ShipmentDocumentWorkflowMixin
+
+    def empty_export(self, *_args, **_kwargs):
+        return {"success": True, "file_path": ""}
+
+    monkeypatch.setattr(ShipmentDocumentWorkflowMixin, "export_shipment_records", empty_export)
+    try:
+        test_approved_shipment_then_export_uses_full_persisted_plan(
+            tmp_path, monkeypatch, trusted_actor
+        )
+    except AssertionError as exc:
+        assert "is_file" in str(exc) or "file_path" in str(exc)
+    else:
+        raise AssertionError("an export without a file was accepted")
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    restored = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan",
+            "-q",
+            "-o",
+            "addopts=",
+            "--tb=line",
+        ],
+        cwd=str(Path(__file__).resolve().parents[2]),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert restored.returncode == 0, restored.stdout + restored.stderr

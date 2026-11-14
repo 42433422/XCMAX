@@ -22,11 +22,28 @@ def _target_mods_root() -> Path:
     return (ROOT / "mods").resolve()
 
 
+def _iter_mod_dirs(mods_root: Path) -> list[Path]:
+    """平铺目录直接命中；编辑源分层时展开 industry/bridge/employees/tools 下一层。"""
+    out: list[Path] = []
+    for entry in sorted(mods_root.iterdir(), key=lambda p: p.name):
+        if entry.name.startswith(("_", ".")) or not entry.is_dir():
+            continue
+        if (entry / "manifest.json").is_file():
+            out.append(entry)
+            continue
+        out.extend(
+            sub
+            for sub in sorted(entry.iterdir(), key=lambda p: p.name)
+            if sub.is_dir()
+            and not sub.name.startswith(("_", "."))
+            and (sub / "manifest.json").is_file()
+        )
+    return out
+
+
 def _mods_scan_fingerprint(mods_root: Path) -> str:
     parts: list[str] = [str(mods_root)]
-    for entry in sorted(mods_root.iterdir(), key=lambda p: p.name):
-        if entry.name.startswith("_") or not entry.is_dir():
-            continue
+    for entry in _iter_mod_dirs(mods_root):
         manifest_path = entry / "manifest.json"
         if manifest_path.is_file():
             parts.append(f"{entry.name}:{manifest_path.stat().st_mtime:.6f}")
@@ -50,9 +67,7 @@ def main() -> int:
     mods_root = _target_mods_root()
     seen: set[str] = set()
     rows = []
-    for entry in sorted(mods_root.iterdir(), key=lambda p: p.name):
-        if entry.name.startswith("_") or not entry.is_dir():
-            continue
+    for entry in _iter_mod_dirs(mods_root):
         mod_id = _read_mod_id(entry)
         if not mod_id or mod_id in seen:
             continue

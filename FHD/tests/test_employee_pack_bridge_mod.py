@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-office-employee-pack-bridge"
+MOD_DIR = REPO / "mods" / "bridge" / "xcagi-office-employee-pack-bridge"
 
 
 @pytest.fixture(autouse=True)

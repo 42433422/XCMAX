@@ -9,6 +9,8 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .mod_source_paths import mod_source_dir
+
 PLANNER_BRIDGE_MOD_ID = "xcagi-planner-bridge"
 MOD_PAGE_PREFIX = f"/mod/{PLANNER_BRIDGE_MOD_ID}"
 
@@ -28,8 +30,7 @@ def _resolve_mod_dir() -> Path | None:
             return Path(meta.mod_path)
     except RECOVERABLE_ERRORS:
         pass
-    trial = Path(__file__).resolve().parents[2] / "mods" / PLANNER_BRIDGE_MOD_ID
-    return trial if (trial / "manifest.json").is_file() else None
+    return mod_source_dir(PLANNER_BRIDGE_MOD_ID)
 
 
 def is_planner_pages_via_mod_enabled() -> bool:

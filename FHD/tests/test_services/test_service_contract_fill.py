@@ -292,7 +292,7 @@ def _contract_client(_contract_generation, monkeypatch):
     # debt19: SSOT is FHD/mods (contracts.__file__ may live under app/domain/... → parents[2]==app)
     path = (
         Path(__file__).resolve().parents[2]
-        / "mods/xcagi-customer-service-bridge/backend/blueprints.py"
+        / "mods/bridge/xcagi-customer-service-bridge/backend/blueprints.py"
     )
     spec = importlib.util.spec_from_file_location("synthetic_contract_artifact_bridge", path)
     assert spec is not None and spec.loader is not None

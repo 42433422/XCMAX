@@ -25,6 +25,45 @@ class DiscoveryPorts:
     logger: logging.Logger
 
 
+def _mod_dir_candidates(root: str) -> list[tuple[str, str]]:
+    """列出 (entry_name, mod_path)。
+
+    编辑源 ``FHD/mods/`` 按 ``industry/ bridge/ employees/ tools/`` 分层，
+    运行时导出目录保持平铺；两种布局都要能发现。
+    """
+    out: list[tuple[str, str]] = []
+    try:
+        entries = sorted(os.listdir(root))
+    except OSError:
+        return out
+    for entry in entries:
+        if entry.startswith(("_", ".")):
+            continue
+        mod_path = os.path.join(root, entry)
+        if os.path.islink(mod_path) or not os.path.isdir(mod_path):
+            continue
+        if os.path.isfile(os.path.join(mod_path, "manifest.json")):
+            out.append((entry, mod_path))
+            continue
+        try:
+            subs = sorted(os.listdir(mod_path))
+        except OSError:
+            subs = []
+        layered = [
+            sub
+            for sub in subs
+            if not sub.startswith(("_", "."))
+            and os.path.isdir(os.path.join(mod_path, sub))
+            and os.path.isfile(os.path.join(mod_path, sub, "manifest.json"))
+        ]
+        if layered:
+            out.extend((sub, os.path.join(mod_path, sub)) for sub in layered)
+        else:
+            # 既非 Mod 也非分层容器：保留原路径，交由解析环节记录告警
+            out.append((entry, mod_path))
+    return out
+
+
 class ModDiscovery:
     def __init__(self, state: ScanState, ports: DiscoveryPorts) -> None:
         self._state = state
@@ -36,14 +75,8 @@ class ModDiscovery:
             parts.append(os.path.abspath(root))
             if not os.path.isdir(root):
                 continue
-            try:
-                entries = sorted(os.listdir(root))
-            except OSError:
-                continue
-            for entry in entries:
-                if entry.startswith(("_", ".")):
-                    continue
-                manifest_path = os.path.join(root, entry, "manifest.json")
+            for entry, mod_path in _mod_dir_candidates(root):
+                manifest_path = os.path.join(mod_path, "manifest.json")
                 if os.path.isfile(manifest_path):
                     try:
                         parts.append(f"{entry}:{os.path.getmtime(manifest_path):.6f}")
@@ -71,6 +104,12 @@ class ModDiscovery:
                 mod_path = self._ports.child(root, cid, directory=True)
                 if mod_path and self._ports.child(mod_path, "manifest.json", directory=False):
                     return mod_path
+                # 分层容器：root/<layer>/<cid>
+                for entry, layered_path in _mod_dir_candidates(root):
+                    if entry == cid and self._ports.child(
+                        layered_path, "manifest.json", directory=False
+                    ):
+                        return layered_path
             return None
 
         canonical = canonical_mod_id(mid)
@@ -117,11 +156,23 @@ class ModDiscovery:
                 if not mod_path:
                     continue
                 absolute = os.path.abspath(mod_path)
-                parent = allowed_roots.get(os.path.normcase(os.path.dirname(absolute)))
                 entry = os.path.basename(absolute)
-                if parent is None or entry.startswith(("_", ".")):
+                if entry.startswith(("_", ".")):
                     continue
-                trusted = self._ports.child(parent, entry, directory=True)
+                direct_parent = os.path.dirname(absolute)
+                trusted: str | None = None
+                if os.path.normcase(direct_parent) in allowed_roots:
+                    trusted = self._ports.child(
+                        allowed_roots[os.path.normcase(direct_parent)], entry, directory=True
+                    )
+                else:
+                    # 分层：<root>/<layer>/<id>
+                    layer_name = os.path.basename(direct_parent)
+                    layer_root = allowed_roots.get(os.path.normcase(os.path.dirname(direct_parent)))
+                    if layer_root is not None and not layer_name.startswith(("_", ".")):
+                        layer = self._ports.child(layer_root, layer_name, directory=True)
+                        if layer:
+                            trusted = self._ports.child(layer, entry, directory=True)
                 if trusted is None or not self._ports.child(
                     trusted, "manifest.json", directory=False
                 ):
@@ -163,10 +214,7 @@ class ModDiscovery:
                     "[ModManager] Mods directory does not exist: %s", mods_root
                 )
                 continue
-            for entry in os.listdir(mods_root):
-                if entry.startswith(("_", ".")):
-                    continue
-                mod_path = os.path.join(mods_root, entry)
+            for entry, mod_path in _mod_dir_candidates(mods_root):
                 if os.path.islink(mod_path) or not os.path.isdir(mod_path):
                     continue
                 manifest_path = os.path.join(mod_path, "manifest.json")

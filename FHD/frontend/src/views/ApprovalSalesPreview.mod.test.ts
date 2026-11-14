@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
-import AwDetailModal from '../../../mods/xcagi-approval-bridge/frontend/views/approval-workspace/AwDetailModal.vue'
+import AwDetailModal from '../../../mods/bridge/xcagi-approval-bridge/frontend/views/approval-workspace/AwDetailModal.vue'
 
 function render(items: Record<string, unknown>[], tool = 'sales') {
   const request = { id: 12, request_no: 'test-approval', title: '智能对话写操作：sales.create_order', status: 'pending', business_type: 'workflow_tool', records: [], description: JSON.stringify({ customer_name: '验收客户', items }), business_data: { tool_id: tool, action: 'create_order', params: { customer_name: '验收客户', items } } }

@@ -165,17 +165,6 @@ class _ScanQrScreenState extends _ScanQrStateScan {
                           right: 32,
                           child: Column(
                             children: [
-                              Text(
-                                '将电脑端显示的配对二维码放入框内，即可自动扫描',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                  fontSize: 13,
-                                  height: 1.31,
-                                  letterSpacing: 0,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
                               TextButton(
                                 onPressed: _showManualInput,
                                 child: Text(

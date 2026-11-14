@@ -80,11 +80,7 @@ WorkflowEmployeeInfo workflowEmployeeFromSsotContact(
       .replaceAll(RegExp(r'/chat/?$'), '')
       .replaceAll(RegExp(r'/messages/?$'), '')
       .ifEmpty('/api/admin/employees/${contact.employeeId}');
-  final subtitle = contact.runnable
-      ? '${contact.department} · 可执行'
-      : contact.source == 'planned'
-          ? '${contact.department} · 未安装'
-          : '${contact.department} · ${contact.source}';
+  final subtitle = contact.department;
   return WorkflowEmployeeInfo(
     id: contact.employeeId,
     label: contact.displayName,
@@ -178,13 +174,8 @@ List<ConversationItem> adminDutyConversationItemsFromSsotPayload(
           id: 'employee:$adminDutyModId:${contact.employeeId}',
           type: ConversationType.aiTask,
           title: contact.displayName,
-          subtitle: contact.description.ifEmpty(
-            contact.runnable
-                ? '${contact.department} · 可执行'
-                : '${contact.department} · 未安装',
-          ),
+          subtitle: contact.department,
           timestampText: '',
-          badgeText: contact.runnable ? null : '未安装',
         ),
       )
       .toList(growable: false);
