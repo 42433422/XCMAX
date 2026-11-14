@@ -2,7 +2,8 @@
 
 export interface RouteTitleSource {
   fullPath: string
-  meta?: { title?: unknown }
+  /** vue-router 5 的 RouteMeta 不再带可索引签名，按实际读取的字段收窄。 */
+  meta?: object
 }
 
 export function committedRouteTitle(
@@ -12,6 +13,7 @@ export function committedRouteTitle(
 ): string | null {
   if (failure) return null
   if (to.fullPath !== currentFullPath) return null
-  const title = typeof to.meta?.title === 'string' ? to.meta.title.trim() : ''
+  const rawTitle = (to.meta as { title?: unknown } | undefined)?.title
+  const title = typeof rawTitle === 'string' ? rawTitle.trim() : ''
   return title ? `${title} - XCAGI` : 'XCAGI'
 }
