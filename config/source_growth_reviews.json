@@ -135,9 +135,9 @@
     },
     "FHD/app/application/agent_orchestrator/tool_permission.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_permission.py",
-      "base_blob": "82a6469e1c22296d1b1d3fa08d98c9217edd5da3",
+      "base_blob": "30af3a3fad9ac8cabfb72201a101ada1d66ef85b",
       "head_blob": "2a21f0cf13de4e5026206794cdaa54ebc4f1c83f",
-      "before_lines": 1111,
+      "before_lines": 1108,
       "after_lines": 1117,
       "reason": "Review request only: Seal workspace_root from server configuration, reject injected approval/bulk-preview/mutation controls, and require product.view for business_db product reads.",
       "boundary": "Execution-context authority filtering and action-specific permission selection only; payload fields never establish authority.",
