@@ -322,7 +322,7 @@ describe('FloatingChatAssistant 语音通话', () => {
     await vi.advanceTimersByTimeAsync(600)
     await flushPromises()
     expect(wrapper.get('.floating-chat-call-caption.error').text()).toContain('网络有点慢')
-    expect(wrapper.find('.floating-chat-call-caption.ai').exists()).toBe(false)
+    expect(wrapper.get('.floating-chat-call-caption.ai').text()).toContain('这次没拿到回复')
     expect(vi.mocked(speakText)).toHaveBeenCalledWith(
       '网络有点慢，我没收到回复，请再说一次。',
       expect.anything(),

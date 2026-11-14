@@ -399,8 +399,8 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
       if (ack) await ack
       if (!open.value) return
       // 失败回执（超时/连接中断）是一段技术告警，朗读出来非常出戏：
-      // 改为一句口语提示，并直接回到聆听，让用户重说。
-      replyText.value = failed ? '' : reply
+      // 改为一句口语提示；同时保证字幕里始终有小C这一侧的内容。
+      replyText.value = failed ? '这次没拿到回复，请再说一次' : reply
       if (failed) setError('网络有点慢，请再说一次')
       if (speakerOn.value) {
         const line = failed ? SPOKEN_RETRY_HINT : reply
