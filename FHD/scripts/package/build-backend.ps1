@@ -1,9 +1,9 @@
-﻿# FrontendEdition: generic = 默认通用壳（ADCDFG）；full = 完整 ERP 侧栏
+﻿# FrontendEdition: 客户端只构建企业版完整路由。
 param(
   [string]$Version = '',
   [switch]$SkipFrontend,
-  [ValidateSet('full', 'generic', 'minimal')]
-  [string]$FrontendEdition = 'generic',
+  [ValidateSet('full')]
+  [string]$FrontendEdition = 'full',
   [ValidateSet('personal', 'enterprise', '')]
   [string]$ProductSku = ''
 )
@@ -22,7 +22,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Mod source/export drift; synchronize the autho
 $Version = $Version.TrimStart("v", "V")
 
 $skuFrontendMap = @{
-  personal = 'minimal'
+  personal = 'full'
   enterprise = 'full'
 }
 if ($ProductSku) {
@@ -45,21 +45,11 @@ if (-not $SkipFrontend) {
   if (-not (Test-Path "node_modules")) {
     npm install
   }
-  if ($ProductSku) {
-    $env:VITE_XCAGI_PRODUCT_SKU = $ProductSku
-  }
-  $env:VITE_XCAGI_EDITION = $FrontendEdition
-  if ($FrontendEdition -eq 'minimal') {
-    npm run build:minimal
-  } elseif ($FrontendEdition -eq 'full') {
-    npm run build:full
-  } else {
-    npm run build
-  }
+  $env:VITE_XCAGI_EDITION = 'full'
+  $env:VITE_XCAGI_PRODUCT_SKU = 'enterprise'
+  npm run build:full
   Remove-Item Env:VITE_XCAGI_EDITION -ErrorAction SilentlyContinue
-  if ($ProductSku) {
-    Remove-Item Env:VITE_XCAGI_PRODUCT_SKU -ErrorAction SilentlyContinue
-  }
+  Remove-Item Env:VITE_XCAGI_PRODUCT_SKU -ErrorAction SilentlyContinue
   Pop-Location
   # 桌面包不构建 admin-console（管理端仅网页 SSOT）
   Write-Host "[backend-build] $(Get-Date -Format o) frontend command completed"
