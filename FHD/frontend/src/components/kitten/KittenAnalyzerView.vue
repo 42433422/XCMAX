@@ -11,15 +11,37 @@
           <div class="kitten-subtitle">可视化 AI 员工 · 对话洞察 · 图表导出</div>
         </div>
       </div>
+      <div class="kitten-tabs" role="tablist" aria-label="智慧分析视图">
+        <button
+          :class="['kitten-tab', { 'is-active': activeTab === 'chat' }]"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'chat'"
+          @click="activeTab = 'chat'"
+        >
+          对话分析
+        </button>
+        <button
+          :class="['kitten-tab', { 'is-active': activeTab === 'dashboard' }]"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'dashboard'"
+          @click="activeTab = 'dashboard'"
+        >
+          经营看板
+        </button>
+      </div>
       <button class="kitten-header-action" type="button" @click="resetSession">清空</button>
     </header>
 
-    <div v-if="datasetSummary" class="kitten-dataset-bar">
+    <KittenBusinessDashboard v-if="activeTab === 'dashboard'" />
+
+    <div v-if="activeTab === 'chat' && datasetSummary" class="kitten-dataset-bar">
       <span class="kitten-dataset-name">{{ datasetSummary.name }}</span>
       <span class="kitten-dataset-meta">{{ datasetSummary.rows }} 行 · {{ datasetSummary.columns }} 列</span>
     </div>
 
-    <div class="chat-container">
+    <div v-show="activeTab === 'chat'" class="chat-container">
       <div ref="chatMessagesRef" class="chat-messages">
         <div v-for="(msg, idx) in messages" :key="idx" :class="['message', msg.role]">
           <div v-html="sanitizeChatBubbleHtml(msg.content)"></div>
@@ -115,7 +137,7 @@
       </aside>
     </div>
 
-    <div class="kitten-input-tools">
+    <div v-show="activeTab === 'chat'" class="kitten-input-tools">
       <select
         v-model="quickPick"
         class="quick-select"
@@ -142,7 +164,7 @@
       </details>
     </div>
 
-    <div v-if="docGenExpanded" class="doc-gen-panel">
+    <div v-if="docGenExpanded" v-show="activeTab === 'chat'" class="doc-gen-panel">
       <div class="doc-gen-title">按描述生成示范稿（正式用印前请审核）</div>
       <div class="doc-gen-row">
         <input
@@ -162,7 +184,7 @@
       </div>
     </div>
 
-    <div class="input-area">
+    <div v-show="activeTab === 'chat'" class="input-area">
       <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv,.txt,.json" class="kitten-file-input" @change="handleFileSelect" />
       <div class="input-wrapper">
         <button type="button" class="attach-btn" title="上传 Excel / CSV / JSON" :disabled="isDatasetParsing" @click="triggerFileUpload">
@@ -205,6 +227,7 @@ import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
 import { downloadBlob, getFilenameFromDisposition } from '@/utils'
 import { appAlert } from '@/utils/appDialog'
 import KittenChartPanel from '@/components/kitten/KittenChartPanel.vue'
+import KittenBusinessDashboard from '@/components/kitten/KittenBusinessDashboard.vue'
 import KittenLauncherIcon from '@/components/kitten/KittenLauncherIcon.vue'
 import KittenVizEmployeeStrip from '@/components/kitten/KittenVizEmployeeStrip.vue'
 import { useKittenVizEmployees } from '@/composables/useKittenVizEmployees'
@@ -215,6 +238,7 @@ import { useKittenAnalyzer, kittenQuickActions, extractKittenDocumentPickupUrl }
 const emit = defineEmits<{ back: [] }>()
 
 const panelCollapsed = ref(true)
+const activeTab = ref<'chat' | 'dashboard'>('chat')
 const docGenPrompt = ref('')
 const docGenFormat = ref<'docx' | 'xlsx'>('docx')
 const docGenExpanded = ref(false)
@@ -282,6 +306,18 @@ function applyVizEmployeeChartType() {
 watch(
   () => datasetSummary.value?.name,
   () => applyVizEmployeeChartType(),
+)
+
+// 客户问“财报/营收/利润”时直接切到经营看板，用业务库实时数据出可视化报表。
+const FINANCIAL_QUESTION_PATTERN = /财报|财务|营收|利润|毛利|经营情况/
+watch(
+  () => messages.value.length,
+  () => {
+    const last = messages.value[messages.value.length - 1]
+    if (last?.role === 'user' && FINANCIAL_QUESTION_PATTERN.test(last.content)) {
+      activeTab.value = 'dashboard'
+    }
+  },
 )
 
 const runDocGen = () => {

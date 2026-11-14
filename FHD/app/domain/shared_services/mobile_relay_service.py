@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import secrets as secrets
 from typing import Any, cast
@@ -55,6 +54,9 @@ class MobileRelayService:
                 desktop_belongs_to_user=lambda user_id, relay_id: self._desktop_belongs_to_user(
                     user_id=user_id, relay_id=relay_id
                 ),
+                desktop_public_key=lambda user_id, relay_id: self._desktop_public_key(
+                    user_id=user_id, relay_id=relay_id
+                ),
                 desktop_for_token=lambda db, relay_id, desktop_token: self._desktop_for_token(
                     db, relay_id=relay_id, desktop_token=desktop_token
                 ),
@@ -100,26 +102,9 @@ class MobileRelayService:
         }.get(status)
         if uid <= 0 or not kind.endswith(".invoke") or not title:
             return
-        # _row_dict 已把 result_json 解析进 "result"；直查裸行时兜底再解一次。
-        result = task.get("result")
-        if not isinstance(result, dict):
-            try:
-                result = json.loads(task.get("result_json") or "{}")
-            except (TypeError, ValueError):
-                result = {}
-        body = ""
-        if isinstance(result, dict):
-            body = str(
-                result.get("summary")
-                or result.get("answer")
-                or result.get("output")
-                or result.get("error_message")
-                or result.get("error")
-                or ""
-            ).strip()
+        # 结果已是端到端密文，云端不再解析正文；通知只提示「去 App 看结果」。
         tool = kind.split(".", 1)[0]
-        if not body:
-            body = f"{tool} 已结束本次任务，打开对话查看详情。"
+        body = f"{tool} 已结束本次任务，打开对话查看详情。"
         try:
             from app.domain.shared_services.mobile_push import notify_user
 
@@ -155,6 +140,14 @@ class MobileRelayService:
     def _desktop_for_token(self, db, *, relay_id: str, desktop_token: str) -> dict[str, Any] | None:
         return repository.desktop_for_token(db, relay_id=relay_id, desktop_token=desktop_token)
 
+    def _desktop_public_key(self, *, user_id: int, relay_id: str) -> str:
+        return repository.desktop_public_key_for_user(
+            user_id=user_id,
+            relay_id=relay_id,
+            database=lambda: get_db(),
+            ensure_schema=lambda db: self.ensure_tables(db),
+        )
+
     def _public_desktop(self, data: dict[str, Any]) -> dict[str, Any]:
         return repository.public_desktop(data)
 
@@ -165,6 +158,7 @@ class MobileRelayService:
         device_id: str,
         capabilities: dict[str, Any] | None = None,
         relay_base_url: str = "",
+        public_key: str = "",
         ttl_seconds: int = 24 * 3600,
     ) -> dict[str, Any]:
         return cast(
@@ -174,17 +168,26 @@ class MobileRelayService:
                 device_id=device_id,
                 capabilities=capabilities,
                 relay_base_url=relay_base_url,
+                public_key=public_key,
                 ttl_seconds=ttl_seconds,
             ),
         )
 
     def renew_desktop_pairing(
-        self, *, relay_id: str, desktop_token: str, ttl_seconds: int = 24 * 3600
+        self,
+        *,
+        relay_id: str,
+        desktop_token: str,
+        public_key: str = "",
+        ttl_seconds: int = 24 * 3600,
     ) -> dict[str, Any] | None:
         return cast(
             dict[str, Any] | None,
             self._pairing.renew_desktop_pairing(
-                relay_id=relay_id, desktop_token=desktop_token, ttl_seconds=ttl_seconds
+                relay_id=relay_id,
+                desktop_token=desktop_token,
+                public_key=public_key,
+                ttl_seconds=ttl_seconds,
             ),
         )
 

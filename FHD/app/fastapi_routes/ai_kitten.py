@@ -4,6 +4,7 @@ Phase 2B 从 :mod:`app.fastapi_routes.archive_gap_batch1/2` 拆分而出,
 URL 保持不变:
 
 - ``GET /api/ai/kitten/business-snapshot``
+- ``GET /api/ai/kitten/financial/dashboard``
 - ``GET /api/ai/kitten/charts/{all,revenue,products,customers,profit,inventory}``
 - ``GET /api/ai/kitten/saved/list`` / ``GET /api/ai/kitten/saved/{id}`` /
   ``GET /api/ai/kitten/saved/{id}/export`` / ``DELETE /api/ai/kitten/saved/{id}``
@@ -101,6 +102,18 @@ def kitten_business_snapshot():
         return {"success": True, "data": snap}
     except RECOVERABLE_ERRORS:
         logger.exception("kitten business-snapshot failed")
+        return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
+
+
+@router.get("/api/ai/kitten/financial/dashboard")
+def kitten_financial_dashboard(months: int = Query(default=6, ge=1, le=24)):
+    """经营/财报可视化看板：从业务库实时聚合 KPI、图表序列与明细表。"""
+    try:
+        from app.application.facades.kitten_facade import chart_service
+
+        return {"success": True, "data": chart_service.get_financial_dashboard(months)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten financial dashboard failed")
         return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 

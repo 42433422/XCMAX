@@ -6,7 +6,6 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     final repository = _repository;
     if (repository == null) return;
 
-    setState(() => _loadingRemoteMessages = true);
     try {
       final remoteMessages = await repository.loadInitialMessages(
         widget.conversation,
@@ -14,11 +13,10 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       if (!mounted) return;
       if (remoteMessages.isNotEmpty) {
         setState(() => _messages = remoteMessages);
+        _syncFlyerChat();
       }
     } catch (_) {
       // Keep the mobile empty state when auth/network is unavailable.
-    } finally {
-      if (mounted) setState(() => _loadingRemoteMessages = false);
     }
     await _resumeInflightRelayIfNeeded();
   }
@@ -54,6 +52,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         ),
       );
     });
+    _syncFlyerChat();
 
     try {
       final reply = await repository.resumeRelayTask(
@@ -90,7 +89,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       setState(() {
         _replaceMessage(
           assistantId,
-          body: '（$error）',
+          body: '（${mobileErrorText(error)}）',
           status: ChatDeliveryStatus.failed,
         );
         _activeRelayProgress = null;
@@ -192,6 +191,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         ),
       ]);
     });
+    _syncFlyerChat();
     _controller.clear();
 
     await _streamAssistantReply(
@@ -240,6 +240,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       );
       if (!mounted) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
+      await repository.removeQueuedMessage(widget.conversation.id, outgoing);
       setState(() {
         _replaceMessage(
           assistantId,
@@ -251,14 +252,26 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     } catch (error) {
       if (!mounted) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
+      final offline = isOfflineError(error);
+      final queuedId = offline
+          ? await repository.enqueuePendingMessage(
+              conversation: widget.conversation,
+              body: outgoing,
+            )
+          : 0;
+      if (!mounted) return;
       setState(() {
         _replaceMessage(
           assistantId,
-          body: mobileProductErrorMessage(
-            error.toString(),
-            '当前离线同步不可用，请连接电脑或稍后重试。',
-          ),
-          status: ChatDeliveryStatus.failed,
+          body: queuedId > 0
+              ? '网络不可用，消息已加入待发送队列，恢复连接后会自动发送。'
+              : mobileProductErrorMessage(
+                  mobileErrorText(error),
+                  '当前离线同步不可用，请连接电脑或稍后重试。',
+                ),
+          status: queuedId > 0
+              ? ChatDeliveryStatus.queued
+              : ChatDeliveryStatus.failed,
         );
         _activeRelayProgress = null;
       });
@@ -280,6 +293,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       _showToolPanel = false;
       _replyTo = null;
     });
+    _syncFlyerChat();
     _controller.clear();
   }
 
@@ -382,6 +396,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       _messages = [..._messages]..removeAt(index);
       if (_replyTo?.id == removed.id) _replyTo = null;
     });
+    _syncFlyerChat();
     _repository
         ?.deleteCachedChatMessage(
           conversationId: widget.conversation.id,

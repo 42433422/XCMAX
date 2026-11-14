@@ -1,6 +1,8 @@
 import logging
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy.exc import IntegrityError
+
 from app.application.customer_creation_receipt import record_customer_creation
 from app.infrastructure.tenant_scope import (
     apply_tenant_filter,
@@ -162,7 +164,11 @@ class CustomerCrudMixin:
                 )
 
                 if existing:
-                    return {"success": False, "message": "客户名称已存在"}
+                    return {
+                        "success": False,
+                        "message": "客户名称已存在",
+                        "error_code": "customer_name_exists",
+                    }
 
                 stamped = owned_tenant_id()
                 if stamped is None:
@@ -177,7 +183,15 @@ class CustomerCrudMixin:
                 )
 
                 session.add(unit)
-                session.flush()
+                try:
+                    session.flush()
+                except IntegrityError:
+                    session.rollback()
+                    return {
+                        "success": False,
+                        "message": "客户名称已存在",
+                        "error_code": "customer_name_exists",
+                    }
                 record_customer_creation(session, unit)
                 payload = PurchaseUnitModel.to_dict(unit)
                 commit_attempted = True

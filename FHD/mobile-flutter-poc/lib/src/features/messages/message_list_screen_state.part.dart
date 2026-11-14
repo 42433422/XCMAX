@@ -13,7 +13,6 @@ class _MessageListScreenState extends State<MessageListScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
-    final colorScheme = Theme.of(context).colorScheme;
     final groups = widget.groups.where(_matchesGroupQuery).toList();
     final items = widget.items.where(_matchesQuery).toList();
     final conversationEntries = _sortMessageEntries(groups, items);
@@ -22,9 +21,6 @@ class _MessageListScreenState extends State<MessageListScreen> {
       ...conversationEntries,
       if (showEmptyState) _ConversationEmptyEntry(loading: widget.loading),
     ];
-    final employeeCount = widget.items
-        .where((item) => item.type == ConversationType.aiTask)
-        .length;
 
     return SafeArea(
       bottom: false,
@@ -34,8 +30,6 @@ class _MessageListScreenState extends State<MessageListScreen> {
         child: Column(
           children: [
             _MessageHomeHeader(
-              account: widget.account ?? MobileMeData.adminFallback(),
-              employeeCount: employeeCount,
               query: _query,
               onQueryChanged: (value) => setState(() => _query = value),
               onClearQuery: () => setState(() => _query = ''),
@@ -67,20 +61,7 @@ class _MessageListScreenState extends State<MessageListScreen> {
                       onLongPress: () => _showConversationActions(item),
                     );
                   },
-                  separatorBuilder: (_, index) {
-                    final current = entries[index];
-                    final next = entries[index + 1];
-                    if (current is _ConversationEmptyEntry ||
-                        next is _ConversationEmptyEntry) {
-                      return const SizedBox.shrink();
-                    }
-                    return Divider(
-                      height: 0.5,
-                      thickness: 0.5,
-                      indent: MessageAvatarLayout.conversationDividerStart,
-                      color: colorScheme.outlineVariant,
-                    );
-                  },
+                  separatorBuilder: (_, index) => const SizedBox.shrink(),
                   itemCount: entries.length,
                 ),
               ),
@@ -186,6 +167,13 @@ class _MessageListScreenState extends State<MessageListScreen> {
         await Navigator.of(context).push<void>(
           MaterialPageRoute(
             builder: (_) => ScanQrScreen(repository: _repository),
+          ),
+        );
+        return;
+      case 'tasks':
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => TaskListScreen(repository: _repository),
           ),
         );
         return;
@@ -350,7 +338,7 @@ class _MessageListScreenState extends State<MessageListScreen> {
       if (!mounted) return;
       final message = error is MobileRepositoryException
           ? error.message
-          : error.toString().replaceFirst('Exception: ', '');
+          : mobileErrorText(error);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message.isEmpty ? '操作失败' : message)),
       );

@@ -14,7 +14,7 @@ def _load(relative: str) -> dict:
 
 
 def test_production_prometheus_scrapes_every_slo_runtime_with_truth_labels() -> None:
-    payload = _load("monitoring/prometheus.production.yml")
+    payload = _load("ops/monitoring/prometheus.production.yml")
     jobs = {row["job_name"]: row for row in payload["scrape_configs"]}
     assert set(jobs) == {
         "fhd-api-stable",
@@ -38,7 +38,7 @@ def test_production_prometheus_scrapes_every_slo_runtime_with_truth_labels() -> 
 
 
 def test_production_alert_rules_select_only_real_targets() -> None:
-    config = _load("monitoring/prometheus.production.yml")
+    config = _load("ops/monitoring/prometheus.production.yml")
     real = {
         (job["job_name"], entry["targets"][0], entry["labels"]["service"])
         for job in config["scrape_configs"]
@@ -47,7 +47,7 @@ def test_production_alert_rules_select_only_real_targets() -> None:
     }
     rules = [
         rule
-        for group in _load("monitoring/production-alerts.yml")["groups"]
+        for group in _load("ops/monitoring/production-alerts.yml")["groups"]
         for rule in group["rules"]
     ]
     assert rules
@@ -68,7 +68,7 @@ def test_production_alert_rules_select_only_real_targets() -> None:
 
 
 def test_alertmanager_routes_every_alert_to_secret_ops_channel() -> None:
-    config = _load("monitoring/alertmanager.production.yml")
+    config = _load("ops/monitoring/alertmanager.production.yml")
     receivers = {row["name"]: row for row in config["receivers"]}
     assert set(receivers) == {"ops-webhook"}
     hook = receivers["ops-webhook"]["webhook_configs"][0]

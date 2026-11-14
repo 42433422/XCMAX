@@ -69,7 +69,7 @@ av==17.1.0
     #   -r ../requirements.txt
     #   faster-whisper
 bandit==1.9.4
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 bcrypt==5.0.0
     # via passlib
 billiard==4.2.4
@@ -83,7 +83,7 @@ cachecontrol[filecache]==0.14.4
 celery==5.6.3
     # via -r ../requirements.txt
 celery-types==0.26.0
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 certifi==2026.10.19
     # via
     #   edge-tts
@@ -140,7 +140,7 @@ distro==1.9.0
     # via
     #   langsmith
     #   openai
-dnspython==2.9.0
+dnspython==2.9.2
     # via email-validator
 edge-tts==7.2.8
     # via -r ../requirements.txt
@@ -242,7 +242,7 @@ jsonpatch==1.36
 jsonpointer==3.4
     # via jsonpatch
 jsonschema==4.26.0
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 jsonschema-specifications==2025.9.1
     # via jsonschema
 kiwisolver==1.5.1
@@ -292,7 +292,7 @@ multidict==6.9.1
     #   aiohttp
     #   yarl
 mypy==2.4.0
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 mypy-extensions==1.1.0
     # via mypy
 narwhals==2.27.1
@@ -417,7 +417,7 @@ pillow==13.0.0
 pip-api==0.0.35
     # via pip-audit
 pip-audit==2.10.1
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 pip-requirements-parser==32.0.1
     # via pip-audit
 platformdirs==4.13.5
@@ -492,16 +492,16 @@ pypdfium2==5.13.0
     # via pdfplumber
 pytest==9.1.1
     # via
-    #   -r ../deploy/requirements-dev.txt
+    #   -r ../ops/deploy/requirements-dev.txt
     #   pytest-asyncio
     #   pytest-cov
     #   pytest-mock
 pytest-asyncio==1.4.0
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 pytest-cov==4.1.0
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 pytest-mock==3.15.1
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 python-alipay-sdk==3.4.0
     # via -r ../requirements.txt
 python-dateutil==2.9.0.post0
@@ -562,7 +562,7 @@ rpds-py==2026.9.1
     #   jsonschema
     #   referencing
 ruff==0.15.22
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 safetensors==0.8.0
     # via
     #   accelerate
@@ -645,23 +645,23 @@ truststore==0.10.5
 typer==0.27.2
     # via transformers
 types-aiofiles==25.1.0.20260518
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 types-cffi==2.1.0.20260827
     # via types-pyopenssl
 types-openpyxl==3.1.5.20261017
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 types-pillow==10.2.0.20240822
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 types-psutil==7.2.2.20260906
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 types-pyopenssl==24.1.0.20240722
     # via types-redis
 types-pyyaml==6.0.12.20260906
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 types-redis==4.6.0.20241004
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 types-requests==2.33.0.20261006
-    # via -r ../deploy/requirements-dev.txt
+    # via -r ../ops/deploy/requirements-dev.txt
 types-setuptools==84.0.0.20261006
     # via types-cffi
 typing-extensions==4.16.0

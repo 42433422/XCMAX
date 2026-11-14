@@ -44,6 +44,8 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         "excel_analysis",
         # 导入会按当前租户写入客户/产品/订单，同样需要恢复租户。
         "import_excel_to_database",
+        "finance",
+        "employee",
     }
 )
 

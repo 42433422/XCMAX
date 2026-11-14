@@ -49,6 +49,10 @@ os.environ.setdefault("XCAGI_REQUIRE_SIGNED_MODS", "0")
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+# 评测脚本归在 FHD/assets/evals；保持 ``from evals.… import`` 的既有写法可解析。
+ASSETS_ROOT = os.path.join(PROJECT_ROOT, "assets")
+if ASSETS_ROOT not in sys.path:
+    sys.path.insert(0, ASSETS_ROOT)
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
 

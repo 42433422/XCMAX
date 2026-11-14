@@ -1,0 +1,73 @@
+# experimental — 非签约部署主路径（主路径=桌面私有化 + 现网单 CVM 滚动；见 FHD/docs/architecture/DEPLOY_PATH_SSOT.md / ADR-route-a）。本文件保留供容器实验；阶段三前不删、不强制迁 extras。
+# Full FHD API in Docker: FastAPI + bundled Redis; PostgreSQL via DATABASE_URL (host or container).
+#
+# From repository root (FHD/):
+#   cp .env.fhd-docker.example .env.fhd-docker   # edit DATABASE_URL / SECRET_KEY
+#   docker compose -f ops/docker/docker-compose.fhd-full.yml --env-file .env.fhd-docker up -d --build
+#
+# Use host Postgres (e.g. modstore container on 5433): set in .env.fhd-docker
+#   DATABASE_URL=postgresql+psycopg://USER:PASS@host.docker.internal:5433/DB
+# Linux Docker 20.10+: extra_hosts below enables host.docker.internal.
+
+services:
+  fhd-redis:
+    image: redis:7-alpine
+    container_name: fhd-redis
+    restart: unless-stopped
+    volumes:
+      - fhd-redis-data:/data
+    networks:
+      - fhd-net
+
+  fhd-api:
+    build:
+      context: ../..
+      dockerfile: ops/docker/Dockerfile.fhd-api
+    image: xcagi-fhd-api:${XCAGI_VERSION:-latest}
+    container_name: fhd-api
+    restart: unless-stopped
+    depends_on:
+      fhd-redis:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${FHD_API_BIND:-127.0.0.1}:${FHD_API_PORT:-5100}:5000"
+    environment:
+      WORKSPACE_ROOT: /app
+      PYTHONPATH: /app
+      XCAGI_UVICORN_RELOAD: "0"
+      XCAGI_ENV: production
+      CACHE_REDIS_URL: redis://fhd-redis:6379/0
+      CELERY_BROKER_URL: redis://fhd-redis:6379/1
+      CELERY_RESULT_BACKEND: redis://fhd-redis:6379/2
+      # Neuro Bus 7 个可靠性开关（cicd-e2e-prompt.md 关键约束 10 · 生产全启用）
+      # verify_neuro_bus_prod.py 校验本机 /root/fhd-full.env 与此处一致。
+      # 任一开关被 .env.fhd-docker 覆盖为 0/空 将触发生产验证失败。
+      XCAGI_NEURO_BUS_DEDUP: "1"
+      XCAGI_NEURO_BUS_CIRCUIT: "1"
+      XCAGI_NEURO_BUS_RATE_LIMIT: "1"
+      XCAGI_NEURO_BUS_TRACE: "1"
+      XCAGI_NEURO_BUS_LIFELINE: "1"
+      XCAGI_NEURO_BUS_DLQ_AUTO: "1"
+      XCAGI_NEURO_BUS_SLA_LOG: "1"
+    env_file:
+      - ../../.env.fhd-docker
+    volumes:
+      - fhd-api-data:/app/data
+      - fhd-api-uploads:/app/uploads
+      - fhd-api-logs:/app/logs
+      - ${FHD_MODS_MOUNT:-fhd-mods-empty}:/app/XCAGI/mods:ro
+    networks:
+      - fhd-net
+
+volumes:
+  fhd-redis-data:
+  fhd-api-data:
+  fhd-api-uploads:
+  fhd-api-logs:
+  fhd-mods-empty:
+
+networks:
+  fhd-net:
+    name: fhd-full-net

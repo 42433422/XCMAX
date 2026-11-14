@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, defineComponent, ref } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import LabelEditorView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/LabelEditorView.vue'
-import { useTpTemplateActions } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/template-preview/useTpTemplateActions'
-import { normalizeLabelFields } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/label-editor/leTemplateData'
-import type { TplRecord } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/template-preview/tpTemplateMeta'
+import LabelEditorView from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/LabelEditorView.vue'
+import { useTpTemplateActions } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/useTpTemplateActions'
+import { normalizeLabelFields } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/label-editor/leTemplateData'
+import type { TplRecord } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/tpTemplateMeta'
 
 vi.mock('@/utils/appDialog', () => ({ appAlert: vi.fn().mockResolvedValue(undefined), appConfirm: vi.fn() }))
 

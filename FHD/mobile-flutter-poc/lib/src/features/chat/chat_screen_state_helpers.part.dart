@@ -2,9 +2,15 @@ part of 'chat_screen.dart';
 
 // _ChatScreenState 的最底层基类：持有全部状态字段与消息编辑/分支解析等低层方法。
 abstract class _ChatStateHelpers extends State<ChatScreen> {
+  String get _flyerMeId => 'me';
+
   late List<ChatMessage> _messages;
+  /// 没有缓存时间戳的消息（本地新建/测试注入）首次渲染时固定 createdAt，
+  /// 避免每次同步都换时间导致 flutter_chat_ui 的动画列表重排断言。
+  final _flyerCreatedAt = <String, DateTime>{};
+  late final InMemoryChatController _flyerChatController =
+      InMemoryChatController();
   final _controller = TextEditingController();
-  var _loadingRemoteMessages = false;
   var _showToolPanel = false;
   var _sending = false;
   var _runningGitOp = false;
@@ -38,6 +44,48 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  // ── Flyer Chat 适配层 ──────────────────────────────────────
+
+  /// 把本地消息同步到 flutter_chat_ui 的控制器。
+  void _syncFlyerChat() {
+    final messages = _messages.map(_toFlyerMessage).toList(growable: false);
+    unawaited(_flyerChatController.setMessages(messages));
+  }
+
+  /// 没有缓存时间戳的消息（本地新建/测试注入）首次渲染时固定 createdAt，
+  /// 避免每次同步都换时间导致 flutter_chat_ui 的动画列表重排断言。
+  Message _toFlyerMessage(ChatMessage message) {
+    final createdMs = message.cacheTimestampMs > 0
+        ? message.cacheTimestampMs
+        : _flyerCreatedAt
+            .putIfAbsent(message.id, DateTime.now)
+            .millisecondsSinceEpoch;
+    return TextMessage(
+      id: message.id,
+      authorId:
+          message.role == ChatRole.user ? _flyerMeId : widget.conversation.id,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(createdMs),
+      text: message.body,
+      status: switch (message.status) {
+        ChatDeliveryStatus.sent => MessageStatus.sent,
+        ChatDeliveryStatus.sending => MessageStatus.sending,
+        ChatDeliveryStatus.queued => MessageStatus.sending,
+        ChatDeliveryStatus.failed => MessageStatus.error,
+      },
+    );
+  }
+
+  Future<User?> _resolveFlyerUser(UserID userId) async {
+    if (userId == _flyerMeId) {
+      return User(id: _flyerMeId, name: '我');
+    }
+    return User(
+      id: userId,
+      name: _resolvedTitle,
+      imageSource: _employeeProfile?.avatarUrl,
+    );
+  }
+
   void _insertVoiceText(String text) {
     final recognized = text.trim();
     if (recognized.isEmpty) return;
@@ -69,6 +117,7 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
       quote: current.quote,
       cacheTimestampMs: current.cacheTimestampMs,
     );
+    _syncFlyerChat();
   }
 
   void _replaceMessage(
@@ -92,11 +141,13 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
       quote: current.quote,
       cacheTimestampMs: current.cacheTimestampMs,
     );
+    _syncFlyerChat();
   }
 
   void _removeMessage(String messageId) {
     _messages = [..._messages]
       ..removeWhere((message) => message.id == messageId);
+    _syncFlyerChat();
   }
 
   List<Map<String, Object?>> _collectRecentToolCalls() {

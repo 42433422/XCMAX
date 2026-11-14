@@ -1,5 +1,5 @@
 {
-  "lines": 2397739,
-  "updated": "2026-11-12",
-  "note": "修复「导入」不调用 Excel 导入工具：planner 规则/关键词（+2）、导入动作注册与权限映射（registry+constants+input_schemas 约 +30）、执行路由 tools_workflow_excel_ocr/dispatch（+35）、按账号解析上传文件名 workflow_spreadsheet_scope/planner_tools（+50）、表格读取恢复租户 tool_executor（+2）、回归测试（+18）、CHANGELOG（+1）；用户要求「导入应调用 ETL 去导入」后批准抬高基线"
+  "lines": 2402707,
+  "updated": "2026-11-14",
+  "note": "PR#3158 按意图裁剪规划 prompt：新增意图裁剪逻辑与用例，净增行"
 }

@@ -80,7 +80,7 @@ jobs:
           python -m pip install --upgrade pip
           python scripts/dev/check_requirements_lock.py --pytest-pin > /tmp/mutation-pytest-constraint.txt
           pip install -c /tmp/mutation-pytest-constraint.txt -r requirements-server-api.txt
-          pip install -c /tmp/mutation-pytest-constraint.txt -r deploy/requirements-dev.txt
+          pip install -c /tmp/mutation-pytest-constraint.txt -r ops/deploy/requirements-dev.txt
           pip install -c /tmp/mutation-pytest-constraint.txt mutmut
 
       - name: Run mutmut

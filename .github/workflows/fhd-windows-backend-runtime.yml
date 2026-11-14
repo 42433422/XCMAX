@@ -7,7 +7,7 @@ on:
     paths:
       - "FHD/pyproject.toml"
       - "FHD/requirements-server-api.txt"
-      - "FHD/deploy/requirements-server-api.lock.txt"
+      - "FHD/ops/deploy/requirements-server-api.lock.txt"
       - "FHD/uv.lock"
       - "FHD/XCAGI/run_fastapi.py"
       - "FHD/app/application/reviewed_excel*.py"
@@ -44,7 +44,7 @@ jobs:
           cache: pip
           cache-dependency-path: |
             FHD/pyproject.toml
-            FHD/deploy/requirements-server-api.lock.txt
+            FHD/ops/deploy/requirements-server-api.lock.txt
       - uses: actions/setup-node@v7
         with:
           node-version: "22"

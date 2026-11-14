@@ -223,6 +223,12 @@ from app.fastapi_routes.mobile_extensions.routes_cs_contacts import ContactRoute
 from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
     ContactRoutesPorts as ContactRoutesPorts,
 )
+from app.fastapi_routes.mobile_extensions.routes_desktop_devices import (
+    DesktopDeviceRoutes as DesktopDeviceRoutes,
+)
+from app.fastapi_routes.mobile_extensions.routes_desktop_devices import (
+    DesktopDeviceRoutesPorts as DesktopDeviceRoutesPorts,
+)
 from app.fastapi_routes.mobile_extensions.routes_devices import DeviceRoutes as DeviceRoutes
 from app.fastapi_routes.mobile_extensions.routes_devices import (
     DeviceRoutesPorts as DeviceRoutesPorts,
@@ -255,6 +261,10 @@ from app.fastapi_routes.mobile_extensions.routes_support import (
 )
 from app.fastapi_routes.mobile_extensions.routes_sync import SyncRoutes as SyncRoutes
 from app.fastapi_routes.mobile_extensions.routes_sync import SyncRoutesPorts as SyncRoutesPorts
+from app.fastapi_routes.mobile_extensions.routes_tasks import TaskRoutes as TaskRoutes
+from app.fastapi_routes.mobile_extensions.routes_tasks import (
+    TaskRoutesPorts as TaskRoutesPorts,
+)
 from app.fastapi_routes.mobile_extensions.routes_worklists import WorklistRoutes as WorklistRoutes
 from app.fastapi_routes.mobile_extensions.routes_worklists import (
     WorklistRoutesPorts as WorklistRoutesPorts,
@@ -521,6 +531,146 @@ mobile_install_customer_delivery_seed = _workspace.mobile_install_customer_deliv
 mobile_home = _workspace.mobile_home
 mobile_nav_menu = _workspace.mobile_nav_menu
 extension_router.include_router(_workspace.router)
+
+
+def _mobile_task_orchestrator() -> Any:
+    from app.application.agent_orchestrator import AgentOrchestrator
+
+    return AgentOrchestrator()
+
+
+def _mobile_tasks_list(
+    *, user_id: str, tenant_id: str, limit: int, include_archived: bool
+) -> list[Any]:
+    return list(
+        _mobile_task_orchestrator().list_tasks(
+            user_id=user_id,
+            tenant_id=tenant_id or None,
+            limit=limit,
+            include_archived=include_archived,
+        )
+    )
+
+
+def _mobile_task_get(*, user_id: str, tenant_id: str, task_id: str) -> Any | None:
+    return _mobile_task_orchestrator().get_task(
+        user_id=user_id,
+        tenant_id=tenant_id or None,
+        task_id=task_id,
+    )
+
+
+_tasks = TaskRoutes(
+    TaskRoutesPorts(
+        list_tasks=contracts.late_callback(lambda: _mobile_tasks_list),
+        get_task=contracts.late_callback(lambda: _mobile_task_get),
+    ),
+    get_mobile_user,
+)
+mobile_task_list = _tasks.mobile_task_list
+mobile_task_detail = _tasks.mobile_task_detail
+extension_router.include_router(_tasks.router)
+
+
+def _ensure_desktop_device_table() -> None:
+    from sqlalchemy import Table, inspect
+
+    from app.db.models.desktop_device import DesktopDeviceRecord
+
+    with backends.database() as db:
+        bind = db.get_bind()
+        insp = inspect(bind)
+        if not insp.has_table(DesktopDeviceRecord.__tablename__):
+            cast("Table", DesktopDeviceRecord.__table__).create(bind, checkfirst=True)
+
+
+def _desktop_device_heartbeat(
+    *,
+    user_id: int,
+    tenant_id: str,
+    device_id: str,
+    label: str,
+    platform: str,
+    app_version: str,
+    capabilities: dict[str, Any],
+) -> dict[str, Any]:
+    from datetime import datetime
+
+    from app.db.models.desktop_device import DesktopDeviceRecord
+
+    _ensure_desktop_device_table()
+    now = datetime.now()
+    with backends.database() as db:
+        record = (
+            db.query(DesktopDeviceRecord).filter(DesktopDeviceRecord.device_id == device_id).first()
+        )
+        if record is None:
+            record = DesktopDeviceRecord(device_id=device_id)
+            db.add(record)
+        record.user_id = user_id
+        record.tenant_id = tenant_id
+        record.label = label
+        record.platform = platform
+        record.app_version = app_version
+        record.capabilities_json = json.dumps(capabilities, ensure_ascii=False)
+        record.last_seen_at = now
+        db.commit()
+        return {
+            "device_id": record.device_id,
+            "label": record.label,
+            "platform": record.platform,
+            "app_version": record.app_version,
+            "last_seen_at": now,
+            "online": True,
+            "capabilities": capabilities,
+        }
+
+
+def _desktop_device_list(
+    *, user_id: int, tenant_id: str, online_within_seconds: int
+) -> list[dict[str, Any]]:
+    from datetime import datetime, timedelta
+
+    from app.db.models.desktop_device import DesktopDeviceRecord
+
+    _ensure_desktop_device_table()
+    now = datetime.now()
+    online_after = now - timedelta(seconds=online_within_seconds)
+    with backends.database() as db:
+        query = db.query(DesktopDeviceRecord).filter(DesktopDeviceRecord.user_id == user_id)
+        if tenant_id:
+            query = query.filter(DesktopDeviceRecord.tenant_id == tenant_id)
+        records = query.order_by(DesktopDeviceRecord.last_seen_at.desc()).limit(20).all()
+        items: list[dict[str, Any]] = []
+        for record in records:
+            try:
+                capabilities = json.loads(record.capabilities_json or "{}")
+            except (TypeError, ValueError):
+                capabilities = {}
+            items.append(
+                {
+                    "device_id": record.device_id,
+                    "label": record.label,
+                    "platform": record.platform,
+                    "app_version": record.app_version,
+                    "last_seen_at": record.last_seen_at,
+                    "online": bool(record.last_seen_at and record.last_seen_at >= online_after),
+                    "capabilities": capabilities if isinstance(capabilities, dict) else {},
+                }
+            )
+        return items
+
+
+_desktop_devices = DesktopDeviceRoutes(
+    DesktopDeviceRoutesPorts(
+        upsert_heartbeat=contracts.late_callback(lambda: _desktop_device_heartbeat),
+        list_devices=contracts.late_callback(lambda: _desktop_device_list),
+    ),
+    get_mobile_user,
+)
+desktop_device_heartbeat = _desktop_devices.desktop_device_heartbeat
+desktop_device_list = _desktop_devices.desktop_device_list
+extension_router.include_router(_desktop_devices.router)
 
 _admin = AdminRoutes(
     AdminRoutesPorts(

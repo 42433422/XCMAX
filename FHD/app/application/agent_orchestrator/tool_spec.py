@@ -122,6 +122,8 @@ def _special_permission(tool_id: str, action: str) -> str:
         return "material.view"
     if tool_id == "materials" and action in {"create", "update", "delete", "batch_delete", "clear"}:
         return "material.edit"
+    if tool_id == "shipment_orders" and action in {"generate", "generate_batch"}:
+        return "shipment.create"
     if (tool_id, action) == ("customers", "query"):
         return "customer.view"
     if tool_id == "customers" and action in {
@@ -489,6 +491,15 @@ def _validate_schema_payload(
             # has completed and the reference has been resolved.
             continue
         expected_type = str(prop.get("type") or "").strip()
+        if (
+            expected_type == "string"
+            and key == "reference_id"
+            and isinstance(value, int)
+            and not isinstance(value, bool)
+        ):
+            # Order tools often resolve a numeric id. Keep the reference as text.
+            payload[key] = str(value)
+            value = payload[key]
         if expected_type and not _type_matches(value, expected_type):
             return False, f"{subject} 字段 {key} 类型错误，应为 {expected_type}"
         enum_values = prop.get("enum")
