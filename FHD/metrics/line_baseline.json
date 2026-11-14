@@ -1,5 +1,5 @@
 {
-  "lines": 2403095,
+  "lines": 2403097,
   "updated": "2026-11-15",
-  "note": "依赖升级集成 PR：vue-router 5 的路由 meta 类型适配（routeTitle.ts +2 行）；经用户批准推进合并"
+  "note": "依赖升级集成 PR：把既有的 async_runtime / http_tls 登记到 cross_cutting 白名单，修复 main 上已红的 utils 边界门禁（+2 行）；经用户批准推进合并"
 }
