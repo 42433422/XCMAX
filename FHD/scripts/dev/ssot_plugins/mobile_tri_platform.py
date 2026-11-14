@@ -17,7 +17,7 @@ from scripts.dev.ssot_plugins.plugin_base import ROOT, load_registry
 MOBILE_SSOT_DOC = ROOT / "docs" / "mobile_tri_platform_ssot.md"
 SSOT_INDEX = ROOT / "docs" / "SSOT_INDEX.md"
 TOKENS = ROOT / "config" / "mobile_design_tokens.json"
-OPENAPI_CONTRACT = ROOT / "contracts" / "openapi.json"
+OPENAPI_CONTRACT = ROOT / "assets" / "contracts" / "openapi.json"
 FASTAPI_MOBILE = ROOT / "app/fastapi_routes/mobile_api.py"
 FASTAPI_MOBILE_EXT = ROOT / "app/fastapi_routes/mobile_api_extensions.py"
 FASTAPI_MOBILE_ADMIN = ROOT / "app/fastapi_routes/mobile_extensions/routes_admin.py"
@@ -127,7 +127,7 @@ def _check_registry(errors: list[str]) -> None:
     derived = set(domain.get("derived") or [])
     for rel in (
         "FHD/config/mobile_design_tokens.json",
-        "FHD/contracts/openapi.json",
+        "FHD/assets/contracts/openapi.json",
         "FHD/app/fastapi_routes/mobile_api.py",
         "FHD/app/fastapi_routes/mobile_api_extensions.py",
         "FHD/app/fastapi_routes/mobile_extensions/routes_ai_groups.py",
@@ -181,7 +181,7 @@ def _check_unified_stack(errors: list[str]) -> None:
     if isinstance(paths, dict):
         for path in ("/api/mobile/v1/admin/home", "/api/mobile/v1/ai-groups"):
             if path not in paths:
-                errors.append(f"contracts/openapi.json 缺少移动契约路径: {path}")
+                errors.append(f"assets/contracts/openapi.json 缺少移动契约路径: {path}")
 
     fastapi_mobile = _read_text(FASTAPI_MOBILE, errors)
     if fastapi_mobile and 'APIRouter(prefix="/api/mobile/v1"' not in fastapi_mobile:

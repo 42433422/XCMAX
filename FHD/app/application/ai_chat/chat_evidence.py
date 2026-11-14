@@ -21,7 +21,13 @@ _KNOWLEDGE_QUERY = re.compile(
     r"有哪些|是什么|多少|怎么|如何)|(?:[？?]|有哪些|是什么|多少|谁是|有没有)"
     r"|(?:知识库|知识网络|业务文档|操作手册|使用说明|使用指南|制度|政策|规范|流程).{0,40}(?:怎么|如何|什么|哪些|步骤|流程|使用|说明|查询|$)"
 )
-_WRITE_REQUEST = re.compile(r"(?:删除|修改|新增|保存|导入|入库|出库|发货|下单|开单|审批|执行|创建)")
+_WRITE_REQUEST = re.compile(
+    r"(?:删除|修改|新增|保存|导入|入库|出库|发货|下单|开单|审批|执行|创建|清理|清空|清除|重置)"
+)
+_KNOWLEDGE_CLEAR_REQUEST = re.compile(
+    r"(?:清理|清空|删除|清除|重置).{0,8}(?:知识库|知识|资料库|记忆)"
+    r"|(?:知识库|知识|资料库|记忆).{0,8}(?:清理|清空|删除|清除|重置)"
+)
 _CONVERSATION_FOLLOWUP = re.compile(r"(?:刚才|之前|上次|上面|你记得|记不记得)")
 _CUSTOMER_LOOKUP = re.compile(
     r"(?:查一下|查下|查询|查看|查)\s*([\u4e00-\u9fffA-Za-z0-9]{2,8}?)(?:那个|这个|的)(?:账单|订单|单据|产品)"
@@ -57,6 +63,23 @@ def customer_name_question(message: str, context: dict[str, Any]) -> str:
     if len(similar) != 1:
         return ""
     return f"你说的「{name}」是之前提到的「{similar[0]}」吗？请回复正确的客户名称和查询需求。"
+
+
+def _clearable_dataset_ids(tenant: str, access: Any) -> list[str]:
+    """Dataset ids the caller may clear, including the Persy memory dataset."""
+    ids: set[str] = {"persy-knowledge"}
+    try:
+        from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+
+        catalog = get_dataset_rag_app_service().status(
+            tenant_id=tenant, access_context=access, include_documents=False
+        )
+        datasets = catalog.get("datasets") if catalog.get("success") else {}
+        if isinstance(datasets, dict):
+            ids.update(str(dataset_id) for dataset_id in datasets)
+    except RECOVERABLE_ERRORS:
+        logger.warning("chat clearable dataset lookup unavailable", exc_info=True)
+    return sorted(ids)
 
 
 def prepare_chat_evidence(
@@ -199,6 +222,12 @@ def prepare_chat_evidence(
                     ]
             except RECOVERABLE_ERRORS:
                 logger.warning("authorized customer name evidence unavailable", exc_info=True)
+        knowledge_query = bool(
+            _KNOWLEDGE_QUERY.search(message)
+            and not _WRITE_REQUEST.search(message)
+            and not _CONVERSATION_FOLLOWUP.search(message)
+        )
+        recalled_memories: list[dict[str, Any]] = []
         try:
             from app.application.persy_memory_app_service import get_persy_memory_app_service
 
@@ -207,21 +236,35 @@ def prepare_chat_evidence(
             )
             memories = recalled.get("memories") if recalled.get("success") else []
             if memories:
-                prior = str(result.get("chat_memory_evidence") or "")
-                statements = [
-                    str(item.get("statement") or "")[:500]
-                    for item in memories
-                    if isinstance(item, dict)
-                ]
-                result["chat_memory_evidence"] = (prior + "\n" + "\n".join(statements))[:3000]
+                recalled_memories = [item for item in memories if isinstance(item, dict)]
+                # 知识问句的记忆会作为知识证据注入；其他问句仍保留在个人记忆里。
+                if not knowledge_query:
+                    prior = str(result.get("chat_memory_evidence") or "")
+                    statements = [
+                        str(item.get("statement") or "")[:500]
+                        for item in recalled_memories
+                    ]
+                    result["chat_memory_evidence"] = (
+                        prior + "\n" + "\n".join(statement for statement in statements if statement)
+                    )[:3000]
         except RECOVERABLE_ERRORS:
             logger.warning("chat confirmed memory recall unavailable", exc_info=True)
-        if (
-            not _KNOWLEDGE_QUERY.search(message)
-            or _WRITE_REQUEST.search(message)
-            or _CONVERSATION_FOLLOWUP.search(message)
-        ):
+        if _KNOWLEDGE_CLEAR_REQUEST.search(message):
+            result["chat_clearable_dataset_ids"] = _clearable_dataset_ids(tenant, access)
+        if not knowledge_query:
             return result
+        # 知识库页面展示的是 Persy 记忆图谱，对话检索同一份记忆；
+        # dataset_rag 文档索引有内容时再补充，两者合并为知识证据。
+        memory_evidence = [
+            {
+                "dataset": "persy-knowledge",
+                "source": "Persy 记忆",
+                "sheet": "",
+                "text": str(item.get("statement") or "")[:1800],
+            }
+            for item in recalled_memories
+            if str(item.get("statement") or "").strip()
+        ][:8]
         from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
         service = get_dataset_rag_app_service()
@@ -319,7 +362,7 @@ def prepare_chat_evidence(
             result["chat_independent_knowledge_query"] = not bool(
                 re.search(r"刚才|之前|上次|上面|那个|这个|它的|上述", message)
             )
-        result["chat_knowledge_evidence"] = evidence[:8]
+        result["chat_knowledge_evidence"] = (memory_evidence + evidence)[:8]
     except RECOVERABLE_ERRORS:
         logger.warning("chat knowledge recall unavailable", exc_info=True)
     result["_chat_evidence_prepared_marker"] = _PREPARED_EVIDENCE

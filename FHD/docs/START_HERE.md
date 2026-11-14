@@ -134,7 +134,7 @@ cd frontend && npm run lint && npm run type-check && npm run type-check:build &&
 | 安装/切换 cron | 服务器：`bash /opt/fhd-full/scripts/deploy/fhd-install-server-cron.sh` |
 
 - **默认模式**：`deploy_mode: tarball` → systemd `fhd-full.service`，端口 `5100`
-- **compose 模式**：manifest `deploy_mode: image` → `fhd-apply-release-compose.sh` + `docker/docker-compose.fhd-prod.yml`（digest 钉扎，GHCR 拉取）
+- **compose 模式**：manifest `deploy_mode: image` → `fhd-apply-release-compose.sh` + `ops/docker/docker-compose.fhd-prod.yml`（digest 钉扎，GHCR 拉取）
 - **可选覆盖**：服务器 cron 环境设 `FHD_DEPLOY_MODE=image|tarball` 可覆盖 manifest（见 `fhd-auto-update.sh`）
 - **manifest**：`/var/www/update/releases/stable/server/fhd-manifest.json`（v2 含 `image` / `image_digest`）
 - **约定**：生产机 **不 git pull、不手改** 业务代码；失败自动回滚：

@@ -121,6 +121,35 @@ def _registered_router_customers(
             or {}
         )
         return result
+    if action == "clear":
+        collected: list[int] = []
+        page = 1
+        while True:
+            listed = svc.get_all(keyword=None, page=page, per_page=500) or {}
+            rows = listed.get("data") if isinstance(listed, dict) else None
+            if not isinstance(rows, list) or not rows:
+                break
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    collected.append(int(row.get("id") or row.get("customer_id") or 0))
+                except (TypeError, ValueError):
+                    continue
+            total = listed.get("total")
+            if isinstance(total, int) and len(collected) >= total:
+                break
+            if len(rows) < 500:
+                break
+            page += 1
+        collected = [item for item in collected if item > 0]
+        if not collected:
+            return {"success": True, "message": "客户列表为空，无需清理", "deleted_count": 0}
+        result = dict(
+            svc.batch_delete(collected, force=True, runtime_context=runtime_context) or {}
+        )
+        result.setdefault("deleted_count", len(collected))
+        return result
     if action == "add_address":
         payload = dict(params or {})
         return dict(svc.add_address(payload) or {})
@@ -406,6 +435,7 @@ def _registered_router_reports(
             *date_filters,
             "customer_id",
             "customer_name",
+            "order_no",
             "status",
             "payment_state",
             "min_amount_exclusive",
@@ -458,10 +488,13 @@ def _registered_router_reports(
     from app.application.agent_orchestrator.artifact_files import store_spreadsheet
 
     artifact = store_spreadsheet(run_id, exported["data"], name=exported["filename"])
+    from app.application.agent_orchestrator.artifact_files import verified_spreadsheet_path
+
     return {
         "success": True,
         "message": "报表文件已生成",
         "row_count": len(rows),
+        "data": {"file_path": str(verified_spreadsheet_path(run_id, artifact))},
         "artifacts": [artifact],
     }
 
@@ -488,7 +521,11 @@ def _registered_router_finance(
             ),
         )
     if action == "create_transaction":
-        return cast("dict[Any, Any]", svc.create_transaction(dict(params or {})))
+        payload = dict(params or {})
+        reference_id = payload.get("reference_id")
+        if isinstance(reference_id, int) and not isinstance(reference_id, bool):
+            payload["reference_id"] = str(reference_id)
+        return cast("dict[Any, Any]", svc.create_transaction(payload))
     if action == "update_transaction":
         transaction_id = int(params.get("transaction_id") or 0)
         payload = {k: v for k, v in params.items() if k != "transaction_id"}

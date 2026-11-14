@@ -85,7 +85,7 @@ export default defineConfig(({ mode }) => {
         // 客服桥接 Mod 自有组件/composable 别名（其物理视图不得用 ../ 相对导入）
         {
           find: '@mod-frontend/xcagi-customer-service-bridge',
-          replacement: path.resolve(__dirname, '../mods/xcagi-customer-service-bridge/frontend'),
+          replacement: path.resolve(__dirname, '../mods/bridge/xcagi-customer-service-bridge/frontend'),
         },
         { find: 'vue-router', replacement: path.resolve(__dirname, 'node_modules/vue-router') },
         { find: 'pinia', replacement: path.resolve(__dirname, 'node_modules/pinia') },

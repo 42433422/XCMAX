@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-EXCEL_MOD = REPO / "mods" / "xcagi-planner-excel-tools"
+EXCEL_MOD = REPO / "mods" / "tools" / "xcagi-planner-excel-tools"
 if not (EXCEL_MOD / "manifest.json").is_file():
     pytest.skip(
         "xcagi-planner-excel-tools not present in SSOT mods/",

@@ -688,7 +688,7 @@ and re-run this script (or push, the git hook + push-update-context-officer take
   - `FHD/frontend/src/**`
   - `FHD/mobile-flutter-poc/**`
   - `FHD/mods/_employees/**`
-  - `FHD/contracts/openapi.json`
+  - `FHD/assets/contracts/openapi.json`
   - `scripts/dev/**`
   - `docs/**`
   - `成都修茈科技有限公司/MODstore_deploy/docs/**`

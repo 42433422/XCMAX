@@ -52,7 +52,7 @@ def test_mod_product_price_roundtrip_sqlite(monkeypatch, price):
     service._cache = None
     monkeypatch.setattr(facade, "_service", lambda: service)
     monkeypatch.setattr(facade, "_write_gate", lambda request: None)
-    mod_root = Path(__file__).resolve().parents[2] / "mods" / "xcagi-erp-domain-bridge"
+    mod_root = Path(__file__).resolve().parents[2] / "mods" / "bridge" / "xcagi-erp-domain-bridge"
     mod = import_mod_backend_py(str(mod_root), "xcagi-erp-domain-bridge", "blueprints")
     monkeypatch.setattr(
         mod,

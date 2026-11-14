@@ -62,7 +62,7 @@ domains:
       - FHD/config/download_release.json#marketing_version
       - FHD/config/release_train.json#product_version
       - 成都修茈科技有限公司/FHD/config/release_train.json#product_version
-      - FHD/contracts/openapi.json#info.version
+      - FHD/assets/contracts/openapi.json#info.version
       - FHD/setup.iss#MyAppVersion
       - FHD/tools/XcagiDownloader/Models/AppSettings.cs#fallback-version
       - FHD/scripts/package/build-installer.ps1#default-version
@@ -82,7 +82,7 @@ domains:
       - FHD/docs/security/CREDENTIAL_INCIDENT_CLOSEOUT.md
       - FHD/XCAGI/README.md
       - FHD/XCAGI/FRONTEND.md
-      - FHD/rasa/README.md
+      - FHD/assets/rasa/README.md
     mode: lint
     check: python scripts/dev/docs_ssot_lint.py
     sync: null
@@ -259,7 +259,7 @@ domains:
     ssot: FHD/docs/mobile_tri_platform_ssot.md
     derived:
       - FHD/config/mobile_design_tokens.json
-      - FHD/contracts/openapi.json
+      - FHD/assets/contracts/openapi.json
       - FHD/app/fastapi_routes/mobile_api.py
       - FHD/app/fastapi_routes/mobile_api_extensions.py
       - FHD/app/fastapi_routes/mobile_extensions/routes_ai_groups.py
@@ -284,7 +284,7 @@ domains:
     derived:
       - FHD/app/neuro_bus/event_types_generated.py
       - FHD/frontend/src/types/agentRunEvents.generated.ts
-      - FHD/contracts/openapi.json#components.schemas.AgentRunEvent
+      - FHD/assets/contracts/openapi.json#components.schemas.AgentRunEvent
     mode: generate+verify
     check: python scripts/dev/neuro_bus_events_ssot.py check
     sync: python scripts/dev/neuro_bus_events_ssot.py generate --apply
@@ -420,6 +420,26 @@ domains:
     mode: generate
     check: python "../成都修茈科技有限公司/scripts/build_capability_center.py" --check
     sync: python "../成都修茈科技有限公司/scripts/build_capability_center.py"
+
+  - name: business-contracts
+    owner: quality
+    enabled: true
+    # 业务契约目录。必跑场景写在检查器的 MINIMUM_REQUIRED 里，目录删掉必跑项会失败。
+    ssot: FHD/config/business_contracts.json
+    derived: []
+    mode: lint
+    check: python scripts/dev/check_business_contract_evidence.py catalog
+    sync: null
+
+  - name: release-scope-evidence
+    owner: release
+    enabled: true
+    # 发布候选制品与必跑范围。BLOCKED 和 NOT RUN 不能记成通过。
+    ssot: FHD/config/release_scope_evidence.json
+    derived: []
+    mode: lint
+    check: python scripts/dev/check_release_scope_evidence.py --self-check
+    sync: null
 
   - name: product-lines
     owner: release

@@ -7,7 +7,7 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {transformSync} from 'esbuild';
 import {createBuildOptions} from './vite/build.js';
-const source=readFileSync('../mods/xcagi-approval-bridge/frontend/views/approval-workspace/awHelpers.ts','utf8');
+const source=readFileSync('../mods/bridge/xcagi-approval-bridge/frontend/views/approval-workspace/awHelpers.ts','utf8');
 const {code}=transformSync(source,{loader:'ts',format:'cjs',target:createBuildOptions().target});
 const module={exports:{}};
 runInNewContext(code,{module,exports:module.exports});

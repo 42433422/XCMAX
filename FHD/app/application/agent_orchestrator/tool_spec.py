@@ -118,10 +118,25 @@ def _special_permission(tool_id: str, action: str) -> str:
         return "product.view"
     if tool_id == "shipment_records" and action in {"query", "list"}:
         return "shipment.view"
+    if tool_id == "materials" and action in {"list", "query"}:
+        return "material.view"
+    if tool_id == "materials" and action in {"create", "update", "delete", "batch_delete", "clear"}:
+        return "material.edit"
+    if tool_id == "shipment_orders" and action in {"generate", "generate_batch"}:
+        return "shipment.create"
     if (tool_id, action) == ("customers", "query"):
         return "customer.view"
-    if tool_id == "customers" and action in {"ensure_exists", "delete", "batch_delete"}:
+    if tool_id == "customers" and action in {
+        "ensure_exists",
+        "delete",
+        "batch_delete",
+        "clear",
+    }:
         return "customer.edit"
+    if tool_id == "products" and action == "clear":
+        return "product.edit"
+    if tool_id == "shipment_records" and action == "clear":
+        return "shipment.edit"
     if tool_id in PERMISSION_BARE_PREFIX_TOOLS:
         if (tool_id, action) == ("employee", "context"):
             return "employee.execute"
@@ -130,6 +145,10 @@ def _special_permission(tool_id: str, action: str) -> str:
         if action in DATASET_RAG_READ_ACTIONS:
             return DATASET_RAG_READ_PERMISSION
         return DATASET_RAG_WRITE_PERMISSION
+    if tool_id == "template_preview" and action in {"list", "query", "view"}:
+        return "etl.read"
+    if tool_id in {"template_preview", "document_template"}:
+        return "etl.template.manage"
     if tool_id == "excel_analysis" and action in {"read", "structure", "query", "statistics"}:
         return "tool.excel_analysis.read"
     fixed = PERMISSION_OVERRIDES.get(tool_id)
@@ -472,6 +491,15 @@ def _validate_schema_payload(
             # has completed and the reference has been resolved.
             continue
         expected_type = str(prop.get("type") or "").strip()
+        if (
+            expected_type == "string"
+            and key == "reference_id"
+            and isinstance(value, int)
+            and not isinstance(value, bool)
+        ):
+            # Order tools often resolve a numeric id. Keep the reference as text.
+            payload[key] = str(value)
+            value = payload[key]
         if expected_type and not _type_matches(value, expected_type):
             return False, f"{subject} 字段 {key} 类型错误，应为 {expected_type}"
         enum_values = prop.get("enum")

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMarketBrowserHandoff } from '@/api/marketAccount'
 import { handleDesktopWindowOpen } from '../../../desktop/desktop-navigation'
-import { useMpHandoff } from '../../../mods/xcagi-model-payment-bridge/frontend/views/model-payment/mpHandoff'
-import { useMpMarketActions } from '../../../mods/xcagi-model-payment-bridge/frontend/views/model-payment/useMpMarketActions'
+import { useMpHandoff } from '../../../mods/bridge/xcagi-model-payment-bridge/frontend/views/model-payment/mpHandoff'
+import { useMpMarketActions } from '../../../mods/bridge/xcagi-model-payment-bridge/frontend/views/model-payment/useMpMarketActions'
 vi.mock('@/api/marketAccount', () => ({ createMarketBrowserHandoff: vi.fn() }))
 
 beforeEach(() => {

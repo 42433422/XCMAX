@@ -4,6 +4,7 @@ import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
+import '../../policy/mobile_error_policy.dart';
 
 class MobileOnboardingScreen extends StatefulWidget {
   const MobileOnboardingScreen({
@@ -144,7 +145,7 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _status = error.toString());
+      setState(() => _status = mobileErrorText(error));
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -156,7 +157,7 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
       final result = await _repository.bootstrapIndustry(_selectedIndustryId);
       if (mounted) setState(() => _status = result);
     } catch (error) {
-      if (mounted) setState(() => _status = error.toString());
+      if (mounted) setState(() => _status = mobileErrorText(error));
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -226,7 +227,6 @@ class _IntroStep extends StatelessWidget {
         const _FlowBlock(
           icon: Icons.cloud_done,
           title: '移动端将独立连接 XCAGI 宿主',
-          body: '注册或登录后先同步账号、市场令牌和企业会话，再按行业装齐基础能力。',
         ),
         const SizedBox(height: 14),
         SizedBox(
@@ -267,7 +267,6 @@ class _IndustryStep extends StatelessWidget {
         const _FlowBlock(
           icon: Icons.extension,
           title: '选择行业',
-          body: '这里使用后端行业目录，和桌面端的行业筛选来源一致。',
         ),
         const SizedBox(height: 14),
         if (industries.isEmpty) ...[
@@ -325,7 +324,6 @@ class _CapabilityStep extends StatelessWidget {
         _FlowBlock(
           icon: Icons.check_circle,
           title: '装齐 $industryTitle 基础包',
-          body: '移动端直接调用市场安装接口，补齐宿主基础包和行业种子能力。',
         ),
         const SizedBox(height: 14),
         _StatusBlock(status.trim().isEmpty ? '等待检查行业基础能力状态' : status),
@@ -353,12 +351,10 @@ class _FlowBlock extends StatelessWidget {
   const _FlowBlock({
     required this.icon,
     required this.title,
-    required this.body,
   });
 
   final IconData icon;
   final String title;
-  final String body;
 
   @override
   Widget build(BuildContext context) {
@@ -376,30 +372,15 @@ class _FlowBlock extends StatelessWidget {
           Icon(icon, size: 24, color: colors.textPrimary),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 17,
-                    height: 1.29,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  body,
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 15,
-                    height: 1.4,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
+            child: Text(
+              title,
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 17,
+                height: 1.29,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0,
+              ),
             ),
           ),
         ],

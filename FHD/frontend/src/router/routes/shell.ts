@@ -87,7 +87,7 @@ export const SHELL_ROUTES: RouteRecordRaw[] = [
     path: '/workflow-employee-space',
     name: 'workflow-employee-space',
     component: () => import('../../views/EmployeeWorkspaceView.vue'),
-    meta: { title: '员工空间' },
+    meta: { title: '员工工作台' },
   },
   ...(isAdminConsoleSpa()
     ? [

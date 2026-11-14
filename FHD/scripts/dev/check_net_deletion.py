@@ -54,7 +54,7 @@ SKIP_PATH_PREFIXES = (
     # 以下为生成物 / 第三方 / dump，非人工维护，逐项说明：
     "FHD/third_party/",                          # vendored 第三方源码
     "FHD/docs/legal/",                           # 软著申请用的整份源码 dump
-    "FHD/contracts/",                            # 由 schema 生成的契约快照
+    "FHD/assets/contracts/",                            # 由 schema 生成的契约快照
     "FHD/dataset_rag/",                          # 数据集文件
     "成都修茈科技有限公司/corp-butler/assets/",    # 前端打包产物
 )

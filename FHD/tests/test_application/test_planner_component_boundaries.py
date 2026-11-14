@@ -177,6 +177,61 @@ def test_missing_model_result_is_not_reported_as_invalid_business_plan(monkeypat
     risk_gate.evaluate.assert_not_called()
 
 
+def test_insufficient_model_balance_tells_the_user_to_recharge(monkeypatch):
+    from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+
+    plan = finalize_planned_graph(
+        None,
+        plan_id="balance",
+        context={"planning_failure_reason": "修茈市场模型余额不足，请在「模型支付」充值后重试。"},
+        validate=lambda _: None,
+        warn=lambda _: None,
+        plan_type=PlanGraph,
+        node_type=WorkflowNode,
+    )
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    planner = Mock()
+    planner.plan.return_value = plan
+    risk_gate = Mock()
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.get_workflow_tool_registry", lambda: {}
+    )
+    result = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, Mock()).handle(
+        "owner", "给客户销售商品", "pro", {}, "给客户销售商品"
+    )
+    assert result["data"]["error_code"] == "workflow_plan_unavailable"
+    assert "余额不足" in result["response"]
+    assert "模型支付" in result["response"]
+    assert "本次没有执行任何业务操作" in result["response"]
+    assert result["data"]["execution_started"] is False
+    risk_gate.evaluate.assert_not_called()
+
+
+def test_planner_completion_surfaces_market_balance_failure(monkeypatch):
+    import pytest
+
+    from app.application.workflow.planner_llm_gateway import request_planner_completion
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    class Provider:
+        async def chat_completion(self, **_kwargs):
+            return {}
+
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider",
+        lambda **_kwargs: Provider(),
+    )
+
+    def fail(coro):
+        coro.close()
+        raise MarketModelError({"status": 402})
+
+    monkeypatch.setattr("app.application.employee_runtime.agent_runner._run_async", fail)
+    with pytest.raises(MarketModelError, match="余额不足"):
+        request_planner_completion(ai_service=object(), context={}, messages=[])
+
+
 def test_autonomy_guard_denial_stops_before_agent_run():
     from app.domain.autonomy.risk_types import RiskDecision, RiskLevel
 
@@ -241,3 +296,67 @@ def test_autonomy_guard_approval_is_attached_even_when_approval_registry_disagre
     assert result["data"]["action"] == "workflow_confirmation_required"
     assert dispatch.pending["owner"]["approval_required"] is True
     assert [item["node_id"] for item in dispatch.pending["owner"]["approval_nodes"]] == ["n1"]
+
+
+def test_auto_approval_mode_skips_plan_confirmation_and_starts_run():
+    from app.domain.autonomy.risk_types import RiskDecision, RiskLevel
+
+    plan = PlanGraph(
+        plan_id="auto-approval-plan",
+        intent="write",
+        todo_steps=["create record"],
+        nodes=[WorkflowNode("n1", "catalog", "write", params={})],
+    )
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    callbacks._merge_tool_runtime_context.return_value = {
+        "tenant_id": "1",
+        "chat_approval_mode": "auto",
+    }
+    callbacks._build_workflow_thinking_steps.return_value = "checked plan"
+    callbacks._capture_agent_run_interaction.return_value = {
+        "data": {"action": "workflow_done"}
+    }
+    planner = Mock()
+    planner.plan.return_value = plan
+    risk_gate = Mock()
+    risk_gate.evaluate.return_value = RiskDecision(
+        requires_confirmation=True,
+        reason="write needs approval",
+        blocking_nodes=["n1"],
+        allowed=False,
+        risk_level=RiskLevel.MEDIUM,
+        decision="require_human",
+    )
+    approval = Mock()
+    approval.get_approval_required_nodes.return_value = [plan.nodes[0]]
+    dispatch = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, approval)
+
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
+        orchestrator.return_value.start_run_from_plan.return_value = SimpleNamespace(
+            status="waiting_user"
+        )
+        dispatch.handle("owner", "创建记录", "pro", {}, "创建记录")
+
+    orchestrator.return_value.start_run_from_plan.assert_called_once()
+    callbacks._capture_agent_run_interaction.assert_called_once()
+    assert "owner" not in dispatch.pending
+
+
+def test_import_request_exposes_import_tool_and_directive():
+    from app.application.workflow.planner_prompt_profile import (
+        detect_intents,
+        select_rules_for_prompt,
+        select_tools_for_prompt,
+    )
+
+    registry = {
+        "excel_analysis": {"available": "shared"},
+        "import_excel_to_database": {"available": "shared"},
+        "generate_office_document": {"available": "shared"},
+    }
+    assert "document" in detect_intents("导入")
+    assert "import_excel_to_database" in select_tools_for_prompt(registry, "导入")
+    assert any("import_excel_to_database" in rule for rule in select_rules_for_prompt("导入"))
+    assert "import_excel_to_database" not in select_tools_for_prompt(registry, "查询客户")
+

@@ -316,3 +316,12 @@ test_reports/*
 # .NET build artifacts (IDE-generated; was misdetected as code changes by dispatch pipeline)
 tools/**/obj/
 tools/**/bin/
+
+# 运行时/可再生成产物（不入库）
+mods/.install-receipts/
+distillation/training_data.jsonl
+baselines/
+frontend/coverage*
+frontend/test-results/
+frontend/playwright-report/
+*.tsbuildinfo

@@ -96,10 +96,12 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     return ''
   })
 
-  function applySessionFields(data: Record<string, unknown>): Promise<void> {
+  function applySessionFields(data: Record<string, unknown>, keepVisible = false): Promise<void> {
     sessionCheckUnavailable.value = false
     const epoch = ++hydrationEpoch
-    workspaceHydrationReady.value = false
+    if (!(keepVisible && workspaceHydrationReady.value && workspaceEpoch.value === productReadAccountEpoch.value)) {
+      workspaceHydrationReady.value = false
+    }
     const kind = String(data.account_kind || 'enterprise').trim()
     if (kind === 'personal' || kind === 'enterprise' || kind === 'admin') {
       accountKind.value = kind
@@ -191,9 +193,9 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     return promise
   }
 
-  function applyFromMeData(data: Record<string, unknown> | null | undefined): Promise<void> {
+  function applyFromMeData(data: Record<string, unknown> | null | undefined, keepVisible = false): Promise<void> {
     if (!data || typeof data !== 'object') return Promise.resolve()
-    return applySessionFields(data)
+    return applySessionFields(data, keepVisible)
   }
 
   function applyFromLoginPayload(raw: Record<string, unknown>): Promise<void> {
@@ -201,7 +203,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     return applySessionFields(payload)
   }
 
-  async function refreshFromServer() {
+  async function refreshFromServer(options?: { keepVisible?: boolean }) {
     const retryUnavailable = sessionCheckUnavailable.value
     let requestEpoch = hydrationEpoch
     const authEpoch = getAuthSessionEpoch(), cleared = clearedEpoch
@@ -246,7 +248,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
         return
       }
       if (res?.success && res.data) {
-        const hydration = applyFromMeData(res.data as Record<string, unknown>)
+        const hydration = applyFromMeData(res.data as Record<string, unknown>, options?.keepVisible === true)
         requestEpoch = hydrationEpoch
         scopeCurrent = captureAuthSession()
         await hydration

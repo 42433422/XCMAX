@@ -15,6 +15,11 @@ Route = tuple[str, str]
 CacheKey = tuple[str, str]
 
 
+def preflight_timeout(connection: "Connection") -> httpx.Timeout:
+    """市场预检（路由/目录）必须短于对话首包预算，不可无限等待不可达的平台。"""
+    return httpx.Timeout(min(connection.timeout, 5.0), connect=3.0)
+
+
 @dataclass(frozen=True)
 class Connection:
     platform_url: str

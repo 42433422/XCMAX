@@ -51,8 +51,3 @@ class _IndexedMessageEntry {
   final int index;
   final Object entry;
 }
-
-String _textOrFallback(String value, String fallback) {
-  final trimmed = value.trim();
-  return trimmed.isEmpty ? fallback : trimmed;
-}

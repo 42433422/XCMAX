@@ -210,9 +210,7 @@ def test_corrupt_source_snapshot_is_rejected(preview_store, monkeypatch, damage)
         assert db.query(PurchaseUnit).count() == 0
 
 
-def test_failed_raw_load_never_commits_partial_rows_or_completion_marker(
-    preview_store, monkeypatch
-):
+def test_repeated_source_coordinates_commit_together_as_slices(preview_store, monkeypatch):
     store = preview_store
     monkeypatch.setenv("FHD_ETL_LLM", "off")
     duplicate = ParsedRow("same-sheet", 1, {"客户名称": "raw only"})
@@ -225,11 +223,13 @@ def test_failed_raw_load_never_commits_partial_rows_or_completion_marker(
     )
     run_id = create_preview(store)
     wait_for_job(store)
-    assert snapshot(store, run_id)["status"] == "failed"
+    assert snapshot(store, run_id)["status"] == "preview_ready"
     with store.factory() as db:
         run = db.get(EltRun, run_id)
-        assert "source_snapshot" not in load_json(run.summary_json, {})
-        assert raw_rows(db, run_id) == []
+        manifest = load_json(run.summary_json, {})["source_snapshot"]
+        rows = raw_rows(db, run_id)
+        assert manifest["rows"] == len(rows) == 2
+        assert [row.source_slice for row in rows] == [0, 1]
         assert db.query(PurchaseUnit).count() == 0
 
 

@@ -233,3 +233,171 @@ async def test_sync_error_receipt_preserves_status_and_safe_history_for_any_deta
         body,
         {"success": False, "response": message, "route_metadata": route, "turn_id": None},
     )
+
+
+def test_history_persists_visible_business_result_on_assistant_ui() -> None:
+    store = Mock(spec=ConversationStore)
+    persist_chat_turn(
+        "web_normal_untrusted",
+        "新增客户",
+        {"session_id": "session-1", "turn_id": "turn-1", "local_user_id": 42},
+        {
+            "success": True,
+            "response": "客户创建成功",
+            "run_id": "run-1",
+            "businessResult": {
+                "status": "completed",
+                "summary": "客户创建成功",
+                "facts": {"customer_id": 23},
+            },
+        },
+        store=store,
+    )
+    metadata = json.loads(store.save_message.call_args_list[1].kwargs["metadata"])
+    assert metadata["ui"]["businessResult"]["facts"]["customer_id"] == 23
+
+
+def test_history_does_not_persist_casual_completed_business_result() -> None:
+    store = Mock(spec=ConversationStore)
+    persist_chat_turn(
+        "web_normal_untrusted",
+        "你好",
+        {"session_id": "session-1", "turn_id": "turn-1", "local_user_id": 42},
+        {
+            "success": True,
+            "response": "你好，需要我做什么？",
+            "run_id": "run-casual",
+            "business_result": {
+                "status": "completed",
+                "summary": "你好，需要我做什么？",
+                "facts": {},
+            },
+        },
+        store=store,
+    )
+    metadata = json.loads(store.save_message.call_args_list[1].kwargs["metadata"])
+    assert "businessResult" not in metadata["ui"]
+
+
+def test_history_persists_summary_only_tool_business_result() -> None:
+    store = Mock(spec=ConversationStore)
+    persist_chat_turn(
+        "web_normal_untrusted",
+        "删除该客户",
+        {"session_id": "session-1", "turn_id": "turn-1", "local_user_id": 42},
+        {
+            "success": True,
+            "response": "已删除",
+            "run_id": "run-delete",
+            "business_result": {
+                "status": "completed",
+                "summary": "已删除",
+                "facts": {},
+                "evidence": {"completed_tool_count": 1},
+            },
+        },
+        store=store,
+    )
+    metadata = json.loads(store.save_message.call_args_list[1].kwargs["metadata"])
+    assert metadata["ui"]["businessResult"]["summary"] == "已删除"
+
+
+def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn():
+    from contextlib import contextmanager
+
+    callbacks = Mock(spec=SessionCallbacks)
+    session = WorkflowSession({}, callbacks)
+    db = Mock()
+    db.query.return_value.filter.return_value.first.return_value = Mock()
+
+    @contextmanager
+    def fake_get_db():
+        yield db
+
+    with (
+        patch("app.db.session.get_db", fake_get_db),
+        patch(
+            "app.application.approval_workspace_app_service."
+            "_approve_ai_workflow_request_without_node",
+            return_value={
+                "success": True,
+                "data": {"workflow_execution": {"success": True, "message": "清理完成"}},
+            },
+        ) as approve,
+    ):
+        reply = session._auto_approve_waiting_request(
+            request_id="req-auto",
+            user_id="chat:scoped-conversation",
+            runtime_context={"actor_id": 7, "user_id": "7"},
+            plan=_plan(),
+            agent_run=AgentRun(user_id="7", message="清理知识库"),
+        )
+
+    assert approve.call_args.kwargs["actor"] == 7
+    assert reply["success"] is True
+    assert reply["data"]["action"] == "workflow_done"
+    assert reply["data"]["data"]["auto_approved"] is True
+    assert "自动审批已通过并执行完成" in reply["response"]
+
+
+def test_auto_approval_without_authenticated_actor_falls_back_to_manual_approval():
+    session = WorkflowSession({}, Mock(spec=SessionCallbacks))
+
+    reply = session._auto_approve_waiting_request(
+        request_id="req-auto",
+        user_id="chat:scoped-conversation",
+        runtime_context={},
+        plan=_plan(),
+        agent_run=AgentRun(user_id="7", message="清理知识库"),
+    )
+
+    assert reply is None
+
+
+def test_auto_approval_continues_through_every_pending_step():
+    from contextlib import contextmanager
+
+    session = WorkflowSession({}, Mock(spec=SessionCallbacks))
+    db = Mock()
+    db.query.return_value.filter.return_value.first.return_value = Mock()
+
+    @contextmanager
+    def fake_get_db():
+        yield db
+
+    step_one = {
+        "success": False,
+        "data": {
+            "workflow_execution": {
+                "success": False,
+                "execution_accepted": True,
+                "next_approval_request_id": "req-2",
+                "message": "当前步骤已获批，后续步骤等待审批",
+            }
+        },
+    }
+    step_two = {
+        "success": True,
+        "data": {"workflow_execution": {"success": True, "message": "全部清理完成"}},
+    }
+
+    with (
+        patch("app.db.session.get_db", fake_get_db),
+        patch(
+            "app.application.approval_workspace_app_service."
+            "_approve_ai_workflow_request_without_node",
+            side_effect=[step_one, step_two],
+        ) as approve,
+    ):
+        reply = session._auto_approve_waiting_request(
+            request_id="req-1",
+            user_id="chat:scoped-conversation",
+            runtime_context={"actor_id": 7},
+            plan=_plan(),
+            agent_run=AgentRun(user_id="7", message="初始化业务数据"),
+        )
+
+    assert approve.call_count == 2
+    assert reply["success"] is True
+    assert reply["data"]["action"] == "workflow_done"
+    assert "全部清理完成" in reply["response"]

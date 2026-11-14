@@ -151,8 +151,13 @@ class AIChatWorkflowResponseMixin:
                     )
                 )
             else:
-                reason = public_step_error(step) or _PUBLIC_WORKFLOW_FAILURE
-                lines.append(f"- {step.node_id}: {step.status}（{reason}）")
+                reason = public_step_error(step)
+                if reason:
+                    lines.append(f"- {step.node_id}: {step.status}（{reason}）")
+                elif step.status in {"pending", "skipped"}:
+                    lines.append(f"- {step.node_id}: 未执行（前序步骤未完成或已中止）")
+                else:
+                    lines.append(f"- {step.node_id}: {step.status}（{_PUBLIC_WORKFLOW_FAILURE}）")
 
         from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 
@@ -225,7 +230,12 @@ class AIChatWorkflowResponseMixin:
                             "message": (
                                 self._workflow_output_message(step.output)
                                 if step.status == "completed"
-                                else public_step_error(step) or _PUBLIC_WORKFLOW_FAILURE
+                                else public_step_error(step)
+                                or (
+                                    "未执行（前序步骤未完成或已中止）"
+                                    if step.status in {"pending", "skipped"}
+                                    else _PUBLIC_WORKFLOW_FAILURE
+                                )
                             ),
                             "output_preview": (
                                 self._workflow_output_preview(step.output)
@@ -250,6 +260,17 @@ class AIChatWorkflowResponseMixin:
                 retryable=False,
             )
             payload["data"].update(text=text, requires_reconciliation=True)
+        write_actions = {"write", "create", "update", "delete", "batch_delete", "clear_dataset"}
+        wrote = any(
+            step.status == "completed" and step.action in write_actions for step in steps
+        )
+        if not success and not uncertain and not wrote:
+            payload["execution"] = {
+                "idempotency_key": "",
+                "intent": str(getattr(plan, "intent", "") or ""),
+                "committed": False,
+                "effect": "none",
+            }
         if success and any(
             step.status == "completed" and step.tool_id == "products" and step.action == "query"
             for step in getattr(agent_run, "steps", []) or []

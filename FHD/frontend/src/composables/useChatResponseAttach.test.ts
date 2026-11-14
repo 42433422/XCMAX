@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { ref } from 'vue'
 import { useChatResponseAttach } from './useChatResponseAttach'
+import { readPlannerBusinessResult } from '@/utils/readPlannerBusinessResult'
 import type { TaskItem } from './useChatPersistence'
 
 function makeDeps() {
@@ -30,6 +31,49 @@ function makeDeps() {
 }
 
 describe('useChatResponseAttach', () => {
+  it('readPlannerBusinessResult accepts camel or nested snake_case results', () => {
+    expect(
+      readPlannerBusinessResult({
+        success: false,
+        businessResult: { status: 'failed', summary: '写入失败' },
+      }),
+    ).toEqual({ status: 'failed', summary: '写入失败' })
+    expect(
+      readPlannerBusinessResult({
+        success: true,
+        data: { business_result: { status: 'completed', summary: '已删除', evidence: { completed_tool_count: 1 } } },
+      }),
+    ).toEqual({ status: 'completed', summary: '已删除', evidence: { completed_tool_count: 1 } })
+    expect(readPlannerBusinessResult({ success: true, data: { business_result: {} } })).toBeUndefined()
+  })
+
+  it('attachBusinessResultToLastAiMessage sets a visible business result on last ai', () => {
+    const { messages, attachBusinessResultToLastAiMessage } = makeDeps()
+    attachBusinessResultToLastAiMessage({
+      success: true,
+      businessResult: { status: 'completed', summary: '客户创建成功', facts: { customer_id: 23 } },
+    })
+    expect(messages.value[1].businessResult).toEqual({
+      status: 'completed',
+      summary: '客户创建成功',
+      facts: { customer_id: 23 },
+    })
+  })
+
+  it('attachBusinessResultToLastAiMessage accepts nested business_result and skips empty objects', () => {
+    const { messages, attachBusinessResultToLastAiMessage } = makeDeps()
+    attachBusinessResultToLastAiMessage({
+      success: true,
+      data: { business_result: {} },
+    })
+    expect(messages.value[1].businessResult).toBeUndefined()
+    attachBusinessResultToLastAiMessage({
+      success: true,
+      data: { business_result: { status: 'failed', summary: '写入失败' } },
+    })
+    expect(messages.value[1].businessResult?.status).toBe('failed')
+  })
+
   it('attachThinkingStepsToLastAiMessage sets thinking on last ai', () => {
     const { messages, attachThinkingStepsToLastAiMessage } = makeDeps()
     attachThinkingStepsToLastAiMessage({

@@ -1,7 +1,8 @@
 """Kitten 分析/图表/报告路由冒烟（FastAPI 版）。
 
-覆盖 ``app.fastapi_routes.ai_kitten`` 全部 14 条路由：
+覆盖 ``app.fastapi_routes.ai_kitten`` 全部 15 条路由：
 - GET  /api/ai/kitten/business-snapshot
+- GET  /api/ai/kitten/financial/dashboard
 - GET  /api/ai/kitten/charts/{all,revenue,products,customers,profit,inventory}
 - GET  /api/ai/kitten/saved/list
 - GET  /api/ai/kitten/saved/{id}
@@ -99,6 +100,51 @@ def test_charts_all_recoverable_error(client: TestClient, monkeypatch: pytest.Mo
     assert r.status_code == 500
     body = r.json()
     assert body["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# GET /api/ai/kitten/financial/dashboard
+# ---------------------------------------------------------------------------
+
+
+def test_financial_dashboard_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_chart_svc = MagicMock()
+    fake_chart_svc.get_financial_dashboard.return_value = {
+        "success": True,
+        "kpis": [{"key": "month_revenue", "value": 1200}],
+        "tables": {"monthly": [{"month": "2026-11"}]},
+    }
+    monkeypatch.setattr(f"{_FACADE}.chart_service", fake_chart_svc)
+    r = client.get("/api/ai/kitten/financial/dashboard")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["success"] is True
+    assert body["data"]["kpis"][0]["value"] == 1200
+    fake_chart_svc.get_financial_dashboard.assert_called_once_with(6)
+
+
+def test_financial_dashboard_custom_months(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_chart_svc = MagicMock()
+    fake_chart_svc.get_financial_dashboard.return_value = {"success": True}
+    monkeypatch.setattr(f"{_FACADE}.chart_service", fake_chart_svc)
+    r = client.get("/api/ai/kitten/financial/dashboard", params={"months": 12})
+    assert r.status_code == 200
+    fake_chart_svc.get_financial_dashboard.assert_called_once_with(12)
+
+
+def test_financial_dashboard_recoverable_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_chart_svc = MagicMock()
+    fake_chart_svc.get_financial_dashboard.side_effect = RuntimeError("DB 不可用")
+    monkeypatch.setattr(f"{_FACADE}.chart_service", fake_chart_svc)
+    r = client.get("/api/ai/kitten/financial/dashboard")
+    assert r.status_code == 500
+    body = r.json()
+    assert body["success"] is False
+    assert "DB 不可用" not in body["message"]
 
 
 # ---------------------------------------------------------------------------

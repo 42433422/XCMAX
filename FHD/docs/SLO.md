@@ -75,8 +75,8 @@ except Exception:
 | 层 | 路径 |
 |----|------|
 | 应用指标 | `GET /metrics` — [`app/utils/metrics.py`](../app/utils/metrics.py) |
-| Prometheus | [`k8s/monitoring/prometheus/`](../k8s/monitoring/prometheus/)（静态 ConfigMap） |
-| Prometheus Operator | [`k8s/monitoring/servicemonitor-xcagi-backend.yaml`](../k8s/monitoring/servicemonitor-xcagi-backend.yaml) · [`prometheusrule-xcagi-alerts.yaml`](../k8s/monitoring/prometheusrule-xcagi-alerts.yaml) — `kubectl apply -k k8s/monitoring/` |
+| Prometheus | [`k8s/ops/monitoring/prometheus/`](../k8s/ops/monitoring/prometheus/)（静态 ConfigMap） |
+| Prometheus Operator | [`k8s/monitoring/servicemonitor-xcagi-backend.yaml`](../k8s/monitoring/servicemonitor-xcagi-backend.yaml) · [`prometheusrule-xcagi-alerts.yaml`](../k8s/ops/monitoring/prometheusrule-xcagi-alerts.yaml) — `kubectl apply -k k8s/monitoring/` |
 | Grafana 看板 | [`k8s/monitoring/grafana/dashboards/xcagi-slo.json`](../k8s/monitoring/grafana/dashboards/xcagi-slo.json) |
 | 本地栈 | `bash scripts/observability/local_stack_up.sh` |
 | Staging runbook | [`k8s/monitoring/STAGING_RUNBOOK.md`](../k8s/monitoring/STAGING_RUNBOOK.md) |

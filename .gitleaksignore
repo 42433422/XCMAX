@@ -88,3 +88,8 @@ b3c539a991a6df97b2afdae2cd97e65eb4162a56:FHD/tests/test_desktop/test_support_bun
 # Independently reviewed empty/truncated PEM regression fixture, no private-key payload.
 # dot agents release_scan_deploy and elt_log_security_fix checked this exact remote occurrence.
 a527a40336a0ee2372a7c021aab964e4d0fa98fb:FHD/tests/test_security/test_log_redaction.py:private-key:36
+
+# e0e5228 云端中继 E2EE：'xcagi-relay-result-v1' 是 HKDF info/域分离标签，
+# 与 FHD/app/application/desktop_relay/e2ee.py 的 RESULT_INFO 完全一致，不含任何凭据。
+e0e5228e9583af38e2a54887a173aa9c9f40ba81:FHD/mobile-flutter-poc/lib/src/security/relay_e2ee.dart:generic-api-key:136
+

@@ -95,7 +95,10 @@ def employee_mods_root(tmp_path, monkeypatch):
     mods_root = tmp_path / "mods"
     mods_root.mkdir()
     catalog = "xcagi-office-employee-pack-bridge"
-    shutil.copytree(Path(__file__).parents[1] / "mods" / catalog, mods_root / catalog)
+    from app.mod_sdk.mod_source_paths import mod_source_dir
+
+    source = mod_source_dir(catalog) or (Path(__file__).parents[1] / "mods" / catalog)
+    shutil.copytree(source, mods_root / catalog)
     monkeypatch.setenv("XCAGI_MODS_ROOT", str(mods_root))
     from app.application.tools.workflow import invalidate_workflow_tool_registry
     from app.infrastructure.mods import employee_registry as er
@@ -333,6 +336,33 @@ def test_excel_verification_rejects_incorrect_count_or_total(monkeypatch, count,
         "",
     )
     assert result["success"] is ok and result["verification"]["verified"] is ok
+
+
+def test_excel_verification_accepts_amount_as_total_amount(monkeypatch):
+    from app.domain.shared_services.tools_workflow_excel_ocr import (
+        _registered_router_excel_analysis,
+    )
+
+    monkeypatch.setattr(
+        "app.application.tools.workflow.handle_excel_analysis",
+        lambda *a, **kw: {
+            "success": True,
+            "row_count": 1,
+            "numeric_summary": {"amount": {"sum": 200}, "quantity": {"sum": 2}},
+        },
+    )
+    result = _registered_router_excel_analysis(
+        "statistics",
+        {
+            "file_path": "report.xlsx",
+            "expected_row_count": 1,
+            "expected_totals": {"total_amount": 200},
+        },
+        {},
+        "normal",
+        "",
+    )
+    assert result["success"] is True and result["verification"]["verified"] is True
 
 
 @pytest.mark.parametrize(
