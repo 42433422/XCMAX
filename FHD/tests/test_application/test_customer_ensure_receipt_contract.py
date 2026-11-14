@@ -1,6 +1,6 @@
 import pytest
 from sqlalchemy import create_engine, event
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from app.application.customer_app_service import CustomerApplicationService
@@ -35,8 +35,21 @@ def ensure(svc):
     return _ensure_customer({"unit_name": "Alpha"}, svc)
 
 
-@pytest.mark.parametrize("names", [("Alpha", "Alpha"), ("Alpha North", "Alpha South")])
-def test_ambiguous_candidates_never_choose_or_create(store, names):
+def test_exact_duplicate_name_is_rejected_and_existing_row_is_reused(store):
+    svc, sessions, calls = store
+    with tenant_scope(7), sessions.begin() as db:
+        db.add(PurchaseUnit(unit_name="Alpha", tenant_id=7))
+    with pytest.raises(IntegrityError):
+        with tenant_scope(7), sessions.begin() as db:
+            db.add(PurchaseUnit(unit_name="Alpha", tenant_id=7))
+    with tenant_scope(7):
+        result = ensure(svc)
+    assert result["success"] is True and result.get("exists") is True
+    assert calls == []
+
+
+def test_ambiguous_candidates_never_choose_or_create(store):
+    names = ("Alpha North", "Alpha South")
     svc, sessions, calls = store
     with tenant_scope(7), sessions.begin() as db:
         db.add_all([PurchaseUnit(unit_name=name, tenant_id=7) for name in names])

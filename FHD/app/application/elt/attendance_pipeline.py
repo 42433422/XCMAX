@@ -640,6 +640,13 @@ def _clock_text(value: str) -> str:
     return match.group(1) if match else ""
 
 
+def _tenant_stamp() -> str:
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    tenant = current_tenant_id()
+    return "" if tenant is None else str(tenant)
+
+
 def _business_exists(conn: sqlite3.Connection, business_id: str) -> bool:
     for query in (
         "SELECT 1 FROM attendance_daily_records WHERE business_id = ?",
@@ -663,6 +670,8 @@ def _ensure_monthly_schema(conn: sqlite3.Connection) -> None:
             source_sheet TEXT,
             source_row INTEGER,
             employee_name TEXT NOT NULL,
+            tenant_id TEXT NOT NULL DEFAULT '',
+            customer_id TEXT NOT NULL DEFAULT '',
             work_month TEXT NOT NULL,
             days_in_month INTEGER NOT NULL,
             absent_dates TEXT NOT NULL DEFAULT '',
@@ -673,6 +682,12 @@ def _ensure_monthly_schema(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(attendance_monthly_marks)")}
+    for column in ("tenant_id", "customer_id"):
+        if column not in columns:
+            conn.execute(
+                f"ALTER TABLE attendance_monthly_marks ADD COLUMN {column} TEXT NOT NULL DEFAULT ''"
+            )
 
 
 def _insert_monthly(
@@ -681,10 +696,11 @@ def _insert_monthly(
     conn.execute(
         """
         INSERT INTO attendance_monthly_marks (
-            business_id, source_file, source_sheet, source_row, employee_name, work_month,
+            business_id, source_file, source_sheet, source_row, employee_name, tenant_id,
+            customer_id, work_month,
             days_in_month, absent_dates, present_marked_dates, unmarked_days, month_notes,
             imported_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             business_id,
@@ -692,6 +708,8 @@ def _insert_monthly(
             row.get("source_sheet") or "",
             int(row.get("source_row") or 0),
             row.get("employee_name") or "",
+            _tenant_stamp(),
+            str(row.get("customer_id") or ""),
             row.get("work_month") or "",
             int(row.get("days_in_month") or 0),
             row.get("absent_dates") or "",
@@ -755,8 +773,8 @@ def _insert_daily(
             department, employee_no, position, user_id, work_date, shift_name,
             daily_times_json, raw_times_json, all_times_json, leave_hours, absent_days,
             late_count_hint, early_count_hint, missing_card_count, notes_json,
-            imported_at, business_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, '[]', ?, ?)
+            imported_at, business_id, tenant_id, customer_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, '[]', ?, ?, ?, ?)
         """,
         (
             source_file,
@@ -775,6 +793,8 @@ def _insert_daily(
             times,
             datetime.now().isoformat(timespec="seconds"),
             business_id,
+            _tenant_stamp(),
+            str(row.get("customer_id") or ""),
         ),
     )
 

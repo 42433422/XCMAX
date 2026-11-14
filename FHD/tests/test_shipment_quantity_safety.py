@@ -19,11 +19,20 @@ def test_invalid_explicit_spec_is_not_masked_by_kg(spec, alias):
     assert error.value.code == "SHIPMENT_SPEC_INVALID"
 
 
-@pytest.mark.parametrize("unit", ["", "桶", "件", "个", "箱"])
+@pytest.mark.parametrize("unit", ["", "桶", "箱"])
 def test_missing_spec_never_defaults(unit):
     with pytest.raises(ShipmentQuantityValidationError) as error:
         resolve_shipment_quantity({"quantity": 3, "unit": unit})
     assert error.value.code == "SHIPMENT_SPEC_REQUIRED"
+
+
+@pytest.mark.parametrize("unit", ["件", "个"])
+def test_piece_unit_without_spec_records_pieces_and_zero_weight(unit):
+    assert resolve_shipment_quantity({"quantity": 2, "unit": unit, "unit_price": 100}) == (
+        2,
+        0.0,
+        None,
+    )
 
 
 @pytest.mark.parametrize(
@@ -57,10 +66,8 @@ def test_valid_spec_alias_and_explicit_weight_preserved():
 @pytest.mark.parametrize(
     "text",
     [
-        "张三 送货单: 白色乳胶漆 数量3个 单价12.50",
         "张三 发货单：白色乳胶漆 数量24 单价3.5",
         "张三3桶ABC",
-        "张三3件ABC",
     ],
 )
 def test_parser_cannot_manufacture_weight(text):
@@ -71,6 +78,26 @@ def test_parser_cannot_manufacture_weight(text):
     assert result["success"]
     with pytest.raises(ShipmentQuantityValidationError):
         prepare_parsed_products(input_products=result["products"], db_products=[])
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "张三 送货单: 白色乳胶漆 数量3个 单价12.50",
+        "张三3件ABC",
+    ],
+)
+def test_piece_text_does_not_invent_kilograms(text):
+    from app.domain.shipment.shipment_product_parser import prepare_parsed_products
+    from app.services.tools_execution.order_parser import _parse_order_text
+
+    result = _parse_order_text(text)
+    assert result["success"]
+    rows = prepare_parsed_products(input_products=result["products"], db_products=[])
+    assert rows
+    assert rows[0]["quantity_kg"] == 0
+    assert rows[0]["quantity_tins"] > 0
+    assert rows[0]["tin_spec"] is None
 
 
 def test_kg_parser_to_product_normalization():

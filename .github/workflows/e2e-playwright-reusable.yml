@@ -61,6 +61,16 @@ jobs:
         run: |
           set -uo pipefail
           rc=1
+          use_public_dns() {
+            echo "::warning::Ubuntu archive did not resolve; using 8.8.8.8 and 1.1.1.1"
+            sudo mkdir -p /etc/systemd/resolved.conf.d
+            printf '[Resolve]\nDNS=8.8.8.8 1.1.1.1\n' | sudo tee /etc/systemd/resolved.conf.d/ci-dns.conf >/dev/null
+            sudo systemctl restart systemd-resolved || true
+            getent hosts archive.ubuntu.com >/dev/null && return 0
+            printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' | sudo tee /etc/resolv.conf >/dev/null
+          }
+          sudo find /etc/apt -type f -exec sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g' {} + || true
+          getent hosts archive.ubuntu.com >/dev/null || use_public_dns
           for attempt in 1 2 3; do
             echo "[deps] attempt ${attempt}/3"
             if npx playwright install-deps chromium; then
@@ -71,6 +81,7 @@ jobs:
             sudo apt-get clean || true
             sudo rm -rf /var/lib/apt/lists/*
             sudo find /etc/apt -type f -exec sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g' {} + || true
+            getent hosts archive.ubuntu.com >/dev/null || use_public_dns
             sudo apt-get update
           done
           if [ "$rc" -ne 0 ]; then

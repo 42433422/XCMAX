@@ -95,6 +95,9 @@ DEFAULT_PERMISSIONS: list[_PermissionSeed] = [
     {"name": "撤销 ELT", "code": "elt.rollback", "module": "elt"},
     {"name": "管理 ELT 目标", "code": "elt.target.manage", "module": "elt"},
     {"name": "审批 AI 工作流", "code": "approval.workflow", "module": "approval"},
+    {"name": "创建销售订单", "code": "tool.sales.create_order", "module": "sales"},
+    {"name": "销售出库", "code": "tool.inventory.stock_out", "module": "inventory"},
+    {"name": "登记财务流水", "code": "tool.finance.create_transaction", "module": "finance"},
 ]
 
 DEFAULT_ROLES: list[_RoleSeed] = [
@@ -125,6 +128,9 @@ DEFAULT_ROLES: list[_RoleSeed] = [
             "elt.template.manage",
             "elt.execute",
             "approval.workflow",
+            "tool.sales.create_order",
+            "tool.inventory.stock_out",
+            "tool.finance.create_transaction",
         ],
     },
     {
@@ -166,6 +172,9 @@ DEFAULT_ROLES: list[_RoleSeed] = [
             "elt.template.manage",
             "elt.execute",
             "approval.workflow",
+            "tool.sales.create_order",
+            "tool.inventory.stock_out",
+            "tool.finance.create_transaction",
         ],
     },
     {
@@ -201,6 +210,9 @@ DEFAULT_ROLES: list[_RoleSeed] = [
             "elt.rollback",
             "elt.target.manage",
             "approval.workflow",
+            "tool.sales.create_order",
+            "tool.inventory.stock_out",
+            "tool.finance.create_transaction",
         ],
     },
 ]

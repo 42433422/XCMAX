@@ -46,6 +46,8 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         "import_excel_to_database",
         # ELT 预演与执行同样按租户查询上传并写入目标库。
         "elt_import",
+        "finance",
+        "employee",
     }
 )
 
