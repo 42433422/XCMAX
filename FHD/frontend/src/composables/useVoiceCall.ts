@@ -94,6 +94,9 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
       bargeLoading = (async () => {
         try {
           const { MicVAD } = await import('@ricky0123/vad-web')
+          // Electron 页面没有 COOP/COEP，禁用多线程 wasm，避免 SharedArrayBuffer 不可用。
+          const ort = await import('onnxruntime-web')
+          ort.env.wasm.numThreads = 1
           const base = `${import.meta.env.BASE_URL || '/'}assets/vad/`
           return await MicVAD.new({
             baseAssetPath: base,
