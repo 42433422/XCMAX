@@ -24,9 +24,9 @@
 import { ref } from 'vue'
 import ReviewedExcelTemplate from '@/components/template/ReviewedExcelTemplate.vue'
 import AwEtlAutoIngestList from '../../../mods/bridge/xcagi-approval-bridge/frontend/views/approval-workspace/AwEtlAutoIngestList.vue'
-import { ETL_CENTER_TABS } from './eltCenter/eltCenterState'
+import { ELT_CENTER_TABS } from './eltCenter/eltCenterState'
 
-const steps = ETL_CENTER_TABS
+const steps = ELT_CENTER_TABS
 const currentStep = ref('archive')
 
 function setStage(stage: string) {
