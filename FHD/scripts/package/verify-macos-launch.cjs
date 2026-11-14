@@ -63,7 +63,7 @@ async function verify(args = process.argv.slice(2), adapters = {}) {
     }
     if (!page) throw Error('Installed UI did not reach the login entry')
     await page.getByRole('heading', { name: '企业账号登录', exact: true }).waitFor({ timeout: 30000 })
-    await page.getByRole('button', { name: /^登\s*录$/ }).waitFor({ timeout: 30000 })
+    await page.getByRole('button', { name: /^(同意说明并登录|登\s*录)$/ }).waitFor({ timeout: 30000 })
     const uiReadyObservedAt = performance.now()
     let mainProcessUptimeSampleSeconds = null
     let mainProcessTimingError = ''

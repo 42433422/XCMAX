@@ -136,13 +136,18 @@ def _forward_fill(row: list[Any], width: int) -> list[str]:
     return result
 
 
-def _parent_rows(probe: list[list[Any]], leaf_index: int, leaf_width: int) -> list[int]:
+def _parent_rows(
+    probe: list[list[Any]],
+    leaf_index: int,
+    leaf_width: int,
+    styled_rows: frozenset[int] = frozenset(),
+) -> list[int]:
     parents: list[int] = []
     for index in range(max(0, leaf_index - 2), leaf_index):
         cells = _non_empty(probe[index])
         if (
             len(cells) >= 2
-            and len(cells) < max(3, leaf_width)
+            and (len(cells) < max(3, leaf_width) or index in styled_rows)
             and sum(not _looks_like_data(cell) for cell in cells) / len(cells) >= 0.8
         ):
             parents.append(index)
@@ -214,22 +219,64 @@ def _compose_headers(
     return headers
 
 
+_STYLE_HEADER_RATIO = 0.5
+
+
+def _styled_rows(style_ratios: Iterable[float]) -> frozenset[int]:
+    """Rows whose populated cells are mostly bold/filled/bordered header cells."""
+    return frozenset(
+        index
+        for index, ratio in enumerate(style_ratios or ())
+        if isinstance(ratio, (int, float)) and ratio >= _STYLE_HEADER_RATIO
+    )
+
+
+def _styled_leaf_index(
+    probe: list[list[Any]],
+    leaf_index: int,
+    hint_keys: set[str],
+    styled_rows: frozenset[int],
+) -> int:
+    """A styled header row owns the plain sub-header rows directly below it."""
+    if leaf_index not in styled_rows:
+        return leaf_index
+    leaf = leaf_index
+    for index in range(leaf_index + 1, len(probe)):
+        cells = _non_empty(probe[index])
+        if (
+            len(cells) < 2
+            or sum(not _looks_like_data(cell) for cell in cells) / len(cells) < 0.8
+            or _row_score(probe[index], index, hint_keys)[0] <= -50
+        ):
+            break
+        leaf = index
+    return leaf
+
+
 def detect_table_layout(
     rows: Iterable[Iterable[Any]],
     *,
     header_hints: Iterable[str] = (),
+    style_ratios: Iterable[float] = (),
 ) -> TableLayout | None:
-    """Detect a one-to-three-row header in the supplied leading rows."""
+    """Detect a one-to-three-row header in the supplied leading rows.
+
+    ``style_ratios`` optionally supplies the share of formatted (bold/filled/
+    bordered) cells per leading row, so a styled header band is recognised even
+    when its top row carries more hint matches than its sub-header row.
+    """
     probe = [_row_values(row) for row in rows]
     if not probe:
         return None
     hint_keys = {semantic_key(value) for value in header_hints if semantic_key(value)}
+    styled = _styled_rows(style_ratios)
     scored = [(*_row_score(row, index, hint_keys), index) for index, row in enumerate(probe)]
     score, matches, leaf_index = max(scored, key=lambda item: item[0])
     if score <= -50:
         return None
+    leaf_index = _styled_leaf_index(probe, leaf_index, hint_keys, styled)
     leaf_width = max(1, len(_non_empty(probe[leaf_index])))
-    parents = _parent_rows(probe, leaf_index, leaf_width)
+    parents = _parent_rows(probe, leaf_index, leaf_width, styled)
     headers = _compose_headers(probe, parents, leaf_index)
     confidence = min(
         0.99,
@@ -243,6 +290,8 @@ def detect_table_layout(
         reasons.append("leading_preamble_skipped")
     if parents:
         reasons.append("multi_row_header")
+    if styled.intersection(range(parents[0] if parents else leaf_index, leaf_index + 1)):
+        reasons.append("styled_header_row")
     return TableLayout(
         header_start=parents[0] if parents else leaf_index,
         header_end=leaf_index,

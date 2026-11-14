@@ -156,6 +156,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
     assert finance_delete_spec.permission == "tool.finance.delete_transaction"
     assert finance_delete_spec.test_fixtures[0]["input"]["transaction_id"] == 31
 
+    assert specs[("shipment_orders", "generate")].permission == "shipment.create"
     shipment_create_spec = specs[("shipment_records", "create")]
     assert shipment_create_spec.risk == "high"
     assert shipment_create_spec.required_params == ["unit_name"]
@@ -736,6 +737,17 @@ def test_required_empty_array_is_present_and_a_missing_key_is_not():
     assert ok and message == ""
     ok, message = _validate_schema_payload(schema, {}, subject="LLM 输出")
     assert not ok and message == "LLM 输出 缺少字段：rows"
+
+
+def test_finance_reference_id_accepts_the_numeric_order_id():
+    params = {
+        "transaction_type": "receivable",
+        "amount": 200,
+        "reference_type": "sales_order",
+        "reference_id": 3,
+    }
+    result = validate_tool_call("finance", "create_transaction", params)
+    assert result.ok, result.message
 
 
 def test_email_contract_rejects_long_invalid_input_without_backtracking():
