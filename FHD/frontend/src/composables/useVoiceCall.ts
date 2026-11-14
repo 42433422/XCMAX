@@ -94,7 +94,7 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
       bargeLoading = (async () => {
         try {
           const { MicVAD } = await import('@ricky0123/vad-web')
-          const base = `${import.meta.env.BASE_URL || '/'}vad/`
+          const base = `${import.meta.env.BASE_URL || '/'}assets/vad/`
           return await MicVAD.new({
             baseAssetPath: base,
             onnxWASMBasePath: `${base}ort/`,
