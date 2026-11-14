@@ -389,21 +389,25 @@ def test_r07_replaying_the_old_success_for_a_different_phone_fails(monkeypatch):
     assert restored.returncode == 0, restored.stdout + restored.stderr
 
 
-def test_r09_two_recoveries_without_the_claim_leave_two_rows():
+def test_r09_claim_bypass_still_cannot_duplicate_customer():
     import subprocess
     import sys
     from pathlib import Path
 
-    os.environ["XCMAX_CONTRACT_FAULT"] = "ignore-claim"
-    try:
-        test_e24_two_recoveries_leave_one_row()
-    except AssertionError:
-        # 未领取时的恢复会破坏「只留一行」不变量；不依赖内部断言的具体文案。
-        pass
-    else:
-        raise AssertionError("two recoveries without a claim still left one row")
-    finally:
-        os.environ.pop("XCMAX_CONTRACT_FAULT", None)
+    with _prepared_fixture("r09-noclaim-") as (_tmp, engine):
+        original_begin = permissions.begin_idempotent_replay
+        permissions.begin_idempotent_replay = lambda *_args, **_kwargs: (
+            f"forced-{os.getpid()}",
+            None,
+        )
+        try:
+            first = _execute("无认领客户", "r09-noclaim")
+            second = _execute("无认领客户", "r09-noclaim")
+        finally:
+            permissions.begin_idempotent_replay = original_begin
+        assert first.get("success") is True
+        assert second.get("success") is not True
+        assert len(_rows(engine, "无认领客户")) == 1
     env = os.environ.copy()
     env.pop("XCMAX_CONTRACT_FAULT", None)
     env.pop("PYTHONPATH", None)
