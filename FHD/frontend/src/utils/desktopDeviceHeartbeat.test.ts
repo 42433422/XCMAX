@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { installDesktopDeviceHeartbeat } from './desktopDeviceHeartbeat'
+import { LS_ENTERPRISE_SESSION_HINT } from './authSessionCache'
+
+/** 心跳只对已登录会话上报；用本地会话标记模拟登录态（不含任何凭据）。 */
+function markSignedIn(): void {
+  window.localStorage.setItem(LS_ENTERPRISE_SESSION_HINT, String(Date.now()))
+}
 
 describe('installDesktopDeviceHeartbeat', () => {
   const originalFetch = global.fetch
@@ -18,6 +24,7 @@ describe('installDesktopDeviceHeartbeat', () => {
   })
 
   it('registers a stable device id and repeats every minute', async () => {
+    markSignedIn()
     const fetchMock = vi.fn().mockResolvedValue({ ok: true })
     global.fetch = fetchMock as unknown as typeof fetch
 
@@ -35,6 +42,7 @@ describe('installDesktopDeviceHeartbeat', () => {
   })
 
   it('reuses the persisted device id instead of generating a new one', async () => {
+    markSignedIn()
     window.localStorage.setItem('xcagi.desktop.device_id', 'device-1')
     const fetchMock = vi.fn().mockResolvedValue({ ok: true })
     global.fetch = fetchMock as unknown as typeof fetch
@@ -59,7 +67,18 @@ describe('installDesktopDeviceHeartbeat', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('does not report a heartbeat while signed out', async () => {
+    const fetchMock = vi.fn()
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    installDesktopDeviceHeartbeat()
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('ignores transient heartbeat failures', async () => {
+    markSignedIn()
     global.fetch = vi.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch
 
     installDesktopDeviceHeartbeat()

@@ -182,6 +182,8 @@ describe('Mac settings runtime boundaries', () => {
   })
 
   it.each(['local', 'online'])('migrates a legacy %s model preference while retaining the assistant name', async (model) => {
+    // 偏好请求只在已登录时发出；用本地会话标记模拟登录态。
+    localStorage.setItem('xcagi_enterprise_session_hint_v1', String(Date.now()))
     const ui = await open()
     boundary.get.mockResolvedValue({ success: true, preferences: { aiModel: model, assistantName: '升级前助手' } })
     await ui.loadPreferences()

@@ -1565,6 +1565,7 @@ describe('SettingsView – loadPreferences', () => {
   beforeEach(resetSettingsTest)
 
   it('从 prefs 读取 assistantName 与 aiMode', async () => {
+    localStorage.setItem('xcagi_enterprise_session_hint_v1', String(Date.now()))
     mockApiGet.mockImplementation(async (url: string) => {
       if (url === '/api/preferences') {
         return { success: true, preferences: { assistantName: '小智', aiMode: 'offline' } }
@@ -1597,6 +1598,7 @@ describe('SettingsView – loadPreferences', () => {
   })
 
   it('prefs 无 aiMode 但有 legacy aiModel=local 时迁移', async () => {
+    localStorage.setItem('xcagi_enterprise_session_hint_v1', String(Date.now()))
     mockApiGet.mockImplementation(async (url: string) => {
       if (url === '/api/preferences') return { success: true, preferences: { aiModel: 'local' } }
       return { data: {}, success: false }

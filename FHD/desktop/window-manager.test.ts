@@ -281,6 +281,48 @@ it('still records a real renderer crash during rollback observation', async () =
   }
 })
 
+it.each([
+  ['crashed', 1],
+  ['oom', 137],
+  ['abnormal-exit', 1],
+  ['integrity-failure', 3],
+  ['killed', 1],
+  // Windows 也会用 clean-exit 配非零退出码：仍属于异常退出。
+  ['clean-exit', 1],
+])('records abnormal renderer exit (%s, exitCode=%i) and reloads in place', async (reason, exitCode) => {
+  vi.mocked(waitForBackendPing).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendApplicationReady).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendStatus).mockResolvedValue(null)
+  let onGone: ((event: unknown, details: { reason: string; exitCode: number }) => void) | undefined
+  const win = Object.assign(makeWindow(), {
+    on: vi.fn(), once: vi.fn(), reload: vi.fn(),
+    setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(), loadURL: vi.fn(async () => undefined),
+    webContents: {
+      on: vi.fn((event: string, listener: typeof onGone) => { if (event === 'render-process-gone') onGone = listener }),
+      getURL: vi.fn(() => 'http://127.0.0.1:17500/'), setWindowOpenHandler: vi.fn(),
+      session: { on: vi.fn() }, executeJavaScript: vi.fn(async () => undefined),
+    },
+  })
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
+  await createWindow()
+  await desktopRuntime.mainApplicationReady
+  vi.mocked(reportRendererError).mockClear()
+  vi.mocked(writeBackendLog).mockClear()
+  const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000)
+  app.isQuitting = false
+  try {
+    expect(onGone).toBeTypeOf('function')
+    onGone?.({}, { reason, exitCode })
+    expect(writeBackendLog).toHaveBeenCalledWith(expect.stringContaining(`reason=${reason}`))
+    expect(reportRendererError).toHaveBeenCalled()
+    expect(win.reload).toHaveBeenCalledOnce()
+    expect(desktopRuntime.rendererFailedDuringStartup).toBe(false)
+  } finally {
+    now.mockRestore()
+    app.isQuitting = false
+  }
+})
+
 it.each([true, false])('records selected splash before loading (file exists: %s)', async (exists) => {
   vi.spyOn(fs, 'existsSync').mockReturnValue(exists)
   vi.mocked(waitForBackendPing).mockResolvedValue(undefined)

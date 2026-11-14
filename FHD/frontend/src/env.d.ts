@@ -31,6 +31,8 @@ interface Window {
     downloadUpdate: () => Promise<unknown>
     installUpdate: () => Promise<void>
     onUpdateEvent: (callback: (event: unknown) => void) => () => void
+    /** 后端健康状态事件：unhealthy / restarting / ready。 */
+    onBackendHealth?: (callback: (state: string) => void) => () => void
     getPairingQrPayload?: () => Promise<string | null>
     showNotification: (title: string, body: string) => Promise<void>
     setBadge: (count: number) => Promise<void>

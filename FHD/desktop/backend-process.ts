@@ -147,6 +147,100 @@ export async function waitForBackendPing(
 /** @deprecated 使用 waitForBackendPing；保留别名供测试/旧引用。 */
 export const waitForBackendHealth = waitForBackendPing
 
+const HEALTH_WATCH_INTERVAL_MS = 20_000
+const HEALTH_FAILURES_BEFORE_RESTART = 3
+const HEALTH_RESTART_BUDGET = 3
+let healthWatchdogTimer: NodeJS.Timeout | null = null
+let healthFailures = 0
+let healthEverReady = false
+let healthRestartInFlight = false
+let healthRestarts = 0
+
+/** 把后端健康状态推给渲染端；渲染端据此恢复请求，而不是刷新整个页面。 */
+let backendHealthNotifier: ((state: 'unhealthy' | 'restarting' | 'ready') => void) | null = null
+
+export function setBackendHealthNotifier(
+  notifier: ((state: 'unhealthy' | 'restarting' | 'ready') => void) | null
+): void {
+  backendHealthNotifier = notifier
+}
+
+function broadcastBackendHealth(state: 'unhealthy' | 'restarting' | 'ready'): void {
+  try {
+    backendHealthNotifier?.(state)
+  } catch {
+    /* 通知失败不影响重启流程 */
+  }
+}
+
+async function probeBackendPing(): Promise<boolean> {
+  try {
+    const response = await loopbackHttpGet(`http://127.0.0.1:${DEFAULT_PORT}/api/ping`, 3_000)
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+async function runHealthCheck(): Promise<void> {
+  if (app.isQuitting || migrationStopInProgress || healthRestartInFlight) return
+  if (!desktopRuntime.backendProcess) return
+  if (await probeBackendPing()) {
+    healthFailures = 0
+    healthEverReady = true
+    return
+  }
+  // 首次就绪前不判定失联，避免把冷启动阶段的探测失败当成故障。
+  if (!healthEverReady) return
+  healthFailures += 1
+  writeBackendLog(`[health] backend ping failed ${healthFailures}/${HEALTH_FAILURES_BEFORE_RESTART}\n`)
+  if (healthFailures < HEALTH_FAILURES_BEFORE_RESTART) return
+  if (healthRestarts >= HEALTH_RESTART_BUDGET) {
+    writeBackendLog('[health] backend unresponsive; restart budget exhausted\n')
+    broadcastBackendHealth('unhealthy')
+    return
+  }
+  healthRestarts += 1
+  healthRestartInFlight = true
+  healthFailures = 0
+  broadcastBackendHealth('restarting')
+  writeBackendLog('[health] backend unresponsive; restarting in place\n')
+  try {
+    await stopBackend()
+    if (!app.isQuitting) await startBackend()
+    const ready = await waitForBackendPing(DEFAULT_PORT, 90_000).then(() => true).catch(() => false)
+    if (ready) {
+      healthEverReady = true
+      writeBackendLog('[health] backend recovered after restart\n')
+      broadcastBackendHealth('ready')
+    } else {
+      writeBackendLog('[health] backend still unresponsive after restart\n')
+      broadcastBackendHealth('unhealthy')
+    }
+  } catch (error) {
+    writeBackendLog(`[health] restart failed: ${error instanceof Error ? error.message : String(error)}\n`)
+    broadcastBackendHealth('unhealthy')
+  } finally {
+    healthRestartInFlight = false
+  }
+}
+
+/** 常驻健康看门狗：进程还在但接口失联时原地重启，不通过刷新页面掩盖问题。 */
+export function startBackendHealthWatchdog(): void {
+  if (healthWatchdogTimer || app.isQuitting) return
+  healthWatchdogTimer = setInterval(() => { void runHealthCheck() }, HEALTH_WATCH_INTERVAL_MS)
+  healthWatchdogTimer.unref?.()
+}
+
+export function stopBackendHealthWatchdog(): void {
+  if (healthWatchdogTimer) clearInterval(healthWatchdogTimer)
+  healthWatchdogTimer = null
+  healthFailures = 0
+  healthEverReady = false
+  healthRestartInFlight = false
+  healthRestarts = 0
+}
+
 const STARTUP_HEALTH_LIMIT_MS = 180_000
 
 /** 同一进程内轮询 /api/health，直到 healthy 或超过启动时限。不改写 health 返回值。 */

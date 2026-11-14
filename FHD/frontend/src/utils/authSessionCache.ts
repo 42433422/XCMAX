@@ -65,6 +65,15 @@ export function hasRecentEnterpriseSessionHint(now = Date.now()): boolean {
 }
 
 /**
+ * 是否有一个可用的登录会话可用于发起「需要身份」的后台请求。
+ * 只读本地标记，不发网络请求；未登录时调用方应静默跳过。
+ */
+export function hasKnownEnterpriseSession(now = Date.now()): boolean {
+  if (cachedValid === true && now - cachedAt <= SESSION_NAV_STALE_MS) return true
+  return hasRecentEnterpriseSessionHint(now)
+}
+
+/**
  * Electron can see Chromium's persisted HttpOnly session before the renderer
  * starts, while renderer localStorage may still be unavailable immediately
  * after an app replacement. This one-shot value only permits shell rendering;
