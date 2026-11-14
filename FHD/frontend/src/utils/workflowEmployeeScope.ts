@@ -65,3 +65,14 @@ export function filterModsForEnterpriseWorkflowRegistry(
     return modBelongsToEnterpriseStack(id, stack)
   })
 }
+
+/**
+ * 企业端「已安装即上岗」：员工来源只看本机已安装的 Mod。
+ * 服务端 /api/mods/ 已按控制面与办公包规则过滤，前端不再叠加行业栈/授权门槛，
+ * 否则市场安装的员工包（不在行业栈、也无 entitlements）装完也上不了岗。
+ */
+export function filterInstalledWorkflowRegistryMods(
+  mods: ModWithWorkflowEmployees[] | undefined,
+): ModWithWorkflowEmployees[] {
+  return filterWorkflowRegistrySourceMods(mods || [])
+}

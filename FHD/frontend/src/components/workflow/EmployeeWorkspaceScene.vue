@@ -10,6 +10,7 @@ import DutyRosterWorkflowLoopView from '@admin-console-inject/workflow/DutyRoste
 import SelfEvolutionLoopRuntimePanel from '@admin-console-inject/workflow/SelfEvolutionLoopRuntimePanel.vue'
 import EmployeeWorkspaceLoopConsole from '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'
 import { useDutyRoster } from '@/composables/useDutyRoster'
+import { isCustomPhaseEmployeeCarrierModId } from '@/utils/modWorkflowEmployees'
 import { workflowRegistryEntryBelongsToStack } from '@/utils/workflowEmployeeScope'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import type { EnterpriseModStack } from '@/constants/enterpriseModStack'
@@ -36,9 +37,14 @@ const enterpriseStack = ref<EnterpriseModStack | null>(null)
 const workspaceDesks = computed(() => {
   const stack = enterpriseStack.value
   const filtered = desks.value.filter((d) => {
-    // 管理端只显示平台编制员工（ALL_PLANNED_YUANGON_PKG_IDS，SSOT 派生），隔离企业 Mod 栈员工（如 attendance_ai 等）
-    if (showManagementLoopPanels.value && !ALL_PLANNED_YUANGON_PKG_IDS.value.has(d.empId)) return false
-    return workflowRegistryEntryBelongsToStack(d, stack)
+    if (showManagementLoopPanels.value) {
+      // 管理端只显示平台编制员工（ALL_PLANNED_YUANGON_PKG_IDS，SSOT 派生）且需在栈内
+      if (!ALL_PLANNED_YUANGON_PKG_IDS.value.has(d.empId)) return false
+      return workflowRegistryEntryBelongsToStack(d, stack)
+    }
+    // 企业端「已安装即上岗」：服务端 /api/mods/ 已过滤控制面与办公包，
+    // 这里只排除定制阶段载体（它们补侧栏，不是工位员工）。
+    return !isCustomPhaseEmployeeCarrierModId(d.carrierModId || d.hostModId)
   })
   return filtered
 })

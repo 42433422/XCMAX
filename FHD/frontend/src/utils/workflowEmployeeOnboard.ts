@@ -6,7 +6,7 @@ import { defaultHostModIdForMarketEmployee } from '@/constants/enterpriseModStac
 import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
-import { filterModsForEnterpriseWorkflowRegistry } from '@/utils/workflowEmployeeScope'
+import { filterInstalledWorkflowRegistryMods } from '@/utils/workflowEmployeeScope'
 import {
   filterWorkflowRegistrySourceMods,
   isNonWorkflowDeskEmployeeId,
@@ -94,10 +94,17 @@ export async function autoOnboardInstalledMarketItem(item: MarketInstallCatalogI
   await modsStore.refresh()
   const wfStore = useWorkflowAiEmployeesStore()
   stack = await resolveEnterpriseModStack()
-  await wfStore.refreshRegistry(filterModsForEnterpriseWorkflowRegistry(modsStore.modsForUi, stack))
+  await wfStore.refreshRegistry(filterInstalledWorkflowRegistryMods(modsStore.modsForWorkflowUi))
 
-  const mod = resolveInstalledMod(modsStore.modsForUi, item)
+  const mod = resolveInstalledMod(modsStore.modsForWorkflowUi, item)
   const idSet = new Set<string>([...collectDeskEmployeeIdsFromCatalogItem(item), ...collectEmployeeIdsFromMod(mod)])
+  // 市场目录行不一定带 employee/workflow_employees 字段；以刷新后的注册表按载体 Mod 反查兜底。
+  const pkgId = String(item.pkg_id || item.id || '').trim()
+  if (!idSet.size && pkgId) {
+    for (const entry of wfStore.registryEntries) {
+      if (String(entry.carrierModId || '') === pkgId) idSet.add(entry.id)
+    }
+  }
   const ids = [...idSet]
 
   if (ids.length) {
@@ -119,7 +126,7 @@ export async function autoOnboardWorkflowEmployeesFromMods(mods: ModWithWorkflow
   await modsStore.refresh()
   const wfStore = useWorkflowAiEmployeesStore()
   const stack = await resolveEnterpriseModStack()
-  await wfStore.refreshRegistry(filterModsForEnterpriseWorkflowRegistry(modsStore.modsForUi, stack))
+  await wfStore.refreshRegistry(filterInstalledWorkflowRegistryMods(modsStore.modsForWorkflowUi))
   const ids: string[] = []
   for (const m of filterWorkflowRegistrySourceMods(mods)) {
     for (const id of collectEmployeeIdsFromMod(m)) ids.push(id)

@@ -65,12 +65,8 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
     { id: 'installed', label: '已安装', icon: 'fa-check-circle' },
   ]
 
+  // 宿主基础员工是随包预装的本地包，市场没有该分类；留在本地目录查询，否则该页永远为空。
   const MARKET_TAB_QUERY: Record<string, { collection?: string; artifact?: string; material_category?: string }> = {
-    host_foundation: {
-      collection: 'host_foundation',
-      artifact: 'employee_pack',
-      material_category: 'ai_employee',
-    },
     office: {
       collection: OFFICE_EMPLOYEE_COLLECTION,
       artifact: 'employee_pack',
@@ -82,8 +78,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
       material_category: 'ai_employee',
     },
     workflow: {
-      collection: STORE_COLLECTION_WORKFLOW_EMPLOYEE,
-      artifact: 'mod',
+      // 市场不支持按 collection 过滤（传了会返回空），先按 AI 员工拉全量再本地按 collection 精筛。
       material_category: 'ai_employee',
     },
     ai_employee: {
@@ -105,6 +100,9 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
   })
 
   const refineMarketItems = (items: StoreModRow[], tab: string): StoreModRow[] => {
+    if (tab === 'workflow') {
+      return items.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_WORKFLOW_EMPLOYEE)
+    }
     if (tab === 'office') {
       return items.filter((m) => isOfficeEmployeePkg(m.pkg_id || m.id))
     }

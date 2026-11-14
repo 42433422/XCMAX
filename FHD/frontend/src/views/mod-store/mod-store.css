@@ -47,6 +47,7 @@
 
 .store-top {
   max-width: var(--layout-max);
+  width: 100%;
   margin: 0 auto;
   padding: 0.75rem var(--layout-pad-x) 0.75rem;
   border-bottom: 1px solid #e2e8f0;
@@ -128,6 +129,7 @@
 
 .store-toolbar {
   max-width: var(--layout-max);
+  width: 100%;
   margin: 0 auto;
   padding: 10px var(--layout-pad-x);
   display: flex;
@@ -151,6 +153,7 @@
 
 .onboarding-banner {
   max-width: var(--layout-max);
+  width: 100%;
   margin: 0 auto;
   padding: 12px var(--layout-pad-x);
   display: flex;
@@ -175,6 +178,7 @@
   grid-template-columns: 220px minmax(0, 1fr);
   gap: 20px;
   max-width: var(--layout-max);
+  width: 100%;
   margin: 0 auto;
   padding: 16px var(--layout-pad-x) 0;
   align-items: start;

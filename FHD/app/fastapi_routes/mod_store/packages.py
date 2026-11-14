@@ -147,8 +147,18 @@ class PackageInstaller:
                         detail=f"远端 Mod 包摘要不一致：expected={expected} actual={actual}",
                     )
             files.normalized = self._normalize_catalog(files.source)
+            # 显式关闭验签只对市场员工包生效：当前市场员工包未携带 META-INF 签名，
+            # 但仍要求内容与目录 sha256 一致；Mod（含可执行后端）始终强制验签。
+            install_verify = verify_signature
+            if not install_verify:
+                if self._artifact(files.normalized) == ARTIFACT_EMPLOYEE_PACK:
+                    self._logger.warning(
+                        "市场员工包未强制验签（按安装请求放行）：%s:%s", pkg_id, version
+                    )
+                else:
+                    install_verify = True
             return self._install(
-                files.normalized, verify_signature=verify_signature, activate=activate
+                files.normalized, verify_signature=install_verify, activate=activate
             )
 
     async def upload(self, file: UploadFile, activate: bool) -> ModStoreInstallResult:

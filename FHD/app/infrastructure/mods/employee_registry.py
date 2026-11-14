@@ -103,6 +103,18 @@ class EmployeeRegistry:
                             raw_wf = raw.get("workflow_employees")
                             if isinstance(raw_wf, list):
                                 wf = [x for x in raw_wf if isinstance(x, dict) and x.get("id")]
+                            if not wf:
+                                # 市场「AI 员工」包通常只声明单个 employee；补一条工位行，
+                                # 否则装完在员工工作台/副窗里永远看不到（办公包由前端规则过滤）。
+                                emp = raw.get("employee") if isinstance(raw.get("employee"), dict) else {}
+                                eid = str(emp.get("id") or "").strip()
+                                if eid:
+                                    wf = [
+                                        {
+                                            "id": eid,
+                                            "label": str(emp.get("label") or raw.get("name") or eid),
+                                        }
+                                    ]
                 except (OSError, json.JSONDecodeError):
                     wf = []
             rows.append(
