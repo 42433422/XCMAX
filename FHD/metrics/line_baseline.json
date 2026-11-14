@@ -1,5 +1,5 @@
 {
-  "lines": 2401817,
+  "lines": 2402448,
   "updated": "2026-11-14",
-  "note": "PR#3136 对齐主干"
+  "note": "PR#3150 证据精确匹配：合并必跑证据按完整 pytest nodeid 与业务字段核对，涉及 check_business_contract_evidence.py / check_release_scope_evidence.py 及对应测试与契约 JSON，净增 631 行；经用户批准推进合并"
 }
