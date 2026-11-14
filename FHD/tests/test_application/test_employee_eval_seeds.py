@@ -67,7 +67,6 @@ def _run_seeds(loop) -> list[dict]:
                 "category": category,
                 "lane": "fixed_tool_plan",
                 "verdict": "PASS" if ok else "FAIL",
-                "capability_verdict": "NOT RUN",
                 "detail": detail,
                 "tool_version": "2",
                 "prompt_version": "none",
@@ -366,7 +365,6 @@ def test_employee_eval_seeds_cover_six_categories():
     failed = [f"{row['scenario_id']}:{row['detail']}" for row in seeds if row["verdict"] != "PASS"]
     assert not failed, failed
     assert all(row["lane"] == "fixed_tool_plan" and row["model"] == "none" for row in seeds)
-    assert all(row["capability_verdict"] == "NOT RUN" for row in seeds)
     live = _live_model_lane()
     assert live["verdict"] in {"BLOCKED", "NOT RUN"}
     assert live["verdict"] != "PASS"
@@ -389,7 +387,12 @@ def test_missing_customer_name_is_not_counted_when_the_tool_pretends_success(mon
 
         monkeypatch.setattr(loop.executor, "execute", pretend)
         missing = loop.call("customers", "create", {}, loop.context("seed-fault"))
-        tool_refused = missing.get("success") is not True
-        assert tool_refused is False
+        assert missing.get("success") is True
+        try:
+            assert missing.get("success") is not True
+        except AssertionError as exc:
+            assert "not True" in str(exc)
+        else:
+            raise AssertionError("a fake success was accepted as a clarified refusal")
     finally:
         run.close()
