@@ -279,7 +279,9 @@ def test_parameterized_required_test_fails_when_one_instance_fails(tmp_path: Pat
     evidence = evidence_from_junit(
         [_write(tmp_path, body)], source_sha="abc", run_id="9", run_attempt="1"
     )
-    r03 = next(item for item in evidence["scenarios"] if item["scenario_id"] == "R03-confirm-binding")
+    r03 = next(
+        item for item in evidence["scenarios"] if item["scenario_id"] == "R03-confirm-binding"
+    )
     assert r03["status"] == "FAIL"
 
 
@@ -303,7 +305,9 @@ def test_parameterized_required_test_passes_when_every_instance_passes(tmp_path:
     evidence = evidence_from_junit(
         [_write(tmp_path, body)], source_sha="abc", run_id="9", run_attempt="1"
     )
-    r03 = next(item for item in evidence["scenarios"] if item["scenario_id"] == "R03-confirm-binding")
+    r03 = next(
+        item for item in evidence["scenarios"] if item["scenario_id"] == "R03-confirm-binding"
+    )
     assert r03["status"] == "PASS"
     assert len(r03["attempts"]) == 2
 
