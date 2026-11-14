@@ -22,60 +22,78 @@
     },
     {
       "requirement_id": "R02",
-      "scenario_id": "R02-zero-valid-rows",
-      "rule": "应当含有业务记录的原件解析出零条有效记录时，不得伪装成可正常提交。",
-      "source": "数据对接零有效行保护；本批只登记。",
-      "preconditions": ["原件被标为应当含有业务记录"],
-      "inputs": ["零有效行样例"],
-      "allowed": ["错误或待处理状态", "保留诊断依据"],
-      "forbidden_effects": ["零条有效记录仍显示可正常提交"],
-      "oracle": "样例标注的预期状态",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "scenario_id": "R02-empty-preview",
+      "rule": "只有表头、没有有效记录的原件可以预演，但不得确认入库。必须留下空预演诊断。",
+      "source": "FHD/tests/test_application/test_etl_preview_task_boundaries.py 的空预演。样例是合成 CSV，不是客户原件。",
+      "preconditions": ["租户内已上传只有表头的 CSV", "预演完成且总行数为 0"],
+      "inputs": ["客户名称,电话\\n"],
+      "allowed": ["状态仍是 preview_ready", "诊断码 ELT_PREVIEW_EMPTY 和 ELT_NO_DATA_ROWS", "确认执行被拒绝"],
+      "forbidden_effects": ["零行预演仍能确认入库"],
+      "oracle": "预演快照里的 total_rows 和 empty_preview 诊断，而不是再解析一遍文件",
+      "tests": [
+        "tests/test_application/test_etl_preview_task_boundaries.py::test_empty_preview_is_not_confirmable"
+      ],
+      "boundary": {
+        "real": ["sqlite", "ELT preview worker", "ELT execute"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
-      "fault_version": "零有效行仍返回可提交",
+      "fault_version": "把总行数改成 1 后仍放行空预演",
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
-      "resources": ["合成工作簿"],
-      "required_for_merge": false
+      "resources": ["合成 CSV"],
+      "required_for_merge": true
     },
     {
       "requirement_id": "R03",
       "scenario_id": "R03-confirm-binding",
       "rule": "用户确认必须绑定身份、租户、预演版本和数据范围。过期预演不得写入，重复提交不得产生重复副作用。",
-      "source": "数据对接确认写入；本批只登记。",
+      "source": "FHD/tests/test_application/test_etl_preview_confirmation.py 用 SQLite 预演。错的预演版本不能写入；正确版本确认后才执行。",
       "preconditions": ["存在一份已版本化的预演"],
       "inputs": ["确认人、租户、预演版本、数据范围"],
       "allowed": ["写入内容与确认内容一致", "同键重复提交读回原结果"],
       "forbidden_effects": ["过期预演写入", "重复副作用"],
       "oracle": "确认单上的版本和范围，对照落库行",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "tests": [
+        "tests/test_application/test_etl_preview_confirmation.py::test_missing_or_wrong_approval_does_not_write_or_claim_run"
+      ],
+      "boundary": {
+        "real": ["sqlite", "ELT execute", "preview revision"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "接受过期预演",
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R04",
       "scenario_id": "R04-export-submitted-result",
       "rule": "导出必须对应已提交的业务结果。核对明细、字段类型、金额、数量和汇总。",
-      "source": "已提交结果导出；本批只登记。",
+      "source": "与 R05 同一条获批出货导出。重新打开的 xlsx 对照已提交产品，不重解析原件。",
       "preconditions": ["业务结果已经提交"],
       "inputs": ["下载接口返回的文件"],
       "allowed": ["重新打开的文件与已提交明细一致"],
       "forbidden_effects": ["只凭 URL、HTTP 200 或 success 判定通过", "用重解析原件代替已提交数据"],
       "oracle": "提交时保存的明细和汇总",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "tests": [
+        "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"
+      ],
+      "boundary": {
+        "real": ["sqlite", "xlsx file"],
+        "doubles": ["fixed plan instead of a live model"],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "导出缺少已提交明细",
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
-      "resources": [],
-      "required_for_merge": false
+      "resources": ["临时 sqlite", "openpyxl"],
+      "required_for_merge": true
     },
     {
       "requirement_id": "R05",
@@ -123,22 +141,28 @@
     },
     {
       "requirement_id": "R07",
-      "scenario_id": "R07-same-intent-once",
-      "rule": "同一业务意图重试只产生一次规定副作用。同键同参读回原结果，同键异参明确冲突。",
-      "source": "工具幂等契约；本批只登记，不把调用次数当业务证据。",
-      "preconditions": ["第一次调用已经成功"],
-      "inputs": ["相同幂等键", "相同或不同参数"],
-      "allowed": ["同键同参返回原业务结果", "同键异参返回冲突"],
-      "forbidden_effects": ["重试再次扣库存或再次建单", "同键异参返回原成功结果"],
-      "oracle": "第一次成功后的数据库行和业务回执",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "scenario_id": "R07-same-key-different-params",
+      "rule": "同一幂等键已经创建客户后，换一个电话再提交必须冲突，不能交回原来的成功结果，也不能改掉已保存的电话。",
+      "source": "FHD/tests/test_application/test_idempotency_recovery_e23_e24.py 的同键异参。",
+      "preconditions": ["租户 11", "进程在提交后退出", "库里已有电话 13800000023 的客户"],
+      "inputs": ["同一幂等键 e23-mismatch", "新电话 13800000999"],
+      "allowed": ["返回 idempotency_conflict", "库里仍只有原来那一行和原来的电话"],
+      "forbidden_effects": ["同键异参返回原成功结果", "覆盖已保存的电话"],
+      "oracle": "崩溃后、重试前读到的那一行客户电话",
+      "tests": [
+        "tests/test_application/test_idempotency_recovery_e23_e24.py::test_same_key_with_different_phone_does_not_reuse_the_row"
+      ],
+      "boundary": {
+        "real": ["sqlite", "spawned process", "AgentToolExecutor"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
-      "fault_version": "重试时再次扣库存，或同键异参返回原成功结果",
+      "fault_version": "同键异参仍返回上一次成功结果",
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
-      "resources": [],
-      "required_for_merge": false
+      "resources": ["临时 sqlite", "可 spawn 的 Python 进程"],
+      "required_for_merge": true
     },
     {
       "requirement_id": "R08",
@@ -167,41 +191,53 @@
     },
     {
       "requirement_id": "R09",
-      "scenario_id": "R09-concurrency",
-      "rule": "并发不能静默覆盖或重复执行。竞态用屏障或明确故障注入点，并保留重放信息。",
-      "source": "幂等与恢复竞争；本批只登记。E24 已有部分覆盖，尚未纳入本门禁。",
-      "preconditions": ["两个执行者同时处理同一意图"],
-      "inputs": ["屏障同步的并发调用"],
-      "allowed": ["一个赢家", "另一个读回原结果或明确冲突"],
-      "forbidden_effects": ["静默覆盖", "重复副作用"],
-      "oracle": "并发结束后的业务行数和各自回执",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "scenario_id": "R09-two-recoveries",
+      "rule": "提交前崩溃之后，两个恢复同时进行，最终只能留下一行客户。另一个可以成功或明确返回进行中，不能各自再插入。",
+      "source": "FHD/tests/test_application/test_idempotency_recovery_e23_e24.py 的双恢复。用进程屏障对齐，不用 sleep。",
+      "preconditions": ["创建在提交前退出", "库里还没有这个客户", "两个恢复进程同时过屏障"],
+      "inputs": ["客户名「崩溃前客户」", "幂等键 e24-race"],
+      "allowed": ["最终一行", "至少一个成功", "另一个成功或 idempotency_in_progress", "回执里的 id 属于这一行或为空"],
+      "forbidden_effects": ["两个恢复各自插入一行"],
+      "oracle": "并发结束后按客户名读到的行数",
+      "tests": [
+        "tests/test_application/test_idempotency_recovery_e23_e24.py::test_e24_two_recoveries_leave_one_row"
+      ],
+      "boundary": {
+        "real": ["sqlite", "two spawned processes", "barrier", "AgentToolExecutor"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
-      "fault_version": "移除版本冲突保护",
+      "fault_version": "恢复时忽略已有领取并各自插入",
       "platforms": ["linux"],
-      "database_modes": ["sqlite", "postgresql"],
-      "resources": [],
-      "required_for_merge": false
+      "database_modes": ["sqlite"],
+      "resources": ["临时 sqlite", "可 spawn 的 Python 进程"],
+      "required_for_merge": true
     },
     {
       "requirement_id": "R10",
       "scenario_id": "R10-tenant-scope",
       "rule": "读取、审批、交接、工具执行、导出和恢复都保持租户与授权范围。",
-      "source": "租户隔离；本批只登记。",
+      "source": "FHD/tests/test_application/test_etl_knowledge_isolation.py 用真实知识库存储。两个租户写入相同内容，文档互不替换。审批、导出和恢复的租户过滤还不在这条测试里。",
       "preconditions": ["两个租户各有数据"],
       "inputs": ["恢复或导出请求"],
       "allowed": ["只返回并修改本租户数据"],
       "forbidden_effects": ["恢复时漏掉租户过滤"],
       "oracle": "请求租户与落库 tenant_id",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
-      "known_defects": [],
+      "tests": [
+        "tests/test_application/test_etl_knowledge_isolation.py::test_identical_content_in_two_tenants_never_replaces_first"
+      ],
+      "boundary": {
+        "real": ["knowledge document store", "tenant_scope"],
+        "doubles": ["embedder returns a fixed vector"],
+        "execution": "real"
+      },
+      "known_defects": ["审批、导出和恢复的租户过滤尚未在本场景执行"],
       "fault_version": "恢复时遗漏租户过滤",
       "platforms": ["linux"],
       "database_modes": ["sqlite", "postgresql"],
-      "resources": [],
-      "required_for_merge": false
+      "resources": ["临时知识库文件"],
+      "required_for_merge": true
     }
   ]
 }

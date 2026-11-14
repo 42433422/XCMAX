@@ -52,6 +52,12 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
     const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload)
     ipcRenderer.on('xcagi:update-event', listener)
     return () => ipcRenderer.removeListener('xcagi:update-event', listener)
+  },
+  /** 后端健康状态（unhealthy / restarting / ready）：渲染端据此恢复请求，不整页刷新。 */
+  onBackendHealth: (callback: (state: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: { state?: string }) => callback(String(payload?.state || ''))
+    ipcRenderer.on('xcagi:backend-health', listener)
+    return () => ipcRenderer.removeListener('xcagi:backend-health', listener)
   }
 })
 
