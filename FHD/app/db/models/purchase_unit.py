@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import Boolean, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.db_base import Base
@@ -11,9 +11,6 @@ from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMi
 
 class PurchaseUnit(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "purchase_units"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "unit_name", name="uq_purchase_units_tenant_name"),
-    )
     unit_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     contact_person: Mapped[Optional[str]] = mapped_column(String(100))
     contact_phone: Mapped[Optional[str]] = mapped_column(String(50))
