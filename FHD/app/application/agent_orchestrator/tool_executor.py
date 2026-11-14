@@ -39,9 +39,6 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         "shipment_orders",
         "document_template",
         "purchase",
-        "finance",
-        "excel_analysis",
-        "employee",
     }
 )
 

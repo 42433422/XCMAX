@@ -147,11 +147,7 @@ class SourceServiceMixin:
             EltRunRow.tenant_id == tenant_id_for_write(),
             EltRunRow.owner_user_id == run.owner_user_id,
         ).delete(synchronize_session=False)
-        seen: dict[tuple[str, int], int] = {}
         for index, source in enumerate(dataset.rows, 1):
-            key = (source.sheet, int(source.row_number))
-            slice_no = seen.get(key, 0)
-            seen[key] = slice_no + 1
             db.add(
                 EltRunRow(
                     tenant_id=tenant_id_for_write(),
@@ -159,7 +155,6 @@ class SourceServiceMixin:
                     run_id=run.id,
                     source_sheet=source.sheet,
                     source_row=source.row_number,
-                    source_slice=slice_no,
                     source_json=dump_json(source.values),
                     provenance_json=dump_json(source.provenance),
                 )

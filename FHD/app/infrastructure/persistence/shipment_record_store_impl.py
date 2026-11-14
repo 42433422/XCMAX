@@ -38,8 +38,7 @@ class SQLAlchemyShipmentRecordStore(ShipmentRecordStorePort):
         amount = first.get("amount")
         if amount is None:
             try:
-                price = float(unit_price or 0)
-                amount = price * (float(quantity_kg or 0) or int(quantity_tins or 0))
+                amount = float(unit_price or 0) * float(quantity_kg or 0)
             except RECOVERABLE_ERRORS:
                 amount = 0.0
 

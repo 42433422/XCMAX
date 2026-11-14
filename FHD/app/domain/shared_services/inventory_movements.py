@@ -1,3 +1,5 @@
+"""Inventory in, out, and transfer operations."""
+
 from __future__ import annotations
 
 import importlib
@@ -7,7 +9,6 @@ from contextlib import nullcontext
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator.business_write_guard import worker_write_guard
@@ -18,16 +19,6 @@ logger = logging.getLogger("app.domain.shared_services.inventory_service")
 
 def _facade():
     return importlib.import_module("app.domain.shared_services.inventory_service")
-
-
-def _posted_stock_out(db, model, product_id, reference_type, reference_id):
-    query = db.query(model).filter(
-        model.product_id == product_id,
-        model.transaction_type == "out",
-        model.reference_type == reference_type,
-        model.reference_id == reference_id,
-    )
-    return query.first()
 
 
 def _positive_movement_quantity(value: Any) -> float:
@@ -242,21 +233,6 @@ class InventoryMovementsMixin:
             }
         with _facade().get_db() as db, worker_write_guard(db):
             try:
-                stock_model = _facade().InventoryTransaction
-                if reference_type and reference_id not in (None, ""):
-                    posted = _posted_stock_out(
-                        db, stock_model, resolved_product_id, str(reference_type), reference_id
-                    )
-                    if posted is not None:
-                        return {
-                            "success": True,
-                            "message": "该业务单据已出库，未重复扣减",
-                            "data": {
-                                "already_posted": True,
-                                "ledger_id": posted.ledger_id,
-                                "quantity": quantity,
-                            },
-                        }
                 resolved_warehouse_id, problem, error_code = _stock_out_warehouse_id(
                     db, warehouse_id
                 )
@@ -286,7 +262,7 @@ class InventoryMovementsMixin:
                 ledger.quantity = float(ledger.quantity) - quantity
                 ledger.available_quantity = float(ledger.available_quantity) - quantity
                 ledger.updated_at = now
-                transaction = stock_model(
+                transaction = _facade().InventoryTransaction(
                     ledger_id=ledger.id,
                     transaction_type="out",
                     product_id=resolved_product_id,
@@ -304,24 +280,7 @@ class InventoryMovementsMixin:
                     created_at=now,
                 )
                 db.add(transaction)
-                try:
-                    db.commit()
-                except IntegrityError:
-                    db.rollback()
-                    raced = _posted_stock_out(
-                        db, stock_model, resolved_product_id, str(reference_type), reference_id
-                    )
-                    if raced is None:
-                        raise
-                    return {
-                        "success": True,
-                        "message": "该业务单据已出库，未重复扣减",
-                        "data": {
-                            "already_posted": True,
-                            "ledger_id": raced.ledger_id,
-                            "quantity": quantity,
-                        },
-                    }
+                db.commit()
                 return {
                     "success": True,
                     "message": "出库成功",

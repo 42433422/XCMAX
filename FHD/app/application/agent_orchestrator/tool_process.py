@@ -20,11 +20,6 @@ import psutil
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
-def dump_tool_output(output: dict) -> str:
-    """Encode a tool result for the idempotency ledger and the worker transport."""
-    return json.dumps(output, ensure_ascii=False, default=_json_scalar)
-
-
 def _json_scalar(value):
     # Match API numeric/date encoding; never stringify arbitrary service objects.
     if isinstance(value, Decimal):
@@ -32,7 +27,7 @@ def _json_scalar(value):
         return int(value) if isinstance(exponent, int) and exponent >= 0 else float(value)
     if isinstance(value, (datetime, date)):
         return value.isoformat()
-    raise TypeError(f"unsupported tool result value:{type(value).__name__}")
+    raise TypeError("unsupported tool result value")
 
 
 def _worker(
@@ -136,11 +131,6 @@ def _worker(
                         "outcome": "unknown",
                         "error_code": "tool_result_transport_failed",
                         "exception_type": type(exc).__name__,
-                        "exception_hint": (
-                            str(exc.args[0])[:120]
-                            if exc.args and isinstance(exc.args[0], str)
-                            else ""
-                        ),
                         "retryable": False,
                     },
                     "uncertain": [],

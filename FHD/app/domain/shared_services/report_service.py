@@ -41,7 +41,6 @@ class ReportService(NeuroEventPublisherMixin):
         region: str | None = None,
         status: str | None = None,
         customer_name: str | None = None,
-        order_no: str | None = None,
     ) -> dict[str, Any]:
         """按订单汇总销售，兼容指定来源的历史发货报表。"""
         if source == "shipment":
@@ -63,8 +62,6 @@ class ReportService(NeuroEventPublisherMixin):
                 query = query.filter(SalesOrder.customer_id == customer_id)
             if customer_name:
                 query = query.filter(SalesOrder.customer_name == customer_name)
-            if order_no:
-                query = query.filter(SalesOrder.order_no == str(order_no))
             if status:
                 query = query.filter(sales_status_predicate(status))
             if payment_state:

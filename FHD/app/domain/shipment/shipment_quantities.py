@@ -82,12 +82,8 @@ def resolve_shipment_quantity(
         )
     if kg is None:
         if spec is None:
-            if unit in {"件", "个"} and tins:
-                kg = 0.0
-            else:
-                raise ShipmentQuantityValidationError("SHIPMENT_SPEC_REQUIRED", row_index)
-        else:
-            kg = tins * spec
+            raise ShipmentQuantityValidationError("SHIPMENT_SPEC_REQUIRED", row_index)
+        kg = tins * spec
     kg = number(kg, field="quantity_kg" if product.get("quantity_kg") is not None else "quantity")
     return int(tins), kg, spec
 

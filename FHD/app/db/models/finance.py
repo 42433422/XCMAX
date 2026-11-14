@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import DateTime, Index, Integer, Numeric, String, Text, text
+from sqlalchemy import DateTime, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -46,16 +46,6 @@ class FinancialTransaction(TenantScopedMixin, Base):
     __table_args__ = (
         Index("ix_fin_txn_type_date", "transaction_type", "transaction_date"),
         Index("ix_fin_txn_ref", "reference_type", "reference_id"),
-        Index(
-            "uq_fin_txn_business_ref",
-            "tenant_id",
-            "transaction_type",
-            "reference_type",
-            "reference_id",
-            unique=True,
-            sqlite_where=text("reference_type IS NOT NULL AND reference_id IS NOT NULL"),
-            postgresql_where=text("reference_type IS NOT NULL AND reference_id IS NOT NULL"),
-        ),
     )
 
     def to_dict(self) -> dict:
