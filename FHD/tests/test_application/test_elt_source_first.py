@@ -233,6 +233,48 @@ def test_repeated_source_coordinates_commit_together_as_slices(preview_store, mo
         assert db.query(PurchaseUnit).count() == 0
 
 
+def test_failed_raw_load_never_commits_partial_rows_or_completion_marker(
+    preview_store, monkeypatch
+):
+    store = preview_store
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    duplicate = ParsedRow("same-sheet", 1, {"客户名称": "raw only"})
+    monkeypatch.setattr(
+        service_preview,
+        "parse_file",
+        lambda *_args, **_kwargs: ParsedDataset(
+            ["客户名称"], [duplicate, duplicate], {"kind": "sheet"}
+        ),
+    )
+    from sqlalchemy.exc import OperationalError
+
+    original_add = store.factory.class_.add
+    flushed = []
+
+    def fail_second_raw_row(db, instance, *args, **kwargs):
+        if isinstance(instance, EltRunRow):
+            if flushed:
+                raise OperationalError(
+                    "injected second raw-row insert", {}, RuntimeError("disk failure")
+                )
+            original_add(db, instance, *args, **kwargs)
+            db.flush()
+            flushed.append(instance.id)
+            return
+        return original_add(db, instance, *args, **kwargs)
+
+    monkeypatch.setattr(store.factory.class_, "add", fail_second_raw_row)
+    run_id = create_preview(store)
+    wait_for_job(store)
+    assert len(flushed) == 1 and flushed[0] is not None
+    assert snapshot(store, run_id)["status"] == "failed"
+    with store.factory() as db:
+        run = db.get(EltRun, run_id)
+        assert "source_snapshot" not in load_json(run.summary_json, {})
+        assert raw_rows(db, run_id) == []
+        assert db.query(PurchaseUnit).count() == 0
+
+
 def test_empty_source_has_a_completed_reusable_snapshot(preview_store, monkeypatch):
     store = preview_store
     monkeypatch.setenv("FHD_ETL_LLM", "off")

@@ -367,6 +367,7 @@ def test_retired_execute_route_never_writes(preview_store, monkeypatch, with_rev
         response = client.post(f"/api/elt/runs/{run_id}/execute", json=payload)
     assert response.status_code == 404
     dispatch.assert_not_called()
+    assert assert_unwritten(store, run_id) == before
 
 
 def test_repeat_confirm_does_not_write_the_customers_again(preview_store, monkeypatch):

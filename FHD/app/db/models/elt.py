@@ -154,7 +154,9 @@ class EltRunRow(TenantScopedMixin, Base):
     owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     source_sheet: Mapped[str] = mapped_column(String(160), nullable=False, default="")
     source_row: Mapped[int] = mapped_column(Integer, nullable=False)
-    source_slice: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_slice: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     source_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     normalized_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     provenance_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")

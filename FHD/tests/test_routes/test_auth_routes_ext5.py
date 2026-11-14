@@ -17,6 +17,31 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
+
+def _assert_shared_custom_cookie_name_0(self, monkeypatch, _shared_literal_0, _shared_literal_1):
+    from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
+
+    monkeypatch.setenv(_shared_literal_0, _shared_literal_1)
+    resp = JSONResponse({"success": True})
+    result = _attach_session_cookie(resp, "session123")
+    assert result is resp
+
+
+def _assert_shared_update_valid_admin_role_1(self, _shared_literal_0, _shared_literal_1):
+    from app.fastapi_routes.domains.auth.auth_routes import users_update
+
+    mock_admin = MagicMock()
+    with patch("app.application.get_user_app_service") as mock_get:
+        mock_service = MagicMock()
+        mock_service.update_user.return_value = {
+            "success": True,
+            "user": {"id": 1, "role": _shared_literal_0},
+        }
+        mock_get.return_value = mock_service
+        result = users_update(user_id=1, body={"role": _shared_literal_1}, _user=mock_admin)
+    assert result["success"] is True
+
+
 # ---------------------------------------------------------------------------
 # _user_public_dict
 # ---------------------------------------------------------------------------
@@ -421,68 +446,42 @@ class TestAttachSessionCookie:
         assert "set-cookie" in result.headers
 
     def test_custom_cookie_name(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
-
-        monkeypatch.setenv("SESSION_COOKIE_NAME", "custom_session")
-        resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
-        assert result is resp
+        return _assert_shared_custom_cookie_name_0(
+            self, monkeypatch, "SESSION_COOKIE_NAME", "custom_session"
+        )
 
     def test_custom_max_age(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
-
-        monkeypatch.setenv("SESSION_COOKIE_MAX_AGE", "3600")
-        resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
-        assert result is resp
+        return _assert_shared_custom_cookie_name_0(
+            self, monkeypatch, "SESSION_COOKIE_MAX_AGE", "3600"
+        )
 
     def test_httponly_disabled(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
-
-        monkeypatch.setenv("SESSION_COOKIE_HTTPONLY", "0")
-        resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
-        assert result is resp
+        return _assert_shared_custom_cookie_name_0(
+            self, monkeypatch, "SESSION_COOKIE_HTTPONLY", "0"
+        )
 
     def test_httponly_false(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
-
-        monkeypatch.setenv("SESSION_COOKIE_HTTPONLY", "false")
-        resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
-        assert result is resp
+        return _assert_shared_custom_cookie_name_0(
+            self, monkeypatch, "SESSION_COOKIE_HTTPONLY", "false"
+        )
 
     def test_secure_enabled(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
-
-        monkeypatch.setenv("SESSION_COOKIE_SECURE", "1")
-        resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
-        assert result is resp
+        return _assert_shared_custom_cookie_name_0(self, monkeypatch, "SESSION_COOKIE_SECURE", "1")
 
     def test_secure_true(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
-
-        monkeypatch.setenv("SESSION_COOKIE_SECURE", "true")
-        resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
-        assert result is resp
+        return _assert_shared_custom_cookie_name_0(
+            self, monkeypatch, "SESSION_COOKIE_SECURE", "true"
+        )
 
     def test_secure_yes(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
-
-        monkeypatch.setenv("SESSION_COOKIE_SECURE", "yes")
-        resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
-        assert result is resp
+        return _assert_shared_custom_cookie_name_0(
+            self, monkeypatch, "SESSION_COOKIE_SECURE", "yes"
+        )
 
     def test_custom_samesite(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
-
-        monkeypatch.setenv("SESSION_COOKIE_SAMESITE", "Strict")
-        resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
-        assert result is resp
+        return _assert_shared_custom_cookie_name_0(
+            self, monkeypatch, "SESSION_COOKIE_SAMESITE", "Strict"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2310,46 +2309,13 @@ class TestUsersUpdateAdditional:
         assert result["success"] is True
 
     def test_update_valid_admin_role(self):
-        from app.fastapi_routes.domains.auth.auth_routes import users_update
-
-        mock_admin = MagicMock()
-        with patch("app.application.get_user_app_service") as mock_get:
-            mock_service = MagicMock()
-            mock_service.update_user.return_value = {
-                "success": True,
-                "user": {"id": 1, "role": "admin"},
-            }
-            mock_get.return_value = mock_service
-            result = users_update(user_id=1, body={"role": "admin"}, _user=mock_admin)
-        assert result["success"] is True
+        return _assert_shared_update_valid_admin_role_1(self, "admin", "admin")
 
     def test_update_valid_operator_role(self):
-        from app.fastapi_routes.domains.auth.auth_routes import users_update
-
-        mock_admin = MagicMock()
-        with patch("app.application.get_user_app_service") as mock_get:
-            mock_service = MagicMock()
-            mock_service.update_user.return_value = {
-                "success": True,
-                "user": {"id": 1, "role": "operator"},
-            }
-            mock_get.return_value = mock_service
-            result = users_update(user_id=1, body={"role": "operator"}, _user=mock_admin)
-        assert result["success"] is True
+        return _assert_shared_update_valid_admin_role_1(self, "operator", "operator")
 
     def test_update_valid_viewer_role(self):
-        from app.fastapi_routes.domains.auth.auth_routes import users_update
-
-        mock_admin = MagicMock()
-        with patch("app.application.get_user_app_service") as mock_get:
-            mock_service = MagicMock()
-            mock_service.update_user.return_value = {
-                "success": True,
-                "user": {"id": 1, "role": "viewer"},
-            }
-            mock_get.return_value = mock_service
-            result = users_update(user_id=1, body={"role": "viewer"}, _user=mock_admin)
-        assert result["success"] is True
+        return _assert_shared_update_valid_admin_role_1(self, "viewer", "viewer")
 
     def test_update_empty_body(self):
         from app.fastapi_routes.domains.auth.auth_routes import users_update
