@@ -1296,7 +1296,16 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 语音通话入口：与按住说话同排的圆形拨号按钮 */
+/* 语音输入竖排：语音通话入口在「按住说话」按钮上方 */
+.composer-voice-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* 语音通话入口：位于按住说话上方的圆形拨号按钮 */
 .voice-call-entry-btn {
   display: inline-flex;
   align-items: center;

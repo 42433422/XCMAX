@@ -161,23 +161,34 @@
           aria-describedby="chat-composer-status"
           @keydown="handleKeyDown"
         ></textarea>
-        <button
-          type="button"
-          class="btn voice-input-btn"
-          :class="voiceButtonClass"
-          :disabled="voiceButtonDisabled"
-          :title="voiceButtonTitle"
-          data-tutorial-id="chat-voice-push-to-talk"
-          @mousedown.prevent="startVoiceRecording"
-          @mouseup.prevent="stopVoiceRecording(false)"
-          @mouseleave="stopVoiceRecording(true)"
-          @touchstart.prevent="startVoiceRecording"
-          @touchend.prevent="stopVoiceRecording(false)"
-          @touchcancel.prevent="stopVoiceRecording(true)"
-        >
-          <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
-          <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
-        </button>
+        <div class="composer-voice-stack">
+          <button
+            type="button"
+            class="btn voice-call-entry-btn"
+            title="语音通话"
+            aria-label="语音通话"
+            @click="startVoiceCallFromHost"
+          >
+            <i class="fa fa-phone" aria-hidden="true"></i>
+          </button>
+          <button
+            type="button"
+            class="btn voice-input-btn"
+            :class="voiceButtonClass"
+            :disabled="voiceButtonDisabled"
+            :title="voiceButtonTitle"
+            data-tutorial-id="chat-voice-push-to-talk"
+            @mousedown.prevent="startVoiceRecording"
+            @mouseup.prevent="stopVoiceRecording(false)"
+            @mouseleave="stopVoiceRecording(true)"
+            @touchstart.prevent="startVoiceRecording"
+            @touchend.prevent="stopVoiceRecording(false)"
+            @touchcancel.prevent="stopVoiceRecording(true)"
+          >
+            <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
+            <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
+          </button>
+        </div>
         <button v-if="isLoading" type="button" class="btn" data-testid="stop-reply" @click="stopReply()">停止回复</button>
         <button
           class="btn btn-primary send-message-btn"
@@ -257,6 +268,7 @@ import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
+import { requestVoiceCallStart } from '@/composables/voiceCallHost'
 import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
@@ -388,6 +400,11 @@ const {
   addAndSaveMessage,
   stageExcelAnalysisContext,
 } = chatViewApi
+
+/** 智能对话页只负责发起通话，通话界面与状态由小C悬浮窗承载。 */
+const startVoiceCallFromHost = () => {
+  requestVoiceCallStart()
+}
 
 const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList, visibleActiveTaskId, workspaceHeader } =
   useRoutedTaskWorkspace({
