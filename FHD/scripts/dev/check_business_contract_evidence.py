@@ -21,6 +21,7 @@ MINIMUM_REQUIRED = (
     "R08-e23-readback",
     "R05-approved-shipment-export",
     "R02-empty-preview",
+    "R07-same-key-different-params",
 )
 REQUIRED_TESTS = {
     "R08-e23-readback": (
@@ -34,6 +35,10 @@ REQUIRED_TESTS = {
     "R02-empty-preview": (
         "tests/test_application/test_etl_preview_task_boundaries.py"
         "::test_empty_preview_is_not_confirmable"
+    ),
+    "R07-same-key-different-params": (
+        "tests/test_application/test_idempotency_recovery_e23_e24.py"
+        "::test_same_key_with_different_phone_does_not_reuse_the_row"
     ),
 }
 

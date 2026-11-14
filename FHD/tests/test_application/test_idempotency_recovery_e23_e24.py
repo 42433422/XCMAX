@@ -340,6 +340,49 @@ def test_same_key_with_different_phone_does_not_reuse_the_row():
         assert _rows(engine, "参数不同")[0]["contact_phone"] == "13800000023"
 
 
+def test_r07_replaying_the_old_success_for_a_different_phone_fails(monkeypatch):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    real = permissions.begin_idempotent_replay
+
+    def replay_previous(*args, **kwargs):
+        key, replay = real(*args, **kwargs)
+        if isinstance(replay, dict) and replay.get("success") is not True:
+            return key, {"success": True, "data": {"contact_phone": "13800000023"}}
+        return key, replay
+
+    monkeypatch.setattr(permissions, "begin_idempotent_replay", replay_previous)
+    try:
+        test_same_key_with_different_phone_does_not_reuse_the_row()
+    except AssertionError as exc:
+        assert "not True" in str(exc) or "idempotency_conflict" in str(exc)
+    else:
+        raise AssertionError("a different phone reused the previous success")
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    restored = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/test_application/test_idempotency_recovery_e23_e24.py::test_same_key_with_different_phone_does_not_reuse_the_row",
+            "-q",
+            "-o",
+            "addopts=",
+            "--tb=line",
+        ],
+        cwd=str(Path(__file__).resolve().parents[2]),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert restored.returncode == 0, restored.stdout + restored.stderr
+
+
 def test_crash_before_create_does_not_claim_an_existing_customer():
     ctx = multiprocessing.get_context("spawn")
     with _prepared_fixture("e24-existing-") as (tmp, engine):
