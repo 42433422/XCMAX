@@ -169,7 +169,7 @@ onMounted(() => {
                 当前账号未同步到企业 Mod 员工工位；账号定制 Mod 开通并注册员工后，这里只显示本企业自己的工位卡片。
               </template>
             </p>
-            <router-link :to="{ name: 'workflow-visualization' }" class="ews-empty-link">
+            <router-link :to="panoramaLocation" class="ews-empty-link">
               {{ showManagementLoopPanels ? '查看流程可视化' : '进入企业全景' }}
             </router-link>
           </div>
