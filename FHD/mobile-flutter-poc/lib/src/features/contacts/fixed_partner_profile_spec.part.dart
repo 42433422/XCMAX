@@ -182,7 +182,7 @@ class FixedPartnerProfileSpec {
         id: id,
         type: type,
         title: name,
-        subtitle: alias,
+        subtitle: '',
         timestampText: '',
         isPinned: true,
       ),

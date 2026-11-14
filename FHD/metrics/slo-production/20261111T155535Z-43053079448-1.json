@@ -1,0 +1,168 @@
+{
+  "schema": "xcagi.production_slo_evidence/v1",
+  "generated_at": "2026-11-11T15:55:35.535952Z",
+  "recorded_at": "2026-11-11T15:55:35.535952Z",
+  "backfill": false,
+  "backfill_reason": "",
+  "environment": "production",
+  "mode": "preflight",
+  "release_id": "",
+  "prometheus_url": "http://127.0.0.1:9091",
+  "transport": "ssh-exec",
+  "window": "30d",
+  "raw_metric_retention_days": 120.0,
+  "raw_metric_retention_source": "prometheus_flags",
+  "source_status": "available",
+  "source_errors": [],
+  "coverage": 0.6,
+  "scrape_coverage": 0.0,
+  "scrape_evidence": {
+    "fhd-api-stable": {
+      "instance": "127.0.0.1:5100",
+      "promql": "sum(sum_over_time(up{environment=\"production\",job=\"fhd-api-stable\",instance=\"127.0.0.1:5100\",service=\"fhd\"}[1d]))",
+      "window_seconds": 86400,
+      "interval_seconds": 15,
+      "expected_scrapes": 5760.0,
+      "successful_scrapes": null,
+      "coverage": null
+    },
+    "modstore-api-production": {
+      "instance": "127.0.0.1:9999",
+      "promql": "sum(sum_over_time(up{environment=\"production\",job=\"modstore-api-production\",instance=\"127.0.0.1:9999\",service=\"modstore\"}[1d]))",
+      "window_seconds": 86400,
+      "interval_seconds": 15,
+      "expected_scrapes": 5760.0,
+      "successful_scrapes": null,
+      "coverage": null
+    }
+  },
+  "day0_eligible": false,
+  "errors": [
+    "SLO-BIZ-01:empty_reading",
+    "SLO-BIZ-01:empty_sample_count",
+    "SLO-BIZ-02:empty_reading",
+    "SLO-BIZ-02:empty_sample_count",
+    "SLO-BIZ-03:empty_reading",
+    "SLO-BIZ-03:empty_sample_count",
+    "SLO-BIZ-04:empty_reading",
+    "SLO-BIZ-04:empty_sample_count",
+    "fhd-api-stable:scrape_coverage_missing_or_invalid",
+    "modstore-api-production:scrape_coverage_missing_or_invalid"
+  ],
+  "readings": {
+    "SLO-API-01": {
+      "promql": "1 - ((sum(increase(api_requests_total{environment=\"production\",status=~\"5..\"}[30d])) or vector(0)) / (sum(increase(api_requests_total{environment=\"production\"}[30d])) > 0))",
+      "sample_promql": "sum(increase(api_requests_total{environment=\"production\"}[30d]))",
+      "reading": "0.9999561372279451",
+      "reading_numeric": 0.9999561372279451,
+      "sample_count": 478824.2071111143,
+      "sample_minimum": 10000,
+      "sample_sufficient": true,
+      "meets_target": true,
+      "passes": true
+    },
+    "SLO-API-02": {
+      "promql": "histogram_quantile(0.95, sum by (le) (rate(api_request_duration_seconds_bucket{environment=\"production\",endpoint=\"/api/auth/login\"}[30d]))) * 1000",
+      "sample_promql": "sum(increase(api_request_duration_seconds_count{environment=\"production\",endpoint=\"/api/auth/login\"}[30d]))",
+      "reading": "975.0000000000001",
+      "reading_numeric": 975.0000000000001,
+      "sample_count": 2.0000256165915533,
+      "sample_minimum": 100,
+      "sample_sufficient": false,
+      "meets_target": false,
+      "passes": false
+    },
+    "SLO-API-03": {
+      "promql": "(sum(increase(api_requests_total{environment=\"production\",status=~\"5..\"}[30d])) or vector(0)) / (sum(increase(api_requests_total{environment=\"production\"}[30d])) > 0)",
+      "sample_promql": "sum(increase(api_requests_total{environment=\"production\"}[30d]))",
+      "reading": "0.000043862772054970154",
+      "reading_numeric": 4.3862772054970154e-05,
+      "sample_count": 478824.2071111143,
+      "sample_minimum": 10000,
+      "sample_sufficient": true,
+      "meets_target": true,
+      "passes": true
+    },
+    "SLO-AI-01": {
+      "promql": "histogram_quantile(0.95, sum by (le) (rate(chat_stream_first_byte_seconds_bucket{environment=\"production\"}[30d]))) * 1000",
+      "sample_promql": "sum(increase(chat_stream_first_byte_seconds_count{environment=\"production\"}[30d]))",
+      "reading": "344.9931676533734",
+      "reading_numeric": 344.9931676533734,
+      "sample_count": 10052.09855410385,
+      "sample_minimum": 100,
+      "sample_sufficient": true,
+      "meets_target": true,
+      "passes": true
+    },
+    "SLO-BUS-01": {
+      "promql": "(1 - ((sum(increase(neurobus_events_dead_lettered_total{environment=\"production\"}[30d])) or vector(0)) + (sum(increase(neurobus_events_lost_total{environment=\"production\"}[30d])) or vector(0))) / (sum(increase(neurobus_events_published_total{environment=\"production\"}[30d])) > 0))",
+      "sample_promql": "sum(increase(neurobus_events_published_total{environment=\"production\"}[30d]))",
+      "reading": "0.9799690704832728",
+      "reading_numeric": 0.9799690704832728,
+      "sample_count": 4660149.968460466,
+      "sample_minimum": 1000,
+      "sample_sufficient": true,
+      "meets_target": false,
+      "passes": false
+    },
+    "SLO-BIZ-01": {
+      "promql": "histogram_quantile(0.95, sum by (le) (rate(customer_op_duration_seconds_bucket{environment=\"production\"}[30d]))) * 1000",
+      "sample_promql": "sum(increase(customer_op_duration_seconds_count{environment=\"production\"}[30d]))",
+      "reading": null,
+      "reading_numeric": null,
+      "sample_count": null,
+      "sample_minimum": 100,
+      "sample_sufficient": false,
+      "meets_target": null,
+      "passes": false
+    },
+    "SLO-BIZ-02": {
+      "promql": "(sum(increase(customer_op_total{environment=\"production\",status=\"error\"}[30d])) or vector(0)) / (sum(increase(customer_op_total{environment=\"production\"}[30d])) > 0)",
+      "sample_promql": "sum(increase(customer_op_total{environment=\"production\"}[30d]))",
+      "reading": null,
+      "reading_numeric": null,
+      "sample_count": null,
+      "sample_minimum": 100,
+      "sample_sufficient": false,
+      "meets_target": null,
+      "passes": false
+    },
+    "SLO-BIZ-03": {
+      "promql": "histogram_quantile(0.95, sum by (le) (rate(doc_recognition_duration_seconds_bucket{environment=\"production\"}[30d]))) * 1000",
+      "sample_promql": "sum(increase(doc_recognition_duration_seconds_count{environment=\"production\"}[30d]))",
+      "reading": null,
+      "reading_numeric": null,
+      "sample_count": null,
+      "sample_minimum": 30,
+      "sample_sufficient": false,
+      "meets_target": null,
+      "passes": false
+    },
+    "SLO-BIZ-04": {
+      "promql": "histogram_quantile(0.95, sum by (le) (rate(export_task_duration_seconds_bucket{environment=\"production\"}[30d]))) * 1000",
+      "sample_promql": "sum(increase(export_task_duration_seconds_count{environment=\"production\"}[30d]))",
+      "reading": null,
+      "reading_numeric": null,
+      "sample_count": null,
+      "sample_minimum": 30,
+      "sample_sufficient": false,
+      "meets_target": null,
+      "passes": false
+    },
+    "SLO-BIZ-05": {
+      "promql": "(1 - (sum(increase(mod_install_total{environment=\"production\",device_scope=\"external_customer\",status=\"error\"}[30d])) or vector(0)) / (sum(increase(mod_install_total{environment=\"production\",device_scope=\"external_customer\"}[30d])) > 0))",
+      "sample_promql": "sum(increase(mod_install_total{environment=\"production\",device_scope=\"external_customer\"}[30d]))",
+      "reading": "1",
+      "reading_numeric": 1.0,
+      "sample_count": 11616.067222611242,
+      "sample_minimum": 6,
+      "sample_sufficient": true,
+      "meets_target": true,
+      "passes": true
+    }
+  },
+  "previous_chain_hash": "0882468dad1cd54e388269c91ca3909418f96d8d8076e71ba4853b34ba1f02c6",
+  "evidence_hash": "e724bfd65d9451ff09c3e8ad2eebe77da0a4f0a56283452ad8ae062a4283998d",
+  "chain_hash": "80843f694f88a898a38daa42d48c474cc2d9a1146ee7a0e1173bec61e098868c",
+  "all_pass": false
+}

@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../platform/credential_cipher.dart';
+import '../security/relay_e2ee.dart';
 import '../data/service_topology_ssot.dart';
 import '../policy/mobile_runtime_policy.dart';
 import 'mobile_models.dart';
 import 'mobile_session_store.dart';
+import 'encrypted_session_store.dart';
 
 export '../data/service_topology_ssot.dart';
 
@@ -44,13 +46,18 @@ abstract class _ApiRootBase {
     HttpClient? httpClient,
     PlatformCredentialCipher? credentialCipher,
   })  : _config = config,
-        _sessionStore = sessionStore ?? FileMobileSessionStore(),
         _httpClient = httpClient ?? HttpClient(),
         _credentialCipher =
-            credentialCipher ?? const PlatformCredentialCipher();
+            credentialCipher ?? const PlatformCredentialCipher() {
+    _sessionStore = sessionStore ??
+        EncryptedMobileSessionStore(
+          FileMobileSessionStore(),
+          cipher: _credentialCipher,
+        );
+  }
 
   final MobileApiConfig _config;
-  final MobileSessionStore _sessionStore;
+  late final MobileSessionStore _sessionStore;
   final HttpClient _httpClient;
   final PlatformCredentialCipher _credentialCipher;
   final StreamController<MobileSessionData> _sessionChanges =

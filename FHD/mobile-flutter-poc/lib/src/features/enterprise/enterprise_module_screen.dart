@@ -7,7 +7,6 @@ class EnterpriseModuleScreen extends StatelessWidget {
   const EnterpriseModuleScreen({
     super.key,
     required this.title,
-    required this.status,
     required this.actionText,
     this.onAction,
   });
@@ -15,7 +14,6 @@ class EnterpriseModuleScreen extends StatelessWidget {
   factory EnterpriseModuleScreen.smartAnalysis({VoidCallback? onAction}) {
     return EnterpriseModuleScreen(
       title: '智慧分析',
-      status: '手机端已收敛为会话入口',
       actionText: '回到消息',
       onAction: onAction,
     );
@@ -24,7 +22,6 @@ class EnterpriseModuleScreen extends StatelessWidget {
   factory EnterpriseModuleScreen.aiOpen({VoidCallback? onAction}) {
     return EnterpriseModuleScreen(
       title: '开放智控',
-      status: '请在电脑端企业模块中使用',
       actionText: '返回',
       onAction: onAction,
     );
@@ -33,7 +30,6 @@ class EnterpriseModuleScreen extends StatelessWidget {
   factory EnterpriseModuleScreen.brain({VoidCallback? onAction}) {
     return EnterpriseModuleScreen(
       title: '智脑集成',
-      status: '员工编排由企业端模块承载',
       actionText: '打开能力库',
       onAction: onAction,
     );
@@ -42,14 +38,12 @@ class EnterpriseModuleScreen extends StatelessWidget {
   factory EnterpriseModuleScreen.modStore({VoidCallback? onAction}) {
     return EnterpriseModuleScreen(
       title: '能力库',
-      status: '安装与授权由企业端和管理端统一管理',
       actionText: '查看企业模块',
       onAction: onAction,
     );
   }
 
   final String title;
-  final String status;
   final String actionText;
   final VoidCallback? onAction;
 
@@ -84,16 +78,6 @@ class EnterpriseModuleScreen extends StatelessWidget {
                         fontSize: 24,
                         height: 1.25,
                         fontWeight: FontWeight.w600,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      status,
-                      style: TextStyle(
-                        color: colors.textSecondary,
-                        fontSize: 15,
-                        height: 1.4,
                         letterSpacing: 0,
                       ),
                     ),

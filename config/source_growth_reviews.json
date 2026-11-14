@@ -135,10 +135,10 @@
     },
     "FHD/app/application/agent_orchestrator/tool_permission.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_permission.py",
-      "base_blob": "8efcf3449ffff3e6206bd3cd8ced3f5bd2a3736a",
-      "head_blob": "3bf86365f110f434ac4226395cfd37c01e9d92ac",
-      "before_lines": 1103,
-      "after_lines": 1120,
+      "base_blob": "30af3a3fad9ac8cabfb72201a101ada1d66ef85b",
+      "head_blob": "82a6469e1c22296d1b1d3fa08d98c9217edd5da3",
+      "before_lines": 1108,
+      "after_lines": 1111,
       "reason": "Review request only: Seal workspace_root from server configuration, reject injected approval/bulk-preview/mutation controls, and require product.view for business_db product reads.",
       "boundary": "Execution-context authority filtering and action-specific permission selection only; payload fields never establish authority.",
       "validation": "Validation scope: Forged-context, workspace rebinding, product permission and persisted-run authorization tests. Full integration CI and human architecture review remain outstanding; this request is not approval.",
@@ -323,6 +323,18 @@
       "boundary": "Drawing-bound and sent-cell validation helpers only, with no new API, authorization bypass, extraction fallback or implicit classification acceptance. Existing full drawing selection validation still runs.",
       "validation": "29 drawing regression tests and context-only scope regression independently passed on 25ccc86d; full template regression and exact-head CI are required before merge.",
       "follow_up": "Human architecture review of this exact bounded growth is still required. This record requests review, does not grant approval, and does not weaken the original cell/drawing scope checks.",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/fastapi_routes/mobile_api_extensions.py": {
+      "base_file": "FHD/app/fastapi_routes/mobile_api_extensions.py",
+      "base_blob": "9eb3caec9d6d55cd43c03a45218c6165504d712a",
+      "head_blob": "e009f703fdff6658e87b4ccda41e167e1da8dc70",
+      "before_lines": 759,
+      "after_lines": 909,
+      "reason": "Review request only: register the mobile unified-task, desktop-device heartbeat and end-to-end encrypted relay routers in the existing mobile extension assembly module.",
+      "boundary": "Route assembly and late-bound port callbacks only; task, device and encryption behavior live in dedicated mobile_extensions and shared_services modules. Authentication and tenant scoping are unchanged.",
+      "validation": "512 relay and mobile route tests passed, including encrypted roundtrip, ciphertext-at-rest, desktop heartbeat and plaintext rejection; Flutter analyze has no errors. Full integration CI and human architecture review remain outstanding; this request is not approval.",
+      "follow_up": "Split the mobile extension assembly into per-domain registries in the next structure pass instead of accumulating more registrations here.",
       "review_owner": "@42433422"
     }
   }

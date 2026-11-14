@@ -6,8 +6,10 @@ import pytest
 
 from app.application.agent_orchestrator.business_harness import (
     BUSINESS_HARNESS_PROTOCOL,
+    attach_visible_business_result_to_chat_payload,
     ensure_business_harness_context,
     ensure_terminal_business_result,
+    visible_chat_business_result,
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.application.agent_orchestrator.task_context import apply_task_context
@@ -429,3 +431,107 @@ def test_statistics_receipt_exposes_actual_rows_and_amount_without_recalculation
     text = _message_for_result({"status": "completed", "facts": facts}, "")
     assert "明细行数: 2" in text or "明细行数：2" in text
     assert "200" in text
+
+
+def test_visible_chat_business_result_hides_completed_casual_turns() -> None:
+    assert (
+        visible_chat_business_result(
+            {
+                "protocol": BUSINESS_HARNESS_PROTOCOL,
+                "status": "completed",
+                "success": True,
+                "summary": "你好",
+                "facts": {},
+            }
+        )
+        is None
+    )
+
+
+def test_visible_chat_business_result_keeps_facts_failures_and_pending() -> None:
+    facts = visible_chat_business_result(
+        {"status": "completed", "summary": "客户创建成功", "facts": {"customer_id": 23}}
+    )
+    assert facts is not None and facts["facts"]["customer_id"] == 23
+    failed = visible_chat_business_result({"status": "failed", "summary": "写入失败", "facts": {}})
+    assert failed is not None and failed["status"] == "failed"
+    pending = visible_chat_business_result(
+        {"status": "pending_approval", "pending_approval": True, "summary": "等待审批", "facts": {}}
+    )
+    assert pending is not None and pending["pending_approval"] is True
+
+
+def test_attach_visible_business_result_uses_payload_or_saved_run() -> None:
+    payload = attach_visible_business_result_to_chat_payload(
+        {
+            "success": True,
+            "response": "客户创建成功",
+            "business_result": {
+                "status": "completed",
+                "summary": "客户创建成功",
+                "facts": {"customer_id": 23},
+            },
+        }
+    )
+    assert payload["businessResult"]["facts"]["customer_id"] == 23
+
+    casual = attach_visible_business_result_to_chat_payload(
+        {
+            "success": True,
+            "response": "你好",
+            "run_id": "run-casual",
+            "business_result": {"status": "completed", "summary": "你好", "facts": {}},
+        }
+    )
+    assert "businessResult" not in casual
+
+    run = AgentRun(user_id="7", message="新增客户", status="completed")
+    run.run_id = "run-facts"
+    run.final_output = {
+        "business_result": {
+            "protocol": BUSINESS_HARNESS_PROTOCOL,
+            "status": "completed",
+            "summary": "客户创建成功",
+            "facts": {"customer_id": 23},
+        }
+    }
+    repo = Mock()
+    repo.get.return_value = run
+    attached = attach_visible_business_result_to_chat_payload(
+        {"success": True, "response": "完成", "run_id": "run-facts"},
+        repository=repo,
+    )
+    assert attached["businessResult"]["facts"]["customer_id"] == 23
+    repo.get.assert_called_once_with("run-facts")
+
+
+def test_visible_chat_business_result_keeps_summary_only_tool_completions() -> None:
+    visible = visible_chat_business_result(
+        {
+            "status": "completed",
+            "summary": "已删除",
+            "facts": {},
+            "evidence": {"completed_tool_count": 1},
+        }
+    )
+    assert visible is not None and visible["summary"] == "已删除"
+
+
+def test_visible_chat_business_result_keeps_summary_only_toolcall_payloads() -> None:
+    visible = visible_chat_business_result(
+        {"status": "completed", "summary": "已删除", "facts": {}},
+        payload={"success": True, "toolCall": {"tool_id": "customers", "action": "delete"}},
+    )
+    assert visible is not None and visible["summary"] == "已删除"
+
+
+def test_attach_visible_business_result_keeps_failed_terminal_payload() -> None:
+    payload = attach_visible_business_result_to_chat_payload(
+        {
+            "success": False,
+            "message": "写入失败",
+            "businessResult": {"status": "failed", "summary": "写入失败", "facts": {}},
+        }
+    )
+    assert payload["businessResult"]["status"] == "failed"
+    assert payload["success"] is False

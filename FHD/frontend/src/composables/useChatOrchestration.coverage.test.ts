@@ -49,6 +49,7 @@ const {
   mockAttachWorkflowTrace,
   mockAttachContextSummary,
   mockAttachApprovalCard,
+  mockAttachBusinessResult,
   mockHydrateTaskOrderNumber,
   mockEnrichShipmentPreviewProducts,
   mockHandleShipmentModify,
@@ -99,6 +100,7 @@ const {
   mockAttachWorkflowTrace: vi.fn(),
   mockAttachContextSummary: vi.fn(),
   mockAttachApprovalCard: vi.fn(),
+  mockAttachBusinessResult: vi.fn(),
   mockHydrateTaskOrderNumber: vi.fn().mockResolvedValue(undefined),
   mockEnrichShipmentPreviewProducts: vi.fn().mockResolvedValue(undefined),
   mockHandleShipmentModify: vi.fn().mockResolvedValue(false),
@@ -314,6 +316,7 @@ vi.mock('./useChatResponseAttach', () => ({
     attachTodoStepsToLastAiMessage: mockAttachTodoSteps,
     attachWorkflowTraceToLastAiMessage: mockAttachWorkflowTrace,
     attachApprovalCardToLastAiMessage: mockAttachApprovalCard,
+    attachBusinessResultToLastAiMessage: mockAttachBusinessResult,
     attachContextSummaryToLastAiMessage: mockAttachContextSummary,
     syncTaskFromChatResponse: mockSyncTaskFromChatResponse,
   }),
@@ -1313,6 +1316,26 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
     })
   })
 
+  it('批量成功时把各部分业务结果挂到对应消息', async () => {
+    const first = { status: 'completed', summary: '客户创建成功', facts: { customer_id: 23 } }
+    const second = { status: 'completed', summary: '已删除', evidence: { completed_tool_count: 1 } }
+    mockRequestChatByModeBatchWithTimeout.mockResolvedValue({
+      success: true,
+      batch: true,
+      results: [
+        { success: true, response: 'part-1', businessResult: first },
+        { success: true, response: 'part-2', businessResult: second },
+      ],
+    })
+    const api = createApi()
+    await api.sendMessage('批量')
+    await vi.waitFor(() => {
+      expect(mockAddMessage).toHaveBeenCalledWith('part-1', 'ai', expect.objectContaining({ businessResult: first }), expect.any(Object))
+      expect(mockAddMessage).toHaveBeenCalledWith('part-2', 'ai', expect.objectContaining({ businessResult: second }), expect.any(Object))
+    })
+    expect(mockAttachBusinessResult.mock.calls.map((call) => call[0].businessResult)).toEqual([first, second])
+  })
+
   it('批量整体失败', async () => {
     mockRequestChatByModeBatchWithTimeout.mockResolvedValue({
       success: false,
@@ -1418,6 +1441,24 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     const api = createApi()
     await api.sendMessage('普通')
     expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('处理出错'), 'ai', { turnId: expect.any(String), workflowAction: 'failed' }, expect.any(Object))
+  })
+
+  it('单条失败仍挂载终态业务结果', async () => {
+    const businessResult = { status: 'failed', summary: '写入失败', facts: {} }
+    mockRequestChatByModeWithTimeout.mockResolvedValue({
+      success: false,
+      message: '写入失败',
+      businessResult,
+    })
+    const api = createApi()
+    await api.sendMessage('普通')
+    expect(mockAddMessage).toHaveBeenCalledWith(
+      expect.stringContaining('写入失败'),
+      'ai',
+      expect.objectContaining({ workflowAction: 'failed', businessResult }),
+      expect.any(Object),
+    )
+    expect(mockAttachBusinessResult).toHaveBeenCalledWith(expect.objectContaining({ success: false, businessResult }))
   })
 
   it('单条请求抛出异常', async () => {

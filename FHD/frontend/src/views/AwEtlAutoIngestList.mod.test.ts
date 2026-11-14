@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
-import AwEtlAutoIngestList from '../../../mods/xcagi-approval-bridge/frontend/views/approval-workspace/AwEtlAutoIngestList.vue'
+import AwEtlAutoIngestList from '../../../mods/bridge/xcagi-approval-bridge/frontend/views/approval-workspace/AwEtlAutoIngestList.vue'
 
 const { autoIngestBatches, withdrawAutoIngestBatch, appConfirm } = vi.hoisted(() => ({
   appConfirm: vi.fn(),

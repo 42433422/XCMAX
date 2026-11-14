@@ -86,7 +86,7 @@ class _AiGroupCreateScreenState extends State<AiGroupCreateScreen> {
                       Expanded(
                         child: _candidates.isEmpty
                             ? const Center(
-                                child: Text('暂无可选 AI 员工，先在「AI员工」里同步'),
+                                child: Text('暂无可用 AI 员工'),
                               )
                             : ListView.separated(
                                 itemCount: _candidates.length,
@@ -167,7 +167,7 @@ class _AiGroupCreateScreenState extends State<AiGroupCreateScreen> {
       setState(() => _creating = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(mobileErrorText(error))));
     }
   }
 }

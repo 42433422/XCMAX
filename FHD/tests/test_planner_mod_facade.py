@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-planner-bridge"
+MOD_DIR = REPO / "mods" / "bridge" / "xcagi-planner-bridge"
 
 
 def test_planner_mod_manifest_facade():

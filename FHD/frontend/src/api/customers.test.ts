@@ -3,7 +3,7 @@ import { customersApi } from './customers'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { useCustomers } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/customers/useCustomers'
+import { useCustomers } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/customers/useCustomers'
 
 vi.mock('./core', () => ({
   api: {

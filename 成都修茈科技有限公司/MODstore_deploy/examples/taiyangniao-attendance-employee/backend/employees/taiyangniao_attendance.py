@@ -179,17 +179,17 @@ def _candidate_backend_dirs(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Lis
         out.append(Path(str(explicit)).expanduser())
     if repo_root:
         r = Path(repo_root).expanduser()
-        out.append(r / "mods" / "taiyangniao-pro" / "backend")
+        out.append(r / "mods" / "industry" / "taiyangniao-pro" / "backend")
         out.append(r / "XCAGI" / "mods" / "taiyangniao-pro" / "backend")
     for root in roots:
         if not root:
             continue
         r = Path(str(root)).expanduser()
-        out.append(r / "mods" / "taiyangniao-pro" / "backend")
+        out.append(r / "mods" / "industry" / "taiyangniao-pro" / "backend")
         out.append(r / "XCAGI" / "mods" / "taiyangniao-pro" / "backend")
     for parent in here.parents:
-        out.append(parent / "mods" / "taiyangniao-pro" / "backend")
-        out.append(parent / "FHD" / "mods" / "taiyangniao-pro" / "backend")
+        out.append(parent / "mods" / "industry" / "taiyangniao-pro" / "backend")
+        out.append(parent / "FHD" / "mods" / "industry" / "taiyangniao-pro" / "backend")
     dedup: List[Path] = []
     seen = set()
     for p in out:
@@ -262,7 +262,7 @@ def _offline_help(payload: Dict[str, Any]) -> Dict[str, Any]:
         "template_relpath": DEFAULT_TEMPLATE_RELPATH,
         "use_personnel_roster": True,
         "workspace_root": "e:/FHD",
-        "taiyangniao_backend_path": "e:/FHD/mods/taiyangniao-pro/backend",
+        "taiyangniao_backend_path": "e:/FHD/mods/industry/taiyangniao-pro/backend",
     }
     return _ok(
         {
@@ -328,7 +328,7 @@ async def _convert(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, An
         return _err(
             "无法导入太阳鸟 pro 转换模块：" + str(exc),
             warnings=[
-                "可通过 payload.taiyangniao_backend_path 指定 e:/FHD/mods/taiyangniao-pro/backend。"
+                "可通过 payload.taiyangniao_backend_path 指定 e:/FHD/mods/industry/taiyangniao-pro/backend。"
             ],
             meta={
                 "handler": "direct_python",

@@ -11,6 +11,7 @@ import '../policy/pinned_ids.dart';
 import 'ai_employee_profile.dart';
 import 'duty_roster_ssot.dart';
 import 'employee_pending_question.dart';
+import 'offline/mobile_offline_store.dart';
 import '../im/im_websocket_client.dart';
 
 part 'mobile_repository_session.part.dart';
@@ -28,7 +29,6 @@ part 'mobile_repository_helpers_format.part.dart';
 part 'mobile_repository_conversation_state.part.dart';
 part 'mobile_repository_extensions.part.dart';
 
-const _badgeInstalledColor = 0xFF3370FF;
 const _xcmaxDefaultWorkspaceRoot = '/Users/a4243342/Desktop/XCMAX';
 
 class MobileRepository extends _RepoBusinessBase {
@@ -54,6 +54,19 @@ abstract class _RepoRootBase {
 
   MobileApiClient get client => _client;
   bool get imWebSocketConnected => _imWebSocket.connected;
+
+  MobileOfflineStore? _offlineStore;
+
+  /// SQLite 离线库不可用时返回 null，调用方回落到会话 JSON，保证老设备仍可启动。
+  Future<MobileOfflineStore?> openOfflineStore() async {
+    final cached = _offlineStore;
+    if (cached != null) return cached;
+    try {
+      return _offlineStore = await MobileOfflineStore.open();
+    } catch (_) {
+      return null;
+    }
+  }
   Stream<Map<String, Object?>> get imWebSocketEvents => _imWebSocket.events;
   ImWsConnectionState get imWebSocketState => _imWebSocket.state;
   Stream<ImWsConnectionState> get imWebSocketStates => _imWebSocket.states;
