@@ -23,8 +23,11 @@ def _legacy_database(url, *, already_sliced=False):
         else "CONSTRAINT uq_etl_run_source_row UNIQUE (run_id,source_sheet,source_row)"
     )
     with engine.begin() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        connection.exec_driver_sql("CREATE TABLE etl_runs (id TEXT PRIMARY KEY)")
+        connection.exec_driver_sql("INSERT INTO etl_runs (id) VALUES ('run')")
         connection.exec_driver_sql(
-            "CREATE TABLE etl_run_rows (id INTEGER PRIMARY KEY,run_id TEXT NOT NULL,"
+            "CREATE TABLE etl_run_rows (id INTEGER PRIMARY KEY,run_id TEXT NOT NULL REFERENCES etl_runs(id),"
             "tenant_id INTEGER NOT NULL,owner_user_id INTEGER NOT NULL,source_sheet TEXT NOT NULL,"
             "source_row INTEGER NOT NULL,source_json TEXT NOT NULL,provenance_json TEXT NOT NULL,"
             "legacy_audit TEXT NOT NULL," + slice_column + constraint + ")"
@@ -72,10 +75,14 @@ def test_forward_upgrade_preserves_every_legacy_field_and_accepts_distinct_slice
         }
         assert "uq_etl_run_source_row" not in uniques
         assert "uq_etl_run_source_slice" in uniques
+        foreign_keys = sa.inspect(connection).get_foreign_keys("etl_run_rows")
+        assert foreign_keys[0]["referred_table"] == "etl_runs"
         insert = "INSERT INTO etl_run_rows (id,run_id,tenant_id,owner_user_id,source_sheet,source_row,source_json,provenance_json,legacy_audit,source_slice) VALUES (:id,'run',17,21,'原表',2,'{}','{}','new',:slice)"
         connection.execute(sa.text(insert), {"id": 3, "slice": 1})
         with pytest.raises(IntegrityError), connection.begin_nested():
             connection.execute(sa.text(insert), {"id": 4, "slice": 1})
+        with pytest.raises(IntegrityError), connection.begin_nested():
+            connection.execute(sa.text(insert.replace("'run'", "'missing'")), {"id": 5, "slice": 2})
         assert connection.exec_driver_sql("SELECT count(*) FROM etl_run_rows").scalar_one() == 3
         assert (
             connection.exec_driver_sql(
