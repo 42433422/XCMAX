@@ -272,7 +272,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             FHD/requirements-server-api.txt
-            FHD/deploy/requirements-dev.txt
+            FHD/ops/deploy/requirements-dev.txt
             FHD/uv.lock
             FHD/pyproject.toml
             FHD/packages/**/pyproject.toml
@@ -284,7 +284,7 @@ jobs:
           pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
           [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
           uv --version
-          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r deploy/requirements-dev.txt "$pytest_pin"
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"
           uv pip check --system --python "$(command -v python)"
 
       - name: Set up the real private Mod frontend compiler
@@ -399,7 +399,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             FHD/requirements-server-api.txt
-            FHD/deploy/requirements-dev.txt
+            FHD/ops/deploy/requirements-dev.txt
             FHD/uv.lock
             FHD/pyproject.toml
             FHD/packages/**/pyproject.toml
@@ -410,7 +410,7 @@ jobs:
           pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
           [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
           uv --version
-          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r deploy/requirements-dev.txt "$pytest_pin"
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"
           uv pip check --system --python "$(command -v python)"
           python -m pip list --format=json > dependency-versions.json
 
@@ -799,13 +799,22 @@ jobs:
 
       # 2026-09-10 #1851 复审：apt 外部源（Google Chrome 等）曾出现 Hash Sum
       # mismatch 导致 P0 E2E 被环境阻断。整改：浏览器二进制走 Playwright CDN
-      # 并缓存；系统依赖（apt）有限重试 3 次（清列表换索引），最终失败必须
       # 让 job 红掉并保留日志——禁止 || true 或跳过当修复。
       - name: Install Playwright system deps (bounded retry)
         working-directory: FHD/frontend
         run: |
           set -uo pipefail
           rc=1
+          use_public_dns() {
+            echo "::warning::Ubuntu archive did not resolve; using 8.8.8.8 and 1.1.1.1"
+            sudo mkdir -p /etc/systemd/resolved.conf.d
+            printf '[Resolve]\nDNS=8.8.8.8 1.1.1.1\n' | sudo tee /etc/systemd/resolved.conf.d/ci-dns.conf >/dev/null
+            sudo systemctl restart systemd-resolved || true
+            getent hosts archive.ubuntu.com >/dev/null && return 0
+            printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' | sudo tee /etc/resolv.conf >/dev/null
+          }
+          sudo find /etc/apt -type f -exec sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g' {} + || true
+          getent hosts archive.ubuntu.com >/dev/null || use_public_dns
           for attempt in 1 2 3; do
             echo "[deps] attempt ${attempt}/3"
             if npx playwright install-deps chromium; then
@@ -815,6 +824,8 @@ jobs:
             echo "::warning::playwright install-deps attempt ${attempt} failed; refreshing apt lists"
             sudo apt-get clean || true
             sudo rm -rf /var/lib/apt/lists/*
+            sudo find /etc/apt -type f -exec sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g' {} + || true
+            getent hosts archive.ubuntu.com >/dev/null || use_public_dns
             sudo apt-get update
           done
           if [ "$rc" -ne 0 ]; then
@@ -970,7 +981,7 @@ jobs:
             --expected-git-sha "${XCAGI_RELEASE_SHA}"
 
       - name: Build image for scanning
-        run: docker build --target production -f docker/Dockerfile.fhd-api -t xcagi-ci-scan:local .
+        run: docker build --target production -f ops/docker/Dockerfile.fhd-api -t xcagi-ci-scan:local .
 
       - name: Smoke test production image
         run: |
@@ -1121,7 +1132,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: FHD
-          file: FHD/docker/Dockerfile.fhd-api
+          file: FHD/ops/docker/Dockerfile.fhd-api
           push: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v') }}
           tags: ${{ steps.meta_fhd.outputs.tags }}
           labels: ${{ steps.meta_fhd.outputs.labels }}
@@ -1387,7 +1398,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             FHD/requirements-server-api.txt
-            FHD/deploy/requirements-dev.txt
+            FHD/ops/deploy/requirements-dev.txt
             FHD/uv.lock
             FHD/pyproject.toml
             FHD/packages/**/pyproject.toml
@@ -1405,7 +1416,7 @@ jobs:
           pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
           [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
           uv --version
-          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r deploy/requirements-dev.txt "$pytest_pin"
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"
           uv pip check --system --python "$(command -v python)"
 
       - name: Install frontend deps

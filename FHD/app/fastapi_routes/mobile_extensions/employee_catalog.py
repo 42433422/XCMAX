@@ -132,6 +132,15 @@ class EmployeeCatalog:
                             ),
                         }
                     if mid:
+                        try:
+                            from app.enterprise.mod_entitlements import (
+                                is_mod_visible_for_enterprise,
+                            )
+
+                            if not is_mod_visible_for_enterprise(mid):
+                                continue
+                        except RECOVERABLE_ERRORS:
+                            continue
                         items.append(item)
                 ports.upsert_admin_duty_mod_item(
                     items, market_profiles, market_connected=market_connected

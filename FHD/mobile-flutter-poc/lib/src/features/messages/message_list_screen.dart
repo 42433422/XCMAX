@@ -16,6 +16,8 @@ import '../cs/cs_chat_screen.dart';
 import '../discover/discover_screen.dart';
 import '../groups/ai_group_screens.dart';
 import '../scan/scan_qr_screen.dart';
+import '../tasks/task_list_screen.dart';
+import '../../policy/mobile_error_policy.dart';
 
 // 按职责拆分为 part 文件：页面 State、首页头部/空态、会话排序工具与行内组件组。
 part 'message_list_screen_state.part.dart';
@@ -73,15 +75,12 @@ class GroupConversationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     final textTheme = Theme.of(context).textTheme;
-    final preview = _textOrFallback(
-      group.preview,
-      group.memberCount == 0
-          ? '还没有成员，进群把 AI 拉进来'
-          : '${group.memberCount} 个 AI 成员在群里',
-    );
+    final preview = group.preview.trim();
 
     return Material(
-      color: group.isPinned ? colors.surfaceHigh : colors.surface,
+      color: group.isPinned
+          ? colors.brand.withValues(alpha: 0.08)
+          : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
@@ -176,7 +175,9 @@ class ConversationRowTile extends StatelessWidget {
     final colors = AppTheme.colors(context);
     final textTheme = Theme.of(context).textTheme;
     final hasUnread = item.unreadCount > 0;
-    final background = item.isPinned ? colors.surfaceHigh : colors.surface;
+    final background = item.isPinned
+        ? colors.brand.withValues(alpha: 0.08)
+        : Colors.transparent;
     final visibleBadge = _visibleConversationBadge(item);
     final titleColor = item.isHidden
         ? colors.textSecondary.withValues(alpha: 0.65)
@@ -214,6 +215,7 @@ class ConversationRowTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: textTheme.titleMedium?.copyWith(
                               color: titleColor,
+                              fontSize: 16.5,
                               fontWeight:
                                   hasUnread ? FontWeight.w700 : FontWeight.w600,
                             ),
@@ -256,6 +258,17 @@ class ConversationRowTile extends StatelessWidget {
                             color: item.badgeColor == null
                                 ? colors.weChatOnline
                                 : Color(item.badgeColor!),
+                          ),
+                        ],
+                        if (hasUnread) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: colors.brand,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ],
                       ],

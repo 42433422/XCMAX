@@ -154,7 +154,7 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(mobileProductErrorMessage(error.toString(), '点赞失败')),
+            content: Text(mobileErrorText(error, fallback: '点赞失败')),
           ),
         );
       }
@@ -169,7 +169,7 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(mobileProductErrorMessage(error.toString(), '评论失败')),
+            content: Text(mobileErrorText(error, fallback: '评论失败')),
           ),
         );
       }

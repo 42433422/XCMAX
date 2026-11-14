@@ -11,98 +11,11 @@ class _AuthLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: SizedBox(
-        width: 72,
-        height: 72,
-        child: Center(
-          child: Image.asset(
-            appLauncherForegroundAsset,
-            width: 50,
-            height: 50,
-            fit: BoxFit.contain,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AccountKindSegment extends StatelessWidget {
-  const _AccountKindSegment({required this.adminMode, required this.onChanged});
-
-  final bool adminMode;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surfaceHigh,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colors.divider, width: 0.5),
-      ),
-      padding: const EdgeInsets.all(4),
-      child: Row(
-        children: [
-          Expanded(
-            child: _AccountKindSegmentItem(
-              label: '服务器后台',
-              selected: adminMode,
-              onTap: () => onChanged(true),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: _AccountKindSegmentItem(
-              label: '企业工作台',
-              selected: !adminMode,
-              onTap: () => onChanged(false),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AccountKindSegmentItem extends StatelessWidget {
-  const _AccountKindSegmentItem({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        height: 36,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? colors.brand : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : colors.textSecondary,
-            fontSize: 14,
-            height: 1.29,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0,
-          ),
-        ),
-      ),
+    return Image.asset(
+      appLauncherForegroundAsset,
+      width: 140,
+      height: 104,
+      fit: BoxFit.contain,
     );
   }
 }

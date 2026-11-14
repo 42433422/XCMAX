@@ -43,7 +43,7 @@ def repository(tmp_path):
         "FHD/mods/_employees/employee-one",
         "FHD/mods/host-one",
         "FHD/XCAGI/mods/industry-one",
-        "FHD/mods/xcagi-customer-service-bridge",
+        "FHD/mods/bridge/xcagi-customer-service-bridge",
     ):
         write_mod(tmp_path, source)
     git(tmp_path, "add", "FHD")
@@ -55,8 +55,12 @@ def repository(tmp_path):
     "path,expected",
     [
         ("FHD/mods/_employees/worker/backend/nested/task.py", "FHD/mods/_employees/worker"),
-        ("FHD/mods/bridge/frontend/pages/index.vue", "FHD/mods/bridge"),
-        ("FHD/XCAGI/mods/industry/backend/routes.py", "FHD/XCAGI/mods/industry"),
+        ("FHD/mods/host-one/frontend/pages/index.vue", "FHD/mods/host-one"),
+        (
+            "FHD/mods/bridge/xcagi-lan-license-bridge/backend/routes.py",
+            "FHD/mods/bridge/xcagi-lan-license-bridge",
+        ),
+        ("FHD/XCAGI/mods/industry-one/backend/routes.py", "FHD/XCAGI/mods/industry-one"),
         ("FHD/mods/_employees/manifest.json", None),
         ("FHD/mods/../../secrets/file", None),
         ("unrelated/FHD/mods/test/source", None),
@@ -73,7 +77,7 @@ def test_exact_main_ancestor_and_all_source_roots(repository):
         "FHD/XCAGI/mods/industry-one",
     ):
         write_mod(repository, source, "1.0.1")
-    canonical = "FHD/mods/xcagi-customer-service-bridge"
+    canonical = "FHD/mods/bridge/xcagi-customer-service-bridge"
     write_mod(repository, canonical, "1.0.0.1")
     sha = commit_main(repository, "versioned fixes")
     git(repository, "commit", "--allow-empty", "-qm", "unrelated metrics")

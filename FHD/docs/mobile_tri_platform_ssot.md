@@ -8,7 +8,7 @@
 - **Flutter 统一前端（唯一交付主线）**：新移动页面、路由、状态、组件、缓存和移动端业务流程 **只** 落到 `FHD/mobile-flutter-poc`。
 - **Android / iOS 均从 Flutter 发版**：统一 CI 验证两端；Android 产出 APK/AAB，iOS 通过 TestFlight / App Store Connect 发布。
 - **独立原生工程已删除**：Kotlin、SwiftUI、HarmonyOS 产品实现及重复 CI 已退出活跃仓库；历史仅可从 Git 取证。
-- **OpenAPI 统一前后端契约**：`FHD/contracts/openapi.json` 是移动端与 FastAPI 后端之间的机器可读契约。Flutter 的 DTO/API client 应从 OpenAPI 或经裁剪的 mobile contract 派生，不允许手写一套与 OpenAPI 漂移的字段口径。
+- **OpenAPI 统一前后端契约**：`FHD/assets/contracts/openapi.json` 是移动端与 FastAPI 后端之间的机器可读契约。Flutter 的 DTO/API client 应从 OpenAPI 或经裁剪的 mobile contract 派生，不允许手写一套与 OpenAPI 漂移的字段口径。
 - **FastAPI 统一后端业务**：账号、权限、员工系统、聊天、SSE/WebSocket、支付、审批、同步、移动 relay、行业选择和数据写入都归 FastAPI 服务端实现；Flutter 只承载交互、展示、本地缓存和必要的端侧适配。
 - **KMM 暂停作为主线**：Flutter 已解决 Android 前端交付问题，不再规划 `mobile-shared` KMM 作为默认方向。
 - **设计 token 统一**：`FHD/config/mobile_design_tokens.json` 是移动 token 的机器可读口径；Flutter 是唯一消费主线。
@@ -22,7 +22,7 @@
 | Android Runner | `FHD/mobile-flutter-poc/android` | Manifest、平台通道、签名、APK/AAB |
 | iOS Runner | `FHD/mobile-flutter-poc/ios` | entitlements、平台通道、签名、IPA |
 | 入口文档 | [`guides/MOBILE_FLUTTER.md`](guides/MOBILE_FLUTTER.md) | 日常开发与发版说明 |
-| 前后端契约 | `FHD/contracts/openapi.json` | Flutter `lib/src/api/*` |
+| 前后端契约 | `FHD/assets/contracts/openapi.json` | Flutter `lib/src/api/*` |
 | 后端业务实现 | `FHD/app/fastapi_routes/mobile_api.py`、`FHD/app/fastapi_routes/mobile_api_extensions.py` 与 `/api/mobile/v1/*` | OpenAPI 导出、移动端 API client |
 | 设计 token | `FHD/config/mobile_design_tokens.json` | Flutter `lib/src/theme/*` |
 | 端侧性能指标 | 本文第 6 节指标名 | Flutter 埋点 |
@@ -44,7 +44,7 @@ Flutter 不负责：
 
 ## 3. OpenAPI 契约边界
 
-`FHD/contracts/openapi.json` 是移动端与后端之间的契约层。变更规则：
+`FHD/assets/contracts/openapi.json` 是移动端与后端之间的契约层。变更规则：
 
 1. 后端新增或修改移动接口，必须先让 FastAPI 路由进入 OpenAPI，并通过 OpenAPI 一致性检查。
 2. Flutter DTO/API client 从 OpenAPI 派生；手写模型只能作为临时过渡，必须在同次或后续明确任务中回收。
@@ -65,7 +65,7 @@ Flutter 只能缓存和展示服务端状态。出现端侧与服务端冲突时
 ### 准入门槛
 
 - Flutter：`cd FHD/mobile-flutter-poc && flutter pub get && flutter test`
-- OpenAPI：`cd FHD && python scripts/dev/export_openapi.py --output contracts/openapi.json && python scripts/tools/check_openapi_consistency.py`
+- OpenAPI：`cd FHD && python scripts/dev/export_openapi.py --output assets/contracts/openapi.json && python scripts/tools/check_openapi_consistency.py`
 - FastAPI mobile：`cd FHD && python -m pytest tests/test_routes/test_mobile_api_extensions_cov.py`
 - SSOT：`cd FHD && python scripts/dev/ssot_cli.py check mobile-tri-platform`
 
@@ -119,7 +119,7 @@ KMM 不再是移动统一默认路线。满足以下全部条件时，才允许�
 出现以下任一情况即视为移动统一 SSOT 漂移：
 
 - 新移动能力绕过 Flutter 主线，在 Runner 或新原生工程内新增产品流程。
-- Flutter API model 与 `FHD/contracts/openapi.json` 字段、路径、错误包络不一致。
+- Flutter API model 与 `FHD/assets/contracts/openapi.json` 字段、路径、错误包络不一致。
 - 可信业务逻辑落在 Flutter 端，导致服务端无法审计、复算或持久化。
 - Flutter 新增颜色、间距、字号，但 `mobile_design_tokens.json` 没有登记。
 - 性能事件命名绕过第 6 节指标表。

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-customer-service-bridge"
+MOD_DIR = REPO / "mods" / "bridge" / "xcagi-customer-service-bridge"
 
 
 def test_customer_service_manifest_pages():

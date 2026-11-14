@@ -273,49 +273,52 @@ class TestBuildProductRow:
         assert row["price"] == Decimal("99.00")  # text 映射非 Decimal → 兜底
 
 
-# ── _resolve_mod_manifest_root ────────────────────────────────────────────
+# ── _resolve_mod_dir ──────────────────────────────────────────────────────
 
 
-class TestResolveModManifestRoot:
-    """覆盖 _resolve_mod_manifest_root 双路径 fallback 逻辑。
+class TestResolveModDir:
+    """覆盖 _resolve_mod_dir 双根 + 分层 fallback 逻辑。
 
     铁律 3 禁止只测 happy path；铁律 6 分支覆盖 ≠ 行覆盖。
     真实集成测试：用 FHD/mods/ 与 FHD/XCAGI/mods/ 真实目录（不 mock 被测函数）。
     """
 
-    def test_mod_in_fhd_mods_returns_fhd_mods(self):
-        """coating-industry 在 FHD/mods/ → 返回 FHD/mods 路径（编辑源优先）。"""
-        result = osm._resolve_mod_manifest_root("coating-industry")
+    def test_mod_in_fhd_mods_returns_layered_dir(self):
+        """coating-industry 在 FHD/mods/industry/ → 返回分层编辑源目录。"""
+        result = osm._resolve_mod_dir("coating-industry")
         assert result is not None
-        assert result.name == "mods"
-        assert result.parent.name == "FHD"
-        assert (result / "coating-industry" / "manifest.json").is_file()
+        assert result.name == "coating-industry"
+        assert result.parent.name == "industry"
+        assert result.parent.parent.name == "mods"
+        assert result.parent.parent.parent.name == "FHD"
+        assert (result / "manifest.json").is_file()
 
     def test_mod_only_in_xcagi_mods_returns_xcagi_mods(self):
-        """attendance-industry 已迁移至 XCAGI/mods/ → fallback 到 FHD/XCAGI/mods。
+        """attendance-industry 已迁移至 XCAGI/mods/ → fallback 到平铺导出副本。
 
         commit a34114a0a 的核心回归测试：FHD/mods/ 找不到时必须 fallback。
         """
-        result = osm._resolve_mod_manifest_root("attendance-industry")
+        result = osm._resolve_mod_dir("attendance-industry")
         assert result is not None
-        assert result.name == "mods"
-        assert result.parent.name == "XCAGI"
-        assert (result / "attendance-industry" / "manifest.json").is_file()
+        assert result.name == "attendance-industry"
+        assert result.parent.name == "mods"
+        assert result.parent.parent.name == "XCAGI"
+        assert (result / "manifest.json").is_file()
 
     def test_mod_not_found_returns_none(self):
         """两个候选路径都不存在 → 返回 None。"""
-        result = osm._resolve_mod_manifest_root("nonexistent-mod-xyz-99999")
+        result = osm._resolve_mod_dir("nonexistent-mod-xyz-99999")
         assert result is None
 
     def test_empty_mod_id_returns_none(self):
         """空 mod_id → 两个候选路径下 manifest.json 都不存在 → 返回 None。"""
-        result = osm._resolve_mod_manifest_root("")
+        result = osm._resolve_mod_dir("")
         assert result is None
 
     def test_load_industry_manifest_uses_fallback_for_attendance(self):
-        """load_industry_manifest 通过 _resolve_mod_manifest_root 找到 attendance-industry。
+        """load_industry_manifest 通过 _resolve_mod_dir 找到 attendance-industry。
 
-        验证 _resolve_mod_manifest_root 被 load_industry_manifest 正确调用（而非仅 _fhd_mods_root 单路径）。
+        验证 _resolve_mod_dir 被 load_industry_manifest 正确调用（而非仅 _fhd_mods_root 单路径）。
         这是 commit a34114a0a 的端到端回归测试。
         """
         baseline_path = (

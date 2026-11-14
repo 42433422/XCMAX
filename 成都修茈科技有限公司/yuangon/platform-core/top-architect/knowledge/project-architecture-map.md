@@ -33,7 +33,7 @@ FHD 采用 Neuro-DDD 思路：表现层、应用层、领域层、基础设施�
 | ---------------- | ----------------------------------------------------------------------------------------- |
 | 移动统一策略     | `FHD/docs/mobile_tri_platform_ssot.md`                                                    |
 | Flutter 主实现   | `FHD/mobile-flutter-poc/**`                                                               |
-| 契约             | `FHD/contracts/openapi.json`                                                              |
+| 契约             | `FHD/assets/contracts/openapi.json`                                                              |
 | FastAPI 移动接口 | `FHD/app/fastapi_routes/mobile_api.py`、`FHD/app/fastapi_routes/mobile_api_extensions.py` |
 | Flutter 收敛边界 | `FHD/mobile-flutter-poc/FLUTTER_UNIFICATION.md`                                           |
 
@@ -81,7 +81,7 @@ MODstore 是 Mod、AI 员工包、工作流、支付/钱包/权益的平台。�
 | 项目状态  | `FHD/docs/PROJECT_STATE.md`            |
 | 员工编制  | `FHD/config/duty_roster.json`          |
 | 移动统一  | `FHD/docs/mobile_tri_platform_ssot.md` |
-| OpenAPI   | `FHD/contracts/openapi.json`           |
+| OpenAPI   | `FHD/assets/contracts/openapi.json`           |
 | 事件契约  | `FHD/config/neuro_bus_events.yaml`     |
 | 账号体系  | `FHD/docs/account_system_ssot.md`      |
 | 版本      | `FHD/VERSION.md`                       |

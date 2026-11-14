@@ -56,9 +56,9 @@ jobs:
           remote="${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}"
           ssh "${ssh_opts[@]}" "$remote" "install -d -m 700 '${remote_dir}'"
           scp "${ssh_opts[@]}" \
-            monitoring/prometheus.production.yml \
-            monitoring/production-alerts.yml \
-            monitoring/alertmanager.production.yml \
+            ops/monitoring/prometheus.production.yml \
+            ops/monitoring/production-alerts.yml \
+            ops/monitoring/alertmanager.production.yml \
             scripts/observability/ensure_production_prometheus.sh \
             scripts/observability/install_production_prometheus_config.sh \
             scripts/observability/run_alert_drill.sh \

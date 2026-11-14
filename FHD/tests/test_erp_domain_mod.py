@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-erp-domain-bridge"
+MOD_DIR = REPO / "mods" / "bridge" / "xcagi-erp-domain-bridge"
 
 
 def test_customer_export_download_is_tenant_scoped(tmp_path, monkeypatch):

@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-approval-bridge"
+MOD_DIR = REPO / "mods" / "bridge" / "xcagi-approval-bridge"
 
 
 def test_approval_manifest_facade_flag():

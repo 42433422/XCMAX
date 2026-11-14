@@ -217,7 +217,7 @@ streams:
       Static producers: app/middleware/neuro_http_trace.py (3 http.* events).
       Dynamic producer: app/neuro_bus/route_event_publisher.py emits f"{event_type}.started"
       / .completed / .failed for any route in the registry — NOT enumerated here (Phase B
-      will scan route registry and add to SSOT). MOD bridge mods/xcagi-neuro-bus-bridge/
+      will scan route registry and add to SSOT). MOD bridge mods/bridge/xcagi-neuro-bus-bridge/
       passes through arbitrary event_type from MOD authors — also NOT enumerated.
     events:
       - { type: "http.request.started",    const: HTTP_REQUEST_STARTED }

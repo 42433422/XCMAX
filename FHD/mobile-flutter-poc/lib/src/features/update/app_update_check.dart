@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../api/mobile_api.dart';
 import '../../widgets/we_ui.dart';
 import 'package_update_installer.dart';
+import '../../policy/mobile_error_policy.dart';
 
 Future<void> runAppUpdateCheck(
   BuildContext context,
@@ -21,10 +22,7 @@ Future<void> runAppUpdateCheck(
     _showUpdatePrompt(context, result, installer);
   } catch (error) {
     if (!context.mounted) return;
-    final message = error is MobileApiException
-        ? error.message
-        : error.toString().replaceFirst('Exception: ', '');
-    _showSnack(context, message.isEmpty ? '检查更新失败，请稍后重试' : message);
+    _showSnack(context, mobileErrorText(error, fallback: '检查更新失败，请稍后重试'));
   }
 }
 
@@ -116,8 +114,9 @@ void _showSnack(BuildContext context, String message) {
 String _installerErrorMessage(Object error) {
   if (error is PlatformException) {
     final message = error.message?.trim();
-    if (message != null && message.isNotEmpty) return message;
+    if (message != null && message.isNotEmpty) {
+      return mobileErrorText(message, fallback: '安装包安装失败，请稍后重试');
+    }
   }
-  final message = error.toString().replaceFirst('Exception: ', '').trim();
-  return message.isEmpty ? '安装包更新失败' : message;
+  return mobileErrorText(error, fallback: '安装包安装失败，请稍后重试');
 }
