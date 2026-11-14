@@ -77,6 +77,75 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
   let voicedRun = 0
   let stopping = false
 
+  /** 插话打断：TTS 播放期间用 Silero VAD（@ricky0123/vad-web）识别用户开口。 */
+  interface BargeInVad {
+    listening: boolean
+    start: () => Promise<void>
+    pause: () => Promise<void>
+    destroy: () => Promise<void>
+  }
+  let bargeVad: BargeInVad | null = null
+  let bargeArmed = false
+  let bargeLoading: Promise<BargeInVad | null> | null = null
+
+  async function ensureBargeDetector(): Promise<BargeInVad | null> {
+    if (bargeVad) return bargeVad
+    if (!bargeLoading) {
+      bargeLoading = (async () => {
+        try {
+          const { MicVAD } = await import('@ricky0123/vad-web')
+          const base = `${import.meta.env.BASE_URL || '/'}vad/`
+          return await MicVAD.new({
+            baseAssetPath: base,
+            onnxWASMBasePath: `${base}ort/`,
+            model: 'v5',
+            startOnLoad: false,
+            getStream: () => ensureMicrophone(),
+            pauseStream: async () => {},
+            resumeStream: async (media: MediaStream) => media,
+            onSpeechStart: () => {},
+            // 连续有声帧达到阈值后才判定为真实开口，避免把扬声器尾音当成插话。
+            onSpeechRealStart: () => {
+              if (!bargeArmed || !open.value || muted.value) return
+              bargeArmed = false
+              stopSpeaking()
+            },
+            onSpeechEnd: () => {},
+            onVADMisfire: () => {},
+            onFrameProcessed: () => {},
+          }) as BargeInVad
+        } catch {
+          // 打断能力不可用时退化为原有半双工通话
+          return null
+        } finally {
+          bargeLoading = null
+        }
+      })()
+    }
+    return bargeLoading
+  }
+
+  async function armBargeIn() {
+    if (!open.value || muted.value) return
+    bargeArmed = true
+    if (!bargeVad) bargeVad = await ensureBargeDetector()
+    if (!bargeVad) return
+    if (!bargeVad.listening) {
+      try { await bargeVad.start() } catch { /* 忽略，保持原通话逻辑 */ }
+    }
+  }
+
+  function disarmBargeIn() {
+    bargeArmed = false
+  }
+
+  function teardownBargeIn() {
+    bargeArmed = false
+    const vad = bargeVad
+    bargeVad = null
+    if (vad) void vad.destroy().catch(() => {})
+  }
+
   const callTitle = computed(() => (typeof title === 'string' ? title : title.value))
   const durationText = computed(() => {
     const m = Math.floor(seconds.value / 60).toString().padStart(2, '0')
@@ -120,7 +189,9 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
     if (stream && stream.getAudioTracks().some(track => track.readyState === 'live')) return stream
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('当前环境不支持麦克风采集')
     if (typeof window.MediaRecorder === 'undefined') throw new Error('当前环境不支持录音')
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    })
     audioCtx = audioCtx || new AudioContext()
     try { await audioCtx.resume() } catch { /* ignore */ }
     const source = audioCtx.createMediaStreamSource(stream)
@@ -331,14 +402,18 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
       if (speakerOn.value) {
         const line = failed ? SPOKEN_RETRY_HINT : reply
         stage.value = 'speaking'
+        // 不阻塞朗读：VAD 模型加载期间先正常播报，加载完成后自动生效。
+        void armBargeIn()
         let speakFailed = false
         await speakText(line, { onError: () => { speakFailed = true } })
+        disarmBargeIn()
         if (speakFailed && open.value) await speakWithSystemVoice(line)
       }
     } catch (error) {
       if (ackTimer) window.clearTimeout(ackTimer)
       if (open.value) setError(error instanceof Error ? error.message.slice(0, 60) : '通话暂时不可用')
     } finally {
+      disarmBargeIn()
       handlingTurn = false
       if (open.value && !muted.value) {
         await new Promise(resolve => window.setTimeout(resolve, SPEAK_TAIL_MS))
@@ -403,6 +478,7 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
     cycleToken += 1
     window.clearInterval(tickTimer)
     tickTimer = undefined
+    teardownBargeIn()
     releaseAudio()
     stopSpeaking()
   }
