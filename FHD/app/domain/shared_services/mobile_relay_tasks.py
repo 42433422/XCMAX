@@ -14,6 +14,26 @@ from sqlalchemy.engine import CursorResult
 from app.application.mobile_relay_ports import TaskPorts
 from app.domain.shared_services.mobile_relay_utils import _json_dumps, _row_dict, _utc_now
 
+ENVELOPE_ALG = "x25519-hkdf-sha256-aesgcm"
+
+
+def is_e2ee_envelope(value: Any, *, require_epk: bool = True) -> bool:
+    """手机↔桌面端到端加密信封：云端只做密文中转，不接触明文。"""
+    if not isinstance(value, dict):
+        return False
+    if int(value.get("v") or 0) != 1:
+        return False
+    alg = str(value.get("alg") or ENVELOPE_ALG)
+    if alg != ENVELOPE_ALG:
+        return False
+    fields = ("epk", "nonce", "ct") if require_epk else ("nonce", "ct")
+    return all(isinstance(value.get(field), str) and value.get(field) for field in fields)
+
+
+def is_e2ee_error(value: Any) -> bool:
+    """桌面端无法解密时只回传错误标记，不回传任何内容。"""
+    return isinstance(value, dict) and value.get("e2ee_error") is True
+
 
 @dataclass(frozen=True, eq=False)
 class RelayTaskQueue:
@@ -29,6 +49,11 @@ class RelayTaskQueue:
     ) -> dict[str, Any] | None:
         if not self.ports.desktop_belongs_to_user(user_id=user_id, relay_id=relay_id):
             return None
+        # 桌面端已登记公钥时必须走端到端加密；旧版未登记公钥的执行端暂时保持兼容。
+        if self.ports.desktop_public_key(user_id=user_id, relay_id=relay_id) and not (
+            is_e2ee_envelope(payload)
+        ):
+            raise ValueError("relay payload must be end-to-end encrypted")
         task_id = uuid.uuid4().hex
         now = _utc_now()
         safe_kind = (kind or "codex.invoke").strip()[:64] or "codex.invoke"
@@ -119,6 +144,26 @@ class RelayTaskQueue:
             )
             return _row_dict(row)
 
+    def _purge_expired(self, db) -> None:
+        """终态任务只保留短周期密文；排队任务最多 7 天，避免云端长期堆积。"""
+        try:
+            hours = max(1, int(os.environ.get("XCAGI_RELAY_RETENTION_HOURS") or "24"))
+        except (TypeError, ValueError):
+            hours = 24
+        current = datetime.now(UTC).replace(microsecond=0)
+        cutoff = (current - timedelta(hours=hours)).isoformat()
+        queued_cutoff = (current - timedelta(days=7)).isoformat()
+        db.execute(
+            text(
+                "DELETE FROM mobile_relay_tasks WHERE status != 'queued' AND updated_at < :cutoff"
+            ),
+            {"cutoff": cutoff},
+        )
+        db.execute(
+            text("DELETE FROM mobile_relay_tasks WHERE status = 'queued' AND created_at < :cutoff"),
+            {"cutoff": queued_cutoff},
+        )
+
     def poll_desktop(
         self,
         *,
@@ -134,6 +179,8 @@ class RelayTaskQueue:
             )
             if not desktop:
                 return None
+            # 加密前提下只保留短周期密文：终态任务按 TTL 删除，排队任务最长保留 7 天。
+            self._purge_expired(db)
             db.execute(
                 text(
                     """
@@ -228,6 +275,10 @@ class RelayTaskQueue:
             )
             if not desktop:
                 return None
+            if str(desktop.get("desktop_public_key") or "").strip() and not (
+                is_e2ee_envelope(result, require_epk=False) or is_e2ee_error(result)
+            ):
+                raise ValueError("relay result must be end-to-end encrypted")
             updated = db.execute(
                 text(
                     """

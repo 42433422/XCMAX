@@ -83,6 +83,13 @@ abstract class _ApiPairingBase extends _ApiCsAuthBase {
         baseUrl: _config.baseUrl);
     final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
     if (envelope.success) {
+      final desktop = envelope.data?['desktop'];
+      if (desktop is Map) {
+        final publicKey = '${desktop['public_key'] ?? ''}'.trim();
+        if (publicKey.isNotEmpty) {
+          await RelayE2ee.pinDesktopKey(relayId.trim(), publicKey);
+        }
+      }
       await persistRelayBindingMeta(relayId.trim(), envelope.data,
           authGeneration: generation);
     }
@@ -99,19 +106,82 @@ abstract class _ApiPairingBase extends _ApiCsAuthBase {
     required String kind,
     required Map<String, Object?> payload,
   }) async {
+    final desktopPublicKey = await _relayDesktopPublicKey(relayId);
+    final sealed = await RelayE2ee.sealPayload(payload, desktopPublicKey);
+    await RelayE2ee.rememberTask(sealed);
     final json = await postJson(XcagiMobileEndpoints.relayTasks, {
       'relay_id': relayId.trim(),
       'kind': kind.trim(),
-      'payload': payload,
+      'payload': sealed.envelope,
     });
     return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<String> _relayDesktopPublicKey(String relayId) async {
+    final clean = relayId.trim();
+    final response = await relayDesktops();
+    final items = response.data?['items'];
+    String publicKey = '';
+    if (items is List) {
+      for (final item in items) {
+        if (item is! Map) continue;
+        if ('${item['relay_id'] ?? ''}'.trim() != clean) continue;
+        publicKey = '${item['public_key'] ?? ''}'.trim();
+        break;
+      }
+    }
+    if (publicKey.isEmpty) {
+      throw const RelayE2eeException(
+        '电脑端尚未启用端到端加密，请更新电脑端并重新配对后再试。',
+      );
+    }
+    await RelayE2ee.pinDesktopKey(clean, publicKey);
+    return publicKey;
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> relayTaskStatus(
     String taskId,
   ) async {
     final json = await getJson(XcagiMobileEndpoints.relayTaskStatus(taskId));
-    return MobileEnvelope.fromJson(json, _asObjectMap);
+    final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
+    await _decryptRelayResult(envelope);
+    return envelope;
+  }
+
+  Future<void> _decryptRelayResult(
+    MobileEnvelope<Map<String, Object?>> envelope,
+  ) async {
+    final task = envelope.data?['task'];
+    if (task is! Map) return;
+    final result = task['result'];
+    if (RelayE2ee.isE2eeError(result)) {
+      task['result'] = <String, Object?>{
+        'error': '电脑端无法解密任务，请重新配对后再试。',
+      };
+      return;
+    }
+    if (!RelayE2ee.isEnvelope(result)) return;
+    final reference = '${result['ref'] ?? ''}'.trim();
+    final keys = await RelayE2ee.taskKeys(reference);
+    if (keys == null ||
+        keys.privateKey.isEmpty ||
+        keys.publicKey.isEmpty ||
+        keys.desktopPublicKey.isEmpty) {
+      task['result'] = <String, Object?>{
+        'error': '任务结果无法解密，请在电脑端重新配对后再试。',
+      };
+      return;
+    }
+    try {
+      task['result'] = await RelayE2ee.openResult(
+        Map<String, Object?>.from(result as Map),
+        ephemeralPrivateKey: keys.privateKey,
+        ephemeralPublicKey: keys.publicKey,
+        desktopPublicKey: keys.desktopPublicKey,
+      );
+    } on RelayE2eeException catch (error) {
+      task['result'] = <String, Object?>{'error': error.message};
+    }
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> relayCancelTask(

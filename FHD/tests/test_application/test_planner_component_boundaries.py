@@ -296,3 +296,67 @@ def test_autonomy_guard_approval_is_attached_even_when_approval_registry_disagre
     assert result["data"]["action"] == "workflow_confirmation_required"
     assert dispatch.pending["owner"]["approval_required"] is True
     assert [item["node_id"] for item in dispatch.pending["owner"]["approval_nodes"]] == ["n1"]
+
+
+def test_auto_approval_mode_skips_plan_confirmation_and_starts_run():
+    from app.domain.autonomy.risk_types import RiskDecision, RiskLevel
+
+    plan = PlanGraph(
+        plan_id="auto-approval-plan",
+        intent="write",
+        todo_steps=["create record"],
+        nodes=[WorkflowNode("n1", "catalog", "write", params={})],
+    )
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    callbacks._merge_tool_runtime_context.return_value = {
+        "tenant_id": "1",
+        "chat_approval_mode": "auto",
+    }
+    callbacks._build_workflow_thinking_steps.return_value = "checked plan"
+    callbacks._capture_agent_run_interaction.return_value = {
+        "data": {"action": "workflow_done"}
+    }
+    planner = Mock()
+    planner.plan.return_value = plan
+    risk_gate = Mock()
+    risk_gate.evaluate.return_value = RiskDecision(
+        requires_confirmation=True,
+        reason="write needs approval",
+        blocking_nodes=["n1"],
+        allowed=False,
+        risk_level=RiskLevel.MEDIUM,
+        decision="require_human",
+    )
+    approval = Mock()
+    approval.get_approval_required_nodes.return_value = [plan.nodes[0]]
+    dispatch = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, approval)
+
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
+        orchestrator.return_value.start_run_from_plan.return_value = SimpleNamespace(
+            status="waiting_user"
+        )
+        dispatch.handle("owner", "创建记录", "pro", {}, "创建记录")
+
+    orchestrator.return_value.start_run_from_plan.assert_called_once()
+    callbacks._capture_agent_run_interaction.assert_called_once()
+    assert "owner" not in dispatch.pending
+
+
+def test_import_request_exposes_import_tool_and_directive():
+    from app.application.workflow.planner_prompt_profile import (
+        detect_intents,
+        select_rules_for_prompt,
+        select_tools_for_prompt,
+    )
+
+    registry = {
+        "excel_analysis": {"available": "shared"},
+        "import_excel_to_database": {"available": "shared"},
+        "generate_office_document": {"available": "shared"},
+    }
+    assert "document" in detect_intents("导入")
+    assert "import_excel_to_database" in select_tools_for_prompt(registry, "导入")
+    assert any("import_excel_to_database" in rule for rule in select_rules_for_prompt("导入"))
+    assert "import_excel_to_database" not in select_tools_for_prompt(registry, "查询客户")
+

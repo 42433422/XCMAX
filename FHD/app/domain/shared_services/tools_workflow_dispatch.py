@@ -23,6 +23,7 @@ from app.domain.shared_services.tools_workflow_excel_ocr import (
     _registered_router_excel_analysis,
     _registered_router_excel_vector_index,
     _registered_router_generate_office_document,
+    _registered_router_import_excel_to_database,
 )
 from app.domain.shared_services.tools_workflow_excel_ocr_ops import (
     _registered_router_excel_import,
@@ -105,6 +106,7 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "dataset_rag": _registered_router_dataset_rag,
         "memory_v2": _registered_router_memory_v2,
         "excel_analysis": _registered_router_excel_analysis,
+        "import_excel_to_database": _registered_router_import_excel_to_database,
         "generate_office_document": _registered_router_generate_office_document,
         "excel_vector_index": _registered_router_excel_vector_index,
         "ocr": _registered_router_ocr,

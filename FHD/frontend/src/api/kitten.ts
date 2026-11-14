@@ -5,6 +5,8 @@ export const kittenApi = {
 
   getCharts: () => api.get('/api/ai/kitten/charts/all'),
 
+  getFinancialDashboard: (months = 6) => api.get(`/api/ai/kitten/financial/dashboard?months=${months}`),
+
   getRevenueChart: (months = 6) => api.get(`/api/ai/kitten/charts/revenue?months=${months}`),
 
   getProductChart: () => api.get('/api/ai/kitten/charts/products'),

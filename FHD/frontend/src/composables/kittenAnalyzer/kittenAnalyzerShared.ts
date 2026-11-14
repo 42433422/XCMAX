@@ -36,6 +36,7 @@ export const kittenOrgCards = [
 ] as const
 
 export const kittenQuickActions = [
+  { text: '我们的财报怎么样？', label: '财报分析' },
   { text: '分析销量趋势', label: '销量趋势' },
   { text: '计算渠道ROI', label: '渠道ROI' },
   { text: '预测下月销量', label: '销量预测' },

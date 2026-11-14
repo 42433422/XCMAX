@@ -133,7 +133,7 @@ def test_synthetic_workbook_is_not_a_release_pass(tmp_path, monkeypatch):
     assert report["checks"]["B31-30"] == "pass"
     assert report["checks"]["B31-34"] == "pass"
     assert report["checks"]["B31-50"] == "pass"
-    assert report["checks"]["B31-38"] == "fail"
+    assert report["checks"]["B31-38"] == "not_tested"
     assert report["checks"]["B31-52"] == "not_tested"
     assert report["checks"]["B31-45"] == "not_tested"
     assert report["checks"]["B31-54"] == "pass"

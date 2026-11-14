@@ -248,7 +248,7 @@ class _AiGroupChatScreenState extends _AiGroupChatStateBase {
         _sending = false;
         _pendingDispatchMode = false;
       });
-      _showSnack(error.toString());
+      _showSnack(mobileErrorText(error));
     } finally {
       _scrollToBottom();
     }

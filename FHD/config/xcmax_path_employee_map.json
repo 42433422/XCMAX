@@ -192,7 +192,7 @@
       "step": "P1e"
     },
     {
-      "prefix": "FHD/deploy/",
+      "prefix": "FHD/ops/deploy/",
       "department": "prod_software",
       "primary": ["deploy-release-officer"],
       "step": "P4"

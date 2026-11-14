@@ -182,6 +182,21 @@ def resolve_planner_tool_executor() -> ExecuteToolFn:
     return execute_workflow_tool
 
 
+def _with_owned_upload_path(
+    args: dict[str, Any] | str, runtime_context: dict[str, Any] | None
+) -> dict[str, Any] | str:
+    """后续轮次只说「导入」时，模型只能拿到文件名；按当前账号换成自己的上传路径。"""
+    if not isinstance(args, dict) or not isinstance(runtime_context, dict):
+        return args
+    file_path = str(args.get("file_path") or "").strip()
+    if not file_path:
+        return args
+    from app.application.tools.workflow_spreadsheet_scope import resolve_owned_upload_path
+
+    resolved = resolve_owned_upload_path(file_path, runtime_context)
+    return {**args, "file_path": resolved} if resolved != file_path else args
+
+
 def execute_planner_workflow_tool(
     name: str,
     args: dict[str, Any] | str,
@@ -192,6 +207,9 @@ def execute_planner_workflow_tool(
 ) -> str:
     """里程碑 F：优先 Mod 原生 handler，其余委托宿主 workflow。"""
     from app.mod_sdk.planner_native_tools import try_execute_native_planner_tool
+
+    if name == "import_excel_to_database":
+        args = _with_owned_upload_path(args, runtime_context)
 
     native_raw, native_mod = try_execute_native_planner_tool(
         name,

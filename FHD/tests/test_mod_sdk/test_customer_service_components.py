@@ -29,7 +29,7 @@ def bridge(monkeypatch, tmp_path):
     monkeypatch.setattr(pipelines, "_pipeline_roots", lambda: [root])
     monkeypatch.setattr(changes, "_pipeline_roots", lambda: [root])
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    path = FHD / "mods/xcagi-customer-service-bridge/backend/blueprints.py"
+    path = FHD / "mods/bridge/xcagi-customer-service-bridge/backend/blueprints.py"
     name = "synthetic_customer_service_components"
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
@@ -341,7 +341,7 @@ def test_domain_imports_do_not_load_host_bindings_or_numbered_routes():
 
 def test_each_registered_mod_keeps_its_late_employee_binding(bridge, monkeypatch):
     name = "synthetic_customer_service_second_instance"
-    path = FHD / "mods/xcagi-customer-service-bridge/backend/blueprints.py"
+    path = FHD / "mods/bridge/xcagi-customer-service-bridge/backend/blueprints.py"
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

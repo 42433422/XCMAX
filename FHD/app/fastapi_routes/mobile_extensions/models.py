@@ -35,11 +35,14 @@ class RelayDesktopRegisterBody(BaseModel):
     device_id: str = Field(default="", max_length=128)
     relay_base_url: str = Field(default="", max_length=512)
     capabilities: dict[str, Any] = Field(default_factory=dict)
+    # 端到端加密公钥（X25519，base64 raw 32 字节）。云端只存公钥，私钥永不离开桌面端。
+    public_key: str = Field(default="", max_length=256)
 
 
 class RelayDesktopRenewBody(BaseModel):
     relay_id: str = Field(..., min_length=8, max_length=80)
     desktop_token: str = Field(..., min_length=16, max_length=256)
+    public_key: str = Field(default="", max_length=256)
 
 
 class RelayMobileBindAccountBody(BaseModel):

@@ -156,6 +156,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
     assert finance_delete_spec.permission == "tool.finance.delete_transaction"
     assert finance_delete_spec.test_fixtures[0]["input"]["transaction_id"] == 31
 
+    assert specs[("shipment_orders", "generate")].permission == "shipment.create"
     shipment_create_spec = specs[("shipment_records", "create")]
     assert shipment_create_spec.risk == "high"
     assert shipment_create_spec.required_params == ["unit_name"]
@@ -738,7 +739,59 @@ def test_required_empty_array_is_present_and_a_missing_key_is_not():
     assert not ok and message == "LLM 输出 缺少字段：rows"
 
 
+def test_finance_reference_id_accepts_the_numeric_order_id():
+    params = {
+        "transaction_type": "receivable",
+        "amount": 200,
+        "reference_type": "sales_order",
+        "reference_id": 3,
+    }
+    result = validate_tool_call("finance", "create_transaction", params)
+    assert result.ok, result.message
+
+
 def test_email_contract_rejects_long_invalid_input_without_backtracking():
     started = perf_counter()
     assert _string_constraint_error("email", "x@" + "!" * 50_000, {"format": "email"})
     assert perf_counter() - started < 1
+
+
+def test_materials_permissions_use_business_codes(monkeypatch):
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    assert get_tool_action_spec("materials", "list").permission == "material.view"
+    assert get_tool_action_spec("materials", "query").permission == "material.view"
+    assert get_tool_action_spec("materials", "batch_delete").permission == "material.edit"
+
+
+def test_template_permissions_use_etl_codes(monkeypatch):
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    assert get_tool_action_spec("template_preview", "list").permission == "etl.read"
+    assert get_tool_action_spec("template_preview", "create").permission == "etl.template.manage"
+    assert get_tool_action_spec("document_template", "delete").permission == "etl.template.manage"
+    assert get_tool_action_spec("document_template", "clear").permission == "etl.template.manage"
+
+
+def test_business_clear_permissions_use_edit_codes(monkeypatch):
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    assert get_tool_action_spec("customers", "clear").permission == "customer.edit"
+    assert get_tool_action_spec("products", "clear").permission == "product.edit"
+    assert get_tool_action_spec("materials", "clear").permission == "material.edit"
+    assert get_tool_action_spec("shipment_records", "clear").permission == "shipment.edit"
+    assert get_tool_action_spec("customers", "clear").input_schema["required"] == []
+
+
+def test_business_db_read_materials_accepts_material_view(trusted_actor, monkeypatch):
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(permissions=["material.view"])
+
+    allowed = actor_tool_denial(
+        "business_db", "read", actor.context, {"entity": "materials"}
+    )
+    denied = actor_tool_denial(
+        "business_db", "read", actor.context, {"entity": "customers"}
+    )
+
+    assert allowed is None
+    assert denied is not None and denied["error_code"] == "tool_permission_denied"

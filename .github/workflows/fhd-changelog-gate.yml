@@ -15,7 +15,7 @@ on:
       - "FHD/desktop_runtime/**"
       - "FHD/mobile-flutter-poc/**"
       - "FHD/XCAGI/**"
-      - "FHD/docker/**"
+      - "FHD/ops/docker/**"
       - "FHD/scripts/package/**"
       - "FHD/VERSION.md"
 

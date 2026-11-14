@@ -4,6 +4,7 @@ import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
+import '../../policy/mobile_error_policy.dart';
 
 enum BusinessListKind {
   customers('客户', Icons.people),
@@ -241,7 +242,7 @@ class _BusinessListScaffoldState extends State<BusinessListScaffold> {
     } catch (error) {
       return _BusinessListResult(
         items: const [],
-        error: error.toString().replaceFirst('Exception: ', ''),
+        error: mobileErrorText(error),
       );
     }
   }
@@ -340,17 +341,6 @@ class _EmptyState extends StatelessWidget {
               fontSize: 16,
               height: 1.38,
               fontWeight: FontWeight.w500,
-              letterSpacing: 0,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '下拉刷新或连接电脑后重试。',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: colors.textSecondary,
-              fontSize: 15,
-              height: 1.4,
               letterSpacing: 0,
             ),
           ),

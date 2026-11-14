@@ -93,6 +93,7 @@ import { clearAppNavIntentIfCurrent, getActiveAppNavIntent } from '@/utils/appNa
 import RouteLoadingFeedback from './shell/RouteLoadingFeedback.vue'
 import { useModRoutes } from '@/composables/useModRoutes'
 import FloatingChatAssistant from './FloatingChatAssistant.vue'
+import { voiceCallActive } from '@/composables/voiceCallHost'
 import DocumentPreviewPictureInPicture from './DocumentPreviewPictureInPicture.vue'
 import PaneResizeHandle from './PaneResizeHandle.vue'
 import Sidebar from './Sidebar.vue'
@@ -267,8 +268,8 @@ watch(currentRouteName, () => {
   syncAppNavIntentWithRoute()
 })
 
-/** 对话与信息页收起悬浮入口，避免遮挡客服和员工的输入工具条。 */
-const shouldShowFloatingChatAssistant = computed(() => !isChatSidebarActive(currentRouteName.value, route) && currentRouteName.value !== 'im' && !documentPreviewPip.visible)
+/** 对话与信息页收起悬浮入口，避免遮挡客服和员工的输入工具条；通话中必须保留，否则静音/挂断会丢失。 */
+const shouldShowFloatingChatAssistant = computed(() => voiceCallActive.value || (!isChatSidebarActive(currentRouteName.value, route) && currentRouteName.value !== 'im' && !documentPreviewPip.visible))
 
 const {
   paneStyle: sidebarShellStyle,
@@ -526,5 +527,6 @@ onBeforeUnmount(() => {
 <style scoped src="./MainLayoutActions.css"></style>
 
 <style scoped>
+/* .route-content-slot 必须同约束：否则被页面内容撑高，视口底部的输入区会被推出屏外。 */
 .route-content, .route-content-slot { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 </style>

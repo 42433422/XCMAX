@@ -12,7 +12,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 ADMIN_MOD = REPO / "XCAGI" / "mods" / "xcagi-erp-domain-bridge"
-SSOT_MOD = REPO / "mods" / "xcagi-erp-domain-bridge"
+SSOT_MOD = REPO / "mods" / "bridge" / "xcagi-erp-domain-bridge"
 MOD_ID = "xcagi-erp-domain-bridge"
 STEM = "domain_handlers"
 

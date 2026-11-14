@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { afterEach, expect, it, vi } from 'vitest'
-import { useCreateOrder } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/create-order/useCreateOrder'
+import { useCreateOrder } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/create-order/useCreateOrder'
 
 const { post, get, listTemplates, download, saveBlob } = vi.hoisted(() => ({ post: vi.fn(), get: vi.fn().mockResolvedValue({ success: false }), listTemplates: vi.fn(), download: vi.fn(), saveBlob: vi.fn() }))
 vi.mock('@/api/index', () => ({ default: { post, download, get } }))

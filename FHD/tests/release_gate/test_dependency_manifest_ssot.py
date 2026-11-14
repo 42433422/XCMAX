@@ -7,7 +7,7 @@ from packaging.version import Version
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 DESKTOP_LOCK = FHD_ROOT / "XCAGI" / "requirements.lock.txt"
-SERVER_LOCK = FHD_ROOT / "deploy" / "requirements-server-api.lock.txt"
+SERVER_LOCK = FHD_ROOT / "ops" / "deploy" / "requirements-server-api.lock.txt"
 SERVER_REQUIREMENTS = FHD_ROOT / "requirements-server-api.txt"
 
 
@@ -22,8 +22,8 @@ def test_canonical_dependency_manifest_paths_are_stable() -> None:
     """Keep alert identity stable while updating the versions in place."""
     assert all(path.is_file() for path in (DESKTOP_LOCK, SERVER_LOCK, SERVER_REQUIREMENTS))
     assert not (FHD_ROOT / "XCAGI" / "requirements-desktop.lock.txt").exists()
-    assert not (FHD_ROOT / "deploy" / "requirements-server.lock.txt").exists()
-    assert not (FHD_ROOT / "deploy" / "requirements-server-api.txt").exists()
+    assert not (FHD_ROOT / "ops" / "deploy" / "requirements-server.lock.txt").exists()
+    assert not (FHD_ROOT / "ops" / "deploy" / "requirements-server-api.txt").exists()
 
 
 def test_high_severity_dependency_floors_are_pinned_in_canonical_ssot() -> None:

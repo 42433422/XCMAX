@@ -347,7 +347,11 @@ router.beforeEach(async (to, _from, finish) => {
         if (useSessionHint) {
           provisionalDesktopEntry = true
         }
-        const valid = useSessionHint ? true : await validateEnterpriseSessionCached()
+        const { useAccountProfileStore } = await import('@/stores/accountProfile')
+        const profile = useAccountProfileStore()
+        const valid = useSessionHint || (profile.workspaceReady && profile.workspaceHydrationReady)
+          ? true
+          : await validateEnterpriseSessionCached()
         if (!valid) {
           next({
             name: 'login',
@@ -356,8 +360,6 @@ router.beforeEach(async (to, _from, finish) => {
           return
         }
         try {
-          const { useAccountProfileStore } = await import('@/stores/accountProfile')
-          const profile = useAccountProfileStore()
           if (provisionalDesktopEntry && !profile.loaded) {
             refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
           } else if (!profile.loaded) {
@@ -428,27 +430,35 @@ router.beforeEach(async (to, _from, finish) => {
   }
 
   if (shouldRouteToHostPackOnboarding(to.name) && !to.meta?.publicAccess && !isAdminConsoleSpa()) {
-    if (generation !== getSidebarNavigationGeneration()) {
-      next(false)
-      return
-    }
-    try {
-      // The login success navigation refreshes this gate once.  Reusing its
-      // short session cache keeps a subsequent desktop deep-link/reload from
-      // blocking the usable screen on the same three bootstrap requests.
-      const onboardingStep = await resolveHostPackOnboardingStep(false)
-      if (onboardingStep) {
-        next({
-          name: 'product-onboarding',
-          query: {
-            step: onboardingStep,
-            redirect: to.fullPath !== '/onboarding' ? to.fullPath : '/',
-          },
-        })
+    const current = router.currentRoute.value
+    const alreadyInWorkspace = shouldRouteToHostPackOnboarding(current.name) && !current.meta?.publicAccess
+    const onboardingTarget = (step: string) => ({
+      name: 'product-onboarding' as const,
+      query: {
+        step,
+        redirect: to.fullPath !== '/onboarding' ? to.fullPath : '/',
+      },
+    })
+    if (alreadyInWorkspace) {
+      // 已经在工作台里切页时，补基础线检查在后台做，不挡住侧栏。
+      void resolveHostPackOnboardingStep(false).then((step) => {
+        if (!step || generation !== getSidebarNavigationGeneration()) return
+        void router.replace(onboardingTarget(step))
+      }).catch(() => undefined)
+    } else {
+      if (generation !== getSidebarNavigationGeneration()) {
+        next(false)
         return
       }
-    } catch {
-      /* API 异常时不阻断主流程 */
+      try {
+        const onboardingStep = await resolveHostPackOnboardingStep(false)
+        if (onboardingStep) {
+          next(onboardingTarget(onboardingStep))
+          return
+        }
+      } catch {
+        /* API 异常时不阻断主流程 */
+      }
     }
   }
 

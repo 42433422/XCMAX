@@ -155,6 +155,7 @@ class AIChatApplicationService(
                 "metadata_filter",
                 "chat_db_read_authorized",
                 "chat_knowledge_dataset_ids",
+                "chat_approval_mode",
             ):
                 if key in context and context[key] is not None:
                     runtime_ctx[key] = copy.deepcopy(context[key])
@@ -307,6 +308,14 @@ class AIChatApplicationService(
                     logger.warning("chat trace attach failed", exc_info=True)
                     if business_write_requested(message):
                         resp = unknown_result(resp)
+            try:
+                from app.application.agent_orchestrator.business_harness import (
+                    attach_visible_business_result_to_chat_payload,
+                )
+
+                resp = attach_visible_business_result_to_chat_payload(resp)
+            except RECOVERABLE_ERRORS:
+                logger.debug("visible business result attach skipped", exc_info=True)
             try:
                 from app.neuro_bus.application_neuro_bridge import neuro_notify_chat_completed
 
