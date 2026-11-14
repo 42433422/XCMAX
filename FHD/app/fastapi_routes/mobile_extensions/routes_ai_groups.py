@@ -42,6 +42,14 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _group_value_error_response(exc: ValueError) -> JSONResponse:
+    status = 404 if str(exc) == "群不存在" else 400
+    return JSONResponse(
+        format_mobile_response(None, "AI 群组请求无效", success=False, code=status),
+        status_code=status,
+    )
+
+
 @dataclass(frozen=True)
 class GroupRoutesPorts:
     mobile_request_user_id: MobileRequestUserIdCall
@@ -175,11 +183,8 @@ class GroupRoutes:
                     user_id=uid, name=body.name
                 )
                 return format_mobile_response(data={"group": group})
-            except ValueError:
-                return JSONResponse(
-                    format_mobile_response(None, "AI 群组请求无效", success=False, code=400),
-                    status_code=400,
-                )
+            except ValueError as exc:
+                return _group_value_error_response(exc)
             except RECOVERABLE_ERRORS:
                 logger.exception("mobile_ai_groups_create")
                 return JSONResponse(
@@ -257,11 +262,8 @@ class GroupRoutes:
                     else {},
                 )
                 return format_mobile_response(data=result)
-            except ValueError:
-                return JSONResponse(
-                    format_mobile_response(None, "AI 群组请求无效", success=False, code=400),
-                    status_code=400,
-                )
+            except ValueError as exc:
+                return _group_value_error_response(exc)
             except RECOVERABLE_ERRORS:
                 logger.exception("mobile_ai_group_post")
                 return JSONResponse(
@@ -300,11 +302,8 @@ class GroupRoutes:
                     },
                 )
                 return format_mobile_response(data={"group": group})
-            except ValueError:
-                return JSONResponse(
-                    format_mobile_response(None, "AI 群组请求无效", success=False, code=400),
-                    status_code=400,
-                )
+            except ValueError as exc:
+                return _group_value_error_response(exc)
             except RECOVERABLE_ERRORS:
                 logger.exception("mobile_ai_group_add_member")
                 return JSONResponse(
@@ -335,11 +334,8 @@ class GroupRoutes:
                     user_id=uid, group_id=group_id, employee_id=employee_id
                 )
                 return format_mobile_response(data={"group": group})
-            except ValueError:
-                return JSONResponse(
-                    format_mobile_response(None, "AI 群组请求无效", success=False, code=400),
-                    status_code=400,
-                )
+            except ValueError as exc:
+                return _group_value_error_response(exc)
             except RECOVERABLE_ERRORS:
                 logger.exception("mobile_ai_group_remove_member")
                 return JSONResponse(
@@ -455,11 +451,8 @@ class GroupRoutes:
             return format_mobile_response(
                 data=result if action == "delete_group" else {"group": result}
             )
-        except ValueError:
-            return JSONResponse(
-                format_mobile_response(None, "AI 群组请求无效", success=False, code=400),
-                status_code=400,
-            )
+        except ValueError as exc:
+            return _group_value_error_response(exc)
         except RECOVERABLE_ERRORS:
             logger.exception(operation)
             return JSONResponse(
