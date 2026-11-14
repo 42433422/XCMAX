@@ -1,5 +1,5 @@
 {
-  "lines": 2399973,
+  "lines": 2400047,
   "updated": "2026-11-14",
-  "note": "闭环三块未接线能力：客户定制 Mod 服务端隔离（中间件与私有扩展判定）、Excel/扫描件表格结构识别（parser_structure 兼容参数、cell_tidy、table_structure_ocr）、小C 语音通话（useVoiceCall 组合式与悬浮窗界面），配套后端 16 例、前端 8 例；同时修复 mypy 类型、broad-except 门禁、前端覆盖率与分片顺序回归。净增 1989 行，基线 2397984 → 2399973。批准人：用户（/goal 全部闭环提交pr冻结合入main打包发版）。"
+  "note": "PR#3145 表头空预演边界：新增 ETL 预演边界用例与业务合同证据校验，净增 74 行"
 }
