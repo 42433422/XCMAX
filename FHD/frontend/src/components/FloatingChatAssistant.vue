@@ -148,6 +148,11 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  /** 非智能对话页发起通话时展开面板；智能对话页只在悬浮球内通话。 */
+  expandCallPanel: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const avatarUrl = computed(() =>
@@ -236,7 +241,7 @@ const closePanel = () => {
 
 const onStartVoiceCallRequest = (event?: Event) => {
   const detail = (event as CustomEvent<{ expandPanel?: boolean }> | undefined)?.detail
-  expandPanelOnCall.value = detail?.expandPanel !== false
+  expandPanelOnCall.value = props.expandCallPanel && detail?.expandPanel !== false
   isOpen.value = expandPanelOnCall.value
   startVoiceCall()
 }
@@ -311,6 +316,17 @@ const scrollToBottom = async () => {
   const el = messageListRef.value
   if (!el) return
   el.scrollTop = el.scrollHeight
+}
+
+/** 通话中按页面切换面板展开态：智能对话页收起，其它页面展开。 */
+const syncCallPanelVisibility = () => {
+  if (expandPanelOnCall.value) {
+    isOpen.value = true
+    void ensurePanelInViewport()
+    return
+  }
+  isOpen.value = false
+  void nextTick(() => keepRootInViewport())
 }
 
 const toggleOpen = async () => {
@@ -409,11 +425,20 @@ watch(isOpen, (openNow) => {
 
 watch(callOpen, (active) => {
   voiceCallActive.value = active
-  if (active && expandPanelOnCall.value) {
-    isOpen.value = true
-    void ensurePanelInViewport()
+  if (active) {
+    expandPanelOnCall.value = props.expandCallPanel
+    syncCallPanelVisibility()
   }
 })
+
+watch(
+  () => props.expandCallPanel,
+  () => {
+    if (!callOpen.value) return
+    expandPanelOnCall.value = props.expandCallPanel
+    syncCallPanelVisibility()
+  },
+)
 
 onMounted(() => {
   void placeRootToBottomRight()

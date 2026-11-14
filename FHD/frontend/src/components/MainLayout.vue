@@ -60,7 +60,11 @@
       </div>
     </div>
     <DocumentPreviewPictureInPicture />
-    <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" :male-avatar="adminConsoleSpa" />
+    <FloatingChatAssistant
+      :visible="shouldShowFloatingChatAssistant"
+      :male-avatar="adminConsoleSpa"
+      :expand-call-panel="!isChatSidebarActive(currentRouteName, route)"
+    />
     <VirtualCursor />
     <OnboardingTutorial />
     <TutorialOverlay v-if="!onboardingTutorialStore.active" />

@@ -297,7 +297,7 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
     stage.value = 'thinking'
     const before = messages.value.length
     // 模型思考常常要好几秒，纯静音会让人以为断线：超过 1.2s 还没回复就先垫一句口头确认。
-    let ack: Promise<void> | null = null
+    let ack: Promise<unknown> | null = null
     const ackTimer = speakerOn.value
       ? window.setTimeout(() => { ack = speakText(ACK_LINE) }, ACK_DELAY_MS)
       : null
