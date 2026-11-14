@@ -1,5 +1,5 @@
 {
-  "lines": 2400559,
+  "lines": 2400639,
   "updated": "2026-11-14",
-  "note": "PR#3148 员工评测种子（对齐 main）"
+  "note": "调度器修复：重试预算耗尽的自我修复项改为移交人工队列并关闭，避免调度器永久失败；相对 main 2400559 净增 80 行（autonomy_scheduler.py +63、test_autonomy_scheduler.py +6、test_autonomy_scheduler_remediation_guard.py +45、断言精简 -34）。批准：用户要求解决全部开放 issue。"
 }
