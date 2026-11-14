@@ -167,7 +167,7 @@ export default defineConfig(() => ({
       {
         // 客服桥接 Mod 自有组件/composable 别名（与主 frontend/vite.config.js 保持一致）
         find: '@mod-frontend/xcagi-customer-service-bridge',
-        replacement: path.resolve(hostRoot, '../mods/xcagi-customer-service-bridge/frontend'),
+        replacement: path.resolve(hostRoot, '../mods/bridge/xcagi-customer-service-bridge/frontend'),
       },
       {
         find: '@mod-views/xcagi-lan-license-bridge',

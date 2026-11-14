@@ -1,5 +1,5 @@
 {
-  "lines": 2398192,
-  "updated": "2026-11-11",
-  "note": "人员兼容路由把分页参数改成 Annotated，避免 Query 的 alias 在 Pydantic 下被当成错误；Playwright 依赖在官方镜像也解析失败时改用公共 DNS。净增 20 行。"
+  "lines": 2400992,
+  "updated": "2026-11-14",
+  "note": "PR#3149 发布范围与合并检查分离：新增范围证据注册与契约测试，净增行"
 }

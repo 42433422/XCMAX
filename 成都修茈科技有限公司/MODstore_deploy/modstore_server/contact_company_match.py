@@ -56,7 +56,7 @@ def _iter_company_match_db_paths() -> list[Path]:
         [
             repo / "data" / "mod_dbs" / "taiyangniao_pro.db",
             Path("/root/data/mod_dbs/taiyangniao_pro.db"),
-            repo / "mods" / "taiyangniao-pro" / "mod_dbs" / "taiyangniao_pro.db",
+            repo / "mods" / "industry" / "taiyangniao-pro" / "mod_dbs" / "taiyangniao_pro.db",
             Path("/opt/fhd-full/data/mod_dbs/taiyangniao_pro.db"),
             Path("/opt/fhd-full/XCAGI/data/mod_dbs/taiyangniao_pro.db"),
         ]

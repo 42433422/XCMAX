@@ -501,7 +501,7 @@ else
     || fail "cannot preserve existing public desktop pointers"
 
   TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}^{tree}")"
-  SUNBIRD_TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}:FHD/mods/sunbird-attendance-custom")"
+  SUNBIRD_TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}:FHD/mods/industry/sunbird-attendance-custom")"
   python3 - "$BUILD_ROOT/.xcmax-release.json" "$TARGET_SHA" "$TREE_SHA" "$ARTIFACT_SHA" "$PRODUCT_VERSION" "$RELEASE_ID" "$SUNBIRD_TREE_SHA" "$SOURCE_ROOT" <<'PY'
 import datetime
 import hashlib
@@ -513,7 +513,7 @@ from pathlib import Path
 
 path, git_sha, tree_sha, artifact_sha, product_version, release_id, sunbird_tree, source_root = sys.argv[1:]
 root = Path(path).parent
-source_path = "FHD/mods/sunbird-attendance-custom"
+source_path = "FHD/mods/industry/sunbird-attendance-custom"
 source_files, source_hash = runpy.run_path(str(root / "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_delivery_versioned.py"))["source_fingerprints"](root / source_path)
 tree_rows = subprocess.run(
     ["git", "-C", source_root, "ls-tree", "-r", "-z", git_sha, "--", source_path],

@@ -398,7 +398,7 @@ def test_csv_mod_declares_new_host_requirement_in_canonical_tree(monkeypatch):
     from app.infrastructure.mods import manifest
 
     root = Path(__file__).resolve().parents[2]
-    source = root / "mods/xcagi-erp-domain-bridge/manifest.json"
+    source = root / "mods/bridge/xcagi-erp-domain-bridge/manifest.json"
     exported = root / "XCAGI/mods/xcagi-erp-domain-bridge/manifest.json"
     assert source.is_file()
     assert not exported.exists()

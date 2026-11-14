@@ -81,7 +81,7 @@ def test_checker_is_present_in_both_dev_manifests_and_frozen_lock():
         for value in config["project"]["optional-dependencies"]["dev"]
         if value.startswith("import-linter")
     )
-    assert requirement in (ROOT / "deploy/requirements-dev.txt").read_text().splitlines()
+    assert requirement in (ROOT / "ops/deploy/requirements-dev.txt").read_text().splitlines()
     packages = tomllib.loads((ROOT / "uv.lock").read_text())["package"]
     assert {"grimp", "import-linter"} <= {package["name"] for package in packages}
     project = next(package for package in packages if package["name"] == config["project"]["name"])

@@ -18,6 +18,7 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 MOD_ID = "sunbird-attendance-custom"
 LEGACY_ID = "taiyangniao-pro"
+MOD_SOURCE_LAYERS = ("industry", "bridge", "employees", "tools")
 
 
 def select_main_rework_source(evidence: dict[str, Any], user_id: int, action: str) -> None:
@@ -110,11 +111,17 @@ def release_source() -> tuple[Path, dict[str, str]]:
         and bool(files)
     ):
         raise ValueError("主线发行身份或私有 Mod 源指纹缺失/不匹配")
-    source = root / "FHD/mods" / MOD_ID
-    actual_files, actual_sha = source_fingerprints(source)
-    if actual_files != files or actual_sha != wanted:
-        raise ValueError("主线私有 Mod 源与发行指纹不一致")
-    return source, {"git_sha": sha, "git_tree": tree, "sha256": wanted}
+    candidates = [
+        root / "FHD/mods" / MOD_ID,
+        *(root / "FHD/mods" / layer / MOD_ID for layer in MOD_SOURCE_LAYERS),
+    ]
+    for source in candidates:
+        if not source.is_dir():
+            continue
+        actual_files, actual_sha = source_fingerprints(source)
+        if actual_files == files and actual_sha == wanted:
+            return source, {"git_sha": sha, "git_tree": tree, "sha256": wanted}
+    raise ValueError("主线私有 Mod 源与发行指纹不一致")
 
 
 def _copy_validated_source(library: Path, provenance: dict[str, str]) -> Path:

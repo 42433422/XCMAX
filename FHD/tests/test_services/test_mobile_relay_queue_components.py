@@ -234,6 +234,11 @@ def test_pairing_and_queue_work_without_importing_the_service_facade(tmp_path):
                     user_id=user_id, relay_id=relay_id,
                     database=database, ensure_schema=repository.ensure_tables,
                 ),
+            desktop_public_key=lambda user_id, relay_id:
+                repository.desktop_public_key_for_user(
+                    user_id=user_id, relay_id=relay_id,
+                    database=database, ensure_schema=repository.ensure_tables,
+                ),
             desktop_for_token=repository.desktop_for_token,
             public_desktop=repository.public_desktop,
             notify_task_creator=notifications.append,

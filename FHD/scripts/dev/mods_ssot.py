@@ -74,15 +74,44 @@ def _skip_path(rel: Path) -> bool:
 
 
 def list_mod_ids(root: Path) -> list[str]:
+    """列出 Mod id。
+
+    编辑源按 ``industry/ bridge/ employees/ tools/`` 分层，导出目录保持平铺，
+    两种布局都要能枚举（id 仍是 Mod 目录名）。
+    """
     if not root.is_dir():
         return []
     out: list[str] = []
     for entry in sorted(root.iterdir()):
-        if not entry.is_dir() or entry.name.startswith("_"):
+        if not entry.is_dir() or entry.name.startswith(("_", ".")):
             continue
         if (entry / "manifest.json").is_file():
             out.append(entry.name)
+            continue
+        for sub in sorted(entry.iterdir()):
+            if (
+                sub.is_dir()
+                and not sub.name.startswith(("_", "."))
+                and (sub / "manifest.json").is_file()
+            ):
+                out.append(sub.name)
     return out
+
+
+def find_source_dir(mod_id: str) -> Path | None:
+    """在编辑源中定位 Mod 目录（平铺或分层容器下一层）。"""
+    direct = SSOT_ROOT / mod_id
+    if (direct / "manifest.json").is_file():
+        return direct
+    if not SSOT_ROOT.is_dir():
+        return None
+    for entry in sorted(SSOT_ROOT.iterdir()):
+        if not entry.is_dir() or entry.name.startswith(("_", ".")):
+            continue
+        candidate = entry / mod_id
+        if (candidate / "manifest.json").is_file():
+            return candidate
+    return None
 
 
 def iter_relative_files(root: Path) -> dict[str, Path]:
@@ -108,10 +137,10 @@ def file_digest(path: Path) -> str:
 
 
 def compare_mod(mod_id: str) -> list[str]:
-    src = SSOT_ROOT / mod_id
+    src = find_source_dir(mod_id)
     dst = EXPORT_ROOT / mod_id
     issues: list[str] = []
-    if not src.is_dir():
+    if src is None or not src.is_dir():
         issues.append(f"{mod_id}: SSOT 目录不存在")
         return issues
     if mod_id in SOURCE_ONLY_MODS:
@@ -146,10 +175,10 @@ def sync_mod(mod_id: str, *, dry_run: bool, prune: bool) -> None:
         raise SystemExit(f"私有 Mod 不允许导出到 XCAGI/mods: {mod_id}")
     if mod_id in NO_XCAGI_EXPORT_MODS:
         raise SystemExit(f"debt19: Mod 不允许导出到 XCAGI/mods: {mod_id}")
-    src = SSOT_ROOT / mod_id
+    src = find_source_dir(mod_id)
     dst = EXPORT_ROOT / mod_id
-    if not src.is_dir():
-        raise SystemExit(f"SSOT 中无 Mod 目录: {src}")
+    if src is None or not src.is_dir():
+        raise SystemExit(f"SSOT 中无 Mod 目录: {mod_id}")
     if not (src / "manifest.json").is_file():
         raise SystemExit(f"缺少 manifest.json: {src / 'manifest.json'}")
 

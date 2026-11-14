@@ -88,7 +88,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           WeCell(
                             title: '扫码绑定',
-                            subtitle: '绑定服务器后台、企业工作台或电脑执行端',
                             icon: Icons.qr_code_2,
                             iconColor: Theme.of(context).colorScheme.secondary,
                             iconBg: Theme.of(
@@ -328,8 +327,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (error) {
       text = '同步失败，点「同步」重试';
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)
-            ?.showSnackBar(SnackBar(content: Text('$error')));
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(mobileErrorText(error))),
+        );
       }
     }
     if (mounted) setState(() => _syncSummary = text);
@@ -354,22 +354,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
-    final before = await _api.loadSession().catchError(
-          (_) => MobileSessionData.empty,
-        );
     await _api.clearActiveAuth();
     if (!mounted) return;
-    _replaceWithMobileLogoutDestination(before);
+    _replaceWithMobileLogoutDestination();
   }
 
-  void _replaceWithMobileLogoutDestination(MobileSessionData before) {
-    final setupComplete =
-        before.setupComplete || before.fhdHost.trim().isNotEmpty;
-    final Widget destination = setupComplete
-        ? const AuthScreen()
-        : const ConnectScreen(fromProfile: true);
+  void _replaceWithMobileLogoutDestination() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => destination),
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
       (_) => false,
     );
   }
@@ -427,9 +419,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _replaceWithAuth();
     } catch (error) {
       if (!mounted) return;
-      final message = error is MobileApiException
-          ? error.message
-          : error.toString().replaceFirst('Exception: ', '');
+      final message =
+          error is MobileApiException ? error.message : mobileErrorText(error);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message.isEmpty ? '注销失败，请检查网络后重试' : message)),
       );

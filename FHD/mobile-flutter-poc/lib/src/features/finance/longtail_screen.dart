@@ -72,17 +72,15 @@ class _LongTailScreenState extends State<LongTailScreen> {
                           children: [
                             WeCell(
                               title: '凭证与收支',
-                              subtitle: '查看应收、应付与交易记录',
                               icon: Icons.receipt_long,
                               iconColor: colors.success,
                               iconBg: Theme.of(
                                 context,
                               ).colorScheme.secondaryContainer,
-                              onTap: () => _showMessage('请在电脑端打开完整财务看板'),
+                              onTap: () => _showMessage('请在电脑端打开财务看板'),
                             ),
                             WeCell(
                               title: '标签打印',
-                              subtitle: '打印商品标签和条码模板',
                               icon: Icons.local_printshop,
                               iconColor: colors.warning,
                               iconBg: colors.warning.withValues(alpha: 0.12),
@@ -129,7 +127,7 @@ class _LongTailScreenState extends State<LongTailScreen> {
 
 String _financePreview(String raw) {
   if (raw.trim().isEmpty) {
-    return '连接企业后端后显示收入、成本、毛利与应付摘要';
+    return '';
   }
   return raw
       .replaceAll('{', '')

@@ -6,6 +6,7 @@ import type { AgentRunEvent } from '@/api/agentRuns'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
 import { buildAgentRunTraceFromEvents, isTrivialChatTrace } from '@/utils/agentRunTraceModel'
 import { asRecord, asArray, asString, asNumber, asBoolean } from '@/utils/typeGuards'
+import { readPlannerBusinessResult } from '@/utils/readPlannerBusinessResult'
 
 export interface UseChatResponseAttachDeps {
   messages: Ref<ChatMessage[]>
@@ -114,6 +115,18 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
       const msg = messages.value[i]
       if (msg?.role === 'ai') {
         msg.approvalCard = card
+        break
+      }
+    }
+  }
+
+  function attachBusinessResultToLastAiMessage(data: ChatPlannerPayload): void {
+    const businessResult = readPlannerBusinessResult(data)
+    if (!businessResult) return
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const msg = messages.value[i]
+      if (msg?.role === 'ai') {
+        msg.businessResult = businessResult
         break
       }
     }
@@ -244,6 +257,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     attachTodoStepsToLastAiMessage,
     attachWorkflowTraceToLastAiMessage,
     attachApprovalCardToLastAiMessage,
+    attachBusinessResultToLastAiMessage,
     attachContextSummaryToLastAiMessage,
     attachAgentRunTraceToLastAiMessage,
     syncTaskFromChatResponse,

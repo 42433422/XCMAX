@@ -220,7 +220,7 @@ mods/<mod_id>/
 
 ## 4b. 行业包 manifest（`*-industry`）
 
-中性行业包（如 `coating-industry`、`attendance-industry`）除 §4 通用字段外，须满足 **七段契约**，JSON Schema 见 [`contracts/industry_package.schema.json`](../../contracts/industry_package.schema.json)。发版前由 `tests/release_gate/test_industry_package_contract.py` 校验。
+中性行业包（如 `coating-industry`、`attendance-industry`）除 §4 通用字段外，须满足 **七段契约**，JSON Schema 见 [`assets/contracts/industry_package.schema.json`](../../assets/contracts/industry_package.schema.json)。发版前由 `tests/release_gate/test_industry_package_contract.py` 校验。
 
 | 契约段 | manifest 字段 | 说明 |
 |---|---|---|
@@ -642,7 +642,7 @@ Workflow Employee 是**前端工作流面板**生成控制卡的元数据。每�
 | `POST` | `/phone-agent/stop` | 停止。 |
 | `GET`  | `/phone-agent/statu` | 对前端历史拼写错误（少写 `s`）的容错别名。 |
 
-**参考实现**：`mods/sz-qsm-pro/backend/blueprints.py` 的 `register_fastapi_routes`。
+**参考实现**：`mods/industry/sz-qsm-pro/backend/blueprints.py` 的 `register_fastapi_routes`。
 
 ### 11.3 Employee Pack（全局员工包）
 
@@ -968,8 +968,8 @@ CI 强烈建议把前两步作为 blocking steps。
 | Mod | 路径 | 展示点 |
 |---|---|---|
 | **example-mod** | `mods/example-mod/` | 最小骨架：一条 hello 路由 + 一个 comms 通道（ping）。从这里起步。 |
-| **taiyangniao-pro** | `mods/taiyangniao-pro/` | 中等：含考勤文件上传 / 转换、菜单覆盖、workflow_employee 占位。 |
-| **sz-qsm-pro** | `mods/sz-qsm-pro/` | 完整形态：多路由（dashboard / advanced-settings / batch-process / smart-recommend / qa-packages / phone-agent）、hook、comms、workflow_employee（电话业务员）、同 Mod 内多模块动态加载、私有依赖（`faster-whisper`、`miniaudio`）。 |
+| **taiyangniao-pro** | `mods/industry/taiyangniao-pro/` | 中等：含考勤文件上传 / 转换、菜单覆盖、workflow_employee 占位。 |
+| **sz-qsm-pro** | `mods/industry/sz-qsm-pro/` | 完整形态：多路由（dashboard / advanced-settings / batch-process / smart-recommend / qa-packages / phone-agent）、hook、comms、workflow_employee（电话业务员）、同 Mod 内多模块动态加载、私有依赖（`faster-whisper`、`miniaudio`）。 |
 
 **模板脚手架**：`MODstore/templates/skeleton/`（变量：`__MOD_ID__`、`__MOD_NAME__`）。
 

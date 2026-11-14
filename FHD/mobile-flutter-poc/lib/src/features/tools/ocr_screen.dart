@@ -29,27 +29,22 @@ class OcrScreen extends StatelessWidget {
                     children: [
                       WeCell(
                         title: '拍照识别',
-                        subtitle: '调用企业端 OCR 引擎处理图片文字',
                         icon: Icons.camera_alt,
                         iconColor: colors.brand,
                         iconBg: colors.brandContainer,
-                        onTap: () =>
-                            _showMessage(context, '移动端拍照上传正在接入，请先使用电脑端 OCR'),
+                        onTap: () => _showMessage(context, '请使用电脑端 OCR'),
                       ),
                       WeCell(
                         title: '从相册选择',
-                        subtitle: '识别票据、表格截图与文档图片',
                         icon: Icons.photo_library,
                         iconColor: colors.success,
                         iconBg: Theme.of(
                           context,
                         ).colorScheme.secondaryContainer,
-                        onTap: () =>
-                            _showMessage(context, '移动端相册识别正在接入，请先使用电脑端 OCR'),
+                        onTap: () => _showMessage(context, '请使用电脑端 OCR'),
                       ),
                       WeCell(
                         title: '批量识别',
-                        subtitle: '完整批量处理请使用电脑端',
                         icon: Icons.insert_drive_file,
                         iconColor: colors.warning,
                         iconBg: colors.warning.withValues(alpha: 0.12),
@@ -64,7 +59,6 @@ class OcrScreen extends StatelessWidget {
                     children: [
                       WeCell(
                         title: 'OCR 服务',
-                        subtitle: '等待移动端上传链路接入',
                         icon: Icons.cloud_done,
                         iconColor: colors.success,
                         iconBg: Theme.of(

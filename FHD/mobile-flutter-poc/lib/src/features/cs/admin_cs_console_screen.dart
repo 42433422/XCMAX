@@ -8,6 +8,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
+import '../../policy/mobile_error_policy.dart';
 
 part 'admin_cs_console_conversation.part.dart';
 part 'admin_cs_console_widgets.part.dart';
@@ -225,17 +226,6 @@ class _AdminCsEmptyInbox extends StatelessWidget {
             color: colors.textSecondary,
             fontSize: 15,
             height: 1.4,
-            letterSpacing: 0,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '客户在「专属客服」发起咨询后会出现在这里',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: colors.textTertiary,
-            fontSize: 13,
-            height: 1.31,
             letterSpacing: 0,
           ),
         ),

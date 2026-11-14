@@ -117,7 +117,7 @@ class _AiEmployeeProfileScreenState extends State<AiEmployeeProfileScreen> {
       id: 'employee:${employee.modId}:${employee.employeeId}',
       type: ConversationType.aiTask,
       title: employee.name,
-      subtitle: employee.summary,
+      subtitle: '',
       timestampText: '',
     );
     Navigator.of(context).push(

@@ -79,11 +79,10 @@ def payment_client(request, tmp_path, monkeypatch):
         app.include_router(model_payment.router)
         prefix = "/api/model-payment"
     else:
-        path = (
-            Path(__file__).resolve().parents[2]
-            / request.param
-            / "xcagi-model-payment-bridge/backend/blueprints.py"
-        )
+        from app.mod_sdk.mod_source_paths import mod_source_dir
+
+        bridge = Path(__file__).resolve().parents[2] / request.param / "xcagi-model-payment-bridge"
+        path = (mod_source_dir("xcagi-model-payment-bridge") or bridge) / "backend/blueprints.py"
         spec = spec_from_file_location("checkout_bridge_test", path)
         module = module_from_spec(spec)
         spec.loader.exec_module(module)

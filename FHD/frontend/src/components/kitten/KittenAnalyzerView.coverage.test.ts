@@ -166,6 +166,7 @@ function mountView(analyzerOverrides: Record<string, unknown> = {}, vizOverrides
         KittenVizEmployeeStrip: VizEmployeeStripStub,
         KittenChartPanel: ChartPanelStub,
         KittenLauncherIcon: LauncherIconStub,
+        KittenBusinessDashboard: true,
       },
     },
   })
@@ -198,6 +199,16 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
     it('无数据集时不显示数据集栏', () => {
       const wrapper = mountView()
       expect(wrapper.find('.kitten-dataset-bar').exists()).toBe(false)
+    })
+
+    it('用户问财报时自动切到经营看板', async () => {
+      const wrapper = mountView()
+      mockAnalyzer.messages.value = [
+        { role: 'ai', content: '欢迎', time: '10:00' },
+        { role: 'user', content: '我们的财报怎么样？', time: '10:01' },
+      ]
+      await nextTick()
+      expect(wrapper.find('.kitten-tab.is-active').text()).toBe('经营看板')
     })
 
     it('有数据集时显示数据集栏', () => {

@@ -21,6 +21,7 @@ export const useIndustryStore = defineStore('industry', () => {
   const currentIndustry = ref<Industry | null>(null)
   const currentConfig = ref<unknown>(null)
   const loading = ref(false)
+  const settled = ref(false)
   const error = ref<string | null>(null)
   // Phase 2 会通过 templatePreviewApi.getTermRules 填充；Phase 1 先留空。
   const termRules = ref<Record<string, unknown>>({})
@@ -84,6 +85,7 @@ export const useIndustryStore = defineStore('industry', () => {
       industries.value = []
     } finally {
       loading.value = false
+      settled.value = true
     }
   }
 
@@ -116,6 +118,7 @@ export const useIndustryStore = defineStore('industry', () => {
       if (fallback) applyCurrentIndustry(fallback)
     } finally {
       loading.value = false
+      settled.value = true
     }
   }
 
@@ -155,7 +158,10 @@ export const useIndustryStore = defineStore('industry', () => {
       if (currentRequest()) error.value = err instanceof Error ? err.message : '从服务器加载行业失败'
       throw err
     } finally {
-      if (currentRequest()) loading.value = false
+      if (currentRequest()) {
+        loading.value = false
+        settled.value = true
+      }
     }
   }
 
@@ -186,6 +192,7 @@ export const useIndustryStore = defineStore('industry', () => {
     currentIndustry: readonly(currentIndustry),
     currentConfig,
     loading,
+    settled,
     error,
     termRules,
     currentIndustryName,

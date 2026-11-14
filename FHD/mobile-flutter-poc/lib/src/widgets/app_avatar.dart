@@ -32,8 +32,7 @@ class AppAvatar extends StatelessWidget {
     return Semantics(
       label: contentDescription,
       image: true,
-      child: ClipRRect(
-        borderRadius: borderRadius,
+      child: ClipOval(
         child: SizedBox.square(
           dimension: size,
           child: effectiveSource == null

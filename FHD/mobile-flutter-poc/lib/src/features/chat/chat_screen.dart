@@ -1,18 +1,25 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
+import 'package:flutter_chat_core/flutter_chat_core.dart';
 
 import '../../api/mobile_models.dart' show MobileMeData;
 import '../../data/ai_employee_profile.dart';
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
+import '../../data/offline/mobile_offline_store.dart';
 import '../../models/conversation.dart';
 import '../../policy/mobile_error_policy.dart';
 import '../../policy/avatar_policy.dart';
 import '../../platform/android_record_audio_permission.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_icons.dart';
 import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
+import '../call/voice_call_screen.dart';
 import '../contacts/employee_profile_screen.dart';
 import '../contacts/fixed_partner_profile_screen.dart';
 import '../devtools/branch_detail_screen.dart';
@@ -51,6 +58,7 @@ class _ChatScreenState extends _ChatStateActions {
   void initState() {
     super.initState();
     _messages = [...widget.initialMessages];
+    _syncFlyerChat();
     _repository = widget.repository ?? MobileRepositoryScope.maybeRead(context);
     _employeeRef = _parseEmployeeConversationRef(widget.conversation.id);
     _loadRemoteMessages();
@@ -60,8 +68,74 @@ class _ChatScreenState extends _ChatStateActions {
 
   @override
   void dispose() {
+    _flyerChatController.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _openCallOptions() {
+    final repository = _repository;
+    if (repository == null) {
+      _showMessage('通话暂时不可用');
+      return;
+    }
+    showCallOptionsSheet(
+      context,
+      onVoice: () {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => VoiceCallScreen(
+              conversation: widget.conversation,
+              repository: repository,
+              title: _resolvedTitle,
+              avatarUrl: _employeeProfile?.avatarUrl,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyChat(BuildContext context) {
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildFlyerTextMessage(
+    BuildContext context,
+    TextMessage message,
+    int index, {
+    required bool isSentByMe,
+    MessageGroupStatus? groupStatus,
+  }) {
+    final originalIndex =
+        _messages.indexWhere((item) => item.id == message.id);
+    if (originalIndex < 0) return const SizedBox.shrink();
+    final original = _messages[originalIndex];
+    final isActiveRelay = _sending &&
+        _activeAssistantId == original.id &&
+        _activeRelayProgress != null;
+    final toolCalls = _toolCallsFor(original);
+    return MessageBubble(
+      message: original,
+      conversation: widget.conversation,
+      showAvatar: _showAvatarAt(originalIndex),
+      userAvatarUrl: _userAvatarSource,
+      aiAvatarUrl: _employeeProfile?.avatarUrl,
+      aiContentDescription: _resolvedTitle,
+      hasEmployeeProfile: _employeeProfile != null,
+      relayProgress: isActiveRelay ? _activeRelayProgress : null,
+      cancellingRelay: _cancellingRelay,
+      onCancelRelay: _cancellingRelay ? null : () => _stopChat(),
+      onReply: () => setState(() => _replyTo = original),
+      onDelete: () => _deleteMessageAt(originalIndex),
+      onResend: original.status == ChatDeliveryStatus.failed
+          ? _resendLastChat
+          : null,
+      toolCalls: toolCalls,
+      onShowTimeline: toolCalls.isEmpty
+          ? null
+          : () => _openTimelineForMessage(original),
+    );
   }
 
   @override
@@ -83,64 +157,37 @@ class _ChatScreenState extends _ChatStateActions {
               onBack: () => Navigator.of(context).maybePop(),
               actions: [
                 IconButton(
-                  onPressed: () => _showMessage('视频通话功能即将上线'),
-                  icon: const Icon(Icons.videocam_outlined, size: 22),
-                  tooltip: '视频',
+                  onPressed: _openCallOptions,
+                  icon: const Icon(AppIcons.video, size: 22),
+                  tooltip: '通话',
                   color: colors.textPrimary,
                 ),
                 IconButton(
                   onPressed: _openProfileOrTools,
-                  icon: const Icon(Icons.more_horiz, size: 22),
+                  icon: const Icon(AppIcons.more, size: 22),
                   tooltip: '更多',
                   color: colors.textPrimary,
                 ),
               ],
             ),
-            if (_loadingRemoteMessages)
-              LinearProgressIndicator(
-                minHeight: 2,
-                color: colors.brand,
-                backgroundColor: colors.surfaceHigh,
-              ),
             Expanded(
-              child: _messages.isEmpty
-                  ? const SizedBox.expand()
-                  : ListView.builder(
-                      reverse: true,
-                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
-                      itemBuilder: (context, index) {
-                        final originalIndex = _messages.length - index - 1;
-                        final message = _messages[originalIndex];
-                        final isActiveRelay = _sending &&
-                            _activeAssistantId == message.id &&
-                            _activeRelayProgress != null;
-                        final toolCalls = _toolCallsFor(message);
-                        return MessageBubble(
-                          message: message,
-                          conversation: widget.conversation,
-                          showAvatar: _showAvatarAt(originalIndex),
-                          userAvatarUrl: _userAvatarSource,
-                          aiAvatarUrl: employeeProfile?.avatarUrl,
-                          aiContentDescription: _resolvedTitle,
-                          hasEmployeeProfile: employeeProfile != null,
-                          relayProgress:
-                              isActiveRelay ? _activeRelayProgress : null,
-                          cancellingRelay: _cancellingRelay,
-                          onCancelRelay:
-                              _cancellingRelay ? null : () => _stopChat(),
-                          onReply: () => setState(() => _replyTo = message),
-                          onDelete: () => _deleteMessageAt(originalIndex),
-                          onResend: message.status == ChatDeliveryStatus.failed
-                              ? _resendLastChat
-                              : null,
-                          toolCalls: toolCalls,
-                          onShowTimeline: toolCalls.isEmpty
-                              ? null
-                              : () => _openTimelineForMessage(message),
-                        );
-                      },
-                      itemCount: _messages.length,
-                    ),
+              child: Chat(
+                chatController: _flyerChatController,
+                currentUserId: _flyerMeId,
+                resolveUser: _resolveFlyerUser,
+                backgroundColor: Colors.transparent,
+                // 发送仍走现有链路：输入区由外层 Column 提供。
+                onMessageSend: (_) {},
+                builders: Builders(
+                  textMessageBuilder: _buildFlyerTextMessage,
+                  emptyChatListBuilder: _buildEmptyChat,
+                  // 与微信/Telegram 一致：消息从底部向上生长。
+                  chatAnimatedListBuilder: (context, itemBuilder) =>
+                      ChatAnimatedList(itemBuilder: itemBuilder, reversed: true),
+                  // 输入区由外层 Column 提供，Chat 只负责消息列表。
+                  composerBuilder: (context) => const SizedBox.shrink(),
+                ),
+              ),
             ),
             _Composer(
               controller: _controller,

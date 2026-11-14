@@ -613,7 +613,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--peak-floor",
         action="store_true",
-        help=f"check：启用峰值硬阻断，低于历史峰值 {PEAK_FLOOR_MARGIN:.1f}% 即失败",
+        help=f"check：启用峰值硬阻断，低于历史峰值 {PEAK_FLOOR_MARGIN:.1f}%% 即失败",
     )
     args = parser.parse_args(argv)
 

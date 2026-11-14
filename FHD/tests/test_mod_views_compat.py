@@ -51,7 +51,7 @@ def test_customer_service_pages_registry_physical():
 
     reg = list_customer_service_pages_registry()
     manifest = json.loads(
-        (REPO / "mods" / "xcagi-customer-service-bridge" / "manifest.json").read_text(
+        (REPO / "mods" / "bridge" / "xcagi-customer-service-bridge" / "manifest.json").read_text(
             encoding="utf-8"
         )
     )

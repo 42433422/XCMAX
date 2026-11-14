@@ -161,6 +161,23 @@ abstract class _RepoServicesBase extends _RepoChatBase {
     return ready ? '行业能力已装齐' : '基础能力已安装，请刷新查看剩余项';
   }
 
+  /// 读取桌面/云端统一任务（移动端只读入口，P0 合流）。
+  Future<List<MobileTaskSummary>> loadTasks({int limit = 50}) async {
+    final response = await _client.mobileTasks(limit: limit);
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('任务列表加载失败'));
+    }
+    return response.data?.items ?? const <MobileTaskSummary>[];
+  }
+
+  Future<List<MobileDesktopDevice>> loadDesktopDevices() async {
+    final response = await _client.mobileDesktopDevices();
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('桌面设备加载失败'));
+    }
+    return response.data?.items ?? const <MobileDesktopDevice>[];
+  }
+
   Future<List<MarketCapability>> loadMarketCapabilities() async {
     final response = await _client.mobileMods();
     if (!response.success) {

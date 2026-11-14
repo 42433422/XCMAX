@@ -104,6 +104,7 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
         ),
       );
     });
+    _syncFlyerChat();
     try {
       final result = await repository.runGitOperation(branch: branch, op: op);
       if (!mounted) return;
@@ -113,7 +114,7 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
       );
     } catch (error) {
       if (!mounted) return;
-      _replaceMessageBody(messageId, '（$error）');
+      _replaceMessageBody(messageId, '（${mobileErrorText(error)}）');
     } finally {
       if (mounted) setState(() => _runningGitOp = false);
     }
@@ -129,19 +130,16 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
         _ChatToolAction(
           icon: Icons.difference,
           title: '查看 diff',
-          subtitle: '逐行检查分支改动',
           onTap: () => _openDiffViewer(branch),
         ),
         _ChatToolAction(
           icon: Icons.account_tree,
           title: '分支与审批',
-          subtitle: '查看提交并合并/丢弃',
           onTap: () => _openBranchDetail(branch),
         ),
         _ChatToolAction(
           icon: Icons.timeline,
           title: '执行回顾',
-          subtitle: '查看工具调用时间线',
           onTap: () => _openTimeline(),
         ),
         ..._sharedToolActions(),
@@ -152,7 +150,6 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
         _ChatToolAction(
           icon: Icons.timeline,
           title: '执行回顾',
-          subtitle: '查看工具调用时间线',
           onTap: () => _openTimeline(),
         ),
         ..._sharedToolActions(),
@@ -162,13 +159,11 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
       _ChatToolAction(
         icon: Icons.refresh,
         title: '新建对话',
-        subtitle: '清空当前上下文',
         onTap: _clearChat,
       ),
       _ChatToolAction(
         icon: Icons.qr_code_scanner,
         title: 'OCR 识别',
-        subtitle: '拍照提取文字',
         onTap: () {
           setState(() => _showToolPanel = false);
           Navigator.of(
@@ -177,9 +172,8 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
         },
       ),
       _ChatToolAction(
-        icon: Icons.mic,
+        icon: AppIcons.mic,
         title: '语音输入',
-        subtitle: '手机语音转文字',
         onTap: _startVoiceInput,
       ),
       ..._sharedToolActions(),
@@ -251,19 +245,16 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
       _ChatToolAction(
         icon: Icons.group,
         title: '任务派工',
-        subtitle: '先讨论再执行',
         onTap: _sendTaskDispatch,
       ),
       _ChatToolAction(
         icon: Icons.check,
         title: '验收回访',
-        subtitle: '要结论和证据',
         onTap: _sendAcceptanceFollowUp,
       ),
       _ChatToolAction(
         icon: Icons.auto_awesome,
         title: '问题修复',
-        subtitle: '定位根因并验证',
         onTap: _sendProblemFix,
       ),
     ];
