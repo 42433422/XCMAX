@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "2026_11_11_etl_source_slice"
-down_revision = "2026_11_11_agent_permissions"
+down_revision = "2026_11_11_business_ref_unique"
 branch_labels = None
 depends_on = None
 
