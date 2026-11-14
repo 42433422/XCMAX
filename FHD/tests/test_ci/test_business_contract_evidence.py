@@ -9,6 +9,7 @@ import pytest
 
 from scripts.dev.check_business_contract_evidence import (
     MINIMUM_REQUIRED,
+    REQUIRED_TESTS,
     catalog_errors,
     ci_gate,
     evidence_from_junit,
@@ -30,7 +31,11 @@ def _case(classname: str, name: str, inner: str = "") -> str:
 
 
 def _passing_pair() -> str:
-    return _case(CLASSNAME, NAME) + _case(EXPORT_CLASS, EXPORT_NAME)
+    body = ""
+    for node_id in REQUIRED_TESTS.values():
+        module, _, name = node_id.partition("::")
+        body += _case(module[:-3].replace("/", "."), name)
+    return body
 
 
 def _xml(body: str) -> str:

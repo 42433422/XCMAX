@@ -22,22 +22,28 @@
     },
     {
       "requirement_id": "R02",
-      "scenario_id": "R02-zero-valid-rows",
-      "rule": "应当含有业务记录的原件解析出零条有效记录时，不得伪装成可正常提交。",
-      "source": "数据对接零有效行保护；本批只登记。",
-      "preconditions": ["原件被标为应当含有业务记录"],
-      "inputs": ["零有效行样例"],
-      "allowed": ["错误或待处理状态", "保留诊断依据"],
-      "forbidden_effects": ["零条有效记录仍显示可正常提交"],
-      "oracle": "样例标注的预期状态",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "scenario_id": "R02-empty-preview",
+      "rule": "只有表头、没有有效记录的原件可以预演，但不得确认入库。必须留下空预演诊断。",
+      "source": "FHD/tests/test_application/test_etl_preview_task_boundaries.py 的空预演。样例是合成 CSV，不是客户原件。",
+      "preconditions": ["租户内已上传只有表头的 CSV", "预演完成且总行数为 0"],
+      "inputs": ["客户名称,电话\\n"],
+      "allowed": ["状态仍是 preview_ready", "诊断码 ELT_PREVIEW_EMPTY 和 ELT_NO_DATA_ROWS", "确认执行被拒绝"],
+      "forbidden_effects": ["零行预演仍能确认入库"],
+      "oracle": "预演快照里的 total_rows 和 empty_preview 诊断，而不是再解析一遍文件",
+      "tests": [
+        "tests/test_application/test_etl_preview_task_boundaries.py::test_empty_preview_is_not_confirmable"
+      ],
+      "boundary": {
+        "real": ["sqlite", "ELT preview worker", "ELT execute"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
-      "fault_version": "零有效行仍返回可提交",
+      "fault_version": "把总行数改成 1 后仍放行空预演",
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
-      "resources": ["合成工作簿"],
-      "required_for_merge": false
+      "resources": ["合成 CSV"],
+      "required_for_merge": true
     },
     {
       "requirement_id": "R03",
