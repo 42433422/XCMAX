@@ -54,18 +54,16 @@ def _discover_native_tool_mods() -> list[dict[str, Any]]:
 
     # 磁盘扫描（Mod 未热加载时）
     try:
+        from app.infrastructure.mods.management.discovery import _mod_dir_candidates
         from app.infrastructure.mods.manifest import parse_manifest
         from app.shell.xcagi_mods_discover import mods_dir
 
         root = mods_dir()
         if not root:
             return rows
-        from pathlib import Path
 
-        for child in Path(root).iterdir():
-            if not child.is_dir() or child.name.startswith("_"):
-                continue
-            parsed_meta = parse_manifest(str(child))
+        for _entry, mod_path in _mod_dir_candidates(str(root)):
+            parsed_meta = parse_manifest(mod_path)
             if parsed_meta is None:
                 continue
             tools = _native_tools_from_metadata(parsed_meta)

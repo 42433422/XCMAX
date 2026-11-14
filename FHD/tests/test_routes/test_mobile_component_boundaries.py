@@ -662,8 +662,8 @@ app = FastAPI()
 app.include_router(mobile_api.router)
 schema = app.openapi()
 operations = [op for path in schema["paths"].values() for verb, op in path.items() if verb in {{"get", "post", "put", "delete", "patch"}}]
-assert len(operations) == 100
-assert len({{op["operationId"] for op in operations}}) == 100
+assert len(operations) == 104
+assert len({{op["operationId"] for op in operations}}) == 104
 assert mobile_api_extensions.get_mobile_user is mobile_api.get_mobile_user
 """
     result = subprocess.run(
@@ -682,7 +682,7 @@ class RejectRoot(importlib.abc.MetaPathFinder):
         if fullname in {"app.fastapi_routes.mobile_api", "app.fastapi_routes.mobile_api_extensions"}:
             raise AssertionError("component tried to load its composition root")
 sys.meta_path.insert(0, RejectRoot())
-for module in ("access", "read_models", "employee_catalog", "routes_worklists", "routes_devices", "routes_pairing", "routes_relay", "routes_support", "routes_workspace", "routes_admin", "routes_circle", "routes_employee_chat", "routes_ai_groups", "routes_cs_contacts", "routes_payment", "routes_super_employee", "routes_sync"):
+for module in ("access", "read_models", "employee_catalog", "routes_worklists", "routes_devices", "routes_pairing", "routes_relay", "routes_tasks", "routes_desktop_devices", "routes_support", "routes_workspace", "routes_admin", "routes_circle", "routes_employee_chat", "routes_ai_groups", "routes_cs_contacts", "routes_payment", "routes_super_employee", "routes_sync"):
     importlib.import_module("app.fastapi_routes.mobile_extensions." + module)
 """
     result = subprocess.run(

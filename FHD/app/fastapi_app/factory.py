@@ -16,6 +16,7 @@ from app.config import Config, get_config
 from app.infrastructure.mods.mod_auth import ModContextMiddleware
 from app.middleware.auth_rate_limit import AuthRateLimitMiddleware
 from app.middleware.csrf import CSRFMiddleware
+from app.middleware.customer_mod_scope import CustomerModScopeMiddleware
 from app.middleware.global_rate_limit import GlobalRateLimitMiddleware
 from app.middleware.industry_context import IndustryContextMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -139,6 +140,9 @@ def _create_fastapi_app(
         app.add_middleware(CORSMiddleware, **_cors_kw)
 
     app.add_middleware(ModContextMiddleware)
+    # 客户定制 Mod 的接口隔离：注册在 ModContext 之前生效（后注册者更外层），
+    # 使未授权的定制路由在进入 Mod 上下文与业务路由之前就被拒绝。
+    app.add_middleware(CustomerModScopeMiddleware)
     app.add_middleware(IndustryContextMiddleware)
     app.add_middleware(LanLicenseGuard)
     app.add_middleware(LanCidrGuard)

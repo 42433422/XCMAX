@@ -52,7 +52,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     _DiscoverItem(
       key: 'pair-desktop',
       title: '扫码绑定电脑端',
-      subtitle: '绑定后，电脑端侧栏的工具会同步到这里',
       icon: Icons.qr_code_scanner,
     ),
   ];
@@ -93,7 +92,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         children: [
                           WeCell(
                             title: 'AI交流圈',
-                            subtitle: '查看企业 AI 员工动态、主页和能力介绍',
                             icon: Icons.forum,
                             iconColor: colors.brand,
                             iconBg: colors.brandContainer,
@@ -102,16 +100,21 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           ),
                         ],
                       ),
-                      const WeSectionCaption('桌面工具（与电脑端侧栏对齐）'),
+                      const WeSectionCaption('桌面工具'),
                       WeCellGroup(
                         children: [
                           for (var i = 0; i < desktopTools.length; i++)
                             WeCell(
                               title: desktopTools[i].title,
-                              subtitle: desktopTools[i].subtitle,
                               icon: desktopTools[i].icon,
-                              iconColor: colors.brand,
-                              iconBg: colors.brandContainer,
+                              iconColor: _toneColor(
+                                context,
+                                desktopTools[i].tone,
+                              ),
+                              iconBg: _toneColor(
+                                context,
+                                desktopTools[i].tone,
+                              ).withValues(alpha: 0.12),
                               onTap: () => _openDesktopTool(desktopTools[i]),
                               showDivider: i < desktopTools.length - 1,
                             ),
@@ -122,23 +125,20 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         children: [
                           WeCell(
                             title: '审批',
-                            subtitle: '待办审批通过或驳回',
                             icon: Icons.fact_check,
-                            iconColor: colors.brand,
-                            iconBg: colors.brandContainer,
+                            iconColor: colors.success,
+                            iconBg: colors.success.withValues(alpha: 0.12),
                             onTap: _openApprovals,
                           ),
                           WeCell(
                             title: '扫码绑定',
-                            subtitle: '绑定企业端、管理端或电脑端登录',
                             icon: Icons.qr_code_scanner,
-                            iconColor: colors.brand,
-                            iconBg: colors.brandContainer,
+                            iconColor: colors.warning,
+                            iconBg: colors.warning.withValues(alpha: 0.12),
                             onTap: _openScan,
                           ),
                           WeCell(
                             title: 'OCR识别',
-                            subtitle: '拍照识别文字与文档',
                             icon: Icons.camera_alt,
                             iconColor: Theme.of(context).colorScheme.tertiary,
                             iconBg: Theme.of(
@@ -148,7 +148,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           ),
                           WeCell(
                             title: '通知与公告',
-                            subtitle: '企业公告与系统通知',
                             icon: Icons.notifications,
                             iconColor: colors.danger,
                             iconBg: Theme.of(
@@ -180,48 +179,125 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             source: item.source,
             modId: item.modId ?? '',
             title: item.name,
-            subtitle: item.source == 'mod'
-                ? 'Mod: ${(item.modId ?? item.key).trim()}'
-                : '点击打开',
             icon: _iconForNav(item),
+            tone: _toneForNav(item),
           ),
         )
         .toList(growable: false);
-    return visible.isEmpty ? _fallbackDesktopTools : visible;
+    if (visible.isEmpty) return _fallbackDesktopTools;
+    return _spreadAdjacentTones(visible);
+  }
+
+  /// 相邻两项同色时顺延色板，避免整列看起来重复。
+  List<_DiscoverItem> _spreadAdjacentTones(List<_DiscoverItem> items) {
+    final result = <_DiscoverItem>[];
+    var previous = -1;
+    for (final item in items) {
+      var tone = item.tone;
+      if (tone == previous) tone = (tone + 1) % 6;
+      result.add(
+        _DiscoverItem(
+          key: item.key,
+          path: item.path,
+          source: item.source,
+          modId: item.modId,
+          title: item.title,
+          icon: item.icon,
+          tone: tone,
+        ),
+      );
+      previous = tone;
+    }
+    return result;
   }
 
   IconData _iconForNav(MobileNavMenuItem item) {
-    if (item.key == 'chat' || item.icon.contains('comment')) {
-      return Icons.chat;
+    final key = item.key.toLowerCase();
+    if (key == 'chat' || item.icon.contains('comment')) return Icons.chat;
+    if (key == 'im' || item.icon.contains('envelope')) return Icons.forum;
+    if (key == 'ai-ecosystem' || item.icon.contains('sitemap')) {
+      return Icons.hub;
     }
-    if (item.key == 'im' || item.icon.contains('envelope')) {
-      return Icons.forum;
+    if (key == 'employee-workflow' ||
+        key.contains('employee') ||
+        item.icon.contains('users')) {
+      return Icons.workspaces;
     }
-    if (item.key == 'ai-ecosystem' || item.icon.contains('sitemap')) {
+    if (key.contains('organization') || key.contains('org')) {
       return Icons.account_tree;
     }
-    if (item.key == 'employee-workflow' || item.icon.contains('users')) {
-      return Icons.group;
+    if (key.contains('product') || item.icon.contains('cube')) {
+      return Icons.inventory_2;
     }
-    if (item.key == 'products' || item.icon.contains('cube')) {
-      return Icons.apps;
+    if (key.contains('customer') || key.contains('contact')) {
+      return Icons.groups;
     }
-    if (item.key == 'orders' || item.icon.contains('file')) {
-      return Icons.description;
+    if (key.contains('order') || key.contains('shipment')) {
+      return Icons.receipt_long;
     }
-    if (item.key == 'print' || item.icon.contains('print')) {
+    if (key.contains('record') || key.contains('history')) {
+      return Icons.history;
+    }
+    if (key.contains('resource') || key.contains('asset')) {
+      return Icons.folder_copy;
+    }
+    if (key.contains('data') || item.icon.contains('database')) {
+      return Icons.dataset;
+    }
+    if (key.contains('finance') || key.contains('wallet')) {
+      return Icons.account_balance_wallet;
+    }
+    if (key.contains('print') || item.icon.contains('print')) {
       return Icons.print;
     }
-    if (item.key == 'data-sources' || item.icon.contains('database')) {
-      return Icons.storage;
-    }
-    if (item.key == 'settings' || item.icon.contains('cog')) {
+    if (key.contains('setting') || item.icon.contains('cog')) {
       return Icons.settings;
     }
-    if (item.source == 'mod') {
-      return Icons.apps;
+    if (item.source == 'mod') return Icons.extension;
+    return Icons.widgets;
+  }
+
+  int _toneForNav(MobileNavMenuItem item) {
+    final key = item.key.toLowerCase();
+    final text = '${item.key} ${item.name}'.toLowerCase();
+    if (text.contains('智能') ||
+        text.contains('生态') ||
+        key.contains('ai-') ||
+        key == 'ai') {
+      return 0;
     }
-    return Icons.build;
+    if (text.contains('员工') ||
+        text.contains('组织') ||
+        text.contains('工作台') ||
+        text.contains('employee') ||
+        text.contains('org')) {
+      return 1;
+    }
+    if (text.contains('对象') ||
+        text.contains('客户') ||
+        text.contains('商品') ||
+        text.contains('产品') ||
+        text.contains('product')) {
+      return 2;
+    }
+    if (text.contains('资源') || text.contains('数据') || text.contains('data')) {
+      return 3;
+    }
+    if (text.contains('单据') ||
+        text.contains('订单') ||
+        text.contains('记录') ||
+        text.contains('打印') ||
+        text.contains('模板') ||
+        text.contains('order') ||
+        text.contains('print')) {
+      return 4;
+    }
+    if (text.contains('系统') ||
+        text.contains('设置') ||
+        text.contains('setting')) {
+      return 5;
+    }
+    return item.key.hashCode.abs() % 6;
   }
 
   void _openDesktopTool(_DiscoverItem item) {
@@ -318,8 +394,8 @@ class _DiscoverItem {
     this.source = '',
     this.modId = '',
     required this.title,
-    required this.subtitle,
     required this.icon,
+    this.tone = 0,
   });
 
   final String key;
@@ -327,6 +403,18 @@ class _DiscoverItem {
   final String source;
   final String modId;
   final String title;
-  final String subtitle;
   final IconData icon;
+  final int tone;
+}
+
+Color _toneColor(BuildContext context, int tone) {
+  final colors = AppTheme.colors(context);
+  return switch (tone) {
+    0 => colors.brand,
+    1 => colors.success,
+    2 => colors.warning,
+    3 => Theme.of(context).colorScheme.tertiary,
+    4 => const Color(0xFF0EA5A4),
+    _ => Theme.of(context).colorScheme.secondary,
+  };
 }

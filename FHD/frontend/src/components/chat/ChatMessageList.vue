@@ -91,6 +91,14 @@
             @cancel="$emit('approval-cancel', approvalCardId(msg.approvalCard))"
           />
           <div
+            v-if="msg.role === 'ai' && businessResultText(msg)"
+            class="message-business-result"
+            data-testid="chat-business-result"
+          >
+            <div class="message-business-result__label">业务结果</div>
+            <div class="message-business-result__text">{{ businessResultText(msg) }}</div>
+          </div>
+          <div
             v-if="showDiagnosticMetadata && msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))"
             class="trace-panel"
           >
@@ -210,6 +218,7 @@ import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.v
 import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue'
 import { buildApprovalCardTrace } from '@/utils/chatOrchestrationTrace'
 import { approvalCardId } from '@/utils/chatApprovalCard'
+import { formatBusinessResultSummary } from '@/utils/businessResultSummary'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 import { CHAT_HISTORY_WINDOW, useChatHistoryWindow } from '@/composables/useChatHistoryWindow'
 import { isFailedChatReply, proactiveReplyMessageId, type ProactiveReplySuggestion } from '@/composables/useProactiveReplySuggestions'
@@ -252,6 +261,10 @@ const emit = defineEmits<{
   'retry-model': [payload: { text: string; turnId: string }]
   'confirm-destructive': [payload: { text: string; idempotencyKey: string }]
 }>()
+
+function businessResultText(message: ChatMessage): string {
+  return formatBusinessResultSummary(message.businessResult)
+}
 
 function originalRequest(index: number): string {
   const reply = props.messages[index]
@@ -672,5 +685,26 @@ watch(
 
 .execution-timeline__list li.is-running .execution-timeline__marker {
   color: var(--xc-color-primary, #0d47a1);
+}
+
+.message-business-result {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  color: #111827;
+}
+.message-business-result__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4b5563;
+  margin-bottom: 4px;
+}
+.message-business-result__text {
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

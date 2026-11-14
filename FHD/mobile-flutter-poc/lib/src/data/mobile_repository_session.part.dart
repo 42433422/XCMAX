@@ -45,12 +45,13 @@ abstract class _RepoSessionBase extends _RepoRootBase {
   }) async {
     final conversationStates = Map<String, _ConversationListState>.of(
       _emptyConversationStates,
-    )..addAll(await _loadConversationListStates(_client));
+    )..addAll(await _loadConversationListStates(_client,
+        openStore: openOfflineStore));
     final fixed = _fixedConversationItems(
-      showCodex: enterpriseMode || adminMode,
-      showCursor: enterpriseMode || adminMode,
-      showClaude: enterpriseMode || adminMode,
-      showTrae: enterpriseMode || adminMode,
+      showCodex: adminMode,
+      showCursor: adminMode,
+      showClaude: adminMode,
+      showTrae: adminMode,
       showCustomerService: enterpriseMode && !adminMode,
       states: conversationStates,
     );
@@ -62,8 +63,8 @@ abstract class _RepoSessionBase extends _RepoRootBase {
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: adminMode ? null : '已安装',
-        badgeColor: adminMode ? null : _badgeInstalledColor,
+        badgeText: null,
+        badgeColor: null,
         states: conversationStates,
       ),
     ]);
@@ -73,12 +74,15 @@ abstract class _RepoSessionBase extends _RepoRootBase {
     bool adminMode = true,
     bool enterpriseMode = true,
   }) async {
-    final conversationStates = await _loadConversationListStates(_client);
+    final conversationStates = await _loadConversationListStates(
+      _client,
+      openStore: openOfflineStore,
+    );
     final fixed = _fixedConversationItems(
-      showCodex: enterpriseMode || adminMode,
-      showCursor: enterpriseMode || adminMode,
-      showClaude: enterpriseMode || adminMode,
-      showTrae: enterpriseMode || adminMode,
+      showCodex: adminMode,
+      showCursor: adminMode,
+      showClaude: adminMode,
+      showTrae: adminMode,
       showCustomerService: enterpriseMode && !adminMode,
       states: conversationStates,
     );
@@ -90,8 +94,8 @@ abstract class _RepoSessionBase extends _RepoRootBase {
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: adminMode ? null : '已安装',
-        badgeColor: adminMode ? null : _badgeInstalledColor,
+        badgeText: null,
+        badgeColor: null,
         states: conversationStates,
       ),
     ]);
@@ -149,5 +153,4 @@ abstract class _RepoSessionBase extends _RepoRootBase {
       // Cache write failure must not block the live Flutter UI.
     }
   }
-
 }

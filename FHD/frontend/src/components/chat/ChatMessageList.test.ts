@@ -48,6 +48,25 @@ function mountList(showDiagnosticMetadata = false) {
 }
 
 describe('ChatMessageList', () => {
+  it('renders a visible Business Harness result on the assistant message', () => {
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        ...defaultProps,
+        messages: [
+          {
+            role: 'ai' as const,
+            content: '客户已创建。',
+            time: '12:00',
+            businessResult: { status: 'completed', summary: '客户创建成功', facts: { customer_id: 23 } },
+          },
+        ],
+      },
+    })
+    expect(wrapper.get('[data-testid="chat-business-result"]').text()).toContain('客户创建成功')
+    expect(wrapper.get('[data-testid="chat-business-result"]').text()).toContain('客户 ID：23')
+  })
+
+
   it('keeps completed suggestions visible at the bottom without moving someone reading earlier messages', async () => {
     const messages = [{ role: 'ai' as const, content: '第一条回复', time: '12:00' },
       { role: 'ai' as const, content: '第二条回复', time: '12:01' }]

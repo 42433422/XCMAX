@@ -274,9 +274,9 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
     stage.value = 'thinking'
     const before = messages.value.length
     // 模型思考常常要好几秒，纯静音会让人以为断线：超过 1.2s 还没回复就先垫一句口头确认。
-    let ack: Promise<boolean> | null = null
+    let ack: Promise<void> | null = null
     const ackTimer = speakerOn.value
-      ? window.setTimeout(() => { ack = speakText(ACK_LINE, { silent: true }) }, ACK_DELAY_MS)
+      ? window.setTimeout(() => { ack = speakText(ACK_LINE) }, ACK_DELAY_MS)
       : null
     try {
       await sendMessage(text)
@@ -291,12 +291,10 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
       if (failed) setError('网络有点慢，请再说一次')
       if (speakerOn.value) {
         const line = failed ? SPOKEN_RETRY_HINT : reply
-        // 真正出声后再切到「正在说话」，避免合成期间显示在说话却没有声音。
-        const spoke = await speakText(line, { silent: true, onStart: () => { stage.value = 'speaking' } })
-        if (!spoke) {
-          stage.value = 'speaking'
-          await speakWithSystemVoice(line)
-        }
+        stage.value = 'speaking'
+        let speakFailed = false
+        await speakText(line, { onError: () => { speakFailed = true } })
+        if (speakFailed && open.value) await speakWithSystemVoice(line)
       }
     } catch (error) {
       if (ackTimer) window.clearTimeout(ackTimer)
@@ -305,9 +303,10 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
       handlingTurn = false
       if (open.value && !muted.value) {
         await new Promise(resolve => window.setTimeout(resolve, SPEAK_TAIL_MS))
-        if (!open.value || muted.value || handlingTurn) return
-        stage.value = 'listening'
-        beginListening()
+        if (open.value && !muted.value && !handlingTurn) {
+          stage.value = 'listening'
+          beginListening()
+        }
       }
     }
   }

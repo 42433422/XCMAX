@@ -18,6 +18,7 @@ const {
   refreshHistorySessions,
   syncAgentRunFromPayload,
   attachApprovalCardToLastAiMessage,
+  attachBusinessResultToLastAiMessage,
   attachAgentRunTraceToLastAiMessage,
   queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, getRun, continueRun, cancelRun, streamMode, modState,
   approvalGetMyRequests, approvalApprove,
@@ -33,6 +34,7 @@ const {
   refreshHistorySessions: vi.fn().mockResolvedValue(undefined),
   syncAgentRunFromPayload: vi.fn().mockResolvedValue(undefined),
   attachApprovalCardToLastAiMessage: vi.fn(),
+  attachBusinessResultToLastAiMessage: vi.fn(),
   attachAgentRunTraceToLastAiMessage: vi.fn(),
   queueVoice: vi.fn(), addMessage: vi.fn(), addAndSaveMessage: vi.fn().mockResolvedValue(undefined), previewMeta: vi.fn(), searchProducts: vi.fn(), observeTool: vi.fn(),
   streamMode: { enabled: true, realShipment: false }, modState: { activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() },
@@ -199,6 +201,7 @@ vi.mock('./useChatResponseAttach', () => ({
     attachTodoStepsToLastAiMessage: vi.fn(),
     attachWorkflowTraceToLastAiMessage: vi.fn(),
     attachApprovalCardToLastAiMessage,
+    attachBusinessResultToLastAiMessage,
     attachAgentRunTraceToLastAiMessage,
     attachContextSummaryToLastAiMessage: vi.fn(),
     syncTaskFromChatResponse: vi.fn(),
@@ -564,6 +567,7 @@ describe('useChatOrchestration stream', () => {
     await api.sendMessage('查看任务进度')
     expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, expect.stringContaining('已收到部分内容\n\n[回复未完成]'))
     expect(attachApprovalCardToLastAiMessage).not.toHaveBeenCalled()
+    expect(attachBusinessResultToLastAiMessage).not.toHaveBeenCalled()
     expect(syncAgentRunFromPayload).toHaveBeenCalledWith({ run_id: 'unfinished-run' }, '查看任务进度', expect.any(Function))
     expect(api.isLoading.value).toBe(false)
     expect(api.isStreamingReply.value).toBe(false)
@@ -581,6 +585,7 @@ describe('useChatOrchestration stream', () => {
     expect(handleChatRequiresToken).toHaveBeenCalledWith('DB_WRITE', '写入授权', ['等待写入授权'])
     expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '\n[需要授权：写入授权]\n')
     expect(attachApprovalCardToLastAiMessage).not.toHaveBeenCalled()
+    expect(attachBusinessResultToLastAiMessage).not.toHaveBeenCalled()
     expect(syncAgentRunFromPayload).toHaveBeenCalledWith({ run_id: 'waiting-run' }, '等待写入授权', expect.any(Function))
     expect(api.isLoading.value).toBe(false)
   })
@@ -766,6 +771,7 @@ describe('useChatOrchestration stream', () => {
     const sending = api.sendMessage('读取已登记应用')
     await vi.waitFor(() => {
       expect(attachApprovalCardToLastAiMessage).toHaveBeenCalledWith(payload)
+      expect(attachBusinessResultToLastAiMessage).toHaveBeenCalledWith(payload)
       expect(api.isLoading.value).toBe(false)
     }, { timeout: 1000 })
     await sending

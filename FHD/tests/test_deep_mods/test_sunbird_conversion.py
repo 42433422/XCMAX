@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 
 from app.mod_sdk.attendance_roster import initialize_roster_once
+from app.mod_sdk.mod_source_paths import mod_source_dir
 from app.mod_sdk.owner_workspace import owner_context, owner_workspace
 
 MOD_ID = "sunbird-attendance-custom"
@@ -18,7 +19,7 @@ BASE = f"/api/mod/{MOD_ID}/attendance"
 
 @pytest.fixture
 def sunbird_client(signed_runtime_mod):
-    source = Path(__file__).resolve().parents[2] / "mods" / MOD_ID
+    source = mod_source_dir(MOD_ID)
     installed = signed_runtime_mod.install(mod_id=MOD_ID, source=source)
     for key in list(sys.modules):
         if key == "sunbird_attendance" or key.startswith("sunbird_attendance."):

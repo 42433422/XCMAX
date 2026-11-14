@@ -1,16 +1,29 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_api.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_models.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
 import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
+import 'package:xcagi_flutter_poc/src/data/offline/mobile_offline_store.dart';
 import 'package:xcagi_flutter_poc/src/models/conversation.dart';
 import 'package:xcagi_flutter_poc/src/policy/mobile_runtime_policy.dart';
 import 'package:xcagi_flutter_poc/src/platform/credential_cipher.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   setUp(MobileProductSkuConfig.resetRemoteSku);
+  setUp(() async {
+    final store = MobileOfflineStore.forExecutor(NativeDatabase.memory());
+    await store.ensureReady();
+    MobileOfflineStore.installSharedForTest(store);
+  });
+  tearDown(() {
+    MobileOfflineStore.resetSharedForTest();
+  });
 
   test(
     'FileMobileSessionStore persists Flutter-equivalent auth fields',
@@ -547,30 +560,27 @@ void main() {
   test(
     'MobileRepository deletes one cached chat message like Flutter ts delete',
     () async {
-      final store = MemoryMobileSessionStore(
-        const MobileSessionData(
-          cachedChatMessages: {
-            'pinned:codex': [
-              {
-                'id': 'cache-1',
-                'conversation_id': 'pinned:codex',
-                'role': 'user',
-                'body': '保留',
-                'ts': 101,
-              },
-              {
-                'id': 'cache-2',
-                'conversation_id': 'pinned:codex',
-                'role': 'assistant',
-                'body': '删除',
-                'ts': 202,
-              },
-            ],
-          },
-        ),
-      );
+      final sessionStore = MemoryMobileSessionStore();
+      final offlineStore = await _sharedStore();
+      // 聊天缓存已迁到 SQLite，删除按 ts 命中离线库。
+      await offlineStore.replaceMessages('pinned:codex', const [
+        {
+          'id': 'cache-1',
+          'conversation_id': 'pinned:codex',
+          'role': 'user',
+          'body': '保留',
+          'ts': 101,
+        },
+        {
+          'id': 'cache-2',
+          'conversation_id': 'pinned:codex',
+          'role': 'assistant',
+          'body': '删除',
+          'ts': 202,
+        },
+      ]);
       final repository = MobileRepository(
-        client: MobileApiClient(sessionStore: store),
+        client: MobileApiClient(sessionStore: sessionStore),
       );
 
       await repository.deleteCachedChatMessage(
@@ -585,9 +595,9 @@ void main() {
         ),
       );
 
-      final cached = (await store.load()).cachedChatMessages['pinned:codex'];
+      final cached = await offlineStore.cachedMessages('pinned:codex');
       expect(cached, hasLength(1));
-      expect(cached?.single['body'], '保留');
+      expect(cached.single['body'], '保留');
     },
   );
 
@@ -702,17 +712,18 @@ void main() {
         throwsA(anything),
       );
 
-      final cached = (await store.load()).cachedChatMessages['pinned:codex'];
+      final offlineStore = await _sharedStore();
+      final cached = await offlineStore.cachedMessages('pinned:codex');
       expect(cached, hasLength(1));
-      expect(cached?.single['role'], 'user');
-      expect(cached?.single['body'], '继续');
+      expect(cached.single['role'], 'user');
+      expect(cached.single['body'], '继续');
 
-      final state = (await store.load()).conversationListStates['pinned:codex'];
-      expect(state?['last_message_preview'], '我: 继续');
-      expect(state?['last_message_at'], isA<int>());
+      final state = await offlineStore.conversationState('pinned:codex');
+      expect(state?['preview'], '我: 继续');
+      expect(state?['timestamp_ms'], isA<int>());
 
       final conversations = await repository.loadConversations(
-        adminMode: false,
+        adminMode: true,
         enterpriseMode: true,
       );
       final codex = conversations.singleWhere(
@@ -755,8 +766,8 @@ void main() {
       expect(cursorReply, 'Cursor 真实后端回复');
       expect(claudeReply.body, 'Claude 真实后端回复');
       expect(api.postedTools, ['Cursor', 'Claude']);
-      final session = await store.load();
-      expect(session.cachedChatMessages['pinned:cursor'], hasLength(2));
+      final offlineStore = await _sharedStore();
+      expect(await offlineStore.cachedMessages('pinned:cursor'), hasLength(2));
     },
   );
 
@@ -941,7 +952,8 @@ void main() {
 
       expect(reply, isNull);
       expect(api.statusCalls, 0);
-      expect((await store.load()).inflightRelayTasks, isEmpty);
+      final offlineStore = await _sharedStore();
+      expect(await offlineStore.inflightTaskId('pinned:codex'), isEmpty);
     },
   );
 
@@ -961,16 +973,16 @@ void main() {
     );
 
     expect(reply, '普通回复');
-    final session = await store.load();
-    final cached = session.cachedChatMessages['pinned:assistant'];
+    final offlineStore = await _sharedStore();
+    final cached = await offlineStore.cachedMessages('pinned:assistant');
     expect(cached, hasLength(2));
-    expect(cached?[0]['role'], 'user');
-    expect(cached?[0]['body'], '你好');
-    expect(cached?[1]['role'], 'assistant');
-    expect(cached?[1]['body'], '普通回复');
-    final state = session.conversationListStates['pinned:assistant'];
-    expect(state?['last_message_preview'], '普通回复');
-    expect(state?['last_message_at'], isA<int>());
+    expect(cached[0]['role'], 'user');
+    expect(cached[0]['body'], '你好');
+    expect(cached[1]['role'], 'assistant');
+    expect(cached[1]['body'], '普通回复');
+    final state = await offlineStore.conversationState('pinned:assistant');
+    expect(state?['preview'], '普通回复');
+    expect(state?['timestamp_ms'], isA<int>());
 
     final conversations = await repository.loadCachedConversations(
       adminMode: false,
@@ -1013,10 +1025,10 @@ void main() {
 
       expect(reply, '普通回复');
       final cached =
-          (await store.load()).cachedChatMessages['pinned:assistant'];
+          await (await _sharedStore()).cachedMessages('pinned:assistant');
       expect(cached, hasLength(2));
-      expect(cached?[0]['role'], 'user');
-      expect(cached?[1]['role'], 'assistant');
+      expect(cached[0]['role'], 'user');
+      expect(cached[1]['role'], 'assistant');
     },
   );
 
@@ -1052,13 +1064,13 @@ void main() {
     );
     expect(api.capturedUserId, 7);
 
-    final cached = (await store.load()).cachedChatMessages[
-        'employee:admin-duty-employees:site-content-editor'];
+    final cached = await (await _sharedStore()).cachedMessages(
+        'employee:admin-duty-employees:site-content-editor');
     expect(cached, hasLength(2));
-    expect(cached?[0]['role'], 'user');
-    expect(cached?[0]['body'], '更新首页文案');
-    expect(cached?[1]['role'], 'assistant');
-    expect(cached?[1]['body'], '员工回复');
+    expect(cached[0]['role'], 'user');
+    expect(cached[0]['body'], '更新首页文案');
+    expect(cached[1]['role'], 'assistant');
+    expect(cached[1]['body'], '员工回复');
   });
 
   test(
@@ -1074,11 +1086,15 @@ void main() {
         enterpriseMode: true,
       );
 
-      expect(conversations.map((item) => item.id), contains('pinned:codex'));
+      // 企业版列表默认不展示内置超级员工，仅 adminMode 显示。
+      expect(
+        conversations.map((item) => item.id),
+        isNot(contains('pinned:codex')),
+      );
       expect(conversations.map((item) => item.id), contains('pinned:cs'));
       final cs = conversations.singleWhere((item) => item.id == 'pinned:cs');
       expect(cs.title, '专属客服');
-      expect(cs.subtitle, '您好，我是您的专属客服');
+      expect(cs.subtitle, isEmpty);
       expect(
         conversations.map((item) => item.id),
         contains('employee:avatar-mod:avatar-generation-employee'),
@@ -1087,10 +1103,10 @@ void main() {
         (item) => item.id == 'employee:avatar-mod:avatar-generation-employee',
       );
       expect(employee.title, '头像生成员工');
-      expect(employee.subtitle, '给 AI 员工生成头像');
+      expect(employee.subtitle, isEmpty);
       expect(employee.avatarUrl, 'https://cdn.example.com/avatar.png');
-      expect(employee.badgeText, '已安装');
-      expect(employee.badgeColor, 0xFF3370FF);
+      expect(employee.badgeText, isNull);
+      expect(employee.badgeColor, isNull);
       expect((await store.load()).cachedModInfos.single['id'], 'avatar-mod');
     },
   );
@@ -1129,13 +1145,16 @@ void main() {
         enterpriseMode: true,
       );
 
-      expect(conversations.map((item) => item.id), contains('pinned:codex'));
+      expect(
+        conversations.map((item) => item.id),
+        isNot(contains('pinned:codex')),
+      );
       final employee = conversations.singleWhere(
         (item) =>
             item.id == 'employee:cached-avatar-mod:cached-avatar-employee',
       );
       expect(employee.title, '缓存头像员工');
-      expect(employee.subtitle, '来自缓存的员工资料');
+      expect(employee.subtitle, isEmpty);
     },
   );
 
@@ -1183,8 +1202,8 @@ void main() {
       expect(employee.title, '缓存头像员工');
       expect(employee.subtitle, '我: 先看缓存');
       expect(employee.timestampMs, 1719820800000);
-      expect(employee.badgeText, '已安装');
-      expect(employee.badgeColor, 0xFF3370FF);
+      expect(employee.badgeText, isNull);
+      expect(employee.badgeColor, isNull);
     },
   );
 
@@ -1229,7 +1248,7 @@ void main() {
             'employee:admin-duty-employees:user-customer-service-officer',
       );
       expect(customerService.title, '客户客服');
-      expect(customerService.subtitle, '查看并回复企业客户的客服消息');
+      expect(customerService.subtitle, isEmpty);
       expect(customerService.type, ConversationType.aiTask);
       expect(conversations.indexOf(customerService), 5);
       final employee = conversations.singleWhere(
@@ -1319,7 +1338,7 @@ void main() {
       );
 
       final conversations = await repository.loadConversations(
-        adminMode: false,
+        adminMode: true,
         enterpriseMode: true,
       );
 
@@ -1342,14 +1361,14 @@ void main() {
       );
 
       final conversations = await repository.loadConversations(
-        adminMode: false,
+        adminMode: true,
         enterpriseMode: true,
       );
 
       final codex = conversations.singleWhere(
         (item) => item.id == 'pinned:codex',
       );
-      expect(codex.subtitle, '全设备协同');
+      expect(codex.subtitle, isEmpty);
       expect(codex.timestampText, isEmpty);
       expect(codex.timestampMs, 0);
     },
@@ -1460,7 +1479,7 @@ void main() {
       );
 
       expect(customerService.title, '客户客服');
-      expect(customerService.subtitle, '查看并回复企业客户的客服消息');
+      expect(customerService.subtitle, isEmpty);
       expect(customerServiceProfile.name, '客户客服');
       expect(customerServiceProfile.title, '客户客服');
       expect(customerServiceProfile.summary, '查看并回复企业客户的客服消息');
@@ -1496,6 +1515,9 @@ void main() {
     },
   );
 }
+
+/// 读取 setUp 注入的内存离线库，验证聊天缓存已迁到 SQLite。
+Future<MobileOfflineStore> _sharedStore() => MobileOfflineStore.open();
 
 class _CancelAwareSuperEmployeeApi extends MobileApiClient {
   _CancelAwareSuperEmployeeApi(MobileSessionStore store)

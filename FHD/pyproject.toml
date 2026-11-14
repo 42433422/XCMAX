@@ -177,6 +177,10 @@ ignore = [
     "SIM222",  # expr-or-true
 ]
 
+[tool.ruff.lint.isort]
+# evals 已移入 assets/evals，但脚本与测试仍以 `from evals.…` 引用
+known-first-party = ["app", "scripts", "evals", "tests"]
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["F841", "F401", "BLE001"]
 "app/fastapi_routes/mobile_api_extensions.py" = ["F811"]

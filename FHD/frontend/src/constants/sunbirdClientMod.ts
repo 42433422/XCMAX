@@ -14,7 +14,7 @@ export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU: NonNullable<ModInfo['menu']>
 
 export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_OVERRIDES: NonNullable<ModInfo['menu_overrides']> = []
 
-/** 与 mods/sz-qsm-pro/manifest.json frontend.menu_overrides 保持一致 */
+/** 与 mods/industry/sz-qsm-pro/manifest.json frontend.menu_overrides 保持一致 */
 export const COATING_CUSTOM_MOD_FALLBACK_OVERRIDES: NonNullable<ModInfo['menu_overrides']> = [
   { key: 'products', label: '产品管理' },
   { key: 'customers', label: '客户管理' },

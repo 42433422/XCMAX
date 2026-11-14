@@ -173,7 +173,7 @@ for package_dir in "${LANGGRAPH_PACKAGE_DIRS[@]}"; do
   mkdir -p "$STAGING/packages/$(dirname "$package_dir")"
   rsync -a "${RSYNC_EXCLUDES[@]}" "$src" "$STAGING/packages/$(dirname "$package_dir")/"
 done
-cp "$FHD_ROOT/deploy/requirements-langgraph-runtime.txt" \
+cp "$FHD_ROOT/ops/deploy/requirements-langgraph-runtime.txt" \
   "$STAGING/requirements-langgraph-runtime.txt"
 
 mkdir -p "$STAGING/templates/admin-vue-dist"
@@ -204,7 +204,7 @@ cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
   "$SCRIPT_DIR/lib/verify_release_archive.py" \
   "$SCRIPT_DIR/lib/verify_release_identity.sh" \
   "$STAGING/scripts/deploy/lib/"
-cp "$FHD_ROOT/docker/docker-compose.fhd-prod.yml" "$STAGING/docker/"
+cp "$FHD_ROOT/ops/docker/docker-compose.fhd-prod.yml" "$STAGING/docker/"
 
 # The scheduled CVM watcher must execute the exact autonomy code shipped by
 # this release.  Falling back to an unrelated server-side Git worktree makes a

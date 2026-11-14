@@ -17,7 +17,11 @@ from pathlib import Path
 FHD_ROOT = Path(__file__).resolve().parents[2]
 CATALOG = FHD_ROOT / "config" / "business_contracts.json"
 STATUSES = {"PASS", "FAIL", "BLOCKED", "NOT RUN", "NOT APPLICABLE"}
-MINIMUM_REQUIRED = ("R08-e23-readback", "R05-approved-shipment-export")
+MINIMUM_REQUIRED = (
+    "R08-e23-readback",
+    "R05-approved-shipment-export",
+    "R02-empty-preview",
+)
 REQUIRED_TESTS = {
     "R08-e23-readback": (
         "tests/test_application/test_idempotency_recovery_e23_e24.py"
@@ -26,6 +30,10 @@ REQUIRED_TESTS = {
     "R05-approved-shipment-export": (
         "tests/test_application/test_shipment_records_agent_routes.py"
         "::test_approved_shipment_then_export_uses_full_persisted_plan"
+    ),
+    "R02-empty-preview": (
+        "tests/test_application/test_etl_preview_task_boundaries.py"
+        "::test_empty_preview_is_not_confirmable"
     ),
 }
 

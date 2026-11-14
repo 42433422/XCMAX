@@ -75,7 +75,9 @@ class ChartDataService(NeuroEventPublisherMixin):
                         ShipmentRecord.product_name,
                         sa_func.coalesce(sa_func.sum(ShipmentRecord.amount), 0).label("revenue"),
                         sa_func.coalesce(sa_func.sum(ShipmentRecord.quantity_kg), 0).label("kg"),
-                        sa_func.coalesce(sa_func.sum(ShipmentRecord.quantity_tins), 0).label("tins"),
+                        sa_func.coalesce(sa_func.sum(ShipmentRecord.quantity_tins), 0).label(
+                            "tins"
+                        ),
                         sa_func.count(ShipmentRecord.id).label("orders"),
                     )
                     .filter(
@@ -115,7 +117,9 @@ class ChartDataService(NeuroEventPublisherMixin):
                     "quantity_kg": round(float(row.kg or 0), 2),
                     "quantity_tins": int(row.tins or 0),
                     "orders": int(row.orders or 0),
-                    "share_pct": round(float(row.revenue or 0) / month_total * 100, 1) if month_total else 0,
+                    "share_pct": round(float(row.revenue or 0) / month_total * 100, 1)
+                    if month_total
+                    else 0,
                 }
                 for idx, row in enumerate(product_rows)
             ]
@@ -126,7 +130,9 @@ class ChartDataService(NeuroEventPublisherMixin):
                     "revenue": round(float(row.total or 0), 2),
                     "orders": int(row.orders or 0),
                     "avg_order": round(float(row.total or 0) / int(row.orders or 1), 2),
-                    "share_pct": round(float(row.total or 0) / month_total * 100, 1) if month_total else 0,
+                    "share_pct": round(float(row.total or 0) / month_total * 100, 1)
+                    if month_total
+                    else 0,
                 }
                 for idx, row in enumerate(customer_rows)
             ]

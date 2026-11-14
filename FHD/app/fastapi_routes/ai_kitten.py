@@ -4,6 +4,7 @@ Phase 2B 从 :mod:`app.fastapi_routes.archive_gap_batch1/2` 拆分而出,
 URL 保持不变:
 
 - ``GET /api/ai/kitten/business-snapshot``
+- ``GET /api/ai/kitten/financial/dashboard``
 - ``GET /api/ai/kitten/charts/{all,revenue,products,customers,profit,inventory}``
 - ``GET /api/ai/kitten/saved/list`` / ``GET /api/ai/kitten/saved/{id}`` /
   ``GET /api/ai/kitten/saved/{id}/export`` / ``DELETE /api/ai/kitten/saved/{id}``

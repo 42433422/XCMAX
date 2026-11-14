@@ -48,16 +48,22 @@ def _fhd_mods_root() -> Path:
     return Path(__file__).resolve().parents[2] / "mods"
 
 
-def _resolve_mod_manifest_root(mod_id: str) -> Path | None:
-    """先查 FHD/mods（编辑源 SSOT），fallback 到 FHD/XCAGI/mods（导出副本）。
+def _resolve_mod_dir(mod_id: str) -> Path | None:
+    """先查 FHD/mods（编辑源 SSOT，按 industry/bridge/employees/tools 分层），
+    fallback 到 FHD/XCAGI/mods（导出副本，平铺）。
 
     与 app/infrastructure/mods/mod_manager.py 双份 mods 查找一致；
     attendance-industry 等已迁移至 XCAGI/mods/ 的包由此 fallback 找到。
     """
     fhd_root = Path(__file__).resolve().parents[2]
     for candidate in (fhd_root / "mods", fhd_root / "XCAGI" / "mods"):
-        if (candidate / mod_id / "manifest.json").is_file():
-            return candidate
+        direct = candidate / mod_id
+        if (direct / "manifest.json").is_file():
+            return direct
+        for layer in ("industry", "bridge", "employees", "tools"):
+            layered = candidate / layer / mod_id
+            if (layered / "manifest.json").is_file():
+                return layered
     return None
 
 
@@ -65,8 +71,8 @@ def load_industry_manifest(industry_id: str) -> dict[str, Any] | None:
     mod_id = industry_mod_id_for(industry_id)
     if not mod_id:
         return None
-    mods_root = _resolve_mod_manifest_root(mod_id) or _fhd_mods_root()
-    manifest_path = mods_root / mod_id / "manifest.json"
+    mod_dir = _resolve_mod_dir(mod_id) or (_fhd_mods_root() / mod_id)
+    manifest_path = mod_dir / "manifest.json"
     if not manifest_path.is_file():
         return None
     try:

@@ -153,15 +153,12 @@ def visible_mod_rows(request: Request, rows: list[dict[str, Any]]) -> list[dict[
 
     visible = []
     for row in rows:
+        mod_id = str(row.get("id") or "")
         frontend = row.get("frontend")
         runtime = frontend.get("runtime") if isinstance(frontend, dict) else None
-        if (
-            row.get("scope", "global") != "global"
-            or runtime
-            or is_customer_private_mod(str(row.get("id") or ""))
-        ):
+        if is_customer_private_mod(mod_id) or row.get("scope", "global") != "global" or runtime:
             try:
-                authorized_install(request, str(row.get("id") or ""))
+                authorized_install(request, mod_id)
             except HTTPException:
                 continue
         visible.append(row)

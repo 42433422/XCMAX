@@ -4,8 +4,8 @@ import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRun
 import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import { fetchMarketAccountOverview, fetchMarketLlmCatalog } from '@/api/marketAccount'
-import { CACHE_KEYS, getCachedData, setCachedData } from '../../../mods/xcagi-model-payment-bridge/frontend/views/model-payment/mpMarketCache'
-import { useMpMarketData } from '../../../mods/xcagi-model-payment-bridge/frontend/views/model-payment/useMpMarketData'
+import { CACHE_KEYS, getCachedData, setCachedData } from '../../../mods/bridge/xcagi-model-payment-bridge/frontend/views/model-payment/mpMarketCache'
+import { useMpMarketData } from '../../../mods/bridge/xcagi-model-payment-bridge/frontend/views/model-payment/useMpMarketData'
 
 vi.mock('@/api/marketAccount', async (load) => ({
   ...await load<typeof import('@/api/marketAccount')>(),
