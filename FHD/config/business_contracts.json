@@ -80,7 +80,7 @@
       "allowed": ["写入内容与确认内容一致", "同键重复提交读回原结果"],
       "forbidden_effects": ["过期预演写入", "重复副作用"],
       "oracle": "确认单上的版本和范围，对照落库行",
-      "tests": ["tests/test_application/test_etl_preview_confirmation.py::test_missing_or_wrong_approval_does_not_write_or_claim_run[None]"],
+      "tests": ["tests/test_application/test_etl_preview_confirmation.py::test_missing_or_wrong_approval_does_not_write_or_claim_run"],
       "boundary": {
         "real": ["sqlite", "ELT execute", "preview revision"],
         "doubles": [],

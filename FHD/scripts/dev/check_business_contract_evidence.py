@@ -194,13 +194,22 @@ def attempts_for_nodes(paths: list[Path], node_ids: list[str]) -> list[dict]:
 
 
 def junit_attempts(paths: list[Path], node_id: str) -> list[dict]:
+    """Collect attempts for a nodeid.
+
+    A parametrized test is reported by pytest as one case per parameter. When the
+    required nodeid names the whole test (no ``[...]``), every parameter instance
+    is collected and all of them must pass — a single passing parameter can never
+    stand in for the others.
+    """
     attempts: list[dict] = []
+    param_prefix = node_id + "["
     for path in paths:
         root = ET.fromstring(path.read_bytes())
         for case in root.iter("testcase"):
             case_name = case.get("name") or ""
             classname = case.get("classname") or ""
-            if case_nodeid(classname, case_name) != node_id:
+            candidate = case_nodeid(classname, case_name)
+            if candidate != node_id and not candidate.startswith(param_prefix):
                 continue
             status, detail = _case_status(case)
             attempts.append(

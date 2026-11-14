@@ -258,6 +258,56 @@ def test_ci_gate_records_not_applicable_when_backend_is_skipped():
     assert evidence["scenarios"][0]["status"] == "NOT APPLICABLE"
 
 
+def test_parameterized_required_test_fails_when_one_instance_fails(tmp_path: Path):
+    """整体 nodeid 会聚合全部参数实例：任一参数失败，场景不能算通过。"""
+    base = REQUIRED_TESTS["R03-confirm-binding"]
+    module, _, name = base.partition("::")
+    classname = module[:-3].replace("/", ".")
+    body = ""
+    seen: set[str] = set()
+    for scenario_id, node_id in REQUIRED_TESTS.items():
+        if scenario_id == "R03-confirm-binding" or node_id in seen:
+            continue
+        seen.add(node_id)
+        bits = node_id.split("::")
+        cn = bits[0][:-3].replace("/", ".")
+        if len(bits) > 2:
+            cn += "." + ".".join(bits[1:-1])
+        body += _case(cn, bits[-1])
+    body += _case(classname, f"{name}[None]")
+    body += _case(classname, f'{name}[""]', "<failure message='boom'/>")
+    evidence = evidence_from_junit(
+        [_write(tmp_path, body)], source_sha="abc", run_id="9", run_attempt="1"
+    )
+    r03 = next(item for item in evidence["scenarios"] if item["scenario_id"] == "R03-confirm-binding")
+    assert r03["status"] == "FAIL"
+
+
+def test_parameterized_required_test_passes_when_every_instance_passes(tmp_path: Path):
+    base = REQUIRED_TESTS["R03-confirm-binding"]
+    module, _, name = base.partition("::")
+    classname = module[:-3].replace("/", ".")
+    body = ""
+    seen: set[str] = set()
+    for scenario_id, node_id in REQUIRED_TESTS.items():
+        if scenario_id == "R03-confirm-binding" or node_id in seen:
+            continue
+        seen.add(node_id)
+        bits = node_id.split("::")
+        cn = bits[0][:-3].replace("/", ".")
+        if len(bits) > 2:
+            cn += "." + ".".join(bits[1:-1])
+        body += _case(cn, bits[-1])
+    body += _case(classname, f"{name}[None]")
+    body += _case(classname, f'{name}[""]')
+    evidence = evidence_from_junit(
+        [_write(tmp_path, body)], source_sha="abc", run_id="9", run_attempt="1"
+    )
+    r03 = next(item for item in evidence["scenarios"] if item["scenario_id"] == "R03-confirm-binding")
+    assert r03["status"] == "PASS"
+    assert len(r03["attempts"]) == 2
+
+
 def test_a_lookalike_name_is_not_the_required_node(tmp_path: Path):
     body = ""
     for node_id in REQUIRED_TESTS.values():
