@@ -8,6 +8,9 @@ import {
   classifyTransportFailure,
   createTraceId,
   isDuplicateUnsafeSubmit,
+  installBackendHealthBridge,
+  noteTransportFailure,
+  noteTransportSuccess,
   publishStabilityNotice,
   resetUnsafeSubmitGuard,
 } from './networkStability'
@@ -84,12 +87,58 @@ describe('network stability notices', () => {
     publishStabilityNotice('  请核对提交结果  ')
     const alert = document.getElementById('stability-notice')
     expect(alert?.getAttribute('role')).toBe('alert')
-    expect(alert?.textContent).toBe('请核对提交结果')
+    expect(alert?.textContent).toContain('请核对提交结果')
+    expect(alert?.querySelector('button')?.textContent).toBe('重试')
     publishStabilityNotice(' ')
-    expect(alert?.textContent).toBe('请核对提交结果')
+    expect(alert?.textContent).toContain('请核对提交结果')
     publishStabilityNotice('网络已恢复')
     expect(document.querySelectorAll('#stability-notice')).toHaveLength(1)
-    expect(alert?.textContent).toBe('网络已恢复')
+    expect(alert?.textContent).toContain('网络已恢复')
+  })
+
+  it('stays silent for a transient failure that recovers quickly', () => {
+    vi.useFakeTimers()
+    noteTransportFailure('服务暂时不可用')
+    expect(document.getElementById('stability-notice')).toBeNull()
+    noteTransportSuccess()
+    vi.advanceTimersByTime(5_000)
+    expect(document.getElementById('stability-notice')).toBeNull()
+    vi.useRealTimers()
+  })
+
+  it('shows the lightweight notice when failures persist', () => {
+    vi.useFakeTimers()
+    noteTransportFailure('服务暂时不可用')
+    vi.advanceTimersByTime(4_000)
+    expect(document.getElementById('stability-notice')?.textContent).toContain('服务暂时不可用')
+    noteTransportSuccess()
+    expect(document.getElementById('stability-notice')).toBeNull()
+    vi.useRealTimers()
+  })
+
+  it('clears the notice and broadcasts readiness when the shell reports the backend is back', () => {
+    let handler: ((state: string) => void) | undefined
+    vi.stubGlobal('xcagiDesktop', {
+      onBackendHealth: (callback: (state: string) => void) => {
+        handler = callback
+        return () => undefined
+      },
+    })
+    const ready = vi.fn()
+    window.addEventListener('xcagi:backend-ready', ready)
+    try {
+      installBackendHealthBridge()
+      noteTransportFailure('服务暂时不可用')
+      noteTransportFailure('服务暂时不可用')
+      expect(document.getElementById('stability-notice')).not.toBeNull()
+      handler?.('restarting')
+      expect(document.getElementById('stability-notice')).not.toBeNull()
+      handler?.('ready')
+      expect(document.getElementById('stability-notice')).toBeNull()
+      expect(ready).toHaveBeenCalledOnce()
+    } finally {
+      window.removeEventListener('xcagi:backend-ready', ready)
+    }
   })
 })
 

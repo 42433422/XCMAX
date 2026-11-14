@@ -10,13 +10,17 @@ import pytest
 @pytest.fixture
 def env(monkeypatch, tmp_path):
     from modstore_server import autonomy_scheduler as m
+    from modstore_server import human_uncertainty_queue as queue
     from modstore_server import scheduler_runtime as runtime
     from modstore_server.maintenance_loop import coordinator, store
 
     memory = {"open_items": []}
     ledger = tmp_path / "ledger.jsonl"
     monkeypatch.setattr(store, "_load_loop_memory", lambda: memory)
+    monkeypatch.setattr(store, "_write_loop_memory", lambda _memory: None)
     monkeypatch.setattr(store, "ledger_path", lambda: ledger)
+    human_queue = Mock(return_value={"queued": True})
+    monkeypatch.setattr(queue, "enqueue_uncertain_item", human_queue)
     dispatch = Mock(return_value={"status": "failed", "error": "git_prep_unavailable"})
     monkeypatch.setattr(coordinator, "run_self_maintenance_loop", dispatch)
     monkeypatch.setattr(m, "register_founder_scorecard_job", lambda *_: None)
@@ -47,6 +51,7 @@ def env(monkeypatch, tmp_path):
         runtime=runtime,
         store=store,
         dispatch=dispatch,
+        human_queue=human_queue,
         memory=memory,
         ledger=ledger,
         clock=clock,
@@ -66,18 +71,12 @@ def test_limit_stops_real_dispatch_for_both_kinds(env, kind):
         attempt(env)
         env.clock[0] += timedelta(days=1)
     before = env.ledger.read_bytes()
-    with pytest.raises(env.m.RemediationBlocked) as ex:
-        env.m.run_pending_automated_remediation()
-    assert ex.value.receipt == {
-        "status": "blocked",
-        "reason": "retry_limit",
-        "attempts": 3,
-        "retry_at": None,
-        "scheduler_status": "failed",
-    }
+    result = env.m.run_pending_automated_remediation()
+    assert result["scheduler_status"] == "deferred"
     assert env.dispatch.call_count == 3
     assert env.ledger.read_bytes() == before
-    assert len(env.memory["open_items"]) == 1
+    assert env.memory["open_items"] == []
+    env.human_queue.assert_called_once()
 
 
 def test_switching_kind_does_not_reset_budget(env):
@@ -85,8 +84,8 @@ def test_switching_kind_does_not_reset_budget(env):
         attempt(env)
         env.clock[0] += timedelta(days=1)
     env.item.update(kind="failed_steps", steps=["code"])
-    with pytest.raises(env.m.RemediationBlocked, match="retry_limit"):
-        env.m.run_pending_automated_remediation()
+    result = env.m.run_pending_automated_remediation()
+    assert result["scheduler_status"] == "deferred"
     assert env.dispatch.call_count == 3
 
 
@@ -107,8 +106,8 @@ def test_same_task_other_kind_cannot_hide_stored_limit(env):
     env.memory["open_items"].append(
         {**env.item, "kind": "failed_steps", "steps": ["code"], "retry_count": 15}
     )
-    with pytest.raises(env.m.RemediationBlocked, match="retry_limit"):
-        env.m.run_pending_automated_remediation()
+    result = env.m.run_pending_automated_remediation()
+    assert result["scheduler_status"] == "deferred"
     env.dispatch.assert_not_called()
 
 
@@ -177,26 +176,39 @@ def test_failed_ledger_write_prevents_dispatch(env, monkeypatch):
     env.dispatch.assert_not_called()
 
 
-@pytest.mark.parametrize("reason", ["retry_limit", "backoff"])
-def test_blocked_job_remains_failed_in_real_runtime_projection(env, monkeypatch, reason):
-    if reason == "retry_limit":
-        env.item["retry_count"] = 3
-    else:
-        attempt(env)
+def test_backoff_job_remains_failed_in_real_runtime_projection(env, monkeypatch):
+    attempt(env)
     records = []
     monkeypatch.setattr(env.runtime, "record_job_run", lambda **kw: records.append(kw))
     scheduler = Mock()
     env.m.register_autonomy_jobs(scheduler)
     scheduler.add_job.call_args.args[0]()
     assert records[-1]["status"] == "failed"
-    assert f"remediation_blocked:{reason}" in records[-1]["error"]
+    assert "remediation_blocked:backoff" in records[-1]["error"]
     row = SimpleNamespace(id=1, **records[-1])
     health = env.runtime._job_summary(
         "self_maintenance_remediation_loop", [row], now=env.clock[0], stale_after=3600
     )
     assert health["state"] == "failing"
     assert health["last_success_at"] is None
-    assert env.dispatch.call_count == (reason == "backoff")
+    assert env.dispatch.call_count == 1
+
+
+def test_retry_limit_handoff_is_deferred_for_runtime_projection(env, monkeypatch):
+    env.item["retry_count"] = 3
+    records = []
+    monkeypatch.setattr(env.runtime, "record_job_run", lambda **kw: records.append(kw))
+    scheduler = Mock()
+    env.m.register_autonomy_jobs(scheduler)
+    scheduler.add_job.call_args.args[0]()
+    assert records[-1]["status"] == "deferred"
+    row = SimpleNamespace(id=1, **records[-1])
+    health = env.runtime._job_summary(
+        "self_maintenance_remediation_loop", [row], now=env.clock[0], stale_after=3600
+    )
+    assert health["state"] == "deferred"
+    assert env.dispatch.call_count == 0
+    env.human_queue.assert_called_once()
 
 
 def test_unknown_transport_error_not_mislabeled_missing_branch(env):
@@ -241,11 +253,13 @@ def test_existing_failure_rows_are_preserved_byte_for_byte(env):
 
 
 @pytest.mark.parametrize("kind", ["automated_remediation", "failed_steps"])
-def test_exhausted_legacy_record_cannot_be_reported_as_no_pending_success(env, kind):
+def test_exhausted_legacy_record_is_handed_off_not_silently_successful(env, kind):
     env.item.update(kind=kind, steps=["code"], retry_count=3)
-    with pytest.raises(env.m.RemediationBlocked, match="retry_limit"):
-        env.m.run_pending_automated_remediation()
+    result = env.m.run_pending_automated_remediation()
+    assert result["scheduler_status"] == "deferred"
+    assert env.memory["open_items"] == []
     env.dispatch.assert_not_called()
+    env.human_queue.assert_called_once()
 
 
 def test_arbitrary_generation_string_cannot_reset_real_task_budget(env):
@@ -253,8 +267,8 @@ def test_arbitrary_generation_string_cannot_reset_real_task_budget(env):
         attempt(env)
         env.clock[0] += timedelta(days=1)
     env.item["generation"] = "invented-reset"
-    with pytest.raises(env.m.RemediationBlocked, match="retry_limit"):
-        env.m.run_pending_automated_remediation()
+    result = env.m.run_pending_automated_remediation()
+    assert result["scheduler_status"] == "deferred"
     assert env.dispatch.call_count == 3
 
 
@@ -334,8 +348,10 @@ def test_new_task_success_does_not_greenwash_older_blocked_scope(env, resolved, 
         else:
             assert result["status"] == "completed_merged"
     else:
-        with pytest.raises(env.m.RemediationBlocked, match="other_retry_limit"):
-            env.m.run_pending_automated_remediation()
+        result = env.m.run_pending_automated_remediation()
+        assert result["scheduler_status"] == "deferred"
+        assert env.memory["open_items"] == []
+        env.human_queue.assert_called_once()
     assert env.dispatch.call_count == 1
 
 

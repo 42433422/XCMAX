@@ -3,6 +3,7 @@
   "name": "奇士美 PRO",
   "version": "1.0.0",
   "author": "XCAGI",
+  "scope": "account",
   "description": "奇士美客户定制：产品/客户管理、批次与出货业务、微信电话业务员与涂料 AI 助手。",
   "primary": true,
   "dependencies": {

@@ -38,3 +38,22 @@ def test_non_admin_roles_do_not_gain_sales_or_report_by_default():
     for role in DEFAULT_ROLES:
         if role["name"] != "admin":
             assert {"sales.view", "report.view"}.isdisjoint(role["permissions"])
+
+
+def test_business_roles_can_query_and_create_sales_orders():
+    from app.db.models.permission import DEFAULT_PERMISSIONS, DEFAULT_ROLES
+
+    codes = {item["code"] for item in DEFAULT_PERMISSIONS}
+    chain = {
+        "tool.sales.query",
+        "tool.sales.create_order",
+        "tool.inventory.stock_out",
+        "tool.finance.create_transaction",
+    }
+    assert chain <= codes
+    for role in DEFAULT_ROLES:
+        granted = set(role["permissions"])
+        if role["name"] in {"user", "operator", "admin"}:
+            assert chain <= granted
+        else:
+            assert chain.isdisjoint(granted)
