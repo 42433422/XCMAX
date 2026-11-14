@@ -85,7 +85,9 @@ export interface UiChatMessage {
     idempotencyKey: string
     intent: string
     committed: boolean
-    effect: 'none' | 'preview' | 'committed' | string
+    effect: 'none' | 'preview' | 'partial' | 'committed' | string
+    /** 后端显式执行结论：未执行 / 部分成功 / 结果未知。 */
+    outcome?: 'not_executed' | 'partial' | 'unknown' | 'succeeded' | string
     tenantId?: string
     customerCount?: number | null
     productCount?: number | null

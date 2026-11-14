@@ -64,13 +64,22 @@ def _plain_intake_match(message: str):
     if _manufacturing_intake(message):
         return None
     match = _PLAIN_INTAKE_RE.search(message or "")
-    # Asking how to submit is a usage question, not consent to create a ticket.
-    if match and not re.search(
-        r"(?:怎么|如何|哪里|在哪|能否|能不能|不要|不用|别|无需|不必|不想|暂不|不是要|已经|已)[^。！？\n]{0,12}$",
-        message[: match.start()],
+    if not match:
+        return None
+    before = (message or "")[: match.start()]
+    # 「能不能/能否」只有在没有求助对象时才是用法询问：
+    # 「能不能帮我/给我提交个工单」是明确请求，不能被当成在问怎么用。
+    asks_for_help = bool(
+        re.search(r"(?:帮我|给我|替我|帮忙|烦请|麻烦|请你|请帮)", before[-16:])
+    )
+    if re.search(
+        r"(?:怎么|如何|哪里|在哪|不要|不用|别|无需|不必|不想|暂不|不是要|已经|已)[^。！？\n]{0,12}$",
+        before,
     ):
-        return match
-    return None
+        return None
+    if not asks_for_help and re.search(r"(?:能否|能不能)[^。！？\n]{0,12}$", before):
+        return None
+    return match
 
 
 def _bare_intake(message: str) -> bool:

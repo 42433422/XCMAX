@@ -68,7 +68,7 @@ class StreamHub {
     if (!this.owners.size) this.terminate(false)
   }
 
-  private emit(type: string, init: EventInit): void {
+  private emit(type: string, init: EventInit & { detail?: unknown; data?: string } = {}): void {
     for (const owner of [...this.owners]) owner.emit(type, init)
   }
 

@@ -111,6 +111,12 @@ class WorkflowApprovalPolicy:
                 item.rejected = True
                 item.reason = "denied by autonomy_guard"
             elif item.requires_approval:
+                precheck_error = precheck_approval_node(node, context)
+                if precheck_error:
+                    item.rejected = True
+                    item.reason = precheck_error
+                    decision.node_decisions.append(item)
+                    continue
                 request = self._approval_service.create_approval_request(
                     plan_id=plan.plan_id,
                     node=node,
@@ -171,4 +177,30 @@ class WorkflowApprovalPolicy:
         )
 
 
-__all__ = ["GatedNodeDecision", "GatedPlanDecision", "WorkflowApprovalPolicy"]
+def precheck_approval_node(node: Any, runtime_context: dict[str, Any] | None) -> str:
+    """在创建审批请求之前运行工具级前置校验。
+
+    返回非空字符串表示该节点不应提交审批：调用方应按「本轮未执行」回执。
+    这样前置校验不会等到审批通过、工具真正执行时才失败，也就不会留下
+    一张「已取消」的审批记录。
+    """
+    context = dict(runtime_context or {})
+    tool_id = str(getattr(node, "tool_id", "") or "")
+    action = str(getattr(node, "action", "") or "")
+    params = dict(getattr(node, "params", None) or {})
+    if (tool_id, action) == ("client_product_issue", "submit"):
+        from app.application.client_product_issue_intake import looks_like_issue_report
+        from app.application.tools.workflow_tools.dispatch import _resolve_user_message
+
+        message = _resolve_user_message(context, params)
+        if not message or not looks_like_issue_report(message):
+            return "原始请求未明确提出产品问题，本轮未提交写入。"
+    return ""
+
+
+__all__ = [
+    "GatedNodeDecision",
+    "GatedPlanDecision",
+    "WorkflowApprovalPolicy",
+    "precheck_approval_node",
+]

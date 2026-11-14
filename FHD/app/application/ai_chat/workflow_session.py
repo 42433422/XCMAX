@@ -496,6 +496,19 @@ class WorkflowSession:
                 message="审批计划校验失败",
             )[1]
         request_id = ""
+        from app.application.workflow.approval_policy import precheck_approval_node
+
+        precheck_error = precheck_approval_node(node, runtime_context)
+        if precheck_error:
+            # 前置校验先于审批创建：校验不通过就不建审批单，
+            # 避免审批通过后工具才失败、还留下一条已取消的审批记录。
+            return _control_reply(
+                precheck_error,
+                "workflow_not_executed",
+                {"run_id": agent_run.run_id, "plan_id": plan.plan_id, "execution_started": False},
+                success=False,
+                message="本轮未提交写入",
+            )[1]
         try:
             approval_context = {**runtime_context, "_approval_agent_run_required": True}
             request = self.approval.create_approval_request(

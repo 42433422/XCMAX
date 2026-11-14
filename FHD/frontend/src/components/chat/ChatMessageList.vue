@@ -167,7 +167,7 @@
           </button>
         </div>
         <div v-if="msg.role === 'ai' && !msg.streamingShell && msg.workflowAction === 'unknown'" class="proactive-suggestions" data-testid="chat-unknown-recovery">
-          <p>请先到任务工作区核对执行结果，避免重复提交。</p>
+          <p>本轮已执行但结果未知，请先到任务工作区核对执行结果，避免重复提交。</p>
         </div>
         <div v-else-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg)" class="proactive-suggestions" data-testid="chat-error-recovery">
           <p>{{ recoveryText(msg) }}</p>

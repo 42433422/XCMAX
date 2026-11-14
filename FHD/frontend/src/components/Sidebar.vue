@@ -87,6 +87,24 @@
               <span v-else class="runtime-health-unchecked">{{ runtimeHealthCheck.text }}</span>
             </span>
           </button>
+          <template v-if="modelServiceAbnormal">
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm runtime-health-action"
+              title="重新请求最近失败的一轮模型回复"
+              @click.stop="retryLastFailedTurn"
+            >
+              重试本轮
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm runtime-health-action"
+              title="前往系统设置切换模型"
+              @click.stop="selectView(settingsMenuItem.key)"
+            >
+              切换模型
+            </button>
+          </template>
           <DesktopAppUpdatePrompt />
           <span
             v-if="adminDeployStatusText"
@@ -219,6 +237,12 @@ const settingsMenuItem = computed(() => {
     description: SETTINGS_MENU_ITEM.description,
   }
 })
+
+/** 模型服务异常时在徽标旁给出可执行入口，而不是只显示提示。 */
+const modelServiceAbnormal = computed(() => runtimeHealth.value.text === '模型服务异常')
+const retryLastFailedTurn = () => {
+  window.dispatchEvent(new CustomEvent('xcagi:retry-last-failed-turn'))
+}
 
 const activeParentKeys = computed(() => {
   const view = props.activeView

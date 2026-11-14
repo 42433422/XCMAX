@@ -158,5 +158,13 @@
 .runtime-health-button .status-dot.offline { background: #c63333; }
 .runtime-health-button .status-dot.pending { background: #64748b; }
 
+/* 模型服务异常时徽标旁的可执行入口：窄侧栏下允许换行，不挤掉状态文字。 */
+.sidebar-footer .status-indicator { flex-wrap: wrap; row-gap: 4px; }
+.runtime-health-action {
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 .runtime-health-labels { display: inline-flex; flex-direction: column; gap: 2px; }
 .runtime-health-labels time, .runtime-health-unchecked { font-size: 10px; opacity: 0.75; }

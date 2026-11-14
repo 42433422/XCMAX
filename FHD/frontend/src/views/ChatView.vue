@@ -152,10 +152,6 @@
           </button>
         </div>
       </div>
-      <div v-if="voiceCallActive && (voiceTranscript.heard || voiceTranscript.reply)" class="chat-call-transcript" role="status" aria-live="polite">
-        <div v-if="voiceTranscript.heard" class="chat-call-transcript-line user">你说：{{ voiceTranscript.heard }}</div>
-        <div v-if="voiceTranscript.reply" class="chat-call-transcript-line ai">小C：{{ voiceTranscript.reply }}</div>
-      </div>
       <div class="input-wrapper">
         <textarea
           id="messageInput"
@@ -272,8 +268,8 @@ import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
-import { requestVoiceCallStart, voiceCallActive } from '@/composables/voiceCallHost'
-import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
+import { requestVoiceCallStart, voiceChatBridge } from '@/composables/voiceCallHost'
+import { isFailedChatReply, useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
@@ -410,14 +406,27 @@ const startVoiceCallFromHost = () => {
   requestVoiceCallStart({ expandPanel: false })
 }
 
-/** 通话字幕：面板收起时在对话页直接显示“你说/小C”内容，避免看不到通话内容。 */
-const voiceTranscript = ref({ heard: '', reply: '' })
-function onVoiceCallTranscript(event: Event) {
-  const detail = (event as CustomEvent<{ heard?: string; reply?: string }>).detail || {}
-  voiceTranscript.value = { heard: String(detail.heard || ''), reply: String(detail.reply || '') }
+/**
+ * 通话轮复用本页的消息与发送通道，语音对话直接出现在当前对话里。
+ * 任务工作区与主对话都复用 ChatView；以「最近激活」的实例作为唯一消息源，
+ * 避免通话内容写进一个列表、用户却盯着另一个列表。
+ */
+const registerVoiceChatBridge = () => {
+  voiceChatBridge.value = {
+    messages,
+    send: (text: string) => chatSendMessage(text),
+    isLoading,
+  }
 }
-onMounted(() => window.addEventListener('xcagi:voice-call-transcript', onVoiceCallTranscript))
-onBeforeUnmount(() => window.removeEventListener('xcagi:voice-call-transcript', onVoiceCallTranscript))
+const unregisterVoiceChatBridge = () => {
+  if (voiceChatBridge.value?.messages !== messages) return
+  voiceChatBridge.value = { messages: null, send: null, isLoading: null }
+}
+onMounted(registerVoiceChatBridge)
+onActivated(registerVoiceChatBridge)
+onMounted(() => window.addEventListener('xcagi:retry-last-failed-turn', retryLastFailedTurn))
+onBeforeUnmount(unregisterVoiceChatBridge)
+onBeforeUnmount(() => window.removeEventListener('xcagi:retry-last-failed-turn', retryLastFailedTurn))
 
 const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList, visibleActiveTaskId, workspaceHeader } =
   useRoutedTaskWorkspace({
@@ -458,6 +467,21 @@ async function reconcileTurn(index: number) {
 function retryFailedModel(payload: { text: string; turnId: string }) {
   messageInput.value = ''
   void retryModelOnly(payload.text, payload.turnId)
+}
+/** 侧边栏「模型服务异常」徽标的重试入口：找回最近一次失败轮次并重发。 */
+function retryLastFailedTurn() {
+  for (let index = messages.value.length - 1; index >= 0; index--) {
+    const reply = messages.value[index]
+    if (reply.role !== 'ai' || reply.streamingShell) continue
+    if (reply.workflowAction !== 'failed' && reply.workflowAction !== 'unknown' && !isFailedChatReply(reply)) continue
+    const turnId = String(reply.turnId || '').trim()
+    const user = messages.value.slice(0, index).reverse()
+      .find(item => item.role === 'user' && (!turnId || item.turnId === turnId))
+    if (!turnId || !user) continue
+    retryFailedModel({ text: plainTextFromChatHtml(user.content), turnId })
+    return
+  }
+  showAppToast('没有可重试的失败轮次，请重新输入。', 'info')
 }
 function confirmDestructiveScope(payload: { text: string; idempotencyKey: string }) {
   void confirmDestructive(payload.text, payload.idempotencyKey)

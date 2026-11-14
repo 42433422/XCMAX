@@ -277,6 +277,16 @@ class AIChatWorkflowResponseMixin:
                 "intent": str(getattr(plan, "intent", "") or ""),
                 "committed": False,
                 "effect": "none",
+                "outcome": "not_executed",
+            }
+        elif not success and not uncertain and wrote:
+            # 部分步骤已写入、其余失败：既不能声称未写入，也不能说完全成功。
+            payload["execution"] = {
+                "idempotency_key": "",
+                "intent": str(getattr(plan, "intent", "") or ""),
+                "committed": True,
+                "effect": "partial",
+                "outcome": "partial",
             }
         if success and any(
             step.status == "completed" and step.tool_id == "products" and step.action == "query"

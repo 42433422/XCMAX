@@ -108,6 +108,16 @@ def test_spoken_business_question_does_not_enter_defect_intake():
     assert looks_like_issue_report("请提交产品问题工单")
 
 
+def test_polite_request_to_submit_ticket_is_intake_not_usage_question():
+    # 语音里「你能不能给我提交个工单」是请求，不是询问怎么提交。
+    assert looks_like_issue_report(
+        "嗯，就是你能不能给我管理端去提交个工单啊？就是你给你们老板提个工单，"
+        "就是这个电话按钮，它就是个按钮，没跟底下那个感觉有点不太适合。"
+    )
+    # 真正询问用法时仍然不能自动建单。
+    assert not looks_like_issue_report("能不能告诉我怎么提交工单？")
+
+
 def test_report_classifier_does_not_escalate_usage_question_or_bad_json():
     client, _ = _client(
         '{"type":"usage_question","confidence":0.99,"expected":"",'

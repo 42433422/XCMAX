@@ -351,6 +351,18 @@ class WorkflowApprovalBridge:
             if success
             else (closed_loop_setup_failure_code(run) or WORKFLOW_EXECUTION_FAILED_CODE),
         )
+        if not success:
+            # 把失败步骤的真实原因带给用户，避免只显示“AI 工作流执行失败”而无法判断是否写入。
+            detail = next(
+                (
+                    str(getattr(step, "error", "") or "").strip()
+                    for step in run.steps
+                    if step.status == "failed" and str(getattr(step, "error", "") or "").strip()
+                ),
+                "",
+            ) or str(getattr(run, "error", "") or "").strip()
+            if detail:
+                message = detail
         return {
             "workflow_executed": True,
             "approval_request_id": request_id,

@@ -76,6 +76,7 @@ class PlannedWorkflowDispatch:
             "intent": "chat_turn",
             "committed": False,
             "effect": "none",
+            "outcome": "not_executed",
         }
 
     @staticmethod

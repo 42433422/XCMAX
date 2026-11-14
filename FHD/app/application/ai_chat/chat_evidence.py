@@ -33,6 +33,39 @@ _CUSTOMER_LOOKUP = re.compile(
     r"(?:查一下|查下|查询|查看|查)\s*([\u4e00-\u9fffA-Za-z0-9]{2,8}?)(?:那个|这个|的)(?:账单|订单|单据|产品)"
 )
 
+# 长会话治理：上下文只保留最近窗口，更早的内容压缩成滚动摘要。
+HISTORY_WINDOW_MESSAGES = 16
+HISTORY_WINDOW_CHARS = 6000
+HISTORY_SUMMARY_ITEMS = 10
+HISTORY_SUMMARY_ITEM_CHARS = 160
+
+
+def _history_window(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+    """按条数和字符预算保留最近若干条，避免长会话把上下文和渲染成本拖爆。"""
+    window: list[dict[str, str]] = []
+    total = 0
+    for item in reversed(messages):
+        length = len(str(item.get("content") or ""))
+        if window and (len(window) >= HISTORY_WINDOW_MESSAGES or total + length > HISTORY_WINDOW_CHARS):
+            break
+        window.append(item)
+        total += length
+    window.reverse()
+    return window
+
+
+def _rolling_history_summary(messages: list[dict[str, str]]) -> str:
+    """窗口之外的历史压成短摘要；确定性压缩，不额外调用模型。"""
+    if len(messages) <= HISTORY_WINDOW_MESSAGES:
+        return ""
+    older = messages[:-HISTORY_WINDOW_MESSAGES][-HISTORY_SUMMARY_ITEMS:]
+    lines = []
+    for item in older:
+        text = re.sub(r"\s+", " ", str(item.get("content") or "")).strip()
+        if text:
+            lines.append(f"- [{item.get('role')}] {text[:HISTORY_SUMMARY_ITEM_CHARS]}")
+    return "\n".join(lines)
+
 
 def customer_name_question(message: str, context: dict[str, Any]) -> str:
     """Ask before substituting a similar customer named earlier in this conversation."""
@@ -98,6 +131,7 @@ def prepare_chat_evidence(
     result.pop("_chat_memory_evidence_authorized", None)
     result.pop("recent_messages", None)
     result.pop("chat_owned_history", None)
+    result.pop("chat_history_summary", None)
     result.pop("chat_independent_knowledge_query", None)
     result.pop("_chat_evidence_authorized", None)
     result.pop("_chat_evidence_prepared_marker", None)
@@ -125,16 +159,20 @@ def prepare_chat_evidence(
     if session:
         try:
             history = task_conversation_store.get_conversation(session_id=session, user_id=owner)
-            owned_history = [
+            rows = [
                 {
                     "role": "assistant" if item.get("role") == "ai" else item.get("role"),
                     "content": str(item.get("content") or "")[:2000],
                 }
-                for item in (history.get("messages") or [])[-24:]
+                for item in (history.get("messages") or [])
                 if isinstance(item, dict) and item.get("role") in {"user", "assistant", "ai"}
             ]
+            owned_history = _history_window(rows)
             result["chat_owned_history"] = owned_history
             result["recent_messages"] = owned_history[-12:]
+            summary = _rolling_history_summary(rows)
+            if summary:
+                result["chat_history_summary"] = summary
         except RECOVERABLE_ERRORS:
             logger.warning("chat history unavailable", exc_info=True)
     try:

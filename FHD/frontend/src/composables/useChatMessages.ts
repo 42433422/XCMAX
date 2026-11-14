@@ -1,4 +1,4 @@
-import { ref, computed, watch, getCurrentScope, onScopeDispose, type Ref } from 'vue'
+import { ref, computed, customRef, watch, getCurrentScope, onScopeDispose, type Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import chatApi from '../api/chat'
 import { localMessagePersistence, samePersistedMessage, useChatMessagePersistence } from './useChatMessagePersistence'
@@ -16,6 +16,16 @@ import { reconcileApprovalCards, restoreApprovalCard } from '@/utils/chatApprova
 import { captureAuthSession } from '@/utils/authSessionCache'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
+
+/** 本地失败回执（未写入服务端）的识别口径，用于清理被后续对话取代的幽灵行。 */
+const TRANSPORT_FAILURE_NOTICE_RE =
+  /处理失败|连接中断|请求超时|尚未收到完成回执|没有收到正文|network error|服务暂时不可用/i
+
+function isSupersededTransportFailure(message: ChatMessage): boolean {
+  if (message.role !== 'ai' || message.streamingShell) return false
+  if (message.persistence?.status === 'saved') return false
+  return TRANSPORT_FAILURE_NOTICE_RE.test(String(message.content || '').replace(/<[^>]*>/g, ' '))
+}
 
 // TTS 语音队列：按顺序播放，避免多条并发抢扬声器
 const voiceQueue: string[] = []
@@ -145,7 +155,43 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
   return extras
 }
 
-export function useChatMessages(sessionId: Ref<string>) {
+interface ChatMessageStore {
+  messages: Ref<ChatMessage[]>
+  cacheError: Ref<string>
+  /** 同一会话被多个视图（智能对话页 / 悬浮窗）同时使用时共享同一份引用。 */
+  refs: number
+}
+
+/**
+ * 按会话缓存键（会话 + Mod）注册的模块级消息单例。
+ * 智能对话页与悬浮窗从同一入口取到同一个 messages 引用，避免两份数组互相覆盖、
+ * 同步时把旧消息当成孤儿行追加到末尾。
+ */
+const chatMessageStores = new Map<string, ChatMessageStore>()
+
+function acquireChatMessageStore(key: string, init: () => ChatMessage[]): ChatMessageStore {
+  const existing = chatMessageStores.get(key)
+  if (existing) {
+    existing.refs += 1
+    return existing
+  }
+  const created: ChatMessageStore = { messages: ref<ChatMessage[]>(init()), cacheError: ref(''), refs: 1 }
+  chatMessageStores.set(key, created)
+  return created
+}
+
+function releaseChatMessageStore(key: string, store: ChatMessageStore): void {
+  store.refs -= 1
+  if (store.refs <= 0 && chatMessageStores.get(key) === store) chatMessageStores.delete(key)
+}
+
+/** 测试用：清空模块级单例，模拟整页刷新。 */
+export function resetChatMessageStores(): void {
+  chatMessageStores.clear()
+}
+
+export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () => boolean } = {}) {
+  const busy = () => options.isBusy?.() === true
   const modsStore = useModsStore()
   const industryStore = useIndustryStore()
   const { activeModId } = storeToRefs(modsStore)
@@ -162,8 +208,6 @@ export function useChatMessages(sessionId: Ref<string>) {
       },
     ]
   }
-
-  const cacheError = ref('')
 
   function readCachedMessages(): ChatMessage[] {
     try {
@@ -210,6 +254,34 @@ export function useChatMessages(sessionId: Ref<string>) {
   }
   if (getCurrentScope()) onScopeDispose(flushMessagesCache)
 
+  let activeStoreKey = storageKey.value
+  let activeStore = acquireChatMessageStore(activeStoreKey, readCachedMessages)
+  const messages = customRef<ChatMessage[]>((track, trigger) => ({
+    get() { track(); return activeStore.messages.value },
+    set(next) { activeStore.messages.value = next; trigger() },
+  }))
+  const cacheError = customRef<string>((track, trigger) => ({
+    get() { track(); return activeStore.cacheError.value },
+    set(next) { activeStore.cacheError.value = next; trigger() },
+  }))
+
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      flushMessagesCache()
+      releaseChatMessageStore(activeStoreKey, activeStore)
+    })
+  }
+
+  /** 切到另一个会话缓存键；已存在的单例沿用其内存态，只有新建时才从本机缓存读取。 */
+  function switchActiveStore(): void {
+    const nextKey = storageKey.value
+    if (nextKey === activeStoreKey) return
+    flushMessagesCache()
+    releaseChatMessageStore(activeStoreKey, activeStore)
+    activeStoreKey = nextKey
+    activeStore = acquireChatMessageStore(activeStoreKey, readCachedMessages)
+  }
+
   function persistMessagesCache(list = messages.value, key = storageKey.value, metaKey = sessionMetaKey.value, sid = sessionId.value): void {
     clearTimeout(cacheTimer)
     cacheTimer = undefined
@@ -229,7 +301,6 @@ export function useChatMessages(sessionId: Ref<string>) {
     }
   }
 
-  const messages = ref<ChatMessage[]>(readCachedMessages())
   function restoreModelRoute() {
     const latest = [...messages.value].reverse().find(message => message.role === 'ai' && message.routeMetadata)
     recordChatModelRoute(sessionId.value, latest?.routeMetadata || null, resolveChatIdentity(String(activeModId.value || '')))
@@ -525,10 +596,23 @@ export function useChatMessages(sessionId: Ref<string>) {
       const sanitized = sanitizeMessagesList(mapped)
       if (!sanitized.length) { if (options.required) throw new Error('当前会话内容无法读取，请重试'); return false }
       const matched = new Set<number>()
-      const unsaved = messages.value.filter(local => {
+      const localList = messages.value
+      const lastLocal = localList[localList.length - 1]
+      const serverTurnIds = new Set(sanitized.map(message => message.turnId).filter(Boolean))
+      const unsaved = localList.filter(local => {
         const index = sanitized.findIndex((server, i) => !matched.has(i) && samePersistedMessage(local, server, toPlainText))
         if (index >= 0) { matched.add(index); sanitized[index] = { ...local, ...sanitized[index] }; return false }
-        return local.persistence?.status !== 'saved'
+        if (local.persistence?.status === 'saved') return false
+        // 没有进行中的轮次、且本轮 turnId 不在服务端：这是从未真正发出的孤儿提问
+        // （例如视图已被替换导致请求没发出去），保留它只会在每次同步时被追加到末尾。
+        if (local.role === 'user' && local.turnId && !busy() && !serverTurnIds.has(local.turnId)) return false
+        // 已被后续对话取代的本地失败回执没有保存价值：它永远匹配不到服务端，
+        // 每次同步都会被追加到末尾，把真正的最新回复挤到上面，看起来像“AI 没回”。
+        if (isSupersededTransportFailure(local)) {
+          const completedOnServer = Boolean(local.turnId) && serverTurnIds.has(local.turnId)
+          if (completedOnServer || local !== lastLocal) return false
+        }
+        return true
       })
       loadMessages(withoutRepeatedWelcomes([...sanitized, ...unsaved.filter(message => !isWelcomeMessage(message))]))
       return true
@@ -541,9 +625,8 @@ export function useChatMessages(sessionId: Ref<string>) {
   watch(
     () => sessionId.value,
     () => {
-      flushMessagesCache()
+      switchActiveStore()
       cacheError.value = ''
-      messages.value = readCachedMessages()
       restoreModelRoute()
     },
     { flush: 'sync' },
@@ -553,20 +636,11 @@ export function useChatMessages(sessionId: Ref<string>) {
   // 切换后应重新读取当前 Mod 对应的本地消息（若无缓存则展示欢迎语）。
   watch(
     () => [String(activeModId.value || ''), productReadAccountEpoch.value, resolveChatStorageScope()] as const,
-    (next, prev) => {
-      // Identity can arrive after the first paint. Do not copy the provisional
-      // welcome buffer onto the authenticated conversation key.
-      if (prev && next[2] !== prev[2]) {
-        clearTimeout(cacheTimer)
-        cacheTimer = undefined
-        pendingCacheWrite = undefined
-        messages.value = readCachedMessages()
-        restoreModelRoute()
-        return
-      }
-      flushMessagesCache()
+    () => {
+      // 每个缓存键都是独立单例：身份从临时作用域切到已登录作用域时，
+      // 直接切到新键自己的缓存，不把临时欢迎语复制过去。
+      switchActiveStore()
       cacheError.value = ''
-      messages.value = readCachedMessages()
       restoreModelRoute()
     },
     { flush: 'sync' },

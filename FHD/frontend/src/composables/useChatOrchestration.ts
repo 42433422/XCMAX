@@ -70,7 +70,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     syncFromServer,
     queueVoice,
     clearVoiceQueue,
-  } = useChatMessages(sessionId)
+  } = useChatMessages(sessionId, { isBusy: () => isLoading.value })
   const CHAT_TTS_ENABLED_KEY = 'xcagi_chat_tts_enabled'
   const ttsEnabled = ref(localStorage.getItem(CHAT_TTS_ENABLED_KEY) !== '0')
   function setTtsEnabled(enabled: boolean) {
@@ -250,8 +250,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     onIdentityChange: () => {
       pendingDbWriteChatRetryMessages.value = null
       plannerWriteUnlockResumeDraft.value = ''
-      chatSessionActivity.cancelAll()
       chatRequest.cancelPendingChatBatch()
+      // 身份刷新会短暂让 owner 缺失；此时取消会让后端已经成功的一轮在前端显示成失败
+      // （network error / 回复丢失）。仍有进行中的轮次时交给 requestScope.isCurrent 自然收尾。
+      if (chatSessionActivity.runningIds.value.size || chatSessionActivity.streamingIds.value.size) return
+      chatSessionActivity.cancelAll()
       chatSessionActivity.runningIds.value.clear()
       chatSessionActivity.streamingIds.value.clear()
       clearVoiceQueue()
@@ -499,6 +502,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     generation.setLoading(true)
     const turnId = createBusinessHarnessId('turn')
     addMessage(message, 'user', { turnId })
+    // 本轮若因视图/身份已过期而没有真正发出请求，要撤回刚插入的用户消息，
+    // 否则会留下一条永远没有回复、并在每次同步时被追加到末尾的“幽灵提问”。
+    const rollbackUnsentUser = () => {
+      const index = messages.value.findIndex(item => item.role === 'user' && item.turnId === turnId)
+      if (index >= 0) messages.value.splice(index, 1)
+    }
     const requestScope = {
       identity: resolveChatIdentity(String(modsStore.activeModId || '')),
       signal: generation.signal,
@@ -516,9 +525,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         return
       }
       const isCurrent = localScope.isCurrent
-      if (!isCurrent()) return
+      if (!isCurrent()) { rollbackUnsentUser(); return }
       const previewModified = await handleShipmentModify(message, localScope.isCurrent)
-      if (!isCurrent()) return
+      if (!isCurrent()) { rollbackUnsentUser(); return }
       if (previewModified) {
         await saveMessage('user', message, taskSessionId)
         await refreshHistorySessions()
@@ -526,7 +535,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       }
 
       const printHandled = await handleStartPrintCommand(message, localScope)
-      if (!isCurrent()) return
+      if (!isCurrent()) { rollbackUnsentUser(); return }
       if (printHandled) {
         await saveMessage('user', message, taskSessionId)
         await refreshHistorySessions()
@@ -683,7 +692,16 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const turnId = String(message?.turnId || '').trim()
     if (!message || !turnId) return { ok: false, message: '缺少本轮编号，无法核对。' }
     try {
-      const result = await chatApi.reconcileTurn(turnId)
+      const result = (await chatApi.reconcileTurn(turnId)) as {
+        success?: boolean
+        message?: string
+        execution?: {
+          idempotency_key?: string
+          intent?: string
+          effect?: string
+          committed?: boolean
+        }
+      } | null
       const execution = result?.execution
       if (!result?.success || !execution) {
         return { ok: false, message: String(result?.message || '核对失败，请稍后重试。') }
