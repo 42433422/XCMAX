@@ -77,6 +77,55 @@ describe('installDesktopDeviceHeartbeat', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('skips the heartbeat when only the device id cannot be stored', async () => {
+    markSignedIn()
+    const original = Storage.prototype.getItem
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (this: Storage, key: string) {
+      if (key === 'xcagi.desktop.device_id') throw new Error('storage blocked')
+      return original.call(this, key)
+    })
+    const fetchMock = vi.fn()
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    installDesktopDeviceHeartbeat()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('logs a genuine service failure but not an expired session', async () => {
+    markSignedIn()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 }) as unknown as typeof fetch
+    installDesktopDeviceHeartbeat()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(warn).not.toHaveBeenCalled()
+
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 }) as unknown as typeof fetch
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(warn).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['MacIntel', 'macos'],
+    ['Win32', 'windows'],
+    ['Linux x86_64', 'linux'],
+    ['iPhone', 'desktop'],
+  ])('reports the platform label for %s', async (platform, expected) => {
+    markSignedIn()
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue(platform)
+    vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Electron/39 XCAGI')
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    installDesktopDeviceHeartbeat()
+    await vi.advanceTimersByTimeAsync(0)
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body))
+    expect(body.platform).toBe(expected)
+    expect(body.label).toBe('XCAGI 桌面端')
+  })
+
   it('ignores transient heartbeat failures', async () => {
     markSignedIn()
     global.fetch = vi.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch
