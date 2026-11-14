@@ -1,5 +1,5 @@
 {
-  "lines": 2403093,
+  "lines": 2403095,
   "updated": "2026-11-15",
-  "note": "依赖升级集成 PR：新增 1 行 CHANGELOG 说明与能力中心页面重生成，净增 1 行；经用户批准推进合并"
+  "note": "依赖升级集成 PR：vue-router 5 的路由 meta 类型适配（routeTitle.ts +2 行）；经用户批准推进合并"
 }
