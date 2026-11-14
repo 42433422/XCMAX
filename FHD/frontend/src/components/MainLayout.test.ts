@@ -193,7 +193,7 @@ describe('MainLayout.vue', () => {
       await vi.advanceTimersByTimeAsync(280)
       expect(wrapper.get('.route-content [role="status"]').text()).toContain('正在打开「')
       expect(wrapper.find('.top-bar [role="status"]').exists()).toBe(false)
-      expect(wrapper.get('.current-page').text()).toBe('当前内容')
+      expect(wrapper.get('.current-page').isVisible()).toBe(false)
       finish(true)
       await flushPromises()
       expect(wrapper.find('.route-nav-feedback').exists()).toBe(false)

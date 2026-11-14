@@ -331,7 +331,7 @@ def _approval_expired(repository: object, run_id: str) -> bool:
 def approval_execution_denial(
     tool_id: str, action: str, context: dict[str, Any] | None
 ) -> dict[str, Any] | None:
-    """Block a business write while this task is waiting, rejected, or expired.
+    """Block a business write while this task is waiting, rejected, cancelled, or expired.
 
     Caller-supplied approval_id and approved flags are ignored. A task with no
     lifecycle row is an ordinary ERP call and is left alone.
@@ -375,7 +375,7 @@ def approval_execution_denial(
     expired = _approval_expired(repository, approval_run_id) or (
         str(getattr(row, "last_error_code", "") or "") == "approval_timeout"
     )
-    if state not in {"waiting_approval", "rejected"} and not expired:
+    if state not in {"waiting_approval", "rejected", "cancelled"} and not expired:
         return None
     if expired:
         reason = "approval_expired"
@@ -383,6 +383,9 @@ def approval_execution_denial(
     elif state == "rejected":
         reason = "approval_rejected"
         message = "任务已驳回，已拒绝执行"
+    elif state == "cancelled":
+        reason = "approval_cancelled"
+        message = "任务已取消，已拒绝执行"
     else:
         reason = "approval_required"
         message = "任务仍在等待审批，已拒绝执行"

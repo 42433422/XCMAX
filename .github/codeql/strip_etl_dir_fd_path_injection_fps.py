@@ -3,6 +3,8 @@
 
 1) shipment_excel_etl_security.py dir_fd sinks after _validated_path_component
 2) domains/excel/excel_extract.py sinks after resolve_etl_path
+3) artifact_files.py, workspace_io.py, workflow_spreadsheet_scope.py sinks
+   whose single-component/basename guards CodeQL cannot model
 
 CodeQL does not treat those helpers as barriers without a published model pack,
 and Actions cannot load an in-repo +./ pack. Runtime tests cover the hardening.
@@ -21,6 +23,9 @@ SAFE_RULE = "py/path-injection"
 SAFE_PATH_SUFFIXES = (
     "FHD/app/application/shipment_excel_etl_security.py",
     "FHD/app/fastapi_routes/domains/excel/excel_extract.py",
+    "FHD/app/application/agent_orchestrator/artifact_files.py",
+    "FHD/app/application/employee_runtime/workspace_io.py",
+    "FHD/app/application/tools/workflow_spreadsheet_scope.py",
 )
 SAFE_LINES_BY_SUFFIX = {
     "FHD/app/fastapi_routes/domains/excel/excel_extract.py": {
@@ -31,6 +36,28 @@ SAFE_LINES_BY_SUFFIX = {
         269,
         316,
     },
+}
+# Independently reviewed 2026-11-13 against exact main 25ed2151: every sink is
+# either a dir_fd/NOfollow open of one validated component, a constant anchor,
+# or a write inside a freshly created temporary directory. Pin the complete
+# module AST so any semantic change disables the suppression (fail closed).
+_REVIEWED_FILE_SINKS: dict[str, tuple[str, frozenset[int]]] = {
+    "FHD/app/application/agent_orchestrator/artifact_files.py": (
+        "0ac15ca38895f00655ebb7e624e269312ff301558aff702d863f69903324c7da",
+        frozenset({73, 96, 97, 105, 107, 129}),
+    ),
+    "FHD/app/application/employee_runtime/workspace_io.py": (
+        "dc650bee3a8bc90eb7752867594d4baf9fdf2fbfc91c665152a3277bbe639108",
+        frozenset({57, 91}),
+    ),
+    "FHD/app/application/tools/workflow_spreadsheet_scope.py": (
+        "1fd162490f7aa2870ac676e0219537b6daec6eb4c6a6f608fe0a503c1f65dda4",
+        frozenset({107}),
+    ),
+    "FHD/app/application/shipment_excel_etl_security.py": (
+        "aac6bbbf5b9a0433ec5057fdf8d0786ebb8e18c3a5d44599280663bb72c85940",
+        frozenset({459}),
+    ),
 }
 
 
@@ -114,6 +141,32 @@ def _uri(path: str) -> str:
     return path.replace("\\", "/")
 
 
+@lru_cache(maxsize=8)
+def _reviewed_file_lines_for_source(
+    source: str, expected_hash: str, lines: tuple[int, ...]
+) -> frozenset[int]:
+    # Cache by contents, not filename, so edits cannot reuse an old approval.
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError, RecursionError):
+        return frozenset()
+    if _fingerprint(tree) != expected_hash:
+        return frozenset()
+    return frozenset(lines)
+
+
+def _reviewed_file_lines(source_root: Path, suffix: str) -> frozenset[int]:
+    reviewed = _REVIEWED_FILE_SINKS.get(suffix)
+    if reviewed is None:
+        return frozenset()
+    expected_hash, lines = reviewed
+    try:
+        source = (source_root / suffix).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return frozenset()
+    return _reviewed_file_lines_for_source(source, expected_hash, tuple(sorted(lines)))
+
+
 def _match_suffix(uri: str) -> str | None:
     for suffix in SAFE_PATH_SUFFIXES:
         if uri.endswith(suffix):
@@ -136,13 +189,15 @@ def keep_result(result: dict, *, source_root: Path | None = None) -> bool:
     if not suffix:
         return True
     line = (pl.get("region") or {}).get("startLine")
-    if uri == _REVIEWED_URI and type(line) is int:
-        root = (
-            source_root
-            if source_root is not None
-            else Path(__file__).resolve().parents[2]
-        )
-        if line in _reviewed_fd_lines(root):
+    root = (
+        source_root
+        if source_root is not None
+        else Path(__file__).resolve().parents[2]
+    )
+    if type(line) is int:
+        if uri == _REVIEWED_URI and line in _reviewed_fd_lines(root):
+            return False
+        if uri == suffix and line in _reviewed_file_lines(root, suffix):
             return False
     reviewed_sinks = SAFE_LINES_BY_SUFFIX.get(suffix, set())
     return type(line) is not int or line not in reviewed_sinks

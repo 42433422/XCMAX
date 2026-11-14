@@ -90,6 +90,12 @@ class _HeaderPlusMenu extends StatelessWidget {
           child: _PlusMenuRow(Icons.qr_code_scanner, '扫一扫'),
         ),
         PopupMenuItem(
+          value: 'tasks',
+          padding: EdgeInsets.zero,
+          height: 43,
+          child: _PlusMenuRow(Icons.task_alt, '任务'),
+        ),
+        PopupMenuItem(
           value: 'employees',
           padding: EdgeInsets.zero,
           height: 43,
@@ -110,7 +116,7 @@ class _HeaderPlusMenu extends StatelessWidget {
       ],
       child: SizedBox.square(
         key: const ValueKey('message_header_plus_button'),
-        dimension: 48,
+        dimension: 40,
         child: Icon(Icons.add, color: colors.textPrimary, size: 24),
       ),
     );
@@ -207,13 +213,9 @@ class _SearchBarFieldState extends State<_SearchBarField> {
               maxLines: 1,
               textAlignVertical: TextAlignVertical.center,
               style: textTheme.bodyMedium?.copyWith(color: colors.textPrimary),
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 isCollapsed: true,
                 border: InputBorder.none,
-                hintText: '查找会话或伙伴',
-                hintStyle: textTheme.bodyMedium?.copyWith(
-                  color: colors.textTertiary,
-                ),
               ),
             ),
           ),

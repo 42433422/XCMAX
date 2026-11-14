@@ -41,8 +41,7 @@ List<ConversationItem> _fixedConversationItems({
       id: PinnedIds.assistant,
       type: ConversationType.pinnedAssistant,
       title: '小C助理',
-      subtitle: states[PinnedIds.assistant]?.preview.ifEmpty('有什么可以帮您？') ??
-          '有什么可以帮您？',
+      subtitle: states[PinnedIds.assistant]?.preview ?? '',
       timestampText: states[PinnedIds.assistant]?.timestampText ?? '',
       timestampMs: states[PinnedIds.assistant]?.timestampMs ?? 0,
       isPinned: true,
@@ -56,7 +55,7 @@ List<ConversationItem> _fixedConversationItems({
         id: PinnedIds.codex,
         type: ConversationType.pinnedCodex,
         title: '超级员工-Codex',
-        subtitle: state?.preview.ifEmpty('全设备协同') ?? '全设备协同',
+        subtitle: state?.preview ?? '',
         timestampText: state?.timestampText ?? '',
         timestampMs: state?.timestampMs ?? 0,
         isOnline: true,
@@ -71,7 +70,7 @@ List<ConversationItem> _fixedConversationItems({
         id: PinnedIds.cursor,
         type: ConversationType.pinnedCursor,
         title: '超级员工-Cursor',
-        subtitle: state?.preview.ifEmpty('全设备协同 · Agent') ?? '全设备协同 · Agent',
+        subtitle: state?.preview ?? '',
         timestampText: state?.timestampText ?? '',
         timestampMs: state?.timestampMs ?? 0,
         isOnline: true,
@@ -86,7 +85,7 @@ List<ConversationItem> _fixedConversationItems({
         id: PinnedIds.claude,
         type: ConversationType.pinnedClaude,
         title: '超级员工-Claude',
-        subtitle: state?.preview.ifEmpty('全设备协同 · 排比派工') ?? '全设备协同 · 排比派工',
+        subtitle: state?.preview ?? '',
         timestampText: state?.timestampText ?? '',
         timestampMs: state?.timestampMs ?? 0,
         isOnline: true,
@@ -101,7 +100,7 @@ List<ConversationItem> _fixedConversationItems({
         id: PinnedIds.trae,
         type: ConversationType.pinnedTrae,
         title: '超级员工-Trae',
-        subtitle: state?.preview.ifEmpty('全设备协同 · Trae') ?? '全设备协同 · Trae',
+        subtitle: state?.preview ?? '',
         timestampText: state?.timestampText ?? '',
         timestampMs: state?.timestampMs ?? 0,
         isOnline: true,
@@ -116,7 +115,7 @@ List<ConversationItem> _fixedConversationItems({
         id: PinnedIds.cs,
         type: ConversationType.pinnedCs,
         title: '专属客服',
-        subtitle: state?.preview.ifEmpty('您好，我是您的专属客服') ?? '您好，我是您的专属客服',
+        subtitle: state?.preview ?? '',
         timestampText: state?.timestampText ?? '',
         timestampMs: state?.timestampMs ?? 0,
         isOnline: true,
@@ -162,8 +161,9 @@ class _ConversationListState {
 }
 
 Future<Map<String, _ConversationListState>> _loadConversationListStates(
-  MobileApiClient client,
-) async {
+  MobileApiClient client, {
+  Future<MobileOfflineStore?> Function()? openStore,
+}) async {
   final session = await client.loadSession();
   final result = <String, _ConversationListState>{};
   for (final entry in session.conversationListStates.entries) {
@@ -171,6 +171,26 @@ Future<Map<String, _ConversationListState>> _loadConversationListStates(
     if (key.isEmpty) continue;
     final state = _ConversationListState.fromJson(entry.value);
     if (state != null) result[key] = state;
+  }
+  final store = await openStore?.call();
+  if (store == null) return result;
+
+  for (final entry in (await store.latestMessagePreviews()).entries) {
+    final existing = result[entry.key];
+    if (existing != null && existing.preview.isNotEmpty) continue;
+    final role = entry.value['role'] == ChatRole.user.name
+        ? ChatRole.user
+        : ChatRole.assistant;
+    final preview = _conversationPreviewForRole(
+      role,
+      '${entry.value['body'] ?? ''}',
+    );
+    final timestampMs = _firstPositiveInt([entry.value['ts']]);
+    if (preview.isEmpty && timestampMs <= 0) continue;
+    result[entry.key] = _ConversationListState(
+      preview: preview,
+      timestampMs: timestampMs,
+    );
   }
   return result;
 }

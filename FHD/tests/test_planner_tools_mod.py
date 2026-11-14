@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-planner-bridge"
+MOD_DIR = REPO / "mods" / "bridge" / "xcagi-planner-bridge"
 
 
 def test_planner_mod_manifest_tools_execution_flag():
@@ -65,7 +65,7 @@ def test_execute_planner_tool_from_body_missing_name():
 
 
 @pytest.mark.skipif(
-    not (REPO / "mods" / "xcagi-planner-excel-tools" / "manifest.json").is_file(),
+    not (REPO / "mods" / "tools" / "xcagi-planner-excel-tools" / "manifest.json").is_file(),
     reason="xcagi-planner-excel-tools mod_native path unavailable",
 )
 def test_execute_planner_tool_excel_chart_recommend(monkeypatch):

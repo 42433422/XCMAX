@@ -17,7 +17,9 @@ REPO = Path(__file__).resolve().parents[1]
 
 def skip_if_bridge_mod_absent(mod_id: str) -> Path:
     """物理桥接 mod 缺失即 ``pytest.skip``；存在则返回其目录路径。"""
-    mod_dir = REPO / "mods" / mod_id
+    from app.mod_sdk.mod_source_paths import mod_source_dir
+
+    mod_dir = mod_source_dir(mod_id) or (REPO / "mods" / mod_id)
     if not mod_dir.is_dir():
         pytest.skip(f"physical bridge mod '{mod_id}' not present in this repo checkout")
     return mod_dir

@@ -17,6 +17,7 @@ import '../about/about_screen.dart';
 import '../auth/auth_screen.dart';
 import '../connect/connect_screen.dart';
 import '../settings/settings_screen.dart';
+import '../../policy/mobile_error_policy.dart';
 
 // 按职责拆分为 part 文件：页面 State、编辑/注销弹窗、资料卡组件与钱包卡片。
 part 'profile_screen_state.part.dart';

@@ -46,7 +46,8 @@ def _bundled_taiyangniao_pro_exposes_attendance_api() -> bool:
     """
     fhd_root = Path(__file__).resolve().parents[3]
     candidates = (
-        fhd_root / "mods" / "taiyangniao-pro" / "backend" / "blueprints.py",
+        # 编辑源分层：FHD/mods/industry/<id>/
+        fhd_root / "mods" / "industry" / "taiyangniao-pro" / "backend" / "blueprints.py",
         fhd_root / "XCAGI" / "mods" / "taiyangniao-pro" / "backend" / "blueprints.py",
     )
     for file_path in candidates:

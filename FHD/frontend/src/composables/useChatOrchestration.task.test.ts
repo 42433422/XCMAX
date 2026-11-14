@@ -179,6 +179,8 @@ vi.mock('./useChatResponseAttach', () => ({
     attachThinkingStepsToLastAiMessage: vi.fn(),
     attachTodoStepsToLastAiMessage: vi.fn(),
     attachWorkflowTraceToLastAiMessage: vi.fn(),
+    attachApprovalCardToLastAiMessage: vi.fn(),
+    attachBusinessResultToLastAiMessage: vi.fn(),
     attachContextSummaryToLastAiMessage: vi.fn(),
     syncTaskFromChatResponse: vi.fn(),
   }),

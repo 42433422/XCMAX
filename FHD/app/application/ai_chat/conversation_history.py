@@ -167,6 +167,10 @@ def persist_chat_turn(
         or inner.get("run_id")
         or inner.get("agent_run_id"),
     }
+    from app.application.agent_orchestrator.business_harness import (
+        extract_payload_business_result,
+    )
+
     ui_payload = {
         "thinkingSteps": inner_payload.get("thinking_steps")
         or inner.get("thinking_steps")
@@ -176,6 +180,7 @@ def persist_chat_turn(
         "nodeResults": inner_payload.get("node_results"),
         "approvalCard": inner_payload.get("approval_card"),
         "attachments": inner_payload.get("attachments"),
+        "businessResult": extract_payload_business_result(response_data),
     }
     ui_payload = {key: value for key, value in ui_payload.items() if value not in (None, "", [])}
     harness_metadata = {

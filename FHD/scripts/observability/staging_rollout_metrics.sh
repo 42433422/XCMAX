@@ -32,7 +32,7 @@ fi
 docker build \
   --build-arg PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/ \
   --build-arg PIP_TRUSTED_HOST=mirrors.aliyun.com \
-  -f docker/Dockerfile.fhd-api \
+  -f ops/docker/Dockerfile.fhd-api \
   -t xcagi-fhd-api:staging .
 
 \$KUB -n \$NS patch configmap xcagi-config --type merge -p '{"data":{"XCAGI_GUNICORN_WORKERS":"2"}}' 2>/dev/null || true

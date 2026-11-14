@@ -9,6 +9,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 import '../update/package_update_installer.dart';
 import '../update/app_update_check.dart';
+import '../../policy/mobile_error_policy.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -29,7 +30,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   var _biometric = false;
   var _themeMode = 'system';
   var _lanModeEnabled = false;
-  var _lanModeSubtitle = '关闭时超级员工经云中继执行';
   var _submittingFeedback = false;
   var _checkingUpdate = false;
   final _feedbackController = TextEditingController();
@@ -74,7 +74,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       WeCell(
                         title: '生物识别解锁',
-                        subtitle: _biometric ? '已开启' : '未开启',
                         icon: Icons.fingerprint,
                         iconColor: colors.brand,
                         iconBg: colors.brandContainer,
@@ -94,7 +93,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       WeCell(
                         title: '局域网模式',
-                        subtitle: _lanModeSubtitle,
                         icon: Icons.lan,
                         iconColor: colors.brand,
                         iconBg: colors.brandContainer,
@@ -114,7 +112,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       WeCell(
                         title: '主题模式',
-                        subtitle: _themeLabel(_themeMode),
                         icon: Icons.palette,
                         iconColor: colors.success,
                         iconBg: Theme.of(
@@ -161,7 +158,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       WeCell(
                         title: '问题反馈',
-                        subtitle: '提交后进入企业支持队列',
                         icon: Icons.bug_report,
                         iconColor: colors.warning,
                         iconBg: colors.warning.withValues(alpha: 0.14),
@@ -197,7 +193,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       WeCell(
                         title: '检查更新',
-                        subtitle: '获取企业版移动端最新构建',
                         icon: Icons.system_update,
                         iconColor: colors.success,
                         iconBg: Theme.of(
@@ -226,7 +221,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _biometric = session.biometricEnabled;
         _themeMode = _normalizeThemeMode(session.themeMode);
         _lanModeEnabled = _isLanModeEnabled(session);
-        _lanModeSubtitle = _lanModeDescription(session);
       });
     } catch (_) {
       // Keep the mobile defaults when local settings storage is unavailable.
@@ -234,24 +228,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _setLanModeEnabled(bool value) {
-    setState(() {
-      _lanModeEnabled = value;
-      _lanModeSubtitle = value ? '优先局域网直连超级员工（需电脑 FHD 在线）' : '关闭时超级员工经云中继执行';
-    });
+    setState(() => _lanModeEnabled = value);
     unawaited(_persistLanMode(value));
   }
 
   Future<void> _persistLanMode(bool enabled) async {
     await _api.saveLocalSettings(serverMode: enabled ? 'lan' : 'cloud');
-    try {
-      final session = await _api.loadSession();
-      if (!mounted) return;
-      setState(() {
-        _lanModeSubtitle = _lanModeDescription(session);
-      });
-    } catch (_) {
-      // Subtitle already reflects the toggle intent.
-    }
   }
 
   void _setBiometricEnabled(bool value) {
@@ -285,9 +267,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ).showSnackBar(const SnackBar(content: Text('感谢您的反馈，我们会尽快处理')));
     } catch (error) {
       if (!mounted) return;
-      final message = error is MobileApiException
-          ? error.message
-          : error.toString().replaceFirst('Exception: ', '');
+      final message =
+          error is MobileApiException ? error.message : mobileErrorText(error);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message.isEmpty ? '反馈提交失败，请稍后重试' : message)),
       );
@@ -403,17 +384,6 @@ class _ThemeModeChip extends StatelessWidget {
   }
 }
 
-String _themeLabel(String mode) {
-  switch (_normalizeThemeMode(mode)) {
-    case 'dark':
-      return '深色';
-    case 'light':
-      return '浅色';
-    default:
-      return '跟随系统';
-  }
-}
-
 String _normalizeThemeMode(String mode) {
   final normalized = mode.trim().toLowerCase();
   if (normalized == 'light' || normalized == 'dark') return normalized;
@@ -422,19 +392,4 @@ String _normalizeThemeMode(String mode) {
 
 bool _isLanModeEnabled(MobileSessionData session) {
   return session.serverMode.trim().toLowerCase() == 'lan';
-}
-
-String _lanModeDescription(MobileSessionData session) {
-  if (!_isLanModeEnabled(session)) {
-    return '关闭时超级员工经云中继执行';
-  }
-  final host = session.fhdHost.trim();
-  final localBase = session.localBaseUrl.trim();
-  if (host.isNotEmpty) {
-    return '优先直连 $host（失败时自动回云中继）';
-  }
-  if (localBase.isNotEmpty) {
-    return '优先直连已绑定电脑（失败时自动回云中继）';
-  }
-  return '已开启；请先绑定电脑或填写局域网地址';
 }

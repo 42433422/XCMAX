@@ -95,7 +95,10 @@ def employee_mods_root(tmp_path, monkeypatch):
     mods_root = tmp_path / "mods"
     mods_root.mkdir()
     catalog = "xcagi-office-employee-pack-bridge"
-    shutil.copytree(Path(__file__).parents[1] / "mods" / catalog, mods_root / catalog)
+    from app.mod_sdk.mod_source_paths import mod_source_dir
+
+    source = mod_source_dir(catalog) or (Path(__file__).parents[1] / "mods" / catalog)
+    shutil.copytree(source, mods_root / catalog)
     monkeypatch.setenv("XCAGI_MODS_ROOT", str(mods_root))
     from app.application.tools.workflow import invalidate_workflow_tool_registry
     from app.infrastructure.mods import employee_registry as er

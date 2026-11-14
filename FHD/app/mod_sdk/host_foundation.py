@@ -99,19 +99,33 @@ def _repo_mod_seed_dirs() -> list[Path]:
     return out
 
 
+MOD_SOURCE_LAYERS = ("industry", "bridge", "employees", "tools")
+
+
+def _mod_seed_bases(root: Path) -> list[Path]:
+    """平铺 mods 根 + 一层分层容器（industry/bridge/employees/tools）。"""
+    bases = [root]
+    for layer in MOD_SOURCE_LAYERS:
+        sub = root / layer
+        if sub.is_dir():
+            bases.append(sub)
+    return bases
+
+
 def read_aux_employee_pack_manifest(pack_id: str) -> dict[str, Any] | None:
     pid = str(pack_id or "").strip()
     if not pid or not is_aux_employee_pack_mod_id(pid):
         return None
     for root in _repo_mod_seed_dirs():
-        mf = root / pid / "manifest.json"
-        if not mf.is_file():
-            continue
-        try:
-            raw = json.loads(mf.read_text(encoding="utf-8"))
-            return raw if isinstance(raw, dict) else None
-        except (OSError, json.JSONDecodeError) as e:
-            logger.warning("read_aux_employee_pack_manifest %s: %s", mf, e)
+        for base in _mod_seed_bases(root):
+            mf = base / pid / "manifest.json"
+            if not mf.is_file():
+                continue
+            try:
+                raw = json.loads(mf.read_text(encoding="utf-8"))
+                return raw if isinstance(raw, dict) else None
+            except (OSError, json.JSONDecodeError) as e:
+                logger.warning("read_aux_employee_pack_manifest %s: %s", mf, e)
     return None
 
 
@@ -168,23 +182,26 @@ def install_aux_employee_pack_from_repo_seed(
         return False, "非触点员工包"
     src: Path | None = None
     for root in _repo_mod_seed_dirs():
-        try:
-            with os.scandir(root) as entries:
-                entry = next(
-                    (
-                        item
-                        for item in entries
-                        if item.name == pid
-                        and not item.is_symlink()
-                        and item.is_dir(follow_symlinks=False)
-                    ),
-                    None,
-                )
-            if entry is not None:
-                src = Path(entry.path)
-                break
-        except OSError:
-            continue
+        for base in _mod_seed_bases(root):
+            try:
+                with os.scandir(base) as entries:
+                    entry = next(
+                        (
+                            item
+                            for item in entries
+                            if item.name == pid
+                            and not item.is_symlink()
+                            and item.is_dir(follow_symlinks=False)
+                        ),
+                        None,
+                    )
+                if entry is not None:
+                    src = Path(entry.path)
+                    break
+            except OSError:
+                continue
+        if src is not None:
+            break
     if src is None:
         return False, f"未找到内置员工包：{pid}"
     from app.infrastructure.mods.mod_manager import get_mod_manager

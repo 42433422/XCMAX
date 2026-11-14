@@ -11,6 +11,7 @@ import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
 import '../voice/voice_input_sheet.dart';
+import '../../policy/mobile_error_policy.dart';
 
 part 'cs_chat_screen_widgets.part.dart';
 part 'cs_chat_screen_input.part.dart';
@@ -203,7 +204,7 @@ class _CsChatScreenState extends State<CsChatScreen> {
       _scrollToBottom();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
+      setState(() => _error = mobileErrorText(error));
     }
   }
 
@@ -244,7 +245,7 @@ class _CsChatScreenState extends State<CsChatScreen> {
         setState(() => _messages = fresh);
       }
     } catch (error) {
-      if (mounted) _showSnack(error.toString());
+      if (mounted) _showSnack(mobileErrorText(error));
     } finally {
       if (mounted) {
         setState(() => _streaming = false);

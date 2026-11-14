@@ -37,7 +37,7 @@ def test_real_mod_handlers_preserve_validation_and_service_tenant(monkeypatch, t
     monkeypatch.setattr(shipment_orders, "_run_shipment_records_agent", records)
     monkeypatch.setattr(shipment_orders, "_run_shipment_orders_agent", orders)
     mod = import_mod_backend_py(
-        str(Path(__file__).resolve().parents[2] / "mods" / "xcagi-erp-domain-bridge"),
+        str(Path(__file__).resolve().parents[2] / "mods" / "bridge" / "xcagi-erp-domain-bridge"),
         "xcagi-erp-domain-bridge",
         "blueprints",
     )
