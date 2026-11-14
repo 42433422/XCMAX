@@ -28,6 +28,11 @@ def _ai_group_guard(request: Request):
         db.close()
 
 
+def _group_value_error_response(exc: ValueError):
+    status = 404 if str(exc) == "群不存在" else 400
+    return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=status)
+
+
 @router.get("/api/admin/ai-groups")
 def admin_ai_groups_list(request: Request, user: CurrentUser = Depends(require_identified_user)):
     denied = _facade()._ai_group_guard(request)
@@ -77,7 +82,7 @@ def admin_ai_groups_create(
         )
         return {"success": True, "group": group}
     except ValueError as exc:
-        return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+        return _group_value_error_response(exc)
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("admin_ai_groups_create")
         return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=500)
@@ -137,7 +142,7 @@ async def admin_ai_group_post(
         )
         return {"success": True, **result}
     except ValueError as exc:
-        return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+        return _group_value_error_response(exc)
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("admin_ai_group_post")
         return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=500)
@@ -171,7 +176,7 @@ def admin_ai_group_add_member(
         )
         return {"success": True, "group": group}
     except ValueError as exc:
-        return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+        return _group_value_error_response(exc)
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("admin_ai_group_add_member")
         return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=500)
@@ -195,7 +200,7 @@ def admin_ai_group_remove_member(
         )
         return {"success": True, "group": group}
     except ValueError as exc:
-        return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+        return _group_value_error_response(exc)
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("admin_ai_group_remove_member")
         return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=500)
