@@ -212,9 +212,7 @@ def _registered_router_dataset_rag(
                 get_persy_memory_app_service,
             )
 
-            result = get_persy_memory_app_service().clear_memories(
-                access_context=write_context
-            )
+            result = get_persy_memory_app_service().clear_memories(access_context=write_context)
         else:
             result = service.clear_dataset(
                 dataset_id,

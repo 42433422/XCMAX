@@ -317,9 +317,7 @@ class PlannedWorkflowDispatch:
         # analysis must execute that same durable AgentRun graph as every other
         # workflow; the former second, model-directed tool loop had no complete
         # approval/permission/receipt boundary and is retired.
-        auto_approval = (
-            str(runtime_ctx.get("chat_approval_mode") or "").strip().lower() == "auto"
-        )
+        auto_approval = str(runtime_ctx.get("chat_approval_mode") or "").strip().lower() == "auto"
         if (
             not has_approval_requirement
             or auto_approval

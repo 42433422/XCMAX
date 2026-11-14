@@ -563,7 +563,9 @@ class WorkflowSession:
         try:
             actor = int(str(raw_actor).strip())
         except (TypeError, ValueError):
-            logger.warning("auto approve actor unavailable user=%r ctx_actor=%r", user_id, raw_actor)
+            logger.warning(
+                "auto approve actor unavailable user=%r ctx_actor=%r", user_id, raw_actor
+            )
             return None
         from app.application.approval_workspace_app_service import (
             _approve_ai_workflow_request_without_node,

@@ -138,7 +138,9 @@ class StepExecution:
             action=step.action,
             params=copy.deepcopy(step.params or {}),
             cost_units=int(getattr(spec, "cost_units", 0) or 0),
-            permission=str(getattr(spec, "permission", "") or ""),
+            permission=str(
+                getattr(spec, "receipt_permission", getattr(spec, "permission", "")) or ""
+            ),
             metadata={
                 "risk": step.risk,
                 "idempotent": step.idempotent,
@@ -146,6 +148,8 @@ class StepExecution:
                 "attempt_count": attempt_count,
             },
         )
+        if tool_call.permission != getattr(spec, "permission", ""):
+            tool_call.metadata["authorization_permission"] = spec.permission
         run.tool_calls.append(tool_call)
         self.usage.refresh_run_cost_metadata(run)
         trace = self._trace(

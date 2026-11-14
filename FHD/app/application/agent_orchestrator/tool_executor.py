@@ -161,6 +161,7 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
         BusinessActionLedger,
         canonical_hash,
     )
+    from app.application.agent_orchestrator.business_write_guard import recheck_worker_claim
     from app.application.agent_orchestrator.catalog_product_edit import (
         existing_action,
         repository,
@@ -197,6 +198,7 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
         factory = factory_for(principal, lock_timeout=5)
         with tenant_scope(int(principal.tenant_id)), factory.guard():
             check_invocation_deadline()
+            recheck_worker_claim()
             trusted_original(params, context, writing=True)
             with source_claim_admission(factory, params, context):
                 claim, existing = ledger.claim(step.tool_id, step.action, params, context)

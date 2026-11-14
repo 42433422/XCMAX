@@ -128,10 +128,12 @@ def create_observed_tool_trace_run(
         output=safe_output,
         error="" if succeeded else "observed tool reported failure",
         cost_units=int(spec.cost_units or 0),
-        permission=spec.permission,
+        permission=spec.receipt_permission,
         finished_at=finished_at,
         metadata={"observed": True, "risk": spec.risk, "idempotent": spec.idempotent},
     )
+    if call.permission != spec.permission:
+        call.metadata["authorization_permission"] = spec.permission
     run.steps.append(step)
     run.tool_calls.append(call)
     run.final_output = {

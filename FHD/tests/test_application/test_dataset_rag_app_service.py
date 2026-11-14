@@ -192,9 +192,7 @@ def test_clear_dataset_removes_every_document(tmp_path: Path) -> None:
         storage_path=tmp_path / "dataset_store.json",
     )
     for source, text in [("a.md", "alpha document"), ("b.md", "beta document")]:
-        svc.ingest_document(
-            dataset_id="clear-me", text=text, source=source, chunk_strategy="fixed"
-        )
+        svc.ingest_document(dataset_id="clear-me", text=text, source=source, chunk_strategy="fixed")
 
     cleared = svc.clear_dataset("clear-me")
     status = svc.status("clear-me")

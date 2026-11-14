@@ -261,9 +261,7 @@ class AIChatWorkflowResponseMixin:
             )
             payload["data"].update(text=text, requires_reconciliation=True)
         write_actions = {"write", "create", "update", "delete", "batch_delete", "clear_dataset"}
-        wrote = any(
-            step.status == "completed" and step.action in write_actions for step in steps
-        )
+        wrote = any(step.status == "completed" and step.action in write_actions for step in steps)
         if not success and not uncertain and not wrote:
             payload["execution"] = {
                 "idempotency_key": "",

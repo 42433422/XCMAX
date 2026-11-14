@@ -241,8 +241,7 @@ def prepare_chat_evidence(
                 if not knowledge_query:
                     prior = str(result.get("chat_memory_evidence") or "")
                     statements = [
-                        str(item.get("statement") or "")[:500]
-                        for item in recalled_memories
+                        str(item.get("statement") or "")[:500] for item in recalled_memories
                     ]
                     result["chat_memory_evidence"] = (
                         prior + "\n" + "\n".join(statement for statement in statements if statement)

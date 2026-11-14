@@ -292,9 +292,9 @@
     "FHD/app/application/ai_chat/workflow_session.py": {
       "base_file": "FHD/app/application/ai_chat/workflow_session.py",
       "base_blob": "2f3bf6bf96f46fd6a75f6b950f9c769346bd1d97",
-      "head_blob": "236e906af3c80e43b293ffca92aa2d57e39211b5",
+      "head_blob": "6a92317f285466fb5fe11c079d93829ea65d8c86",
       "before_lines": 1105,
-      "after_lines": 1217,
+      "after_lines": 1219,
       "reason": "Review request only: Preserve the existing PR auto-mode approval continuation using the normal approval-workspace permission/ownership checks and bounded multi-step execution.",
       "boundary": "Only explicitly selected auto mode enters this path; existing application approval verification and the single orchestrator execution path remain required.",
       "validation": "Chat-component actor validation, approval failure and chained continuation regressions are required; independent human review and full current-head CI remain outstanding.",

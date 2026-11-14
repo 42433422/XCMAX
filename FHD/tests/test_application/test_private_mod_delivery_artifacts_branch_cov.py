@@ -20,6 +20,24 @@ import pytest
 from app.application import private_mod_delivery_artifacts as mod
 from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
 
+
+async def _assert_shared_http_error_dict_detail_0(
+    self, _shared_literal_0, _shared_literal_1, _shared_literal_2, _shared_literal_3
+):
+    resp = _resp(_shared_literal_0, body={_shared_literal_2: _shared_literal_3})
+    client = _async_client(request_resp=resp)
+    with (
+        patch("httpx.AsyncClient", return_value=client),
+        patch(
+            "app.fastapi_routes.market_account._market_base_url",
+            return_value="https://m.example.com",
+        ),
+    ):
+        with pytest.raises(RuntimeError) as ei:
+            await mod.custom_delivery_remote_json("tok", "/foo")
+    assert _shared_literal_1 in str(ei.value)
+
+
 BASE = "app.application.private_mod_delivery_artifacts"
 
 
@@ -159,32 +177,12 @@ class TestCustomDeliveryRemoteJson:
         assert result == {}
 
     async def test_http_error_dict_detail(self):
-        resp = _resp(404, body={"detail": "not found"})
-        client = _async_client(request_resp=resp)
-        with (
-            patch("httpx.AsyncClient", return_value=client),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://m.example.com",
-            ),
-        ):
-            with pytest.raises(RuntimeError) as ei:
-                await mod.custom_delivery_remote_json("tok", "/foo")
-        assert "not found" in str(ei.value)
+        return await _assert_shared_http_error_dict_detail_0(
+            self, 404, "not found", "detail", "not found"
+        )
 
     async def test_http_error_dict_message_fallback(self):
-        resp = _resp(500, body={"message": "boom"})
-        client = _async_client(request_resp=resp)
-        with (
-            patch("httpx.AsyncClient", return_value=client),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://m.example.com",
-            ),
-        ):
-            with pytest.raises(RuntimeError) as ei:
-                await mod.custom_delivery_remote_json("tok", "/foo")
-        assert "boom" in str(ei.value)
+        return await _assert_shared_http_error_dict_detail_0(self, 500, "boom", "message", "boom")
 
     async def test_http_error_non_dict_uses_status(self):
         resp = _resp(403, body="plain")
@@ -201,18 +199,7 @@ class TestCustomDeliveryRemoteJson:
         assert "403" in str(ei.value)
 
     async def test_http_error_dict_empty_detail_uses_status(self):
-        resp = _resp(400, body={"detail": ""})
-        client = _async_client(request_resp=resp)
-        with (
-            patch("httpx.AsyncClient", return_value=client),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://m.example.com",
-            ),
-        ):
-            with pytest.raises(RuntimeError) as ei:
-                await mod.custom_delivery_remote_json("tok", "/foo")
-        assert "400" in str(ei.value)
+        return await _assert_shared_http_error_dict_detail_0(self, 400, "400", "detail", "")
 
     async def test_non_dict_ok_body_raises(self):
         resp = _resp(200, body=[1, 2])

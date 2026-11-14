@@ -786,12 +786,8 @@ def test_business_db_read_materials_accepts_material_view(trusted_actor, monkeyp
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     actor = trusted_actor(permissions=["material.view"])
 
-    allowed = actor_tool_denial(
-        "business_db", "read", actor.context, {"entity": "materials"}
-    )
-    denied = actor_tool_denial(
-        "business_db", "read", actor.context, {"entity": "customers"}
-    )
+    allowed = actor_tool_denial("business_db", "read", actor.context, {"entity": "materials"})
+    denied = actor_tool_denial("business_db", "read", actor.context, {"entity": "customers"})
 
     assert allowed is None
     assert denied is not None and denied["error_code"] == "tool_permission_denied"

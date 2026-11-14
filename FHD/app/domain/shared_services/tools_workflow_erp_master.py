@@ -270,7 +270,11 @@ def _registered_router_materials(
             result = svc.batch_delete_materials(ids)
         except RECOVERABLE_ERRORS as err:
             logger.error("清空原材料时 service 执行异常：%s", err)
-            return {"success": True, "message": f"已清空 {len(ids)} 条记录", "deleted_count": len(ids)}
+            return {
+                "success": True,
+                "message": f"已清空 {len(ids)} 条记录",
+                "deleted_count": len(ids),
+            }
         if isinstance(result, dict):
             result.setdefault("success", True)
             result.setdefault("deleted_count", len(ids))

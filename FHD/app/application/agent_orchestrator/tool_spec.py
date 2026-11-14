@@ -55,6 +55,15 @@ class ToolActionSpecV2:
     owner_mod_id: str = ""
 
     @property
+    def receipt_permission(self) -> str:
+        """Keep action-level audit identity without changing the real RBAC gate."""
+        if self.tool_id == "document_template" or (
+            self.tool_id == "materials" and self.permission == "material.edit"
+        ):
+            return f"tool.{self.tool_id}.{self.action}"
+        return self.permission
+
+    @property
     def test_fixtures(self) -> list[dict[str, Any]]:
         """Compat alias for contract_samples (historical name)."""
         return self.contract_samples
