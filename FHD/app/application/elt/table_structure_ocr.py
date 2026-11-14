@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Any
 
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
@@ -71,11 +73,8 @@ def _model_kwargs() -> dict[str, str]:
 
 
 def _allow_download() -> bool:
-    return (os.environ.get("FHD_ETL_TABLE_STRUCTURE_ALLOW_DOWNLOAD") or "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    value = (os.environ.get("FHD_ETL_TABLE_STRUCTURE_ALLOW_DOWNLOAD") or "").strip().lower()
+    return value in {"1", "true", "yes"}
 
 
 def _build_pipeline() -> Any | None:
@@ -118,7 +117,7 @@ def get_table_structure_pipeline() -> Any | None:
             _PIPELINE_READY = True
             try:
                 _PIPELINE = _build_pipeline()
-            except Exception:  # noqa: BLE001 - optional local runtime
+            except RECOVERABLE_ERRORS:
                 logger.warning("PP-StructureV3 pipeline unavailable", exc_info=True)
                 _PIPELINE = None
         return _PIPELINE
@@ -304,7 +303,8 @@ def recognize_table_structures(
         except TypeError as exc:
             logger.debug("PP-StructureV3 rejected 'input' keyword on page %s (%s)", page, exc)
             result = engine.predict(image)
-        except Exception:  # noqa: BLE001 - optional local runtime
+        except BOUNDARY_ERRORS:
+            # 每页独立隔离：单页识别失败只跳过该页，不让整份单据失去结构还原。
             logger.warning("PP-StructureV3 prediction failed on page %s", page, exc_info=True)
             continue
         for payload in _iter_payloads(result):
