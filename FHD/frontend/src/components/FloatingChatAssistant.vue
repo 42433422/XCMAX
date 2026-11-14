@@ -8,7 +8,7 @@
   >
     <button
       class="floating-chat-toggle"
-      :class="{ 'floating-chat-toggle--admin': props.maleAvatar }"
+      :class="{ 'floating-chat-toggle--admin': props.maleAvatar, 'floating-chat-toggle--calling': callOpen }"
       type="button"
       :aria-expanded="isOpen ? 'true' : 'false'"
       aria-controls="floating-chat-panel"
@@ -22,13 +22,47 @@
       </span>
       <span
         v-if="callOpen"
-        class="floating-chat-toggle-voice"
-        aria-label="通话中"
-        title="通话中"
+        class="floating-chat-ball-actions"
+        @pointerdown.stop
       >
-        <i class="fa fa-phone" aria-hidden="true"></i>
+        <span
+          class="floating-chat-ball-action"
+          role="button"
+          tabindex="0"
+          :title="callMuted ? '取消静音' : '静音'"
+          :aria-label="callMuted ? '取消静音' : '静音'"
+          @click.stop="toggleVoiceCallMute"
+          @keydown.enter.prevent.stop="toggleVoiceCallMute"
+          @keydown.space.prevent.stop="toggleVoiceCallMute"
+        >
+          <i class="fa" :class="callMuted ? 'fa-microphone' : 'fa-microphone-slash'" aria-hidden="true"></i>
+        </span>
+        <span
+          class="floating-chat-ball-action"
+          role="button"
+          tabindex="0"
+          :title="callSpeakerOn ? '关闭免提' : '开启免提'"
+          :aria-label="callSpeakerOn ? '关闭免提' : '开启免提'"
+          @click.stop="toggleVoiceCallSpeaker"
+          @keydown.enter.prevent.stop="toggleVoiceCallSpeaker"
+          @keydown.space.prevent.stop="toggleVoiceCallSpeaker"
+        >
+          <i class="fa" :class="callSpeakerOn ? 'fa-volume-up' : 'fa-volume-off'" aria-hidden="true"></i>
+        </span>
+        <span
+          class="floating-chat-ball-action floating-chat-ball-action--hangup"
+          role="button"
+          tabindex="0"
+          title="挂断"
+          aria-label="挂断"
+          @click.stop="hangUpVoiceCall"
+          @keydown.enter.prevent.stop="hangUpVoiceCall"
+          @keydown.space.prevent.stop="hangUpVoiceCall"
+        >
+          <i class="fa fa-phone" aria-hidden="true"></i>
+        </span>
       </span>
-      <span class="floating-chat-toggle-label">小C助理</span>
+      <span v-else class="floating-chat-toggle-label">小C助理</span>
     </button>
 
     <div
@@ -67,30 +101,6 @@
           <p v-if="!callHeardText && !callReplyText && !callErrorText" class="floating-chat-call-hint">
             请直接说话，小C 会自动回答。
           </p>
-        </div>
-        <div class="floating-chat-call-actions">
-          <button
-            type="button"
-            class="floating-chat-call-action"
-            :title="callMuted ? '取消静音' : '静音'"
-            @click="toggleVoiceCallMute"
-          >
-            <i class="fa" :class="callMuted ? 'fa-microphone' : 'fa-microphone-slash'" aria-hidden="true"></i>
-            {{ callMuted ? '取消静音' : '静音' }}
-          </button>
-          <button
-            type="button"
-            class="floating-chat-call-action"
-            :title="callSpeakerOn ? '关闭免提' : '开启免提'"
-            @click="toggleVoiceCallSpeaker"
-          >
-            <i class="fa" :class="callSpeakerOn ? 'fa-volume-up' : 'fa-volume-off'" aria-hidden="true"></i>
-            {{ callSpeakerOn ? '免提开' : '免提关' }}
-          </button>
-          <button type="button" class="floating-chat-call-action floating-chat-call-hangup" title="挂断" @click="hangUpVoiceCall">
-            <i class="fa fa-phone" aria-hidden="true"></i>
-            挂断
-          </button>
         </div>
       </div>
 

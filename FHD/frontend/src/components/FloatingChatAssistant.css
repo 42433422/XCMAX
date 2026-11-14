@@ -66,35 +66,51 @@
     0 5px 12px rgba(22, 77, 143, 0.25);
 }
 
-/* 悬浮窗头像外的通话中状态图标（仅通话时显示） */
-.floating-chat-toggle-voice {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border: 2px solid rgba(255, 255, 255, 0.96);
-  border-radius: 50%;
-  background: #16a34a;
-  color: #ffffff;
-  font-size: 11px;
-  line-height: 1;
-  box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.55);
-  animation: floating-chat-call-pulse 1.6s ease-out infinite;
+/* 通话中悬浮球底部的静音/免提/挂断图标 */
+.floating-chat-toggle--calling {
+  width: 92px;
 }
 
-@keyframes floating-chat-call-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.55);
-  }
-  70% {
-    box-shadow: 0 0 0 8px rgba(22, 163, 74, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
-  }
+.floating-chat-ball-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.16);
+}
+
+.floating-chat-ball-action {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 50%;
+  background: #ffffff;
+  color: #334155;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.floating-chat-ball-action:hover {
+  background: #f1f5f9;
+}
+
+.floating-chat-ball-action:focus-visible {
+  outline: 3px solid rgba(24, 144, 255, 0.32);
+  outline-offset: 2px;
+}
+
+.floating-chat-ball-action--hangup,
+.floating-chat-ball-action--hangup:hover {
+  background: #dc2626;
+  border-color: #b91c1c;
+  color: #ffffff;
 }
 
 .floating-chat-root:not(.dragging) .floating-chat-toggle {
@@ -120,7 +136,6 @@
 .floating-chat-close:focus-visible,
 .floating-chat-send:focus-visible,
 .floating-chat-call-entry:focus-visible,
-.floating-chat-call-action:focus-visible,
 .floating-chat-input:focus-visible {
   outline: 3px solid rgba(24, 144, 255, 0.32);
   outline-offset: 2px;
@@ -383,42 +398,6 @@
   text-align: center;
   font-size: 12px;
   color: rgba(100, 116, 139, 0.9);
-}
-
-.floating-chat-call-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.floating-chat-call-action {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-width: 0;
-  height: 38px;
-  border: 1px solid rgba(203, 213, 225, 0.95);
-  border-radius: 12px;
-  background: #ffffff;
-  color: #172033;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.floating-chat-call-action:hover {
-  background: rgba(239, 246, 255, 0.96);
-}
-
-.floating-chat-call-hangup {
-  border-color: transparent;
-  background: #dc2626;
-  color: #ffffff;
-}
-
-.floating-chat-call-hangup:hover {
-  background: #b91c1c;
 }
 
 @media (max-width: 767px) {
