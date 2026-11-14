@@ -11,6 +11,7 @@ import { SIDEBAR_THEME_OPTIONS, persistSidebarTheme } from '@/utils/sidebarTheme
 import { appAlert } from '@/utils/appDialog'
 import { setAppLocale } from '@/i18n'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { hasKnownEnterpriseSession } from '@/utils/authSessionCache'
 import {
   errorMessage,
   type ApiMessageResult,
@@ -218,6 +219,11 @@ export function useSettingsBasics() {
   })
 
   async function loadPreferences() {
+    // 未登录时不发需要身份的偏好请求；沿用本地缓存的助手名称，登录后再同步。
+    if (!hasKnownEnterpriseSession()) {
+      assistantName.value = readStoredAssistantName() || DEFAULT_ASSISTANT_NAME
+      return
+    }
     try {
       const data = await api.get<{ success?: boolean; preferences?: Record<string, unknown> }>('/api/preferences', { user_id: 'default' })
       if (!data?.success || !data?.preferences) return
@@ -248,7 +254,9 @@ export function useSettingsBasics() {
         })
       }
     } catch (e) {
-      console.error('加载设置失败:', e)
+      // 会话过期属于正常的未登录状态；只有真正的服务异常才记录日志。
+      const message = e instanceof Error ? e.message : String(e)
+      if (!/401|403|未授权|未登录/.test(message)) console.error('加载设置失败:', e)
       assistantName.value = readStoredAssistantName() || DEFAULT_ASSISTANT_NAME
     }
   }

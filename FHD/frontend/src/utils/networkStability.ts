@@ -228,17 +228,89 @@ export class SseConnectionRegistry {
 
 export const sseConnections = new SseConnectionRegistry()
 
+const STABILITY_NOTICE_ID = 'stability-notice'
+/** 首次失败先静默观察；这段时间内恢复就不打扰用户。 */
+const TRANSIENT_GRACE_MS = 4_000
+let pendingNoticeTimer: number | undefined
+let consecutiveFailures = 0
+
+export function dismissStabilityNotice(): void {
+  if (typeof document === 'undefined') return
+  document.getElementById(STABILITY_NOTICE_ID)?.remove()
+}
+
+function clearPendingNotice(): void {
+  if (pendingNoticeTimer !== undefined) {
+    window.clearTimeout(pendingNoticeTimer)
+    pendingNoticeTimer = undefined
+  }
+}
+
+/**
+ * 传输失败只在持续存在或用户操作受阻时轻量提示：
+ * 单次失败静默 4 秒，期间恢复则不出现任何提示；连续失败立即提示。
+ */
+export function noteTransportFailure(message: string): void {
+  consecutiveFailures += 1
+  if (typeof window === 'undefined') return
+  if (consecutiveFailures >= 2) {
+    clearPendingNotice()
+    publishStabilityNotice(message)
+    return
+  }
+  if (pendingNoticeTimer !== undefined) return
+  pendingNoticeTimer = window.setTimeout(() => {
+    pendingNoticeTimer = undefined
+    publishStabilityNotice(message)
+  }, TRANSIENT_GRACE_MS)
+}
+
+/** 任意请求成功即视为服务已恢复：撤掉提示，不留下任何遮挡。 */
+export function noteTransportSuccess(): void {
+  consecutiveFailures = 0
+  if (typeof window === 'undefined') return
+  clearPendingNotice()
+  dismissStabilityNotice()
+}
+
+/**
+ * 桌面壳的后端恢复通知：就绪后撤掉提示并广播事件，页面自行重取数据。
+ * 不做整页刷新，用户已输入的内容与滚动位置都保留。
+ */
+export function installBackendHealthBridge(): void {
+  if (typeof window === 'undefined') return
+  const subscribe = window.xcagiDesktop?.onBackendHealth
+  if (typeof subscribe !== 'function') return
+  subscribe((state) => {
+    if (state !== 'ready') return
+    noteTransportSuccess()
+    window.dispatchEvent(new CustomEvent('xcagi:backend-ready'))
+  })
+}
+
 export function publishStabilityNotice(message: string): void {
   if (typeof document === 'undefined') return
   const text = message.trim()
   if (!text) return
-  let node = document.getElementById('stability-notice')
+  let node = document.getElementById(STABILITY_NOTICE_ID)
   if (!node) {
     node = document.createElement('div')
-    node.id = 'stability-notice'
+    node.id = STABILITY_NOTICE_ID
     node.setAttribute('role', 'alert')
-    node.style.cssText = 'position:fixed;z-index:100000;top:16px;left:50%;transform:translateX(-50%);max-width:min(640px,92vw);padding:14px 18px;border-radius:10px;background:#3f1d1d;color:#fff;font-size:16px;line-height:1.45;box-shadow:0 8px 24px rgba(0,0,0,.28);'
+    node.style.cssText = 'position:fixed;z-index:100000;bottom:20px;left:50%;transform:translateX(-50%);max-width:min(560px,92vw);display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:#fff7e6;border:1px solid #f0d9a8;color:#5c3d00;font-size:14px;line-height:1.45;box-shadow:0 6px 18px rgba(0,0,0,.12);'
     document.body.appendChild(node)
   }
-  node.textContent = text
+  node.textContent = ''
+  const label = document.createElement('span')
+  label.textContent = text
+  const retry = document.createElement('button')
+  retry.type = 'button'
+  retry.textContent = '重试'
+  retry.style.cssText = 'flex:0 0 auto;border:0;border-radius:6px;padding:4px 12px;background:#3b6fd9;color:#fff;font-size:13px;cursor:pointer;'
+  retry.addEventListener('click', () => {
+    dismissStabilityNotice()
+    consecutiveFailures = 0
+    window.dispatchEvent(new CustomEvent('xcagi:stability-retry'))
+  })
+  node.append(label, retry)
 }

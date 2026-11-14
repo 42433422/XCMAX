@@ -4,7 +4,7 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { clientShellRequestHeaders } from '@/utils/clientShell'
 import { resolveErpApiPathWhenReady } from '@/utils/erpDomainPaths'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
-import { classifyTransportFailure, createTraceId, publishStabilityNotice, RefreshSingleFlight, SideEffectGate } from '@/utils/networkStability'
+import { classifyTransportFailure, createTraceId, noteTransportFailure, noteTransportSuccess, publishStabilityNotice, RefreshSingleFlight, SideEffectGate } from '@/utils/networkStability'
 
 /**
  * 后端 LanLicenseGuard 返回 401 + error=license_* 时派发；
@@ -345,6 +345,7 @@ async function requestOnce<T = unknown>(
       throw new ApiError(errorMessage, response.status, errorData)
     }
 
+    noteTransportSuccess()
     if (responseType === 'blob') {
       return response
     }
@@ -374,8 +375,8 @@ async function requestOnce<T = unknown>(
     const message = timedOut
       ? `请求超时（>${Math.ceil(Number(timeoutMs) / 1000)}s）。该请求未成功。`
       : stability.message
-    // 超时保留失败回执供页面处理，默认不弹全局提示；其他网络故障仍提示。
-    if (!quiet && stability.kind !== 'timeout') publishStabilityNotice(message)
+    // 超时保留失败回执供页面处理，默认不弹全局提示；传输故障按「持续才提示」处理。
+    if (!quiet && stability.kind !== 'timeout') noteTransportFailure(message)
     throw new ApiError(message, 0, { success: false, stability })
   } finally {
     if (timeoutId) clearTimeout(timeoutId)
