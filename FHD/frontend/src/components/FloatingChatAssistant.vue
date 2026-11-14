@@ -428,7 +428,18 @@ watch(callOpen, (active) => {
   if (active) {
     expandPanelOnCall.value = props.expandCallPanel
     syncCallPanelVisibility()
+    return
   }
+  window.dispatchEvent(new CustomEvent('xcagi:voice-call-transcript', { detail: { heard: '', reply: '' } }))
+})
+
+// 面板收起（智能对话页）时，把通话字幕同步给对话页显示。
+watch([callHeardText, callReplyText], ([heard, reply]) => {
+  window.dispatchEvent(
+    new CustomEvent('xcagi:voice-call-transcript', {
+      detail: { heard: heard || '', reply: reply || '' },
+    }),
+  )
 })
 
 watch(

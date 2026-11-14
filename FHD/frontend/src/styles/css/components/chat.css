@@ -1296,6 +1296,32 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 通话中面板收起时，在对话页直接展示最新一句“你说/小C” */
+.chat-call-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(239, 246, 255, 0.92);
+  border: 1px solid rgba(191, 219, 254, 0.9);
+}
+
+.chat-call-transcript-line {
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.chat-call-transcript-line.user {
+  color: #1d4ed8;
+}
+
+.chat-call-transcript-line.ai {
+  color: #334155;
+}
+
 /* 语音输入竖排：语音通话入口在「按住说话」按钮上方 */
 .composer-voice-stack {
   display: inline-flex;

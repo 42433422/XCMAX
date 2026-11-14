@@ -152,6 +152,10 @@
           </button>
         </div>
       </div>
+      <div v-if="voiceCallActive && (voiceTranscript.heard || voiceTranscript.reply)" class="chat-call-transcript" role="status" aria-live="polite">
+        <div v-if="voiceTranscript.heard" class="chat-call-transcript-line user">你说：{{ voiceTranscript.heard }}</div>
+        <div v-if="voiceTranscript.reply" class="chat-call-transcript-line ai">小C：{{ voiceTranscript.reply }}</div>
+      </div>
       <div class="input-wrapper">
         <textarea
           id="messageInput"
@@ -268,7 +272,7 @@ import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
-import { requestVoiceCallStart } from '@/composables/voiceCallHost'
+import { requestVoiceCallStart, voiceCallActive } from '@/composables/voiceCallHost'
 import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
@@ -405,6 +409,15 @@ const {
 const startVoiceCallFromHost = () => {
   requestVoiceCallStart({ expandPanel: false })
 }
+
+/** 通话字幕：面板收起时在对话页直接显示“你说/小C”内容，避免看不到通话内容。 */
+const voiceTranscript = ref({ heard: '', reply: '' })
+function onVoiceCallTranscript(event: Event) {
+  const detail = (event as CustomEvent<{ heard?: string; reply?: string }>).detail || {}
+  voiceTranscript.value = { heard: String(detail.heard || ''), reply: String(detail.reply || '') }
+}
+onMounted(() => window.addEventListener('xcagi:voice-call-transcript', onVoiceCallTranscript))
+onBeforeUnmount(() => window.removeEventListener('xcagi:voice-call-transcript', onVoiceCallTranscript))
 
 const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList, visibleActiveTaskId, workspaceHeader } =
   useRoutedTaskWorkspace({
