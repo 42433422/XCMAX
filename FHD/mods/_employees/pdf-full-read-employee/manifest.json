@@ -11,7 +11,7 @@
   },
   "employee": {
     "id": "pdf-full-read-employee",
-    "label": "PDF 生成员",
+    "label": "PDF 全量读取员",
     "capabilities": [
       "pdf.native_text",
       "pdf.image_extract",
@@ -21,8 +21,8 @@
   "workflow_employees": [
     {
       "id": "pdf-full-read-employee",
-      "label": "PDF 生成员",
-      "panel_title": "PDF 生成员",
+      "label": "PDF 全量读取员",
+      "panel_title": "PDF 全量读取员",
       "panel_summary": "上传 .pdf，只读原生文字；图片分类存储并 VLM 描述。",
       "capabilities": [
         "pdf.native_text",
@@ -42,7 +42,7 @@
       "id": "pdf-full-read-employee",
       "version": "1.0.0",
       "artifact": "employee_pack",
-      "name": "PDF 生成员",
+      "name": "PDF 全量读取员",
       "description": "制作 PDF 全量读取员工包"
     },
     "perception": {
