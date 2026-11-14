@@ -262,6 +262,27 @@ const keepRootInViewport = () => {
   rootTop.value = normalized.top
 }
 
+/** 展开面板/通话时保证整块面板（含底部静音、免提、挂断）落在视口内。 */
+const ensurePanelInViewport = async () => {
+  await nextTick()
+  const root = rootRef.value
+  const panel = root?.querySelector('.floating-chat-panel') as HTMLElement | null
+  if (!root || !panel) return
+  const margin = 8
+  const panelRect = panel.getBoundingClientRect()
+  if (panelRect.top < margin) {
+    rootTop.value = clamp(
+      rootTop.value + (margin - panelRect.top),
+      EDGE_PADDING_PX,
+      Math.max(EDGE_PADDING_PX, window.innerHeight - root.offsetHeight - margin),
+    )
+  }
+  const nextRect = panel.getBoundingClientRect()
+  if (nextRect.top < margin) {
+    await placeRootToBottomRight()
+  }
+}
+
 const scrollToBottom = async () => {
   await nextTick()
   const el = messageListRef.value
@@ -358,15 +379,17 @@ watch(
   },
 )
 
-watch(isOpen, () => {
-  void nextTick(() => {
-    keepRootInViewport()
-  })
+watch(isOpen, (openNow) => {
+  if (openNow) void ensurePanelInViewport()
+  else keepRootInViewport()
 })
 
 watch(callOpen, (active) => {
   voiceCallActive.value = active
-  if (active) isOpen.value = true
+  if (active) {
+    isOpen.value = true
+    void ensurePanelInViewport()
+  }
 })
 
 onMounted(() => {
