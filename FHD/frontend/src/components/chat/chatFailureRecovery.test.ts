@@ -25,4 +25,19 @@ describe('chat failure recovery', () => {
     })
     expect(record).toMatchObject({ idempotencyKey: 'turn-1', committed: false, effect: 'preview', tenantId: 'demo', customerCount: 2, productCount: 5 })
   })
+
+  it('treats a turn that never started executing as having no business write', () => {
+    const record = readChatExecution({
+      success: false,
+      execution_state: 'failed',
+      data: { action: 'workflow_planning_failed', execution_started: false },
+    })
+    expect(record).toMatchObject({ committed: false, effect: 'none' })
+    expect(chatFailureRecoveryText(record)).toContain('本轮尚未提交写入')
+  })
+
+  it('keeps an unknown outcome when the server never marked execution as started', () => {
+    expect(readChatExecution({ success: false, data: { action: 'workflow_planning_failed' } })).toBeUndefined()
+    expect(chatFailureRecoveryText(undefined)).toContain('写入状态未确认')
+  })
 })

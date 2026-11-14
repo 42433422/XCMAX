@@ -50,6 +50,74 @@ def test_optional_worksheet_template_matches_capsule_rule():
     assert choose_optional_template(templates, True) is None
 
 
+def test_recipe_sheet_saves_into_template_library(tmp_path, monkeypatch):
+    import contextlib
+
+    from app.application import office_parse_app_service as service
+
+    assert service._elt_target({"target_type": "abnormal"}, ".xlsx") == "knowledge"
+    source = tmp_path / "recipe.xlsx"
+    source.write_bytes(b"PK-recipe")
+    captured: dict[str, object] = {}
+
+    def fake_ingest(**kwargs):
+        captured.update(kwargs)
+        return {"success": True, "template": {"id": 1, "name": "生产打印单"}}, 200
+
+    monkeypatch.setattr(
+        "app.application.office_template_ingest_app_service.ingest_office_bytes_to_template_library",
+        fake_ingest,
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.tenant_scope.tenant_scope",
+        lambda _tenant: contextlib.nullcontext(),
+    )
+    parsed = {
+        "detection": {"document_type": "recipe_sheet", "sheet_name": "生产打印单"},
+        "file_path": str(source),
+        "headers": ["原材料编号", "原料数量（KG)", "工艺流程", "备注"],
+    }
+    out = service._save_template_candidate(source, parsed, tenant_id=1)
+    assert out["pipeline"] == "template"
+    assert out["status"] == "ingested"
+    assert out["template_name"] == "生产打印单"
+    assert captured["source"] == "elt_recipe_template"
+    assert [item["label"] for item in captured["field_override"]] == [
+        "原材料编号",
+        "原料数量（KG)",
+        "工艺流程",
+        "备注",
+    ]
+
+
+def test_unconfirmed_detection_falls_back_to_knowledge():
+    from app.application.office_parse_app_service import _elt_target
+
+    assert _elt_target({"target_type": "abnormal"}, ".xlsx") == "knowledge"
+    assert _elt_target({"target_type": "shipment_records"}, ".xlsx") == "shipment_records"
+
+
+def test_xls_conversion_is_staged_inside_elt_data_root(tmp_path, monkeypatch):
+    from app.application import office_parse_app_service as service
+
+    source = tmp_path / "大桶商标.xls"
+    source.write_bytes(b"legacy-biff")
+    app_data = tmp_path / "appdata"
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_legacy.ensure_slice_workbook",
+        lambda _raw: (b"PK-converted", {}),
+    )
+    monkeypatch.setattr(
+        "app.utils.path_io.path_utils.get_app_data_dir", lambda: app_data
+    )
+
+    converted, cleanup = service._elt_parse_path(source)
+
+    assert cleanup == converted
+    assert converted.parent == (app_data / "temp_excel").resolve()
+    assert converted.read_bytes() == b"PK-converted"
+
+
 def test_parse_office_file_goes_through_elt(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     _workbook(tmp_path / "uploads" / "宗南.xlsx")

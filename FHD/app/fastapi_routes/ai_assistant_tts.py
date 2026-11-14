@@ -149,9 +149,14 @@ def _platform_mimo_payload(
     except RECOVERABLE_ERRORS as exc:
         logger.info("platform MiMo TTS unavailable: %s", type(exc).__name__)
         return None
-    if resp.status_code != 200 or provider != "mimo" or not mime.startswith("audio/"):
+    # 平台 MiMo 未就绪时会回退 edge-tts；两者都是平台合成，直接播放即可。
+    if (
+        resp.status_code != 200
+        or provider not in {"mimo", "edge"}
+        or not mime.startswith("audio/")
+    ):
         logger.info(
-            "platform MiMo TTS rejected: status=%s provider=%s content_type=%s",
+            "platform TTS rejected: status=%s provider=%s content_type=%s",
             resp.status_code,
             provider or "missing",
             mime or "missing",
@@ -161,8 +166,8 @@ def _platform_mimo_payload(
         return None
     return {
         "audioBase64": f"data:{mime};base64,{base64.b64encode(audio).decode('ascii')}",
-        "voice": voice_name or "冰糖",
-        "provider": "mimo",
+        "voice": voice_name or ("冰糖" if provider == "mimo" else edge_voice),
+        "provider": provider,
     }
 
 

@@ -12,6 +12,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import aclosing, contextmanager
+from pathlib import Path
 from types import SimpleNamespace as SimpleNamespace
 from typing import Any, Dict, List, Optional, Self
 
@@ -120,6 +121,9 @@ class ModstorePlatformAdapter:
         self._route_aliases: dict[tuple[Connection, tuple[str, str]], tuple[str, str]] = {}
         self.last_route_metadata: dict[str, Any] = {}
         self._default_route_lock = threading.Lock()
+        # 平台路由发现是独立网络调用；失败时短暂回退到配置默认路由，避免拖垮整轮对话。
+        self._route_fallback_until = 0.0
+        self._route_failures = 0
         self._source = "env"
         self._client: Optional[httpx.AsyncClient] = None
         self._client_loop_id: int | None = None
@@ -275,16 +279,102 @@ class ModstorePlatformAdapter:
             self.last_route_metadata = metadata
         return result
 
+    def _route_snapshot_key(self, connection: Connection) -> str:
+        return f"{getattr(connection, 'platform_url', '')}|{self.user_id or ''}"
+
+    def _route_snapshot_path(self) -> Path | None:
+        raw = os.environ.get("XCAGI_ROUTE_SNAPSHOT_PATH", "").strip()
+        if raw.lower() in {"0", "off", "none"}:
+            return None
+        if not raw:
+            # 测试默认不落盘，避免不同用例共享同一份路由快照。
+            if os.environ.get("PYTEST_CURRENT_TEST"):
+                return None
+            from app.utils.path_io.path_utils import get_app_data_dir
+
+            raw = str(Path(get_app_data_dir()) / "llm_route_snapshot.json")
+        return Path(raw)
+
+    def _load_route_snapshot(self, connection: Connection) -> dict[str, Any] | None:
+        """读取上次成功的路由快照（30 分钟内有效），用于平台不可达时继续对话。"""
+        path = self._route_snapshot_path()
+        if path is None:
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        saved = payload.get(self._route_snapshot_key(connection))
+        if not isinstance(saved, dict):
+            return None
+        saved_at = float(saved.get("saved_at") or 0)
+        if time.time() - saved_at > 30 * 60:
+            return None
+        if not saved.get("provider") or not saved.get("model"):
+            return None
+        return saved
+
+    def _save_route_snapshot(self, connection: Connection, snapshot: dict[str, Any]) -> None:
+        path = self._route_snapshot_path()
+        if path is None:
+            return
+        try:
+            payload: dict[str, Any] = {}
+            if path.is_file():
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                payload = loaded if isinstance(loaded, dict) else {}
+            payload[self._route_snapshot_key(connection)] = {
+                key: snapshot.get(key)
+                for key in ("provider", "model", "route_source", "config_revision")
+            } | {"saved_at": time.time()}
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(path)
+        except OSError as exc:
+            logger.warning("路由快照写入失败（不影响本轮对话）: %s", exc)
+
     def resolve_default_route(self, connection: Connection | None = None) -> tuple[str, str]:
         if not self._use_account_default:
             return self.default_provider, self.default_model
         with self._default_route_lock:
             connection = connection or self._connection()
             if self._account_default is None or self._account_default[0] != connection:
-                snapshot = routing.resolve_account_route(connection, _httpx_sync_client)
+                saved = self._load_route_snapshot(connection)
+                if saved is not None:
+                    route = str(saved["provider"]), str(saved["model"])
+                    self._route_snapshots[(connection, route)] = {
+                        key: value for key, value in saved.items() if key != "saved_at"
+                    }
+                    self._account_default = (connection, route)
+                    return route
+                if time.monotonic() < self._route_fallback_until:
+                    return self.default_provider, self.default_model
+                try:
+                    snapshot = routing.resolve_account_route(connection, _httpx_sync_client)
+                except httpx.HTTPError as exc:
+                    # 仅传输层失败（握手超时/连接中断）时回退：这类失败代表根本没能
+                    # 询问平台，回退不会掩盖平台给出的业务结论。平台明确返回的拒绝
+                    # （解析失败、4xx/5xx）必须原样抛出，保持“未解析的路由不许发送”约束。
+                    self._route_failures += 1
+                    # 指数退避式的熔断冷却：30s → 60s → 120s → 300s，成功后清零。
+                    backoff = min(300, 30 * (2 ** (self._route_failures - 1)))
+                    self._route_fallback_until = time.monotonic() + backoff
+                    logger.warning(
+                        "平台默认模型路由暂不可用（连续 %s 次），%ss 内不再探测，回退到 %s/%s: %s",
+                        self._route_failures,
+                        backoff,
+                        self.default_provider,
+                        self.default_model,
+                        exc,
+                    )
+                    return self.default_provider, self.default_model
                 route = snapshot["provider"], snapshot["model"]
                 self._route_snapshots[(connection, route)] = snapshot
                 self._account_default = (connection, route)
+                self._route_fallback_until = 0.0
+                self._route_failures = 0
+                self._save_route_snapshot(connection, snapshot)
             return self._account_default[1]
 
     def follow_platform_default(self) -> None:

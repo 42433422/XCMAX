@@ -12,9 +12,9 @@
     </div>
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
-        :empty-intro="getIndustryPreset(currentIndustryId).scenario"
-        @fill-example="fillComposer"
         @retry-model="retryFailedModel"
+        @recall-edit="recallMessage"
+        @reconcile-turn="reconcileTurn"
         @confirm-destructive="confirmDestructiveScope"
         :session-key="messageSessionKey"
         :proactive-suggestions="proactiveSuggestionsByMessage"
@@ -163,6 +163,15 @@
         ></textarea>
         <button
           type="button"
+          class="btn voice-call-entry-btn"
+          title="语音通话"
+          aria-label="语音通话"
+          @click="startVoiceCall"
+        >
+          <i class="fa fa-phone" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
           class="btn voice-input-btn"
           :class="voiceButtonClass"
           :disabled="voiceButtonDisabled"
@@ -232,6 +241,21 @@
       @confirm="confirmOfficeDockingReview"
       @close="clearOfficeDockingReview"
     />
+    <VoiceCallOverlay
+      v-if="voiceCallOpen"
+      :title="voiceCallTitle"
+      :stage="voiceCallStage"
+      :duration-text="voiceCallDuration"
+      :status-text="voiceCallStatus"
+      :heard-text="voiceCallHeard"
+      :reply-text="voiceCallReply"
+      :error-text="voiceCallError"
+      :muted="voiceCallMuted"
+      :speaker-on="voiceCallSpeakerOn"
+      @hangup="hangUpVoiceCall"
+      @toggle-mute="toggleVoiceCallMute"
+      @toggle-speaker="toggleVoiceCallSpeaker"
+    />
   </div>
 </template>
 
@@ -251,12 +275,14 @@ import ChatSidePanel from '@/components/chat/ChatSidePanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
 import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
+import VoiceCallOverlay from '@/components/chat/VoiceCallOverlay.vue'
 import TaskWorkspaceContextBar from '@/components/chat/TaskWorkspaceContextBar.vue'
 import { useChatOfficeDocking } from '@/composables/useChatOfficeDocking'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
+import { useVoiceCall } from '@/composables/useVoiceCall'
 import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
@@ -389,6 +415,26 @@ const {
   stageExcelAnalysisContext,
 } = chatViewApi
 
+const {
+  open: voiceCallOpen,
+  stage: voiceCallStage,
+  durationText: voiceCallDuration,
+  statusText: voiceCallStatus,
+  callTitle: voiceCallTitle,
+  heardText: voiceCallHeard,
+  replyText: voiceCallReply,
+  errorText: voiceCallError,
+  muted: voiceCallMuted,
+  speakerOn: voiceCallSpeakerOn,
+  start: startVoiceCall,
+  hangUp: hangUpVoiceCall,
+  toggleMute: toggleVoiceCallMute,
+  toggleSpeaker: toggleVoiceCallSpeaker,
+} = useVoiceCall({
+  sendMessage: (message: string) => chatSendMessage(message),
+  messages,
+})
+
 const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList, visibleActiveTaskId, workspaceHeader } =
   useRoutedTaskWorkspace({
     props,
@@ -411,9 +457,19 @@ const { approveTaskWithFeedback, approveRunFromChat } = useTaskApprovalFeedback(
 })
 
 const messageInput = ref('')
-function fillComposer(text: string) {
-  messageInput.value = text
+async function recallMessage(index: number) {
+  if (!window.confirm('撤回这条消息及其之后的所有回复，并把内容放回输入框重新编辑？')) return
+  const result = await chatViewApi.recallUserMessage(index)
+  if (!result.ok) {
+    if (result.message) window.alert(result.message)
+    return
+  }
+  messageInput.value = result.text
   document.getElementById('messageInput')?.focus()
+}
+async function reconcileTurn(index: number) {
+  const result = await chatViewApi.reconcileTurnMessage(index)
+  if (!result.ok && result.message) window.alert(result.message)
 }
 function retryFailedModel(payload: { text: string; turnId: string }) {
   messageInput.value = ''

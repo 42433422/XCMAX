@@ -149,11 +149,17 @@ def runtime_asset(
 
 def visible_mod_rows(request: Request, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Do not leak private menus through process-global entitlement caches."""
+    from app.mod_sdk.client_private_mods import is_customer_private_mod
+
     visible = []
     for row in rows:
         frontend = row.get("frontend")
         runtime = frontend.get("runtime") if isinstance(frontend, dict) else None
-        if row.get("scope", "global") != "global" or runtime:
+        if (
+            row.get("scope", "global") != "global"
+            or runtime
+            or is_customer_private_mod(str(row.get("id") or ""))
+        ):
             try:
                 authorized_install(request, str(row.get("id") or ""))
             except HTTPException:

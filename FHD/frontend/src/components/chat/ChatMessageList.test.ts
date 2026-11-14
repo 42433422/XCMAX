@@ -333,6 +333,8 @@ it('offers failure recovery with visible original text without sending a request
   expect(wrapper.find('[data-testid="proactive-suggestions"]').exists()).toBe(false)
   await wrapper.findAll('button').find(button => button.text().includes('不重复写入'))!.trigger('click')
   expect(wrapper.emitted('retry-model')).toEqual([[{ text: '仅回答测试', turnId: 'turn-a' }]])
+  await wrapper.get('[data-testid="chat-reconcile-turn"]').trigger('click')
+  expect(wrapper.emitted('reconcile-turn')).toEqual([[1]])
   expect(wrapper.emitted('fill-example')).toBeUndefined()
   expect(wrapper.text()).not.toContain('查看模型状态')
 })
@@ -359,12 +361,10 @@ it('asks for an explicit delete confirmation and does not offer it after a commi
   committed.unmount()
 })
 
-it('shows an empty conversation example that only fills the composer', async () => {
-  const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [], emptyIntro: '当前工作区用于考勤查询。' } })
-  expect(wrapper.text()).toContain('当前工作区用于考勤查询')
-  expect(wrapper.text()).toContain('可用能力以当前配置为准')
-  await wrapper.get('.chat-welcome button').trigger('click')
-  expect(wrapper.emitted('fill-example')).toEqual([['请用一句话介绍你能做什么。仅回答，不执行操作。']])
+it('keeps an empty conversation blank without welcome decorations', async () => {
+  const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [] } })
+  expect(wrapper.find('.chat-welcome').exists()).toBe(false)
+  expect(wrapper.text().trim()).toBe('')
 })
 
 it('retries only the exact user turn and does not substitute a later unbound message', async () => {

@@ -318,7 +318,10 @@ def execute_workflow_tool(
         ),
         "generate_office_document": _json_tool(
             lambda call: generate_office_document(
-                call.args, adapters.generate_document, adapters.store_document
+                call.args,
+                adapters.generate_document,
+                adapters.store_document,
+                runtime_context=call.runtime_context,
             ),
             failure={"success": False, "error": "office_document_generation_failed"},
         ),

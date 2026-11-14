@@ -81,6 +81,22 @@ describe('bounded chat history and derived content', () => {
     expect(f.wrapper.get('[data-message-index="499"]').attributes('aria-posinset')).toBe('500')
   })
 
+  it('moves the history pager into the quick-actions header slot when present', async () => {
+    const slot = document.createElement('div')
+    slot.id = 'chat-history-nav-slot'
+    document.body.appendChild(slot)
+    try {
+      const f = fixture()
+      await nextTick()
+      const nav = slot.querySelector('.chat-history-navigation')
+      expect(nav).not.toBeNull()
+      expect(nav!.textContent).toContain('更早消息')
+      expect(f.wrapper.text()).not.toContain('更早消息')
+    } finally {
+      slot.remove()
+    }
+  })
+
   it('preserves history reading during streaming/appends and resets the window/expansion on scope changes', async () => {
     const f = fixture()
     await nextTick()

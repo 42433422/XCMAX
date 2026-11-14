@@ -255,6 +255,59 @@ class TaskConversationStore:
             db.commit()
             return True
 
+    def delete_messages_from(
+        self, *, session_id: str, user_id: int, message_id: int
+    ) -> int:
+        """撤回一条用户消息及其之后的所有回复；非本会话消息直接拒绝。"""
+        with get_db() as db:
+            target = (
+                db.query(AIConversation)
+                .filter(
+                    AIConversation.id == message_id,
+                    AIConversation.session_id == session_id,
+                    AIConversation.user_id == str(user_id),
+                )
+                .first()
+            )
+            if target is None:
+                raise PermissionError("message does not belong to this conversation")
+            if target.role != "user":
+                raise PermissionError("only user messages can be withdrawn")
+            deleted = (
+                db.query(AIConversation)
+                .filter(
+                    AIConversation.session_id == session_id,
+                    AIConversation.id >= int(message_id),
+                )
+                .delete(synchronize_session=False)
+            )
+            session = (
+                db.query(AIConversationSession)
+                .filter(AIConversationSession.session_id == session_id)
+                .first()
+            )
+            if session is not None:
+                remaining = (
+                    db.query(AIConversation)
+                    .filter(AIConversation.session_id == session_id)
+                    .count()
+                )
+                session.message_count = remaining
+                last = (
+                    db.query(AIConversation)
+                    .filter(AIConversation.session_id == session_id)
+                    .order_by(AIConversation.id.desc())
+                    .first()
+                )
+                if last is not None:
+                    session.last_message_at = last.created_at
+                    plain = _plain_text(last.content).replace("\n", " ")
+                    session.summary = f"{plain[:120]}…" if len(plain) > 120 else plain
+                else:
+                    session.summary = ""
+            db.commit()
+            return int(deleted or 0)
+
     def clear_sessions(self, *, user_id: int) -> int:
         with get_db() as db:
             sessions = (

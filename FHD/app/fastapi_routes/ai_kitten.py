@@ -104,6 +104,18 @@ def kitten_business_snapshot():
         return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
+@router.get("/api/ai/kitten/financial/dashboard")
+def kitten_financial_dashboard(months: int = Query(default=6, ge=1, le=24)):
+    """经营/财报可视化看板：从业务库实时聚合 KPI、图表序列与明细表。"""
+    try:
+        from app.application.facades.kitten_facade import chart_service
+
+        return {"success": True, "data": chart_service.get_financial_dashboard(months)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten financial dashboard failed")
+        return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
+
+
 @router.get("/api/ai/kitten/charts/all")
 def kitten_charts_all():
     try:

@@ -130,14 +130,13 @@ afterEach(() => { wrapper?.unmount(); wrapper = undefined })
 
 describe('shipped chat Mod task navigation', () => {
   it.each([['host', HostChatView], ['desktop Mod', ModChatView]] as const)(
-    'connects %s empty examples and safe retry without exposing model diagnostics', async (_label, component) => {
+    'keeps %s empty conversation blank and safe retry without exposing model diagnostics', async (_label, component) => {
       await mountView(summary(), false, component, true)
       await flushPromises()
       expect(wrapper!.find('[data-testid="chat-model-status"]').exists()).toBe(false)
       expect(wrapper!.text()).not.toContain('模型信息')
       expect(wrapper!.find('.chat-model-recovery').exists()).toBe(false)
-      await wrapper!.get('.chat-welcome button').trigger('click')
-      expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toContain('仅回答，不执行操作')
+      expect(wrapper!.find('.chat-welcome').exists()).toBe(false)
       ;(chatApi.messages as Ref<UiChatMessage[]>).value = [
         { role: 'user', content: '仅回答测试', time: '12:00', turnId: 'test-turn' },
         { role: 'ai', content: '处理失败：模型未返回正文', time: '12:00', turnId: 'test-turn', workflowAction: 'failed' },

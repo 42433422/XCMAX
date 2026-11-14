@@ -525,11 +525,19 @@ def _trusted_base_roots() -> list[Path]:
                 app_data / "temp_excel",
                 app_data / "outputs",
                 app_data / "templates" / "reviewed_excel",
+                # ELT 上传件与切分出的模板文件都在受管目录内，属于服务端自有资产。
+                app_data / "elt" / "uploads",
                 Path(get_upload_dir()),
                 Path(get_data_dir()),
                 Path(get_shipment_output_dir()),
             )
         )
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        tenant_id = current_tenant_id()
+        if tenant_id is not None:
+            tenant_root = app_data / "tenants" / str(tenant_id)
+            roots.extend((tenant_root / "document_templates", tenant_root / "template_library"))
     except RECOVERABLE_ERRORS:
         pass
     # A workspace is trusted only when the server operator configures its exact

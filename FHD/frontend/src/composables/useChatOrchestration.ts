@@ -45,6 +45,7 @@ import agentRunsApi from '@/api/agentRuns'
 import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { approvalApi } from '@/api/approval'
+import chatApi from '@/api/chat'
 import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { lastChatModelRoute } from '@/utils/chatModelRoute'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
@@ -652,6 +653,54 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const confirmWorkflowFromCard = (cardId: string) => controlWorkflowFromCard(cardId, 'confirm')
   const cancelWorkflowFromCard = (cardId: string) => controlWorkflowFromCard(cardId, 'cancel')
 
+  /** 撤回一条用户消息及其之后的回复，供「撤回编辑」使用。 */
+  async function recallUserMessage(index: number): Promise<{ ok: boolean; text: string; message?: string }> {
+    const message = messages.value[index]
+    if (!message || message.role !== 'user') return { ok: false, text: '', message: '只能撤回自己发送的消息。' }
+    if (isLoading.value || isExecuting.value) return { ok: false, text: '', message: '当前对话正在处理，请稍后再撤回。' }
+    const text = plainTextFromChatHtml(message.content).trim()
+    const persistenceId = String(message.persistence?.id || '')
+    if (persistenceId.startsWith('server:')) {
+      const messageId = Number(persistenceId.slice('server:'.length))
+      if (Number.isSafeInteger(messageId) && messageId > 0) {
+        try {
+          const result = await chatApi.deleteMessagesFrom(String(sessionId.value || ''), messageId)
+          if (!result?.success) return { ok: false, text, message: String(result?.message || '撤回服务端消息失败。') }
+        } catch {
+          return { ok: false, text, message: '撤回服务端消息失败，请稍后重试。' }
+        }
+      }
+    }
+    messages.value = messages.value.slice(0, index)
+    return { ok: true, text }
+  }
+
+  /** 失败卡片：按本轮幂等键向后端核对，确认这轮到底有没有写入。 */
+  async function reconcileTurnMessage(index: number): Promise<{ ok: boolean; message?: string }> {
+    const message = messages.value[index]
+    const turnId = String(message?.turnId || '').trim()
+    if (!message || !turnId) return { ok: false, message: '缺少本轮编号，无法核对。' }
+    try {
+      const result = await chatApi.reconcileTurn(turnId)
+      const execution = result?.execution
+      if (!result?.success || !execution) {
+        return { ok: false, message: String(result?.message || '核对失败，请稍后重试。') }
+      }
+      messages.value[index] = {
+        ...message,
+        execution: {
+          idempotencyKey: String(execution.idempotency_key || turnId),
+          intent: String(execution.intent || 'chat_turn'),
+          committed: execution.committed === true,
+          effect: String(execution.effect || 'unknown'),
+        },
+      }
+      return { ok: true }
+    } catch {
+      return { ok: false, message: '核对失败，请稍后重试。' }
+    }
+  }
+
   async function syncSessionMessages(options: { required?: boolean; isCurrent?: () => boolean } = {}): Promise<void> {
     if (isLoading.value || isExecuting.value) {
       if (options.required) throw new Error('当前会话正在处理，请稍后重试')
@@ -742,6 +791,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     retryModelOnly: (message: string, turnId: string) => sendMessage(message, { retryOf: turnId, idempotencyKey: turnId }),
     confirmDestructive: (message: string, idempotencyKey: string) => sendMessage(message, { destructiveConfirmed: true, idempotencyKey }),
     stopReply,
+    recallUserMessage,
+    reconcileTurnMessage,
     confirmWorkflowFromCard,
     cancelWorkflowFromCard,
     confirmTask,

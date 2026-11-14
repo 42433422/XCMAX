@@ -191,6 +191,20 @@ export const chatApi = {
     return api.delete<ApiResponse<{ success: boolean }>>(`/api/conversations/${sessionId}`)
   },
 
+  /** 撤回一条用户消息及其之后的回复（撤回编辑）。 */
+  deleteMessagesFrom(sessionId: string, messageId: number): Promise<ApiResponse<{ success: boolean; deleted?: number; message?: string }>> {
+    return api.delete<ApiResponse<{ success: boolean; deleted?: number; message?: string }>>(
+      `/api/conversations/${sessionId}/messages/${messageId}`,
+    )
+  },
+
+  /** 按本轮幂等键核对工具写入状态（失败卡片的「核对写入状态」）。 */
+  reconcileTurn(turnId: string): Promise<ApiResponse<{ success: boolean; execution?: { idempotency_key?: string; intent?: string; effect?: string; committed?: boolean; message?: string } }>> {
+    return api.get<ApiResponse<{ success: boolean; execution?: { idempotency_key?: string; intent?: string; effect?: string; committed?: boolean; message?: string } }>>(
+      `/api/conversations/turns/${encodeURIComponent(turnId)}/reconcile`,
+    )
+  },
+
   saveMessage(payload: unknown): Promise<ApiResponse<unknown>> {
     return api.post<ApiResponse<unknown>>('/api/conversations/message', payload, { timeoutMs: 20_000 })
   },

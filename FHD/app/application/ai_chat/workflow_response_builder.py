@@ -151,8 +151,15 @@ class AIChatWorkflowResponseMixin:
                     )
                 )
             else:
+                waiting_question = (
+                    str(step.output.get("question") or "").strip()
+                    if step.status == "waiting_user" and isinstance(step.output, dict)
+                    else ""
+                )
                 reason = public_step_error(step)
-                if reason:
+                if waiting_question:
+                    lines.append(f"- {step.node_id}: 待确认（{waiting_question}）")
+                elif reason:
                     lines.append(f"- {step.node_id}: {step.status}（{reason}）")
                 elif step.status in {"pending", "skipped"}:
                     lines.append(f"- {step.node_id}: 未执行（前序步骤未完成或已中止）")

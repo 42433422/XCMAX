@@ -67,6 +67,18 @@ class PlannedWorkflowDispatch:
         self.approval = approval
 
     @staticmethod
+    def _no_write_execution(context: dict[str, Any]) -> dict[str, Any]:
+        """规划/模型阶段失败时明确记录：本回合没有产生任何业务写入。"""
+        return {
+            "idempotency_key": str(
+                context.get("idempotency_key") or context.get("turn_id") or ""
+            ),
+            "intent": "chat_turn",
+            "committed": False,
+            "effect": "none",
+        }
+
+    @staticmethod
     def _execute_reply_plan(plan: PlanGraph, context: dict[str, Any]) -> dict[str, Any]:
         """Run a model-authored plain reply through the same LangGraph runtime."""
         from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
@@ -80,6 +92,7 @@ class PlannedWorkflowDispatch:
                 "execution_state": "failed",
                 "message": "普通回复图必须只包含受限的 conversation.reply 节点",
                 "response": "平台模型回复未通过 LangGraph 校验。",
+                "execution": PlannedWorkflowDispatch._no_write_execution(context),
                 "data": {"action": "model_reply_failed", "execution_started": False},
             }
 
@@ -114,6 +127,7 @@ class PlannedWorkflowDispatch:
                 "execution_state": "failed",
                 "message": result.message or "平台模型回复未通过 LangGraph 校验",
                 "response": result.message or "平台模型回复未通过 LangGraph 校验",
+                "execution": PlannedWorkflowDispatch._no_write_execution(context),
                 "data": {
                     "action": "model_reply_failed",
                     "execution_started": False,
@@ -129,6 +143,7 @@ class PlannedWorkflowDispatch:
                 "execution_state": "failed",
                 "message": "平台模型没有返回可用回复",
                 "response": "平台模型没有返回可用回复，请重试。",
+                "execution": PlannedWorkflowDispatch._no_write_execution(context),
                 "data": {"action": "model_reply_failed", "execution_started": False},
             }
         return {
@@ -165,6 +180,7 @@ class PlannedWorkflowDispatch:
                 "execution_state": "blocked",
                 "message": str(exc),
                 "response": str(exc),
+                "execution": self._no_write_execution(context),
                 "data": {"error_code": "attachment_reupload_required", "execution_started": False},
             }
         pending_handled, pending_result = self.callbacks._resume_pending_dynamic_workflow(
@@ -227,6 +243,7 @@ class PlannedWorkflowDispatch:
                 "execution_state": "failed",
                 "message": message_text,
                 "response": message_text,
+                "execution": self._no_write_execution(context),
                 "data": {
                     "text": message_text,
                     "action": "workflow_planning_failed",
@@ -249,6 +266,7 @@ class PlannedWorkflowDispatch:
                 "execution_state": "failed",
                 "message": message_text,
                 "response": message_text,
+                "execution": self._no_write_execution(context),
                 "data": {
                     "text": message_text,
                     "action": "workflow_planning_failed",
@@ -272,6 +290,7 @@ class PlannedWorkflowDispatch:
             return self._risk_rejection(
                 "workflow_action_prohibited",
                 str(getattr(exc, "reason", "操作命中禁止边界")),
+                context,
             )
         plan_node_ids = {str(node.node_id) for node in plan.nodes}
         denied_nodes = decision.denied_nodes or []
@@ -279,7 +298,7 @@ class PlannedWorkflowDispatch:
         if not isinstance(denied_nodes, (list, tuple, set, frozenset)) or not isinstance(
             blocking_nodes, (list, tuple, set, frozenset)
         ):
-            return self._risk_rejection("workflow_risk_denied", "风险审核结果格式无效")
+            return self._risk_rejection("workflow_risk_denied", "风险审核结果格式无效", context)
         denied_ids = {str(node_id) for node_id in denied_nodes if str(node_id)}
         blocking_ids = {str(node_id) for node_id in blocking_nodes if str(node_id)}
         if (
@@ -291,6 +310,7 @@ class PlannedWorkflowDispatch:
             return self._risk_rejection(
                 "workflow_risk_denied",
                 str(decision.reason or "计划未通过自主执行风险策略"),
+                context,
             )
         runtime_ctx = self.callbacks._merge_tool_runtime_context(user_id, message, context)
         runtime_ctx["source"] = str(source or "").strip()
@@ -409,13 +429,16 @@ class PlannedWorkflowDispatch:
         }
 
     @staticmethod
-    def _risk_rejection(code: str, reason: str) -> dict[str, Any]:
+    def _risk_rejection(
+        code: str, reason: str, context: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         message = "计划未通过系统风险审核，本次没有执行任何业务操作。"
         return {
             "success": False,
             "execution_state": "blocked",
             "message": message,
             "response": message,
+            "execution": PlannedWorkflowDispatch._no_write_execution(context or {}),
             "data": {
                 "text": message,
                 "action": "workflow_risk_rejected",

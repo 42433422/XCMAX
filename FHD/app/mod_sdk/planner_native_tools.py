@@ -110,6 +110,7 @@ def try_execute_native_planner_tool(
     workspace_root: str | None = None,
     *,
     db_write_token: str | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> tuple[str | None, str | None]:
     """若 Mod 已注册该工具则返回 (result_json, mod_id)，否则 (None, None)。"""
     if not is_planner_native_tools_enabled():
@@ -133,12 +134,24 @@ def try_execute_native_planner_tool(
             fn = getattr(mod, "run_native_tool", None)
             if not callable(fn):
                 continue
-            out = fn(
-                tool,
-                args,
-                workspace_root=workspace_root,
-                db_write_token=db_write_token,
-            )
+            try:
+                out = fn(
+                    tool,
+                    args,
+                    workspace_root=workspace_root,
+                    db_write_token=db_write_token,
+                    runtime_context=runtime_context,
+                )
+            except TypeError as error:
+                if "runtime_context" not in str(error):
+                    raise
+                # 旧版 Mod 处理器没有 runtime_context 形参，退回到原调用签名。
+                out = fn(
+                    tool,
+                    args,
+                    workspace_root=workspace_root,
+                    db_write_token=db_write_token,
+                )
             if out is None:
                 continue
             return str(out), mod_id

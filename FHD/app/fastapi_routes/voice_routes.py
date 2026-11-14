@@ -5,13 +5,14 @@ Voice / ASR Routes - FastAPI Implementation
 - POST /api/voice/transcribe      短录音（MediaRecorder blob）→ 文本
 - POST /api/voice/command         语音 → ASR → 意图识别 → 可选自动执行（端到端语音指令）
 
-与 mods/sz-qsm-pro/phone_agent/asr_processor.py 的差异：
+与 mods/industry/sz-qsm-pro/phone_agent/asr_processor.py 的差异：
 - 那边针对电话采音流（float32 numpy + 双阈值 VAD 分段），这里直接接受 webm/ogg/wav 文件。
 - 为避免互相污染模型实例和环境变量，这里使用独立的 XCAGI_CHAT_ASR_* 命名空间。
 """
 
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import sys
@@ -196,6 +197,114 @@ def _asr_wav(path: Path) -> tuple[bytes, float]:
     return out.getvalue(), len(pcm) / 32000
 
 
+def _wav_pcm16k(wav_bytes: bytes) -> bytes:
+    with wave.open(io.BytesIO(wav_bytes), "rb") as source:
+        return source.readframes(source.getnframes())
+
+
+def _funasr_text(message: dict[str, Any]) -> str:
+    direct = str(message.get("text") or "").strip()
+    if direct:
+        return direct
+    sents = message.get("stamp_sents")
+    if not isinstance(sents, list):
+        return ""
+    return "".join(
+        str(item.get("text_seg") or "").replace(" ", "")
+        for item in sents
+        if isinstance(item, dict)
+    ).strip()
+
+
+async def _platform_funasr_transcribe(token: str, wav: bytes) -> str:
+    """平台 FunASR WebSocket：MiMo ASR 尚未上线时的可用识别通道。"""
+    from urllib.parse import quote
+
+    from app.fastapi_routes.market_bridge.settings import _market_api_base_url
+
+    try:
+        import websockets
+        from websockets.exceptions import WebSocketException
+    except ImportError:
+        raise HTTPException(503, "本机缺少语音通道组件") from None
+
+    base = _market_api_base_url().rstrip("/")
+    scheme, _, host = base.partition("://")
+    ws_url = f"{'wss' if scheme == 'https' else 'ws'}://{host}/api/asr/funasr?token={quote(token, safe='')}"
+    pcm = _wav_pcm16k(wav)
+    if not pcm:
+        raise HTTPException(422, "录音为空")
+
+    try:
+        return await _funasr_stream(ws_url, pcm)
+    except HTTPException:
+        raise
+    except (OSError, TimeoutError, WebSocketException) as exc:
+        logger.warning("platform FunASR websocket failed: %s", type(exc).__name__)
+        raise HTTPException(503, "平台语音识别连接失败") from None
+
+
+async def _funasr_stream(ws_url: str, pcm: bytes) -> str:
+    import json as _json
+
+    import websockets
+
+    async with websockets.connect(ws_url, open_timeout=10, close_timeout=2) as ws:
+        try:
+            ready = _json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+        except (TimeoutError, ValueError, TypeError):
+            raise HTTPException(504, "平台语音识别连接超时") from None
+        if isinstance(ready, dict) and ready.get("type") == "error":
+            raise HTTPException(503, "平台语音识别服务未启动")
+        await ws.send(
+            _json.dumps(
+                {
+                    "mode": "2pass",
+                    "chunk_size": [5, 10, 5],
+                    "chunk_interval": 10,
+                    "encoder_chunk_look_back": 4,
+                    "decoder_chunk_look_back": 0,
+                    "wav_name": "mic",
+                    "wav_format": "pcm",
+                    "audio_fs": 16000,
+                    "is_speaking": True,
+                    "itn": True,
+                }
+            )
+        )
+        # 60ms 一包（16k mono s16le），与平台前端一致。
+        for offset in range(0, len(pcm), 1920):
+            await ws.send(pcm[offset : offset + 1920])
+        await ws.send(_json.dumps({"is_speaking": False}))
+
+        deadline = time.monotonic() + 12
+        partial = ""
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
+            except TimeoutError:
+                break
+            try:
+                message = _json.loads(raw)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(message, dict):
+                continue
+            if message.get("type") == "error":
+                raise HTTPException(502, "平台语音识别失败")
+            text = _funasr_text(message)
+            if not text:
+                continue
+            mode = str(message.get("mode") or "")
+            if "offline" in mode:
+                return text
+            partial = text
+        return partial
+
+
 async def _platform_transcribe(
     request: Request, path: Path, language: str | None
 ) -> dict[str, Any]:
@@ -208,8 +317,9 @@ async def _platform_transcribe(
     token = _session_market_token(request)
     if not token:
         raise HTTPException(401, "当前账户未连接平台")
+    wav, duration = await run_in_threadpool(_asr_wav, path)
+    failure: HTTPException | None = None
     try:
-        wav, duration = await run_in_threadpool(_asr_wav, path)
         async with httpx.AsyncClient(timeout=75.0) as client:
             response = await client.post(
                 f"{_market_api_base_url()}/api/workbench/asr",
@@ -226,18 +336,42 @@ async def _platform_transcribe(
             or not isinstance(result.get("text"), str)
         ):
             raise ValueError("invalid platform response")
-    except HTTPException:
-        raise
+    except HTTPException as exc:
+        failure = exc
     except (httpx.HTTPError, ValueError, TypeError) as exc:
-        logger.warning("platform ASR failed: %s", type(exc).__name__)
-        raise HTTPException(502, "平台语音识别请求失败，请勿自动重试") from None
-    return {
-        "text": result["text"],
-        "language": result.get("language", ""),
-        "audio_seconds": duration,
-        "cold_start": False,
-        "model_loaded": True,
-    }
+        logger.warning("platform MiMo ASR failed: %s", type(exc).__name__)
+        failure = HTTPException(502, "平台语音识别请求失败，请勿自动重试")
+    else:
+        return {
+            "text": result["text"],
+            "language": result.get("language", ""),
+            "audio_seconds": duration,
+            "cold_start": False,
+            "model_loaded": True,
+        }
+
+    # 生产尚未上线 MiMo ASR 时退回平台已有的 FunASR 实时识别。
+    assert failure is not None
+    logger.info("falling back to platform FunASR: %s", failure.detail)
+    try:
+        text = await _platform_funasr_transcribe(token, wav)
+    except HTTPException as exc:
+        logger.warning("platform FunASR unavailable: %s", exc.detail)
+        text = ""
+    if text.strip():
+        return {
+            "text": text,
+            "language": "",
+            "audio_seconds": duration,
+            "cold_start": False,
+            "model_loaded": True,
+            "engine": "funasr",
+        }
+
+    # 平台两条 ASR 通道都不可用时，用本机 faster-whisper 兜底，保证语音通话可用。
+    local = await run_in_threadpool(_run_transcribe, path, language)
+    local["engine"] = "local-whisper"
+    return local
 
 
 @router.post("/transcribe")

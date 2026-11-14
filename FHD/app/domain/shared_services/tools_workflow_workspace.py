@@ -33,10 +33,15 @@ def _registered_router_template_preview(
     if action == "view":
         return {"success": True, "redirect": "/console?view=template-preview"}
     from app.application import get_template_app_service
+    from app.infrastructure.tenant_scope import tenant_scope
 
     svc = get_template_app_service()
+    tenant_raw = runtime_context.get("tenant_id")
+    tenant_id = int(tenant_raw) if str(tenant_raw or "").isdigit() else None
     if action in ("list", "query"):
-        result = svc.get_templates()
+        # 规划器在后台执行时没有请求上下文，必须显式带入租户，否则模板库 fail-closed。
+        with tenant_scope(tenant_id):
+            result = svc.get_templates()
         if isinstance(result, dict):
             templates = result.get("templates")
             return {

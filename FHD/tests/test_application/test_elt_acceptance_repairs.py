@@ -77,6 +77,131 @@ def test_real_customer_workbooks_classify_without_size_or_fidelity_rejection():
     parsed.close()
 
 
+def test_recipe_and_finance_ledgers_are_not_misclassified_as_master_data(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    recipe = tmp_path / "recipe.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["原材料编号", "原料数量（KG)", "工艺流程", "备注"])
+    sheet.append(["A1", 10, "搅拌", ""])
+    book.save(recipe)
+    book.close()
+
+    ledger = tmp_path / "ledger.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["日期", "单号", "客户", "应收", "实收", "欠款"])
+    sheet.append(["2026-01-01", "1", "甲", 100, 50, 50])
+    book.save(ledger)
+    book.close()
+
+    customers = tmp_path / "customers.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["客户名称", "联系人", "电话", "地址"])
+    sheet.append(["甲公司", "张三", "13800138000", "成都"])
+    book.save(customers)
+    book.close()
+
+    recipe_result = detect_elt_target(recipe)
+    assert recipe_result["target_type"] == "abnormal"
+    assert recipe_result["reason"] == "recipe_sheet_not_master_data"
+    ledger_result = detect_elt_target(ledger)
+    assert ledger_result["target_type"] == "abnormal"
+    assert ledger_result["reason"] == "finance_ledger_not_master_data"
+    assert detect_elt_target(customers)["target_type"] == "customers"
+
+
+def test_advise_target_classification_rejects_unknown_enum(monkeypatch):
+    from app.application.elt import llm_assist
+
+    monkeypatch.setattr(
+        llm_assist,
+        "_complete",
+        lambda *args, **kwargs: llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={"target_type": "made_up_target", "confidence": 0.99, "reason": "x"},
+        ),
+    )
+    rejected = llm_assist.advise_target_classification("表头：自定义字段")
+    assert rejected.used_llm is False
+    assert rejected.degraded is True
+
+    monkeypatch.setattr(
+        llm_assist,
+        "_complete",
+        lambda *args, **kwargs: llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={"target_type": "customers", "confidence": 3, "reason": "客户名单"},
+        ),
+    )
+    accepted = llm_assist.advise_target_classification("表头：客户名称 联系人")
+    assert accepted.used_llm is True
+    assert accepted.data == {
+        "target_type": "customers",
+        "confidence": 1.0,
+        "reason": "客户名单",
+    }
+
+
+def test_llm_escalation_accepts_confident_unknown_classification(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    from app.application.elt import target_detection as detection
+
+    unknown = tmp_path / "unknown-format.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["自定义字段", "记录值"])
+    sheet.append(["甲", 1])
+    book.save(unknown)
+    book.close()
+
+    monkeypatch.setattr(
+        detection,
+        "_llm_classification",
+        lambda _lines: {
+            "target_type": "customers",
+            "document_type": "llm_classified",
+            "confidence": 0.9,
+            "reason": "llm:名单含客户与联系人",
+            "confirmed": True,
+        },
+    )
+    result = detection.detect_elt_target(unknown)
+    assert result["target_type"] == "customers"
+    assert result["reason"].startswith("llm:")
+
+
+def test_llm_not_consulted_for_recipe_or_unconfident_answer(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    from app.application.elt import target_detection as detection
+
+    recipe = tmp_path / "recipe-guard.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["原材料编号", "原料数量（KG)", "工艺流程"])
+    sheet.append(["A1", 10, "搅拌"])
+    book.save(recipe)
+    book.close()
+
+    calls: list[int] = []
+    monkeypatch.setattr(
+        detection,
+        "_llm_classification",
+        lambda lines: calls.append(1) or {"target_type": "products", "confidence": 0.99},
+    )
+    assert detection.detect_elt_target(recipe)["target_type"] == "abnormal"
+    assert calls == []
+
+    # 模型没给出可信答案时不改变确定性结论。
+    monkeypatch.setattr(detection, "_llm_classification", lambda _lines: None)
+    escalated = detection._escalate(
+        {"target_type": "abnormal", "confidence": 0.0, "reason": "unconfirmed_template:.xlsx"},
+        ["未知内容"],
+    )
+    assert escalated["target_type"] == "abnormal"
+
+
 def test_unknown_and_similar_templates_are_not_forced(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     unknown = tmp_path / "unknown-template.xlsx"

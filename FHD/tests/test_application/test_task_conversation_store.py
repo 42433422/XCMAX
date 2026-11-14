@@ -52,6 +52,23 @@ def store(monkeypatch) -> TaskConversationStore:
     return TaskConversationStore()
 
 
+def test_delete_messages_from_withdraws_user_turn_and_later_replies(
+    store: TaskConversationStore,
+) -> None:
+    store.save_message(session_id="recall-1", user_id=41, role="user", content="第一条")
+    store.save_message(session_id="recall-1", user_id=41, role="ai", content="第一条回复")
+    second = store.save_message(session_id="recall-1", user_id=41, role="user", content="第二条")
+
+    assert store.delete_messages_from(session_id="recall-1", user_id=41, message_id=second) == 1
+    history = store.get_history(session_id="recall-1", user_id=41)
+    assert [item["role"] for item in history["messages"]] == ["user", "ai"]
+
+    with pytest.raises(PermissionError):
+        store.delete_messages_from(session_id="recall-1", user_id=42, message_id=second)
+    with pytest.raises(PermissionError):
+        store.delete_messages_from(session_id="recall-1", user_id=41, message_id=999)
+
+
 def test_durable_user_id_only_accepts_positive_numeric_actors() -> None:
     assert durable_user_id("41") == 41
     assert durable_user_id(42) == 42

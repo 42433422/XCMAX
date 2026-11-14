@@ -1,19 +1,15 @@
 <template>
   <div class="chat-messages-shell">
-    <nav v-if="messages.length > CHAT_HISTORY_WINDOW" class="chat-history-navigation" aria-label="聊天历史分页">
-      <button type="button" :disabled="windowStart === 0" @click="moveWindow(-1)">更早消息</button>
-      <span role="status">第 {{ windowStart + 1 }}–{{ windowEnd }} 条，共 {{ messages.length }} 条</span>
-      <button type="button" :disabled="windowEnd === messages.length" @click="moveWindow(1)">较新消息</button>
-      <button type="button" @click="showLatest">最新消息</button>
-    </nav>
+    <Teleport to="#chat-history-nav-slot" :disabled="!historyNavTarget">
+      <nav v-if="messages.length > CHAT_HISTORY_WINDOW" :class="['chat-history-navigation', { 'is-header': historyNavTarget }]" aria-label="聊天历史分页">
+        <button type="button" :disabled="windowStart === 0" @click="moveWindow(-1)">更早消息</button>
+        <span role="status">第 {{ windowStart + 1 }}–{{ windowEnd }} 条，共 {{ messages.length }} 条</span>
+        <button type="button" :disabled="windowEnd === messages.length" @click="moveWindow(1)">较新消息</button>
+        <button type="button" @click="showLatest">最新消息</button>
+      </nav>
+    </Teleport>
     <div class="chat-messages" id="chatMessages" ref="messagesHostRef" role="list" aria-label="聊天消息"
       @scroll.passive="onScroll" @xcagi-reveal-chat-message="revealMessage">
-      <div v-if="!messages.length && !isLoading" class="message ai chat-welcome" role="listitem">
-        <h2>开始新的对话</h2>
-        <p>{{ emptyIntro || '你可以描述问题、查询资料，或说明需要协助的业务任务。' }}</p>
-        <p>可用能力以当前配置为准。点击示例只填入输入框，请检查后发送。</p>
-        <button type="button" class="btn btn-secondary" @click="$emit('fill-example', '请用一句话介绍你能做什么。仅回答，不执行操作。')">试试：介绍你能做什么</button>
-      </div>
       <div
         v-for="{ msg, idx } in visibleMessages"
         :key="presentation(msg).key"
@@ -136,6 +132,17 @@
             <span v-if="msg.persistence.error" class="message-save-error">{{ msg.persistence.error }}</span>
           </span>
           <button v-if="msg.persistence?.request && ['failed', 'local'].includes(msg.persistence.status)" type="button" class="btn btn-secondary btn-sm" @click="$emit('retry-save', msg.persistence.id)">仅重试保存</button>
+          <button
+            v-if="msg.role === 'user' && !msg.streamingShell"
+            type="button"
+            class="message-recall-btn"
+            data-testid="chat-recall-edit"
+            title="撤回编辑"
+            aria-label="撤回编辑"
+            @click.stop="$emit('recall-edit', idx)"
+          >
+            <i class="fa fa-undo" aria-hidden="true"></i>
+          </button>
           <button v-if="!msg.streamingShell && msg.content" type="button" class="message-copy-btn" :title="copyLabels.get(msg) || '复制正文'" :aria-label="copyLabels.get(msg) || '复制正文'" @click.stop="copyMessage(msg, $event)">
             <i class="fa fa-copy" aria-hidden="true"></i>
           </button>
@@ -158,6 +165,7 @@
           <p>{{ recoveryText(msg) }}</p>
           <details v-if="originalRequest(idx)"><summary>查看本次原始输入</summary><p>{{ originalRequest(idx) }}</p></details>
           <button v-if="originalRequest(idx)" type="button" class="btn btn-secondary btn-sm" :disabled="isLoading" @click="retryModel(idx)">重试模型请求（不重复写入）</button>
+          <button v-if="msg.turnId" type="button" class="btn btn-secondary btn-sm" :disabled="isLoading" data-testid="chat-reconcile-turn" @click="$emit('reconcile-turn', idx)">核对写入状态</button>
         </div>
         <div v-else-if="msg.role === 'ai' && !msg.streamingShell && msg.execution?.effect === 'preview' && !msg.execution.committed" class="proactive-suggestions" data-testid="chat-destructive-preview">
           <p>上述范围尚未删除。确认后才会写入，且同一请求不会重复执行。</p>
@@ -190,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, type Ref } from 'vue'
+import { onMounted, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, plainTextFromChatHtml } from '@/utils/sanitizeHtml'
@@ -213,7 +221,6 @@ const saveLabels = { local: '本机副本 · 服务端未核实', saving: '正�
 
 const props = defineProps<{
   messages: ChatMessage[]
-  emptyIntro?: string
   sessionKey?: string
   proactiveSuggestions?: ReadonlyMap<string, readonly ProactiveReplySuggestion[]>
   isLoading: boolean
@@ -239,8 +246,9 @@ const emit = defineEmits<{
   'approval-cancel': [cardId: string]
   'retry-save': [id: string]
   'approve-run': [runId: string]
+  'recall-edit': [idx: number]
+  'reconcile-turn': [idx: number]
   'pick-proactive-suggestion': [item: ProactiveReplySuggestion]
-  'fill-example': [text: string]
   'retry-model': [payload: { text: string; turnId: string }]
   'confirm-destructive': [payload: { text: string; idempotencyKey: string }]
 }>()
@@ -292,6 +300,11 @@ function approveMessage(message: ChatMessage) {
 }
 
 const messagesHostRef = ref<HTMLElement | null>(null)
+/** 顶部快捷按钮行里的分页挂载点；独立挂载（如测试）时回退到消息区顶部。 */
+const historyNavTarget = ref(false)
+onMounted(() => {
+  historyNavTarget.value = !!document.getElementById('chat-history-nav-slot')
+})
 const copyLabels = ref(new Map<ChatMessage, string>())
 const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLatest, onScroll, revealMessage, scrollToLatestIfFollowing } =
   useChatHistoryWindow(() => props.messages, messagesHostRef, () => props.sessionKey)
@@ -489,6 +502,12 @@ watch(
   border: 1px solid var(--app-border-subtle, rgba(226, 232, 240, 0.82));
   border-radius: 999px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.chat-history-navigation.is-header {
+  /* 顶置到快捷按钮行时不再需要自身外边距 */
+  margin: 0;
+  max-width: none;
 }
 
 .chat-history-navigation span[role='status'] {

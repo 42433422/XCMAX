@@ -44,12 +44,11 @@ def _template_bounds(
     """
 
     selected = [row for row in regions if row.get("status") == "selected"]
-    if not selected:
-        raise EltError("ELT_SHIPMENT_TEMPLATE_REGION_MISSING", "未识别到可提取的送货单版式")
     requested = str(source_region_id or "").strip()
     if requested:
+        # 显式指定区段时允许取任意状态（例如未选入业务导入、但仍要进模板库的区段）。
         region = next(
-            (row for row in selected if str(row.get("id") or "") == requested),
+            (row for row in regions if str(row.get("id") or "") == requested),
             None,
         )
         if region is None:
@@ -59,6 +58,8 @@ def _template_bounds(
                 status_code=409,
             )
     else:
+        if not selected:
+            raise EltError("ELT_SHIPMENT_TEMPLATE_REGION_MISSING", "未识别到可提取的送货单版式")
         region = sorted(
             selected,
             key=lambda row: (str(row.get("sheet")), int(row.get("header_row") or 0)),
@@ -86,11 +87,12 @@ def _copy_sheet_region(
     start_row: int,
     end_row: int,
     last_col: int,
+    title: str = "送货单",
 ) -> Workbook:
     output = Workbook()
     target = output.active
     assert target is not None
-    target.title = "送货单"
+    target.title = str(title or "送货单")[:31]
     for source_row in range(start_row, end_row + 1):
         target_row = source_row - start_row + 1
         target.row_dimensions[target_row].height = source.row_dimensions[source_row].height
@@ -126,21 +128,29 @@ def _copy_sheet_region(
     return output
 
 
-def _clear_example_lines(worksheet: Any, *, header_row: int, last_col: int) -> None:
+_TOTAL_LABELS = {"合计", "总计", "小计", "汇总", "大写人民币"}
+
+
+def _clear_example_lines(
+    worksheet: Any, *, header_row: int, last_col: int, require_total: bool = True
+) -> None:
     total_row = 0
     for row in range(header_row + 1, worksheet.max_row + 1):
         values = [
             clean_cell_text(worksheet.cell(row=row, column=column).value)
-            for column in range(1, min(last_col, 4) + 1)
+            for column in range(1, last_col + 1)
         ]
-        if semantic_key(" ".join(values)) in {"合计", "总计", "小计", "汇总"}:
+        if semantic_key(" ".join(values)) in _TOTAL_LABELS:
             total_row = row
             break
-        if any(semantic_key(value) in {"合计", "总计", "小计", "汇总"} for value in values):
+        if any(semantic_key(value) in _TOTAL_LABELS for value in values):
             total_row = row
             break
     if not total_row:
-        raise EltError("ELT_SHIPMENT_TEMPLATE_TOTAL_MISSING", "送货单版式缺少合计行")
+        if require_total:
+            raise EltError("ELT_SHIPMENT_TEMPLATE_TOTAL_MISSING", "送货单版式缺少合计行")
+        # 数据型表没有合计行：清空表头之后的全部示例行，只保留表头结构。
+        total_row = worksheet.max_row + 1
     for row in range(header_row + 1, total_row):
         for column in range(1, last_col + 1):
             cell = worksheet.cell(row=row, column=column)
@@ -148,20 +158,21 @@ def _clear_example_lines(worksheet: Any, *, header_row: int, last_col: int) -> N
                 cell.value = None
 
 
-def extract_shipment_template(
+def _slice_region(
     source_path: str | Path,
     *,
     source_features: dict[str, Any],
-    destination: str | Path,
     source_region_id: str | None = None,
-) -> dict[str, Any]:
+    clear_example_rows: bool = True,
+    require_total: bool = True,
+) -> tuple[Workbook, dict[str, Any]]:
+    """把预演识别出的一个区段切出来，返回独立工作簿与区段元数据。"""
     regions = [item for item in source_features.get("regions") or [] if isinstance(item, dict)]
     region, start_row, end_limit = _template_bounds(
         regions,
         source_region_id=source_region_id,
     )
-    safe_source = resolve_elt_path(source_path)
-    workbook = load_workbook(safe_source, data_only=False, keep_links=False)
+    workbook = load_workbook(resolve_elt_path(source_path), data_only=False, keep_links=False)
     try:
         sheet_name = str(region.get("sheet") or "")
         if sheet_name not in workbook.sheetnames:
@@ -175,23 +186,95 @@ def extract_shipment_template(
             start_row=start_row,
             end_row=end_row,
             last_col=last_col,
+            title=sheet_name,
         )
     finally:
         workbook.close()
-    header_row = int(region.get("header_row") or 0) - start_row + 1
-    _clear_example_lines(output.active, header_row=header_row, last_col=last_col)
+    header_row = max(1, int(region.get("header_row") or 0) - start_row + 1)
+    headerless = bool(region.get("headerless"))
+    # 无表头流水区段本身就是模板内容，不能按「表头 + 空数据行」清空。
+    if clear_example_rows and not headerless:
+        _clear_example_lines(
+            output.active,
+            header_row=header_row,
+            last_col=last_col,
+            require_total=require_total,
+        )
+    return output, {
+        "sheet": sheet_name,
+        "source_region_id": region.get("id"),
+        "header_row": header_row,
+        "headerless": headerless,
+        "rows": end_row - start_row + 1,
+        "columns": last_col,
+        "title": "" if headerless else _region_title(output.active, header_row, last_col),
+        "headers": [
+            str(header).strip() for header in (region.get("headers") or []) if str(header or "").strip()
+        ],
+        "customer_name": str(region.get("customer_name") or "").strip(),
+    }
+
+
+def _region_title(worksheet: Any, header_row: int, last_col: int) -> str:
+    """取区段表头上方第一行有内容的文本，作为模板区分名（如「2025年3月报价」）。"""
+    for row in range(1, header_row):
+        values = [
+            clean_cell_text(worksheet.cell(row=row, column=column).value)
+            for column in range(1, last_col + 1)
+        ]
+        text = " ".join(value for value in values if value).strip()
+        if text:
+            return text[:60]
+    return ""
+
+
+def extract_region_template(
+    source_path: str | Path,
+    *,
+    source_features: dict[str, Any],
+    destination: str | Path,
+    source_region_id: str | None = None,
+    clear_example_rows: bool = False,
+    require_total: bool = False,
+) -> dict[str, Any]:
+    """把区段切分成独立文件，供模板库登记。
+
+    与 ``extract_shipment_template`` 共用同一套沙箱：来源必须是受管上传目录，
+    目标必须是受管的租户模板目录；非发货单目标保留示例行，便于模板库预览。
+    """
+    output, meta = _slice_region(
+        source_path,
+        source_features=source_features,
+        source_region_id=source_region_id,
+        clear_example_rows=clear_example_rows,
+        require_total=require_total,
+    )
+    try:
+        destination_path = resolve_elt_output_path(destination)
+        with open_elt_output_file(destination_path) as output_file:
+            output.save(output_file)
+    finally:
+        output.close()
+    return {"file_path": str(destination_path), **meta}
+
+
+def extract_shipment_template(
+    source_path: str | Path,
+    *,
+    source_features: dict[str, Any],
+    destination: str | Path,
+    source_region_id: str | None = None,
+) -> dict[str, Any]:
+    output, meta = _slice_region(
+        source_path,
+        source_features=source_features,
+        source_region_id=source_region_id,
+    )
     destination_path = resolve_elt_output_path(destination)
     with open_elt_output_file(destination_path) as output_file:
         output.save(output_file)
     output.close()
-    return {
-        "file_path": str(destination_path),
-        "sheet": sheet_name,
-        "source_region_id": region.get("id"),
-        "header_row": header_row,
-        "rows": end_row - start_row + 1,
-        "columns": last_col,
-    }
+    return {"file_path": str(destination_path), **meta}
 
 
-__all__ = ["extract_shipment_template"]
+__all__ = ["extract_region_template", "extract_shipment_template"]

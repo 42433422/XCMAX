@@ -74,6 +74,20 @@ describe('TTS speech dispatch and playback', () => {
     expect(mocks.offline.synthesizeOffline).not.toHaveBeenCalled()
     expect(onError).toHaveBeenCalledOnce()
   })
+  it('splits a long reply into sentence chunks and plays them in order', async () => {
+    tts.setEngineMode('online')
+    await tts.speakText('第一句内容需要足够长才能单独成块。第二句内容也需要足够长才能单独成块。')
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(2)
+    expect(audio).toHaveLength(2)
+    const bodies = mocks.apiFetch.mock.calls.map(call => JSON.parse(String(call[1]?.body)).text)
+    expect(bodies).toEqual(['第一句内容需要足够长才能单独成块', '第二句内容也需要足够长才能单独成块'])
+  })
+  it('keeps a short reply in a single synthesis request', async () => {
+    tts.setEngineMode('online')
+    await tts.speakText('好的，马上处理。')
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(1)
+    expect(audio).toHaveLength(1)
+  })
   it('finishes empty text without making a speech request', async () => {
     const onEnd = vi.fn()
     await tts.speakText('  ', { onEnd })

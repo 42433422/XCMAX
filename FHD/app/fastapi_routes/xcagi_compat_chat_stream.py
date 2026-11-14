@@ -304,12 +304,16 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                     file_context=resolve_file_context(runtime_context),
                 )
 
-        if control:
-            sink = {}
-            yield from _heartbeats(_chat, "正在执行已确认的任务", sink, encode)
-            payload = sink["value"]
-        else:
-            payload = _chat()
+        # 普通对话同样可能是几十秒的工具/审批链路；必须持续发心跳，
+        # 否则前端 40s 无事件会误判超时（即使后端随后成功完成）。
+        sink = {}
+        yield from _heartbeats(
+            _chat,
+            "正在执行已确认的任务" if control else "正在处理任务",
+            sink,
+            encode,
+        )
+        payload = sink["value"]
     except facade.RECOVERABLE_ERRORS as exc:
         from app.infrastructure.chat_stream_lifetime import current_lifetime
 

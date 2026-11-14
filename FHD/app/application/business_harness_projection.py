@@ -37,6 +37,29 @@ _FACT_LABELS = {
 }
 
 
+def completed_deliverable_lines(run: Any) -> list[str]:
+    """已完成节点产出的可下载文件；必须写进回复，否则用户拿不到真实文件。"""
+    lines: list[str] = []
+    seen: set[str] = set()
+    for step in getattr(run, "steps", []) or []:
+        if str(getattr(step, "status", "") or "") != "completed":
+            continue
+        output = getattr(step, "output", None)
+        if not isinstance(output, dict):
+            continue
+        url = str(output.get("download_url") or "").strip()
+        name = str(output.get("file_name") or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        lines.append(
+            f"- 已生成《{name}》：[{name}]({url})（一次性有效，请及时下载）"
+            if name
+            else f"- [下载文件]({url})（一次性有效，请及时下载）"
+        )
+    return lines
+
+
 def _message_for_result(result: dict[str, Any], approval_request_id: str) -> str:
     status = str(result.get("status") or "")
     summary = str(result.get("summary") or "").strip()
@@ -234,11 +257,15 @@ def project_terminal_run_to_conversation(
             ensure_ascii=False,
             default=str,
         )[:12000]
+        content = _message_for_result(result, approval_request_id)
+        deliverables = completed_deliverable_lines(run)
+        if deliverables and str(result.get("status") or "") == "completed":
+            content = "\n".join([content, *deliverables])
         return get_conversation_service().save_message(
             session_id=session_id,
             user_id=str(run.user_id or ""),
             role="assistant",
-            content=_message_for_result(result, approval_request_id)[:8000],
+            content=content[:8000],
             intent="business_harness_result",
             metadata=metadata,
             idempotency_key=projection_key,

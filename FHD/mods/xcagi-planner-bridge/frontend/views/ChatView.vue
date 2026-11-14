@@ -7,9 +7,9 @@
     </div>
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
-        :empty-intro="getIndustryPreset(currentIndustryId).scenario"
-        @fill-example="fillComposer"
         @retry-model="retryFailedModel"
+        @recall-edit="recallMessage"
+        @reconcile-turn="reconcileTurn"
         @confirm-destructive="confirmDestructiveScope"
         :session-key="messageSessionKey"
         :proactive-suggestions="proactiveSuggestionsByMessage"
@@ -345,9 +345,19 @@ watch(() => String(modsStore.activeModId || ''), (modId, previous) => {
 })
 
 const messageInput = ref('')
-function fillComposer(text: string) {
-  messageInput.value = text
+async function recallMessage(index: number) {
+  if (!window.confirm('撤回这条消息及其之后的所有回复，并把内容放回输入框重新编辑？')) return
+  const result = await chatViewApi.recallUserMessage(index)
+  if (!result.ok) {
+    if (result.message) window.alert(result.message)
+    return
+  }
+  messageInput.value = result.text
   document.getElementById('messageInput')?.focus()
+}
+async function reconcileTurn(index: number) {
+  const result = await chatViewApi.reconcileTurnMessage(index)
+  if (!result.ok && result.message) window.alert(result.message)
 }
 function retryFailedModel(payload: { text: string; turnId: string }) {
   messageInput.value = ''

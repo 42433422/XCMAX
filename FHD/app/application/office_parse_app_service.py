@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import re
-import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -195,19 +194,21 @@ def _resolve_office_path(file_path: str) -> Path:
 def _elt_parse_path(path: Path) -> tuple[Path, Path | None]:
     if path.suffix.lower() != ".xls":
         return path, None
+    from uuid import uuid4
+
     from app.application.elt.errors import EltError, ReviewedExcelError
     from app.application.reviewed_excel_legacy import ensure_slice_workbook
+    from app.utils.path_io.path_utils import get_app_data_dir
 
     try:
         data, _receipt = ensure_slice_workbook(path.read_bytes())
     except ReviewedExcelError as exc:
         raise EltError("ELT_FILE_TYPE_UNSUPPORTED", str(exc)) from exc
-    handle = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
-    try:
-        handle.write(data)
-    finally:
-        handle.close()
-    converted = Path(handle.name)
+    # 转换后的工作簿必须落在 ELT 受信根内，否则后续 resolve_elt_path 会拒绝系统临时目录。
+    staging_root = Path(get_app_data_dir()).resolve() / "temp_excel"
+    staging_root.mkdir(parents=True, exist_ok=True)
+    converted = staging_root / f"{path.stem}-{uuid4().hex}.xlsx"
+    converted.write_bytes(data)
     return converted, converted
 
 
@@ -227,7 +228,9 @@ def _elt_target(detection: dict[str, Any], suffix: str) -> str:
         "knowledge",
     }:
         return target
-    return "products"
+    # 未确认的文件（配方单、财务台账等）没有匹配的业务主数据目标：
+    # 退回知识库，避免把逐笔流水或工艺记录写进产品/客户表。
+    return "knowledge"
 
 
 def _worksheet_templates(path: Path) -> list[dict[str, str]]:
@@ -323,6 +326,7 @@ def parse_office_file_elt(file_path: str) -> dict[str, Any]:
         "row_count": row_count,
         "headers": headers,
         "warnings": warnings,
+        "template_candidate": str(detection.get("document_type") or "") == "recipe_sheet",
         "summary": f"ELT 已解析 {path.name}，{row_count} 行。工作表模板可选，当前未选用。",
     }
 
@@ -394,6 +398,56 @@ def _plan_from_preview(
     }
 
 
+def _is_template_candidate(parsed: dict[str, Any]) -> bool:
+    detection = parsed.get("detection") if isinstance(parsed.get("detection"), dict) else {}
+    return str(detection.get("document_type") or "") == "recipe_sheet"
+
+
+def _save_template_candidate(
+    path: Path, parsed: dict[str, Any], *, tenant_id: int
+) -> dict[str, Any]:
+    """把生产/配方版式写入模版库，供智能对话生成客户实际生产表。"""
+    from app.application.office_template_ingest_app_service import (
+        ingest_office_bytes_to_template_library,
+    )
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    detection = parsed.get("detection") if isinstance(parsed.get("detection"), dict) else {}
+    template_name = str(detection.get("sheet_name") or path.stem or "生产模板").strip()
+    headers = [str(item).strip() for item in (parsed.get("headers") or []) if str(item).strip()]
+    field_override = (
+        [{"label": header, "value": "", "type": "dynamic"} for header in headers]
+        if headers
+        else None
+    )
+    try:
+        with tenant_scope(int(tenant_id)):
+            payload, _code = ingest_office_bytes_to_template_library(
+                file_body=path.read_bytes(),
+                filename=path.name,
+                template_name=template_name,
+                source="elt_recipe_template",
+                field_override=field_override,
+            )
+    except RECOVERABLE_ERRORS:
+        logger.exception("生产模版入库失败")
+        payload = {"success": False, "message": "模版库入库失败", "ingested": False}
+    ok = bool(payload.get("success"))
+    return {
+        "pipeline": "template",
+        "status": "ingested" if ok else "failed",
+        "file_name": path.name,
+        "template_name": template_name,
+        "template_candidate": True,
+        "template_ingest": payload,
+        "auto_ingest": {
+            "status": "applied" if ok else "failed",
+            "business": {"target_type": "template"},
+            "knowledge": {},
+        },
+    }
+
+
 def save_office_file_elt(
     file_path: str,
     *,
@@ -423,6 +477,8 @@ def save_office_file_elt(
     if parsed is None:
         parsed = parse_office_file_elt(file_path)
     path = _resolve_office_path(str(parsed.get("file_path") or file_path))
+    if _is_template_candidate(parsed):
+        return _save_template_candidate(path, parsed, tenant_id=int(tenant_id))
     templates = [item for item in (parsed.get("templates") or []) if isinstance(item, dict)]
     chosen = choose_optional_template(templates, template_index)
     template_id = str(chosen.get("id") or "") if isinstance(chosen, dict) else ""

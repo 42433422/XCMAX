@@ -234,6 +234,13 @@ async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Reques
             tenant_id = meta.get("tenant_id")
         if not tenant_id:
             raise HTTPException(status_code=400, detail="缺少 tenant_id，无法入库")
+        # ELT 的模型协助按登录账号取市场模型；不绑定 owner 时会被判为「无可用模型」。
+        from app.application.elt.llm_session_provider import (
+            bind_elt_llm_owner,
+            reset_elt_llm_owner,
+        )
+
+        llm_owner_token = bind_elt_llm_owner(int(user.id))
         try:
             if intent == "elt_parse":
                 result = await asyncio.to_thread(parse_office_file_elt, body.file_path)
@@ -247,6 +254,8 @@ async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Reques
                 )
         except EltError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.message) from None
+        finally:
+            reset_elt_llm_owner(llm_owner_token)
         return {"success": True, "data": result}
     if intent == "knowledge_only":
         text = str(body.knowledge_text or "").strip()

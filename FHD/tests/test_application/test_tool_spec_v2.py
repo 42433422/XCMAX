@@ -164,7 +164,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     shipment_update_spec = specs[("shipment_records", "update")]
     assert shipment_update_spec.risk == "medium"
-    assert shipment_update_spec.permission == "tool.shipment_records.update"
+    assert shipment_update_spec.permission == "shipment.edit"
 
     shipment_delete_spec = specs[("shipment_records", "delete")]
     assert shipment_delete_spec.risk == "high"
@@ -172,6 +172,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     shipment_order_generate_spec = specs[("shipment_orders", "generate")]
     assert shipment_order_generate_spec.risk == "high"
+    assert shipment_order_generate_spec.permission == "shipment.create"
     assert shipment_order_generate_spec.required_params == ["unit_name", "products"]
     assert shipment_order_generate_spec.input_schema["required"] == ["unit_name", "products"]
     assert shipment_order_generate_spec.test_fixtures[0]["output"]["record_id"] == 7
@@ -183,7 +184,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     shipment_order_print_spec = specs[("shipment_orders", "print")]
     assert shipment_order_print_spec.risk == "high"
-    assert shipment_order_print_spec.permission == "tool.shipment_orders.print"
+    assert shipment_order_print_spec.permission == "shipment.view"
     assert shipment_order_print_spec.output_schema["required"] == [
         "success",
         "file_path",
@@ -208,7 +209,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     shipment_order_clear_all_spec = specs[("shipment_orders", "clear_all")]
     assert shipment_order_clear_all_spec.risk == "high"
-    assert shipment_order_clear_all_spec.permission == "tool.shipment_orders.clear_all"
+    assert shipment_order_clear_all_spec.permission == "shipment.edit"
     assert shipment_order_clear_all_spec.test_fixtures[0]["output"]["deleted_count"] == 5
 
     shipment_order_delete_spec = specs[("shipment_orders", "delete")]
@@ -314,6 +315,7 @@ def test_build_tool_specs_v2_exposes_document_generation_contract() -> None:
     document_spec = specs[("generate_office_document", "execute")]
     assert document_spec.risk == "medium"
     assert document_spec.idempotent is False
+    assert document_spec.permission == "tool.reports.export"
     assert document_spec.timeout_seconds == 120
     assert document_spec.input_schema["properties"]["output_format"]["enum"] == ["docx", "xlsx"]
     assert document_spec.output_schema["required"] == [
@@ -783,3 +785,15 @@ def test_business_db_read_materials_accepts_material_view(trusted_actor, monkeyp
 
     assert allowed is None
     assert denied is not None and denied["error_code"] == "tool_permission_denied"
+
+
+def test_shipment_order_generate_uses_shipment_create_permission(trusted_actor, monkeypatch):
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(permissions=["shipment.create"])
+    assert actor_tool_denial("shipment_orders", "generate", actor.context, {}) is None
+
+    viewer = trusted_actor(permissions=["shipment.view"], role="viewer")
+    denied = actor_tool_denial("shipment_orders", "generate", viewer.context, {})
+    assert denied is not None and denied["reason"] == "permission_denied"

@@ -399,10 +399,18 @@ class WorkflowSession:
                 message="待确认状态未保存",
             )[1]
         reason = decision_reason or "工作流步骤需要用户确认"
-        response_text = (
-            f"工作流已安全暂停（{waiting.tool_id}.{waiting.action}）。{reason}。"
-            "回复「确认」继续，回复「取消」终止。"
+        question = (
+            str(waiting.output.get("question") or "").strip()
+            if isinstance(waiting.output, dict)
+            else ""
         )
+        if question:
+            response_text = f"{question}\n\n回复「确认」将按说明继续，回复「取消」终止。"
+        else:
+            response_text = (
+                f"工作流已安全暂停（{waiting.tool_id}.{waiting.action}）。{reason}。"
+                "回复「确认」继续，回复「取消」终止。"
+            )
         return {
             "success": True,
             "message": "等待确认",
@@ -623,12 +631,30 @@ class WorkflowSession:
             "auto approve finished request=%s last=%s success=%s", request_id, current_id, success
         )
         message = messages[-1] if messages else ""
+        run_id = str(getattr(agent_run, "run_id", "") or "")
         text = (
             f"自动审批已通过并执行完成。{message}"
             if success
             else f"自动审批未完成执行：{message or '请到任务中核对结果'}"
         )
-        run_id = str(getattr(agent_run, "run_id", "") or "")
+        # 自动审批在同一轮返回，必须把节点产物（如生成的 Excel）与下载链接写回回复，
+        # 否则用户只能看到「执行完成」，拿不到真实文件。
+        if success and run_id:
+            fresh_run = agent_run
+            try:
+                from app.application.agent_orchestrator import AgentOrchestrator
+
+                fresh_run = AgentOrchestrator().get_run(run_id) or agent_run
+                agent_run = fresh_run
+            except RECOVERABLE_ERRORS:
+                logger.warning("auto approve reload run failed run=%s", run_id, exc_info=True)
+            from app.application.business_harness_projection import (
+                completed_deliverable_lines,
+            )
+
+            deliverable_lines = completed_deliverable_lines(fresh_run)
+            if deliverable_lines:
+                text = "\n".join([text, *deliverable_lines])
         reply = _control_reply(
             text,
             "workflow_done" if success else "workflow_failed",
@@ -637,6 +663,10 @@ class WorkflowSession:
                 "agent_run_id": run_id,
                 "approval_request_id": request_id,
                 "auto_approved": True,
+                "artifacts": [
+                    artifact.to_dict()
+                    for artifact in (getattr(agent_run, "artifacts", None) or [])
+                ],
             },
             success=success,
             message="自动审批已完成" if success else "自动审批执行未完成",

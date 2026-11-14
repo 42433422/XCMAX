@@ -44,7 +44,11 @@ def native(call: ToolCall) -> str | None:
     from app.mod_sdk.planner_native_tools import try_execute_native_planner_tool
 
     result, _mod = try_execute_native_planner_tool(
-        call.name, call.args, call.workspace_root, db_write_token=call.db_write_token
+        call.name,
+        call.args,
+        call.workspace_root,
+        db_write_token=call.db_write_token,
+        runtime_context=call.runtime_context,
     )
     return result
 

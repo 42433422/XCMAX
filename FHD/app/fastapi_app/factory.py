@@ -149,6 +149,10 @@ def _create_fastapi_app(
 
     app.add_middleware(DesktopAdminForbiddenMiddleware)
 
+    from app.middleware.customer_mod_scope import CustomerModScopeMiddleware
+
+    app.add_middleware(CustomerModScopeMiddleware)
+
     logging.basicConfig(
         level=getattr(config_object, "LOG_LEVEL", "INFO"),
         format=getattr(

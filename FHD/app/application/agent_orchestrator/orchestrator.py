@@ -1169,6 +1169,17 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 stopped_for_interaction = True
                 return {"success": True, "requires_confirmation": True}
             original_params = copy.deepcopy(step.params)
+            if (
+                step.status == "waiting_user"
+                and isinstance(step.output, dict)
+                and isinstance(step.output.get("resume_params"), dict)
+                and approved in {step.step_id, step.node_id}
+            ):
+                # 用户确认后重跑暂停步骤时带上工具要求的续跑参数（如「仅写入正确行」）。
+                step.params.update(
+                    {str(key): value for key, value in step.output["resume_params"].items()}
+                )
+                step.output.pop("resume_params", None)
             if refuse_unresolved_step(run, step, outputs):
                 stopped_for_interaction = True
                 return dict(
@@ -1263,6 +1274,37 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     self._mark_budget_exceeded(run, step, budget, node_outputs=outputs)
                     return {"success": False, "error_code": "budget_exceeded", "message": run.error}
                 self._execute_step(run, step, runtime_context=runtime_context, node_outputs=outputs)
+                decision = (
+                    step.output.get("question")
+                    if isinstance(step.output, dict) and step.output.get("requires_user_decision") is True
+                    else ""
+                )
+                if decision:
+                    # 工具返回的阻断项属于预期交互，不是失败：停在这里询问用户，
+                    # 后续依赖步骤保持未执行，避免把守卫当成「异常」。
+                    step.status = "waiting_user"
+                    run.status = "waiting_user"
+                    run.final_output = {
+                        "clarification": {
+                            "step_id": step.step_id,
+                            "question": str(decision),
+                            "requires_confirmation": True,
+                        }
+                    }
+                    run.add_event(
+                        "step.waiting_user",
+                        str(decision),
+                        {
+                            "step_id": step.step_id,
+                            "node_id": step.node_id,
+                            "tool_id": step.tool_id,
+                            "action": step.action,
+                            "reason": "requires_user_decision",
+                        },
+                    )
+                    self._repo.save(run)
+                    stopped_for_interaction = True
+                    return {"success": True, "requires_confirmation": True, "question": str(decision)}
                 if run.metadata.get("non_retryable"):
                     terminal = _verified_catalog_terminal(run, step)
                     if terminal is None:

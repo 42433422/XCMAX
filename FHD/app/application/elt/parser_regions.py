@@ -51,6 +51,7 @@ _FINANCE_CONTENT_RE = re.compile(
 _CATALOG_RE = re.compile(r"(报价|价格|价目|色漆编号|色号|样品|目录)", re.I)
 _DELIVERY_RE = re.compile(r"(送货|发货|出货|delivery)", re.I)
 _TOTAL_RE = re.compile(r"^(合计|总计|小计|汇总)(?:\s|[:：]|$)", re.I)
+_TOTAL_LABELS = {"合计", "总计", "小计", "汇总", "大写人民币", "人民币大写", "金额大写", "大写金额"}
 _NON_PRODUCT_RE = re.compile(
     r"^(运费|物流费|配送费|快递费|装卸费|服务费|折扣|优惠|税费)$",
     re.I,
@@ -58,7 +59,8 @@ _NON_PRODUCT_RE = re.compile(
 _BUYER_LABEL_RE = re.compile(
     r"(?:(?:购货单位|购买单位|采购单位)(?:（[^）]*）|\([^)]*\))?"
     r"|(?:客户(?:名称)?|买方|buyer|bill\s*to|sold\s*to))"
-    r"\s*[:：]\s*(.+?)(?=\s+(?:联系人|电话|手机|日期|订单|单号|编号|20\d{2})|$)",
+    # 冒号可能缺失（如「购货单位（乙方）博旺家私 联系人：李总」），不能因此丢掉客户名。
+    r"\s*[:：]?\s*(.+?)(?=\s+(?:联系人|电话|手机|日期|订单|单号|编号|20\d{2})|$)",
     re.I,
 )
 _CONTACT_RE = re.compile(
@@ -209,7 +211,8 @@ def _is_total_row(values: tuple[Any, ...] | list[Any], *, max_col: int) -> bool:
     if not cells:
         return False
     first = semantic_key(cells[0])
-    return first in {"合计", "总计", "小计", "汇总"} or bool(_TOTAL_RE.match(" ".join(cells[:2])))
+    # 「大 写 人 民 币」这类合计行常带空格，semantic_key 已压缩空白。
+    return first in _TOTAL_LABELS or bool(_TOTAL_RE.match(" ".join(cells[:2])))
 
 
 def _build_sheet_plan(

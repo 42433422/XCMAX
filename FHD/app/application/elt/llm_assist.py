@@ -735,6 +735,98 @@ def business_units(source: str) -> list[str]:
     return units
 
 
+_TARGET_CLASSIFY_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["target_type", "confidence", "reason"],
+    "properties": {
+        "target_type": {
+            "type": "string",
+            "enum": [
+                "shipment_records",
+                "customers",
+                "products",
+                "customer_products",
+                "attendance",
+                "purchase_orders",
+                "knowledge",
+                "abnormal",
+            ],
+        },
+        "confidence": {"type": "number"},
+        "reason": {"type": "string"},
+    },
+}
+
+_TARGET_TYPE_HINTS = {
+    "shipment_records": "送货单/发货单/出货单的逐笔明细（有购货单位或客户、产品、数量、单价、金额）",
+    "customers": "客户/往来单位主数据（客户名称、联系人、电话、地址等，每行一个客户）",
+    "products": "产品/物料主数据（型号、名称、规格、单价，每行一个产品）",
+    "customer_products": "客户与产品关联表（同一行同时有客户和产品信息）",
+    "attendance": "考勤记录（姓名、日期、上班/下班、打卡）",
+    "purchase_orders": "采购订单（供应商、采购单号、采购明细）",
+    "knowledge": "无法安全写入业务主数据，但值得归档检索的文档（配方单、台账、合同、说明等）",
+    "abnormal": "无法判断或文件本身没有可用表格内容",
+}
+
+
+def advise_target_classification(document_text: str) -> LlmAssistResult:
+    """Classify one uploaded workbook/text file into a bounded business target.
+
+    Advisory only: the caller applies its own confidence threshold and falls
+    back to the knowledge lane. The answer must stay inside the enum, so an
+    unexpected file never invents a new write target.
+    """
+    source = str(document_text or "").strip()
+    if not source:
+        return LlmAssistResult()
+    hints = "\n".join(f"- {key}: {value}" for key, value in _TARGET_TYPE_HINTS.items())
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是数据导入的文件类型分类器。只返回 JSON，字段为 target_type、confidence、reason。"
+                "target_type 只能取以下枚举之一：\n"
+                f"{hints}\n"
+                "判断依据只看正文里的标题、表头和样例行，不要看文件名。"
+                "如果表格是逐笔流水/配方/工艺/财务对账，且没有明确的主数据字段，选 knowledge。"
+                "如果内容不足以判断，选 abnormal，并把 confidence 降低。"
+                "confidence 是 0 到 1 之间的小数，只有证据充分时才给 0.8 以上。"
+                "reason 用一句中文说明依据。不要输出 markdown 或额外文字。"
+            ),
+        },
+        {"role": "user", "content": source[:6000]},
+    ]
+    result = _complete(
+        messages,
+        schema=_TARGET_CLASSIFY_SCHEMA,
+        max_tokens=400,
+        lane="target_classify",
+        max_repairs=0,
+        timeout_seconds=elt_llm_timeout_seconds(),
+    )
+    if not result.used_llm or result.degraded:
+        return result
+    data = result.data if isinstance(result.data, dict) else {}
+    target = str(data.get("target_type") or "").strip()
+    if target not in _TARGET_TYPE_HINTS:
+        return LlmAssistResult(
+            used_llm=False,
+            degraded=True,
+            degradation_code="ELT_LLM_TARGET_INVALID",
+        )
+    try:
+        confidence = float(data.get("confidence") or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    result.data = {
+        "target_type": target,
+        "confidence": max(0.0, min(1.0, confidence)),
+        "reason": str(data.get("reason") or "")[:200],
+    }
+    return result
+
+
 def advise_business_import(sheet_text: str) -> LlmAssistResult:
     """Import archived sheet rows on the database line, one bounded unit at a time.
 
@@ -924,6 +1016,7 @@ __all__ = [
     "advise_field_mappings",
     "advise_knowledge_import",
     "advise_row_decisions",
+    "advise_target_classification",
     "advise_workbook_regions",
     "clear_elt_llm_circuit",
     "elt_llm_enabled",

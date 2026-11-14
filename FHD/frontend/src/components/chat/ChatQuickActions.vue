@@ -10,6 +10,7 @@
     >
       {{ quickBtn.label }}
     </button>
+    <div id="chat-history-nav-slot" class="quick-actions__history"></div>
     <ValueStatsBar class="quick-actions__stats" />
   </div>
 </template>

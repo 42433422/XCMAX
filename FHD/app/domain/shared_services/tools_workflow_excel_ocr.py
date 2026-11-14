@@ -147,6 +147,7 @@ def _registered_router_generate_office_document(
             "generate_office_document",
             payload,
             workspace_root=runtime_context.get("workspace_root"),
+            runtime_context=runtime_context,
         )
         parsed = json.loads(raw) if isinstance(raw, str) else raw
         return parsed if isinstance(parsed, dict) else {"success": False, "message": str(raw)}

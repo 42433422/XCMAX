@@ -432,6 +432,66 @@ def conversations_delete(
     }
 
 
+@router.delete("/conversations/{conversation_id}/messages/{message_id}")
+def conversations_delete_message(
+    request: Request,
+    conversation_id: str,
+    message_id: int,
+    user_id: str = Query(default="default"),
+    mod_id: str = Query(default=""),
+) -> dict:
+    """撤回一条用户消息及其之后的所有回复（撤回编辑）。"""
+    from fastapi.responses import JSONResponse
+
+    cid = str(conversation_id or "").strip()
+    numeric_user_id = durable_user_id(_xcagi_request_user_id(request, user_id))
+    if numeric_user_id is None:
+        return JSONResponse({"success": False, "message": "请先登录后再访问会话。"}, status_code=401)
+    try:
+        deleted = task_conversation_store.delete_messages_from(
+            session_id=cid,
+            user_id=numeric_user_id,
+            message_id=int(message_id),
+        )
+    except PermissionError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
+    except RECOVERABLE_ERRORS as exc:
+        logger.error("conversations delete message: %s", exc)
+        return JSONResponse({"success": False, "message": "撤回消息失败"}, status_code=500)
+    return {"success": True, "deleted": deleted}
+
+
+@router.get("/conversations/turns/{turn_id}/reconcile")
+def conversations_turn_reconcile(
+    request: Request,
+    turn_id: str,
+    user_id: str = Query(default="default"),
+    mod_id: str = Query(default=""),
+) -> dict:
+    """按本轮幂等键核对工具写入状态，供失败卡片「核对写入状态」使用。"""
+    from app.application.agent_orchestrator.tool_permission import reconcile_turn_effect
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
+    _xcagi_request_user_id(request, user_id)
+    context = request_runtime_context(request, {})
+    try:
+        effect = reconcile_turn_effect(
+            tenant_id=str(context.get("tenant_id") or ""),
+            idempotency_key=str(turn_id or "").strip(),
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.error("conversations turn reconcile: %s", exc)
+        raise HTTPException(status_code=500, detail="核对结果失败") from exc
+    return {
+        "success": True,
+        "execution": {
+            "idempotency_key": str(turn_id or "").strip(),
+            "intent": "chat_turn",
+            **effect,
+        },
+    }
+
+
 @router.post("/conversations/{conversation_id}/messages")
 def conversations_post_message(
     request: Request,

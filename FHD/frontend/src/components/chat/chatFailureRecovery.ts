@@ -8,7 +8,14 @@ export function readChatExecution(payload: unknown): ChatExecutionRecord | undef
   const data = asRecord(row.data)
   const nested = asRecord(data.data)
   const raw = asRecord(row.execution || data.execution || nested.execution)
-  if (typeof raw.committed !== 'boolean') return undefined
+  if (typeof raw.committed !== 'boolean') {
+    // 模型/规划阶段就失败时，后端会明确标记尚未开始执行：本回合没有任何业务写入。
+    const started = row.execution_started ?? data.execution_started ?? nested.execution_started
+    if (started === false) {
+      return { idempotencyKey: '', intent: '', committed: false, effect: 'none' }
+    }
+    return undefined
+  }
   const effect = String(raw.effect || 'none')
   return {
     idempotencyKey: String(raw.idempotency_key || raw.idempotencyKey || ''),

@@ -16,6 +16,7 @@ _AUXILIARY_SHEET_RE = re.compile(
     re.I,
 )
 _TOTAL_RE = re.compile(r"^(合计|总计|小计|汇总)(?:\s|[:：]|$)", re.I)
+_TOTAL_PREFIX_RE = re.compile(r"^(合计|总计|小计|汇总|共计|累计)")
 _NOTE_RE = re.compile(r"^(备注|说明|制表|审核|签字|签名)(?:\s|[:：]|$)", re.I)
 _CONTRACT_RE = re.compile(r"^(本合同|本协议|合同条款|协议条款|条款[:：])")
 _NUMBER_RE = re.compile(
@@ -273,6 +274,9 @@ def is_footer_or_note_row(values: Iterable[Any]) -> bool:
         return False
     first_two = " ".join(cells[:2])
     if _TOTAL_RE.match(first_two):
+        return True
+    # 「合   计」常用空格排版，压缩空白后再按合计前缀判断。
+    if _TOTAL_PREFIX_RE.match(re.sub(r"\s+", "", first_two)):
         return True
     return len(cells) <= 2 and bool(_NOTE_RE.match(first_two) or _CONTRACT_RE.match(first_two))
 

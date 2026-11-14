@@ -546,6 +546,74 @@ def _retained_result(output: dict[str, Any]) -> dict[str, Any] | None:
     return dict(output) if output.get("success") is True else None
 
 
+def reconcile_turn_effect(*, tenant_id: str, idempotency_key: str) -> dict[str, Any]:
+    """按本轮幂等键汇总工具执行记录，回答「这一轮到底写没写」。
+
+    只读取持久化的 tool_idempotency 记录，不触发任何工具调用。
+    ``effect`` 取值：none（未派发/已确认无写入）、committed（已写入）、
+    unknown（有调用结果无法判定，需人工核对）。
+    """
+    key = str(idempotency_key or "").strip()
+    empty = {"effect": "none", "committed": False, "records": 0, "in_flight": 0, "unknown": 0}
+    if not key:
+        return empty
+    from app.application.employee_runtime.result_verifier import (
+        execution_result_requires_reconciliation,
+    )
+    suffix = f":{key}"
+    prefix = f"{tenant_id}:" if str(tenant_id or "").strip() else ""
+    matched: list[dict[str, Any]] = []
+    conn = _idempotency_conn()
+    try:
+        if conn is not None:
+            rows = conn.execute(
+                "select scope_key, fingerprint, owner, inflight, output_json from tool_idempotency"
+            )
+            for scope_key, *rest in rows:
+                if str(scope_key).endswith(suffix) and str(scope_key).startswith(prefix):
+                    matched.append(_stored_claim(tuple(rest)))
+        else:
+            for scope_key, record in list(_IDEMPOTENCY.items()):
+                if str(scope_key).endswith(suffix) and str(scope_key).startswith(prefix):
+                    matched.append(dict(record))
+    finally:
+        if conn is not None:
+            conn.close()
+    if not matched:
+        return empty
+    in_flight = sum(1 for record in matched if record.get("inflight"))
+    committed = 0
+    unknown = 0
+    failed = 0
+    for record in matched:
+        output = record.get("output")
+        if record.get("inflight"):
+            continue
+        if not isinstance(output, dict):
+            unknown += 1
+            continue
+        retained = _retained_result(output)
+        if output.get("success") is True and retained is not None and retained.get("success") is True:
+            committed += 1
+        elif output.get("success") is False and not execution_result_requires_reconciliation(output):
+            failed += 1
+        else:
+            unknown += 1
+    effect = "none"
+    if committed:
+        effect = "committed"
+    elif unknown or in_flight:
+        effect = "unknown"
+    return {
+        "effect": effect,
+        "committed": bool(committed),
+        "records": len(matched),
+        "in_flight": in_flight,
+        "unknown": unknown,
+        "failed": failed,
+    }
+
+
 def drop_process_idempotency_memory() -> None:
     """Simulate a process restart: memory claims die, the sqlite record remains."""
     with _IDEMPOTENCY_LOCK:

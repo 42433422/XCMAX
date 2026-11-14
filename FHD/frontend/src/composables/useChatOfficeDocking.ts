@@ -164,6 +164,19 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
           template_index: item.selectedTemplateIndex ?? -1,
         }))
         const data = asRecord(body.data)
+        // 生产/配方版式走模版库，不提交业务入库审批；保存后供智能对话生成实际生产表。
+        if (asString(data.pipeline) === 'template') {
+          const ingest = asRecord(data.template_ingest)
+          const ingested = body.success !== false && asString(data.status) === 'ingested'
+          item.commitStatus = ingested ? 'committed' : 'failed'
+          item.summary = ingested
+            ? `已保存为模版：${asString(data.template_name) || item.fileName}。可在智能对话中用于生成客户实际生产表。`
+            : `模版保存失败：${asString(ingest.message) || asString(data.message) || '未知错误'}`
+          if (!ingested) item.error = item.summary
+          await deps.addAndSaveMessage(item.summary, 'ai')
+          touchItems()
+          continue
+        }
         const ingest = asRecord(data.auto_ingest || data)
         if (body.success === false || (ingest.status && ingest.status !== 'awaiting_approval')) {
           throw new Error(asString(body.message || data.summary) || '入库审批没有排队')

@@ -792,6 +792,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         ["file_path"],
         {
             "file_path": {"type": "string"},
+            "valid_rows_only": {"type": "boolean"},
         },
     ),
     ("elt_import", "execute"): _object_schema(
@@ -1042,6 +1043,13 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "prompt": {"type": "string"},
             "request": {"type": "string"},
             "output_format": {"type": "string", "enum": ["docx", "xlsx"]},
+            "template_id": {"type": "string"},
+            "template_name": {"type": "string"},
+            "file_path": {"type": "string"},
+            "sheet_name": {"type": "string"},
+            "rows": {"type": "array", "items": {"type": "object"}},
+            "field_mapping": {"type": "object"},
+            "output_name": {"type": "string"},
         },
     ),
     ("sales", "create_order"): _SALES_QUOTE_INPUT,

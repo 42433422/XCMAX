@@ -173,6 +173,25 @@ def test_business_names_containing_total_words_are_not_excluded():
     assert _roles(result)[4] == "summary"
 
 
+def test_spaced_total_amount_footer_is_a_summary_row():
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["品名", "数量", "规格", "数量/KG", "单价", "金额"])
+    ws.append(["PE白底漆", 1, 600, 600, 9, 5400])
+    ws.append(["扯纸水", 1, 15, 15, 9, 135])
+    ws.append(["大 写 人 民 币", None, None, 5535, None, None, 5535])
+    result = _segment(ws)
+    assert result.tables[0].data_rows == [2, 3]
+    assert _roles(result)[4] == "summary"
+
+
+def test_spaced_total_amount_is_recognised_as_total_row():
+    from app.application.elt.parser_regions import _is_total_row
+
+    assert _is_total_row(["大 写 人 民 币", None, None, 5535, None, None, 5535], max_col=6)
+    assert not _is_total_row(["PE白底漆", 1, 600, 600, 9, 5400], max_col=6)
+
+
 def test_indented_parallel_tables_keep_source_columns(tmp_path):
     wb = Workbook()
     ws = wb.active

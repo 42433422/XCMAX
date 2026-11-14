@@ -47,8 +47,26 @@ def parse_customer_product_regions(
             recent: deque[tuple[int, tuple[Any, ...]]] = _facade().deque(maxlen=5)
             active: dict[str, Any] | None = None
             sheet_candidates = 0
+            # 无表头流水表（如按年度排列的发货明细）没有表头行，单独按数据块登记为区段。
+            filled_row_count = 0
+            first_filled_row = 0
+            last_filled_row = 0
+            filled_min_col = 0
+            filled_max_col = 0
             for row_number, raw_values in enumerate(worksheet.iter_rows(values_only=True), start=1):
                 values = tuple(raw_values)
+                filled = [
+                    index
+                    for index, value in enumerate(values, start=1)
+                    if _facade().clean_cell_text(value)
+                ]
+                if filled:
+                    filled_row_count += 1
+                    last_filled_row = row_number
+                    if not first_filled_row:
+                        first_filled_row = row_number
+                    filled_min_col = min(filled_min_col or filled[0], filled[0])
+                    filled_max_col = max(filled_max_col, filled[-1])
                 candidate = _facade()._header_candidate(values)
                 if candidate is not None:
                     active = None
@@ -196,6 +214,35 @@ def parse_customer_product_regions(
                                 imported_by_sheet.get(worksheet.title, 0) + 1
                             )
                 recent.append((row_number, values))
+            if (
+                not sheet_candidates
+                and filled_row_count >= 5
+                and filled_max_col - filled_min_col + 1 >= 3
+            ):
+                # 表头缺失但数据成块的流水页：登记为不参与业务导入的区段，
+                # 供模板库切分成独立模板。
+                regions.append(
+                    {
+                        "id": (
+                            f"{worksheet.title}!R{first_filled_row}"
+                            f"C{filled_min_col}:{filled_max_col}"
+                        ),
+                        "sheet": worksheet.title,
+                        "role": "ledger",
+                        "headerless": True,
+                        "header_row": 0,
+                        "first_column": filled_min_col,
+                        "last_column": filled_max_col,
+                        "headers": [],
+                        "customer_name": "",
+                        "contact_person": "",
+                        "order_number": "",
+                        "order_date": "",
+                        "evidence_rows": [{"row": first_filled_row}],
+                        "row_count": 0,
+                        "status": "excluded",
+                    }
+                )
             if not imported_by_sheet.get(worksheet.title):
                 skipped_sheets.append(
                     {
