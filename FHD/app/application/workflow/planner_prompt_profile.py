@@ -165,8 +165,34 @@ def is_employee_tool(tool_id: str) -> bool:
     return key.endswith(_EMPLOYEE_TOOL_SUFFIXES)
 
 
+def _semantic_intents(text: str) -> set[str]:
+    """语义路由补充关键词漏判的场景；模型不可用时静默返回空集合。"""
+    try:
+        from app.application.intent import classify_intents, threshold
+        from app.utils.operational_errors import RECOVERABLE_ERRORS
+    except ImportError:
+        return set()
+    try:
+        matches = classify_intents(text, limit=3)
+        if not matches:
+            return set()
+        bar = threshold()
+        best = matches[0].confidence
+        if best < bar:
+            return set()
+        # 只采纳明显领先的场景，避免「提交一下」这类模糊说法同时命中员工/客户。
+        floor = best - 0.05
+        return {
+            match.intent
+            for match in matches
+            if match.confidence >= max(bar, floor) and match.intent in _SCENARIO_KEYWORDS
+        }
+    except RECOVERABLE_ERRORS:
+        return set()
+
+
 def detect_intents(message: str, context: dict[str, Any] | None = None) -> set[str]:
-    """按关键词识别请求场景；识别不到时返回空集合。"""
+    """按关键词识别请求场景，并用语义路由补齐漏判；识别不到时返回空集合。"""
     text = str(message or "").strip().lower()
     if not text:
         return set()
@@ -174,6 +200,7 @@ def detect_intents(message: str, context: dict[str, Any] | None = None) -> set[s
     for intent, keywords in _SCENARIO_KEYWORDS.items():
         if any(keyword.lower() in text for keyword in keywords):
             intents.add(intent)
+    intents.update(_semantic_intents(text))
     return intents
 
 

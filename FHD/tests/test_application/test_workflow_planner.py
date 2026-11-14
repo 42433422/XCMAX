@@ -43,6 +43,8 @@ def test_employee_discovery_uses_verified_actor_and_replaces_client_catalog(
             "employee_pack_tools": [
                 {"pack_id": "known-report-worker", "runtime_ok": True},
                 {"pack_id": "broken-worker", "runtime_ok": False},
+                # 宿主管理员工：非平台管理员不可执行，不能出现在规划器选项里。
+                {"pack_id": "user-customer-service-officer", "runtime_ok": True},
             ]
         },
     )

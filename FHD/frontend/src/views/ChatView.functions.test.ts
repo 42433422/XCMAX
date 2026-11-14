@@ -131,7 +131,6 @@ vi.mock('@/composables/useChatMessageUi', () => ({
     isMessageCollapsed: () => false,
     expandMessage: vi.fn(),
     collapseMessage: vi.fn(),
-    getCollapsedPreview: () => '',
     canSpeakMessage: () => false,
     toggleMessageTts: vi.fn(),
     batchCalculateHeights: vi.fn(),

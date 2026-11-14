@@ -77,7 +77,9 @@ export const SHELL_ROUTES: RouteRecordRaw[] = [
     name: 'other-tools',
     redirect: { name: 'workflow-employee-space' },
   },
-  ...(import.meta.env.VITE_XCAGI_EDITION !== 'minimal'
+  // 流程可视化依赖宿主编制视图，仅管理端构建注入；企业/通用构建整段摇树移除，
+  // 避免平台内部员工名单随产物下发。
+  ...(import.meta.env.VITE_XCMAX_ADMIN_CONSOLE === '1'
     ? [
         {
           path: '/workflow-visualization',

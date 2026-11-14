@@ -23,12 +23,28 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from app.infrastructure.auth.dependencies import require_admin_user
+from app.infrastructure.auth.dependencies import require_admin_user, require_identified_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
+
+_EMPTY_DUTY_ROSTER: dict[str, Any] = {
+    "areas": {},
+    "departments": {},
+    "employee_labels": {},
+    "employee_descriptions": {},
+    "all_planned_ids": [],
+}
+
+
+def _is_platform_admin(user: Any) -> bool:
+    """宿主编制属于平台内部数据，只有平台管理员可以看。"""
+    return (
+        str(getattr(user, "tier", "") or "").strip().lower() == "admin"
+        and str(getattr(user, "role", "") or "").strip().lower() == "admin"
+    )
 
 
 class IndustryResponse(BaseModel):
@@ -239,8 +255,23 @@ async def get_industry_presets():
 
 
 @router.get("/workflow-employee-catalog")
-async def get_workflow_employee_catalog():
-    """工作流员工目录（配置 + 扫描 mods 目录）。"""
+async def get_workflow_employee_catalog(
+    user: Any = Depends(require_identified_user),
+):
+    """工作流员工目录（配置 + 扫描 mods 目录）。
+
+    目录包含宿主自有员工，属于平台内部数据；企业账号只拿到空目录，
+    本企业员工应通过企业 Mod 自身接口获取。
+    """
+    if not _is_platform_admin(user):
+        return {
+            "success": True,
+            "data": {
+                "catalog": [],
+                "static_catalog": [],
+                "scope": "tenant",
+            },
+        }
     try:
         from app.mod_sdk.host_profile import (
             load_host_profile,
@@ -258,6 +289,7 @@ async def get_workflow_employee_catalog():
                 "workflow_monolith_mod_id": prof.get("workflow_monolith_mod_id"),
                 "workflow_split_mod_ids": prof.get("workflow_split_mod_ids"),
                 "static_catalog": load_workflow_employee_catalog(),
+                "scope": "platform",
             },
         }
     except RECOVERABLE_ERRORS as e:
@@ -278,12 +310,22 @@ async def get_employee_registry_rules():
 
 
 @router.get("/duty-roster")
-async def get_duty_roster():
+async def get_duty_roster(
+    user: Any = Depends(require_identified_user),
+):
     """编制矩阵 SSOT 派生（替代前端硬编码 yuangonDutyRoster.ts）。
 
     单一真相源：FHD/config/duty_roster.json + mods/_employees/*/manifest.json
     运行时派生：areas / departments / employee_labels / employee_descriptions / all_planned_ids
+
+    隔离：宿主编制是平台内部组织数据，只有平台管理员可见；企业账号返回空编制，
+    不暴露宿主部门、员工 id 与中文名。
     """
+    if not _is_platform_admin(user):
+        return {
+            "success": True,
+            "data": {**_EMPTY_DUTY_ROSTER, "schema_version": 0, "scope": "tenant"},
+        }
     try:
         from app.mod_sdk.duty_roster import (
             all_planned_duty_employee_ids,
@@ -330,6 +372,7 @@ async def get_duty_roster():
                 "employee_descriptions": employee_descriptions,
                 "all_planned_ids": all_planned_ids,
                 "schema_version": doc.get("schema_version", 1),
+                "scope": "platform",
             },
         }
     except RECOVERABLE_ERRORS as e:

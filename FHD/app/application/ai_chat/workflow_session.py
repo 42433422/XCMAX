@@ -22,6 +22,21 @@ logger = logging.getLogger(__name__)
 CONFIRM_WORDS = {"确认", "是", "是的", "好的", "好", "继续", "执行", "确认执行", "ok", "yes"}
 CANCEL_WORDS = {"取消", "否", "不要", "停止", "no"}
 
+_PLAN_CONFIRM_PREFIXES = ("确认", "确定", "同意", "可以", "好的", "执行", "继续", "是", "对")
+_PLAN_CANCEL_PREFIXES = ("取消", "不要", "不用", "别", "停止", "算了", "否")
+
+
+def _plan_confirmation_decision(text: str) -> bool | None:
+    """解析计划级确认答复；返回 None 表示既不是确认也不是取消。"""
+    normalized = str(text or "").strip().lower().rstrip("。.!！,，")
+    if not normalized:
+        return None
+    if normalized in CANCEL_WORDS or normalized.startswith(_PLAN_CANCEL_PREFIXES):
+        return False
+    if normalized in CONFIRM_WORDS or normalized.startswith(_PLAN_CONFIRM_PREFIXES):
+        return True
+    return None
+
 
 def _control_reply(
     text: str,
@@ -924,12 +939,88 @@ class WorkflowSession:
                     message="澄清步骤已变化",
                 )[1]
             if not str(waiting.params.get("target_node_id") or ""):
+                from app.application.agent_orchestrator.clarification import (
+                    is_plan_confirmation,
+                )
+
+                if is_plan_confirmation(waiting):
+                    # 计划级确认（等价 interrupt 的 resume）：确认就在原计划继续，
+                    # 取消就终止；绝不能丢弃已有步骤的计划重新规划。
+                    decision = _plan_confirmation_decision(text)
+                    if decision is None:
+                        question = str(
+                            waiting.output.get("question")
+                            or waiting.params.get("question")
+                            or "该操作需要确认。"
+                        )
+                        return _control_reply(
+                            f"{question}\n回复「确认」继续执行，回复「取消」终止；"
+                            "如需修改范围，请先回复「取消」再重新描述。",
+                            "workflow_confirmation_required",
+                            {
+                                "requires_confirmation": True,
+                                "run_id": run_id,
+                                "plan_id": plan.plan_id,
+                            },
+                            message="等待确认",
+                        )[1]
+                    continued = orchestrator.continue_plan_confirmation(
+                        run_id,
+                        answered_by=run.user_id,
+                        clarification_step_id=waiting.step_id,
+                        confirmed=decision,
+                        runtime_context=runtime_ctx,
+                    )
+                    if continued is None:
+                        return _control_reply(
+                            "确认未能绑定到当前执行记录，原计划仍暂停；请重新确认或取消。",
+                            "workflow_resume_failed",
+                            {"run_id": run_id, "plan_id": plan.plan_id},
+                            success=False,
+                            message="确认续跑失败",
+                        )[1]
+                    if continued.status == "waiting_user":
+                        self.pending.pop(user_id, None)
+                        interaction = self.capture_agent_run_interaction(
+                            user_id=user_id,
+                            agent_run=continued,
+                            runtime_context=runtime_ctx,
+                            thinking_steps=str(pending.get("thinking_steps") or ""),
+                            decision_reason="下一步需要确认",
+                            approval_nodes=pending.get("approval_nodes") or [],
+                        )
+                        return (
+                            interaction
+                            or _control_reply(
+                                "AgentRun 已暂停，但找不到对应的待处理交互；未切换到备用执行路径。",
+                                "workflow_resume_failed",
+                                {"run_id": continued.run_id, "plan_id": plan.plan_id},
+                                success=False,
+                                message="待处理交互缺失",
+                            )[1]
+                        )
+                    self.pending.pop(user_id, None)
+                    self.callbacks._persist_plan_state(
+                        plan,
+                        runtime_ctx,
+                        status="succeeded"
+                        if continued.status == "completed"
+                        else ("cancelled" if continued.status == "cancelled" else "failed"),
+                        message=str(continued.error or ""),
+                    )
+                    return self.callbacks._format_agent_run_response(
+                        plan,
+                        continued,
+                        thinking_steps=str(pending.get("thinking_steps") or ""),
+                        user_message=str(runtime_ctx.get("message") or run.message or ""),
+                    )
                 if run.tool_calls or any(
                     step.status == "completed" and (step.tool_id, step.action) != ("clarify", "ask")
                     for step in run.steps
                 ):
                     return _control_reply(
-                        "当前澄清未绑定具体业务步骤，且原计划已有步骤运行；为避免重复执行，原计划保持暂停，请提供新的完整请求。",
+                        "当前澄清未绑定具体业务步骤，且原计划已有步骤运行；为避免重复执行，原计划保持暂停。"
+                        "回复「取消」可结束该计划，再重新描述目标。",
                         "workflow_clarification_unbound",
                         {"run_id": run_id, "plan_id": plan.plan_id},
                         success=False,

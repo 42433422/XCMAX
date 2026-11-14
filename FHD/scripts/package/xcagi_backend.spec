@@ -58,6 +58,12 @@ for item in [
 ]:
     datas.extend(add_data(item))
 
+# 语义意图识别模型（semantic-router + fastembed 的 ONNX 模型）。构建机先运行
+# `python scripts/dev/fetch_intent_model.py` 生成；缺失时不阻断打包，运行时回退规则判定。
+_intent_model = ROOT / "models" / "fastembed"
+if _intent_model.is_dir():
+    datas.append((str(_intent_model.resolve()), "models/fastembed"))
+
 _bundle_policy = runpy.run_path(str(ROOT / "scripts/package/bundled_mod_policy.py"))
 _staged_mods = _bundle_policy["validated_staged_mods"](
     (os.environ.get("XCAGI_STAGED_MODS_DIR") or "").strip()

@@ -79,18 +79,25 @@ class LLMWorkflowPlanner:
         context.pop("available_employees", None)
         if context.get("_actor_authorization"):
             try:
+                from app.application.employee_runtime.loader import candidate_pack_ids
+                from app.application.employee_runtime.tool_scope import host_employee_denial
                 from app.domain.shared_services.auth_service import get_auth_service
                 from app.infrastructure.auth.agent_mod_scope import _bound_actor
                 from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
                 if get_auth_service().has_permission(_bound_actor(context), "employee.list"):
+                    # 宿主管理员工（EMPLOYEE_TOOLS）只有平台管理员能执行。规划器
+                    # 只能看到当前账号确实能跑的员工，避免生成一张注定失败的
+                    # 审批单（审批通过后执行才报 employee_host_admin_required）。
                     context["available_employees"] = [
                         {
                             "employee_id": row["pack_id"],
                             "description": str(row.get("description") or "")[:200],
                         }
                         for row in build_employee_tools_status().get("employee_pack_tools", [])
-                        if row.get("runtime_ok") and row.get("pack_id")
+                        if row.get("runtime_ok")
+                        and row.get("pack_id")
+                        and not host_employee_denial(candidate_pack_ids(row["pack_id"]), {}, context)
                     ][:80]
             except RECOVERABLE_ERRORS:
                 logger.warning("authorized employee discovery unavailable", exc_info=True)

@@ -395,7 +395,10 @@ def run_alembic_upgrade(
 
 
 def _current_head_revision() -> str | None:
-    """当前包迁移链的 head revision（ScriptDirectory 解析，不依赖数据库）。"""
+    """当前包迁移链的 head revision（ScriptDirectory 解析，不依赖数据库）。
+
+    多 head 分支并存时返回第一个 head；调用方如需严格单 head 请用 get_heads()。
+    """
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -403,7 +406,8 @@ def _current_head_revision() -> str | None:
     if not ini.is_file():
         raise FileNotFoundError(f"alembic.ini not found: {ini}")
     script = ScriptDirectory.from_config(Config(str(ini)))
-    return script.get_current_head()
+    heads = script.get_heads()
+    return heads[0] if heads else None
 
 
 def is_schema_current(data_dir: str | os.PathLike[str] | None = None) -> bool | None:
@@ -421,6 +425,15 @@ def is_schema_current(data_dir: str | os.PathLike[str] | None = None) -> bool | 
         return False
     if stamped not in _known_alembic_revisions():
         return False
+    # 多 head 分支并存时，只要 stamp 在任一 head 上即视为 current，避免启动即崩。
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    ini = _resolve_alembic_ini()
+    if ini.is_file():
+        script = ScriptDirectory.from_config(Config(str(ini)))
+        heads = script.get_heads()
+        if stamped in heads:
+            return True
     return stamped == _current_head_revision()
 
 

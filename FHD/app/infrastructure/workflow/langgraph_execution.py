@@ -33,6 +33,19 @@ _DEFERRED_RETRY_CODES = frozenset(
 )
 
 
+def _publish_tool_event(record: dict[str, Any]) -> None:
+    """把工具开始/结束推给当前对话流，供前端实时长执行链。
+
+    发布失败绝不能影响工具执行本身：这里只吞掉发布侧异常。
+    """
+    try:
+        from app.infrastructure.chat_stream_lifetime import publish_stream_tool_record
+
+        publish_stream_tool_record(record)
+    except Exception:  # noqa: BLE001 - 观测通道不得改变执行结果
+        logger.debug("stream tool record publish skipped", exc_info=True)
+
+
 class LangGraphExecutionMixin:
     _dispatch: Any
     _publisher: StateEventPublisher | None
@@ -59,6 +72,19 @@ class LangGraphExecutionMixin:
         retries = 0
         started = _now_iso()
         begin = time.perf_counter()
+
+        def _emit(phase: str, **extra: Any) -> None:
+            _publish_tool_event(
+                {
+                    "phase": phase,
+                    "node_id": node.node_id,
+                    "tool_id": node.tool_id,
+                    "action": node.action,
+                    **extra,
+                }
+            )
+
+        _emit("started", params=dict(node.params or {}))
         while retries <= attempts_quota:
             params = dict(node.params or {})
             params["_runtime_context"] = state
@@ -83,6 +109,14 @@ class LangGraphExecutionMixin:
             ):
                 retryable = False
             if output.get("success", False):
+                duration_ms = int((time.perf_counter() - begin) * 1000)
+                _emit(
+                    "finished",
+                    success=True,
+                    duration_ms=duration_ms,
+                    output_preview=_summarize_output(output),
+                    retries=retries,
+                )
                 return NodeExecutionResult(
                     node_id=node.node_id,
                     success=True,
@@ -94,7 +128,7 @@ class LangGraphExecutionMixin:
                     retryable=retryable,
                     started_at=started,
                     finished_at=_now_iso(),
-                    duration_ms=int((time.perf_counter() - begin) * 1000),
+                    duration_ms=duration_ms,
                     attempts=attempts,
                 )
             last_error = str(output.get("message") or output.get("error") or "未知错误")
@@ -120,6 +154,20 @@ class LangGraphExecutionMixin:
                 retryable = False
             if not retryable:
                 break
+        recovery_hint = self._recovery_hint(
+            node,
+            retryable=retryable,
+            failure_output=last_output,
+        )
+        duration_ms = int((time.perf_counter() - begin) * 1000)
+        _emit(
+            "finished",
+            success=False,
+            duration_ms=duration_ms,
+            error=last_error,
+            retries=max(0, retries - 1),
+            recovery_hint=recovery_hint,
+        )
         return NodeExecutionResult(
             node_id=node.node_id,
             success=False,
@@ -130,14 +178,10 @@ class LangGraphExecutionMixin:
             error=last_error,
             retries=max(0, retries - 1),
             retryable=retryable,
-            recovery_hint=self._recovery_hint(
-                node,
-                retryable=retryable,
-                failure_output=last_output,
-            ),
+            recovery_hint=recovery_hint,
             started_at=started,
             finished_at=_now_iso(),
-            duration_ms=int((time.perf_counter() - begin) * 1000),
+            duration_ms=duration_ms,
             attempts=attempts,
         )
 

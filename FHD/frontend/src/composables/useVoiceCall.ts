@@ -642,6 +642,8 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手', re
       node.onaudioprocess = (event: AudioProcessingEvent) => {
         const session = voiceStream
         if (!streamArmed || !session?.ready || !session.ws || session.ws.readyState !== WebSocket.OPEN) return
+        // 不做门限截断：说话音量偏低时截断会把整句吃掉，导致「识别不出来」。
+        // 噪声抑制交给浏览器约束与 VAD 决定何时开始流式。
         const pcm = downsampleToPcm16(event.inputBuffer.getChannelData(0), audioCtx?.sampleRate || 16000)
         if (pcm.byteLength) session.ws.send(pcm)
       }
@@ -694,23 +696,75 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手', re
     session.resolveFinished(session.finalText || session.partial)
   }
 
+  /**
+   * 采集麦克风：约束全部用 ideal，避免设备不支持时 getUserMedia 直接失败；
+   * 仍失败则退化为最宽松的 `{ audio: true }`，保证通话可用优先于降噪。
+   */
+  async function requestMicrophone(): Promise<MediaStream> {
+    const media = navigator.mediaDevices
+    try {
+      return await media.getUserMedia({
+        audio: {
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
+          channelCount: { ideal: 1 },
+        },
+      })
+    } catch (error) {
+      if (error instanceof Error && error.name === 'NotAllowedError') throw error
+      return media.getUserMedia({ audio: true })
+    }
+  }
+
+  /** 对已存在的轨道再补一次降噪约束（部分浏览器重连后会把约束重置为默认值）。 */
+  async function applyVoiceConstraints(media: MediaStream): Promise<void> {
+    const track = media.getAudioTracks()[0]
+    if (!track?.applyConstraints) return
+    try {
+      await track.applyConstraints({
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      })
+    } catch { /* 设备不支持时保持原有约束 */ }
+  }
+
   async function ensureMicrophone(): Promise<MediaStream> {
-    if (stream && stream.getAudioTracks().some(track => track.readyState === 'live')) return stream
+    if (stream && stream.getAudioTracks().some(track => track.readyState === 'live')) {
+      await applyVoiceConstraints(stream)
+      return stream
+    }
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('当前环境不支持麦克风采集')
     if (typeof window.MediaRecorder === 'undefined') throw new Error('当前环境不支持录音')
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    })
+    stream = await requestMicrophone()
     audioCtx = audioCtx || new AudioContext()
     try { await audioCtx.resume() } catch { /* ignore */ }
     const source = audioCtx.createMediaStreamSource(stream)
-    // 部分 USB 麦克风增益偏低，放大后再做能量判断，避免把正常说话当成静音。
+    // 先滤掉低频轰鸣（空调、桌面震动）与高频嘶声，再进入电平判断和流式通道，
+    // 否则固定增益会把底噪一起放大，VAD 与流式识别都会把杂音当成人声。
+    // 老环境没有 BiquadFilter 时退化为直连，保证通话仍可用。
+    const chain: AudioNode[] = [source]
+    if (typeof audioCtx.createBiquadFilter === 'function') {
+      const highpass = audioCtx.createBiquadFilter()
+      highpass.type = 'highpass'
+      highpass.frequency.value = 80
+      highpass.Q.value = 0.7
+      const lowpass = audioCtx.createBiquadFilter()
+      lowpass.type = 'lowpass'
+      lowpass.frequency.value = 6500
+      chain.push(highpass, lowpass)
+    }
+    // 部分 USB 麦克风增益偏低，保留轻度放大；阈值随后续底噪自适应，不会误判静音。
     const gain = audioCtx.createGain()
-    gain.gain.value = 2.5
+    gain.gain.value = 2.0
+    chain.push(gain)
     analyser = audioCtx.createAnalyser()
     analyser.fftSize = 1024
-    source.connect(gain)
-    gain.connect(analyser)
+    analyser.smoothingTimeConstant = 0
+    for (let i = 0; i < chain.length - 1; i += 1) chain[i].connect(chain[i + 1])
+    chain[chain.length - 1].connect(analyser)
     ensurePcmProcessor()
     return stream
   }
@@ -751,8 +805,9 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手', re
     speechStartedAt = 0
     lastVoiceAt = 0
     calibratedUntil = Date.now() + CALIBRATION_MS
-    noiseFloor = 0.012
-    threshold = 0.03
+    // 每轮重新标定，但保留一个受控上限，避免上一轮残留的高底噪把本轮语音一起吃掉。
+    noiseFloor = clamp(noiseFloor, 0.006, 0.015)
+    threshold = clamp(noiseFloor * 2.2, 0.008, 0.06)
     voicedRun = 0
     stopping = false
     void (async () => {
@@ -776,10 +831,16 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手', re
           const level = readLevel()
           if (now < calibratedUntil) {
             noiseFloor = noiseFloor * 0.7 + level * 0.3
-            threshold = clamp(noiseFloor * 2.0, 0.008, 0.06)
+            threshold = clamp(noiseFloor * 2.2, 0.008, 0.06)
             return
           }
           const voiced = level > threshold
+          if (!voiced) {
+            // 静默期跟踪环境底噪（空调/风扇起停），但设上限，
+            // 避免底噪被追高后把小声说话误判成静音。
+            noiseFloor = clamp(noiseFloor * 0.97 + level * 0.03, 0.004, 0.02)
+          }
+          threshold = clamp(noiseFloor * (stage.value === 'speaking' ? 2.8 : 2.0), 0.008, 0.05)
           voicedRun = voiced ? voicedRun + 1 : 0
           if (voiced && voicedRun >= VOICED_FRAMES_TO_START) {
             lastVoiceAt = now

@@ -10,7 +10,7 @@ import math
 import os
 import re
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 import aiohttp
 import httpx
@@ -108,10 +108,10 @@ def _speech_rate_float(rate: str | None) -> float:
     return max(0.6, min(1.6, value))
 
 
-def _platform_mimo_payload(
+def _platform_mimo_audio(
     request: Request, text: str, voice: str | None, rate: str | None
-) -> dict[str, str] | None:
-    """本机没有 MiMo 密钥时，用当前登录会话向平台要音频。密钥留在平台。"""
+) -> dict[str, Any] | None:
+    """向平台要音频原始字节（不做 base64），供二进制/流式端点直接回传。"""
     from app.domain.shared_services.mimo_tts_service import is_configured
     from app.domain.shared_services.tts_service import _EDGE_VOICE_RE
     from app.fastapi_routes.market_bridge.http_transport import _auth_header
@@ -149,7 +149,6 @@ def _platform_mimo_payload(
     except RECOVERABLE_ERRORS as exc:
         logger.info("platform MiMo TTS unavailable: %s", type(exc).__name__)
         return None
-    # 平台 MiMo 未就绪时会回退 edge-tts；两者都是平台合成，直接播放即可。
     if (
         resp.status_code != 200
         or provider not in {"mimo", "edge"}
@@ -165,10 +164,118 @@ def _platform_mimo_payload(
     if not audio or len(audio) > 8_000_000:
         return None
     return {
-        "audioBase64": f"data:{mime};base64,{base64.b64encode(audio).decode('ascii')}",
-        "voice": voice_name or ("冰糖" if provider == "mimo" else edge_voice),
+        "audio": audio,
+        "mime": mime,
         "provider": provider,
+        "voice": voice_name or ("冰糖" if provider == "mimo" else edge_voice),
     }
+
+
+def _platform_mimo_payload(
+    request: Request, text: str, voice: str | None, rate: str | None
+) -> dict[str, str] | None:
+    """本机没有 MiMo 密钥时，用当前登录会话向平台要音频。密钥留在平台。"""
+    result = _platform_mimo_audio(request, text, voice, rate)
+    if result is None:
+        return None
+    audio = result["audio"]
+    return {
+        "audioBase64": (
+            f"data:{result['mime']};base64,"
+            f"{base64.b64encode(audio).decode('ascii')}"
+        ),
+        "voice": result["voice"],
+        "provider": result["provider"],
+    }
+
+
+_AUDIO_CHUNK_BYTES = 64 * 1024
+
+
+def _iter_audio_bytes(data: bytes):
+    for offset in range(0, len(data), _AUDIO_CHUNK_BYTES):
+        yield data[offset : offset + _AUDIO_CHUNK_BYTES]
+
+
+@router.get("/api/tts/audio")
+def compat_tts_audio(
+    request: Request,
+    text: str = "",
+    voice: str = "",
+    rate: str = "",
+):
+    """直接返回音频二进制，供 ``<audio src>`` 边下边播。
+
+    相比 ``POST /api/tts`` 的 base64 data URI：没有 33% 体积膨胀、没有前端
+    JSON 解析与 base64 解码，浏览器拿到首块即可起播。
+    """
+    from fastapi.responses import StreamingResponse
+
+    clean = text.strip()
+    if not clean or len(clean) > 400:
+        return JSONResponse(
+            {"success": False, "message": "TTS 请求参数无效", "data": {}}, status_code=422
+        )
+    if len(voice) > 120 or len(rate) > 120:
+        return JSONResponse(
+            {"success": False, "message": "TTS 请求参数无效", "data": {}}, status_code=422
+        )
+    if rate and not re.fullmatch(r"[+-][0-9]{1,3}%", rate):
+        return JSONResponse(
+            {"success": False, "message": "TTS 请求参数无效", "data": {}}, status_code=422
+        )
+
+    platform = _platform_mimo_audio(request, clean, voice or None, rate or None)
+    if platform is not None:
+        audio = platform["audio"]
+        return StreamingResponse(
+            _iter_audio_bytes(audio),
+            media_type=platform["mime"],
+            headers={
+                "Content-Length": str(len(audio)),
+                "Cache-Control": "private, max-age=300",
+                "X-TTS-Provider": platform["provider"],
+                # HTTP 头只允许 latin-1；MiMo 音色名是中文，需百分号编码。
+                "X-TTS-Voice": quote(platform["voice"], safe=""),
+            },
+        )
+
+    if os.environ.get("XCAGI_TTS_PLATFORM_ONLY", "1").lower() not in {"0", "false"}:
+        return JSONResponse(
+            {"success": False, "message": "平台 MiMo 语音合成暂不可用", "data": {}}, status_code=503
+        )
+    try:
+        from app.application.facades.tts_facade import (
+            synthesize_to_data_uri,
+            trigger_common_tts_warmup,
+        )
+
+        trigger_common_tts_warmup()
+        result = synthesize_to_data_uri(
+            text=clean,
+            voice=voice or None,
+            lang="zh",
+            rate=rate or None,
+        )
+        uri = result.get("audioBase64") if isinstance(result, dict) else None
+        if not isinstance(uri, str) or "," not in uri:
+            raise TtsUpstreamResponseError("TTS returned invalid audio data URI")
+        audio = base64.b64decode(uri.split(",", 1)[1], validate=True)
+        mime = uri[5:].split(";", 1)[0] or "audio/mpeg"
+        return StreamingResponse(
+            _iter_audio_bytes(audio),
+            media_type=mime,
+            headers={
+                "Content-Length": str(len(audio)),
+                "Cache-Control": "private, max-age=300",
+                "X-TTS-Provider": str(result.get("provider") or "edge"),
+            },
+        )
+    except RECOVERABLE_ERRORS as error:
+        logger.warning("TTS audio unavailable: %s", type(error).__name__)
+        return JSONResponse(
+            {"success": False, "message": "TTS 服务暂不可用", "data": {}}, status_code=503
+        )
 
 
 @router.post("/api/tts")

@@ -65,9 +65,12 @@ from app.domain.shared_services.tools_workflow_workspace import (
 def _registered_router_client_product_issue(action, params, runtime_context, profile, user_message):
     if action != "submit":
         return {"success": False, "message": "不支持的产品问题上报操作"}
+    from app.application.client_product_issue_intake import resolve_issue_report_message
     from app.application.registered_client_issue import submit_client_product_issue
 
-    return submit_client_product_issue(user_message, runtime_context)
+    # 与审批前置校验共用同一套取文逻辑：续办请求要从会话前文/计划参数找回问题描述。
+    resolved = resolve_issue_report_message(user_message, runtime_context, params)
+    return submit_client_product_issue(resolved or user_message, runtime_context)
 
 
 class _WorkflowRouterMap(dict):

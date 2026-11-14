@@ -1,5 +1,3 @@
-import { YUANGON_PKG_ROLE_LABELS } from '@/domain/yuangonDutyRoster'
-
 export type EmployeeSsotContactRecord = {
   employee_id: string
   display_name: string
@@ -71,7 +69,7 @@ function nameForEmployee(
 ): string {
   const backendName = String(row?.display_name || '').trim()
   if (backendName && backendName !== id) return backendName
-  return String(payload?.employee_labels?.[id] || YUANGON_PKG_ROLE_LABELS[id] || backendName || id).trim() || id
+  return String(payload?.employee_labels?.[id] || backendName || id).trim() || id
 }
 
 function descriptionForEmployee(id: string, payload: EmployeeSsotPayload | null | undefined, fallback = ''): string {

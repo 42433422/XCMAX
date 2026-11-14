@@ -72,13 +72,13 @@
 .message-recall-btn,
 .message-tts-btn {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   padding: 0;
-  border: 1px solid #dbe3f0;
-  border-radius: 50%;
-  background: #ffffff;
-  color: #5b6b88;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8a94a6;
   font-size: 12px;
   line-height: 1;
   display: inline-flex;
@@ -89,9 +89,7 @@
   transition:
     opacity 0.15s ease,
     background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    color 0.15s ease;
 }
 
 .message-copy-btn .fa,
@@ -118,15 +116,13 @@
 .message-copy-btn:hover,
 .message-recall-btn:hover,
 .message-tts-btn:hover {
-  background: #f0f6ff;
-  border-color: #4a90e2;
+  background: #eef2f7;
   color: #2d7bd6;
 }
 
 .message-tts-btn.is-playing {
-  background: #2d7bd6;
-  border-color: #2d7bd6;
-  color: #fff;
+  background: #e8f0fe;
+  color: #2d7bd6;
   animation: tts-pulse 1.4s ease-in-out infinite;
 }
 
@@ -312,13 +308,6 @@
   border-radius: 0;
 }
 
-.todo-panel .todo-title {
-  font-size: 11px;
-  font-weight: 500;
-  color: #065f46;
-  margin-bottom: 2px;
-}
-
 .todo-panel ul {
   margin: 0;
   padding-left: 16px;
@@ -338,27 +327,6 @@
   background: transparent;
   border-left: 2px solid #3b82f6;
   border-radius: 0;
-}
-
-.trace-title {
-  font-size: 11px;
-  font-weight: 500;
-  color: #1e40af;
-  margin-bottom: 2px;
-}
-
-.trace-stages {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-.trace-chip {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: #dbeafe;
-  color: #1d4ed8;
 }
 
 .trace-action {

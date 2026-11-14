@@ -14,7 +14,9 @@ from app.application.agent_orchestrator.budget import (
 )
 from app.application.agent_orchestrator.clarification import (
     apply_clarification_answer,
+    apply_plan_confirmation,
     find_waiting_step,
+    is_plan_confirmation,
     pause_for_clarification,
 )
 from app.application.agent_orchestrator.param_references import refuse_unresolved_step
@@ -654,6 +656,44 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         )
         if not self._repo.save_if_unchanged(run, previous):
             return None
+        self._execute_with_durable_lease(run, runtime_context=context)
+        return cast("AgentRun", self._repo.save(run))
+
+    def continue_plan_confirmation(
+        self,
+        run_id: str,
+        *,
+        answered_by: str,
+        clarification_step_id: str,
+        confirmed: bool,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> AgentRun | None:
+        """把计划级确认的答复写回原计划并续跑，语义等价 interrupt 的 resume。
+
+        与 ``continue_after_clarification`` 的区别：这里没有目标节点，也不允许
+        重建计划；确认即在同一张图上继续，取消即终止。
+        """
+        run = self._repo.get(run_id)
+        if run is None or run.status != "waiting_user":
+            return cast("AgentRun | None", run)
+        if str(answered_by or "") != run.user_id:
+            return None
+        waiting_step = find_waiting_step(run, approved_step_id=clarification_step_id)
+        if waiting_step is None or not is_plan_confirmation(waiting_step):
+            return None
+        from app.application.agent_orchestrator.tool_permission import overlay_resume_context
+
+        previous = copy.deepcopy(run)
+        context = overlay_resume_context(
+            run.metadata.get("runtime_context") or {}, runtime_context
+        )
+        apply_plan_confirmation(run, step_id=waiting_step.step_id, confirmed=confirmed)
+        run.metadata["runtime_context"] = context
+        apply_ai_budget_metadata(run, context)
+        if not self._repo.save_if_unchanged(run, previous):
+            return None
+        if not confirmed:
+            return cast("AgentRun", self._repo.get(run_id))
         self._execute_with_durable_lease(run, runtime_context=context)
         return cast("AgentRun", self._repo.save(run))
 

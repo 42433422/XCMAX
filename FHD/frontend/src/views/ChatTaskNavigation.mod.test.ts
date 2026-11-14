@@ -30,7 +30,7 @@ vi.mock('@/composables/useChatVoiceInput', () => ({ useChatVoiceInput: () => ({
 }) }))
 vi.mock('@/composables/useChatMessageUi', () => ({ useChatMessageUi: () => ({
   messageHeights: ref(new Map()), playingMsgIdx: ref(-1), latestAiMessageIndex: ref(-1), isMessageCollapsed: () => false,
-  expandMessage: vi.fn(), collapseMessage: vi.fn(), getCollapsedPreview: () => '', canSpeakMessage: () => false,
+  expandMessage: vi.fn(), collapseMessage: vi.fn(), canSpeakMessage: () => false,
   toggleMessageTts: vi.fn(), batchCalculateHeights: vi.fn(), stopMessageTts: vi.fn(),
 }) }))
 vi.mock('@/composables/useResizablePane', () => ({ useResizablePane: () => ({
@@ -142,7 +142,7 @@ describe('shipped chat Mod task navigation', () => {
         { role: 'ai', content: '处理失败：模型未返回正文', time: '12:00', turnId: 'test-turn', workflowAction: 'failed' },
       ]
       await flushPromises()
-      await button('重试模型请求（不重复写入）').trigger('click')
+      await wrapper!.get('[data-testid="chat-retry-model"]').trigger('click')
       expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toBe('')
       expect(chatApi.sendMessage).not.toHaveBeenCalled()
       expect(chatApi.retryModelOnly).toHaveBeenCalledWith('仅回答测试', 'test-turn')

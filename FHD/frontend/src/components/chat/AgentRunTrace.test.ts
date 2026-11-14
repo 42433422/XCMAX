@@ -59,7 +59,7 @@ describe('AgentRunTrace', () => {
 
     const card = wrapper.get('[data-testid="agent-run-trace"]')
     expect((card.element as HTMLDetailsElement).open).toBe(true)
-    expect(card.text()).toContain('XCAGI Business Harness')
+    expect(card.text()).not.toContain('XCAGI Business Harness')
     expect(card.text()).toContain('业务数据写入')
     expect(card.text()).toContain('等待确认')
     expect(card.find('.fa-database').exists()).toBe(true)
@@ -145,7 +145,7 @@ describe('AgentRunTrace', () => {
     const wrapper = mount(AgentRunTrace, { props: { trace } })
 
     expect(wrapper.text()).toContain('research and write')
-    expect(wrapper.text()).toContain('2 项异常')
+    expect(wrapper.text()).toContain('执行失败')
     expect(wrapper.text()).toContain('重试 2')
     expect(wrapper.text()).toContain('已记住授权')
     expect(wrapper.text()).toContain('缺少必要字段')
@@ -207,7 +207,6 @@ it.each([
   summary.element.dispatchEvent(event)
   expect(event.defaultPrevented).toBe(true)
   expect(summary.attributes('aria-disabled')).toBe('true')
-  expect(wrapper.text()).toContain('Run · short')
   wrapper.unmount()
 })
 

@@ -189,12 +189,35 @@ def precheck_approval_node(node: Any, runtime_context: dict[str, Any] | None) ->
     action = str(getattr(node, "action", "") or "")
     params = dict(getattr(node, "params", None) or {})
     if (tool_id, action) == ("client_product_issue", "submit"):
-        from app.application.client_product_issue_intake import looks_like_issue_report
+        from app.application.client_product_issue_intake import (
+            resolve_issue_report_message,
+        )
         from app.application.tools.workflow_tools.dispatch import _resolve_user_message
 
-        message = _resolve_user_message(context, params)
-        if not message or not looks_like_issue_report(message):
+        # 本轮可能只是「确认 / 那你去提交一下呀」，真正的工单内容在会话前文
+        # 或计划节点的 request 里，不能因为本轮原话不含问题就拒绝受理。
+        message = resolve_issue_report_message(
+            _resolve_user_message(context, params), context, params
+        )
+        if not message:
             return "原始请求未明确提出产品问题，本轮未提交写入。"
+    if tool_id == "employee" and action in {"execute", "context"}:
+        # 宿主管理员工/专用工具只有平台管理员可执行；在执行前就拒绝，
+        # 不创建审批单，避免出现「审批通过 → 立刻取消」的假审批。
+        from app.application.employee_runtime.loader import candidate_pack_ids
+        from app.application.employee_runtime.tool_scope import host_employee_denial
+
+        input_data = params.get("input")
+        denial = host_employee_denial(
+            candidate_pack_ids(str(params.get("employee_id") or params.get("pack_id") or "")),
+            input_data if isinstance(input_data, dict) else {},
+            context,
+        )
+        if denial:
+            return (
+                "该员工属于宿主管理员工，只有平台管理员可以调用，本轮未执行；"
+                "提交产品问题请在对话中直接说明问题现象。"
+            )
     return ""
 
 

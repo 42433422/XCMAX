@@ -5,6 +5,20 @@ export type PlannerSseEvent =
   | { type: 'model_activity' }
   | { type: 'token'; text: string; ephemeral?: boolean }
   | { type: 'tool_progress'; label?: string; text?: string; phase?: string; run_id?: string }
+  | {
+      type: 'tool_call'
+      phase?: 'started' | 'finished'
+      node_id?: string
+      tool_id?: string
+      action?: string
+      params?: Record<string, unknown>
+      success?: boolean
+      duration_ms?: number
+      output_preview?: string
+      error?: string
+      retries?: number
+      recovery_hint?: string
+    }
   | { type: 'done'; result?: unknown }
   | { type: 'error'; result?: unknown; message?: string; status_code?: number; run_id?: string; route_metadata?: unknown; execution_outcome?: string; requires_reconciliation?: boolean }
   | { type: 'requires_token'; token_name?: string; token_description?: string; run_id?: string }

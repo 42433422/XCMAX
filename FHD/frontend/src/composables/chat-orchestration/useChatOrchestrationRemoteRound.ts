@@ -6,15 +6,17 @@ import type { useChatMessages } from '../useChatMessages'
 import type { useChatRequest, ChatRequestScope } from '../useChatRequest'
 import type { useChatResponseAttach } from '../useChatResponseAttach'
 import { readPlannerBusinessResult } from '@/utils/readPlannerBusinessResult'
+import { applyToolCallEvent } from '@/utils/agentStepChain'
 import type { useChatSessionActivity } from '../useChatSessionActivity'
 import type { ShipmentTask } from '../useShipmentTask'
-import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
-import chatApi, { parseChatStreamErrorResponse } from '@/api/chat'
+import type { ChatPlannerPayload } from '@/types/chat'
+import chatApi from '@/api/chat'
+import { useAiSdkChatRound } from './useAiSdkChatRound'
 import productsApi from '@/api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { useModsStore } from '@/stores/mods'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
-import { readPlannerSseResponse, isChatStreamEnabled, isWorkflowControlMessage, IncompletePlannerSseError, type PlannerSseEvent } from '@/utils/chatSseStream'
+import { isChatStreamEnabled, isWorkflowControlMessage, IncompletePlannerSseError, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
 import { stripPlannerDisplayMarkers } from '@/utils/chatBubbleDisplay'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
@@ -396,25 +398,49 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         }).catch(() => undefined)
       }
       let streamPlain = ''
+      let streamTextFromAi = false
+      let replaying = false
+      let plannerEventHandler: ((event: PlannerSseEvent) => void) | null = null
+      let handlePlannerEventRef: ((event: PlannerSseEvent) => void) | null = null
+      const aiChatRound = useAiSdkChatRound({
+        onEvent: (event) => plannerEventHandler?.(event),
+        onText: (value) => {
+          if (!streamTextFromAi) return
+          streamPlain = value
+          if (!round.isActive()) return
+          scheduleStreamFrame()
+          if (streamMessage) delete streamMessage.waitingHint
+          setLoadingProgress('正在生成回复…', requestScope.sessionId)
+        },
+      })
       let doneResult: unknown = null
       let awaitingAuthorization = false
       let sseError: string | null = null
       let failureExecution: ReturnType<typeof readChatExecution> = undefined
       let sseOutcomeUnknown = false
       let streamRunId = ''
+      // 新一轮开始：清掉上一轮残留的执行链步骤，避免多轮累积。
+      if (streamMessage) delete streamMessage.liveSteps
       const ttsShouldSpeakThisMessage = ttsEnabled.value
       let receivedDone = false
       try {
         const { body } = buildPlannerChatRequestPayload(primaryForStream, opts, requestScope)
-        const res = await chatApi.sendChatStream(
-          { ...body, message: String(body.message || primaryForStream) } as ChatRequest & Record<string, unknown>,
-          { signal: controller.signal },
-        )
-        if (!isOwnerCurrent()) { controller.abort(); return }
-        if (!res.ok) {
-          throw Object.assign(new Error(await parseChatStreamErrorResponse(res, consumeRoute)), { status: res.status })
-        }
-        await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
+        streamTextFromAi = true
+        handlePlannerEventRef = (ev: PlannerSseEvent) => {
+          if (replaying) {
+            // 续传只补齐正文与终态，不重放副作用。
+            if (ev.type === 'done') {
+              doneResult = ev.result
+              receivedDone = true
+              awaitingAuthorization = false
+            } else if (ev.type === 'error') {
+              sseError = String(ev.message || '流式接口错误')
+              sseOutcomeUnknown = Boolean(ev.requires_reconciliation || ev.execution_outcome === 'unknown')
+            } else if (ev.type === 'requires_token') {
+              awaitingAuthorization = true
+            }
+            return
+          }
           if (!isOwnerCurrent()) { controller.abort(); return }
           const heartbeat = (ev.type === 'token' && ev.ephemeral === true)
             || (ev.type === 'tool_progress' && ev.phase === 'accepted')
@@ -432,21 +458,26 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           } else if (ev.type === 'tool_progress') {
             streamRunId = ev.run_id || streamRunId
             const hint = String(ev.text || ev.label || '').trim()
-            if (round.isActive() && streamMessage && hint) streamMessage.waitingHint = hint
+            if (round.isActive() && streamMessage && hint) {
+              streamMessage.waitingHint = hint
+              // 执行链的流式占位步骤：轮到哪个动作就显示哪个，不等整轮结束。
+              streamMessage.toolProgressLabel = hint
+            }
             setLoadingProgress(hint || '正在执行任务…', requestScope.sessionId)
             if (streamRunId) syncStreamRun({ run_id: streamRunId })
+          } else if (ev.type === 'tool_call') {
+            // 结构化工具事件：按 node_id 原地增改，执行链随执行进度实时长出来。
+            if (round.isActive() && streamMessage) {
+              streamMessage.liveSteps = applyToolCallEvent(streamMessage.liveSteps || [], ev)
+              if (ev.phase !== 'finished') delete streamMessage.waitingHint
+            }
           } else if (ev.type === 'token') {
             if (ev.ephemeral) {
               const hint = String(ev.text || '').replace(/\s+/g, ' ').trim()
               if (round.isActive() && streamMessage && hint) streamMessage.waitingHint = hint
               setLoadingProgress(hint || '仍在等待模型响应…', requestScope.sessionId)
-            } else {
-              streamPlain += ev.text || ''
-              if (round.isActive()) {
-                scheduleStreamFrame()
-                if (streamMessage) delete streamMessage.waitingHint
-              }
-              setLoadingProgress('正在生成回复…', requestScope.sessionId)
+            } else if (round.isActive() && streamMessage) {
+              delete streamMessage.waitingHint
             }
           } else if (ev.type === 'done') {
             doneResult = ev.result
@@ -466,6 +497,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             const tokenName = ev.token_name || ''
             const tokenDesc = ev.token_description || ''
             handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
+            streamTextFromAi = false
             streamPlain += `\n[需要授权：${tokenDesc || tokenName || '授权信息'}]\n`
             if (round.isActive()) {
               cancelStreamFrame()
@@ -476,8 +508,17 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               plannerWriteUnlockResumeDraft.value = streamPlain
             }
           }
-        }, controller.signal)
+        }
+        plannerEventHandler = handlePlannerEventRef
+        const roundResult = await aiChatRound.send(
+          { ...body, message: String(body.message || primaryForStream) },
+          controller.signal,
+        )
+        plannerEventHandler = null
+        streamTextFromAi = false
         if (!isOwnerCurrent()) return
+        if (!awaitingAuthorization && roundResult.text) streamPlain = roundResult.text
+        if (roundResult.error) throw roundResult.error
         if (sseError) {
           throw new Error(sseError)
         }
@@ -533,6 +574,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
         }
       } catch (err: unknown) {
+        plannerEventHandler = null
+        streamTextFromAi = false
         cancelStreamFrame()
         if (Number(asRecord(err).status) === 401 && round.isActive()) void probeEnterpriseSession()
         const timedOut = asRecord(err).name === 'AbortError'
@@ -548,6 +591,43 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         const dropped = !sseError && (timedOut || err instanceof IncompletePlannerSseError
           || [408, 502, 503, 504].includes(Number(asRecord(err).status))
           || /failed to fetch|network\s*error|econnrefused|econnreset|err_connection|socket hang up|load failed|网络中断|连接中断/i.test(errText))
+        if (dropped && round.isActive() && streamRunId && handlePlannerEventRef) {
+          // 断线续传：用同一 turn_id 再连一次，后端只回放已产生的事件，不重跑任务。
+          let resumed = false
+          replaying = true
+          plannerEventHandler = handlePlannerEventRef
+          streamTextFromAi = true
+          const replayController = new AbortController()
+          const replayTimer = window.setTimeout(() => replayController.abort(), 20000)
+          try {
+            const { body } = buildPlannerChatRequestPayload(primaryForStream, opts, requestScope)
+            const result = await aiChatRound.send(
+              { ...body, message: String(body.message || primaryForStream) },
+              replayController.signal,
+            )
+            if (result.text) streamPlain = result.text
+            resumed = receivedDone && isOwnerCurrent()
+          } catch {
+            resumed = false
+          } finally {
+            window.clearTimeout(replayTimer)
+            replaying = false
+            streamTextFromAi = false
+            plannerEventHandler = null
+          }
+          if (resumed) {
+            cancelStreamFrame()
+            applyPlainTextToMessageIndex(msgIndex, streamPlain)
+            if (streamMessage) {
+              streamMessage.workflowAction = sseOutcomeUnknown ? 'unknown' : 'completed'
+              delete streamMessage.streamingShell
+              delete streamMessage.waitingHint
+            }
+            deps.flushMessagesCache?.()
+            round.setStreaming(false)
+            return
+          }
+        }
         if (dropped && round.isActive()) {
           let presentation = droppedRoundPresentation({ reachable: false })
           try {
@@ -604,6 +684,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         }
         if (streamRunId) syncStreamRun({ run_id: streamRunId })
       } finally {
+        plannerEventHandler = null
+        streamTextFromAi = false
         cancelStreamFrame()
         if (round.isActive() && streamMessage) delete streamMessage.waitingHint
         if (round.isActive() && streamMessage?.streamingShell) {

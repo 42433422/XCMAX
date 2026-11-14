@@ -4,9 +4,11 @@ import { useNowMsTicker, useWorkflowEmployeeDesks } from '@/composables/useWorkf
 import { YUANGONG_ENTRY_STITCH_PNG, YUANGONG_ENTRY_WORKFLOW_PNG, YUANGONG_ENTRY_WORKFLOW_SVG } from '@/constants/yuangongAssets'
 import YuangongStation from '@/components/workflow/YuangongStation.vue'
 import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeInspector.vue'
-import DutyRosterWorkflowLoopView from '@/components/workflow/DutyRosterWorkflowLoopView.vue'
-import SelfEvolutionLoopRuntimePanel from '@/components/workflow/SelfEvolutionLoopRuntimePanel.vue'
-import EmployeeWorkspaceLoopConsole from '@/components/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'
+// 管理端专属：依赖宿主编制，企业构建由 @admin-console-inject 别名替换为空组件，
+// 避免把平台内部员工名单打进企业产物。
+import DutyRosterWorkflowLoopView from '@admin-console-inject/workflow/DutyRosterWorkflowLoopView.vue'
+import SelfEvolutionLoopRuntimePanel from '@admin-console-inject/workflow/SelfEvolutionLoopRuntimePanel.vue'
+import EmployeeWorkspaceLoopConsole from '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'
 import { useDutyRoster } from '@/composables/useDutyRoster'
 import { workflowRegistryEntryBelongsToStack } from '@/utils/workflowEmployeeScope'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'

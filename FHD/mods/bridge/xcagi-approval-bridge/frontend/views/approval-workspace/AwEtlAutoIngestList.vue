@@ -6,7 +6,10 @@
     </div>
     <p class="aw-elt-auto-ingest__hint">写入要等审批工作台通过。这里只撤回已经入库的批次，原件与已保存模板保留。</p>
     <p v-if="loading" role="status">正在读取入库批次…</p>
-    <p v-if="error" role="alert">{{ error }} <button type="button" @click="reload">重试</button></p>
+    <p v-if="error" role="alert">
+      {{ error }}
+      <button v-if="!gateError" type="button" @click="reload">重试</button>
+    </p>
     <p v-else-if="!loading && !items.length">暂无自动入库批次。</p>
     <ul v-if="!loading && items.length" class="aw-elt-auto-ingest__list">
       <li v-for="item in items" :key="String(item.batch_id)">
@@ -49,6 +52,8 @@ type Batch = {
 const items = ref<Batch[]>([])
 const loading = ref(false)
 const error = ref('')
+/** 功能未启用/非企业版属于固定状态，重试无意义。 */
+const gateError = ref(false)
 const busyId = ref('')
 let active = true
 let readGeneration = 0
@@ -64,11 +69,16 @@ async function reload() {
   const current = () => active && sessionCurrent() && generation === readGeneration
   loading.value = true
   error.value = ''
+  gateError.value = false
   try {
     const result = await eltApi.autoIngestBatches(50, true) as Batch[]
     if (current()) items.value = result
   } catch (err) {
-    if (current()) error.value = err instanceof Error ? err.message : '读取入库批次失败'
+    if (current()) {
+      const code = String((err as { code?: string })?.code || '')
+      gateError.value = ['ELT_CENTER_DISABLED', 'ELT_ENTERPRISE_REQUIRED'].includes(code)
+      error.value = err instanceof Error ? err.message : '读取入库批次失败'
+    }
   } finally {
     if (current()) loading.value = false
   }

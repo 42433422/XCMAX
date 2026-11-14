@@ -161,6 +161,18 @@ export default defineConfig(() => ({
         find: '@admin-console-inject/views/DutyRosterGraphView.vue',
         replacement: path.join(adminSrc, 'views/DutyRosterGraphView.vue'),
       },
+      {
+        find: '@admin-console-inject/workflow/DutyRosterWorkflowLoopView.vue',
+        replacement: path.join(hostSrc, 'components/workflow/DutyRosterWorkflowLoopView.vue'),
+      },
+      {
+        find: '@admin-console-inject/workflow/SelfEvolutionLoopRuntimePanel.vue',
+        replacement: path.join(hostSrc, 'components/workflow/SelfEvolutionLoopRuntimePanel.vue'),
+      },
+      {
+        find: '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue',
+        replacement: path.join(hostSrc, 'components/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'),
+      },
       { find: '@host', replacement: hostSrc },
       { find: '@', replacement: hostSrc },
       { find: '@amin', replacement: path.resolve(hostRoot, '../AMIN') },

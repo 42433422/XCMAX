@@ -158,11 +158,31 @@ def _progress(encode: Callable[[dict[str, Any]], bytes], phase: str, label: str)
     return encode({"type": "tool_progress", "phase": phase, "label": label, "text": label})
 
 
+class _ToolRecordQueue:
+    """收集工具执行线程推来的记录，由 SSE 生产者按心跳节奏取出。"""
+
+    def __init__(self) -> None:
+        self._items: list[dict[str, Any]] = []
+        self._lock = threading.Lock()
+
+    def push(self, *, sequence: int, record: dict[str, Any]) -> None:
+        if not isinstance(record, dict):
+            return
+        with self._lock:
+            self._items.append(record)
+
+    def drain(self) -> list[dict[str, Any]]:
+        with self._lock:
+            items, self._items = self._items, []
+        return items
+
+
 def _heartbeats(
     fn: Callable[[], Any],
     label: str,
     sink: dict[str, Any],
     encode: Callable[[dict[str, Any]], bytes],
+    tool_records: _ToolRecordQueue | None = None,
 ) -> Iterator[bytes]:
     """Run blocking local work off the producer and keep the stream observably alive."""
     box: dict = {}
@@ -175,13 +195,21 @@ def _heartbeats(
         except BOUNDARY_ERRORS as exc:
             box["error"] = exc
 
+    def tool_lines() -> Iterator[bytes]:
+        if tool_records is None:
+            return
+        for record in tool_records.drain():
+            yield encode({"type": "tool_call", **record})
+
     thread = threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True)
     thread.start()
     interval = _tool_heartbeat_seconds()
     while thread.is_alive():
         thread.join(interval)
+        yield from tool_lines()
         if thread.is_alive():
             yield _progress(encode, "running", label)
+    yield from tool_lines()
     if "error" in box:
         raise box["error"]
     sink["value"] = box.get("value")
@@ -307,11 +335,21 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         # 普通对话同样可能是几十秒的工具/审批链路；必须持续发心跳，
         # 否则前端 40s 无事件会误判超时（即使后端随后成功完成）。
         sink = {}
+        # 工具执行线程会把起止记录推进本队列，心跳时转成 tool_call 事件，
+        # 前端据此实时长出「执行链」，不必等整轮结束回填。
+        tool_records = _ToolRecordQueue()
+        try:
+            from app.infrastructure.chat_stream_lifetime import watch_stream_tool_records
+
+            watch_stream_tool_records(tool_records.push)
+        except Exception:  # noqa: BLE001 - 观测通道不可用时不阻断对话
+            tool_records = None
         yield from _heartbeats(
             _chat,
             "正在执行已确认的任务" if control else "正在处理任务",
             sink,
             encode,
+            tool_records,
         )
         payload = sink["value"]
     except facade.RECOVERABLE_ERRORS as exc:

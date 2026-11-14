@@ -1,9 +1,16 @@
 <template>
-  <button type="button" class="msg-fold__action msg-fold__action--collapse" @click="$emit('collapse')">
+  <button
+    type="button"
+    class="msg-fold__action msg-fold__action--collapse"
+    :class="{ 'msg-fold__action--icon': !label }"
+    :aria-label="label || '收起'"
+    :title="label || '收起'"
+    @click="$emit('collapse')"
+  >
     <svg class="msg-fold__chevron msg-fold__chevron--up" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path d="M4 10l4-4 4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
     </svg>
-    {{ label }}
+    <span v-if="label">{{ label }}</span>
   </button>
 </template>
 
@@ -38,6 +45,10 @@ defineEmits<{
   cursor: pointer;
   white-space: nowrap;
   transition: color 0.15s ease;
+}
+
+.msg-fold__action--icon {
+  margin-left: auto;
 }
 
 .msg-fold__action:hover {

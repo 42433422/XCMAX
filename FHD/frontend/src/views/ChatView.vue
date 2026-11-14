@@ -28,7 +28,7 @@
         :latest-ai-message-index="latestAiMessageIndex"
         :playing-msg-idx="playingMsgIdx"
         :is-message-collapsed="isMessageCollapsed"
-        :get-collapsed-preview="getCollapsedPreview"
+        :can-collapse-message="canCollapseMessage"
         :can-speak-message="canSpeakMessage"
         :chat-messages-ref="chatRefBag.chatMessagesRef"
         @expand-message="expandMessage"
@@ -613,9 +613,9 @@ const {
   playingMsgIdx,
   latestAiMessageIndex,
   isMessageCollapsed,
+  canCollapseMessage,
   expandMessage,
   collapseMessage,
-  getCollapsedPreview,
   canSpeakMessage,
   toggleMessageTts,
   batchCalculateHeights,

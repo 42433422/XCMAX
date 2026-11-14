@@ -6,8 +6,7 @@
  *   - system：保留设置项兼容。
  */
 
-import { apiFetch } from './apiBase'
-import { readCsrfTokenFromCookie } from './csrfCookie'
+import { apiFetch, getApiBase } from './apiBase'
 import { playOfflinePcm, synthesizeOffline, ensureOfflineReady, isOfflineReady, isOfflineLoading, getOfflineProgress, stopOffline } from './offlineTts'
 import { asRecord, asString } from '@/utils/typeGuards'
 import { showAppToast } from '@/composables/useAppToast'
@@ -403,75 +402,97 @@ export function createChineseUtterance(text: string): SpeechSynthesisUtterance {
   return configureUtterance(u)
 }
 
-async function fetchOnlineTtsDataUri(text: string, signal: AbortSignal): Promise<string> {
-  const voice = getOnlineVoiceId()
-  const rate = getSpeechRate()
-  const ratePercent = Math.round(rate * 100) - 100
-
-  await ensureTtsCsrfCookie(signal)
-  signal.throwIfAborted()
-
-  const res = await apiFetch('/api/tts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal,
-    body: JSON.stringify({ text, lang: 'zh', voice, rate: `${ratePercent >= 0 ? '+' : ''}${ratePercent}%` }),
+/**
+ * 流式朗读：直接用二进制端点作为 ``<audio src>``。
+ * - 服务端返回 audio/*，浏览器拿到首块即可起播，不再等整段音频 + base64。
+ * - 预取变成「预热同一 URL」，命中 HTTP 缓存（private, max-age）后重播零等待。
+ */
+function onlineTtsAudioUrl(text: string): string {
+  const ratePercent = Math.round(getSpeechRate() * 100) - 100
+  const params = new URLSearchParams({
+    text,
+    voice: getOnlineVoiceId(),
+    rate: `${ratePercent >= 0 ? '+' : ''}${ratePercent}%`,
   })
-  let json: Record<string, unknown> = {}
-  try {
-    json = asRecord(await res.json())
-  } catch {
-    json = {}
-  }
-  signal.throwIfAborted()
-  if (!res.ok || !json.success) {
-    throw new Error(asString(json.message) || `在线 TTS 失败（HTTP ${res.status}）`)
-  }
-  const ttsData = asRecord(json.data)
-  const uri = ttsData.audioBase64
-  if (!uri || typeof uri !== 'string') {
-    throw new Error('在线 TTS 响应缺少音频')
-  }
-  return uri
+  return `${getApiBase()}/api/tts/audio?${params.toString()}`
 }
 
-async function ensureTtsCsrfCookie(signal: AbortSignal): Promise<void> {
-  if (typeof window === 'undefined') return
-  if (readCsrfTokenFromCookie()) return
-  try {
-    await apiFetch('/api/health', { method: 'GET', timeoutMs: 5_000, signal })
-  } catch {
-    /* best-effort: the following POST will surface the actual TTS error */
+/** 已预热过的 URL（同一句话重复播报直接命中浏览器缓存）。 */
+const ONLINE_TTS_WARM_MAX = 40
+const warmedTtsUrls = new Set<string>()
+
+async function warmOnlineTts(url: string, signal: AbortSignal): Promise<void> {
+  if (warmedTtsUrls.has(url)) return
+  const res = await apiFetch(url, { method: 'GET', signal, timeoutMs: 30_000 })
+  if (!res.ok) {
+    let message = `在线 TTS 失败（HTTP ${res.status}）`
+    try {
+      const failed = asRecord(await res.json())
+      message = asString(failed.message) || message
+    } catch {
+      /* 非 JSON 错误体保持默认文案 */
+    }
+    throw new Error(message)
   }
+  // 只要响应体被读走，浏览器 HTTP 缓存就保存了音频，<audio> 再次请求即命中。
+  await res.arrayBuffer().catch(() => undefined)
+  if (warmedTtsUrls.size >= ONLINE_TTS_WARM_MAX) {
+    const oldest = warmedTtsUrls.values().next().value
+    if (oldest) warmedTtsUrls.delete(oldest)
+  }
+  warmedTtsUrls.add(url)
 }
 
-/** 单句合成上限：过长会拉高首字延迟，过短又会句间停顿明显。 */
+/**
+ * 切块上限。
+ * 实测上游合成 ≈ 1.2s 固定开销 + 0.11s/字（12 字 1.6s、48 字 5.4s），
+ * 因此首块要短（尽快出声），后续块保持在「合成时间能被上一块播放时间覆盖」的范围。
+ */
 const SPEECH_CHUNK_MAX_CHARS = 48
 const SPEECH_CHUNK_MIN_CHARS = 12
+/** 首块上限：直接决定第一声的延迟。 */
+const SPEECH_FIRST_CHUNK_MAX_CHARS = 14
+/** 首块之后的上限：再大就会让下一块的起播等待超过播放时长。 */
+const SPEECH_LATER_CHUNK_MAX_CHARS = 64
 const SENTENCE_BREAK = /[。！？；!?;…\n]+/
 
-/** 把回复切成便于「边合成边播」的句子块；短句合并，长句按标点截断。 */
+/** 把回复切成便于「边合成边播」的句子块；首块短、后续块大。 */
 export function splitSpeechChunks(text: string): string[] {
   const plain = String(text || '').trim()
   if (!plain) return []
-  const sentences: string[] = []
-  let buffer = ''
-  for (const piece of plain.split(SENTENCE_BREAK)) {
-    const body = piece.trim()
-    if (!body) continue
-    buffer = buffer ? `${buffer}，${body}` : body
-    if (buffer.length >= SPEECH_CHUNK_MIN_CHARS) {
-      sentences.push(buffer)
-      buffer = ''
-    }
+  const pieces: string[] = []
+  for (const raw of plain.split(SENTENCE_BREAK)) {
+    const body = raw.trim()
+    if (body) pieces.push(body)
   }
-  if (buffer) sentences.push(buffer)
   const chunks: string[] = []
-  for (const sentence of sentences) {
-    for (let i = 0; i < sentence.length; i += SPEECH_CHUNK_MAX_CHARS) {
-      chunks.push(sentence.slice(i, i + SPEECH_CHUNK_MAX_CHARS))
+  let current = ''
+  const limit = () => (chunks.length === 0 ? SPEECH_FIRST_CHUNK_MAX_CHARS : SPEECH_LATER_CHUNK_MAX_CHARS)
+  for (const piece of pieces) {
+    let rest = piece
+    while (rest.length) {
+      const room = limit() - current.length
+      if (room <= 0) {
+        chunks.push(current)
+        current = ''
+        continue
+      }
+      if (rest.length <= room) {
+        current += rest
+        rest = ''
+        if (current.length >= limit()) {
+          chunks.push(current)
+          current = ''
+        }
+        break
+      }
+      current += rest.slice(0, room)
+      rest = rest.slice(room)
+      chunks.push(current)
+      current = ''
     }
   }
+  if (current) chunks.push(current)
   return chunks
 }
 
@@ -527,21 +548,31 @@ async function playOnlineTts(text: string, controller: AbortController, onStart?
   try {
     const chunks = splitSpeechChunks(text)
     if (!chunks.length) return
-    // 先合成第一块并立即播放；播放期间并行合成下一块，首字延迟只取决于最短一块。
-    const synth = (chunk: string): Promise<string> => {
-      // Include CSRF and response-body reads in the synthesis budget (MiMo 8s + Edge 15s).
+    const urls = chunks.map(onlineTtsAudioUrl)
+    // 上游每块约 2s，预取 2 块：播放第 N 块时，后面两块已经在合成或已进缓存。
+    const PREFETCH_AHEAD = 2
+    const synth = (url: string): Promise<void> => {
+      // 合成超时与请求走同一信号：暂停/挂断都会立刻取消。
       const timer = setTimeout(() => onlineController.abort(new DOMException('TTS synthesis timeout', 'TimeoutError')), 30_000)
-      const pending = fetchOnlineTtsDataUri(chunk, signal).finally(() => clearTimeout(timer))
+      const pending = warmOnlineTts(url, signal).finally(() => clearTimeout(timer))
       // 预取失败不能变成未处理的 rejection：真正 await 时仍会抛出。
       pending.catch(() => {})
       return pending
     }
-    let next = synth(chunks[0])
-    for (let i = 0; i < chunks.length; i += 1) {
-      const uri = await next
+    const inflight: Array<Promise<void>> = []
+    let nextIndex = 0
+    const pump = () => {
+      while (inflight.length < PREFETCH_AHEAD && nextIndex < urls.length) {
+        inflight.push(synth(urls[nextIndex]))
+        nextIndex += 1
+      }
+    }
+    pump()
+    for (let i = 0; i < urls.length; i += 1) {
+      await inflight.shift()
       signal.throwIfAborted()
-      next = i + 1 < chunks.length ? synth(chunks[i + 1]) : Promise.resolve('')
-      await playAudioUri(uri, signal, i === 0 ? onStart : undefined)
+      pump()
+      await playAudioUri(urls[i], signal, i === 0 ? onStart : undefined)
     }
   } finally {
     controller.signal.removeEventListener('abort', onStop)

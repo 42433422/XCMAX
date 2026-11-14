@@ -88,7 +88,7 @@ describe('dutyEmployeesFromEmployeeSsot', () => {
     expect(rows.every((row) => !/[a-z_]{4,} · /.test(row.subtitle))).toBe(true)
   })
 
-  it('后端回显英文 ID 时，员工名回退为编制表中文名；真实名保留', () => {
+  it('后端只回显英文 ID 时直接使用该 ID（不再内置宿主编制中文名）；真实名保留', () => {
     const payload: EmployeeSsotPayload = {
       contacts: [
         {
@@ -112,7 +112,7 @@ describe('dutyEmployeesFromEmployeeSsot', () => {
 
     const rows = dutyEmployeesFromEmployeeSsot(payload)
     const byId = new Map(rows.map((row) => [row.id, row]))
-    expect(byId.get('intake-dispatcher')?.display_name).toBe('需求接入员')
+    expect(byId.get('intake-dispatcher')?.display_name).toBe('intake-dispatcher')
     expect(byId.get('intent-analyst')?.display_name).toBe('需求分析员工')
   })
 })

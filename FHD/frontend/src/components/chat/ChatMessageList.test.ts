@@ -10,7 +10,7 @@ import { proactiveReplyMessageId } from '@/composables/useProactiveReplySuggesti
 const defaultProps = {
   isLoading: false, isStreamingReply: false, loadingProgressText: '',
   messageHeights: new Map<number, number>(), latestAiMessageIndex: 0, playingMsgIdx: -1,
-  isMessageCollapsed: () => false, getCollapsedPreview: () => '', canSpeakMessage: () => false,
+  isMessageCollapsed: () => false, canSpeakMessage: () => false,
 }
 function mountList(showDiagnosticMetadata = false) {
   return mount(ChatMessageList, {
@@ -40,7 +40,6 @@ function mountList(showDiagnosticMetadata = false) {
       latestAiMessageIndex: 0,
       playingMsgIdx: -1,
       isMessageCollapsed: () => false,
-      getCollapsedPreview: () => '',
       canSpeakMessage: () => false,
       showDiagnosticMetadata,
     },
@@ -168,7 +167,7 @@ describe('ChatMessageList', () => {
 
     expect(wrapper.get('[data-testid="agent-run-trace"]').text()).toContain('业务数据写入')
     expect(wrapper.get('[data-testid="agent-run-trace"] .fa-database').exists()).toBe(true)
-    expect(wrapper.get('.message-orchestration-intro').text()).toContain('展开卡片')
+    expect(wrapper.find('.message-orchestration-intro').exists()).toBe(false)
     expect(wrapper.find('.message-html').exists()).toBe(false)
   })
 
@@ -224,7 +223,7 @@ describe('ChatMessageList', () => {
     const wrapper = mount(ChatMessageList, {
       props: {
         messages: [
-          { role: 'ai' as const, content: '较早的长回复', time: '11:38' },
+          { role: 'ai' as const, content: '较早的长回复'.repeat(30), time: '11:38' },
           { role: 'ai' as const, content: '最新回复', time: '11:39' },
         ],
         isLoading: false,
@@ -234,14 +233,16 @@ describe('ChatMessageList', () => {
         latestAiMessageIndex: 1,
         playingMsgIdx: -1,
         isMessageCollapsed: (_message, index) => index === 0,
-        getCollapsedPreview: () => '较早的长回复…',
         canSpeakMessage: () => false,
       },
     })
 
-    expect(wrapper.get('.msg-fold__text').text()).toContain('较早的长回复')
+    // 溢出检测在挂载后的下一个 tick 完成
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('.msg-fold__inner').text()).toContain('较早的长回复')
     expect(wrapper.findAll('.message')[0].attributes('style')).toContain('min-height: auto')
-    await wrapper.get('.msg-fold__action').trigger('click')
+    await wrapper.get('.msg-fold__trigger').trigger('click')
     expect(wrapper.emitted('expand-message')).toEqual([[0]])
   })
 })
@@ -258,12 +259,13 @@ it('renders execution progress, safe user text, diagnostic errors and forwards m
   const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [message,
     { role: 'user', content: '<b>谢谢</b><script>bad()</script>', time: '12:01' }], latestAiMessageIndex: 2,
     chatMessagesRef: host, showDiagnosticMetadata: true, canSpeakMessage: () => true, playingMsgIdx: 0,
+    canCollapseMessage: () => true,
     messageHeights: new Map([[0, 200]]), isLoading: true, loadingProgressText: '正在导出' } })
   await wrapper.vm.$nextTick()
   expect(host.value).toBe(wrapper.get('#chatMessages').element)
   expect(wrapper.findAll('.execution-timeline__marker').map(x => x.text())).toEqual(['✓', '×', '■', 'Ⅱ', '↻', '●'])
   expect(wrapper.get('.execution-timeline__current').text()).toBe('步骤5')
-  expect(wrapper.get('.execution-timeline').attributes('open')).toBeUndefined()
+  expect(wrapper.get('.message-receipt').attributes('open')).toBeUndefined()
   expect(wrapper.get('.todo-panel').text()).toContain('检查库存')
   expect(wrapper.get('.trace-node-meta').text()).toContain('重试 2 次 · 150ms')
   expect(wrapper.get('.trace-node-error').text()).toContain('暂时不可用')
@@ -335,22 +337,23 @@ it('copies the condensed visible summary when a plan is collapsed', async () => 
     role: 'ai', time: '', content: '动态工作流计划：内部明细', agentRunTrace: { run_id: '1', intent: '', status: 'running', phases: [], terminal: false },
   }] } })
   await wrapper.get('.message-copy-btn').trigger('click'); await Promise.resolve()
-  expect(writeText).toHaveBeenCalledWith('执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。')
+  expect(writeText).not.toHaveBeenCalled()
+  expect(wrapper.get('.message-copy-btn').attributes('aria-label')).toBe('没有可复制的正文')
   wrapper.unmount()
 })
 
 
-it('offers failure recovery with visible original text without sending a request or showing continuation suggestions', async () => {
+it('offers failure recovery in the message action row without repeating the original input', async () => {
   const messages = [
     { role: 'user' as const, content: '仅回答测试', time: '12:00', turnId: 'turn-a' },
     { role: 'ai' as const, content: '处理失败：模型未返回正文', time: '12:00', turnId: 'turn-a', workflowAction: 'failed' },
   ]
   const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages } })
-  expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).toContain('仅回答测试')
-  expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).toContain('写入状态未确认')
+  expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).toContain('结果未知')
+  expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).not.toContain('仅回答测试')
   expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).not.toContain('已执行的业务操作不会撤销')
   expect(wrapper.find('[data-testid="proactive-suggestions"]').exists()).toBe(false)
-  await wrapper.findAll('button').find(button => button.text().includes('不重复写入'))!.trigger('click')
+  await wrapper.get('[data-testid="chat-retry-model"]').trigger('click')
   expect(wrapper.emitted('retry-model')).toEqual([[{ text: '仅回答测试', turnId: 'turn-a' }]])
   await wrapper.get('[data-testid="chat-reconcile-turn"]').trigger('click')
   expect(wrapper.emitted('reconcile-turn')).toEqual([[1]])
@@ -392,11 +395,11 @@ it('retries only the exact user turn and does not substitute a later unbound mes
     { role: 'user', content: '另一个未绑定输入', time: '12:01' },
     { role: 'ai', content: '处理失败：请重试', time: '12:02', turnId: 'turn-a' },
   ] } })
-  await wrapper.findAll('button').find(button => button.text().includes('不重复写入'))!.trigger('click')
+  await wrapper.get('[data-testid="chat-retry-model"]').trigger('click')
   expect(wrapper.emitted('retry-model')).toEqual([[{ text: '本轮原文', turnId: 'turn-a' }]])
   await wrapper.setProps({ messages: [
     { role: 'user', content: '未绑定输入', time: '12:00' },
     { role: 'ai', content: '处理失败：请重试', time: '12:02', turnId: 'turn-b' },
   ] })
-  expect(wrapper.findAll('button').some(button => button.text().includes('不重复写入'))).toBe(false)
+  expect(wrapper.find('[data-testid="chat-retry-model"]').exists()).toBe(false)
 })

@@ -81,6 +81,20 @@ export default defineConfig(({ mode }) => {
           find: '@admin-console-inject/views/DutyRosterGraphView.vue',
           replacement: path.resolve(__dirname, './src/views/adminDutyRosterGraphView.stub.vue'),
         },
+        // 依赖宿主编制的管理端组件：企业/通用构建统一替换为空组件，防止平台内部
+        // 员工名单进入企业产物（真实组件只在 admin-console 构建中注入）。
+        {
+          find: '@admin-console-inject/workflow/DutyRosterWorkflowLoopView.vue',
+          replacement: path.resolve(__dirname, './src/components/adminOnlyStub.vue'),
+        },
+        {
+          find: '@admin-console-inject/workflow/SelfEvolutionLoopRuntimePanel.vue',
+          replacement: path.resolve(__dirname, './src/components/adminOnlyStub.vue'),
+        },
+        {
+          find: '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue',
+          replacement: path.resolve(__dirname, './src/components/adminOnlyStub.vue'),
+        },
         { find: '@', replacement: path.resolve(__dirname, './src') },
         // 客服桥接 Mod 自有组件/composable 别名（其物理视图不得用 ../ 相对导入）
         {

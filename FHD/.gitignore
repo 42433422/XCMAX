@@ -11,6 +11,8 @@ build/
 !desktop/build/**
 develop-eggs/
 dist/
+# 语义意图 ONNX 模型由 scripts/dev/fetch_intent_model.py 生成，不入库（约 91MB）
+models/
 downloads/
 eggs/
 .eggs/

@@ -2,6 +2,8 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 enableAutoUnmount(afterEach)
 const { archive, legacy } = vi.hoisted(() => ({
   archive: {
@@ -215,5 +217,19 @@ describe('data docking user-only intake', () => {
     expect(archive.previewReviewedIntake).not.toHaveBeenCalled()
     expect(archive.saveReviewedExcel).not.toHaveBeenCalled()
     wrapper.unmount()
+  })
+})
+
+describe('数据对接中心样式契约', () => {
+  it('模板类名与样式文件前缀一致，避免整页样式失效', () => {
+    const viewDir = resolve(process.cwd(), 'src/views')
+    const source = readFileSync(resolve(viewDir, 'EltCenterView.vue'), 'utf8')
+    const css = readFileSync(resolve(viewDir, 'EltCenterView.css'), 'utf8')
+    for (const cls of ['elt-center', 'elt-chat-header', 'elt-intake-shell', 'elt-workflow-steps']) {
+      expect(source).toContain(`class="${cls}`)
+      expect(css).toContain(`.${cls}`)
+    }
+    // 历史问题：模板误写成 etl- 前缀，CSS 全是 elt-，整页样式不生效。
+    expect(source).not.toContain('class="etl-')
   })
 })
