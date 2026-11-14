@@ -93,6 +93,15 @@ async def platform_shell_employee_tools():
     return {"success": True, "data": build_employee_tools_status()}
 
 
+@router.get("/employee-directory")
+async def platform_shell_employee_directory():
+    """统一员工目录：智能对话 / 员工工作台 / 信息形象 共用同一份可用员工名单。"""
+    from app.mod_sdk.employee_directory import build_employee_directory
+
+    employees = build_employee_directory()
+    return {"success": True, "data": {"employees": employees, "count": len(employees)}}
+
+
 @router.get("/employee-ssot")
 async def platform_shell_employee_ssot():
     """Employee & department SSOT derived views.

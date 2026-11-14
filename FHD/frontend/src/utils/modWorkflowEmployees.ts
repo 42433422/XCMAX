@@ -53,6 +53,8 @@ export type ModWithWorkflowEmployees = {
   type?: string
   /** 后端标注：员工包由本机商店安装（属于本企业），平台随包分发的员工包为 false/缺省 */
   tenant_owned?: boolean
+  /** 由统一员工目录合成的工位源：条目已是可用员工，不再套用办公包排除规则 */
+  directory_sourced?: boolean
   workflow_employees?: WorkflowEmployeeManifestEntry[]
 }
 

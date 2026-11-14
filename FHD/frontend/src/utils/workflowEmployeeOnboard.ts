@@ -6,7 +6,7 @@ import { defaultHostModIdForMarketEmployee } from '@/constants/enterpriseModStac
 import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
-import { filterModsForEnterpriseWorkflowRegistry, tenantOwnedWorkflowModIds } from '@/utils/workflowEmployeeScope'
+import { syncEnterpriseWorkflowRegistry } from '@/utils/syncEnterpriseWorkflowRegistry'
 import {
   filterWorkflowRegistrySourceMods,
   isNonWorkflowDeskEmployeeId,
@@ -93,19 +93,15 @@ export async function autoOnboardInstalledMarketItem(item: MarketInstallCatalogI
   const modsStore = useModsStore()
   await modsStore.refresh()
   const wfStore = useWorkflowAiEmployeesStore()
-  stack = await resolveEnterpriseModStack()
-  const workflowMods = modsStore.modsForWorkflowUi
-  await wfStore.refreshRegistry(
-    filterModsForEnterpriseWorkflowRegistry(workflowMods, stack, tenantOwnedWorkflowModIds(workflowMods)),
-  )
+  stack = await syncEnterpriseWorkflowRegistry({ forceDirectory: true })
 
   const mod = resolveInstalledMod(modsStore.modsForWorkflowUi, item)
   const idSet = new Set<string>([...collectDeskEmployeeIdsFromCatalogItem(item), ...collectEmployeeIdsFromMod(mod)])
-  // 市场目录行不一定带 employee/workflow_employees 字段；以刷新后的注册表按载体 Mod 反查兜底。
+  // 市场目录行不一定带 employee/workflow_employees 字段；以统一员工目录反查兜底。
   const pkgId = String(item.pkg_id || item.id || '').trim()
   if (!idSet.size && pkgId) {
     for (const entry of wfStore.registryEntries) {
-      if (String(entry.carrierModId || '') === pkgId) idSet.add(entry.id)
+      if (String(entry.carrierModId || '') === pkgId || entry.id === pkgId) idSet.add(entry.id)
     }
   }
   const ids = [...idSet]
@@ -128,11 +124,7 @@ export async function autoOnboardWorkflowEmployeesFromMods(mods: ModWithWorkflow
   const modsStore = useModsStore()
   await modsStore.refresh()
   const wfStore = useWorkflowAiEmployeesStore()
-  const stack = await resolveEnterpriseModStack()
-  const workflowMods = modsStore.modsForWorkflowUi
-  await wfStore.refreshRegistry(
-    filterModsForEnterpriseWorkflowRegistry(workflowMods, stack, tenantOwnedWorkflowModIds(workflowMods)),
-  )
+  await syncEnterpriseWorkflowRegistry({ forceDirectory: true })
   const ids: string[] = []
   for (const m of filterWorkflowRegistrySourceMods(mods)) {
     for (const id of collectEmployeeIdsFromMod(m)) ids.push(id)

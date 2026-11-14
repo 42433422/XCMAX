@@ -372,16 +372,17 @@ def _registered_router_employee(
     from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
     if action in ("list", "query"):
-        status = build_employee_tools_status()
+        from app.mod_sdk.employee_directory import build_employee_directory
+
+        employees = build_employee_directory()
         return {
             "success": True,
-            "message": f"已发现 {status.get('registered_tool_count', 0)} 个可调用员工",
+            "message": f"已发现 {len(employees)} 个可调用员工",
             "data": [
-                {**item, "employee_id": item.get("pack_id") or item.get("employee_id")}
-                for item in status.get("employee_pack_tools", [])
-                if isinstance(item, dict)
+                {**item, "employee_id": item["pack_id"]}
+                for item in employees
             ],
-            "status": status,
+            "status": {"registered_tool_count": len(employees)},
         }
     if action not in {"execute", "context"}:
         return {"success": False, "message": f"未注册的 employee 动作: {action}"}

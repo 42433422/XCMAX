@@ -65,18 +65,3 @@ export function filterModsForEnterpriseWorkflowRegistry(
     return modBelongsToEnterpriseStack(id, stack)
   })
 }
-
-/**
- * 本机商店安装的员工包 id（后端 `/api/mods/` 的 `tenant_owned` 标记）。
- * 随产品分发的平台员工包不算企业员工，企业端员工注册表只认「行业栈 + 本企业安装」。
- */
-export function tenantOwnedWorkflowModIds(
-  mods: ModWithWorkflowEmployees[] | undefined,
-): Set<string> {
-  const ids = new Set<string>()
-  for (const mod of mods || []) {
-    const id = String(mod.id || '').trim()
-    if (id && mod.tenant_owned) ids.add(id)
-  }
-  return ids
-}
