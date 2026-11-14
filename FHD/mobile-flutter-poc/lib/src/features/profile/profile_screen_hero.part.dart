@@ -33,9 +33,9 @@ class _ProfileHeroCard extends StatelessWidget {
     final accent = _profileAccentColor(context, page?.accent);
     final solidHero = page?.heroVariant.toLowerCase() == 'solid';
     final headline = page?.headline.trim() ?? '';
-    final subtitle = (page?.subtitle ?? '').ifEmpty('个人资料与工作身份');
-    final readyStatus = (page?.statusReady ?? '').ifEmpty('资料、头像和工作台状态已就绪');
-    final syncingStatus = (page?.statusSyncing ?? '').ifEmpty('正在同步你的资料与工作台状态');
+    final subtitle = page?.subtitle.trim() ?? '';
+    final readyStatus = page?.statusReady.trim() ?? '';
+    final syncingStatus = page?.statusSyncing.trim() ?? '';
     final primaryChip = (page?.primaryChip ?? '').ifEmpty(accountKindLabel);
     final secondaryChip = (page?.secondaryChip ?? '').ifEmpty(serverModeLabel);
     final titleColor =
@@ -131,19 +131,21 @@ class _ProfileHeroCard extends StatelessWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: bodyColor,
-                            fontSize: 13,
-                            height: 1.31,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0,
+                        if (subtitle.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: bodyColor,
+                              fontSize: 13,
+                              height: 1.31,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0,
+                            ),
                           ),
-                        ),
+                        ],
                         const SizedBox(height: 12),
                         Row(
                           children: [

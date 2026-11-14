@@ -293,7 +293,7 @@ class TestInstallAuxEmployeePackFromRepoSeed:
             assert "未找到" in msg
 
     def test_install_success(self, tmp_path: Path) -> None:
-        mod_dir = tmp_path / "mods" / "lan-gate-ai-employee"
+        mod_dir = tmp_path / "mods" / "employees" / "lan-gate-ai-employee"
         mod_dir.mkdir(parents=True)
         (mod_dir / "manifest.json").write_text(json.dumps({"id": "lan-gate-ai-employee"}))
         (mod_dir / "code.py").write_text("x = 1")
@@ -318,7 +318,7 @@ class TestInstallAuxEmployeePackFromRepoSeed:
             mock_mm.load_all_mods.assert_called_once()
 
     def test_install_overwrites_existing_dest(self, tmp_path: Path) -> None:
-        mod_dir = tmp_path / "mods" / "lan-gate-ai-employee"
+        mod_dir = tmp_path / "mods" / "employees" / "lan-gate-ai-employee"
         mod_dir.mkdir(parents=True)
         (mod_dir / "manifest.json").write_text(json.dumps({"id": "lan-gate-ai-employee"}))
 
@@ -343,7 +343,7 @@ class TestInstallAuxEmployeePackFromRepoSeed:
             assert not (dest_dir / "old.txt").exists()
 
     def test_install_handles_os_error(self, tmp_path: Path) -> None:
-        mod_dir = tmp_path / "mods" / "lan-gate-ai-employee"
+        mod_dir = tmp_path / "mods" / "employees" / "lan-gate-ai-employee"
         mod_dir.mkdir(parents=True)
         (mod_dir / "manifest.json").write_text(json.dumps({"id": "lan-gate-ai-employee"}))
 

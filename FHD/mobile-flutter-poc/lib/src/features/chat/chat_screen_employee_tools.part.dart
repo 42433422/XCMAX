@@ -48,7 +48,7 @@ AiEmployeeProfile? _employeePlaceholderFromRef(_EmployeeConversationRef? ref) {
     employeeId: ref.employeeId,
     name: ref.employeeId,
     title: ref.employeeId,
-    summary: '稍后刷新或从企业端同步数据',
+    summary: '',
     apiBasePath: '',
     phoneChannel: '',
     workflowPlaceholder: false,
@@ -80,13 +80,11 @@ class _ChatToolAction {
   const _ChatToolAction({
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.onTap,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
   final VoidCallback onTap;
 }
 

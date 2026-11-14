@@ -331,7 +331,7 @@ def _approval_expired(repository: object, run_id: str) -> bool:
 def approval_execution_denial(
     tool_id: str, action: str, context: dict[str, Any] | None
 ) -> dict[str, Any] | None:
-    """Block a business write while this task is waiting, rejected, or expired.
+    """Block a business write while this task is waiting, rejected, cancelled, or expired.
 
     Caller-supplied approval_id and approved flags are ignored. A task with no
     lifecycle row is an ordinary ERP call and is left alone.
@@ -375,7 +375,7 @@ def approval_execution_denial(
     expired = _approval_expired(repository, approval_run_id) or (
         str(getattr(row, "last_error_code", "") or "") == "approval_timeout"
     )
-    if state not in {"waiting_approval", "rejected"} and not expired:
+    if state not in {"waiting_approval", "rejected", "cancelled"} and not expired:
         return None
     if expired:
         reason = "approval_expired"
@@ -383,6 +383,9 @@ def approval_execution_denial(
     elif state == "rejected":
         reason = "approval_rejected"
         message = "任务已驳回，已拒绝执行"
+    elif state == "cancelled":
+        reason = "approval_cancelled"
+        message = "任务已取消，已拒绝执行"
     else:
         reason = "approval_required"
         message = "任务仍在等待审批，已拒绝执行"
@@ -495,6 +498,12 @@ def _try_claim(key: str, record: dict[str, Any]) -> dict[str, Any] | None:
         conn.close()
 
 
+def _tool_output_json(output: dict[str, Any]) -> str:
+    from app.application.agent_orchestrator.tool_process import dump_tool_output
+
+    return dump_tool_output(output)
+
+
 def _finish_claim(key: str, owner: str, output: dict[str, Any] | None) -> None:
     """Only the worker that claimed a key may settle it or release a known failure."""
     conn = _idempotency_conn()
@@ -511,7 +520,7 @@ def _finish_claim(key: str, owner: str, output: dict[str, Any] | None) -> None:
                 changed = conn.execute(
                     "update tool_idempotency set inflight = 0, output_json = ? "
                     "where scope_key = ? and owner = ? and inflight = 1",
-                    (json.dumps(output, ensure_ascii=False), key, owner),
+                    (_tool_output_json(output), key, owner),
                 ).rowcount
             if changed != 1:
                 raise RuntimeError("工具幂等执行权已变化，必须核验原调用结果")
@@ -674,7 +683,7 @@ def _complete_dead_claim(key: str, owner: str, output: dict[str, Any]) -> bool:
             (
                 "update tool_idempotency set inflight = 0, output_json = ? "
                 "where scope_key = ? and owner = ? and inflight = 1",
-                (json.dumps(output, ensure_ascii=False), key, owner),
+                (_tool_output_json(output), key, owner),
             )
         ]
     )

@@ -37,7 +37,7 @@ def _attendance_subsystems() -> dict:
     }
 
 
-COATING = _subsystems(FHD / "mods" / "coating-industry" / "manifest.json")
+COATING = _subsystems(FHD / "mods" / "industry" / "coating-industry" / "manifest.json")
 ATTENDANCE = _attendance_subsystems()
 
 

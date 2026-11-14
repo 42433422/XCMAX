@@ -13,7 +13,7 @@ def test_erp_duplicate_capabilities_stay_out_of_primary_sidebar():
         "mod-erp-wechat-contacts",
     }
     # debt19: NO_XCAGI_EXPORT — SSOT is FHD/mods only (no XCAGI dual copy)
-    mod_dir = REPO / "mods" / "xcagi-erp-domain-bridge"
+    mod_dir = REPO / "mods" / "bridge" / "xcagi-erp-domain-bridge"
     data = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
     menu_ids = {str(row.get("id") or "") for row in data.get("frontend", {}).get("menu", [])}
     assert menu_ids.isdisjoint(retired)
@@ -24,7 +24,9 @@ def test_erp_pages_registry_physical():
 
     reg = list_erp_pages_registry()
     manifest = json.loads(
-        (REPO / "mods" / "xcagi-erp-domain-bridge" / "manifest.json").read_text(encoding="utf-8")
+        (REPO / "mods" / "bridge" / "xcagi-erp-domain-bridge" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
     )
     if manifest.get("config", {}).get("views_physical"):
         assert reg.get("component_source") == "mod.frontend.views (O+ physical)"

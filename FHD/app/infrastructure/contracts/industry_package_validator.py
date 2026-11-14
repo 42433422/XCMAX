@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 _FHD_ROOT = Path(__file__).resolve().parents[3]
-_SCHEMA_PATH = _FHD_ROOT / "contracts" / "industry_package.schema.json"
+_SCHEMA_PATH = _FHD_ROOT / "assets" / "contracts" / "industry_package.schema.json"
 _BASELINE_PATH = _FHD_ROOT / "config" / "industry_baseline.json"
 # 编辑源与导出副本双路径：FHD/mods/ 为 SSOT 编辑源，FHD/XCAGI/mods/ 为运行时导出副本。
 # 与 app/infrastructure/mods/mod_manager.py "开发树常见双份 mods" 双份查找一致。
@@ -84,12 +84,24 @@ def iter_industry_package_manifests() -> list[Path]:
         for child in sorted(mods_root.iterdir()):
             if not child.is_dir() or child.name in seen:
                 continue
-            manifest = child / "manifest.json"
-            if not manifest.is_file():
-                continue
-            if child.name.endswith("-industry"):
-                out.append(manifest)
-                seen.add(child.name)
+            if (child / "manifest.json").is_file():
+                candidates = [child]
+            else:
+                # 分层容器（industry/ bridge/ employees/ tools/）
+                candidates = [
+                    sub
+                    for sub in sorted(child.iterdir())
+                    if sub.is_dir() and not sub.name.startswith(("_", "."))
+                ]
+            for mod_dir in candidates:
+                if mod_dir.name in seen:
+                    continue
+                manifest = mod_dir / "manifest.json"
+                if not manifest.is_file():
+                    continue
+                if mod_dir.name.endswith("-industry"):
+                    out.append(manifest)
+                    seen.add(mod_dir.name)
     return out
 
 

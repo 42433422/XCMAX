@@ -21,7 +21,7 @@
 - `FHD/mobile-flutter-poc/FLUTTER_UNIFICATION.md`
 - `FHD/config/duty_roster.json`
 - `scripts/dev/sync_duty_roster.py`
-- `FHD/contracts/openapi.json`
+- `FHD/assets/contracts/openapi.json`
 - `成都修茈科技有限公司/MODstore_deploy/docs/ARCHITECTURE.md`
 - `成都修茈科技有限公司/yuangon/**`
 

@@ -5,6 +5,7 @@ import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
+import '../../policy/mobile_error_policy.dart';
 
 class EmployeeQuestionsScreen extends StatefulWidget {
   const EmployeeQuestionsScreen({super.key, this.repository, this.employeeId});
@@ -64,7 +65,7 @@ class _EmployeeQuestionsScreenState extends State<EmployeeQuestionsScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
+      setState(() => _error = mobileErrorText(error));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -100,7 +101,7 @@ class _EmployeeQuestionsScreenState extends State<EmployeeQuestionsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(mobileErrorText(error))));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -172,14 +173,8 @@ class _EmployeeQuestionsScreenState extends State<EmployeeQuestionsScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                '暂无员工主动提问',
+                '暂无提问',
                 style: TextStyle(color: colors.textTertiary, fontSize: 16),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '员工遇到需要老板决策的事会主动在这里问你',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: colors.textTertiary, fontSize: 12),
               ),
             ],
           ),
