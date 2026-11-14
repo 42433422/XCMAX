@@ -262,6 +262,14 @@ const keepRootInViewport = () => {
   rootTop.value = normalized.top
 }
 
+const onWindowResize = () => {
+  if (isOpen.value) {
+    void ensurePanelInViewport()
+    return
+  }
+  keepRootInViewport()
+}
+
 /** 展开面板/通话时保证整块面板（含底部静音、免提、挂断）落在视口内。 */
 const ensurePanelInViewport = async () => {
   await nextTick()
@@ -394,7 +402,7 @@ watch(callOpen, (active) => {
 
 onMounted(() => {
   void placeRootToBottomRight()
-  window.addEventListener('resize', keepRootInViewport)
+  window.addEventListener('resize', onWindowResize)
   window.addEventListener('xcagi:close-floating-chat', closeFloatingChatPanel)
   window.addEventListener('xcagi:close-assistant-float', closeFloatingChatPanel)
   window.addEventListener('xcagi:suppress-floating-chat', suppressFloatingChatPanel)
@@ -405,7 +413,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   hangUpVoiceCall()
   voiceCallActive.value = false
-  window.removeEventListener('resize', keepRootInViewport)
+  window.removeEventListener('resize', onWindowResize)
   window.removeEventListener('xcagi:close-floating-chat', closeFloatingChatPanel)
   window.removeEventListener('xcagi:close-assistant-float', closeFloatingChatPanel)
   window.removeEventListener('xcagi:suppress-floating-chat', suppressFloatingChatPanel)
