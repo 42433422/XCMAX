@@ -1,5 +1,5 @@
 {
-  "lines": 2397920,
+  "lines": 2397931,
   "updated": "2026-11-14",
-  "note": "安全修复 +1 行：CHANGELOG 增加 dnspython CVE 修复的用户可见说明；uv.lock 仅替换锁定版本，净变更 0 行。经发布安全门禁要求批准"
+  "note": "修复设置页未处理异常：useSettingsBasics 新增 9 行安全读取助手名、CHANGELOG 1 行、格式化 1 行，共 +11 行；属 CI 阻断缺陷的最小修复，经发布验收批准"
 }

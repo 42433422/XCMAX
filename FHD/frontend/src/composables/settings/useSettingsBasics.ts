@@ -22,6 +22,16 @@ import {
 const ASSISTANT_NAME_KEY = 'assistantName'
 const DEFAULT_ASSISTANT_NAME = '修茈'
 
+/** 无 localStorage 的运行环境（如测试结束后的定时回调）返回空串，不抛错。 */
+function readStoredAssistantName(): string {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return ''
+    return window.localStorage.getItem(ASSISTANT_NAME_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
 export function useSettingsBasics() {
   const { t, te, locale } = useI18n()
 
@@ -218,7 +228,7 @@ export function useSettingsBasics() {
       if (typeof preferredAssistantName === 'string') {
         assistantName.value = preferredAssistantName
       } else {
-        assistantName.value = window.localStorage.getItem(ASSISTANT_NAME_KEY) || DEFAULT_ASSISTANT_NAME
+        assistantName.value = readStoredAssistantName() || DEFAULT_ASSISTANT_NAME
       }
       window.localStorage.setItem(ASSISTANT_NAME_KEY, normalizedAssistantName.value)
 
@@ -239,7 +249,7 @@ export function useSettingsBasics() {
       }
     } catch (e) {
       console.error('加载设置失败:', e)
-      assistantName.value = window.localStorage.getItem(ASSISTANT_NAME_KEY) || DEFAULT_ASSISTANT_NAME
+      assistantName.value = readStoredAssistantName() || DEFAULT_ASSISTANT_NAME
     }
   }
 
