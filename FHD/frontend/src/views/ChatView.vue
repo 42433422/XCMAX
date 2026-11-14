@@ -401,9 +401,9 @@ const {
   stageExcelAnalysisContext,
 } = chatViewApi
 
-/** 智能对话页只负责发起通话，通话界面与状态由小C悬浮窗承载。 */
+/** 智能对话页只在悬浮球内通话，不展开悬浮窗面板。 */
 const startVoiceCallFromHost = () => {
-  requestVoiceCallStart()
+  requestVoiceCallStart({ expandPanel: false })
 }
 
 const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList, visibleActiveTaskId, workspaceHeader } =

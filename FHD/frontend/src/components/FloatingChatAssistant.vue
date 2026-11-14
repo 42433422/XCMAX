@@ -174,6 +174,8 @@ const rootTop = ref(0)
 const isDragging = ref(false)
 const hasDraggedSincePointerDown = ref(false)
 const suppressNextToggleClick = ref(false)
+/** 发起通话时是否展开面板：智能对话页只在悬浮球内通话。 */
+const expandPanelOnCall = ref(true)
 const dragPointerId = ref<number | null>(null)
 const dragStartClientX = ref(0)
 const dragStartClientY = ref(0)
@@ -222,6 +224,7 @@ const suppressFloatingChatPanel = () => {
 
 /** 悬浮窗内入口只发起点话，实际通话由 'xcagi:start-voice-call' 统一开启。 */
 const startCallFromEntry = () => {
+  expandPanelOnCall.value = true
   isOpen.value = true
   requestVoiceCallStart()
 }
@@ -231,8 +234,10 @@ const closePanel = () => {
   isOpen.value = false
 }
 
-const onStartVoiceCallRequest = () => {
-  isOpen.value = true
+const onStartVoiceCallRequest = (event?: Event) => {
+  const detail = (event as CustomEvent<{ expandPanel?: boolean }> | undefined)?.detail
+  expandPanelOnCall.value = detail?.expandPanel !== false
+  isOpen.value = expandPanelOnCall.value
   startVoiceCall()
 }
 
@@ -404,7 +409,7 @@ watch(isOpen, (openNow) => {
 
 watch(callOpen, (active) => {
   voiceCallActive.value = active
-  if (active) {
+  if (active && expandPanelOnCall.value) {
     isOpen.value = true
     void ensurePanelInViewport()
   }

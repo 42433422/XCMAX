@@ -5,6 +5,8 @@ import { ref } from 'vue'
 export const voiceCallActive = ref(false)
 
 /** 其它页面（如智能对话输入框）只发起点话，界面与通话状态都由悬浮窗承载。 */
-export function requestVoiceCallStart(): void {
-  window.dispatchEvent(new CustomEvent('xcagi:start-voice-call'))
+export function requestVoiceCallStart(options: { expandPanel?: boolean } = {}): void {
+  window.dispatchEvent(
+    new CustomEvent('xcagi:start-voice-call', { detail: { expandPanel: options.expandPanel !== false } }),
+  )
 }
