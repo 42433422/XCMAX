@@ -18,6 +18,7 @@ from app.application.group_chat.constants import (
 )
 from app.application.group_chat.employee_registry import _member_public_shape, _utc_now
 from app.application.group_chat.message_formatting import ChatFormatting
+from app.application.group_chat.storage import group_row_visible
 
 
 class ChatProjection:
@@ -184,7 +185,7 @@ class ChatProjection:
     def latest_previews(rows: list[dict[str, Any]], user_id: int) -> dict[str, dict[str, Any]]:
         previews: dict[str, dict[str, Any]] = {}
         for r in rows:
-            if int(r.get("user_id") or 0) != int(user_id):
+            if int(r.get("user_id") or 0) != int(user_id) or not group_row_visible(r):
                 continue
             gid = str(r.get("group_id"))
             sender = str(r.get("sender_name") or "")

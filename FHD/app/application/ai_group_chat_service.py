@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import functools
+import inspect
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -115,10 +118,29 @@ from app.application.group_chat.protocols import (
     SuperEmployee,
 )
 from app.application.group_chat.replies import ChatReplies
-from app.application.group_chat.storage import GroupChatRepository
+from app.application.group_chat.storage import GroupChatRepository, resolve_group_chat_parent
 from app.application.group_chat.work_dispatch import WorkDispatch
 from app.application.group_chat.work_reports import WorkReports
-from app.utils.path_io.path_utils import get_app_data_dir
+from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
+
+
+def _with_bound_tenant(func: Callable):
+    """Keep construction-time tenant active for the duration of a service call."""
+    if inspect.iscoroutinefunction(func):
+
+        @functools.wraps(func)
+        async def async_wrapped(self, *args, **kwargs):
+            with self._bound_scope():
+                return await func(self, *args, **kwargs)
+
+        return async_wrapped
+
+    @functools.wraps(func)
+    def wrapped(self, *args, **kwargs):
+        with self._bound_scope():
+            return func(self, *args, **kwargs)
+
+    return wrapped
 
 
 class AiGroupChatService:
@@ -156,9 +178,12 @@ class AiGroupChatService:
             if self._mode == "enterprise"
             else _default_duty_employee_loader
         )
-        self._storage = GroupChatRepository(
-            Path(storage_root) if storage_root is not None else Path(get_app_data_dir())
-        )
+        self._storage_root = storage_root
+        self._bound_tenant_id = current_tenant_id()
+        parent, unscoped_compat = resolve_group_chat_parent(storage_root)
+        self._unscoped_compat = unscoped_compat
+        self._unscoped_denied = not unscoped_compat and self._bound_tenant_id is None
+        self._storage = GroupChatRepository(parent)
         self._root = self._storage.root
         self._groups_path = self._storage._groups_path
         self._messages_path = self._storage._messages_path
@@ -250,6 +275,20 @@ class AiGroupChatService:
             make_row,
         )
 
+    @contextlib.contextmanager
+    def _bound_scope(self):
+        """Re-apply the construction-time tenant so workers keep the same store."""
+        tid = getattr(self, "_bound_tenant_id", None)
+        if tid is None:
+            yield
+            return
+        with tenant_scope(int(tid)):
+            yield
+
+    def _deny_unscoped(self) -> bool:
+
+        return bool(getattr(self, "_unscoped_denied", False))
+
     async def _execute_employee_work(
         self,
         *,
@@ -301,7 +340,10 @@ class AiGroupChatService:
 
     _format_work_order_message = staticmethod(ChatFormatting.format_work_order_message)
 
+    @_with_bound_tenant
     def list_groups(self, *, user_id: int, include_hidden: bool = False) -> list[dict[str, Any]]:
+        if self._deny_unscoped():
+            return []
         return self._catalog.list_groups(user_id=user_id, include_hidden=include_hidden)
 
     def _ensure_required_members(self, user_id: int) -> None:
@@ -318,46 +360,78 @@ class AiGroupChatService:
     def _backfill_department_members(self, groups: list[dict[str, Any]]) -> None:
         return self._directory.backfill_department_members(groups)
 
+    @_with_bound_tenant
     def list_member_candidates(self) -> list[dict[str, Any]]:
         return self._directory.list_member_candidates()
 
+    @_with_bound_tenant
     def create_group(self, *, user_id: int, name: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.create_group(user_id=user_id, name=name)
 
+    @_with_bound_tenant
     def add_member(self, *, user_id: int, group_id: str, member: dict[str, Any]) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.add_member(user_id=user_id, group_id=group_id, member=member)
 
+    @_with_bound_tenant
     def remove_member(self, *, user_id: int, group_id: str, employee_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.remove_member(
             user_id=user_id, group_id=group_id, employee_id=employee_id
         )
 
+    @_with_bound_tenant
     def toggle_pinned(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.toggle_pinned(user_id=user_id, group_id=group_id)
 
+    @_with_bound_tenant
     def mark_unread(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.mark_unread(user_id=user_id, group_id=group_id)
 
+    @_with_bound_tenant
     def mark_read(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.mark_read(user_id=user_id, group_id=group_id)
 
+    @_with_bound_tenant
     def toggle_followed(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.toggle_followed(user_id=user_id, group_id=group_id)
 
+    @_with_bound_tenant
     def toggle_hidden(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.toggle_hidden(user_id=user_id, group_id=group_id)
 
+    @_with_bound_tenant
     def delete_group(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._catalog.delete_group(user_id=user_id, group_id=group_id)
 
+    @_with_bound_tenant
     def get_messages(
         self, *, user_id: int, group_id: str, limit: int = 100
     ) -> list[dict[str, Any]]:
+        if self._deny_unscoped():
+            return []
         return self._conversation.get_messages(user_id=user_id, group_id=group_id, limit=limit)
 
     def _sync_relay_progress_for_group(self, *, user_id: int, group_id: str) -> None:
         return self._progress.sync_relay_progress_for_group(user_id=user_id, group_id=group_id)
 
+    @_with_bound_tenant
     async def post_message(
         self,
         *,
@@ -370,6 +444,8 @@ class AiGroupChatService:
         branch_context: str = "",
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return await self._conversation.post_message(
             user_id=user_id,
             group_id=group_id,
@@ -415,11 +491,15 @@ class AiGroupChatService:
 
     _format_relay_progress_message = staticmethod(ChatFormatting.format_relay_progress_message)
 
+    @_with_bound_tenant
     def delete_message(self, *, user_id: int, group_id: str, message_id: str) -> dict[str, Any]:
+        if self._deny_unscoped():
+            raise ValueError("群不存在")
         return self._conversation.delete_message(
             user_id=user_id, group_id=group_id, message_id=message_id
         )
 
+    @_with_bound_tenant
     def append_relay_work_report(self, *, task: dict[str, Any]) -> dict[str, Any] | None:
         return self._work_reports.append_relay_work_report(task=task)
 
@@ -596,6 +676,7 @@ class AiGroupChatService:
     def _latest_previews(self, user_id: int) -> dict[str, dict[str, Any]]:
         return ChatProjection.latest_previews(self._read_messages(), user_id)
 
+    @_with_bound_tenant
     def _user_groups(self, user_id: int) -> list[dict[str, Any]]:
         return self._storage.user_groups(user_id)
 
@@ -604,9 +685,11 @@ class AiGroupChatService:
     def _compact_groups_file_if_needed(self) -> None:
         return self._storage.compact_groups_file_if_needed()
 
+    @_with_bound_tenant
     def _all_groups(self) -> list[dict[str, Any]]:
         return self._storage.all_groups()
 
+    @_with_bound_tenant
     def _read_messages(self) -> list[dict[str, Any]]:
         return self._storage.read_messages()
 
@@ -632,15 +715,19 @@ class AiGroupChatService:
     def _read_jsonl(self, path: Path) -> list[dict[str, Any]]:
         return self._storage.read_jsonl(path)
 
+    @_with_bound_tenant
     def _append_group(self, group: dict[str, Any]) -> None:
         return self._storage.append_group(group)
 
+    @_with_bound_tenant
     def _rewrite_groups(self, groups: list[dict[str, Any]]) -> None:
         return self._storage.rewrite_groups(groups)
 
+    @_with_bound_tenant
     def _append_messages(self, messages: list[dict[str, Any]]) -> None:
         return self._storage.append_messages(messages)
 
+    @_with_bound_tenant
     def _rewrite_messages(self, messages: list[dict[str, Any]]) -> None:
         return self._storage.rewrite_messages(messages)
 

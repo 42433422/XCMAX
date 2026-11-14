@@ -100,9 +100,15 @@ def test_department_backfill_only_updates_requested_owner(
 def test_duplicate_group_merge_preserves_other_owner_with_same_keeper_id(
     service: AiGroupChatService,
 ) -> None:
-    keeper = {"id": "dept:development", "user_id": 1, "name": "超级开发部", "members": []}
-    duplicate = {"id": "old", "user_id": 1, "name": "超级开发部", "members": []}
-    foreign = {"id": keeper["id"], "user_id": 2, "name": "我的群", "members": []}
+    keeper = {
+        "id": "dept:development",
+        "user_id": 1,
+        "tenant_id": 1,
+        "name": "超级开发部",
+        "members": [],
+    }
+    duplicate = {"id": "old", "user_id": 1, "tenant_id": 1, "name": "超级开发部", "members": []}
+    foreign = {"id": keeper["id"], "user_id": 2, "tenant_id": 1, "name": "我的群", "members": []}
     service._rewrite_groups([keeper, duplicate, deepcopy(foreign)])
 
     service._merge_duplicate_super_development_groups(1)
@@ -279,7 +285,11 @@ async def test_completion_and_persistence_ports_resolve_patches_after_constructi
         return {"success": True, "content": "构造后替换的回复"}
 
     monkeypatch.setattr(service, "_completion_fn", complete)
-    monkeypatch.setattr(service, "_append_messages", lambda batch: messages.extend(deepcopy(batch)))
+
+    def _append(batch: Rows) -> None:
+        messages.extend({**deepcopy(row), "tenant_id": 1} for row in batch)
+
+    monkeypatch.setattr(service, "_append_messages", _append)
     monkeypatch.setattr(service, "_read_messages", lambda: deepcopy(messages))
 
     response = await service.post_message(user_id=1, group_id=group["id"], text="请回复")
