@@ -3,6 +3,7 @@
   "name": "太阳鸟 PRO",
   "version": "1.0.0",
   "author": "XCAGI",
+  "scope": "account",
   "description": "太阳鸟客户定制：部门/人员管理、考勤表转换、排班数据处理与考勤 AI 员工。",
   "primary": true,
   "dependencies": {
