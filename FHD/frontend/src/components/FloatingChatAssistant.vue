@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="props.visible && !externallyHidden"
+    v-if="props.visible && (!externallyHidden || voiceCallActive)"
     ref="rootRef"
     class="floating-chat-root"
     :class="{ dragging: isDragging }"
@@ -33,12 +33,60 @@
     >
       <div class="floating-chat-header" @pointerdown="onDragStart">
         <div class="floating-chat-title-wrap">
-          <div id="floating-chat-title" class="floating-chat-title">小C助理</div>
+          <div id="floating-chat-title" class="floating-chat-title">{{ callOpen ? '语音通话' : '小C助理' }}</div>
+          <div v-if="callOpen" class="floating-chat-call-meta">{{ callDurationText }} · {{ callStatusText }}</div>
         </div>
-        <button class="floating-chat-close" type="button" aria-label="关闭" @click="isOpen = false">×</button>
+        <button
+          v-if="!callOpen"
+          class="floating-chat-call-entry"
+          type="button"
+          aria-label="语音通话"
+          title="语音通话"
+          @click="startCallFromEntry"
+        >
+          <i class="fa fa-phone" aria-hidden="true"></i>
+          <span class="floating-chat-call-entry-label">语音通话</span>
+        </button>
+        <button class="floating-chat-close" type="button" aria-label="关闭" @click="closePanel">×</button>
       </div>
 
-      <div ref="messageListRef" class="floating-chat-messages">
+      <div v-if="callOpen" class="floating-chat-call">
+        <div class="floating-chat-call-stage" role="status" aria-live="polite">{{ callStatusText }}</div>
+        <div class="floating-chat-call-captions">
+          <div v-if="callHeardText" class="floating-chat-call-caption user">你说：{{ callHeardText }}</div>
+          <div v-if="callReplyText" class="floating-chat-call-caption ai">小C：{{ callReplyText }}</div>
+          <div v-if="callErrorText" class="floating-chat-call-caption error" role="alert">{{ callErrorText }}</div>
+          <p v-if="!callHeardText && !callReplyText && !callErrorText" class="floating-chat-call-hint">
+            请直接说话，小C 会自动回答。
+          </p>
+        </div>
+        <div class="floating-chat-call-actions">
+          <button
+            type="button"
+            class="floating-chat-call-action"
+            :title="callMuted ? '取消静音' : '静音'"
+            @click="toggleVoiceCallMute"
+          >
+            <i class="fa" :class="callMuted ? 'fa-microphone' : 'fa-microphone-slash'" aria-hidden="true"></i>
+            {{ callMuted ? '取消静音' : '静音' }}
+          </button>
+          <button
+            type="button"
+            class="floating-chat-call-action"
+            :title="callSpeakerOn ? '关闭免提' : '开启免提'"
+            @click="toggleVoiceCallSpeaker"
+          >
+            <i class="fa" :class="callSpeakerOn ? 'fa-volume-up' : 'fa-volume-off'" aria-hidden="true"></i>
+            {{ callSpeakerOn ? '免提开' : '免提关' }}
+          </button>
+          <button type="button" class="floating-chat-call-action floating-chat-call-hangup" title="挂断" @click="hangUpVoiceCall">
+            <i class="fa fa-phone" aria-hidden="true"></i>
+            挂断
+          </button>
+        </div>
+      </div>
+
+      <div v-else ref="messageListRef" class="floating-chat-messages">
         <div v-for="(msg, idx) in visibleMessages" :key="`${idx}-${msg.time}`" class="floating-chat-message" :class="msg.role">
           <div class="floating-chat-bubble" v-html="sanitizeChatBubbleHtml(msg.content)"></div>
           <div class="floating-chat-time">{{ msg.time }}</div>
@@ -48,7 +96,7 @@
         </div>
       </div>
 
-      <form class="floating-chat-input-row" @submit.prevent="submitMessage">
+      <form v-if="!callOpen" class="floating-chat-input-row" @submit.prevent="submitMessage">
         <textarea
           v-model.trim="draft"
           class="floating-chat-input"
@@ -66,6 +114,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useChatView } from '@/composables/useChatView'
+import { useVoiceCall } from '@/composables/useVoiceCall'
+import { requestVoiceCallStart, voiceCallActive } from '@/composables/voiceCallHost'
 import { publicAssetUrl } from '@/utils/publicAssetUrl'
 import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
@@ -119,6 +169,22 @@ const { messages, isLoading, isStreamingReply, loadingProgressText, sendMessage 
   sessionId: currentSessionId,
 })
 
+/** 语音通话：复用当前悬浮窗会话的发送与消息流，界面留在悬浮窗内。 */
+const {
+  open: callOpen,
+  durationText: callDurationText,
+  statusText: callStatusText,
+  heardText: callHeardText,
+  replyText: callReplyText,
+  errorText: callErrorText,
+  muted: callMuted,
+  speakerOn: callSpeakerOn,
+  start: startVoiceCall,
+  hangUp: hangUpVoiceCall,
+  toggleMute: toggleVoiceCallMute,
+  toggleSpeaker: toggleVoiceCallSpeaker,
+} = useVoiceCall({ sendMessage, messages, title: '小C助理' })
+
 const visibleMessages = computed(() => messages.value.slice(-20))
 const rootStyle = computed(() => ({
   left: `${rootLeft.value}px`,
@@ -126,12 +192,30 @@ const rootStyle = computed(() => ({
 }))
 
 const closeFloatingChatPanel = () => {
+  if (callOpen.value) hangUpVoiceCall()
   isOpen.value = false
 }
 
 const suppressFloatingChatPanel = () => {
+  if (callOpen.value) hangUpVoiceCall()
   isOpen.value = false
   externallyHidden.value = true
+}
+
+/** 悬浮窗内入口只发起点话，实际通话由 'xcagi:start-voice-call' 统一开启。 */
+const startCallFromEntry = () => {
+  isOpen.value = true
+  requestVoiceCallStart()
+}
+
+const closePanel = () => {
+  if (callOpen.value) hangUpVoiceCall()
+  isOpen.value = false
+}
+
+const onStartVoiceCallRequest = () => {
+  isOpen.value = true
+  startVoiceCall()
 }
 
 const restoreFloatingChatPanel = () => {
@@ -182,6 +266,8 @@ const toggleOpen = async () => {
     suppressNextToggleClick.value = false
     return
   }
+  // 通话中不收起面板，否则静音/挂断按钮会一起消失。
+  if (callOpen.value && isOpen.value) return
   isOpen.value = !isOpen.value
   if (isOpen.value) {
     await scrollToBottom()
@@ -270,6 +356,11 @@ watch(isOpen, () => {
   })
 })
 
+watch(callOpen, (active) => {
+  voiceCallActive.value = active
+  if (active) isOpen.value = true
+})
+
 onMounted(() => {
   void placeRootToBottomRight()
   window.addEventListener('resize', keepRootInViewport)
@@ -277,14 +368,18 @@ onMounted(() => {
   window.addEventListener('xcagi:close-assistant-float', closeFloatingChatPanel)
   window.addEventListener('xcagi:suppress-floating-chat', suppressFloatingChatPanel)
   window.addEventListener('xcagi:restore-floating-chat', restoreFloatingChatPanel)
+  window.addEventListener('xcagi:start-voice-call', onStartVoiceCallRequest)
 })
 
 onBeforeUnmount(() => {
+  hangUpVoiceCall()
+  voiceCallActive.value = false
   window.removeEventListener('resize', keepRootInViewport)
   window.removeEventListener('xcagi:close-floating-chat', closeFloatingChatPanel)
   window.removeEventListener('xcagi:close-assistant-float', closeFloatingChatPanel)
   window.removeEventListener('xcagi:suppress-floating-chat', suppressFloatingChatPanel)
   window.removeEventListener('xcagi:restore-floating-chat', restoreFloatingChatPanel)
+  window.removeEventListener('xcagi:start-voice-call', onStartVoiceCallRequest)
 })
 </script>
 

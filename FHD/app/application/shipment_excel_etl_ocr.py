@@ -86,15 +86,7 @@ def text_blocks_to_grid(
     return [row for row in grid if any(str(cell).strip() for cell in row)]
 
 
-def grid_to_workbook_path(
-    grid: list[list[str]],
-    *,
-    output_path: str | Path | None = None,
-    sheet_name: str = "OCR",
-    meta_lines: list[str] | None = None,
-) -> Path:
-    from openpyxl import Workbook
-
+def _resolve_workbook_output_path(output_path: str | Path | None) -> Path:
     if output_path:
         raw_output_path = output_path
     else:
@@ -105,7 +97,19 @@ def grid_to_workbook_path(
         descriptor, temp_name = tempfile.mkstemp(prefix="etl_ocr_", suffix=".xlsx", dir=temp_root)
         os.close(descriptor)
         raw_output_path = Path(temp_name)
-    path = etl_security.resolve_etl_output_path(raw_output_path)
+    return etl_security.resolve_etl_output_path(raw_output_path)
+
+
+def grid_to_workbook_path(
+    grid: list[list[str]],
+    *,
+    output_path: str | Path | None = None,
+    sheet_name: str = "OCR",
+    meta_lines: list[str] | None = None,
+) -> Path:
+    from openpyxl import Workbook
+
+    path = _resolve_workbook_output_path(output_path)
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -121,6 +125,52 @@ def grid_to_workbook_path(
         for col, value in enumerate(row, start=1):
             ws.cell(row_idx, col, value)
         row_idx += 1
+    with etl_security.open_etl_output_file(path) as output_file:
+        wb.save(output_file)
+    wb.close()
+    return path
+
+
+def tables_to_workbook_path(
+    tables: list[Any],
+    *,
+    output_path: str | Path | None = None,
+    sheet_name: str = "OCR",
+    meta_lines: list[str] | None = None,
+) -> Path:
+    """每张已识别表格写成独立 sheet（``<sheet_name>_1``、``_2``…），保留合并区域。"""
+    from openpyxl import Workbook
+
+    path = _resolve_workbook_output_path(output_path)
+    base_name = (sheet_name or "OCR")[:28]
+    wb = Workbook()
+    default_sheet = wb.active
+    assert default_sheet is not None
+    wb.remove(default_sheet)
+    for index, table in enumerate(tables, start=1):
+        ws = wb.create_sheet(f"{base_name}_{index}"[:31])
+        row_idx = 1
+        lines = meta_lines if index == 1 and meta_lines is not None else table.meta_lines
+        for line in lines or []:
+            text = str(line or "").strip()
+            if not text:
+                continue
+            ws.cell(row_idx, 1, text)
+            row_idx += 1
+        grid_start = row_idx
+        for row in table.grid:
+            for col, value in enumerate(row, start=1):
+                ws.cell(row_idx, col, value)
+            row_idx += 1
+        for min_row, min_col, max_row, max_col in table.merges:
+            ws.merge_cells(
+                start_row=grid_start + min_row - 1,
+                start_column=min_col,
+                end_row=grid_start + max_row - 1,
+                end_column=max_col,
+            )
+    if not wb.worksheets:
+        wb.create_sheet(base_name or "OCR")
     with etl_security.open_etl_output_file(path) as output_file:
         wb.save(output_file)
     wb.close()
@@ -190,6 +240,53 @@ def _guess_meta_lines(grid: list[list[str]]) -> list[str]:
     return meta[:3]
 
 
+def _tables_to_workbook_result(
+    images: list[Any],
+    *,
+    source_path: Path,
+    output_path: str | Path | None,
+) -> dict[str, Any] | None:
+    """优先用本地表结构识别产出多 sheet 工作簿；无结果时交给文本块回退。"""
+    from app.application.elt.table_structure_ocr import (
+        recognize_table_structures,
+        table_structure_mode,
+    )
+
+    mode = table_structure_mode()
+    if mode == "off":
+        return None
+    try:
+        tables = [table for table in recognize_table_structures(images) if table.grid]
+    except RECOVERABLE_ERRORS:
+        if mode == "required":
+            raise
+        logger.warning("table structure recognition failed; using text lines", exc_info=True)
+        return None
+    if not tables:
+        if mode == "required":
+            raise RuntimeError("表结构识别未返回可用表格（FHD_ETL_TABLE_STRUCTURE=required）")
+        return None
+    meta_lines = tables[0].meta_lines or _guess_meta_lines(tables[0].grid)
+    xlsx = tables_to_workbook_path(
+        tables,
+        output_path=output_path,
+        sheet_name=source_path.stem[:28] or "OCR",
+        meta_lines=meta_lines,
+    )
+    return {
+        "success": True,
+        "file_path": str(xlsx),
+        "source_path": str(source_path),
+        "block_count": 0,
+        "row_count": sum(len(table.grid) for table in tables),
+        "col_count": max((len(row) for table in tables for row in table.grid), default=0),
+        "meta_lines": meta_lines,
+        "table_count": len(tables),
+        "structure": "table",
+        "message": f"OCR 已生成结构化表格 {xlsx.name}",
+    }
+
+
 def ocr_source_to_workbook(
     file_path: str | Path,
     *,
@@ -208,11 +305,15 @@ def ocr_source_to_workbook(
         }
 
     try:
+        with etl_security.open_etl_input_file(path) as source_file:
+            images = _load_image_arrays(source_file, suffix=path.suffix.lower())
+        structured = _tables_to_workbook_result(images, source_path=path, output_path=output_path)
+        if structured is not None:
+            return structured
+
         from app.domain.shared_services.ocr_service import get_ocr_service
 
         ocr = get_ocr_service()
-        with etl_security.open_etl_input_file(path) as source_file:
-            images = _load_image_arrays(source_file, suffix=path.suffix.lower())
         all_blocks: list[dict[str, Any]] = []
         for img in images:
             blocks = ocr.recognize_text_blocks(img) or []
@@ -329,5 +430,6 @@ __all__ = [
     "is_ocr_source",
     "ocr_source_to_workbook",
     "parse_ocr_document",
+    "tables_to_workbook_path",
     "text_blocks_to_grid",
 ]

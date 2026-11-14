@@ -490,3 +490,46 @@ def test_ambiguous_mapping_blocks_import_until_confirmed(preview_store):
     store.executor.futures[-1].result(timeout=10)
     confirmed = snapshot(store, run_id)
     assert confirmed["preview_revision"] not in {None, reviewed["preview_revision"]}
+
+
+def test_r02_marking_an_empty_preview_as_a_row_is_rejected(preview_store, monkeypatch):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from app.application.elt.service_execution import ExecutionServiceMixin
+    from app.db.models.elt import EltRun
+
+    original = ExecutionServiceMixin.execute
+
+    def pretend_one_row(self, db, *args, **kwargs):
+        run = db.get(EltRun, kwargs["run_id"])
+        run.total_rows = 1
+        db.flush()
+        return original(self, db, *args, **kwargs)
+
+    monkeypatch.setattr(ExecutionServiceMixin, "execute", pretend_one_row)
+    with pytest.raises(AssertionError) as caught:
+        test_empty_preview_is_not_confirmable(preview_store)
+    assert "ELT_PREVIEW_EMPTY" in str(caught.value)
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    restored = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/test_application/test_etl_preview_task_boundaries.py::test_empty_preview_is_not_confirmable",
+            "-q",
+            "-o",
+            "addopts=",
+            "--tb=line",
+        ],
+        cwd=str(Path(__file__).resolve().parents[2]),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert restored.returncode == 0, restored.stdout + restored.stderr
