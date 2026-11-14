@@ -494,6 +494,18 @@ jobs:
         with:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 1
+      - name: Refuse a change that drops merge-required contracts still required on main
+        working-directory: .
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          floor="${RUNNER_TEMP}/business-contract-floor.json"
+          if git cat-file -e origin/main:FHD/config/business_contract_floor.json 2>/dev/null; then
+            git show origin/main:FHD/config/business_contract_floor.json > "${floor}"
+          else
+            cp FHD/config/business_contract_floor.json "${floor}"
+          fi
+          python3 FHD/scripts/dev/check_business_contract_evidence.py floor --floor "${floor}"
       - name: Record business contract as not applicable when backend tests are not required
         if: needs.classify.outputs.backend != 'true'
         run: |

@@ -49,39 +49,51 @@
       "requirement_id": "R03",
       "scenario_id": "R03-confirm-binding",
       "rule": "用户确认必须绑定身份、租户、预演版本和数据范围。过期预演不得写入，重复提交不得产生重复副作用。",
-      "source": "数据对接确认写入；本批只登记。",
+      "source": "FHD/tests/test_application/test_etl_preview_confirmation.py 用 SQLite 预演。错的预演版本不能写入；正确版本确认后才执行。",
       "preconditions": ["存在一份已版本化的预演"],
       "inputs": ["确认人、租户、预演版本、数据范围"],
       "allowed": ["写入内容与确认内容一致", "同键重复提交读回原结果"],
       "forbidden_effects": ["过期预演写入", "重复副作用"],
       "oracle": "确认单上的版本和范围，对照落库行",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "tests": [
+        "tests/test_application/test_etl_preview_confirmation.py::test_missing_or_wrong_approval_does_not_write_or_claim_run"
+      ],
+      "boundary": {
+        "real": ["sqlite", "ELT execute", "preview revision"],
+        "doubles": [],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "接受过期预演",
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
       "resources": [],
-      "required_for_merge": false
+      "required_for_merge": true
     },
     {
       "requirement_id": "R04",
       "scenario_id": "R04-export-submitted-result",
       "rule": "导出必须对应已提交的业务结果。核对明细、字段类型、金额、数量和汇总。",
-      "source": "已提交结果导出；本批只登记。",
+      "source": "与 R05 同一条获批出货导出。重新打开的 xlsx 对照已提交产品，不重解析原件。",
       "preconditions": ["业务结果已经提交"],
       "inputs": ["下载接口返回的文件"],
       "allowed": ["重新打开的文件与已提交明细一致"],
       "forbidden_effects": ["只凭 URL、HTTP 200 或 success 判定通过", "用重解析原件代替已提交数据"],
       "oracle": "提交时保存的明细和汇总",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
+      "tests": [
+        "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan"
+      ],
+      "boundary": {
+        "real": ["sqlite", "xlsx file"],
+        "doubles": ["fixed plan instead of a live model"],
+        "execution": "real"
+      },
       "known_defects": [],
       "fault_version": "导出缺少已提交明细",
       "platforms": ["linux"],
       "database_modes": ["sqlite"],
-      "resources": [],
-      "required_for_merge": false
+      "resources": ["临时 sqlite", "openpyxl"],
+      "required_for_merge": true
     },
     {
       "requirement_id": "R05",
@@ -206,20 +218,26 @@
       "requirement_id": "R10",
       "scenario_id": "R10-tenant-scope",
       "rule": "读取、审批、交接、工具执行、导出和恢复都保持租户与授权范围。",
-      "source": "租户隔离；本批只登记。",
+      "source": "FHD/tests/test_application/test_etl_knowledge_isolation.py 用真实知识库存储。两个租户写入相同内容，文档互不替换。审批、导出和恢复的租户过滤还不在这条测试里。",
       "preconditions": ["两个租户各有数据"],
       "inputs": ["恢复或导出请求"],
       "allowed": ["只返回并修改本租户数据"],
       "forbidden_effects": ["恢复时漏掉租户过滤"],
       "oracle": "请求租户与落库 tenant_id",
-      "tests": [],
-      "boundary": {"real": [], "doubles": [], "execution": "NOT RUN"},
-      "known_defects": [],
+      "tests": [
+        "tests/test_application/test_etl_knowledge_isolation.py::test_identical_content_in_two_tenants_never_replaces_first"
+      ],
+      "boundary": {
+        "real": ["knowledge document store", "tenant_scope"],
+        "doubles": ["embedder returns a fixed vector"],
+        "execution": "real"
+      },
+      "known_defects": ["审批、导出和恢复的租户过滤尚未在本场景执行"],
       "fault_version": "恢复时遗漏租户过滤",
       "platforms": ["linux"],
       "database_modes": ["sqlite", "postgresql"],
-      "resources": [],
-      "required_for_merge": false
+      "resources": ["临时知识库文件"],
+      "required_for_merge": true
     }
   ]
 }

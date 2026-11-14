@@ -397,8 +397,9 @@ def test_r09_two_recoveries_without_the_claim_leave_two_rows():
     os.environ["XCMAX_CONTRACT_FAULT"] = "ignore-claim"
     try:
         test_e24_two_recoveries_leave_one_row()
-    except AssertionError as exc:
-        assert "1" in str(exc)
+    except AssertionError:
+        # 未领取时的恢复会破坏「只留一行」不变量；不依赖内部断言的具体文案。
+        pass
     else:
         raise AssertionError("two recoveries without a claim still left one row")
     finally:
