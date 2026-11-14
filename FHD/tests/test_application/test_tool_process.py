@@ -360,6 +360,15 @@ def test_default_adapter_refuses_unserializable_or_expired_start_without_dispatc
         assert {child.pid for child in multiprocessing.active_children()} <= children
 
 
+def test_idempotency_payload_encodes_decimal_prices():
+    from decimal import Decimal
+
+    from app.application.agent_orchestrator.tool_process import dump_tool_output
+
+    encoded = dump_tool_output({"price": Decimal("100.00"), "quantity": Decimal("2")})
+    assert json.loads(encoded) == {"price": 100.0, "quantity": 2}
+
+
 def test_real_adapter_transports_database_scalars_and_reports_unsupported_result():
     executor = FixtureExecutor()
     result = execute_with_tool_deadline(
@@ -534,3 +543,11 @@ def test_worker_result_file_contains_only_public_route_identity(tmp_path, monkey
     encoded = (tmp_path / "result").read_text()
     assert json.loads(encoded)["llm_route_metadata"] == route
     assert "private-token" not in encoded and "private-mask" not in encoded
+
+
+def test_finance_writes_restore_the_task_tenant():
+    from app.application.agent_orchestrator.tool_executor import _SQL_TENANT_SCOPED_TOOL_IDS
+
+    assert "finance" in _SQL_TENANT_SCOPED_TOOL_IDS
+    assert "excel_analysis" in _SQL_TENANT_SCOPED_TOOL_IDS
+    assert "employee" in _SQL_TENANT_SCOPED_TOOL_IDS

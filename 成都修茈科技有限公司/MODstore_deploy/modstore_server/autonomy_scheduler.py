@@ -365,6 +365,45 @@ def _reserve_remediation_attempt(pending: dict[str, Any]) -> set[tuple[str, ...]
     return blocked - {tuple(key)}
 
 
+def _handoff_exhausted_remediations(keys: set[tuple[str, ...]], *, attempts: int) -> bool:
+    """Hand remediation items that can never dispatch again to a human queue.
+
+    The retry budget stays fail-closed, but an exhausted item must not trap the
+    scheduler in a permanent failure loop: record the handoff, then close the
+    item so later ticks can either resume other work or report recovery.
+    """
+    from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
+    from modstore_server.maintenance_loop.memory import close_loop_memory_items
+
+    handed: list[tuple[str, str]] = []
+    for branch, task_id in sorted(key for key in keys if all(key[:2])):
+        receipt = enqueue_uncertain_item(
+            context={
+                "branch": branch,
+                "para_task_id": task_id,
+                "retry_count": attempts,
+                "failed_steps": ["code"],
+            },
+            decision={
+                "action": "await_human_strategy_approval",
+                "reason": "retry_limit_exhausted",
+            },
+            reason=f"self-maintenance remediation for {branch} exhausted its retry budget",
+        )
+        if receipt.get("queued") or receipt.get("reason") == "duplicate":
+            handed.append((branch, task_id))
+    if not handed:
+        return False
+    close_loop_memory_items(
+        actor="scheduler",
+        branches=[branch for branch, _ in handed],
+        task_ids=[task_id for _, task_id in handed],
+        resolution_reason="remediation_retry_budget_exhausted_handoff",
+    )
+    logger.warning("handed %d exhausted remediation item(s) to human queue", len(handed))
+    return True
+
+
 def run_pending_automated_remediation() -> dict[str, Any]:
     """Resume a vetoed repair only when the loop has executable stored context."""
     pending = pending_automated_remediation()
@@ -373,7 +412,21 @@ def run_pending_automated_remediation() -> dict[str, Any]:
 
     from modstore_server.maintenance_loop.coordinator import run_self_maintenance_loop
 
-    blocked = _reserve_remediation_attempt(pending)
+    try:
+        blocked = _reserve_remediation_attempt(pending)
+    except RemediationBlocked as exc:
+        raw_attempts = exc.receipt.get("attempts")
+        attempts = raw_attempts if isinstance(raw_attempts, int) else 0
+        if exc.receipt.get("reason") != "retry_limit" or not _handoff_exhausted_remediations(
+            {tuple(_remediation_key(pending))}, attempts=attempts
+        ):
+            raise
+        return {
+            "ok": True,
+            "scheduler_reason": "retry_limit_handoff",
+            "scheduler_status": "deferred",
+            "status": "deferred_retry_limit_handoff",
+        }
     result = run_self_maintenance_loop(
         triggered_by="automated_remediation",
         force=False,
@@ -402,6 +455,13 @@ def run_pending_automated_remediation() -> dict[str, Any]:
             isinstance(item, dict) and tuple(_remediation_key(item)) in blocked
             for item in remaining
         ):
+            limit = _int_env("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", 3, minimum=1)
+            if _handoff_exhausted_remediations(blocked, attempts=limit):
+                return {
+                    **result,
+                    "scheduler_reason": "other_retry_limit_handoff",
+                    "scheduler_status": "deferred",
+                }
             raise RemediationBlocked("other_retry_limit", 0)
     return result
 

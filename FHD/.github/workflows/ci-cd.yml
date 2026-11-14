@@ -494,6 +494,18 @@ jobs:
         with:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 1
+      - name: Refuse a change that drops merge-required contracts still required on main
+        working-directory: .
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          floor="${RUNNER_TEMP}/business-contract-floor.json"
+          if git cat-file -e origin/main:FHD/config/business_contract_floor.json 2>/dev/null; then
+            git show origin/main:FHD/config/business_contract_floor.json > "${floor}"
+          else
+            cp FHD/config/business_contract_floor.json "${floor}"
+          fi
+          python3 FHD/scripts/dev/check_business_contract_evidence.py floor --floor "${floor}"
       - name: Record business contract as not applicable when backend tests are not required
         if: needs.classify.outputs.backend != 'true'
         run: |
@@ -780,13 +792,22 @@ jobs:
 
       # 2026-09-10 #1851 复审：apt 外部源（Google Chrome 等）曾出现 Hash Sum
       # mismatch 导致 P0 E2E 被环境阻断。整改：浏览器二进制走 Playwright CDN
-      # 并缓存；系统依赖（apt）有限重试 3 次（清列表换索引），最终失败必须
       # 让 job 红掉并保留日志——禁止 || true 或跳过当修复。
       - name: Install Playwright system deps (bounded retry)
         working-directory: frontend
         run: |
           set -uo pipefail
           rc=1
+          use_public_dns() {
+            echo "::warning::Ubuntu archive did not resolve; using 8.8.8.8 and 1.1.1.1"
+            sudo mkdir -p /etc/systemd/resolved.conf.d
+            printf '[Resolve]\nDNS=8.8.8.8 1.1.1.1\n' | sudo tee /etc/systemd/resolved.conf.d/ci-dns.conf >/dev/null
+            sudo systemctl restart systemd-resolved || true
+            getent hosts archive.ubuntu.com >/dev/null && return 0
+            printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' | sudo tee /etc/resolv.conf >/dev/null
+          }
+          sudo find /etc/apt -type f -exec sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g' {} + || true
+          getent hosts archive.ubuntu.com >/dev/null || use_public_dns
           for attempt in 1 2 3; do
             echo "[deps] attempt ${attempt}/3"
             if npx playwright install-deps chromium; then
@@ -796,6 +817,8 @@ jobs:
             echo "::warning::playwright install-deps attempt ${attempt} failed; refreshing apt lists"
             sudo apt-get clean || true
             sudo rm -rf /var/lib/apt/lists/*
+            sudo find /etc/apt -type f -exec sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g' {} + || true
+            getent hosts archive.ubuntu.com >/dev/null || use_public_dns
             sudo apt-get update
           done
           if [ "$rc" -ne 0 ]; then
