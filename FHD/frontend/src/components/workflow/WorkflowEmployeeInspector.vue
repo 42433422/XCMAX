@@ -135,6 +135,8 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
   display: flex;
   align-items: stretch;
   gap: 8px;
+  /* 列表有很多员工时，flex 子项默认会被压缩成几像素高的细条（滚动区域失效）。 */
+  flex: 0 0 auto;
   border-radius: 10px;
   border: 1px solid #e5e7eb;
   background: #f9fafb;
