@@ -8,6 +8,7 @@ import {
   classifyTransportFailure,
   createTraceId,
   isDuplicateUnsafeSubmit,
+  installBackendHealthBridge,
   noteTransportFailure,
   noteTransportSuccess,
   publishStabilityNotice,
@@ -113,6 +114,31 @@ describe('network stability notices', () => {
     noteTransportSuccess()
     expect(document.getElementById('stability-notice')).toBeNull()
     vi.useRealTimers()
+  })
+
+  it('clears the notice and broadcasts readiness when the shell reports the backend is back', () => {
+    let handler: ((state: string) => void) | undefined
+    vi.stubGlobal('xcagiDesktop', {
+      onBackendHealth: (callback: (state: string) => void) => {
+        handler = callback
+        return () => undefined
+      },
+    })
+    const ready = vi.fn()
+    window.addEventListener('xcagi:backend-ready', ready)
+    try {
+      installBackendHealthBridge()
+      noteTransportFailure('服务暂时不可用')
+      noteTransportFailure('服务暂时不可用')
+      expect(document.getElementById('stability-notice')).not.toBeNull()
+      handler?.('restarting')
+      expect(document.getElementById('stability-notice')).not.toBeNull()
+      handler?.('ready')
+      expect(document.getElementById('stability-notice')).toBeNull()
+      expect(ready).toHaveBeenCalledOnce()
+    } finally {
+      window.removeEventListener('xcagi:backend-ready', ready)
+    }
   })
 })
 
