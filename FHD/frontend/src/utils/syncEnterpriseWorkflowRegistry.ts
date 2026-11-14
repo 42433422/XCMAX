@@ -1,8 +1,7 @@
 import type { EnterpriseModStack } from '@/constants/enterpriseModStack'
-import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
-import { filterInstalledWorkflowRegistryMods } from '@/utils/workflowEmployeeScope'
+import { filterModsForEnterpriseWorkflowRegistry, tenantOwnedWorkflowModIds } from '@/utils/workflowEmployeeScope'
 import type { ModWithWorkflowEmployees } from '@/utils/modWorkflowEmployees'
 
 /** 按企业 Mod 栈合并工作流员工注册表（避免磁盘上 workshop 员工包串入副窗/员工空间） */
@@ -11,7 +10,7 @@ export async function syncEnterpriseWorkflowRegistry(
   options?: { forceStack?: boolean },
 ): Promise<EnterpriseModStack> {
   const stack = await resolveEnterpriseModStack(Boolean(options?.forceStack))
-  const scopedMods = filterInstalledWorkflowRegistryMods(mods)
+  const scopedMods = filterModsForEnterpriseWorkflowRegistry(mods, stack, tenantOwnedWorkflowModIds(mods))
   const wfStore = useWorkflowAiEmployeesStore()
   wfStore.hydrateFromMods(scopedMods)
   wfStore.pruneOrphanWorkflowEmployeeToggles(scopedMods)

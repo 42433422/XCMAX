@@ -23,6 +23,7 @@ from app.application.mod_store.http_port_contracts import (
     ModPackageWriter,
 )
 from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .projection import safe_text
 from .schemas import ModStoreInstallResult
@@ -82,6 +83,8 @@ class PackageInstaller:
             ok, message = self._employees().install_from_package(
                 path, verify_signature=verify_signature
             )
+            if ok:
+                self._mark_tenant_owned(path)
             return ModStoreInstallResult(success=bool(ok), message=message, data=None)
         ok, message, metadata = self._mods().install_mod_package(
             path, verify_signature=verify_signature, activate=activate
@@ -92,6 +95,17 @@ class PackageInstaller:
             else None
         )
         return ModStoreInstallResult(success=bool(ok), message=message, data=data)
+
+    def _mark_tenant_owned(self, package_path: str) -> None:
+        """商店安装成功的员工包记为本机租户自有员工，企业端才可见。"""
+        try:
+            from app.infrastructure.mods.artifact_package import peek_manifest_from_zip
+            from app.mod_sdk.tenant_employee_packs import mark_tenant_owned_pack
+
+            manifest = peek_manifest_from_zip(package_path) or {}
+            mark_tenant_owned_pack(str(manifest.get("id") or ""))
+        except RECOVERABLE_ERRORS:
+            self._logger.warning("mark tenant owned employee pack failed", exc_info=True)
 
     async def from_catalog(
         self,

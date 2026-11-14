@@ -6,7 +6,7 @@ import { defaultHostModIdForMarketEmployee } from '@/constants/enterpriseModStac
 import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
-import { filterInstalledWorkflowRegistryMods } from '@/utils/workflowEmployeeScope'
+import { filterModsForEnterpriseWorkflowRegistry, tenantOwnedWorkflowModIds } from '@/utils/workflowEmployeeScope'
 import {
   filterWorkflowRegistrySourceMods,
   isNonWorkflowDeskEmployeeId,
@@ -94,7 +94,10 @@ export async function autoOnboardInstalledMarketItem(item: MarketInstallCatalogI
   await modsStore.refresh()
   const wfStore = useWorkflowAiEmployeesStore()
   stack = await resolveEnterpriseModStack()
-  await wfStore.refreshRegistry(filterInstalledWorkflowRegistryMods(modsStore.modsForWorkflowUi))
+  const workflowMods = modsStore.modsForWorkflowUi
+  await wfStore.refreshRegistry(
+    filterModsForEnterpriseWorkflowRegistry(workflowMods, stack, tenantOwnedWorkflowModIds(workflowMods)),
+  )
 
   const mod = resolveInstalledMod(modsStore.modsForWorkflowUi, item)
   const idSet = new Set<string>([...collectDeskEmployeeIdsFromCatalogItem(item), ...collectEmployeeIdsFromMod(mod)])
@@ -126,7 +129,10 @@ export async function autoOnboardWorkflowEmployeesFromMods(mods: ModWithWorkflow
   await modsStore.refresh()
   const wfStore = useWorkflowAiEmployeesStore()
   const stack = await resolveEnterpriseModStack()
-  await wfStore.refreshRegistry(filterInstalledWorkflowRegistryMods(modsStore.modsForWorkflowUi))
+  const workflowMods = modsStore.modsForWorkflowUi
+  await wfStore.refreshRegistry(
+    filterModsForEnterpriseWorkflowRegistry(workflowMods, stack, tenantOwnedWorkflowModIds(workflowMods)),
+  )
   const ids: string[] = []
   for (const m of filterWorkflowRegistrySourceMods(mods)) {
     for (const id of collectEmployeeIdsFromMod(m)) ids.push(id)

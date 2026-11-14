@@ -51,6 +51,8 @@ export type ModWithWorkflowEmployees = {
   id: string
   name?: string
   type?: string
+  /** 后端标注：员工包由本机商店安装（属于本企业），平台随包分发的员工包为 false/缺省 */
+  tenant_owned?: boolean
   workflow_employees?: WorkflowEmployeeManifestEntry[]
 }
 
