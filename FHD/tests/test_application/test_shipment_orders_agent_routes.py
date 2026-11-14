@@ -79,7 +79,12 @@ def _assert_shipment_order_run(repo: InMemoryAgentRunRepository, run_id: str, ac
     assert run.intent == f"shipment_orders_{action}"
     assert run.tool_calls[0].tool_id == "shipment_orders"
     assert run.tool_calls[0].action == action
-    assert run.tool_calls[0].permission == f"tool.shipment_orders.{action}"
+    expected = (
+        "shipment.create"
+        if action in {"generate", "generate_batch"}
+        else f"tool.shipment_orders.{action}"
+    )
+    assert run.tool_calls[0].permission == expected
     assert run.tool_calls[0].cost_units == 2
     assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
         event.event_type for event in run.events
