@@ -11,13 +11,13 @@ from app.application.dataset_rag_app_service import (
 )
 from app.application.persy_memory_graph import PersyMemoryGraphMixin
 from app.application.persy_memory_utils import (
+    _VISIBLE_MEMORY_STATUSES as _VISIBLE_MEMORY_STATUSES,
+)
+from app.application.persy_memory_utils import (
     PERSY_MEMORY_ACTIVE as PERSY_MEMORY_ACTIVE,
 )
 from app.application.persy_memory_utils import (
     PERSY_MEMORY_PENDING as PERSY_MEMORY_PENDING,
-)
-from app.application.persy_memory_utils import (
-    _VISIBLE_MEMORY_STATUSES as _VISIBLE_MEMORY_STATUSES,
 )
 from app.application.persy_memory_utils import (
     _coerce_access_context as _coerce_access_context,
