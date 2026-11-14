@@ -22,6 +22,7 @@ MINIMUM_REQUIRED = (
     "R05-approved-shipment-export",
     "R02-empty-preview",
     "R07-same-key-different-params",
+    "R09-two-recoveries",
 )
 REQUIRED_TESTS = {
     "R08-e23-readback": (
@@ -39,6 +40,10 @@ REQUIRED_TESTS = {
     "R07-same-key-different-params": (
         "tests/test_application/test_idempotency_recovery_e23_e24.py"
         "::test_same_key_with_different_phone_does_not_reuse_the_row"
+    ),
+    "R09-two-recoveries": (
+        "tests/test_application/test_idempotency_recovery_e23_e24.py"
+        "::test_e24_two_recoveries_leave_one_row"
     ),
 }
 
