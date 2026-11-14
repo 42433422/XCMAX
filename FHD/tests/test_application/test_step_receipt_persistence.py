@@ -17,9 +17,12 @@ from app.application.agent_orchestrator.step_execution import StepExecution
 from app.db.db_base import Base
 
 
+@pytest.mark.parametrize("missing_spec", [False, True])
 @pytest.mark.parametrize("failed_sink", [None, "artifacts", "observation"])
 @pytest.mark.parametrize("unknown", [False, True])
-def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_sink, unknown):
+def test_receipt_is_durable_before_optional_sinks(
+    tmp_path, monkeypatch, failed_sink, unknown, missing_spec
+):
     def no_network(*args, **kwargs):
         raise AssertionError("synthetic receipt tests prohibit network/model access")
 
@@ -81,7 +84,11 @@ def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_
         return apply
 
     dependencies = SimpleNamespace(
-        action_spec=lambda *_: SimpleNamespace(cost_units=0, permission="", timeout_seconds=2),
+        action_spec=lambda *_: (
+            None
+            if missing_spec
+            else SimpleNamespace(cost_units=0, permission="", timeout_seconds=2)
+        ),
         validate=lambda *_: SimpleNamespace(ok=True),
         refresh_budget=lambda _: None,
     )

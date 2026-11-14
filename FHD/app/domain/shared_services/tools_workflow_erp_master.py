@@ -172,7 +172,7 @@ def _registered_router_products(
     if action == "clear":
         listed = svc.get_products(page=1, per_page=100000) or {}
         rows = listed.get("data") if isinstance(listed, dict) else None
-        ids: list[int] = []
+        ids = []
         for row in rows if isinstance(rows, list) else []:
             if not isinstance(row, dict):
                 continue
@@ -254,7 +254,7 @@ def _registered_router_materials(
     if action == "clear":
         listed = svc.get_all_materials(page=1, per_page=100000) or {}
         rows = listed.get("data") if isinstance(listed, dict) else None
-        ids: list[int] = []
+        ids = []
         for row in rows if isinstance(rows, list) else []:
             if not isinstance(row, dict):
                 continue

@@ -148,8 +148,9 @@ class StepExecution:
                 "attempt_count": attempt_count,
             },
         )
-        if tool_call.permission != getattr(spec, "permission", ""):
-            tool_call.metadata["authorization_permission"] = spec.permission
+        authorization_permission = getattr(spec, "permission", "")
+        if tool_call.permission != authorization_permission:
+            tool_call.metadata["authorization_permission"] = authorization_permission
         run.tool_calls.append(tool_call)
         self.usage.refresh_run_cost_metadata(run)
         trace = self._trace(

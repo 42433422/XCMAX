@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
+from starlette.responses import JSONResponse
 
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
@@ -302,7 +303,8 @@ def test_history_persists_summary_only_tool_business_result() -> None:
     assert metadata["ui"]["businessResult"]["summary"] == "已删除"
 
 
-def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn():
+@pytest.mark.parametrize("as_response", [False, True])
+def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn(as_response):
     from contextlib import contextmanager
 
     callbacks = Mock(spec=SessionCallbacks)
@@ -314,15 +316,16 @@ def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn():
     def fake_get_db():
         yield db
 
+    payload = {
+        "success": True,
+        "data": {"workflow_execution": {"success": True, "message": "清理完成"}},
+    }
     with (
         patch("app.db.session.get_db", fake_get_db),
         patch(
             "app.application.approval_workspace_app_service."
             "_approve_ai_workflow_request_without_node",
-            return_value={
-                "success": True,
-                "data": {"workflow_execution": {"success": True, "message": "清理完成"}},
-            },
+            return_value=JSONResponse(payload) if as_response else payload,
         ) as approve,
     ):
         reply = session._auto_approve_waiting_request(
