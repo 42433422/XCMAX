@@ -68,7 +68,19 @@ _SCENARIO_KEYWORDS: dict[str, tuple[str, ...]] = {
     "customer": ("客户", "客户名", "联系人", "往来单位", "这家公司"),
     "sales": ("销售", "订单", "出货", "报价", "收款", "付款", "应收", "发货单"),
     "database": ("数据库", "查库", "入库", "新增", "更新", "删除", "修改", "改一下"),
-    "document": ("excel", "表格", "导出", "报表", "pdf", "ppt", "word", "文档", "打印", "合计", "明细"),
+    "document": (
+        "excel",
+        "表格",
+        "导出",
+        "报表",
+        "pdf",
+        "ppt",
+        "word",
+        "文档",
+        "打印",
+        "合计",
+        "明细",
+    ),
     "knowledge": ("知识库", "资料", "文档库", "dataset", "检索资料"),
     "employee": ("员工", "派活", "专员", "助手", "交接", "让谁", "哪个员工"),
     "memory": ("记住", "偏好", "习惯", "上次说"),
@@ -183,7 +195,9 @@ def select_tools_for_prompt(
     if not intents:
         text = str(message or "").strip()
         if len(text) <= _SMALLTALK_MAX_CHARS:
-            core_only = {tid: spec for tid, spec in tool_registry.items() if _is_core_tool(str(tid))}
+            core_only = {
+                tid: spec for tid, spec in tool_registry.items() if _is_core_tool(str(tid))
+            }
             return core_only or tool_registry
         return tool_registry
     if "employee" in intents:
