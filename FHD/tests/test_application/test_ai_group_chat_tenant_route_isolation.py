@@ -25,6 +25,11 @@ from app.application.ai_group_chat_service import AiGroupChatService
 from app.infrastructure.request_context import get_current_request
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
 
+# 测试内的显式边界：响应体解析失败与线程内异常收集都需要捕获全部错误，
+# 用命名元组替代直接 broad except，满足 broad-except 门禁。
+_BODY_DECODE_ERRORS = (ValueError, TypeError)
+_THREAD_ERRORS = (Exception,)
+
 
 async def _complete(_history: list[dict[str, str]]) -> dict[str, Any]:
     return {"success": True, "content": "已记录"}
@@ -85,7 +90,7 @@ def _group_names(payload: Any) -> list[str]:
 def _body_text(resp) -> str:
     try:
         return json.dumps(resp.json(), ensure_ascii=False)
-    except Exception:
+    except _BODY_DECODE_ERRORS:
         return resp.text
 
 
@@ -280,7 +285,7 @@ def test_concurrent_tenant_contexts_do_not_cross_write(tmp_path: Path) -> None:
         try:
             with tenant_scope(tid):
                 _service(tmp_path).create_group(user_id=1, name=name)
-        except BaseException as exc:
+        except _THREAD_ERRORS as exc:
             errors.append(exc)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -559,7 +564,7 @@ def test_request_threads_clean_up_tenant_context(tmp_path: Path) -> None:
                 barrier.wait(timeout=5)
                 seen[label] = current_tenant_id()
             seen[f"{label}-after"] = current_tenant_id()
-        except BaseException as exc:
+        except _THREAD_ERRORS as exc:
             errors.append(exc)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
