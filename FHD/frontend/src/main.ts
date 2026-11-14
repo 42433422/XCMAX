@@ -32,6 +32,7 @@ import { bootstrapHostConfig } from '@/stores/hostConfig'
 import { waitForInitialBootstrapDependencies } from './bootstrapDependencies'
 import { prefetchRouteChunks } from './utils/routePrefetch'
 import { prefetchShellRouteChunks } from './utils/shellRoutePrefetch'
+import { installBackendHealthBridge } from '@/utils/networkStability'
 import { installDesktopDeviceHeartbeat } from './utils/desktopDeviceHeartbeat'
 
 import './styles/tokens.css'
@@ -136,6 +137,7 @@ function prefetchStaticRouteChunks(): void {
  */
 async function bootstrap() {
   installStabilityClient()
+  installBackendHealthBridge()
   bootstrapEditionDefaults()
   void bootstrapHostConfig()
   applySidebarThemeFromStorage()

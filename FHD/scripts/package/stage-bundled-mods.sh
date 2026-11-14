@@ -30,7 +30,7 @@ IDS_JSON="$("${PYTHON}" "${READ_SCRIPT}" "${SKU}")"
 while IFS= read -r mod_id; do
   [[ -n "${mod_id}" ]] && IDS+=("${mod_id}")
 done < <("${PYTHON}" -c "import json,sys; print('\n'.join(json.loads(sys.argv[1])))" "${IDS_JSON}")
-EXCLUDE_ALWAYS=(taiyangniao-pro sz-qsm-pro _employees industry-solutions)
+EXCLUDE_ALWAYS=(taiyangniao-pro sz-qsm-pro sunbird-attendance-custom _employees industry-solutions)
 
 rm -rf "${STAGE_DIR}"
 mkdir -p "${STAGE_DIR}"
