@@ -72,8 +72,13 @@ def _registered_router_excel_analysis(
             and result.get("row_count") != params["expected_row_count"]
         ):
             mismatches.append("明细行数")
+        summary = result.get("numeric_summary") or {}
         for column, expected in (params.get("expected_totals") or {}).items():
-            actual = (result.get("numeric_summary") or {}).get(column, {}).get("sum")
+            # Sales exports name the money column amount. Plans often say total_amount.
+            source = column
+            if source not in summary and source == "total_amount" and "amount" in summary:
+                source = "amount"
+            actual = summary.get(source, {}).get("sum")
             if actual is None or not isclose(
                 float(actual), float(expected), rel_tol=1e-9, abs_tol=1e-9
             ):

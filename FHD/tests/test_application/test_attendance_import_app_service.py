@@ -137,6 +137,8 @@ class TestEnsureSchema:
             "ix_employees_name",
             "ix_departments_dept",
         } <= names
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(attendance_daily_records)")}
+        assert {"tenant_id", "customer_id"} <= columns
         # 幂等：重复执行不报错
         svc._ensure_schema(conn)
         conn.close()
