@@ -56,6 +56,13 @@ export function useChatHistoryWindow(messages: () => ChatMessage[], host: Ref<HT
     if (!previous || key !== previous[1] || items[0] !== previous[0][0]) showLatest()
   })
   watch([() => messages().length, () => messages()[messages().length - 1]?.content], () => {
+    const items = messages()
+    const last = items[items.length - 1]
+    // 用户自己刚发出消息（含语音通话）时必须回到最新，否则会停在历史窗口里看不到这轮对话。
+    if (!followingLatest.value && last?.role === 'user') {
+      showLatest()
+      return
+    }
     if (followingLatest.value) start.value = Math.max(0, messages().length - CHAT_HISTORY_WINDOW)
     else start.value = Math.min(start.value, Math.max(0, messages().length - CHAT_HISTORY_WINDOW))
     void nextTick().then(bottom)
