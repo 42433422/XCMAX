@@ -156,7 +156,7 @@ def apply_clarification_answer(
             candidate["confirmed"] = True
     candidate.pop("candidates", None)
     candidate.pop("_candidates", None)
-    if target.tool_id == "sales" and target.action in {"quote", "create_order"}:
+    if target.tool_id == "sales" and target.action in {"quote", "create_order"} and parameters:
         from app.application.sales_quote_inputs import quote_answer_candidate
 
         candidate = quote_answer_candidate(target.params, parameters)

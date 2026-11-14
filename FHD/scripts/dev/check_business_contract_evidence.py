@@ -17,7 +17,16 @@ from pathlib import Path
 FHD_ROOT = Path(__file__).resolve().parents[2]
 CATALOG = FHD_ROOT / "config" / "business_contracts.json"
 STATUSES = {"PASS", "FAIL", "BLOCKED", "NOT RUN", "NOT APPLICABLE"}
-MINIMUM_REQUIRED = ("R08-e23-readback", "R05-approved-shipment-export")
+MINIMUM_REQUIRED = (
+    "R08-e23-readback",
+    "R05-approved-shipment-export",
+    "R04-export-submitted-result",
+    "R03-confirm-binding",
+    "R02-empty-preview",
+    "R07-same-key-different-params",
+    "R09-two-recoveries",
+    "R10-tenant-scope",
+)
 REQUIRED_TESTS = {
     "R08-e23-readback": (
         "tests/test_application/test_idempotency_recovery_e23_e24.py"
@@ -26,6 +35,30 @@ REQUIRED_TESTS = {
     "R05-approved-shipment-export": (
         "tests/test_application/test_shipment_records_agent_routes.py"
         "::test_approved_shipment_then_export_uses_full_persisted_plan"
+    ),
+    "R02-empty-preview": (
+        "tests/test_application/test_etl_preview_task_boundaries.py"
+        "::test_empty_preview_is_not_confirmable"
+    ),
+    "R07-same-key-different-params": (
+        "tests/test_application/test_idempotency_recovery_e23_e24.py"
+        "::test_same_key_with_different_phone_does_not_reuse_the_row"
+    ),
+    "R09-two-recoveries": (
+        "tests/test_application/test_idempotency_recovery_e23_e24.py"
+        "::test_e24_two_recoveries_leave_one_row"
+    ),
+    "R04-export-submitted-result": (
+        "tests/test_application/test_shipment_records_agent_routes.py"
+        "::test_approved_shipment_then_export_uses_full_persisted_plan"
+    ),
+    "R03-confirm-binding": (
+        "tests/test_application/test_etl_preview_confirmation.py"
+        "::test_missing_or_wrong_approval_does_not_write_or_claim_run"
+    ),
+    "R10-tenant-scope": (
+        "tests/test_application/test_etl_knowledge_isolation.py"
+        "::test_identical_content_in_two_tenants_never_replaces_first"
     ),
 }
 
@@ -90,6 +123,26 @@ def catalog_errors(data: dict) -> list[str]:
     for scenario_id, node_id in REQUIRED_TESTS.items():
         if node_id not in wired:
             errors.append(f"required test removed: {scenario_id} {node_id}")
+    return errors
+
+
+def floor_errors(floor: dict) -> list[str]:
+    """Fail when this change drops a scenario or test that the floor still requires.
+
+    CI loads the floor from ``origin/main`` once that file exists there. Editing
+    the copy in the pull request does not replace that floor.
+    """
+    errors: list[str] = []
+    required = floor.get("required_scenarios")
+    tests = floor.get("required_tests")
+    if not isinstance(required, list) or not isinstance(tests, dict):
+        return ["floor file is missing required_scenarios or required_tests"]
+    for scenario_id in required:
+        if scenario_id not in MINIMUM_REQUIRED:
+            errors.append(f"main still requires {scenario_id}")
+    for scenario_id, node_id in tests.items():
+        if REQUIRED_TESTS.get(str(scenario_id)) != node_id:
+            errors.append(f"main still requires {scenario_id} {node_id}")
     return errors
 
 
@@ -264,6 +317,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("catalog")
+    floor = sub.add_parser("floor")
+    floor.add_argument("--floor", type=Path, required=True)
     gate = sub.add_parser("ci-gate")
     gate.add_argument("--source-sha", required=True)
     gate.add_argument("--run-id", required=True)
@@ -278,6 +333,13 @@ def main(argv: list[str] | None = None) -> int:
                 print("\n".join(errors), file=sys.stderr)
                 return 1
             print(f"business contracts ok: required={','.join(MINIMUM_REQUIRED)}")
+            return 0
+        if args.command == "floor":
+            errors = floor_errors(json.loads(args.floor.read_text(encoding="utf-8")))
+            if errors:
+                print("\n".join(errors), file=sys.stderr)
+                return 1
+            print(f"business contract floor held: required={','.join(MINIMUM_REQUIRED)}")
             return 0
         evidence = ci_gate(
             args.shards,

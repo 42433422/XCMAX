@@ -69,11 +69,13 @@ def request_planner_completion(
             ModelConcurrencyLimitError,
             ModelRateLimitError,
         )
+        from app.infrastructure.modstore_transport import MarketModelError
         from app.utils.resilience.rate_limiter import RateLimitBackendError
 
         if isinstance(
             exc,
             (
+                MarketModelError,
                 ModelCircuitOpenError,
                 ModelConcurrencyLimitError,
                 ModelRateLimitError,
