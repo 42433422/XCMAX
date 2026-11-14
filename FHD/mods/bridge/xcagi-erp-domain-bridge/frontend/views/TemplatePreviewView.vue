@@ -3,7 +3,7 @@
     <div class="page-content">
       <div class="page-header">
         <h2>模板预览</h2>
-        <p class="muted" style="margin:0;font-size:13px;">浏览并管理已保存的 Excel / Word 导出模板：可按业务分组，也可「自定义」新建。</p>
+        <p class="muted" style="margin:0;font-size:13px;">浏览并管理已保存的 Excel / Word / PPT / PDF / CSV 导出模板：可按业务分组，也可「自定义」新建。</p>
       </div>
 
       <section class="template-library-intake-note" aria-label="模板库说明">
@@ -25,12 +25,31 @@
           {{ tab.label }}
         </button>
         <button type="button" class="btn btn-sm btn-secondary" @click="refreshTemplates">刷新</button>
+        <div class="template-search">
+          <i class="fa fa-search template-search__icon" aria-hidden="true"></i>
+          <input
+            v-model.trim="searchKeyword"
+            class="template-search__input"
+            type="text"
+            placeholder="搜索模板名称、类型或业务范围"
+            aria-label="搜索模板"
+          />
+          <button
+            v-if="searchKeyword"
+            type="button"
+            class="template-search__clear"
+            aria-label="清空搜索"
+            @click="searchKeyword = ''"
+          >
+            &times;
+          </button>
+        </div>
         <button type="button" class="btn btn-sm btn-primary" @click="openCreateModal()">
           <i class="fa fa-plus" aria-hidden="true"></i> 创建模板
         </button>
       </div>
       <div class="template-rule-hint">
-        模板替换会校验功能词条完整性：Excel 按表头/单元格词条；Word 按正文与页眉页脚中的占位符（如 <span v-pre>{{产品型号}}</span>）；须覆盖对应业务的全部必备词条后才允许保存。
+        模板替换会校验功能词条完整性：Excel / CSV 按表头或单元格词条；Word 按正文与页眉页脚中的占位符（如 <span v-pre>{{产品型号}}</span>）；PPT / PDF 仅登记原件路径。须覆盖对应业务的全部必备词条后才允许保存。
       </div>
       <div class="grid-tool-card">
         <div class="grid-tool-title">Excel 网格映射工具</div>
@@ -52,7 +71,9 @@
 
       <div v-if="loading" class="muted">模板加载中...</div>
       <div v-else-if="error" class="muted">{{ error }}</div>
-      <div v-else-if="filteredTemplates.length === 0" class="muted">当前业务范围暂无导出模板</div>
+      <div v-else-if="filteredTemplates.length === 0" class="muted">
+        {{ searchKeyword ? `没有匹配「${searchKeyword}」的模板` : '当前业务范围暂无导出模板' }}
+      </div>
 
       <div v-else class="template-preview-section">
         <div class="template-preview-grid">
@@ -90,7 +111,7 @@ const tp = assembleTemplatePreview()
 const gridToolFileInput = ref<HTMLInputElement | null>(null)
 
 const {
-  scopeTabs, activeScopeTab, refreshTemplates, openCreateModal,
+  scopeTabs, activeScopeTab, searchKeyword, refreshTemplates, openCreateModal,
   onGridToolFileSelected, gridToolFile, extractingGrid, extractGridFromExcel,
   gridToolResult, openGridToolPreview,
   loading, error, filteredTemplates,
@@ -105,5 +126,51 @@ const {
 }
 .template-library-intake-note a {
   color: #235d8c;
+}
+.template-search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 240px;
+  flex: 1 1 240px;
+  max-width: 320px;
+}
+.template-search__icon {
+  position: absolute;
+  left: 9px;
+  font-size: 12px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+.template-search__input {
+  width: 100%;
+  height: 30px;
+  padding: 0 26px 0 28px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #334155;
+  outline: none;
+}
+.template-search__input:focus {
+  border-color: #0b72d9;
+  box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.14);
+}
+.template-search__clear {
+  position: absolute;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.template-search__clear:hover {
+  background: #e2e8f0;
+  color: #475569;
 }
 </style>

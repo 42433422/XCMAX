@@ -18,27 +18,27 @@ vi.mock('@/utils/tenantStorageScope', () => ({
 
 describe('marketCatalogCache – buildMarketCatalogCacheKey', () => {
   it('tab 和 q 组合 key', () => {
-    expect(buildMarketCatalogCacheKey('office', 'excel')).toBe('office:excel')
+    expect(buildMarketCatalogCacheKey('office', 'excel')).toBe('v2:office:excel')
   })
 
   it('q 为空字符串时', () => {
-    expect(buildMarketCatalogCacheKey('office', '')).toBe('office:')
+    expect(buildMarketCatalogCacheKey('office', '')).toBe('v2:office:')
   })
 
   it('q 为空白字符串时 trim 后为空', () => {
-    expect(buildMarketCatalogCacheKey('office', '   ')).toBe('office:')
+    expect(buildMarketCatalogCacheKey('office', '   ')).toBe('v2:office:')
   })
 
   it('q 为 undefined 时使用默认空字符串', () => {
-    expect(buildMarketCatalogCacheKey('office')).toBe('office:')
+    expect(buildMarketCatalogCacheKey('office')).toBe('v2:office:')
   })
 
   it('tab 为空字符串时', () => {
-    expect(buildMarketCatalogCacheKey('', 'query')).toBe(':query')
+    expect(buildMarketCatalogCacheKey('', 'query')).toBe('v2::query')
   })
 
   it('q 含前后空格时 trim', () => {
-    expect(buildMarketCatalogCacheKey('all', '  keyword  ')).toBe('all:keyword')
+    expect(buildMarketCatalogCacheKey('all', '  keyword  ')).toBe('v2:all:keyword')
   })
 })
 

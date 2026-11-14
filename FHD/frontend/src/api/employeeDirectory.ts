@@ -10,6 +10,9 @@ export type DirectoryEmployee = {
   /** 区域中文名，如「制作车间」；无映射时为空 */
   department: string
   runtime_ok: boolean
+  /** 仅提示词、无本地 Python 运行时的对话型员工 */
+  prompt_only: boolean
+  runtime_kind: 'direct_python' | 'prompt_only'
   handlers: string[]
 }
 

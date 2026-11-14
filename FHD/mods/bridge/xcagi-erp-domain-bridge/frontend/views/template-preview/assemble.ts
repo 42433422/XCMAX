@@ -10,6 +10,8 @@ import {
   canPreviewVirtualTemplate,
   getExcelPreviewTitle,
   getMatchedScopeLabels,
+  getTemplateCategoryIcon,
+  getTemplateCategoryLabel,
   getTemplateCoverage,
   getTemplateDisplayTermsText,
   getTemplateFields,
@@ -19,7 +21,11 @@ import {
   getTemplateScopeLabel,
   getTemplateSourceLabel,
   getTemplateTypeLabel,
+  isGridTemplateCategory,
 } from './tpTemplateMeta'
+
+/** 全局搜索向模板库交接关键词的 sessionStorage 键（顶部搜索框与模板库共用）。 */
+export const TEMPLATE_SEARCH_STORAGE_KEY = 'xcagi_template_search_keyword'
 
 /**
  * 组装模板预览视图全部状态与动作；子组件通过单一 ctx prop 共享，
@@ -46,8 +52,39 @@ export function assembleTemplatePreview() {
     { immediate: true }
   )
 
+  watch(
+    () => route.query.keyword,
+    (keyword) => list.applyRouteKeyword(keyword),
+    { immediate: true }
+  )
+
+  /** 顶部全局搜索跳转时通过 sessionStorage 交接关键词，避免依赖挂载时序。 */
+  function consumeGlobalSearchHandoff() {
+    try {
+      const keyword = sessionStorage.getItem(TEMPLATE_SEARCH_STORAGE_KEY) || ''
+      if (!keyword) return
+      sessionStorage.removeItem(TEMPLATE_SEARCH_STORAGE_KEY)
+      list.applyRouteKeyword(keyword)
+    } catch {
+      /* 无 sessionStorage（隐私模式等）时忽略 */
+    }
+  }
+
+  /** 已在模板库页面时不会重新挂载，改由事件即时应用关键词。 */
+  function onGlobalSearchEvent(event: Event) {
+    const keyword = String((event as CustomEvent<{ keyword?: string }>).detail?.keyword || '').trim()
+    if (keyword) list.applyRouteKeyword(keyword)
+    try {
+      sessionStorage.removeItem(TEMPLATE_SEARCH_STORAGE_KEY)
+    } catch {
+      /* 忽略 */
+    }
+  }
+
   onMounted(() => {
     active = true
+    consumeGlobalSearchHandoff()
+    window.addEventListener('xcagi:template-search', onGlobalSearchEvent)
     window.addEventListener('xcagi:templates-updated', templatesUpdated)
     void list.refreshTemplates()
   })
@@ -65,6 +102,7 @@ export function assembleTemplatePreview() {
   onDeactivated(() => { active = false })
 
   onBeforeUnmount(() => {
+    window.removeEventListener('xcagi:template-search', onGlobalSearchEvent)
     window.removeEventListener('xcagi:templates-updated', templatesUpdated)
     create.stopProgressTimer()
   })
@@ -87,6 +125,9 @@ export function assembleTemplatePreview() {
     getTemplateGridData,
     getExcelPreviewTitle,
     getTemplateTypeLabel,
+    getTemplateCategoryLabel,
+    getTemplateCategoryIcon,
+    isGridTemplateCategory,
     getTemplateDisplayTermsText,
     getMatchedScopeLabels,
     getTemplateCoverage,

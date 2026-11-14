@@ -303,6 +303,7 @@ def _template_platform_complete(
     """Template route through the software platform default model (market session)."""
     import asyncio
     import logging
+    import time
 
     import httpx
 
@@ -341,11 +342,18 @@ def _template_platform_complete(
         except INFRA_TRANSIENT:
             raise ModelRequestNotSent("平台模型初始化失败；未调用模型") from None
         from app.application.reviewed_excel_audit import current_call_id
-        from app.application.reviewed_excel_budget import template_first_byte_seconds
+        from app.application.reviewed_excel_budget import (
+            template_call_max_seconds,
+            template_first_byte_seconds,
+        )
 
         audit_callback = response_capture()
         call_id = current_call_id()
         first_byte_seconds = min(template_first_byte_seconds(), timeout_seconds)
+        # One absolute cap per platform call: activity cannot extend it, and every
+        # attempt (including same-key recovery) shares the same deadline.
+        max_seconds = template_call_max_seconds()
+        deadline = time.monotonic() + max_seconds
         seen = {"on": False}
 
         def _still_processing() -> None:
@@ -366,12 +374,18 @@ def _template_platform_complete(
                 )
             )
             try:
-                # The first event has its own deadline; later events reset an idle wait.
+                # The first event has its own deadline; later events extend only the
+                # idle wait between events, never the absolute cap of the call.
                 wait = first_byte_seconds
                 while True:
-                    done, _pending = await asyncio.wait({task}, timeout=wait)
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    done, _pending = await asyncio.wait({task}, timeout=min(wait, remaining))
                     if task in done:
                         return task.result()
+                    if deadline - time.monotonic() <= 0:
+                        break
                     if not seen["on"]:
                         break
                     seen["on"] = False
@@ -381,6 +395,11 @@ def _template_platform_complete(
                     await task
                 except asyncio.CancelledError:
                     pass
+                if time.monotonic() >= deadline:
+                    raise ReviewedExcelError(
+                        f"平台模型生成超时（已超过 {max_seconds:g} 秒），"
+                        "已中断本次生成；可重新发起该文件的生成"
+                    )
                 raise TimeoutError
             finally:
                 if not task.done():

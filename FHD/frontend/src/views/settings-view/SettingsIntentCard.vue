@@ -1,8 +1,8 @@
 <template>
-  <details class="settings-card" data-tutorial-id="settings-intent" open>
+  <details class="settings-card" data-tutorial-id="settings-intent">
     <summary class="settings-row">
-      <span class="settings-row__icon settings-row__icon--purple" aria-hidden="true">
-        <i class="fa fa-magic"></i>
+      <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
+        <img class="settings-row__icon-art" :src="intentArtSrc" alt="" />
       </span>
       <span class="settings-row__label">{{ $t('settings.aiIntent') }}</span>
       <span v-if="currentIntentIndustryLabel" class="settings-row__pill" @click.stop>
@@ -50,6 +50,7 @@
 
 <script setup lang="ts">
 import { useIndustryStore } from '@/stores/industry'
+import intentArtSrc from '@/assets/icons/settings/r1c4.png'
 
 const industryStore = useIndustryStore()
 defineProps<{

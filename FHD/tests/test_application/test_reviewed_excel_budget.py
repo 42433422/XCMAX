@@ -170,6 +170,65 @@ def test_template_timeout_is_separate_from_elt_row_limit(monkeypatch):
     assert template_timeout_seconds() == 180
 
 
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (None, 600),
+        ("90", 90),
+        ("30", 30),
+        ("1800", 1800),
+        ("29", 600),
+        ("1801", 600),
+        ("nan", 600),
+        ("inf", 600),
+        ("not-a-number", 600),
+    ],
+)
+def test_template_call_max_seconds_defaults_and_falls_back_on_invalid_range(
+    monkeypatch, value, expected
+):
+    from app.application.reviewed_excel_budget import template_call_max_seconds
+
+    if value is None:
+        monkeypatch.delenv("FHD_TEMPLATE_LLM_MAX_SECONDS", raising=False)
+    else:
+        monkeypatch.setenv("FHD_TEMPLATE_LLM_MAX_SECONDS", value)
+    assert template_call_max_seconds() == expected
+
+
+def test_template_call_absolute_cap_interrupts_keepalive_activity(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    from app.application.elt import llm_session_provider as sessions
+    from app.application.reviewed_excel_template import _template_platform_complete
+
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
+
+    async def chat(*_args, **kwargs):
+        alive = kwargs["_processing_status"]
+        for _ in range(200):
+            alive()
+            await asyncio.sleep(0.005)
+
+    monkeypatch.setattr(
+        sessions,
+        "current_owner_market_provider",
+        lambda **_: SimpleNamespace(is_configured=True, chat_completion=chat),
+    )
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_budget.template_timeout_seconds", lambda: 0.02
+    )
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_budget.template_first_byte_seconds", lambda: 0.02
+    )
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_budget.template_call_max_seconds", lambda: 0.2
+    )
+    with pytest.raises(ReviewedExcelError, match="平台模型生成超时"):
+        _template_platform_complete([], {}, 20, owner_id=7)
+
+
 @pytest.mark.parametrize("failure_type", [RuntimeError, OSError, ImportError, TypeError])
 def test_platform_initialization_failure_is_presend_and_restores_owner(monkeypatch, failure_type):
     from app.application.elt import llm_session_provider as sessions

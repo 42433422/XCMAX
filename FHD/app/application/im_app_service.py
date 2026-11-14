@@ -17,6 +17,7 @@ from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
 from app.domain.app_pure.im_read_state_mixin import ImReadStateMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.user_avatar_storage import avatar_file_for_user
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -104,9 +105,27 @@ class ImApplicationService(ImReadStateMixin, ImEmployeeMixin, EmployeePeerMixin)
             "display_name": name or f"用户{user.id}",
             "username": str(user.username or "").strip(),
         }
+        avatar_url = ImApplicationService.user_avatar_url(user)
+        if avatar_url:
+            out["avatar_url"] = avatar_url
         if dedicated_cs:
             out["is_enterprise_dedicated_cs"] = True
         return out
+
+    @staticmethod
+    def user_avatar_url(user: User | None) -> str:
+        """账号池里的持久化头像；本机头像走统一鉴权后的 IM 头像接口。"""
+        if user is None or not getattr(user, "id", None):
+            return ""
+        stored = str(getattr(user, "wx_avatar_url", "") or "").strip()
+        if stored.startswith(("http://", "https://")):
+            return stored
+        try:
+            if avatar_file_for_user(int(user.id)) is None:
+                return ""
+        except OSError:
+            return ""
+        return f"/api/im/users/{int(user.id)}/avatar"
 
     def _direct_peer_id(self, conversation_id: int, user_id: int) -> int | None:
         row = self._db.execute(
@@ -275,6 +294,9 @@ class ImApplicationService(ImReadStateMixin, ImEmployeeMixin, EmployeePeerMixin)
                 "peer_username": username,
                 "employee_id": username[len("emp:") :] if username.startswith("emp:") else "",
             }
+            avatar_url = self.user_avatar_url(peer)
+            if avatar_url:
+                item["avatar_url"] = avatar_url
             if conv.is_direct and self._is_enterprise_dedicated_cs_user(peer):
                 item["is_enterprise_dedicated_cs"] = True
             result.append(item)

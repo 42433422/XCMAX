@@ -1,9 +1,8 @@
 <template>
   <div class="panel-content panel-content-task" id="taskPanel">
       <div class="task-panel-body">
-        <div v-if="taskSyncState" class="task-sync-status" role="status" aria-live="polite">
-          <p v-if="taskSyncState.error">{{ taskSyncState.error }}</p>
-          <span>{{ taskSyncState.lastVerifiedAt ? `上次核对：${new Date(taskSyncState.lastVerifiedAt).toLocaleString('zh-CN')}` : '任务状态尚未核对' }}</span>
+        <div v-if="taskSyncState?.error" class="task-sync-status" role="status" aria-live="polite">
+          <p>{{ taskSyncState.error }}</p>
           <button type="button" class="btn btn-secondary btn-sm" :disabled="taskSyncState.checking" @click="$emit('refresh-tasks')">
             {{ taskSyncState.checking ? '正在核对…' : '重新核对状态' }}
           </button>
@@ -106,14 +105,19 @@
         </template>
         <template v-if="taskList.length">
           <div class="task-toolbar" :class="{ 'task-toolbar-below-card': !!currentTask }">
-            <div class="task-filters">
-              <button class="task-filter-btn" :class="{ active: taskFilter === 'all' }" @click="$emit('set-task-filter', 'all')">{{ $t('chat.filterAll') }}</button>
-              <button class="task-filter-btn" :class="{ active: taskFilter === 'running' }" @click="$emit('set-task-filter', 'running')">{{ $t('chat.filterRunning') }}</button>
-              <button class="task-filter-btn" :class="{ active: taskFilter === 'blocked' }" @click="$emit('set-task-filter', 'blocked')">{{ $t('chat.filterBlocked') }}</button>
-              <button class="task-filter-btn" :class="{ active: taskFilter === 'success' }" @click="$emit('set-task-filter', 'success')">{{ $t('chat.filterSuccess') }}</button>
-              <button class="task-filter-btn" :class="{ active: taskFilter === 'failed' }" @click="$emit('set-task-filter', 'failed')">{{ $t('chat.filterFailed') }}</button>
-            </div>
-            <button class="btn btn-secondary btn-sm" @click="$emit('clear-task-history')">{{ $t('chat.clearTaskHistory') }}</button>
+            <select
+              class="task-filter-select"
+              :value="taskFilter"
+              aria-label="按状态筛选任务"
+              @change="onTaskFilterChange"
+            >
+              <option value="all">{{ $t('chat.filterAll') }}</option>
+              <option value="running">{{ $t('chat.filterRunning') }}</option>
+              <option value="blocked">{{ $t('chat.filterBlocked') }}</option>
+              <option value="success">{{ $t('chat.filterSuccess') }}</option>
+              <option value="failed">{{ $t('chat.filterFailed') }}</option>
+            </select>
+            <button class="task-clear" type="button" @click="$emit('clear-task-history')">{{ $t('chat.clearTaskHistory') }}</button>
           </div>
           <div class="task-list" data-tutorial-id="task-workspace-list">
             <div
@@ -126,6 +130,15 @@
                   task.type === 'workflow_employee' && !expandedTaskIds.includes(task.id),
               }"
             >
+              <button
+                type="button"
+                class="task-list-close"
+                aria-label="关闭任务"
+                title="关闭任务"
+                @click.stop="$emit('remove-task', task.id)"
+              >
+                ×
+              </button>
               <button
                 type="button"
                 class="task-list-main"
@@ -149,7 +162,6 @@
                 v-if="task.type !== 'workflow_employee' || expandedTaskIds.includes(task.id)"
                 class="task-list-meta"
               >
-                <span>{{ formatTaskSourceLabel(task.source) }}</span>
                 <span
                   v-if="typeof task.progress === 'number' && task.status !== 'failed' && task.status !== 'cancelled' && !(task.type === 'workflow_employee' && task.payload?.workflowProgressStarted === false)"
                 >{{ $t('chat.progress', { pct: task.progress }) }}</span>
@@ -243,7 +255,6 @@
                     @click="$emit('open-shipment-records')"
                   >{{ $t('chat.openShipmentRecords') }}</button>
                   <button class="btn btn-secondary btn-sm" @click="$emit('jump-to-task-message', task)">{{ $t('chat.jumpToMessage') }}</button>
-                  <span class="task-summary">本地状态快照，不提供伪控制</span>
                 </div>
               </div>
             </div>
@@ -335,6 +346,7 @@ const emit = defineEmits<{
   'switch-view': [view: string]
   'set-task-filter': [filter: TaskFilter]
   'clear-task-history': []
+  'remove-task': [id: string]
   'toggle-task-expanded': [id: string]
   'select-task': [task: TaskItem]
   'open-shipment-records': []
@@ -363,6 +375,11 @@ function openWorkspace(task: TaskItem): void {
   const target = workspaceTargets.value[task.id]
   if (target) void router.push(target)
   else emit('select-task', task)
+}
+
+function onTaskFilterChange(event: Event): void {
+  const target = event.target as HTMLSelectElement | null
+  if (target) emit('set-task-filter', target.value as TaskFilter)
 }
 const customOrderNumberModel = computed({
   get: () => props.currentTask?.customOrderNumber ?? '',

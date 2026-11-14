@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatWorkDurationShort, totalWorkMs } from './useWorkflowEmployeeDesks'
+import { formatWorkDurationShort, totalWorkMs, resolveDeskStatusLine } from './useWorkflowEmployeeDesks'
 
 describe('useWorkflowEmployeeDesks', () => {
   describe('formatWorkDurationShort', () => {
@@ -37,6 +37,26 @@ describe('useWorkflowEmployeeDesks', () => {
 
     it('returns days with hours', () => {
       expect(formatWorkDurationShort(126000000)).toBe('1d 11h')
+    })
+  })
+
+  describe('resolveDeskStatusLine', () => {
+    it('uses on-duty wording for prompt-only employees', () => {
+      expect(
+        resolveDeskStatusLine({ empId: 'wb', panelTitle: '工作流 · 专家', shortName: '专家', enabled: false, promptOnly: true }),
+      ).toBe('待召唤')
+      expect(
+        resolveDeskStatusLine({ empId: 'wb', panelTitle: '工作流 · 专家', shortName: '专家', enabled: true, promptOnly: true }),
+      ).toBe('待命')
+    })
+
+    it('keeps window wording for runnable employees', () => {
+      expect(
+        resolveDeskStatusLine({ empId: 'excel', panelTitle: '工作流 · Excel', shortName: 'Excel', enabled: false }),
+      ).toBe('副窗未启用')
+      expect(
+        resolveDeskStatusLine({ empId: 'excel', panelTitle: '工作流 · Excel', shortName: 'Excel', enabled: true }),
+      ).toBe('暂无快照')
     })
   })
 

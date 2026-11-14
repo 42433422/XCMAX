@@ -18,6 +18,11 @@ dependencies = [
 xcagi-brain = "app.cli.brain:main"
 
 [project.optional-dependencies]
+# 可选：Docling 文档解析后端（PDF/DOCX/PPTX 的版面、表格与扫描件 OCR）。
+# 默认不安装；安装后由 XCAGI_DOC_PARSER=auto 自动启用。
+doc-parsing = [
+    "docling>=2.0.0",
+]
 server-api = [
     "fastapi>=0.136.1",
     "uvicorn[standard]>=0.27.0",

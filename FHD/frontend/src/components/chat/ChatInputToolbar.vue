@@ -56,6 +56,16 @@
     <button
       class="toolbar-btn"
       type="button"
+      :title="$t('chat.uploadFolderTitle')"
+      @click="triggerFolderUpload"
+      :disabled="excelAnalyzeUploading"
+    >
+      <i class="fa fa-folder-open" aria-hidden="true"></i>
+      {{ $t('chat.uploadFolder') }}
+    </button>
+    <button
+      class="toolbar-btn"
+      type="button"
       data-tutorial-id="toolbar-office-docking"
       :title="$t('chat.officeDockingTitle')"
       @click="$emit('trigger-office-docking')"
@@ -67,7 +77,16 @@
     <input
       ref="fileInputRef"
       type="file"
-      accept=".xlsx,.xlsm,image/jpeg,image/png,image/webp,image/gif,.pdf,application/pdf,.log,.txt,text/plain"
+      :accept="intakeAcceptAttribute('context', 'analysis')"
+      multiple
+      style="display: none"
+      @change="onFileChange"
+    />
+    <input
+      ref="folderInputRef"
+      type="file"
+      webkitdirectory
+      directory
       multiple
       style="display: none"
       @change="onFileChange"
@@ -113,6 +132,7 @@
 import { ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApprovalMode } from '@/composables/useApprovalMode'
+import { intakeAcceptAttribute } from '@/utils/documentIntake'
 
 useI18n()
 
@@ -139,6 +159,7 @@ const emit = defineEmits<{
 }>()
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const folderInputRef = ref<HTMLInputElement | null>(null)
 
 function toggleApproval() {
   approvalMode.setEnabled(!approvalMode.state.enabled)
@@ -159,6 +180,10 @@ watch(
 
 function triggerUpload() {
   fileInputRef.value?.click()
+}
+
+function triggerFolderUpload() {
+  folderInputRef.value?.click()
 }
 
 function onFileChange(event: Event) {

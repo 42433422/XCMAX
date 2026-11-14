@@ -835,6 +835,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     bindAllExcelSheetsToChat,
     toggleTaskExpanded,
     setTaskFilter,
+    removeTask,
     ...agentTaskRuntime,
     jumpToTaskMessage,
     handleAutoAction,

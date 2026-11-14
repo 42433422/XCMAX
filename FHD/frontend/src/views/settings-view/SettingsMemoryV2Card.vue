@@ -1,8 +1,8 @@
 <template>
-  <details class="settings-card" data-tutorial-id="settings-memory-v2" open>
+  <details class="settings-card" data-tutorial-id="settings-memory-v2">
     <summary class="settings-row">
-      <span class="settings-row__icon settings-row__icon--blue" aria-hidden="true">
-        <i class="fa fa-bookmark"></i>
+      <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
+        <img class="settings-row__icon-art" :src="persyArtSrc" alt="" />
       </span>
       <span class="settings-row__label">{{ $t('settings.persySystem') }}</span>
       <span class="settings-row__meta">{{ persyFoldMeta }}</span>
@@ -249,6 +249,7 @@
 <script setup lang="ts">
 import type { MemoryV2Record, MemoryV2Status, MemoryV2Type } from '@/api/memoryV2'
 import type { ButlerProfileView } from '@/api/butlerProfile'
+import persyArtSrc from '@/assets/icons/settings/r2c1.png'
 
 const props = defineProps<{
   persyFoldMeta: string

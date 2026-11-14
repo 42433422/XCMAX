@@ -401,21 +401,22 @@ describe('ChatView functions – sendQuick', () => {
     localStorage.clear()
   })
 
-  it('设置 messageInput 并触发发送', async () => {
+  it('只填入输入框，不自动发送', async () => {
     const { wrapper } = await mountChatView()
     const vm = wrapper.vm as any
     vm.sendQuick('快捷消息')
     await flushPromises()
-    expect(mockChatSendMessage).toHaveBeenCalledWith('快捷消息')
+    expect(vm.messageInput).toBe('快捷消息')
+    expect(mockChatSendMessage).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('空字符串也能触发发送', async () => {
+  it('空字符串只填入输入框，不发送', async () => {
     const { wrapper } = await mountChatView()
     const vm = wrapper.vm as any
     vm.sendQuick('')
     await flushPromises()
-    // 空字符串 trim 后为空，不发送
+    expect(vm.messageInput).toBe('')
     expect(mockChatSendMessage).not.toHaveBeenCalled()
     wrapper.unmount()
   })

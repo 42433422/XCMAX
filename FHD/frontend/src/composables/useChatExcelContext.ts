@@ -117,15 +117,17 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     syncScope()
     const capturedScope = activeScope, capturedRevision = revision
     const isCurrent = deps.captureIsCurrent?.() || (() => true)
-    const res = await filesToMultimodalRows(list)
+    const res = await filesToMultimodalRows(list, { skipUnsupported: list.length > 1 })
     if (capturedRevision !== revision || capturedScope !== scopeKey() || !isCurrent()) return
     if (!res.ok) {
       await addAndSaveMessage(`[附件] ${res.error}`, 'ai')
       return
     }
-    multimodalStaging.value = [...multimodalStaging.value, ...res.rows].slice(-6)
+    multimodalStaging.value = [...multimodalStaging.value, ...res.rows].slice(-50)
+    const names = res.rows.slice(0, 5).map((r) => r.filename).join('、')
+    const suffix = res.rows.length > 5 ? ` 等 ${res.rows.length} 个文件` : ''
     await addAndSaveMessage(
-      `[附件] 已加入 ${res.rows.length} 个文件（${res.rows.map((r) => r.filename).join('、')}），发送下一条消息时将一并提交给模型。`,
+      `[附件] 已加入 ${res.rows.length} 个文件（${names}${suffix}），发送下一条消息时将一并提交给模型。`,
       'ai',
     )
   }

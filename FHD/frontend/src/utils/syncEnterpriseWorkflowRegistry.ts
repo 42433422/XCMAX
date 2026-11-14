@@ -6,7 +6,7 @@ import type { ModWithWorkflowEmployees } from '@/utils/modWorkflowEmployees'
 
 /** 统一员工目录 → 注册表源形态（每个员工包一行工位）。 */
 export function directoryToWorkflowMods(
-  rows: Array<{ pack_id: string; label: string }>,
+  rows: Array<{ pack_id: string; label: string; prompt_only?: boolean }>,
 ): ModWithWorkflowEmployees[] {
   return rows
     .filter((row) => String(row.pack_id || '').trim())
@@ -15,7 +15,9 @@ export function directoryToWorkflowMods(
       return {
         id: packId,
         directory_sourced: true,
-        workflow_employees: [{ id: packId, label: String(row.label || packId) }],
+        workflow_employees: [
+          { id: packId, label: String(row.label || packId), prompt_only: row.prompt_only === true },
+        ],
       }
     })
 }

@@ -1035,28 +1035,31 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   // ===== 10. 工具函数与计算属性 =====
 
-  it('avatarText 处理空字符串返回 ?', async () => {
-    imMocks.fetchImConversations.mockResolvedValue([{ ...sampleConversation, title: '' }])
+  it('无头像的会话从员工头像池稳定取图（标题为空）', async () => {
+    imMocks.fetchImConversations.mockResolvedValue([{ ...sampleConversation2, title: '' }])
     imMocks.fetchImContacts.mockResolvedValue([])
     const wrapper = await mountView()
-    const avatar = wrapper.find('.im-conv-item:not(.im-conv-item--pinned) .im-avatar')
-    expect(avatar.text()).toBe('?')
+    const avatar = wrapper.find('.im-conv-item:not(.im-conv-item--pinned) .im-avatar img')
+    expect(avatar.exists()).toBe(true)
+    expect(avatar.attributes('src')).toBeTruthy()
   })
 
-  it('avatarText 处理 null/undefined 返回 ?', async () => {
-    imMocks.fetchImConversations.mockResolvedValue([{ ...sampleConversation, title: null as unknown as string }])
+  it('无头像的会话从员工头像池稳定取图（标题为 null）', async () => {
+    imMocks.fetchImConversations.mockResolvedValue([{ ...sampleConversation2, title: null as unknown as string }])
     imMocks.fetchImContacts.mockResolvedValue([])
     const wrapper = await mountView()
-    const avatar = wrapper.find('.im-conv-item:not(.im-conv-item--pinned) .im-avatar')
-    expect(avatar.text()).toBe('?')
+    const avatar = wrapper.find('.im-conv-item:not(.im-conv-item--pinned) .im-avatar img')
+    expect(avatar.exists()).toBe(true)
+    expect(avatar.attributes('src')).toBeTruthy()
   })
 
-  it('avatarText 取首字符并大写', async () => {
-    imMocks.fetchImConversations.mockResolvedValue([{ ...sampleConversation, title: '张三' }])
+  it('账号池携带头像时优先展示持久化头像', async () => {
+    imMocks.fetchImConversations.mockResolvedValue([{ ...sampleConversation2, title: '张三', avatar_url: '/api/im/users/10/avatar' }])
     imMocks.fetchImContacts.mockResolvedValue([])
     const wrapper = await mountView()
-    const avatar = wrapper.find('.im-conv-item:not(.im-conv-item--pinned) .im-avatar')
-    expect(avatar.text()).toBe('张')
+    const avatar = wrapper.find('.im-conv-item:not(.im-conv-item--pinned) .im-avatar img')
+    expect(avatar.exists()).toBe(true)
+    expect(avatar.attributes('src')).toBe('/api/im/users/10/avatar')
   })
 
   it('formatTime 处理 null 返回空字符串', async () => {

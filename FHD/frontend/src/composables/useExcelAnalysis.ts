@@ -11,6 +11,8 @@ export type { ExcelAnalysisResult } from '@/types/excel'
 /** 多表 xlsx 在服务端 openpyxl 解析可能远超 30s；过短会 Abort 且任务面板卡在「解析工作簿」进度 */
 const EXTRACT_GRID_TIMEOUT_MS = 180_000
 const EXTRACT_GRID_SINGLE_SHEET_TIMEOUT_MS = 90_000
+/** 文件夹批量分析上限，避免整目录扫描时串行请求过多。 */
+const MAX_BATCH_EXCEL_FILES = 10
 
 /**
  * 必须始终用相对路径（与当前页面同源），经 Vite :5001 代理到后端 :5000。
@@ -235,10 +237,11 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
 
   async function onExcelAnalyzeFileChange(e: Event): Promise<void> {
     const input = e.target as HTMLInputElement
-    const file = input.files?.[0]
+    const files = Array.from(input.files || [])
+    const file = files[0]
     if (!file) return
 
-    if (/\.(xlsx|xlsm)$/i.test(file.name)) {
+    if (files.length === 1 && /\.(xlsx|xlsm)$/i.test(file.name)) {
       const isCurrent = options.captureIsCurrent?.() || (() => true)
       // Excel is copied into FormData synchronously below, so the picker can be
       // reset now and selecting the same workbook again will still emit change.
@@ -355,12 +358,29 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
         excelAnalyzeUploading.value = false
       }
     } else {
-      if (onMultimodalFileChangeCallback) {
-        await onMultimodalFileChangeCallback(e)
-      }
-      // The multimodal handler snapshots File objects before clearing. Keep
-      // this fallback for callers that register a custom handler.
+      // 文件夹/多选场景：Excel 逐个分析，其余文件交给多模态暂存。
+      const excelFiles = files.filter((f) => /\.(xlsx|xlsm)$/i.test(f.name))
+      const otherFiles = files.filter((f) => !/\.(xlsx|xlsm)$/i.test(f.name))
       input.value = ''
+      if (excelFiles.length) {
+        const batch = excelFiles.slice(0, MAX_BATCH_EXCEL_FILES)
+        if (excelFiles.length > batch.length) {
+          appendChatLine(
+            `[附件] 文件夹内共 ${excelFiles.length} 个 Excel，本次仅分析前 ${batch.length} 个。`,
+            'ai',
+          )
+        }
+        for (const excelFile of batch) {
+          await onExcelAnalyzeFileChange({
+            target: { files: [excelFile], value: '' },
+          } as unknown as Event)
+        }
+      }
+      if (otherFiles.length && onMultimodalFileChangeCallback) {
+        await onMultimodalFileChangeCallback({
+          target: { files: otherFiles, value: '' },
+        } as unknown as Event)
+      }
     }
   }
 

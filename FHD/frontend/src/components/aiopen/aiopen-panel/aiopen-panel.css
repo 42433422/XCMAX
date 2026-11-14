@@ -570,3 +570,6 @@
 .aiopen-row-auth { grid-template-columns: auto 1fr; }
 .aiopen-input, .aiopen-select { border: 1px solid #d1d5db; border-radius: 6px; padding: 5px 8px; min-width: 0; }
 .aiopen-result { color: #64748b; min-height: 16px; }
+.aiopen-usage { margin: 6px 0; padding: 6px 8px; background: #f8fafc; border-radius: 6px; }
+.aiopen-usage-title { margin: 0; font-size: 12px; color: #334155; }
+.aiopen-usage-recent { margin: 2px 0 0; font-size: 11px; color: #94a3b8; }

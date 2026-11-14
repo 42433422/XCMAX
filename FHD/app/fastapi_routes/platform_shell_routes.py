@@ -95,10 +95,13 @@ async def platform_shell_employee_tools():
 
 @router.get("/employee-directory")
 async def platform_shell_employee_directory():
-    """统一员工目录：智能对话 / 员工工作台 / 信息形象 共用同一份可用员工名单。"""
+    """统一员工目录：智能对话 / 员工工作台 / 信息形象 共用同一份可用员工名单。
+
+    展示口径包含 prompt-only 员工（对话型专家），执行类接口仍只取 runtime_ok。
+    """
     from app.mod_sdk.employee_directory import build_employee_directory
 
-    employees = build_employee_directory()
+    employees = build_employee_directory(include_prompt_only=True)
     return {"success": True, "data": {"employees": employees, "count": len(employees)}}
 
 

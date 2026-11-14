@@ -90,6 +90,20 @@ describe('ChatInputToolbar', () => {
     expect(wrapper.emitted('trigger-upload')).toBeUndefined()
   })
 
+  it('opens hidden folder input on upload-folder click', async () => {
+    const click = vi.fn()
+    const wrapper = mountToolbar()
+    const inputs = wrapper.findAll('input[type="file"]')
+    expect(inputs.length).toBe(2)
+    expect(inputs[1].attributes('webkitdirectory')).toBeDefined()
+    const folderInput = inputs[1].element as HTMLInputElement
+    folderInput.click = click
+    const folderBtn = wrapper.findAll('.toolbar-btn').find((b) => b.text().includes('chat.uploadFolder'))
+    expect(folderBtn).toBeTruthy()
+    await folderBtn!.trigger('click')
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+
   it('emits register-excel-input on mount', () => {
     const wrapper = mountToolbar()
     const registered = wrapper.emitted('register-excel-input') || []
@@ -137,7 +151,7 @@ describe('ChatInputToolbar', () => {
     const wrapper = mountToolbar()
     const input = wrapper.find('input[type="file"]')
     expect(input.attributes('accept')).toContain('.xlsx')
-    expect(input.attributes('accept')).toContain('image/jpeg')
+    expect(input.attributes('accept')).toContain('.jpg')
     expect(input.attributes('accept')).toContain('.pdf')
   })
 

@@ -55,6 +55,7 @@ export function mergeModManifestEntries(
         source: 'mod_manifest',
         carrierModId: declaringModId || undefined,
         hostModId: resolvedHost || undefined,
+        prompt_only: e.prompt_only === true,
       })
     }
   }

@@ -195,17 +195,17 @@ describe('ModStore.vue – rendering', () => {
     wrapper.unmount()
   })
 
-  it('renders store shell with sidebar and main', async () => {
+  it('renders store shell with tabs and main', async () => {
     const wrapper = await mountModStore()
     expect(wrapper.find('.store-shell').exists()).toBe(true)
-    expect(wrapper.find('.store-sidebar').exists()).toBe(true)
+    expect(wrapper.find('.store-tabs').exists()).toBe(true)
     expect(wrapper.find('.store-main').exists()).toBe(true)
     wrapper.unmount()
   })
 
   it('renders navigation tabs', async () => {
     const wrapper = await mountModStore()
-    const navItems = wrapper.findAll('.store-nav__item')
+    const navItems = wrapper.findAll('.store-tab')
     expect(navItems.length).toBeGreaterThanOrEqual(4)
     wrapper.unmount()
   })
@@ -248,7 +248,7 @@ describe('ModStore.vue – navigation tabs', () => {
 
   it('switches tab on click', async () => {
     const wrapper = await mountModStore()
-    const navItems = wrapper.findAll('.store-nav__item')
+    const navItems = wrapper.findAll('.store-tab')
     if (navItems.length > 1) {
       await navItems[1].trigger('click')
       expect(navItems[1].classes()).toContain('active')
@@ -603,7 +603,7 @@ describe('ModStore.vue – collection labels', () => {
 
   it('renders store nav with expected tab labels', async () => {
     const wrapper = await mountModStore()
-    const navText = wrapper.find('.store-nav').text()
+    const navText = wrapper.find('.store-tabs').text()
     expect(navText).toContain('全部商品')
     expect(navText).toContain('已安装')
     wrapper.unmount()

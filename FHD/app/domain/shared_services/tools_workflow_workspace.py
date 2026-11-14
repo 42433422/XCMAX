@@ -374,10 +374,10 @@ def _registered_router_employee(
     if action in ("list", "query"):
         from app.mod_sdk.employee_directory import build_employee_directory
 
-        employees = build_employee_directory()
+        employees = build_employee_directory(include_prompt_only=True)
         return {
             "success": True,
-            "message": f"已发现 {len(employees)} 个可调用员工",
+            "message": f"已发现 {len(employees)} 个员工",
             "data": [
                 {**item, "employee_id": item["pack_id"]}
                 for item in employees

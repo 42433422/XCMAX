@@ -11,6 +11,28 @@ export interface TpCreateFlowDeps {
   refreshTemplates: () => void | Promise<void>
 }
 
+/** 模板库支持的文件类型：Excel / Word / PPT / PDF / CSV。 */
+const SUPPORTED_TEMPLATE_EXTS = ['xlsx', 'xls', 'docx', 'pptx', 'pdf', 'csv']
+const TEMPLATE_CATEGORIES = ['excel', 'word', 'pptx', 'pdf', 'csv']
+const EXT_TO_CATEGORY: Record<string, string> = {
+  xlsx: 'excel',
+  xls: 'excel',
+  docx: 'word',
+  pptx: 'pptx',
+  ppt: 'pptx',
+  pdf: 'pdf',
+  csv: 'csv',
+}
+
+/** 归一化后端返回的模板类别，无法识别时返回空串。 */
+function normalizeTemplateCategory(value: unknown): string {
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase()
+  const mapped = EXT_TO_CATEGORY[raw] || raw
+  return TEMPLATE_CATEGORIES.includes(mapped) ? mapped : ''
+}
+
 /** FileUploadStep file-selected 事件载荷 */
 interface TpFileSelectedData {
   selectedFile: File | null
@@ -59,6 +81,8 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
   const recognizedType = ref<unknown>(null)
   const editorFields = ref<TplField[]>([])
   const editorTemplateType = ref('excel')
+  /** 真实模板类别：excel/word/pptx/pdf/csv，保存时写入 category */
+  const templateCategory = ref('excel')
   /** 分析接口返回的完整 preview_data（保存时做脱敏后写入） */
   const analyzedPreviewData = ref<TplPreviewData | null>(null)
   const analyzedFilePath = ref('')
@@ -104,6 +128,7 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
     recognizedType.value = null
     editorFields.value = []
     editorTemplateType.value = 'excel'
+    templateCategory.value = 'excel'
     analyzedPreviewData.value = null
     analyzedFilePath.value = ''
     analyzedOriginalFilename.value = ''
@@ -134,8 +159,8 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
 
       const name = String(selectedFile.value.name || '')
       const ext = (name.split('.').pop() || '').toLowerCase()
-      if (!['xlsx', 'xls', 'docx'].includes(ext)) {
-        await appAlert('请上传 Excel（.xlsx / .xls）或 Word（.docx）模板文件')
+      if (!SUPPORTED_TEMPLATE_EXTS.includes(ext)) {
+        await appAlert('请上传 Excel（.xlsx / .xls）、Word（.docx）、PPT（.pptx）、PDF 或 CSV 模板文件')
         return false
       }
 
@@ -155,12 +180,13 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
       const res = (await templatePreviewApi.analyzeTemplate(formData)) as AnalyzeTemplateResponse
 
       if (res && res.success) {
-        const kind = String(res.template_type || '').toLowerCase()
-        if (kind !== 'excel' && kind !== 'word') {
+        const kind = normalizeTemplateCategory(res.template_type || EXT_TO_CATEGORY[ext])
+        if (!kind) {
           analyzing.value = false
-          await appAlert('本页仅支持创建 Excel 或 Word 导出模板')
+          await appAlert('无法识别该文件的模板类型')
           return false
         }
+        templateCategory.value = kind
 
         const validation = validateUploadedTemplate(res)
         uploadValidationResult.value = validation
@@ -301,8 +327,9 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
       const fields = Array.isArray(editorFields.value) ? [...editorFields.value] : []
       const isCustom = isCustomScope.value
       const scopeMeta: Partial<TemplateScopeMeta> = getScopeMeta(templateScope.value) || {}
-      const isWord = editorTemplateType.value === 'word'
-      const category = isWord ? 'word' : 'excel'
+      const category = templateCategory.value
+      const isWord = category === 'word'
+      const isGrid = category === 'excel' || category === 'csv'
       const customLabel = String(customScopeLabel.value || '').trim()
       const customType = String(customTemplateType.value || '').trim()
       const templateType = isCustom
@@ -320,7 +347,7 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
           ...basePreview,
           placeholders: Array.isArray(basePreview.placeholders) ? [...basePreview.placeholders] : []
         }
-      } else {
+      } else if (isGrid) {
         const strippedSampleRows = stripSampleRowsKeepTemplateShape(
           basePreview.sample_rows,
           fields
@@ -331,6 +358,9 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
           sample_rows: strippedSampleRows,
           grid_preview: strippedGrid
         }
+      } else {
+        // PPT / PDF：保留分析产出的摘要与文件路径，不做网格脱敏。
+        preview_data = { ...basePreview }
       }
       if (isCustom && customLabel) {
         preview_data.custom_scope_label = customLabel
@@ -385,9 +415,9 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
   }
 
   function validateUploadedTemplate(analyzeResult: AnalyzeTemplateResponse) {
-    const kind = String(analyzeResult?.template_type || '').toLowerCase()
-    if (kind !== 'excel' && kind !== 'word') {
-      return { valid: false, missing: ['仅支持 Excel 或 Word 模板'] }
+    const kind = normalizeTemplateCategory(analyzeResult?.template_type)
+    if (!kind) {
+      return { valid: false, missing: ['无法识别该文件的模板类型'] }
     }
     const required = getRequiredTermsByScope(templateScope.value)
     if (!required.length) {
@@ -412,6 +442,7 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
     recognizedType,
     editorFields,
     editorTemplateType,
+    templateCategory,
     analyzedPreviewData,
     analyzedFilePath,
     analyzedOriginalFilename,

@@ -102,6 +102,15 @@ export default defineConfig(({ mode }) => {
           replacement: path.resolve(__dirname, '../mods/bridge/xcagi-customer-service-bridge/frontend'),
         },
         { find: 'vue-router', replacement: path.resolve(__dirname, 'node_modules/vue-router') },
+        // 模板库原件预览（mod 内动态 import 需显式指向宿主依赖）
+        {
+          find: '@vue-office/docx',
+          replacement: path.resolve(__dirname, 'node_modules/@vue-office/docx'),
+        },
+        {
+          find: '@vue-office/pptx',
+          replacement: path.resolve(__dirname, 'node_modules/@vue-office/pptx'),
+        },
         { find: 'pinia', replacement: path.resolve(__dirname, 'node_modules/pinia') },
         { find: 'element-plus', replacement: path.resolve(__dirname, 'node_modules/element-plus') },
         { find: 'xlsx', replacement: path.resolve(__dirname, 'node_modules/xlsx') },

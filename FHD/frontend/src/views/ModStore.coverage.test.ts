@@ -1575,8 +1575,8 @@ describe('ModStore.coverage – 模板条件渲染分支', () => {
     expect(text).toContain('安装')
     // M1 有更新
     expect(text).toContain('更新')
-    // M1 source=remote → 网页查看
-    expect(text).toContain('网页查看')
+    // 招聘市场式卡片：远端条目通过「详情」进入网页信息
+    expect(text).toContain('详情')
     wrapper.unmount()
   })
 
@@ -1596,7 +1596,7 @@ describe('ModStore.coverage – 模板条件渲染分支', () => {
     wrapper.unmount()
   })
 
-  it('渲染：enterpriseLayerLabel 非空时显示标签', async () => {
+  it('渲染：企业层级标签移入详情，不在卡片上堆叠', async () => {
     mockResolveEnterpriseOrgLayerForCatalogItem.mockReturnValue({
       code: 'L2',
       label: '战术层',
@@ -1613,7 +1613,7 @@ describe('ModStore.coverage – 模板条件渲染分支', () => {
     })
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
-    expect(wrapper.text()).toContain('L2 战术层')
+    expect(wrapper.text()).not.toContain('L2 战术层')
     wrapper.unmount()
   })
 

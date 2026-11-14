@@ -21,7 +21,7 @@
           <span class="app-launcher-icon app-launcher-icon--production" aria-hidden="true">
             <ProductionEmployeeLauncherIcon />
           </span>
-          <span class="app-launcher-name">生产员工</span>
+          <span class="app-launcher-name">私有交付</span>
           <span class="app-launcher-desc">进入客户交付中心，承接企业客户的标准交付与定制生产闭环</span>
         </button>
         <button
@@ -59,7 +59,7 @@
       <header class="production-embed__header">
         <button type="button" class="production-embed__back" @click="exitAnalyzer">返回 AI 生态</button>
         <div>
-          <div class="production-embed__eyebrow">生产员工</div>
+          <div class="production-embed__eyebrow">私有交付</div>
           <h1>客户私有 Mod 生产中心</h1>
         </div>
       </header>
@@ -180,9 +180,15 @@ const exitAnalyzer = () => {
 }
 .app-launcher-icon--kitten {
   background: linear-gradient(145deg, #0f766e 0%, #1e40af 100%);
+  overflow: hidden;
   box-shadow:
     0 8px 20px rgba(15, 118, 110, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.app-launcher-icon--kitten :deep(img) {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
 }
 .app-launcher--kitten:hover .app-launcher-icon--kitten {
   box-shadow:
@@ -191,9 +197,15 @@ const exitAnalyzer = () => {
 }
 .app-launcher-icon--aiopen {
   background: linear-gradient(145deg, #3b82f6 0%, #1d4ed8 100%);
+  overflow: hidden;
   box-shadow:
     0 8px 20px rgba(37, 99, 235, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.app-launcher-icon--aiopen :deep(img) {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
 }
 .app-launcher--aiopen:hover .app-launcher-icon--aiopen {
   box-shadow:
@@ -202,9 +214,15 @@ const exitAnalyzer = () => {
 }
 .app-launcher-icon--production {
   background: linear-gradient(145deg, #f59e0b 0%, #ea580c 100%);
+  overflow: hidden;
   box-shadow:
     0 8px 20px rgba(234, 88, 12, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.app-launcher-icon--production :deep(img) {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
 }
 .app-launcher--production:hover .app-launcher-icon--production {
   box-shadow:
@@ -213,9 +231,15 @@ const exitAnalyzer = () => {
 }
 .app-launcher-icon--modstore {
   background: linear-gradient(145deg, #8b5cf6 0%, #6d28d9 100%);
+  overflow: hidden;
   box-shadow:
     0 8px 20px rgba(109, 40, 217, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.app-launcher-icon--modstore :deep(img) {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
 }
 .app-launcher--modstore:hover .app-launcher-icon--modstore {
   box-shadow:

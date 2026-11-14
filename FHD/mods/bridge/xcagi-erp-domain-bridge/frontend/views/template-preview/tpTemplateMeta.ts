@@ -73,6 +73,44 @@ const EXPORT_TEMPLATE_SOURCES = new Set([
   'fs_scan'
 ])
 
+export const TEMPLATE_CATEGORY_LABELS: Record<string, string> = {
+  excel: 'Excel',
+  word: 'Word',
+  pptx: 'PPT',
+  pdf: 'PDF',
+  csv: 'CSV',
+  label: '标签打印',
+}
+
+const TEMPLATE_CATEGORY_ICONS: Record<string, string> = {
+  excel: 'fa-file-excel-o',
+  word: 'fa-file-word-o',
+  pptx: 'fa-file-powerpoint-o',
+  pdf: 'fa-file-pdf-o',
+  csv: 'fa-file-text-o',
+  label: 'fa-tag',
+}
+
+function normalizeCategory(tpl: TplRecord | null): string {
+  return String((tpl as Record<string, unknown> | null)?.category || '')
+    .trim()
+    .toLowerCase()
+}
+
+export function getTemplateCategoryLabel(tpl: TplRecord | null): string {
+  return TEMPLATE_CATEGORY_LABELS[normalizeCategory(tpl)] || 'Excel'
+}
+
+export function getTemplateCategoryIcon(tpl: TplRecord | null): string {
+  return TEMPLATE_CATEGORY_ICONS[normalizeCategory(tpl)] || ''
+}
+
+/** CSV 与 Excel 共用网格预览；PPT/PDF 只登记与下载。 */
+export function isGridTemplateCategory(tpl: TplRecord | null): boolean {
+  const category = normalizeCategory(tpl)
+  return category === 'excel' || category === 'csv'
+}
+
 export function isExportTemplate(tpl: TplRecord | null): boolean {
   if (!tpl || tpl.virtual) return false
   if (tpl.category !== 'excel' && tpl.category !== 'word') return false

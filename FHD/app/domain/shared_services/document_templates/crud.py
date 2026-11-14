@@ -59,7 +59,7 @@ def _build_template_payload_from_row(row):
     if not isinstance(preview_data, dict):
         preview_data = {}
     category = str(analyzed_data.get("category") or "").strip().lower()
-    if category not in ("excel", "word", "pptx", "pdf", "label"):
+    if category not in ("excel", "word", "pptx", "pdf", "csv", "label"):
         category = "excel"
     return {
         "id": f"db:{row.id}",
@@ -150,7 +150,7 @@ def _create_template_with_payload_inner(payload: dict):
                     400,
                 )
         incoming_category = str(payload.get("category") or "").strip().lower()
-        if incoming_category not in ("excel", "word", "pptx", "pdf", "label"):
+        if incoming_category not in ("excel", "word", "pptx", "pdf", "csv", "label"):
             incoming_category = "excel"
         analyzed_data = {
             "category": incoming_category,

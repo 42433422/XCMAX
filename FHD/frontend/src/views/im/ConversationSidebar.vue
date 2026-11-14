@@ -42,6 +42,14 @@
             decoding="async"
             draggable="false"
           />
+          <img
+            v-else-if="sidebarItemAvatarSrc(item)"
+            class="im-avatar-img"
+            :src="sidebarItemAvatarSrc(item) || undefined"
+            alt=""
+            decoding="async"
+            draggable="false"
+          />
           <template v-else>{{ sidebarItemAvatarText(item) }}</template>
         </span>
         <div class="im-conv-main">
@@ -81,6 +89,7 @@ defineProps<{
   sidebarItemTitle: (item: ImSidebarListItem) => string
   sidebarItemPreview: (item: ImSidebarListItem) => string
   sidebarItemAvatarText: (item: ImSidebarListItem) => string
+  sidebarItemAvatarSrc: (item: ImSidebarListItem) => string | null
   sidebarItemSuperAvatarSrc: (item: ImSidebarListItem) => string | null
   sidebarItemUnread: (item: ImSidebarListItem) => number
 }>()
@@ -357,6 +366,15 @@ const emit = defineEmits<{
   height: 100%;
   display: block;
   object-fit: contain;
+  border-radius: inherit;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.im-avatar-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
   border-radius: inherit;
   user-select: none;
   -webkit-user-drag: none;

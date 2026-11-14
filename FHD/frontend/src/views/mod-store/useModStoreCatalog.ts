@@ -206,7 +206,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
     const result = await fetchMarketCatalog({
       ...query,
       q: searchQuery.value.trim() || undefined,
-      limit: 80,
+      limit: 200,
     })
     const items = refineMarketItems(result.items || [], tab)
     allMods.value = items

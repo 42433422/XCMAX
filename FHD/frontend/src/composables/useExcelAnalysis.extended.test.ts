@@ -133,6 +133,46 @@ describe('useExcelAnalysis - extended', () => {
     expect(api.excelAnalyzeUploading.value).toBe(false)
   })
 
+  it('analyzes every workbook when a folder supplies several Excel files', async () => {
+    const onAnalyzeDone = vi.fn()
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ success: true, fields: [], preview_data: { sheet_name: 'Sheet1' } }),
+    } as unknown as Response)
+
+    const api = useExcelAnalysis(makeMessages(), { onAnalyzeDone })
+    const inputs = [
+      new File(['a'], 'a.xlsx'),
+      new File(['b'], 'b.xlsm'),
+    ]
+    const input = { files: inputs, value: '' } as unknown as HTMLInputElement
+    await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
+
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+    expect(onAnalyzeDone).toHaveBeenCalledWith({ fileName: 'a.xlsx', success: true })
+    expect(onAnalyzeDone).toHaveBeenCalledWith({ fileName: 'b.xlsm', success: true })
+  })
+
+  it('splits a mixed folder into Excel analysis and multimodal staging', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ success: true, fields: [], preview_data: { sheet_name: 'Sheet1' } }),
+    } as unknown as Response)
+
+    const cb = vi.fn()
+    const api = useExcelAnalysis(makeMessages())
+    api.setOnMultimodalFileChangeCallback(cb)
+    const excel = new File(['a'], 'a.xlsx')
+    const image = new File(['png'], 'shot.png', { type: 'image/png' })
+    const input = { files: [excel, image], value: '' } as unknown as HTMLInputElement
+    await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(cb).toHaveBeenCalledTimes(1)
+    const staged = (cb.mock.calls[0][0] as { target: { files: File[] } }).target.files
+    expect(staged.map((f) => f.name)).toEqual(['shot.png'])
+  })
+
   it('does not publish an Excel result after its captured conversation is no longer current', async () => {
     let resolve!: (value: Response) => void
     vi.mocked(global.fetch).mockReturnValue(new Promise(r => { resolve = r }))

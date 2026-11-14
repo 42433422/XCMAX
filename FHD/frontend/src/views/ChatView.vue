@@ -84,6 +84,7 @@
         @switch-view="emitSwitchView"
         @set-task-filter="setTaskFilter"
         @clear-task-history="clearTaskHistory"
+        @remove-task="removeTask"
         @toggle-task-expanded="toggleTaskExpanded"
         @select-task="selectTask"
         @open-shipment-records="openShipmentRecordsFromAuditTask"
@@ -230,7 +231,7 @@
       ref="officeDockingInputRef"
       type="file"
       multiple
-      accept=".xlsx,.xlsm,.xls,.csv,.docx,.doc,.pdf,.pptx,.ppt"
+      :accept="intakeAcceptAttribute('office')"
       style="display: none"
       @change="onOfficeDockingFileChange"
     />
@@ -247,7 +248,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
@@ -264,6 +265,7 @@ import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
 import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
 import TaskWorkspaceContextBar from '@/components/chat/TaskWorkspaceContextBar.vue'
 import { useChatOfficeDocking } from '@/composables/useChatOfficeDocking'
+import { intakeAcceptAttribute } from '@/utils/documentIntake'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
@@ -375,6 +377,7 @@ const {
   selectTask,
   setTaskFilter,
   clearTaskHistory,
+  removeTask,
   retryTask,
   pauseTask,
   resumeTask,
@@ -489,12 +492,53 @@ function confirmDestructiveScope(payload: { text: string; idempotencyKey: string
 const composerDragOver = ref(false)
 let composerDragDepth = 0
 
-const COMPOSER_ACCEPT_RE = /\.(xlsx|xlsm|pdf|jpe?g|png|webp|gif)$/i
-const COMPOSER_ACCEPT_MIME = /^(image\/(jpeg|png|webp|gif)|application\/pdf)/i
+const COMPOSER_ACCEPT_RE = /\.(xlsx|xlsm|pdf|jpe?g|png|webp|gif|txt|log)$/i
+const COMPOSER_ACCEPT_MIME = /^(image\/(jpeg|png|webp|gif)|application\/pdf|text\/plain)/i
+/** 拖入文件夹时的递归扫描上限，避免误拖大目录导致卡顿。 */
+const COMPOSER_MAX_DROP_FILES = 200
 
-function filesFromDataTransfer(dt: DataTransfer | null): File[] {
-  if (!dt?.files?.length) return []
-  return Array.from(dt.files)
+async function collectEntryFiles(entry: FileSystemEntry, out: File[]): Promise<void> {
+  if (out.length >= COMPOSER_MAX_DROP_FILES) return
+  if (entry.isFile) {
+    const file = await new Promise<File | null>((resolve) => {
+      (entry as FileSystemFileEntry).file(
+        (f) => resolve(f),
+        () => resolve(null),
+      )
+    })
+    if (file) out.push(file)
+    return
+  }
+  if (!entry.isDirectory) return
+  const reader = (entry as FileSystemDirectoryEntry).createReader()
+  for (;;) {
+    const batch = await new Promise<FileSystemEntry[]>((resolve) => {
+      reader.readEntries(
+        (items) => resolve(items),
+        () => resolve([]),
+      )
+    })
+    if (!batch.length) return
+    for (const child of batch) {
+      if (out.length >= COMPOSER_MAX_DROP_FILES) return
+      await collectEntryFiles(child, out)
+    }
+  }
+}
+
+async function filesFromDataTransfer(dt: DataTransfer | null): Promise<File[]> {
+  if (!dt) return []
+  const entries = Array.from(dt.items || [])
+    .filter((item) => item.kind === 'file')
+    .map((item) => (typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null))
+    .filter((entry): entry is FileSystemEntry => Boolean(entry))
+  if (!entries.length) return Array.from(dt.files || [])
+  const out: File[] = []
+  for (const entry of entries) {
+    await collectEntryFiles(entry, out)
+    if (out.length >= COMPOSER_MAX_DROP_FILES) break
+  }
+  return out.length ? out : Array.from(dt.files || [])
 }
 
 function isComposerAcceptedFile(file: File): boolean {
@@ -522,11 +566,11 @@ async function onComposerDrop(e: DragEvent) {
   composerDragDepth = 0
   composerDragOver.value = false
   if (isLoading.value || excelAnalyzeUploading.value) return
-  const files = filesFromDataTransfer(e.dataTransfer)
+  const files = await filesFromDataTransfer(e.dataTransfer)
   if (!files.length) return
   const accepted = files.filter(isComposerAcceptedFile)
   if (!accepted.length) {
-    await addAndSaveMessage('[附件] 不支持的文件类型，请拖入 Excel、图片或 PDF', 'ai')
+    await addAndSaveMessage('[附件] 不支持的文件类型，请拖入 Excel、图片、PDF 或包含它们的文件夹', 'ai')
     return
   }
   // The picker snapshots these files and applies the existing session/identity guard.
@@ -712,8 +756,14 @@ function chooseAllWorksheetTemplates() {
 }
 
 const sendQuick = (text: string) => {
+  // 顶部快捷按钮只填入输入框，由用户确认后再发送，避免误触直接执行。
   messageInput.value = text
-  void sendMessage()
+  void nextTick(() => {
+    const el = document.getElementById('messageInput') as HTMLTextAreaElement | null
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(text.length, text.length)
+  })
 }
 
 const handleKeyDown = (e: KeyboardEvent) => {

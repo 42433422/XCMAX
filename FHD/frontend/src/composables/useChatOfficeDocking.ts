@@ -5,6 +5,7 @@ import { computed, ref } from 'vue'
 import api from '@/api/core'
 import { isOfficeDockingFileSupported, uploadChatOfficeFile } from '@/utils/officeEmployeeReadApi'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { isTemporaryDocument } from '@/utils/documentIntake'
 import { pickOptionalTemplate } from '@/domain/optionalTemplateSelection'
 import {
   newItemId,
@@ -68,7 +69,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     officeDockingPanelOpen.value = true
     if (!isOfficeDockingFileSupported(file.name)) {
       item.status = 'error'
-      item.error = '不支持的办公文件'
+      item.error = isTemporaryDocument(file.name) ? 'Excel 临时锁文件，已跳过' : '不支持的办公文件'
       touchItems()
       return
     }

@@ -67,10 +67,11 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onActivated } from 'vue';
+import { computed, ref, onMounted, onActivated, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useOrdersStore } from '@/stores/orders';
 import { pushErpPage } from '@/utils/erpPagePaths';
+import { useRecordFocusQuery } from '@/composables/useRecordFocusQuery';
 import DataTable from '@/components/DataTable.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { appConfirm } from '@/utils/appDialog';
@@ -93,6 +94,7 @@ function goCreateOrder() {
 }
 
 const searchQuery = ref('');
+const { keyword: routeKeyword } = useRecordFocusQuery();
 const showClearConfirm = ref(false);
 const canClearAll = computed(() => !store.loading && !store.error && store.orders.length > 0);
 
@@ -140,8 +142,18 @@ async function confirmClearAll() {
 
 onActivated(doSearch);
 
+watch(routeKeyword, (keyword) => {
+  searchQuery.value = String(keyword || '').trim();
+  void doSearch();
+});
+
 onMounted(() => {
-  loadOrders();
+  searchQuery.value = String(routeKeyword.value || '').trim();
+  if (searchQuery.value) {
+    void doSearch();
+  } else {
+    loadOrders();
+  }
   void tutorialStore.loadCourses().catch(() => undefined);
 });
 </script>

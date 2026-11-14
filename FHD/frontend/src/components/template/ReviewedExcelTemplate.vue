@@ -8,6 +8,7 @@ import templatePreviewApi from '@/api/templatePreview'
 import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
 import { eltApi, type EltRun } from '@/api/elt'
 import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
+import { BATCH_MAX_BYTES, BATCH_MAX_FILES, mergeIntakeReports, preflightDocuments, type IntakeReport } from '@/utils/documentIntake'
 import { autoIngestStatusLabel, actionLabel, targetLabel } from '@/views/eltCenter/eltCenterShared'
 import TemplateCandidatePreview from './TemplateCandidatePreview.vue'
 import WorkbookEmployeeReport from './WorkbookEmployeeReport.vue'
@@ -472,11 +473,10 @@ watch([getAuthSessionEpoch, () => productReadAccountEpoch.value], () => {
   emit('stage', 'archive')
 }, { flush: 'sync' })
 onBeforeUnmount(() => { resetIntake(); stopIngestPoll(); alive = false; operationEpoch += 1; selectionEpoch += 1 })
-const WORKBOOK_NAME = /\.(xlsx|xls|docx)$/i
-const BATCH_BYTE_LIMIT = 50 * 1024 * 1024
-function importableWorkbook(file: File) {
-  return WORKBOOK_NAME.test(file.name) && !file.name.startsWith('~$')
-}
+const BATCH_BYTE_LIMIT = BATCH_MAX_BYTES
+const intakeReport = ref<IntakeReport | null>(null)
+/** 单份文档生成的上限，略大于后端模板调用绝对上限（600 秒）。 */
+const GENERATE_TIMEOUT_MS = 11 * 60 * 1000
 function batchBytes(items: File[]) {
   return items.reduce((sum, item) => sum + item.size, 0)
 }
@@ -550,31 +550,49 @@ function onComposerDragLeave(event: DragEvent) {
   if (target && related && target.contains(related)) return
   composerDragOver.value = false
 }
-function applyChosenFiles(list: File[]) {
+function applyChosenFiles(list: File[], report: IntakeReport) {
   if (!alive || busy.value || documentWorkPending.value) return
   const canAppend = classifications.value.some((item) => item.status === 'classified')
   if (canAppend && files.value.length) {
-    const next = [...files.value, ...list]
-    if (next.length > 200) {
-      error.value = '一次最多上传 200 个文件，请分批上传'
+    const appended = report.accepted
+    const next = [...files.value, ...appended]
+    if (next.length > BATCH_MAX_FILES) {
+      error.value = `一次最多上传 ${BATCH_MAX_FILES} 个文件，请分批上传`
       return
     }
     if (batchBytes(next) > BATCH_BYTE_LIMIT) {
       error.value = '本批文件超过 50 MB，请分批上传'
       return
     }
+    intakeReport.value = mergeIntakeReports(intakeReport.value, report)
+    if (!appended.length) { error.value = ''; return }
     const keptKeys = files.value.map((_, index) => archiveKeys.value[index] || crypto.randomUUID())
     files.value = next
-    archiveKeys.value = [...keptKeys, ...list.map(() => crypto.randomUUID())]
+    archiveKeys.value = [...keptKeys, ...appended.map(() => crypto.randomUUID())]
     error.value = ''
     return
   }
   files.value = list
   archiveKeys.value = files.value.map(() => crypto.randomUUID())
+  intakeReport.value = report
   archiveProgress.value = ''
   selectionEpoch += 1; selectedFilesCurrent = captureAuthSession()
   resetSelectionState()
-  error.value = files.value.length > 200 ? '一次最多上传 200 个文件，请分批上传' : ''
+  const oversize = report.items.find((item) => item.reason === 'too_large')
+  const batchOverflow = report.items.some((item) => item.reason === 'too_large' && item.detail.startsWith('本批'))
+  if (list.length > BATCH_MAX_FILES) {
+    error.value = `一次最多上传 ${BATCH_MAX_FILES} 个文件，请分批上传`
+  } else if (batchOverflow) {
+    files.value = []
+    archiveKeys.value = []
+    error.value = '本批文件超过 50 MB，请分批上传'
+  } else if (oversize) {
+    files.value = []
+    archiveKeys.value = []
+    error.value = `「${oversize.name}」超过 50 MB，请分批上传`
+  } else {
+    error.value = report.blocked ? '没有可导入的文件：请选择 Excel 或对账单 Word（.xlsx / .xls / .docx）' : ''
+  }
   analysisProgress.value = ''; analysisErrors.value = {}
   classificationNotice.value = ''
   emit('stage', 'archive')
@@ -586,10 +604,10 @@ function droppedEntries(event: DragEvent): FileSystemEntry[] {
   })
 }
 async function collectDropped(entry: FileSystemEntry, found: File[]) {
-  if (found.length > 200) return
+  if (found.length > 1000) return
   if (entry.isFile) {
     const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, () => reject(new Error('unreadable'))))
-    if (importableWorkbook(file)) found.push(file)
+    found.push(file)
     return
   }
   if (!entry.isDirectory) return
@@ -599,7 +617,7 @@ async function collectDropped(entry: FileSystemEntry, found: File[]) {
     if (!batch.length) return
     for (const child of batch) {
       await collectDropped(child, found)
-      if (found.length > 200) return
+      if (found.length > 1000) return
     }
   }
 }
@@ -614,31 +632,43 @@ async function onComposerDrop(event: DragEvent) {
     if (folder) {
       for (const entry of entries) {
         await collectDropped(entry, list)
-        if (list.length > 200) break
+        if (list.length > 1000) break
       }
-    } else list = Array.from(event.dataTransfer?.files || []).filter(importableWorkbook)
+    } else list = Array.from(event.dataTransfer?.files || [])
   } catch {
     error.value = '文件夹没有读完，请改为选择其中的文件'
     return
   }
   if (!list.length) {
-    error.value = folder ? '文件夹里没有 Excel 或对账单 Word（.xlsx / .xls / .docx）' : '请拖入 Excel 或对账单 Word（.xlsx / .xls / .docx）'
+    error.value = folder ? '文件夹是空的或没有可读取的文件' : '请拖入 Excel 或对账单 Word（.xlsx / .xls / .docx）'
     return
   }
-  applyChosenFiles(list)
+  const report = preflightDocuments(list, 'template')
+  if (report.blocked) {
+    intakeReport.value = report
+    error.value = '没有可导入的文件：请选择 Excel 或对账单 Word（.xlsx / .xls / .docx）'
+    return
+  }
+  applyChosenFiles(report.accepted, report)
 }
 function choose(event: Event) {
   if (!alive || busy.value) return
   const input = event.target as HTMLInputElement
   const folder = input.hasAttribute('webkitdirectory')
-  const list = Array.from(input.files || []).filter((item) => !folder || importableWorkbook(item))
+  const raw = Array.from(input.files || [])
   input.value = ''
   input.removeAttribute('webkitdirectory')
-  if (folder && !list.length) {
+  if (!raw.length) {
+    if (folder) error.value = '文件夹是空的或没有可读取的文件'
+    return
+  }
+  const report = preflightDocuments(raw, 'template')
+  if (report.blocked && folder) {
+    intakeReport.value = report
     error.value = '文件夹里没有 Excel 或对账单 Word（.xlsx / .xls / .docx）'
     return
   }
-  applyChosenFiles(list)
+  applyChosenFiles(report.accepted, report)
 }
 function confirmLegacyScope(form: FormData, name: string, hash: string, current: () => boolean) {
   if (!current()) return false
@@ -1069,6 +1099,21 @@ async function previewAutoSlice(index: number, slice: AutoSlice) {
   name.value = slice.filename.replace(/\.xlsx$/i, '')
   await preview(slice)
 }
+/**
+ * 单份文档生成带绝对上限：一份文件生成过久时不再阻塞同批其他文件，
+ * 结果标记为未知并交由服务端记录核对，不重复调用模型。
+ */
+async function generateWithDeadline(doc: ReviewedDocument) {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const expired = new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(true), GENERATE_TIMEOUT_MS) })
+  const settled = documentWorkspace.generate(doc).then(() => false, () => false)
+  const timedOut = await Promise.race([settled, expired])
+  if (timer) clearTimeout(timer)
+  if (timedOut && !doc.review && !doc.error) {
+    doc.unknown = true
+    doc.error = `生成超过 ${Math.round(GENERATE_TIMEOUT_MS / 60000)} 分钟未返回，已跳过并继续处理其余文件；服务端结果稍后可核对。`
+  }
+}
 async function runModelPipeline(extendBudget = false) {
   const current = captureFileOperation(), item = currentClassification.value
   const source = file.value
@@ -1119,7 +1164,7 @@ async function runModelPipeline(extendBudget = false) {
   for (const doc of representatives) {
     if (!current() || cancelAnalysis.value) return
     archiveProgress.value = `正在生成：${doc.displayName}`
-    await documentWorkspace.generate(doc)
+    await generateWithDeadline(doc)
     if (current() && doc.review) emit('stage', 'template')
     if (doc.error || doc.unknown) break
   }
@@ -1417,6 +1462,15 @@ async function downloadCandidate(index: number) {
       </div>
       <div v-if="files.length" class="elt-bubble elt-bubble--user">
         已选择 {{ files.length }} 个文件：{{ files.map((item) => item.name).join('、') }}
+      </div>
+      <div v-if="intakeReport" class="elt-bubble elt-bubble--system elt-intake-report" role="note" aria-label="预检结果">
+        <p class="elt-intake-report__summary">预检结果：{{ intakeReport.summary }}</p>
+        <details v-if="intakeReport.skipped.length || intakeReport.convertible.length" class="elt-intake-report__details">
+          <summary>查看跳过的文件与需转换项</summary>
+          <ul>
+            <li v-for="(item, reportIndex) in intakeReport.items.filter((entry) => entry.verdict !== 'accepted' || entry.needsConversion)" :key="`intake-${reportIndex}-${item.name}`">{{ item.name }} — {{ item.detail }}</li>
+          </ul>
+        </details>
       </div>
       <div v-for="(note, noteIndex) in requirementNotes" :key="`req-${noteIndex}`" class="elt-bubble elt-bubble--user">
         整理要求：{{ note }}
@@ -1910,6 +1964,11 @@ async function downloadCandidate(index: number) {
 .elt-bubble--user { align-self: flex-end; background: var(--xc-color-primary); color: var(--xc-color-surface); }
 .elt-bubble--system { background: var(--xc-color-surface-2); color: var(--xc-color-text); }
 .elt-bubble--error { background: var(--xc-color-danger-bg); color: var(--xc-color-danger); }
+.elt-intake-report__summary { margin: 0; }
+.elt-intake-report__details { margin-top: var(--xc-space-2); }
+.elt-intake-report__details summary { cursor: pointer; color: var(--xc-color-text-secondary); }
+.elt-intake-report__details ul { margin: var(--xc-space-2) 0 0; padding-left: 1.2rem; max-height: 12rem; overflow: auto; }
+.elt-intake-report__details li { font-size: 0.875em; color: var(--xc-color-text-secondary); }
 .elt-processing-feedback { display: flex; align-items: center; gap: var(--xc-space-3); min-height: 2.5rem; }
 .elt-processing-feedback--busy { border: 1px solid var(--xc-color-primary); color: var(--xc-color-text); background: color-mix(in srgb, var(--xc-color-primary) 8%, var(--xc-color-surface)); }
 .elt-processing-feedback__spinner { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; border: 2px solid var(--xc-color-border); border-top-color: var(--xc-color-primary); border-radius: 50%; animation: elt-progress-spin 0.9s linear infinite; }

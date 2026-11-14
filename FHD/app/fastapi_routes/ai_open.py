@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+import time
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
@@ -35,6 +36,9 @@ from app.application.aiopen.service import (
     MCP_DEFAULT_PROTOCOL_VERSION,
     MCP_PROTOCOL_VERSIONS,
     aiopen_manifest,
+    api_key_usage_recent,
+    api_key_usage_summary,
+    authorize_api_key,
     build_aiopen_guide,
     build_mcp_install_bundle,
     format_tool_result_text,
@@ -42,6 +46,7 @@ from app.application.aiopen.service import (
     invoke_tool,
     list_api_keys,
     openclaw_chat_proxy,
+    record_api_key_use,
     revoke_api_key,
     seed_capability_whitelist,
     verify_api_key,
@@ -81,6 +86,22 @@ def _unauthorized() -> JSONResponse:
     return JSONResponse(
         {"success": False, "message": "invalid X-AIOPEN-Key", "code": "AIOPEN_KEY_INVALID"},
         status_code=401,
+    )
+
+
+_DENY_STATUS = {
+    "AIOPEN_KEY_INVALID": 401,
+    "AIOPEN_KEY_EXPIRED": 401,
+    "AIOPEN_SCOPE_DENIED": 403,
+    "AIOPEN_RATE_LIMITED": 429,
+    "AIOPEN_QUOTA_EXCEEDED": 429,
+}
+
+
+def _denied_response(decision: dict[str, Any]) -> JSONResponse:
+    return JSONResponse(
+        {"success": False, "message": decision.get("message") or "AIOPEN Key 不可用", "code": decision.get("code")},
+        status_code=_DENY_STATUS.get(str(decision.get("code")), 403),
     )
 
 
@@ -185,13 +206,15 @@ async def aiopen_invoke(
     x_aiopen_key: AiOpenKeyHeader = None,
     body: dict = Body(default_factory=dict),
 ):
-    if not verify_api_key(x_aiopen_key):
-        return _unauthorized()
     tool = str(body.get("tool") or "").strip()
     raw_args = body.get("args")
     args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
     if not tool:
         return JSONResponse({"success": False, "message": "tool 不能为空"}, status_code=400)
+    decision = authorize_api_key(x_aiopen_key, tool)
+    if not decision.get("ok"):
+        return _denied_response(decision)
+    started = time.perf_counter()
     result = await invoke_tool(tool, args, request.app)
     status = 200
     if result.get("code") in {
@@ -202,6 +225,13 @@ async def aiopen_invoke(
         status = 403
     elif result.get("code") == "UNKNOWN_TOOL":
         status = 404
+    record_api_key_use(
+        x_aiopen_key,
+        tool,
+        channel="rest",
+        ok=status == 200,
+        duration_ms=(time.perf_counter() - started) * 1000,
+    )
     payload = {"tool": tool, **result}
     run_id = _trace_aiopen_tool_call(
         route="/api/aiopen/invoke",
@@ -237,11 +267,39 @@ async def _handle_mcp_message(
     )
 
 
+def _mcp_tool_name(msg: dict[str, Any]) -> str:
+    params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
+    return str((params or {}).get("name") or "").strip()
+
+
+def _mcp_authorize(msg: dict[str, Any], key: str | None) -> dict[str, Any] | None:
+    """仅对 tools/call 做 Key 策略校验；其余方法沿用原有鉴权。"""
+    if msg.get("method") != "tools/call":
+        return None
+    decision = authorize_api_key(key, _mcp_tool_name(msg))
+    return None if decision.get("ok") else decision
+
+
+def _record_mcp_call(
+    key: str | None, msg: dict[str, Any], started: float, response: dict[str, Any] | None
+) -> None:
+    if msg.get("method") != "tools/call":
+        return
+    record_api_key_use(
+        key,
+        _mcp_tool_name(msg),
+        channel="mcp",
+        ok=not (isinstance(response, dict) and response.get("error")),
+        duration_ms=(time.perf_counter() - started) * 1000,
+    )
+
+
 @router.get("/api/aiopen/mcp")
 async def aiopen_mcp_get(request: Request, x_aiopen_key: AiOpenKeyHeader = None):
     """Streamable HTTP GET：无 SSE 推送时返回服务说明（Cursor 探测用）。"""
-    if not verify_api_key(x_aiopen_key):
-        return _unauthorized()
+    decision = authorize_api_key(x_aiopen_key)
+    if not decision.get("ok"):
+        return _denied_response(decision)
     manifest = aiopen_manifest()
     return JSONResponse(
         {
@@ -263,8 +321,9 @@ async def aiopen_mcp(
     x_aiopen_key: AiOpenKeyHeader = None,
     body: Any = Body(default=None),
 ):
-    if not verify_api_key(x_aiopen_key):
-        return _unauthorized()
+    base_decision = authorize_api_key(x_aiopen_key)
+    if not base_decision.get("ok"):
+        return _denied_response(base_decision)
     params = body.get("params") if isinstance(body, dict) else {}
     protocol_version = _resolve_mcp_protocol_version(params if isinstance(params, dict) else {})
     is_initialize = isinstance(body, dict) and body.get("method") == "initialize"
@@ -277,7 +336,19 @@ async def aiopen_mcp(
                 if item.get("method") == "initialize":
                     protocol_version = _resolve_mcp_protocol_version(item_params)
                     is_initialize = True
+                denied = _mcp_authorize(item, x_aiopen_key)
+                if denied is not None:
+                    responses.append(
+                        _jsonrpc_error(
+                            item.get("id"),
+                            -32000,
+                            f"{denied.get('code')}: {denied.get('message')}",
+                        )
+                    )
+                    continue
+                started = time.perf_counter()
                 resp = await _handle_mcp_message(item, request.app, protocol_version)
+                _record_mcp_call(x_aiopen_key, item, started, resp)
                 if resp is not None:
                     responses.append(resp)
         if not responses:
@@ -295,7 +366,21 @@ async def aiopen_mcp(
             status_code=400,
             protocol_version=protocol_version,
         )
+    denied = _mcp_authorize(body, x_aiopen_key)
+    if denied is not None:
+        return _wrap_mcp_json(
+            _jsonrpc_error(
+                body.get("id"),
+                -32000,
+                f"{denied.get('code')}: {denied.get('message')}",
+            ),
+            request,
+            status_code=_DENY_STATUS.get(str(denied.get("code")), 403),
+            protocol_version=protocol_version,
+        )
+    started = time.perf_counter()
     resp = await _handle_mcp_message(body, request.app, protocol_version)
+    _record_mcp_call(x_aiopen_key, body, started, resp)
     if resp is None:
         return _wrap_mcp_json(None, request, status_code=202, protocol_version=protocol_version)
     return _wrap_mcp_json(
@@ -321,8 +406,22 @@ def aiopen_keys_create(
     body: dict = Body(default_factory=dict),
     _admin: Any = Depends(require_admin_user),
 ):
+    raw_scopes = body.get("scopes")
+    if isinstance(raw_scopes, str):
+        scopes = [item.strip() for item in raw_scopes.split(",") if item.strip()]
+    elif isinstance(raw_scopes, list):
+        scopes = [str(item).strip() for item in raw_scopes if str(item).strip()]
+    else:
+        scopes = None
+    expires_in_days = _positive_int(body.get("expires_in_days"))
+    expires_at = time.time() + expires_in_days * 86400 if expires_in_days else None
     created = generate_api_key(
-        str(body.get("label") or ""), principal=ScreenPrincipal.from_user(_admin)
+        str(body.get("label") or ""),
+        principal=ScreenPrincipal.from_user(_admin),
+        scopes=scopes,
+        expires_at=expires_at,
+        rate_limit_per_min=_positive_int(body.get("rate_limit_per_min")),
+        daily_quota=_positive_int(body.get("daily_quota")),
     )
     return _trace_aiopen_control_result(
         {"success": True, **created},
@@ -331,6 +430,28 @@ def aiopen_keys_create(
         body=body,
         user_id=str(getattr(_admin, "id", "") or ""),
     )
+
+
+def _positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+@router.get("/api/aiopen/usage")
+def aiopen_usage(
+    days: int = Query(default=7, ge=1, le=90),
+    recent: int = Query(default=20, ge=1, le=200),
+    _admin: Any = Depends(require_admin_user),
+):
+    """AaaS 控制面：近 N 天调用计量与最近调用明细。"""
+    return {
+        "success": True,
+        "summary": api_key_usage_summary(days),
+        "recent": api_key_usage_recent(recent),
+    }
 
 
 @router.delete("/api/aiopen/keys")

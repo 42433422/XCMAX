@@ -70,6 +70,7 @@ from .result_text import format_tool_result_text as format_tool_result_text
 from .route_policy import RoutePolicy
 from .route_policy import normalize_api_path as normalize_api_path
 from .runtime import ApiKeyRegistry, RuntimeState
+from .usage import UsageLedger
 
 AIOPEN_STATE: dict[str, Any] = {
     "wechat_open": True,
@@ -89,6 +90,22 @@ def _repo_stdio_bridge_path() -> str:
     return str(Path(__file__).resolve().parents[3] / "scripts" / "dev" / "aiopen_mcp_stdio.py")
 
 
+def _aiopen_storage_path(name: str) -> Path | None:
+    """AaaS 控制面数据目录（Key 与调用计量）；不可写时回退纯内存。"""
+    import sys
+
+    if "pytest" in sys.modules:
+        return None
+    try:
+        from app.utils.path_io.path_utils import get_app_data_dir
+
+        base = Path(get_app_data_dir()) / "aiopen"
+        base.mkdir(parents=True, exist_ok=True)
+        return base / name
+    except (OSError, ImportError):
+        return None
+
+
 def _api_client(app: ASGIApp) -> InternalHttpClient:
     from starlette.testclient import TestClient
 
@@ -106,8 +123,13 @@ def _upstream_open(
 
 _state = RuntimeState(AIOPEN_STATE)
 _keys = ApiKeyRegistry(
-    _state, lambda: _env_api_key(), lambda count: secrets.token_urlsafe(count), lambda: time.time()
+    _state,
+    lambda: _env_api_key(),
+    lambda count: secrets.token_urlsafe(count),
+    lambda: time.time(),
+    storage=lambda: _aiopen_storage_path("keys.json"),
 )
+_usage = UsageLedger(lambda: _aiopen_storage_path("usage.jsonl"), lambda: time.time())
 _policy = RoutePolicy(
     _state, lambda: CAPABILITY_ROUTE_PREFIXES, lambda path: normalize_api_path(path)
 )
@@ -166,9 +188,53 @@ def verify_api_key(provided: str | None) -> bool:
 
 
 def generate_api_key(
-    label: str = "", *, principal: ScreenPrincipal | None = None
+    label: str = "",
+    *,
+    principal: ScreenPrincipal | None = None,
+    scopes: list[str] | None = None,
+    expires_at: float | None = None,
+    rate_limit_per_min: int | None = None,
+    daily_quota: int | None = None,
 ) -> dict[str, Any]:
-    return _keys.generate(label, principal=principal)
+    return _keys.generate(
+        label,
+        principal=principal,
+        scopes=scopes,
+        expires_at=expires_at,
+        rate_limit_per_min=rate_limit_per_min,
+        daily_quota=daily_quota,
+    )
+
+
+def authorize_api_key(provided: str | None, tool: str = "") -> dict[str, Any]:
+    return _keys.authorize(provided, tool)
+
+
+def record_api_key_use(
+    provided: str | None,
+    tool: str = "",
+    *,
+    channel: str,
+    ok: bool,
+    duration_ms: float,
+) -> dict[str, Any]:
+    info = _keys.record_use(provided, tool, ok=ok)
+    return _usage.record(
+        key_preview=str(info.get("key_preview") or ""),
+        label=str(info.get("label") or ""),
+        tool=tool,
+        channel=channel,
+        ok=ok,
+        duration_ms=duration_ms,
+    )
+
+
+def api_key_usage_summary(days: int = 7) -> dict[str, Any]:
+    return _usage.summary(days)
+
+
+def api_key_usage_recent(limit: int = 100) -> list[dict[str, Any]]:
+    return _usage.recent(limit)
 
 
 def resolve_api_key_principal(provided: str | None) -> ScreenPrincipal | None:

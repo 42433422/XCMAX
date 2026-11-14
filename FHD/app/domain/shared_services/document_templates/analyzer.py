@@ -133,6 +133,10 @@ def _analyze_template_with_upload_inner(file, template_name: str, template_scope
             return _analyze_pdf_template(
                 file_path, template_name, file.filename, task_id, template_scope
             )
+        if file_ext == ".csv":
+            return _analyze_csv_template(
+                file_path, template_name, file.filename, task_id, template_scope
+            )
         if file_ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp"]:
             return _analyze_label_template(file_path, template_name, file.filename, task_id)
 
@@ -369,6 +373,109 @@ def _analyze_pdf_template(
     return analyze_pdf_template(
         file_path, template_name, original_filename, task_id, template_scope
     )
+
+
+_CSV_ENCODINGS = ("utf-8-sig", "gb18030", "utf-16")
+
+
+def _read_csv_rows(file_path: str, *, max_rows: int = 200) -> list[list[str]]:
+    """读取 CSV 前若干行，按 UTF-8 → GB18030 → UTF-16 依次尝试解码。"""
+    import csv
+
+    with open(file_path, "rb") as handle:
+        raw = handle.read()
+    text: str | None = None
+    for encoding in _CSV_ENCODINGS:
+        try:
+            text = raw.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        text = raw.decode("utf-8", errors="replace")
+
+    rows: list[list[str]] = []
+    for row in csv.reader(text.splitlines()):
+        if len(rows) >= max_rows:
+            break
+        rows.append([str(cell or "").strip() for cell in row])
+    return rows
+
+
+def _analyze_csv_template(
+    file_path: str,
+    template_name: str,
+    original_filename: str,
+    task_id: str,
+    template_scope: str = "",
+):
+    try:
+        _update_progress(task_id, 15, 1, "文件上传成功")
+        _update_progress(task_id, 45, 2, "解析 CSV 表头与样例行...")
+
+        rows = _read_csv_rows(file_path)
+        if not rows:
+            _cleanup_progress_tracking(task_id)
+            _safe_remove(file_path)
+            return _j({"success": False, "message": "CSV 文件为空，无法作为模板"}, 400)
+
+        header = rows[0]
+        headers = [cell for cell in header if cell]
+        if not headers:
+            _cleanup_progress_tracking(task_id)
+            _safe_remove(file_path)
+            return _j(
+                {"success": False, "message": "CSV 首行未识别到表头，请补全列名后重试"}, 400
+            )
+
+        fields = [{"label": cell, "value": "", "type": "dynamic"} for cell in headers]
+
+        valid, missing_terms = _validate_required_terms({}, fields, template_scope)
+        if not valid:
+            _cleanup_progress_tracking(task_id)
+            _safe_remove(file_path)
+            return _j(
+                {
+                    "success": False,
+                    "message": "模板缺少必备词条，请补全表头后重试",
+                    "required_terms": _get_template_scope_required_terms().get(
+                        template_scope, []
+                    ),
+                    "missing_terms": missing_terms,
+                },
+                400,
+            )
+
+        body = rows[1:]
+        sample_rows = [
+            {header[i] or f"col{i + 1}": (row[i] if i < len(row) else "") for i in range(len(header))}
+            for row in body[:5]
+        ]
+
+        name = template_name or os.path.splitext(original_filename)[0]
+        _mark_progress_completed(task_id, 100, 3, "分析完成！")
+        return _j(
+            {
+                "success": True,
+                "task_id": task_id,
+                "template_name": name,
+                "template_type": "csv",
+                "fields": fields,
+                "preview_data": {
+                    "file_path": file_path,
+                    "original_filename": original_filename,
+                    "sheet_name": "CSV",
+                    "headers": headers,
+                    "sample_rows": sample_rows,
+                    "grid_preview": {"rows": [header, *body[:10]]},
+                },
+            }
+        )
+    except RECOVERABLE_ERRORS as e:
+        logger.error("分析 CSV 模板失败：%s", e)
+        _cleanup_progress_tracking(task_id)
+        _safe_remove(file_path)
+        return _j({"success": False, "message": "分析 CSV 失败，请稍后重试"}, 500)
 
 
 def _analyze_label_template(

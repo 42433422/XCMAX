@@ -3,6 +3,10 @@
 口径固定为：本机已安装 employee_pack 中 ``runtime_ok`` 且不属于宿主管理岗
 （``EMPLOYEE_TOOLS``）的员工。任何界面需要“可用员工”时都应读这里，
 避免对话、工作台、通讯录各自筛选导致名单不一致。
+
+展示类调用方可传 ``include_prompt_only=True``，把只有系统提示词、没有本地
+Python 运行时的员工（如导入的对话型专家）一并纳入目录；执行类调用方保持
+默认值，只拿 runnable 员工。
 """
 
 from __future__ import annotations
@@ -84,8 +88,26 @@ def _description(manifest: dict[str, Any]) -> str:
     return ""
 
 
-def build_employee_directory() -> list[dict[str, Any]]:
-    """返回统一员工目录（已排序）。"""
+def _has_explicit_system_prompt(manifest: dict[str, Any]) -> bool:
+    """员工是否显式声明了系统提示词（仅提示词型员工的判定依据）。"""
+    cfg = manifest.get("employee_config_v2")
+    if not isinstance(cfg, dict):
+        return False
+    cognition = cfg.get("cognition")
+    if not isinstance(cognition, dict):
+        return False
+    agent = cognition.get("agent")
+    if not isinstance(agent, dict):
+        return False
+    return bool(str(agent.get("system_prompt") or "").strip())
+
+
+def build_employee_directory(include_prompt_only: bool = False) -> list[dict[str, Any]]:
+    """返回统一员工目录（已排序）。
+
+    ``include_prompt_only`` 仅给展示层使用：没有 direct_python 运行时、但显式
+    声明了系统提示词的员工以 ``prompt_only=True`` 纳入目录。
+    """
     from app.mod_sdk.employee_specialized_tools_employee_map import EMPLOYEE_TOOLS
     from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
@@ -104,12 +126,22 @@ def build_employee_directory() -> list[dict[str, Any]]:
 
     employees: list[dict[str, Any]] = []
     for pack_id, tool in tools.items():
-        if not pack_id or not tool.get("runtime_ok"):
+        if not pack_id:
             continue
         if any(EMPLOYEE_TOOLS.get(candidate) for candidate in candidate_pack_ids(pack_id)):
             continue
         manifest = records.get(pack_id, {}).get("manifest")
         manifest = manifest if isinstance(manifest, dict) else {}
+        runtime_ok = bool(tool.get("runtime_ok"))
+        handlers = list(tool.get("handlers") or [])
+        prompt_only = (
+            include_prompt_only
+            and not runtime_ok
+            and "direct_python" not in handlers
+            and _has_explicit_system_prompt(manifest)
+        )
+        if not runtime_ok and not prompt_only:
+            continue
         identity = _manifest_identity(manifest)
         area = str(identity.get("area") or "").strip() or _roster_area_for_employee(pack_id)
         employees.append(
@@ -119,8 +151,10 @@ def build_employee_directory() -> list[dict[str, Any]]:
                 "description": _description(manifest),
                 "area": area,
                 "department": area_labels.get(area, ""),
-                "runtime_ok": True,
-                "handlers": list(tool.get("handlers") or []),
+                "runtime_ok": runtime_ok,
+                "prompt_only": prompt_only,
+                "runtime_kind": "direct_python" if runtime_ok else "prompt_only",
+                "handlers": handlers,
             }
         )
     employees.sort(key=lambda row: (row["label"], row["pack_id"]))

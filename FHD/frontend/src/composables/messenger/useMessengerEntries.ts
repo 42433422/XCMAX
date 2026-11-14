@@ -12,6 +12,9 @@
 import { type ImContact, type ImConversationSummary } from '@/api/im'
 import { type SuperEmployeeAvatarKey, superEmployeeAvatarSrcForId } from '@/constants/superEmployeeAvatars'
 import { type CodexSuperEmployeeDispatch, type CodexSuperEmployeeMessage } from '@/api/codexSuperEmployee'
+import defaultUserAvatarSrc from '@/assets/avatars/user-default.png'
+import { publicAssetUrl } from '@/utils/publicAssetUrl'
+import { employeeAvatarUrl } from '@/utils/employeeAvatar'
 // 宿主编制（平台内部员工）不再内置到企业构建：联系人一律以接口返回为准。
 
 // ── 类型 ──────────────────────────────────────────────────────────────
@@ -248,6 +251,43 @@ export function pinnedAvatarText(entry: PinnedImEntry): string {
   return avatarText(entry.display_name)
 }
 
+/** 企业专属客服统一使用管理端小C头像。 */
+export const ENTERPRISE_CS_AVATAR_SRC = publicAssetUrl('ai-butler-male-avatar-v1.jpg')
+
+/** 账号池持久化头像；无自定义头像时从员工头像池按 id 稳定取图。 */
+function pooledAvatar(seed: string): string {
+  return employeeAvatarUrl(seed) || defaultUserAvatarSrc
+}
+
+export function contactAvatarSrc(contact: ImContact): string {
+  if (isEnterpriseDedicatedContact(contact)) return ENTERPRISE_CS_AVATAR_SRC
+  const stored = String(contact.avatar_url || '').trim()
+  if (stored) return stored
+  return pooledAvatar(String(contact.username || contact.display_name || contact.id || ''))
+}
+
+export function conversationAvatarSrc(conversation: ImConversationSummary): string {
+  if (isEnterpriseDedicatedConversation(conversation)) return ENTERPRISE_CS_AVATAR_SRC
+  const stored = String(conversation.avatar_url || '').trim()
+  if (stored) return stored
+  return pooledAvatar(
+    String(conversation.peer_username || conversation.title || conversation.id || ''),
+  )
+}
+
+/** 固定入口：只有普通联系人（如企业专属客服）走账号头像；编制员工在列表层按序取图。 */
+export function pinnedContactAvatarSrc(entry: PinnedImEntry): string | null {
+  if (
+    isSuperEmployeeEntry(entry) ||
+    isDutyEmployeeEntry(entry) ||
+    isExternalAppEntry(entry) ||
+    isAiGroupChatEntry(entry)
+  ) {
+    return null
+  }
+  return contactAvatarSrc(entry)
+}
+
 export function pinnedEntryPreview(entry: PinnedImEntry): string {
   if (isSuperEmployeeEntry(entry)) return entry.subtitle
   if (isDutyEmployeeEntry(entry)) return entry.subtitle
@@ -281,11 +321,11 @@ export function systemEntryDispatch(entry: SystemEmployeeEntry): string {
 }
 
 export function isEnterpriseDedicatedContact(contact: ImContact): boolean {
-  return Boolean(contact.is_enterprise_dedicated_cs) || contact.username.trim().toLowerCase() === 'enterprise-cs'
+  return Boolean(contact.is_enterprise_dedicated_cs) || String(contact.username || '').trim().toLowerCase() === 'enterprise-cs'
 }
 
 export function isEnterpriseDedicatedConversation(conversation: ImConversationSummary): boolean {
-  return Boolean(conversation.is_enterprise_dedicated_cs) || conversation.title.trim() === '企业专属客服'
+  return Boolean(conversation.is_enterprise_dedicated_cs) || String(conversation.title || '').trim() === '企业专属客服'
 }
 
 export function isCodexDispatcherMessage(message: CodexSuperEmployeeMessage): boolean {

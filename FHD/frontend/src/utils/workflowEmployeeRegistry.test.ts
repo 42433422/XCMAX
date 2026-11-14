@@ -35,6 +35,18 @@ describe('workflowEmployeeRegistry', () => {
     expect(merged.map((e) => e.id)).toEqual(['csv-generate-employee'])
   })
 
+  it('carries prompt_only from directory rows into registry entries', () => {
+    const merged = mergeModManifestEntries({ schemaVersion: 1, employees: [] }, [
+      {
+        id: 'wb-expert-demo',
+        directory_sourced: true,
+        workflow_employees: [{ id: 'wb-expert-demo', label: '对话型专家', prompt_only: true }],
+      },
+    ])
+    expect(merged).toHaveLength(1)
+    expect(merged[0].prompt_only).toBe(true)
+  })
+
   it('resolveLabel returns entry label', () => {
     expect(resolveLabel({ id: 'a', label: 'A', kind: 'mod_extension', order: 1 })).toBe('A')
   })

@@ -1,8 +1,8 @@
 <template>
   <details class="settings-card settings-card--about">
     <summary class="settings-row">
-      <span class="settings-row__icon settings-row__icon--slate" aria-hidden="true">
-        <i class="fa fa-info-circle"></i>
+      <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
+        <img class="settings-row__icon-art" :src="aboutArtSrc" alt="" />
       </span>
       <span class="settings-row__label">{{ $t('settings.about') }}</span>
       <span class="settings-row__meta">{{ appVersionLabel }}</span>
@@ -51,6 +51,8 @@
 </template>
 
 <script setup lang="ts">
+import aboutArtSrc from '@/assets/icons/settings/r5c1.png'
+
 defineProps<{
   appVersionLabel: string
   aboutDisplayLine: string

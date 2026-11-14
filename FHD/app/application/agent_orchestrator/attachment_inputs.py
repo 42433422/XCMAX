@@ -59,6 +59,16 @@ def _decode(raw: bytes, suffix: str) -> tuple[str, dict[str, Any]]:
         finally:
             workbook.close()
     if suffix == ".pdf":
+        try:
+            from app.application.document_parsing.router import parse_pdf_bytes_with_docling
+
+            docling_text = parse_pdf_bytes_with_docling(raw)
+        except Exception:  # noqa: BLE001 - Docling 失败要回退 pdfplumber
+            docling_text = None
+        if docling_text and docling_text.strip():
+            coverage["method"] = "docling"
+            return finish(docling_text)
+
         import pdfplumber
 
         with pdfplumber.open(io.BytesIO(raw)) as pdf:

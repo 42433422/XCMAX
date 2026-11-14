@@ -82,6 +82,18 @@ def _maybe_downscale_image_jpeg(raw: bytes, mime: str) -> tuple[str, str]:
 
 def _pdf_bytes_to_text(raw: bytes, filename: str) -> str:
     try:
+        from app.application.document_parsing.router import parse_pdf_bytes_with_docling
+
+        docling_text = parse_pdf_bytes_with_docling(raw)
+    except RECOVERABLE_ERRORS:
+        docling_text = None
+    if docling_text and docling_text.strip():
+        body = docling_text.strip()
+        if len(body) > _MAX_PDF_TEXT_CHARS:
+            body = body[:_MAX_PDF_TEXT_CHARS] + "\n…(truncated)"
+        return f"[PDF 文件: {filename}]\n{body}"
+
+    try:
         import pdfplumber
     except RECOVERABLE_ERRORS as exc:
         return f"[PDF {filename}: 无法读取（缺少 pdfplumber: {exc}）]"

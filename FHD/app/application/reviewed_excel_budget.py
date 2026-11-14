@@ -244,6 +244,24 @@ def template_timeout_seconds() -> float:
     return value
 
 
+def template_call_max_seconds() -> float:
+    """Absolute cap for one template model call, independent of idle activity.
+
+    An out-of-range value falls back to the default instead of refusing the call:
+    the cap only bounds a call that is already running.
+    """
+    import math
+    import os
+
+    try:
+        value = float(os.environ.get("FHD_TEMPLATE_LLM_MAX_SECONDS", "") or 600)
+    except ValueError:
+        return 600.0
+    if not math.isfinite(value) or not 30 <= value <= 1800:
+        return 600.0
+    return value
+
+
 def template_first_byte_seconds() -> float:
     """Deadline for the first market event; distinct from the idle wait between events.
 

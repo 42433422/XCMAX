@@ -353,18 +353,28 @@ def test_template_platform_uses_account_provider_once_and_never_retries(monkeypa
     assert calls.count("timeout") == 1
 
 
-def test_streamed_tokens_keep_the_template_call_alive():
+def test_streamed_tokens_keep_the_template_call_alive_but_heartbeats_do_not():
     from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
-    seen, pieces = [], []
-    for data in (
+    contents = (
         '{"choices": [{"delta": {"reasoning_content": "synthetic"}}]}',
         '{"choices": [{"delta": {"content": "{}"}}]}',
+        '{"content": "tail"}',
+        '{"choices": [{"delta": {"tool_calls": [{"id": "synthetic"}]}}]}',
+    )
+    keepalives = (
         '{"status": "processing"}',
+        '{"state": "accepted"}',
+        '{"type": "heartbeat"}',
+        '{"event": "ping"}',
+        '{"ping": 1}',
+        "{}",
         "",
-    ):
+    )
+    seen, pieces = [], []
+    for data in keepalives + contents + keepalives:
         ModstorePlatformAdapter._absorb_stream_payload(None, data, lambda: seen.append(1), pieces)
-    assert len(seen) == 3 and pieces == ["{}"]
+    assert len(seen) == 4 and pieces == ["{}", "tail"]
 
 
 def test_audited_body_reports_each_chunk_while_it_is_archived():

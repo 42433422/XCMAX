@@ -1,7 +1,10 @@
 <template>
   <main class="im-chat">
     <header class="im-chat-head">
-      <span class="im-avatar im-avatar--sm" aria-hidden="true">{{ avatarText(activeTitle) }}</span>
+      <span class="im-avatar im-avatar--sm" aria-hidden="true">
+        <img v-if="activeAvatarSrc" class="im-avatar-img" :src="activeAvatarSrc" alt="" decoding="async" draggable="false" />
+        <template v-else>{{ avatarText(activeTitle) }}</template>
+      </span>
       <span class="im-chat-title">{{ activeTitle }}</span>
       <slot name="ticket-results" />
       <div v-if="csAutomation" class="im-cs-controls">
@@ -67,6 +70,7 @@ import { avatarText } from '@/composables/messenger/useMessengerEntries'
 
 defineProps<{
   activeTitle: string
+  activeAvatarSrc?: string | null
   hasMoreHistory: boolean
   busy: boolean
   messages: ImMessage[]
@@ -107,6 +111,15 @@ function onInput(ev: Event): void {
 
 <style scoped src="./ImChatCommon.css"></style>
 <style scoped>
+.im-avatar-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+  user-select: none;
+  -webkit-user-drag: none;
+}
 .im-cs-controls {
   margin-left: auto;
   display: inline-flex;
