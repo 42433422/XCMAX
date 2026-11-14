@@ -44,10 +44,16 @@ def test_business_roles_can_query_and_create_sales_orders():
     from app.db.models.permission import DEFAULT_PERMISSIONS, DEFAULT_ROLES
 
     codes = {item["code"] for item in DEFAULT_PERMISSIONS}
-    assert {"tool.sales.query", "tool.sales.create_order"} <= codes
+    chain = {
+        "tool.sales.query",
+        "tool.sales.create_order",
+        "tool.inventory.stock_out",
+        "tool.finance.create_transaction",
+    }
+    assert chain <= codes
     for role in DEFAULT_ROLES:
         granted = set(role["permissions"])
         if role["name"] in {"user", "operator", "admin"}:
-            assert {"tool.sales.query", "tool.sales.create_order"} <= granted
+            assert chain <= granted
         else:
-            assert {"tool.sales.query", "tool.sales.create_order"}.isdisjoint(granted)
+            assert chain.isdisjoint(granted)
