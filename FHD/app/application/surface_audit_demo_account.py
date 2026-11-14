@@ -27,7 +27,6 @@ def is_local_demo_market_token(token: str) -> bool:
 def demo_account_config() -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "username": "xcagi-enterprise-demo",
-        "password": "Demo@2026",
         "display_name": "企业版演示",
         "company_brand": "修茈演示企业",
         "email": "enterprise-demo@xiu-ci.com",
@@ -54,6 +53,7 @@ def demo_username() -> str:
 
 
 def demo_password() -> str:
+    """Explicit env/config only; an absent password disables demo login and seeding."""
     return (
         os.environ.get("SURFACE_AUDIT_DEMO_PASSWORD")
         or os.environ.get("SURFACE_AUDIT_ENTERPRISE_PASSWORD")

@@ -29,6 +29,7 @@ def test_final_ai_approval_requires_confirmed_execution(monkeypatch, with_node):
     req = ApprovalRequest(
         id=1,
         request_no="pending-1",
+        tenant_id=1,
         flow_id=1,
         business_type="workflow_tool",
         business_data="{}",
@@ -39,7 +40,10 @@ def test_final_ai_approval_requires_confirmed_execution(monkeypatch, with_node):
     )
     req.current_node = node if with_node else None
     db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = req
+    query = MagicMock()
+    query.filter.return_value = query
+    query.first.return_value = req
+    db.query.return_value = query
 
     @contextmanager
     def session():
@@ -60,7 +64,13 @@ def test_final_ai_approval_requires_confirmed_execution(monkeypatch, with_node):
         lambda **kwargs: None if with_node else {"success": True, "workflow_executed": False},
     )
 
-    result = service.approve_request(1, MagicMock(), body={})
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with tenant_scope(1):
+        result = service.approve_request(1, MagicMock(), body={})
+    filters = [clause for invocation in query.filter.call_args_list for clause in invocation.args]
+    assert any(clause.compare(ApprovalRequest.id == req.id) for clause in filters)
+    assert any(clause.compare(ApprovalRequest.tenant_id == req.tenant_id) for clause in filters)
     payload = json.loads(result.body) if isinstance(result, JSONResponse) else result
 
     assert payload["success"] is False

@@ -205,6 +205,23 @@ def _registered_router_dataset_rag(
             dataset_id, job_id, access_context=access_context(DATASET_WRITE_PERMISSION)
         )
         return finalize(result, dataset_id=dataset_id, job_id=job_id)
+    if action == "clear_dataset":
+        write_context = access_context(DATASET_WRITE_PERMISSION)
+        if dataset_id == "persy-knowledge":
+            from app.application.persy_memory_app_service import (
+                get_persy_memory_app_service,
+            )
+
+            result = get_persy_memory_app_service().clear_memories(
+                access_context=write_context
+            )
+        else:
+            result = service.clear_dataset(
+                dataset_id,
+                tenant_id=str(params.get("tenant_id") or ""),
+                access_context=write_context,
+            )
+        return finalize(result, dataset_id=dataset_id)
     if action == "delete_document":
         document_id = str(params.get("document_id") or "").strip()
         if not document_id:

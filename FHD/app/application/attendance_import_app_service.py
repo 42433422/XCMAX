@@ -96,6 +96,11 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     columns = {row[1] for row in conn.execute("PRAGMA table_info(attendance_daily_records)")}
     if "business_id" not in columns:
         conn.execute("ALTER TABLE attendance_daily_records ADD COLUMN business_id TEXT")
+    for column in ("tenant_id", "customer_id"):
+        if column not in columns:
+            conn.execute(
+                f"ALTER TABLE attendance_daily_records ADD COLUMN {column} TEXT NOT NULL DEFAULT ''"
+            )
     conn.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS ux_attendance_business_id

@@ -6,8 +6,6 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import httpx
-
 from app.infrastructure.llm.modstore_chat_failover import (
     build_chat_failover_candidates,
     chat_failover_max_attempts,
@@ -17,6 +15,7 @@ from app.infrastructure.modstore_transport import safe_route_metadata as route_m
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .protocols import Connection, Payload, Route, SyncClientFactory
+from .protocols import preflight_timeout as _preflight_timeout
 from .responses import _response_status_code
 
 
@@ -25,7 +24,7 @@ def resolve_account_route(
 ) -> Payload:
     """Resolve account preferences/BYOK/platform defaults at their server-owned source."""
     with client_factory(
-        timeout=httpx.Timeout(min(connection.timeout, 15.0), connect=5.0),
+        timeout=_preflight_timeout(connection),
         headers=connection.headers(),
     ) as client:
         url = f"{connection.platform_url}/api/llm/resolve-chat-default"
@@ -79,7 +78,7 @@ def resolve_account_default(connection: Connection, client_factory: SyncClientFa
 def follow_platform_default(connection: Connection, client_factory: SyncClientFactory) -> None:
     """Apply only the caller's explicit recovery action with their own authorization."""
     with client_factory(
-        timeout=httpx.Timeout(min(connection.timeout, 15.0), connect=5.0),
+        timeout=_preflight_timeout(connection),
         headers=connection.headers(),
     ) as client:
         response = client.put(
@@ -100,7 +99,7 @@ class FailoverDiscovery:
     def _fetch(self, path: str) -> Payload | None:
         try:
             with self.client(
-                timeout=httpx.Timeout(min(self.connection.timeout, 15.0), connect=5.0),
+                timeout=_preflight_timeout(self.connection),
                 headers=self.connection.headers(),
             ) as client:
                 response = client.get(f"{self.connection.platform_url}{path}")

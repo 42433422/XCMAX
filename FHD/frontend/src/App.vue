@@ -170,26 +170,14 @@ const routeReadinessHandlers = computed(() => {
 <style>
 .startup-readiness {
   position: fixed;
-  top: 16px;
-  right: 16px;
-  z-index: 40;
-  width: min(360px, calc(100vw - 32px));
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: #fff;
-  color: var(--app-text, #253858);
-  box-shadow: 0 8px 24px rgba(37, 56, 88, 0.16);
-  outline: none;
-}
-.startup-readiness[data-state="error"] {
   inset: 0;
   z-index: 2147483647;
   display: grid;
   place-items: center;
-  width: auto;
-  border-radius: 0;
+  padding: 24px;
   background: var(--app-bg, #f4f7fb);
-  box-shadow: none;
+  color: var(--app-text, #253858);
+  outline: none;
 }
 .startup-readiness__panel { max-width: 480px; text-align: center; }
 .startup-readiness h1 { font-size: 22px; }

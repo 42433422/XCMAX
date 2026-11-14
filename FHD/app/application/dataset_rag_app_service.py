@@ -323,6 +323,52 @@ class DatasetRagApplicationService:
             access_context=access_context,
         )
 
+    def clear_dataset(
+        self,
+        dataset_id: str,
+        *,
+        tenant_id: str = "",
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Remove every document in one dataset for the caller's tenant."""
+        access = access_context if isinstance(access_context, DatasetAccessContext) else None
+        list_context = access_context
+        if access is not None and DATASET_READ_PERMISSION not in access.permissions:
+            # 列举待删文档需要读权限，真正的删除仍由 delete_document 校验写权限。
+            list_context = DatasetAccessContext(
+                actor_id=access.actor_id,
+                tenant_id=access.tenant_id,
+                permissions=frozenset(set(access.permissions) | {DATASET_READ_PERMISSION}),
+                is_admin=access.is_admin,
+            )
+        status = self.status(
+            dataset_id,
+            tenant_id=tenant_id,
+            access_context=list_context,
+            include_documents=True,
+        )
+        if not status.get("success"):
+            return status
+        deleted_documents = 0
+        deleted_chunks = 0
+        for document in status.get("documents") or []:
+            document_id = str((document or {}).get("document_id") or "").strip()
+            if not document_id:
+                continue
+            result = self.delete_document(
+                dataset_id, document_id, access_context=access_context
+            )
+            if not result.get("success"):
+                return result
+            deleted_documents += 1
+            deleted_chunks += int(result.get("deleted_chunks") or 0)
+        return {
+            "success": True,
+            "dataset_id": dataset_id,
+            "deleted_documents": deleted_documents,
+            "deleted_chunks": deleted_chunks,
+        }
+
     def diff_versions(
         self,
         *,

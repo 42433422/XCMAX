@@ -18,10 +18,13 @@ class ApprovalRepository:
 
     @staticmethod
     def request(db: Session, request_id: int) -> ApprovalRequest | None:
-        return cast(
-            ApprovalRequest | None,
-            db.query(ApprovalRequest).filter(ApprovalRequest.id == request_id).first(),
-        )
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        query = db.query(ApprovalRequest).filter(ApprovalRequest.id == request_id)
+        tenant_id = current_tenant_id()
+        if tenant_id is not None:
+            query = query.filter(ApprovalRequest.tenant_id == tenant_id)
+        return cast(ApprovalRequest | None, query.first())
 
     @staticmethod
     def flow(db: Session, flow_id: int, *, include_deleted: bool = False) -> ApprovalFlow | None:

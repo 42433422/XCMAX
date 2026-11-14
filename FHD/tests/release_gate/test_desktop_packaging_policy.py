@@ -45,10 +45,14 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     sh_thin = (scripts / "build-windows-electron-only.sh").read_text(encoding="utf-8")
     spec = (scripts / "xcagi_backend.spec").read_text(encoding="utf-8")
 
-    assert "personal = 'minimal'" in ps_backend
+    assert "personal = 'full'" in ps_backend
     assert "enterprise = 'full'" in ps_backend
-    assert "personal   = 'minimal'" in ps_sync
+    assert "build:minimal" not in ps_backend
+    assert "build:generic" not in ps_backend
+    assert "personal   = 'full'" in ps_sync
     assert "enterprise = 'full'" in ps_sync
+    assert "build:minimal" not in ps_sync
+    assert "build:generic" not in ps_sync
 
     assert "build-installer.ps1" in sh_windows and "-ProductSku" in sh_windows
     for script in (sh_thin,):
@@ -580,3 +584,43 @@ def test_missing_industry_seed_does_not_block_desktop_release() -> None:
     assert 'throw "Missing industry seed mod(s)' not in ps_stage
     assert 'throw "industry-seeds/ missing open industry mod(s)' not in ps_verify
     assert "exit 1" not in sh_stage.split("Skipped missing industry seed mod(s)", 1)[-1]
+
+
+@pytest.mark.parametrize("sku", ["enterprise", "personal", "generic", "minimal", "unknown"])
+def test_frontend_entry_normalizes_legacy_personal_without_changing_runtime_sku(tmp_path, sku):
+    import os
+    import subprocess
+
+    script = tmp_path / "scripts/package/build-frontend.sh"
+    script.parent.mkdir(parents=True)
+    script.write_text((REPO_ROOT / "scripts/package/build-frontend.sh").read_text())
+    (tmp_path / "frontend").mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    npm = bin_dir / "npm"
+    npm.write_text(
+        "#!/bin/sh\n"
+        'test "$VITE_XCAGI_PRODUCT_SKU:$VITE_XCAGI_EDITION:$XCAGI_PRODUCT_SKU" '
+        '= "enterprise:full:personal" || exit 71\n'
+        "mkdir -p ../templates/vue-dist\n"
+        "echo index-test.js > ../templates/vue-dist/index.html\n"
+        "echo mods/test/frontend/views/ > ../templates/vue-dist/index-test.js\n"
+    )
+    npm.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(script), sku],
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "SKIP_FRONTEND_INSTALL": "1",
+            "XCAGI_PRODUCT_SKU": "personal",
+        },
+    )
+    assert (result.returncode == 0) == (sku in {"enterprise", "personal"}), result.stderr
+    identity = tmp_path / "build/vue-dist-identity.json"
+    if result.returncode == 0:
+        assert json.loads(identity.read_text())["sku"] == "enterprise"
+    else:
+        assert not identity.exists()

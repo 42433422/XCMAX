@@ -173,7 +173,13 @@ RELEVANT = {
             "FHD/tests/test_application/test_shipment_excel_etl_production_ready.py",
         ],
         "suffixes": [],
-        "exact": [".github/workflows/fhd-mac-control-contract.yml"],
+        "exact": [
+            ".github/workflows/fhd-mac-control-contract.yml",
+            "FHD/.github/workflows/mac-control-contract.yml",
+            "FHD/scripts/dev/e2e-full.sh",
+            "FHD/scripts/dev/e2e_supervise.py",
+            "FHD/tests/test_ci/test_isolated_e2e_credentials.py",
+        ],
         "contains": [],
     },
 }

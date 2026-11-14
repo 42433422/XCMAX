@@ -82,26 +82,10 @@ def edition_mod_ids(edition: Edition | None = None) -> tuple[str, ...]:
 
 
 def configure_edition_defaults(*, desktop: bool = False) -> Edition:
-    """填充进程环境默认：打包桌面与显式 ``XCAGI_DEFAULT_EDITION`` 时偏向 generic 壳。"""
+    """填充进程环境默认。桌面不再把 full 改写成 generic/minimal 壳。"""
+    del desktop
     if resolve_product_sku():
         configure_sku_edition_env()
-    ed = resolve_edition()
-    if ed != "full":
-        return ed
-    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("PYTEST_VERSION"):
-        return ed
-    default_ed = (os.environ.get("XCAGI_DEFAULT_EDITION") or "").strip().lower()
-    is_desktop = desktop or (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
-    if is_desktop or default_ed == "generic":
-        os.environ.setdefault("XCAGI_GENERIC_EDITION", "1")
-        os.environ.setdefault("XCAGI_PLATFORM_SHELL", "1")
-    elif default_ed == "minimal":
-        os.environ.setdefault("XCAGI_MINIMAL_EDITION", "1")
-        os.environ.setdefault("XCAGI_PLATFORM_SHELL", "1")
     return resolve_edition()
 
 

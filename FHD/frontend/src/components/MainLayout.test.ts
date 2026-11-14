@@ -185,7 +185,7 @@ describe('MainLayout.vue', () => {
     await router.push('/settings')
     let finish!: (applied: boolean) => void
     const navigation = vi.spyOn(sidebarNavigation, 'navigateFromSidebarKey').mockImplementation(() => new Promise(resolve => { finish = resolve }))
-    const wrapper = mount(MainLayout, { slots: { default: '<section class="current-page">当前内容</section>' }, global: { plugins: [pinia, router] } })
+    const wrapper = mount(MainLayout, { attachTo: document.body, slots: { default: '<section class="current-page">当前内容</section>' }, global: { plugins: [pinia, router] } })
     try {
       await wrapper.get('.sidebar-chat').trigger('click')
       await wrapper.get('.sidebar-chat').trigger('click')
@@ -194,8 +194,11 @@ describe('MainLayout.vue', () => {
       expect(wrapper.get('.route-content [role="status"]').text()).toContain('正在打开「')
       expect(wrapper.find('.top-bar [role="status"]').exists()).toBe(false)
       expect(wrapper.get('.current-page').isVisible()).toBe(false)
+      expect(wrapper.get('.route-content').attributes('aria-busy')).toBe('true')
       finish(true)
       await flushPromises()
+      expect(wrapper.get('.current-page').isVisible()).toBe(true)
+      expect(wrapper.get('.route-content').attributes('aria-busy')).toBeUndefined()
       expect(wrapper.find('.route-nav-feedback').exists()).toBe(false)
     } finally {
       wrapper.unmount(); navigation.mockRestore(); vi.useRealTimers()
@@ -234,4 +237,32 @@ describe('MainLayout.vue', () => {
       wrapper.unmount(); navigation.mockRestore(); vi.useRealTimers()
     }
   })
+  it('restores visible content after back/forward supersedes a pending sidebar request', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const router = createTestRouter()
+    await router.push('/')
+    await router.push('/settings')
+    let finish!: (applied: boolean) => void
+    const navigation = vi.spyOn(sidebarNavigation, 'navigateFromSidebarKey').mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = mount(MainLayout, { attachTo: document.body, slots: { default: '<section class="current-page">内容</section>' }, global: { plugins: [pinia, router] } })
+    try {
+      await wrapper.get('.sidebar-workflow').trigger('click')
+      expect(wrapper.get('.current-page').isVisible()).toBe(false)
+      router.back()
+      await flushPromises()
+      expect(router.currentRoute.value.name).toBe('chat')
+      expect(wrapper.get('.current-page').isVisible()).toBe(true)
+      finish(false)
+      await flushPromises()
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      router.forward()
+      await flushPromises()
+      expect(router.currentRoute.value.name).toBe('settings')
+      expect(wrapper.get('.current-page').isVisible()).toBe(true)
+    } finally {
+      wrapper.unmount(); navigation.mockRestore()
+    }
+  })
+
 })

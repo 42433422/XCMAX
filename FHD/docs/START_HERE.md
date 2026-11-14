@@ -27,8 +27,6 @@
 | 企业桌面 SQLite | `cp XCAGI/.env.enterprise-desktop.example XCAGI/.env.enterprise-desktop` |
 | 公网市场联调 | `cp XCAGI/.env.online-market.example XCAGI/.env.online-market` |
 
-`frontend/.env.generic` 与 `frontend/.env.minimal` 为 **无密钥** 的 Vite 构建预设，可留在仓库内。
-
 ---
 
 ## 1. 启动与验收（8 份）

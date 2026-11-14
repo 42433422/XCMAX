@@ -341,9 +341,10 @@ export async function startBackend(): Promise<void> {
       XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
       XCAGI_UVICORN_RELOAD: '0',
       XCAGI_GLOBAL_RATE_LIMIT: '0',
-      // Market primary (xiaomi) often failovers before first delta; give headroom.
+      // 必须小于前端 40s 流停滞看门狗：后端先返回确定性超时事件，
+      // 避免前端先判定「连接中断、状态未确认」。
       XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC:
-        process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC || '45',
+        process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC || '35',
       LOG_LEVEL: process.env.LOG_LEVEL || (app.isPackaged ? 'WARNING' : 'INFO'),
       XCAGI_DESKTOP_FAST_START: '1',
       // 后端父进程看门狗：Electron 崩溃/被强杀时后端自行退出，避免残留进程占住端口。

@@ -50,6 +50,7 @@ REPORT_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "report_type": {"type": "string", "enum": ["sales", "inventory", "purchase"]},
             "group_by": {"type": "string"},
             "filename": {"type": "string"},
+            "order_no": {"type": "string", "description": "只导出这一张销售订单"},
             "data": {"type": "array"},
             "warehouse_id": {"type": "integer"},
             "category": {"type": "string"},

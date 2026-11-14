@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC="${ROOT}/templates/vue-dist"
 BUILD=0
-EDITION="${EDITION:-generic}"
+EDITION="${EDITION:-full}"
 PRODUCT_SKU="${PRODUCT_SKU:-enterprise}"
 
 while [[ $# -gt 0 ]]; do
@@ -18,22 +18,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-case "${PRODUCT_SKU}" in
-  personal) EDITION=minimal ;;
-  enterprise) EDITION=full ;;
-esac
+EDITION=full
+PRODUCT_SKU=enterprise
 
 if [[ "${BUILD}" -eq 1 || ! -f "${SRC}/index.html" ]]; then
   (
     cd "${ROOT}/frontend"
     [[ -d node_modules ]] || npm install
-    export VITE_XCAGI_PRODUCT_SKU="${PRODUCT_SKU}"
-    export VITE_XCAGI_EDITION="${EDITION}"
-    case "${EDITION}" in
-      minimal) npm run build:minimal ;;
-      full) npm run build:full ;;
-      *) npm run build ;;
-    esac
+    export VITE_XCAGI_PRODUCT_SKU=enterprise
+    export VITE_XCAGI_EDITION=full
+    npm run build:full
   )
 fi
 

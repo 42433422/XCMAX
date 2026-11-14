@@ -30,12 +30,12 @@ ADMIN_MODS_RUNTIME="${FHD_ROOT}/mods"
 "${PYTHON:-python3}" "${SCRIPT_DIR}/mods_ssot.py" sync >/dev/null && echo "[prep] mods_ssot.py sync OK" || echo "[warn] mods_ssot.py sync 未执行（忽略）"
 export XCAGI_MODS_ADMIN_RUNTIME="${XCAGI_MODS_ADMIN_RUNTIME:-${ADMIN_MODS_RUNTIME}}"
 
-# 桌面开发默认走本地 MODstore :8788；演示号已在官网注册，无本地市场时用 XCAGI_USE_REMOTE_MARKET=1
+# 桌面开发默认走本地 MODstore :8788；默认不访问真实市场；远程市场需显式选择并提供 URL 与独立凭据
 LOCAL_MARKET_ENV="${XCAGI_DIR}/.env.local-market"
 if [[ "${XCAGI_USE_REMOTE_MARKET:-0}" == "1" ]]; then
-  export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-https://xiu-ci.com}"
-  MARKET_MODE="官网"
-  MARKET_HINT="演示号 xcagi-enterprise-demo 已在 ${XCAGI_MARKET_BASE_URL} 注册"
+  export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:?Remote market requires an explicit URL}"
+  MARKET_MODE="显式远程"
+  MARKET_HINT="请使用该市场独立配置的凭据"
 elif [[ -f "${LOCAL_MARKET_ENV}" ]]; then
   set -a
   # shellcheck disable=SC1090
@@ -44,12 +44,12 @@ elif [[ -f "${LOCAL_MARKET_ENV}" ]]; then
   export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-http://127.0.0.1:8788}"
   export MODSTORE_LOCAL_BASE_URL="${MODSTORE_LOCAL_BASE_URL:-http://127.0.0.1:8788}"
   MARKET_MODE="本地"
-  MARKET_HINT="请先 bash FHD/scripts/dev/run_modstore_daily_local.sh；或 XCAGI_USE_REMOTE_MARKET=1 走官网"
+  MARKET_HINT="请先 bash FHD/scripts/dev/run_modstore_daily_local.sh"
 else
   export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-http://127.0.0.1:8788}"
   export MODSTORE_LOCAL_BASE_URL="${MODSTORE_LOCAL_BASE_URL:-http://127.0.0.1:8788}"
   MARKET_MODE="本地"
-  MARKET_HINT="请先 run_modstore_daily_local.sh；或 XCAGI_USE_REMOTE_MARKET=1 走官网演示号"
+  MARKET_HINT="请先 run_modstore_daily_local.sh"
 fi
 
 API_PORT=5000
@@ -67,7 +67,7 @@ echo "  管理 API  ${ADMIN_API_BASE}  ← web · 管理端 Vite 用（禁 deskt
 echo "  企业端 http://127.0.0.1:${WEB_PORT}/"
 echo "  管理端 http://127.0.0.1:${ADMIN_PORT}/admin/  ← 管理员独立运维台"
 echo "  市场 ${XCAGI_MARKET_BASE_URL}（${MARKET_MODE} · ${MARKET_HINT}）"
-echo "  企业演示 xcagi-enterprise-demo / Demo@2026（官网 + 本地 shim 均可）"
+echo "  本地企业演示登录需显式设置 SURFACE_AUDIT_DEMO_PASSWORD（独立随机测试凭据，勿复用线上密码）"
 echo "  企业 mods/ 空（干净通用）；管理端 Mod → ${XCAGI_MODS_ADMIN_RUNTIME}/"
 echo "  管理员请打开管理端 URL，勿在企业页 :${WEB_PORT} 登 admin"
 echo "  代理：NO_PROXY=${NO_PROXY}"
@@ -114,7 +114,7 @@ mkdir -p "${XCAGI_DATA_DIR}/data"
   export VECTOR_DB_URL=
   export XCAGI_GLOBAL_RATE_LIMIT=0
   export XCAGI_AUTH_RATE_LIMIT=0
-  export XCAGI_USE_REMOTE_MARKET="${XCAGI_USE_REMOTE_MARKET:-1}"
+  export XCAGI_USE_REMOTE_MARKET="${XCAGI_USE_REMOTE_MARKET:-0}"
   exec "${PY}" run_fastapi.py --desktop --headless --host 127.0.0.1 --port "${API_PORT}" --data-dir "${XCAGI_DATA_DIR}"
 ) &
 BACKEND_PID=$!
@@ -155,7 +155,7 @@ fi
   export XCAGI_API_PORT="${ADMIN_API_PORT}"
   export XCAGI_GLOBAL_RATE_LIMIT=0
   export XCAGI_AUTH_RATE_LIMIT=0
-  export XCAGI_USE_REMOTE_MARKET="${XCAGI_USE_REMOTE_MARKET:-1}"
+  export XCAGI_USE_REMOTE_MARKET="${XCAGI_USE_REMOTE_MARKET:-0}"
   unset XCAGI_DESKTOP_FORCE_LOCAL_DATABASE || true
   unset XCAGI_MOD_ISOLATED_DATABASES || true
   exec "${PY}" run.py

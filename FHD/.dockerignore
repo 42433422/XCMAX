@@ -115,3 +115,6 @@ desktop/
 .vector_index/
 .archive/
 .cursor/
+
+# Superseded migration sources are not part of the active revision graph.
+alembic/versions/_archive_pre_baseline_2026_06_22/

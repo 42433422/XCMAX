@@ -524,6 +524,34 @@ class TestDocumentTemplateRouter:
         mock.assert_called_once()
         assert result["http_status_code"] == 400
 
+    def test_clear_deletes_every_deletable_template(self):
+        templates = [
+            {"id": "db:1"},
+            {"id": "fs:custom.xlsx"},
+            {"id": "starter:builtin"},
+            {"id": "db:2"},
+        ]
+        delete_results = [
+            ({"success": True}, 200),
+            ({"success": False, "message": "内置模板不可删除"}, 403),
+            ({"success": True}, 200),
+        ]
+        with (
+            patch(
+                "app.application.get_template_app_service",
+                return_value=MagicMock(get_templates=lambda: {"templates": templates}),
+            ),
+            patch(
+                "app.legacy.routes.document_templates_compat.run_archive_template_delete",
+                side_effect=delete_results,
+            ) as delete,
+        ):
+            result = _registered_router_document_template("clear", {}, {}, "admin", "")
+        assert delete.call_count == 3
+        assert result["success"] is True
+        assert result["deleted_templates"] == 2
+        assert result["skipped_templates"] == 2
+
     def test_unknown_action(self):
         result = _registered_router_document_template("fly", {}, {}, "admin", "")
         assert result["success"] is False
@@ -569,7 +597,7 @@ class TestTemplatePreviewRouter:
         with patch("app.application.get_template_app_service", return_value=mock_svc):
             result = _registered_router_template_preview("query", {}, {}, "admin", "")
         assert result["success"] is True
-        assert result["data"] == [{"id": 1}]
+        assert result["templates"] == [{"id": 1}]
 
     def test_query_alias(self):
         mock_svc = MagicMock()
@@ -937,6 +965,34 @@ class TestDatasetRagRouter:
         result = _registered_router_dataset_rag("ingest_document", {}, {}, "admin", "")
         assert result["success"] is False
         assert "dataset_id" in result["message"]
+
+    def test_clear_dataset_uses_persy_memory_for_persy_knowledge(self):
+        with patch(
+            "app.application.persy_memory_app_service.get_persy_memory_app_service"
+        ) as mock_get:
+            mock_get.return_value.clear_memories.return_value = {
+                "success": True,
+                "deleted_memories": 2,
+            }
+            result = _registered_router_dataset_rag(
+                "clear_dataset", {"dataset_id": "persy-knowledge"}, {}, "admin", ""
+            )
+        assert result["success"] is True
+        assert result["deleted_memories"] == 2
+
+    def test_clear_dataset_delegates_for_document_dataset(self):
+        with patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service"
+        ) as mock_get:
+            mock_get.return_value.clear_dataset.return_value = {
+                "success": True,
+                "deleted_documents": 3,
+            }
+            result = _registered_router_dataset_rag(
+                "clear_dataset", {"dataset_id": "docs"}, {}, "admin", ""
+            )
+        assert result["success"] is True
+        assert result["deleted_documents"] == 3
 
     def test_ingest_document(self):
         with patch(
