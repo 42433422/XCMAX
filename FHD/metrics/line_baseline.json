@@ -1,5 +1,5 @@
 {
-  "lines": 2402745,
+  "lines": 2402750,
   "updated": "2026-11-14",
-  "note": "PR#3164 补 source-growth 条目（+12 行）"
+  "note": "PR#3164 修复：群租户隔离测试用命名边界元组替代 broad except（+5 行），满足 broad-except 门禁；经用户批准推进合并"
 }
