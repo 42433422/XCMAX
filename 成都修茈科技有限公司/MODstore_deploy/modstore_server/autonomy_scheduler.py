@@ -415,7 +415,8 @@ def run_pending_automated_remediation() -> dict[str, Any]:
     try:
         blocked = _reserve_remediation_attempt(pending)
     except RemediationBlocked as exc:
-        attempts = int(exc.receipt.get("attempts") or 0)
+        raw_attempts = exc.receipt.get("attempts")
+        attempts = raw_attempts if isinstance(raw_attempts, int) else 0
         if exc.receipt.get("reason") != "retry_limit" or not _handoff_exhausted_remediations(
             {tuple(_remediation_key(pending))}, attempts=attempts
         ):
