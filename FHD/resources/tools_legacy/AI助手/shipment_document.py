@@ -437,10 +437,9 @@ class ShipmentDocumentGenerator:
             # 规格/KG (F列) - 每桶的KG数
             self._write_cell(worksheet, row, 6, product.get("tin_spec", 0))
 
-            # 数量/KG (G列) - 直接填入数值
-            kg_value = float(product.get("quantity_kg", 0))
-            if kg_value > 0:
-                self._write_cell(worksheet, row, 7, kg_value)
+            # 数量/KG：没有重量时写 0，避免按件出单后仍留下上一次的公斤数
+            kg_value = float(product.get("quantity_kg", 0) or 0)
+            self._write_cell(worksheet, row, 7, kg_value)
 
             # 单价/元 (H列)
             unit_price = float(product.get("unit_price", 0))
@@ -460,8 +459,7 @@ class ShipmentDocumentGenerator:
 
         # 第15行：数量/KG 合计与「合计」标签——模板行被清空后按表头列补回，
         # 保证客户拿到的单据既能看到总公斤数，也保留模板原有的合计行标识。
-        if total_quantity_kg > 0:
-            self._write_total_by_header(worksheet, ("数量/KG", "数量/kg"), 15, total_quantity_kg)
+        self._write_total_by_header(worksheet, ("数量/KG", "数量/kg"), 15, total_quantity_kg)
         if not worksheet.cell(row=15, column=1).value:
             self._write_cell(worksheet, 15, 1, "合计")
 

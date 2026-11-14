@@ -126,7 +126,10 @@ def prepare_parsed_products(
 
         amount = p.get("amount")
         if amount is None:
-            amount = (_to_float_or_none(unit_price) or 0) * (_to_float_or_none(quantity_kg) or 0)
+            price = _to_float_or_none(unit_price) or 0
+            amount = price * (
+                (_to_float_or_none(quantity_kg) or 0) or int(quantity_tins or 0)
+            )
 
         parsed_products.append(
             {
