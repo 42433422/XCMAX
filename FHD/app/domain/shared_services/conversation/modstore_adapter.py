@@ -96,12 +96,15 @@ class ModstorePlatformAdapter:
         auth_token: str | None = None,
         user_id: int | None = None,
         default_provider: str = "xiaomi",
-        default_model: str = "mimo-v2.5-pro",
+        default_model: str = "mimo-v2.6-flash",
         timeout: float = 150.0,
     ):
         """初始化市场地址、凭据、默认模型和连接超时；显式值保持原环境回退规则。"""
         self.platform_url = (
-            platform_url or os.environ.get("MODSTORE_PLATFORM_URL", "http://localhost:8000")
+            platform_url
+            or os.environ.get("XCAGI_MARKET_BASE_URL", "").strip()
+            or os.environ.get("MODSTORE_PLATFORM_URL", "").strip()
+            or "https://xiu-ci.com"
         ).rstrip("/")
         # None → env fallback; explicit "" means "no token" (session-bound isolation).
         self.auth_token = _strip_bearer_prefix(
@@ -151,7 +154,7 @@ class ModstorePlatformAdapter:
         platform_url = (
             kwargs.get("platform_url")
             or os.environ.get("XCAGI_MARKET_BASE_URL")
-            or os.environ.get("MODSTORE_PLATFORM_URL", "http://127.0.0.1:8765")
+            or os.environ.get("MODSTORE_PLATFORM_URL", "https://xiu-ci.com")
         ).rstrip("/")
         credential = authentication.resolve_credential(
             kwargs.get("auth_token", ""),

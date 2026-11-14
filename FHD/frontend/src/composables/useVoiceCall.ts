@@ -39,6 +39,17 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
+/** ASR 偶发把语种标签当正文输出（<chinese> 等），先剥离再做有效性判断。 */
+const PLACEHOLDER_TAG = /<[^<>\s]{1,24}>/g
+
+function normalizeTranscript(raw: string): string {
+  return raw.replace(PLACEHOLDER_TAG, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function hasTranscriptContent(text: string): boolean {
+  return /[\p{L}\p{N}]/u.test(text)
+}
+
 export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: UseVoiceCallDeps) {
   const open = ref(false)
   const stage = ref<VoiceCallStage>('connecting')
@@ -233,28 +244,40 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
     await transcribeAndReply(blob, mime, token)
   }
 
+  async function requestTranscript(blob: Blob, ext: string, signal: AbortSignal): Promise<string> {
+    const form = new FormData()
+    form.append('file', blob, `voice-call.${ext}`)
+    const response = await apiFetch('/api/voice/transcribe', {
+      method: 'POST',
+      body: form,
+      signal,
+    })
+    const raw = await response.text()
+    let data: { success?: boolean; detail?: string; message?: string; error?: string; data?: { text?: string } } | null = null
+    try { data = raw ? JSON.parse(raw) : null } catch { /* invalid json */ }
+    if (!response.ok || !data || data.success === false) {
+      throw new Error(String(data?.detail || data?.message || data?.error || raw || `HTTP ${response.status}`))
+    }
+    return normalizeTranscript(String(data.data?.text || ''))
+  }
+
   async function transcribeAndReply(blob: Blob, mime: string, token: number) {
     stage.value = 'thinking'
     const ext = mime.includes('webm') ? 'webm' : mime.includes('ogg') ? 'ogg' : /mp4|m4a/.test(mime) ? 'm4a' : 'wav'
     const controller = new AbortController()
     const timer = window.setTimeout(() => controller.abort(), TRANSCRIPTION_TIMEOUT_MS)
     try {
-      const form = new FormData()
-      form.append('file', blob, `voice-call.${ext}`)
-      const response = await apiFetch('/api/voice/transcribe', {
-        method: 'POST',
-        body: form,
-        signal: controller.signal,
-      })
-      const raw = await response.text()
-      let data: { success?: boolean; detail?: string; message?: string; error?: string; data?: { text?: string } } | null = null
-      try { data = raw ? JSON.parse(raw) : null } catch { /* invalid json */ }
-      if (token !== cycleToken || !open.value) return
-      if (!response.ok || !data || data.success === false) {
-        throw new Error(String(data?.detail || data?.message || data?.error || raw || `HTTP ${response.status}`))
+      // 空转写、纯占位 token 或识别报错都视为失败：同一段录音自动重试一次。
+      let text = ''
+      for (let attempt = 0; attempt < 2 && !text; attempt += 1) {
+        try {
+          text = await requestTranscript(blob, ext, controller.signal)
+        } catch (error) {
+          if (controller.signal.aborted || attempt === 1) throw error
+        }
       }
-      const text = String(data.data?.text || '').trim()
-      if (!text) {
+      if (token !== cycleToken || !open.value) return
+      if (!text || !hasTranscriptContent(text)) {
         beginListening()
         return
       }
@@ -279,14 +302,30 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
       ? window.setTimeout(() => { ack = speakText(ACK_LINE) }, ACK_DELAY_MS)
       : null
     try {
-      await sendMessage(text)
+      // 模型/网络偶发失败：同一句自动重发一次，仍失败再播报“再说一次”。
+      let reply = ''
+      let failed = true
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await sendMessage(text)
+        if (!open.value) return
+        const candidate = latestAssistantReply(before)
+        if (candidate && !FAILURE_NOTICE.test(candidate)) {
+          reply = candidate
+          failed = false
+          break
+        }
+        reply = candidate || ''
+        if (attempt === 0) {
+          clearError()
+          await new Promise(resolve => window.setTimeout(resolve, 500))
+          if (!open.value) return
+        }
+      }
       if (ackTimer) window.clearTimeout(ackTimer)
       if (ack) await ack
       if (!open.value) return
-      const reply = latestAssistantReply(before)
       // 失败回执（超时/连接中断）是一段技术告警，朗读出来非常出戏：
       // 改为一句口语提示，并直接回到聆听，让用户重说。
-      const failed = !reply || FAILURE_NOTICE.test(reply)
       replyText.value = failed ? '' : reply
       if (failed) setError('网络有点慢，请再说一次')
       if (speakerOn.value) {

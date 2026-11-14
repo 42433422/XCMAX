@@ -152,7 +152,7 @@ describe('FloatingChatAssistant 语音通话', () => {
     expect(wrapper.find('.floating-chat-messages').exists()).toBe(false)
     expect(voiceCallActive.value).toBe(true)
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在接通…')
-    expect(wrapper.get('.floating-chat-call-hangup').text()).toContain('挂断')
+    expect(wrapper.get('.floating-chat-ball-action--hangup').attributes('aria-label')).toBe('挂断')
   })
 
   it('按 聆听 → 思考 → 说话 推进阶段并在挂断后释放通话状态', async () => {
@@ -201,7 +201,7 @@ describe('FloatingChatAssistant 语音通话', () => {
     await vi.advanceTimersByTimeAsync(300)
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在聆听…')
 
-    await wrapper.get('.floating-chat-call-hangup').trigger('click')
+    await wrapper.get('.floating-chat-ball-action--hangup').trigger('click')
     await nextTick()
     expect(voiceCallActive.value).toBe(false)
     expect(wrapper.find('.floating-chat-call').exists()).toBe(false)
@@ -218,17 +218,18 @@ describe('FloatingChatAssistant 语音通话', () => {
     await vi.advanceTimersByTimeAsync(400)
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在聆听…')
 
-    await wrapper.findAll('.floating-chat-call-action').find(button => button.text().includes('静音'))!.trigger('click')
+    await wrapper.findAll('.floating-chat-ball-action')[0].trigger('click')
     await nextTick()
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('已静音')
 
-    await wrapper.findAll('.floating-chat-call-action').find(button => button.text().includes('取消静音'))!.trigger('click')
+    expect(wrapper.findAll('.floating-chat-ball-action')[0].attributes('aria-label')).toBe('取消静音')
+    await wrapper.findAll('.floating-chat-ball-action')[0].trigger('click')
     await vi.advanceTimersByTimeAsync(400)
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在聆听…')
 
-    await wrapper.findAll('.floating-chat-call-action').find(button => button.text().includes('免提开'))!.trigger('click')
+    await wrapper.findAll('.floating-chat-ball-action')[1].trigger('click')
     await nextTick()
-    expect(wrapper.findAll('.floating-chat-call-action').some(button => button.text().includes('免提关'))).toBe(true)
+    expect(wrapper.findAll('.floating-chat-ball-action')[1].attributes('aria-label')).toBe('开启免提')
   })
 
   it('合成语音失败时回退系统语音播报', async () => {
@@ -318,6 +319,8 @@ describe('FloatingChatAssistant 语音通话', () => {
     await vi.advanceTimersByTimeAsync(900)
     await flushPromises()
 
+    await vi.advanceTimersByTimeAsync(600)
+    await flushPromises()
     expect(wrapper.get('.floating-chat-call-caption.error').text()).toContain('网络有点慢')
     expect(wrapper.find('.floating-chat-call-caption.ai').exists()).toBe(false)
     expect(vi.mocked(speakText)).toHaveBeenCalledWith(
@@ -345,7 +348,7 @@ describe('FloatingChatAssistant 语音通话', () => {
     await vi.advanceTimersByTimeAsync(900)
     await flushPromises()
 
-    expect(vi.mocked(apiFetch)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(apiFetch)).toHaveBeenCalledTimes(2)
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在聆听…')
     expect(wrapper.find('.floating-chat-call-caption.ai').exists()).toBe(false)
   })

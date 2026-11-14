@@ -285,7 +285,7 @@ class TestModstorePlatformAdapterInit:
         a = ModstorePlatformAdapter()
         assert a.is_configured is True
         assert a.provider_name == "modstore-xiaomi"
-        assert a.model_name == "mimo-v2.5-pro"
+        assert a.model_name == "mimo-v2.6-flash"
 
     def test_init_with_custom_params(self):
         from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter

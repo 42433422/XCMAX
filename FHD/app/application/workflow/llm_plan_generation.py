@@ -22,6 +22,15 @@ _MODEL_SECRET_TEXT = re.compile(
     r"(?i)(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|密码|口令)\b\s*[:=]\s*)([^\s,;]+)|"
     r"(\bBearer\s+)[A-Za-z0-9._~+/=-]+"
 )
+# 模型偶尔在 JSON 字符串值里输出裸控制字符（\x00-\x1f），json.loads 会直接拒绝。
+_BARE_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _sanitize_model_json(raw: str) -> str:
+    """清洗模型输出中的裸控制字符，保留换行与制表符，避免合法计划被误拒。"""
+    return _BARE_CONTROL_CHARS.sub("", raw)
+
+
 _MODEL_CONTEXT_PRIVATE_KEYS = (
     "authorization",
     "access_token",
@@ -200,7 +209,7 @@ def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[Wo
     if not raw:
         return None
     raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    parsed = json.loads(raw)
+    parsed = json.loads(_sanitize_model_json(raw))
     if not isinstance(parsed, dict):
         return None
     mode = str(parsed.get("mode") or "workflow").strip().lower()
@@ -590,7 +599,7 @@ class LlmPlanGeneration:
             message = first.get("message") if isinstance(first, dict) else {}
             raw = str(message.get("content") or "").strip() if isinstance(message, dict) else ""
             raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            parsed = json.loads(raw)
+            parsed = json.loads(_sanitize_model_json(raw))
             if not isinstance(parsed, dict) or parsed.get("resolved") is not True:
                 return None
             parameters = parsed.get("parameters")
