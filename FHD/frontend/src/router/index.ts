@@ -8,11 +8,8 @@ import {
 import { getSidebarNavigationGeneration } from '@/utils/sidebarNavigation'
 import { showAppToast } from '@/composables/useAppToast'
 import { useLanGate } from '@/composables/useLanGate'
-import { isPlatformShellModeEnabled, isIndustryDeliveryRouteName, SHELL_CORE_ROUTE_NAMES } from '@/constants/platformShellMode'
 import { shouldRouteToProductOnboarding } from '@/composables/useProductFlow'
-import { readHostPackAcknowledged } from '@/constants/productFlow'
 import { resolveHostPackOnboardingStep, shouldRouteToHostPackOnboarding } from '@/utils/hostPackOnboardingGate'
-import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect'
 import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths'
 import { resolvePlannerChatHomePath, resolvePlannerPagePath } from '@/utils/plannerPagePaths'
 import { readActiveExtensionModId } from '@/utils/erpDomainPaths'
@@ -36,7 +33,6 @@ import { CORE_ROUTES } from './routes/core'
 import { BUSINESS_ROUTES } from './routes/business'
 import { SHELL_ROUTES } from './routes/shell'
 import { refreshDesktopSessionInBackground } from '@/utils/desktopSessionRestore'
-import { activeTutorialRunAllowsRoute } from '@/stores/tutorialV2'
 import { clearRouteChunkError, isChunkLoadError, markRouteChunkError } from '@/utils/routeLoadState'
 const DEFAULT_DUTY_ROSTER_GRAPH_VIEW = 'department'
 function normalizeDutyRosterGraphView(raw: unknown): string {
@@ -287,31 +283,6 @@ router.beforeEach(async (to, _from, finish) => {
       next({ path: modChat, query: to.query, hash: to.hash })
       return
     }
-  }
-
-  const activeTutorialRoute = activeTutorialRunAllowsRoute(String(to.name || ''))
-  if (
-    isPlatformShellModeEnabled() &&
-    !activeTutorialRoute &&
-    to.name &&
-    !SHELL_CORE_ROUTE_NAMES.has(String(to.name)) &&
-    !isIndustryDeliveryRouteName(
-      String(to.name),
-      useModsStore()
-        .mods.map((m) => String(m.id || '').trim())
-        .filter(Boolean),
-      readHostPackAcknowledged(),
-    ) &&
-    !to.meta?.mod
-  ) {
-    const modPage = resolveHostBusinessPageRedirect(String(to.name))
-    if (modPage) {
-      const target = router.resolve(modPage)
-      next({ path: target.path, query: { ...target.query, ...to.query }, hash: to.hash || target.hash })
-      return
-    }
-    next(resolvePlannerChatHomePath())
-    return
   }
 
   // SSOT：桌面壳禁止 admin（须早于 requiresAdminAccount / 管理端客服侧，避免企业构建内 /admin/entitlements 可达）

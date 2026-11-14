@@ -26,7 +26,7 @@ fi
 # Web 与桌面共享 templates/vue-dist；完整 macOS 安装包从当前源码重建。
 if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
   if [ "${FHD_REBUILD_FRONTEND:-0}" = "1" ] || [ "${FHD_USE_PREBUILT_VUE_DIST:-1}" != "1" ] || [ ! -f "templates/vue-dist/index.html" ]; then
-    bash scripts/package/build-frontend.sh "${PRODUCT_SKU:-generic}"
+    bash scripts/package/build-frontend.sh "${PRODUCT_SKU:-enterprise}"
   else
     echo "[info] 复用已有 templates/vue-dist（$(grep -oE 'index-[A-Za-z0-9_-]+\.js' templates/vue-dist/index.html | head -1 || echo 'unknown')）—— 如需重建请设 FHD_REBUILD_FRONTEND=1"
   fi
