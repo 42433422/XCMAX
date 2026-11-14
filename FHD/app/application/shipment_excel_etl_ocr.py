@@ -144,7 +144,9 @@ def tables_to_workbook_path(
     path = _resolve_workbook_output_path(output_path)
     base_name = (sheet_name or "OCR")[:28]
     wb = Workbook()
-    wb.remove(wb.active)
+    default_sheet = wb.active
+    assert default_sheet is not None
+    wb.remove(default_sheet)
     for index, table in enumerate(tables, start=1):
         ws = wb.create_sheet(f"{base_name}_{index}"[:31])
         row_idx = 1

@@ -98,9 +98,9 @@ def _build_pipeline() -> Any | None:
     }
     try:
         return PPStructureV3(**options)
-    except TypeError:
+    except TypeError as exc:
         # Older 3.x releases do not accept every optional switch.
-        logger.debug("PPStructureV3 rejected optional switches; retrying minimal", exc_info=True)
+        logger.debug("PPStructureV3 rejected optional switches (%s); retrying minimal", exc)
         return PPStructureV3(
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
@@ -211,9 +211,9 @@ def html_to_grid(markup: str) -> tuple[list[list[str]], list[tuple[int, int, int
             if rowspan > 1 or colspan > 1:
                 merges.append((row_index + 1, column + 1, row_index + rowspan, column + colspan))
             column += colspan
-    width = max((len(row) for row in grid), default=0)
-    for row in grid:
-        row.extend([""] * (width - len(row)))
+    width = max((len(columns) for columns in grid), default=0)
+    for columns in grid:
+        columns.extend([""] * (width - len(columns)))
     while grid and not any(cell for cell in grid[-1]):
         grid.pop()
     return grid, merges
@@ -237,7 +237,8 @@ def _iter_payloads(result: Any) -> list[dict[str, Any]]:
         payload = _payload(item)
         if payload is None:
             continue
-        nested = payload.get("res") if isinstance(payload.get("res"), dict) else payload
+        nested_raw = payload.get("res")
+        nested: dict[str, Any] = nested_raw if isinstance(nested_raw, dict) else payload
         payloads.append(nested)
     return payloads
 
@@ -300,7 +301,8 @@ def recognize_table_structures(
     for page, image in enumerate(images, start=1):
         try:
             result = engine.predict(input=image)
-        except TypeError:
+        except TypeError as exc:
+            logger.debug("PP-StructureV3 rejected 'input' keyword on page %s (%s)", page, exc)
             result = engine.predict(image)
         except Exception:  # noqa: BLE001 - optional local runtime
             logger.warning("PP-StructureV3 prediction failed on page %s", page, exc_info=True)

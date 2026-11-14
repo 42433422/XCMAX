@@ -234,7 +234,7 @@ describe('FloatingChatAssistant 语音通话', () => {
   it('合成语音失败时回退系统语音播报', async () => {
     vi.useFakeTimers()
     installMicrophone(async () => mockStream())
-    const synthSpeak = vi.fn()
+    const synthSpeak = vi.fn(() => { throw new Error('系统语音不可用') })
     vi.stubGlobal('speechSynthesis', { speak: synthSpeak, cancel: vi.fn() })
     vi.mocked(apiFetch).mockResolvedValue({
       ok: true,
@@ -273,6 +273,81 @@ describe('FloatingChatAssistant 语音通话', () => {
 
     expect(wrapper.get('.floating-chat-call-caption.error').text()).toContain('麦克风权限被拒绝')
     expect(wrapper.get('.floating-chat-call-stage').text()).toContain('麦克风权限被拒绝')
+  })
+
+  it('对话失败时给出可见错误并继续聆听', async () => {
+    vi.useFakeTimers()
+    installMicrophone(async () => mockStream())
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ success: true, data: { text: '你好' } }),
+    } as Response)
+    sendMessageMock.mockRejectedValue(new Error('网络连接中断，请稍后再试'))
+
+    const wrapper = await openAssistant()
+    await wrapper.get('.floating-chat-call-entry').trigger('click')
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(400)
+    micLevel = 0.3
+    await vi.advanceTimersByTimeAsync(1_500)
+    micLevel = 0
+    await vi.advanceTimersByTimeAsync(900)
+    await flushPromises()
+
+    expect(wrapper.get('.floating-chat-call-caption.error').text()).toContain('网络连接中断')
+    await vi.advanceTimersByTimeAsync(300)
+    expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在聆听…')
+  })
+
+  it('没有拿到回复时改用口语提示重说', async () => {
+    vi.useFakeTimers()
+    installMicrophone(async () => mockStream())
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ success: true, data: { text: '你好' } }),
+    } as Response)
+    sendMessageMock.mockResolvedValue(undefined)
+
+    const wrapper = await openAssistant()
+    await wrapper.get('.floating-chat-call-entry').trigger('click')
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(400)
+    micLevel = 0.3
+    await vi.advanceTimersByTimeAsync(1_500)
+    micLevel = 0
+    await vi.advanceTimersByTimeAsync(900)
+    await flushPromises()
+
+    expect(wrapper.get('.floating-chat-call-caption.error').text()).toContain('网络有点慢')
+    expect(wrapper.find('.floating-chat-call-caption.ai').exists()).toBe(false)
+    expect(vi.mocked(speakText)).toHaveBeenCalledWith(
+      '网络有点慢，我没收到回复，请再说一次。',
+      expect.anything(),
+    )
+  })
+
+  it('语音识别失败后回到聆听而不是中断通话', async () => {
+    vi.useFakeTimers()
+    installMicrophone(async () => mockStream())
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => JSON.stringify({ success: false, detail: '识别服务暂不可用' }),
+    } as Response)
+
+    const wrapper = await openAssistant()
+    await wrapper.get('.floating-chat-call-entry').trigger('click')
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(400)
+    micLevel = 0.3
+    await vi.advanceTimersByTimeAsync(1_500)
+    micLevel = 0
+    await vi.advanceTimersByTimeAsync(900)
+    await flushPromises()
+
+    expect(vi.mocked(apiFetch)).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在聆听…')
+    expect(wrapper.find('.floating-chat-call-caption.ai').exists()).toBe(false)
   })
 
   it('响应 xcagi:start-voice-call 事件并在卸载时移除监听', async () => {

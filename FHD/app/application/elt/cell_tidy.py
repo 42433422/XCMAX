@@ -211,7 +211,7 @@ def behead_paths(
     if not rows:
         return []
     resolved_width = width if width is not None else max(len(row) for row in rows)
-    paths: list[list[str]] = [[] for _ in range(resolved_width)]
+    column_paths: list[list[str]] = [[] for _ in range(resolved_width)]
     for index, row in enumerate(rows):
         padded = [row[col] if col < len(row) else "" for col in range(resolved_width)]
         layer = (
@@ -221,9 +221,9 @@ def behead_paths(
         )
         for col in range(resolved_width):
             label = layer[col]
-            if label and (not paths[col] or paths[col][-1] != label):
-                paths[col].append(label)
-    return paths
+            if label and (not column_paths[col] or column_paths[col][-1] != label):
+                column_paths[col].append(label)
+    return column_paths
 
 
 __all__ = [
