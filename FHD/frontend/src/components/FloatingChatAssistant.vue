@@ -20,6 +20,20 @@
       <span class="floating-chat-toggle-avatar" aria-hidden="true">
         <img :src="avatarUrl" alt="" draggable="false" width="42" height="42" decoding="async" />
       </span>
+      <span
+        v-if="!callOpen"
+        class="floating-chat-toggle-voice"
+        role="button"
+        tabindex="0"
+        aria-label="语音通话"
+        title="语音通话"
+        @pointerdown.stop
+        @click.stop="startCallFromEntry"
+        @keydown.enter.prevent="startCallFromEntry"
+        @keydown.space.prevent="startCallFromEntry"
+      >
+        <i class="fa fa-phone" aria-hidden="true"></i>
+      </span>
       <span class="floating-chat-toggle-label">小C助理</span>
     </button>
 

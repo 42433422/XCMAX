@@ -10,6 +10,7 @@
 }
 
 .floating-chat-toggle {
+  position: relative;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
@@ -63,6 +64,38 @@
   box-shadow:
     0 0 0 2px rgba(45, 122, 220, 0.58),
     0 5px 12px rgba(22, 77, 143, 0.25);
+}
+
+/* 悬浮窗头像外的语音通话快捷入口 */
+.floating-chat-toggle-voice {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  border-radius: 50%;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.35);
+  transition:
+    transform 150ms ease,
+    background 150ms ease;
+}
+
+.floating-chat-toggle-voice:hover {
+  background: #1d4ed8;
+  transform: scale(1.08);
+}
+
+.floating-chat-toggle-voice:focus-visible {
+  outline: 3px solid rgba(24, 144, 255, 0.32);
+  outline-offset: 2px;
 }
 
 .floating-chat-root:not(.dragging) .floating-chat-toggle {
