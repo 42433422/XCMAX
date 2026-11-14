@@ -49,11 +49,7 @@ echo "========== Windows Electron-only SKU: ${SKU} =========="
 bash scripts/package/stage-bundled-mods.sh "${SKU}" || true
 
 (cd frontend && [ -d node_modules ] || npm install)
-if [[ "${SKU}" == "personal" ]]; then
-  (cd frontend && VITE_XCAGI_PRODUCT_SKU=personal VITE_XCAGI_EDITION=minimal npm run build:minimal)
-else
-  (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
-fi
+(cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
 # 桌面包不构建 admin-console（管理端仅网页 SSOT）
 
 printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > desktop/resources/product-sku.json

@@ -91,8 +91,8 @@ def build_platform_shell_payload(installed_mod_ids: list[str] | None = None) -> 
         "bridge_mods": bridges,
         "platform_shell_mode": shell_mode or edition in ("minimal", "generic"),
         "frontend_shell_hint": (
-            "npm run build:minimal — OpenClaw shell (chat + mod-store); "
-            "build:generic — full industry mod pack. ?full=1 for legacy ERP."
+            "Client build is enterprise full routes (npm run build / build:full). "
+            "Admin console is a separate web SPA. Generic and minimal shells are removed."
         ),
         "policy": "new_business_features_should_ship_as_mod_or_employee_pack",
         "host_profile": {

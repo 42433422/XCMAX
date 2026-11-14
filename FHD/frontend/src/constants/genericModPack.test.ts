@@ -65,11 +65,11 @@ describe('genericModPack', () => {
     expect(shouldHideAttendanceModSidebarMenu('mod-attendance-industry-home')).toBe(false)
   })
 
-  it('does not apply full-sidebar suppression to enterprise generic host builds', () => {
+  it('applies full-sidebar suppression for enterprise hosts', () => {
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', 'enterprise')
     vi.stubEnv('VITE_XCAGI_EDITION', 'generic')
     vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
-    expect(shouldSuppressRedundantModMenuInFullHostSidebar('mod-planner-chat')).toBe(false)
+    expect(shouldSuppressRedundantModMenuInFullHostSidebar('mod-planner-chat')).toBe(true)
 
     vi.stubEnv('VITE_XCAGI_EDITION', 'full')
     vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '')
