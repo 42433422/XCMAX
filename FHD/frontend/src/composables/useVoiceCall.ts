@@ -87,10 +87,95 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
   let bargeVad: BargeInVad | null = null
   let bargeArmed = false
   let bargeLoading: Promise<BargeInVad | null> | null = null
+  let bargeArmedAt = 0
+  /** 用户插话时，这段语音直接由 VAD 音频转写，避免“打断的那句话”丢失。 */
+  let bargeUtteranceActive = false
+
+  interface BargeDebug {
+    state: 'idle' | 'loading' | 'ready' | 'error'
+    error: string
+    armed: boolean
+    speechStarts: number
+    interrupts: number
+    frames: number
+  }
+  const bargeDebug: BargeDebug = { state: 'idle', error: '', armed: false, speechStarts: 0, interrupts: 0, frames: 0 }
+
+  function publishBargeDebug() {
+    try {
+      ;(window as Window & { __xcagiVoice?: BargeDebug }).__xcagiVoice = { ...bargeDebug, armed: bargeArmed }
+    } catch { /* ignore */ }
+  }
+
+  function triggerBargeIn() {
+    bargeDebug.speechStarts += 1
+    // 朗读刚开始的 250ms 内忽略（可能是扬声器起播的自身声音）。
+    if (!bargeArmed || !open.value || muted.value || Date.now() - bargeArmedAt < 250) {
+      publishBargeDebug()
+      return
+    }
+    bargeArmed = false
+    bargeUtteranceActive = true
+    bargeDebug.interrupts += 1
+    publishBargeDebug()
+    stopSpeaking()
+  }
+
+  /** Float32(16k) → 16bit PCM WAV，供插话语音直接走 ASR。 */
+  function encodeWav16k(samples: Float32Array): Blob {
+    const buffer = new ArrayBuffer(44 + samples.length * 2)
+    const view = new DataView(buffer)
+    const write = (offset: number, text: string) => {
+      for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i))
+    }
+    write(0, 'RIFF')
+    view.setUint32(4, 36 + samples.length * 2, true)
+    write(8, 'WAVEfmt ')
+    view.setUint32(16, 16, true)
+    view.setUint16(20, 1, true)
+    view.setUint16(22, 1, true)
+    view.setUint32(24, 16000, true)
+    view.setUint32(28, 32000, true)
+    view.setUint16(32, 2, true)
+    view.setUint16(34, 16, true)
+    write(36, 'data')
+    view.setUint32(40, samples.length * 2, true)
+    for (let i = 0; i < samples.length; i += 1) {
+      const s = Math.max(-1, Math.min(1, samples[i]))
+      view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+    }
+    return new Blob([buffer], { type: 'audio/wav' })
+  }
+
+  async function handleBargeUtterance(audio: Float32Array) {
+    try {
+      const controller = new AbortController()
+      const timer = window.setTimeout(() => controller.abort(), TRANSCRIPTION_TIMEOUT_MS)
+      const text = await requestTranscript(encodeWav16k(audio), 'wav', controller.signal).finally(() => window.clearTimeout(timer))
+      // 等上一轮 finally 收尾，避免两轮同时占用 handlingTurn。
+      for (let i = 0; i < 60 && handlingTurn; i += 1) {
+        await new Promise(resolve => window.setTimeout(resolve, 100))
+      }
+      if (!open.value || muted.value) return
+      const cleaned = normalizeTranscript(text)
+      bargeUtteranceActive = false
+      if (!cleaned || !hasTranscriptContent(cleaned)) {
+        beginListening()
+        return
+      }
+      heardText.value = cleaned
+      await handleUtterance(cleaned)
+    } catch {
+      bargeUtteranceActive = false
+      if (open.value && !muted.value) beginListening()
+    }
+  }
 
   async function ensureBargeDetector(): Promise<BargeInVad | null> {
     if (bargeVad) return bargeVad
     if (!bargeLoading) {
+      bargeDebug.state = 'loading'
+      publishBargeDebug()
       bargeLoading = (async () => {
         try {
           const { MicVAD } = await import('@ricky0123/vad-web')
@@ -98,7 +183,7 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
           const ort = await import('onnxruntime-web')
           ort.env.wasm.numThreads = 1
           const base = `${import.meta.env.BASE_URL || '/'}assets/vad/`
-          return await MicVAD.new({
+          const vad = await MicVAD.new({
             baseAssetPath: base,
             onnxWASMBasePath: `${base}ort/`,
             model: 'v5',
@@ -106,18 +191,26 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
             getStream: () => ensureMicrophone(),
             pauseStream: async () => {},
             resumeStream: async (media: MediaStream) => media,
-            onSpeechStart: () => {},
-            // 连续有声帧达到阈值后才判定为真实开口，避免把扬声器尾音当成插话。
-            onSpeechRealStart: () => {
-              if (!bargeArmed || !open.value || muted.value) return
-              bargeArmed = false
-              stopSpeaking()
+            // 用 speechStart 更快响应；250ms 起播保护避免把扬声器起播当成插话。
+            onSpeechStart: () => triggerBargeIn(),
+            onSpeechRealStart: () => triggerBargeIn(),
+            onSpeechEnd: (audio: Float32Array) => {
+              if (bargeUtteranceActive) void handleBargeUtterance(audio)
             },
-            onSpeechEnd: () => {},
             onVADMisfire: () => {},
-            onFrameProcessed: () => {},
+            onFrameProcessed: (probabilities: { isSpeech?: number }) => {
+              bargeDebug.frames += 1
+              if (bargeDebug.frames % 25 === 0) publishBargeDebug()
+              void probabilities
+            },
           }) as BargeInVad
-        } catch {
+          bargeDebug.state = 'ready'
+          publishBargeDebug()
+          return vad
+        } catch (error) {
+          bargeDebug.state = 'error'
+          bargeDebug.error = error instanceof Error ? error.message : String(error)
+          publishBargeDebug()
           // 打断能力不可用时退化为原有半双工通话
           return null
         } finally {
@@ -128,22 +221,42 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
     return bargeLoading
   }
 
-  async function armBargeIn() {
-    if (!open.value || muted.value) return
-    bargeArmed = true
+  /** 通话开始即预热 VAD，避免首句朗读时还在下载模型。 */
+  async function prepareBargeIn() {
+    if (!open.value) return
     if (!bargeVad) bargeVad = await ensureBargeDetector()
     if (!bargeVad) return
     if (!bargeVad.listening) {
-      try { await bargeVad.start() } catch { /* 忽略，保持原通话逻辑 */ }
+      try { await bargeVad.start() } catch (error) {
+        bargeDebug.state = 'error'
+        bargeDebug.error = error instanceof Error ? error.message : String(error)
+        publishBargeDebug()
+      }
+    }
+  }
+
+  async function armBargeIn() {
+    if (!open.value || muted.value) return
+    bargeArmed = true
+    bargeArmedAt = Date.now()
+    publishBargeDebug()
+    if (!bargeVad) bargeVad = await ensureBargeDetector()
+    if (!bargeVad) return
+    if (!bargeVad.listening) {
+      try { await bargeVad.start() } catch { /* 保持原通话逻辑 */ }
     }
   }
 
   function disarmBargeIn() {
     bargeArmed = false
+    publishBargeDebug()
   }
 
   function teardownBargeIn() {
     bargeArmed = false
+    bargeUtteranceActive = false
+    bargeDebug.state = 'idle'
+    publishBargeDebug()
     const vad = bargeVad
     bargeVad = null
     if (vad) void vad.destroy().catch(() => {})
@@ -418,7 +531,8 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
     } finally {
       disarmBargeIn()
       handlingTurn = false
-      if (open.value && !muted.value) {
+      // 插话轮由 VAD 音频独立转写，旧轮不再抢占麦克风。
+      if (!bargeUtteranceActive && open.value && !muted.value) {
         await new Promise(resolve => window.setTimeout(resolve, SPEAK_TAIL_MS))
         if (open.value && !muted.value && !handlingTurn) {
           stage.value = 'listening'
@@ -466,6 +580,11 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手' }: 
     clearError()
     muted.value = false
     handlingTurn = false
+    bargeDebug.speechStarts = 0
+    bargeDebug.interrupts = 0
+    bargeDebug.frames = 0
+    bargeUtteranceActive = false
+    void prepareBargeIn()
     window.clearInterval(tickTimer)
     tickTimer = window.setInterval(() => {
       if (open.value && stage.value !== 'ended') seconds.value += 1
