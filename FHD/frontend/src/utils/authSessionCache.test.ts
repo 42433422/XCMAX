@@ -4,6 +4,7 @@ import {
   canResumeRecentDesktopSession,
   consumeDesktopSessionBootstrapHint,
   hasRecentEnterpriseSessionHint,
+  hasKnownEnterpriseSession,
   invalidateEnterpriseSessionCache,
   LS_ENTERPRISE_SESSION_HINT,
   markEnterpriseSessionValid,
@@ -31,6 +32,16 @@ describe('authSessionCache', () => {
     await expect(validateEnterpriseSessionCached()).resolves.toBe(true)
     await expect(validateEnterpriseSessionCached()).resolves.toBe(true)
     expect(authApi.validateSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports whether a known session exists without asking the server', () => {
+    expect(hasKnownEnterpriseSession()).toBe(false)
+    markEnterpriseSessionValid()
+    expect(hasKnownEnterpriseSession()).toBe(true)
+    invalidateEnterpriseSessionCache()
+    expect(hasKnownEnterpriseSession()).toBe(false)
+    localStorage.setItem(LS_ENTERPRISE_SESSION_HINT, String(Date.now()))
+    expect(hasKnownEnterpriseSession()).toBe(true)
   })
 
   it('reuses a valid session after the short TTL and refreshes behind the click', async () => {
