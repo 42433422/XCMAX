@@ -4,18 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import (
-    CheckConstraint,
-    Date,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    Numeric,
-    String,
-    Text,
-    text,
-)
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.db_base import Base
@@ -105,21 +94,6 @@ class InventoryTransaction(TenantScopedMixin, Base):
         CheckConstraint(
             "COALESCE(delivered_quantity, 0) <= COALESCE(ordered_quantity, 0)",
             name="ck_inventory_transactions_delivered_not_exceed_ordered",
-        ),
-        Index(
-            "uq_inventory_out_business_ref",
-            "tenant_id",
-            "product_id",
-            "transaction_type",
-            "reference_type",
-            "reference_id",
-            unique=True,
-            postgresql_where=text(
-                "transaction_type = 'out' AND reference_type IS NOT NULL AND reference_id IS NOT NULL"
-            ),
-            sqlite_where=text(
-                "transaction_type = 'out' AND reference_type IS NOT NULL AND reference_id IS NOT NULL"
-            ),
         ),
     )
 
