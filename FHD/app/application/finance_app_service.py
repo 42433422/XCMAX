@@ -1,12 +1,4 @@
-"""
-财务应用服务
-
-聚合两类数据来源：
-1. 实时派生：从 ShipmentRecord（销售收入/AR）和 PurchaseOrder（采购支出/AP）聚合。
-2. 手动凭证：通过 FinancialTransaction 表记录手工收付款、账期调整等。
-
-消失条件：当引入正式 ERP 总账模块时，本模块迁移为 GL 适配器。
-"""
+"""财务应用服务：出货与采购派生看板，以及手工凭证。"""
 
 from __future__ import annotations
 
@@ -16,6 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from app.db.models.finance import FinancialTransaction
 from app.db.models.purchase import PurchaseOrder, Supplier
@@ -33,6 +26,22 @@ def _to_float(v: Any) -> float | None:
     if isinstance(v, Decimal):
         return float(v)
     return float(v)
+
+
+def _posted_financial_transaction(db, transaction_type, reference_type, reference_id):
+    if not reference_type or reference_id in (None, ""):
+        return None
+    query = db.query(FinancialTransaction).filter(
+        FinancialTransaction.transaction_type == transaction_type,
+        FinancialTransaction.reference_type == reference_type,
+        FinancialTransaction.reference_id == reference_id,
+    )
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    tenant_id = current_tenant_id()
+    if tenant_id is not None:
+        query = query.filter(FinancialTransaction.tenant_id == tenant_id)
+    return query.first()
 
 
 class FinanceAppService:
@@ -251,12 +260,29 @@ class FinanceAppService:
     def create_transaction(self, data: dict[str, Any]) -> dict[str, Any]:
         with get_db() as db:
             try:
+                reference_type = data.get("reference_type")
+                reference_id = data.get("reference_id")
+                if isinstance(reference_id, str) and reference_id.isdigit():
+                    reference_id = int(reference_id)
+                if reference_type and reference_id not in (None, ""):
+                    posted = _posted_financial_transaction(
+                        db,
+                        data["transaction_type"],
+                        reference_type,
+                        reference_id,
+                    )
+                    if posted is not None:
+                        return {
+                            "success": True,
+                            "message": "该业务单据已登记，未重复入账",
+                            "data": posted.to_dict(),
+                        }
                 txn = FinancialTransaction(
                     transaction_type=data["transaction_type"],
                     amount=Decimal(str(data["amount"])),
                     currency=data.get("currency", "CNY"),
-                    reference_type=data.get("reference_type"),
-                    reference_id=data.get("reference_id"),
+                    reference_type=reference_type,
+                    reference_id=reference_id,
                     description=data.get("description"),
                     transaction_date=_parse_dt(data.get("transaction_date")) or utc_now_naive(),
                     due_date=_parse_dt(data.get("due_date")),
@@ -266,7 +292,23 @@ class FinanceAppService:
                     created_by=data.get("created_by"),
                 )
                 db.add(txn)
-                db.commit()
+                try:
+                    db.commit()
+                except IntegrityError:
+                    db.rollback()
+                    raced = _posted_financial_transaction(
+                        db,
+                        data["transaction_type"],
+                        reference_type,
+                        reference_id,
+                    )
+                    if raced is None:
+                        raise
+                    return {
+                        "success": True,
+                        "message": "该业务单据已登记，未重复入账",
+                        "data": raced.to_dict(),
+                    }
                 db.refresh(txn)
                 try:
                     from app.neuro_bus.application_neuro_bridge import (

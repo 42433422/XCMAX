@@ -171,6 +171,12 @@ def _recover_once(db_path: str, idem_path: str, name: str, key: str, barrier, se
     try:
         _bind(db_path, idem_path)
         permissions.drop_process_idempotency_memory()
+        if os.environ.get("XCMAX_CONTRACT_FAULT") == "ignore-claim":
+
+            def begin(*_args, **_kwargs):
+                return (f"forced-{os.getpid()}", None)
+
+            permissions.begin_idempotent_replay = begin
         barrier.wait(timeout=30)
         result = _execute(name, key)
         sender.send(
@@ -338,6 +344,87 @@ def test_same_key_with_different_phone_does_not_reuse_the_row():
         assert rejected.get("error_code") == "idempotency_conflict"
         assert len(_rows(engine, "参数不同")) == 1
         assert _rows(engine, "参数不同")[0]["contact_phone"] == "13800000023"
+
+
+def test_r07_replaying_the_old_success_for_a_different_phone_fails(monkeypatch):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    real = permissions.begin_idempotent_replay
+
+    def replay_previous(*args, **kwargs):
+        key, replay = real(*args, **kwargs)
+        if isinstance(replay, dict) and replay.get("success") is not True:
+            return key, {"success": True, "data": {"contact_phone": "13800000023"}}
+        return key, replay
+
+    monkeypatch.setattr(permissions, "begin_idempotent_replay", replay_previous)
+    try:
+        test_same_key_with_different_phone_does_not_reuse_the_row()
+    except AssertionError as exc:
+        assert "not True" in str(exc) or "idempotency_conflict" in str(exc)
+    else:
+        raise AssertionError("a different phone reused the previous success")
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    restored = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/test_application/test_idempotency_recovery_e23_e24.py::test_same_key_with_different_phone_does_not_reuse_the_row",
+            "-q",
+            "-o",
+            "addopts=",
+            "--tb=line",
+        ],
+        cwd=str(Path(__file__).resolve().parents[2]),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert restored.returncode == 0, restored.stdout + restored.stderr
+
+
+def test_r09_two_recoveries_without_the_claim_leave_two_rows():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    os.environ["XCMAX_CONTRACT_FAULT"] = "ignore-claim"
+    try:
+        test_e24_two_recoveries_leave_one_row()
+    except AssertionError:
+        # 未领取时的恢复会破坏「只留一行」不变量；不依赖内部断言的具体文案。
+        pass
+    else:
+        raise AssertionError("two recoveries without a claim still left one row")
+    finally:
+        os.environ.pop("XCMAX_CONTRACT_FAULT", None)
+    env = os.environ.copy()
+    env.pop("XCMAX_CONTRACT_FAULT", None)
+    env.pop("PYTHONPATH", None)
+    restored = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/test_application/test_idempotency_recovery_e23_e24.py::test_e24_two_recoveries_leave_one_row",
+            "-q",
+            "-o",
+            "addopts=",
+            "--tb=line",
+        ],
+        cwd=str(Path(__file__).resolve().parents[2]),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert restored.returncode == 0, restored.stdout + restored.stderr
 
 
 def test_crash_before_create_does_not_claim_an_existing_customer():
