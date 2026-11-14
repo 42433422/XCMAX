@@ -393,6 +393,10 @@ class LlmPlanGeneration:
                 },
             )
         except (ValueError, TypeError) as err:
+            from app.infrastructure.modstore_transport import MarketModelError
+
+            if isinstance(err, MarketModelError):
+                raise
             logger.warning("LLM 规划参数错误，拒绝计划并暂停执行: %s", err)
             return None
         except RuntimeError as err:
