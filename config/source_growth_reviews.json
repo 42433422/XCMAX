@@ -336,6 +336,18 @@
       "validation": "512 relay and mobile route tests passed, including encrypted roundtrip, ciphertext-at-rest, desktop heartbeat and plaintext rejection; Flutter analyze has no errors. Full integration CI and human architecture review remain outstanding; this request is not approval.",
       "follow_up": "Split the mobile extension assembly into per-domain registries in the next structure pass instead of accumulating more registrations here.",
       "review_owner": "@42433422"
+    },
+    "FHD/app/application/ai_group_chat_service.py": {
+      "base_file": "FHD/app/application/ai_group_chat_service.py",
+      "base_blob": "b81c1d77f6ccd8aa617fbadc1f3e3fb8e00bb961",
+      "head_blob": "1faa754a770559f61560d19562aaf25b9045e12f",
+      "before_lines": 748,
+      "after_lines": 835,
+      "reason": "Review request only: enforce tenant isolation for AI group chat storage and admin/mobile routes.",
+      "boundary": "Tenant scoping of AI group JSONL storage and route ownership checks only; no cross-tenant reads or writes are authorized.",
+      "validation": "Local tenant isolation and route isolation tests passed; full integration CI and human architecture review remain outstanding; this request is not approval.",
+      "follow_up": "Keep tenant ownership checks centralized as group routes evolve.",
+      "review_owner": "@42433422"
     }
   }
 }
