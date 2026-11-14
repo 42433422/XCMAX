@@ -28,8 +28,81 @@ let onlineAudioEl: HTMLAudioElement | null = null
 let speechController: AbortController | null = null
 let offlineWarmupStarted = false
 
+/**
+ * 播放状态（仿 Pipecat AudioBufferProcessor 的串行输出队列）：
+ * 朗读按句块串行播放，同一时刻只允许一个音频源，暂停/继续作用在当前句块上。
+ */
+export type TtsPlaybackState = 'idle' | 'playing' | 'paused'
+let playbackState: TtsPlaybackState = 'idle'
+/** 在合成尚未出声时请求暂停：首块起播后立即暂停，避免「点了暂停还在说」。 */
+let pauseRequested = false
+type PlaybackListener = (state: TtsPlaybackState) => void
+const playbackListeners = new Set<PlaybackListener>()
+
+function setPlaybackState(next: TtsPlaybackState): void {
+  if (playbackState === next) return
+  playbackState = next
+  for (const fn of playbackListeners) {
+    try { fn(next) } catch { /* ignore */ }
+  }
+}
+
+export function onTtsPlaybackChange(cb: PlaybackListener): () => void {
+  playbackListeners.add(cb)
+  return () => playbackListeners.delete(cb)
+}
+
+export function getTtsPlaybackState(): TtsPlaybackState {
+  return playbackState
+}
+
+/** 暂停当前朗读（在线音频或系统语音）。返回是否确实有可暂停的播放。 */
+export function pauseSpeaking(): boolean {
+  pauseRequested = true
+  if (!speechController) return false
+  if (onlineAudioEl && !onlineAudioEl.paused) {
+    try { onlineAudioEl.pause() } catch { /* ignore */ }
+    setPlaybackState('paused')
+    return true
+  }
+  if (hasSpeechSynthesis() && window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+    try { window.speechSynthesis.pause() } catch { /* ignore */ }
+    setPlaybackState('paused')
+    return true
+  }
+  // 仍在合成音频：记录暂停意图，首块起播时立即停住。
+  return true
+}
+
+/** 继续被暂停的朗读。 */
+export function resumeSpeaking(): boolean {
+  pauseRequested = false
+  if (onlineAudioEl?.paused && onlineAudioEl.currentTime > 0 && onlineAudioEl.src) {
+    void onlineAudioEl.play().catch(() => { /* ignore */ })
+    setPlaybackState('playing')
+    return true
+  }
+  if (hasSpeechSynthesis() && window.speechSynthesis.paused) {
+    try { window.speechSynthesis.resume() } catch { /* ignore */ }
+    setPlaybackState('playing')
+    return true
+  }
+  return false
+}
+
+/** 当前是否正在朗读（含暂停态），供 UI 决定显示「暂停 / 继续」。 */
+export function isSpeakingNow(): boolean {
+  if (playbackState === 'paused') return true
+  if (onlineAudioEl && !onlineAudioEl.paused && !onlineAudioEl.ended) return true
+  return hasSpeechSynthesis() && (window.speechSynthesis.speaking || window.speechSynthesis.pending)
+}
+
 function stopOnlinePlayback(): void {
-  if (!onlineAudioEl) return
+  pauseRequested = false
+  if (!onlineAudioEl) {
+    setPlaybackState('idle')
+    return
+  }
   const el = onlineAudioEl
   onlineAudioEl = null
   try {
@@ -41,6 +114,7 @@ function stopOnlinePlayback(): void {
   } catch {
     /* ignore */
   }
+  setPlaybackState('idle')
 }
 
 const NEURAL_KEYWORDS = [
@@ -417,6 +491,7 @@ function playAudioUri(uri: string, signal: AbortSignal, onStart?: () => void): P
       if (error) {
         a.pause()
         a.src = ''
+        if (playbackState !== 'paused') setPlaybackState('idle')
         reject(error)
       } else resolve()
     }
@@ -424,8 +499,21 @@ function playAudioUri(uri: string, signal: AbortSignal, onStart?: () => void): P
     // Limit loading only; a long, playing message must be allowed to finish.
     loadTimer = setTimeout(() => finish(new DOMException('TTS audio load timeout', 'TimeoutError')), 15_000)
     signal.addEventListener('abort', onAbort, { once: true })
-    a.onplaying = () => { clearTimeout(loadTimer); onStart?.() }
-    a.onended = () => finish()
+    a.onplaying = () => {
+      clearTimeout(loadTimer)
+      onStart?.()
+      if (pauseRequested) {
+        // 用户在合成阶段就点了暂停：起播即暂停，等继续。
+        try { a.pause() } catch { /* ignore */ }
+        setPlaybackState('paused')
+        return
+      }
+      setPlaybackState('playing')
+    }
+    a.onended = () => {
+      if (onlineAudioEl === a && !pauseRequested) setPlaybackState('idle')
+      finish()
+    }
     a.onerror = () => finish(new Error('音频播放失败'))
     void a.play().catch(finish)
   })
@@ -501,6 +589,12 @@ async function speakWithSystemVoice(text: string, controller: AbortController): 
       if (!controller.signal.aborted) controller.signal.addEventListener('abort', onAbort, { once: true })
       u.onstart = () => {
         started = true
+        if (pauseRequested) {
+          try { window.speechSynthesis.pause() } catch { /* ignore */ }
+          setPlaybackState('paused')
+          return
+        }
+        setPlaybackState('playing')
       }
       u.onend = () => finish(true)
       u.onerror = () => finish(false)
@@ -574,7 +668,9 @@ export function stopSpeaking(): void {
   const controller = speechController
   speechController = null
   controller?.abort()
+  pauseRequested = false
   stopOnlinePlayback()
+  setPlaybackState('idle')
   // Only cancel speechSynthesis when it is actually active; unconditional cancel
   // releases the Windows "communications" audio session even when idle, which
   // causes other apps' volumes to snap back (OS audio-ducking restore).

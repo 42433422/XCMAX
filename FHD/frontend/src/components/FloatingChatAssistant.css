@@ -400,6 +400,93 @@
   color: rgba(100, 116, 139, 0.9);
 }
 
+/* 流式识别的中间结果：弱化展示，确认后再变成正式字幕。 */
+.floating-chat-call-caption.partial {
+  opacity: 0.72;
+  font-style: italic;
+}
+
+.floating-chat-call-notice {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #92400e;
+  background: rgba(254, 243, 199, 0.9);
+  border: 1px solid rgba(253, 230, 138, 0.9);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+
+.floating-chat-call-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.floating-chat-call-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: #334155;
+  background: rgba(241, 245, 249, 0.95);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.floating-chat-call-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 语音判停设置：窄面板内纵向排列，避免挤压通话状态与字幕。 */
+.floating-chat-call-settings {
+  width: 100%;
+  font-size: 12px;
+  color: #475569;
+}
+
+.floating-chat-call-settings summary {
+  cursor: pointer;
+  color: #64748b;
+  user-select: none;
+}
+
+.floating-chat-call-setting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.floating-chat-call-setting > span {
+  flex: 0 0 56px;
+}
+
+.floating-chat-call-setting input[type='range'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.floating-chat-call-setting input[type='number'] {
+  width: 56px;
+}
+
+.floating-chat-call-setting em {
+  font-style: normal;
+  color: #64748b;
+}
+
+.floating-chat-call-setting--check {
+  gap: 6px;
+}
+
+.floating-chat-call-settings__hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: rgba(100, 116, 139, 0.85);
+}
+
 @media (max-width: 767px) {
   .floating-chat-root {
     max-width: calc(100vw - 12px);

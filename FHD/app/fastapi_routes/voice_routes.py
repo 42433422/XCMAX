@@ -23,7 +23,16 @@ import wave
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from starlette.concurrency import run_in_threadpool
 
 from app.fastapi_routes.voice_model_source import (
@@ -216,27 +225,44 @@ def _funasr_text(message: dict[str, Any]) -> str:
     ).strip()
 
 
-async def _platform_funasr_transcribe(token: str, wav: bytes) -> str:
-    """平台 FunASR WebSocket：MiMo ASR 尚未上线时的可用识别通道。"""
+def _funasr_ws_url(token: str) -> str:
     from urllib.parse import quote
 
     from app.fastapi_routes.market_bridge.settings import _market_api_base_url
 
+    base = _market_api_base_url().rstrip("/")
+    scheme, _, host = base.partition("://")
+    return f"{'wss' if scheme == 'https' else 'ws'}://{host}/api/asr/funasr?token={quote(token, safe='')}"
+
+
+_FUNASR_STREAM_CONFIG = {
+    "mode": "2pass",
+    "chunk_size": [5, 10, 5],
+    "chunk_interval": 10,
+    "encoder_chunk_look_back": 4,
+    "decoder_chunk_look_back": 0,
+    "wav_name": "mic",
+    "wav_format": "pcm",
+    "audio_fs": 16000,
+    "is_speaking": True,
+    "itn": True,
+}
+
+
+async def _platform_funasr_transcribe(token: str, wav: bytes) -> str:
+    """平台 FunASR WebSocket：MiMo ASR 尚未上线时的可用识别通道。"""
     try:
         import websockets
         from websockets.exceptions import WebSocketException
     except ImportError:
         raise HTTPException(503, "本机缺少语音通道组件") from None
 
-    base = _market_api_base_url().rstrip("/")
-    scheme, _, host = base.partition("://")
-    ws_url = f"{'wss' if scheme == 'https' else 'ws'}://{host}/api/asr/funasr?token={quote(token, safe='')}"
     pcm = _wav_pcm16k(wav)
     if not pcm:
         raise HTTPException(422, "录音为空")
 
     try:
-        return await _funasr_stream(ws_url, pcm)
+        return await _funasr_stream(_funasr_ws_url(token), pcm)
     except HTTPException:
         raise
     except (OSError, TimeoutError, WebSocketException) as exc:
@@ -256,22 +282,7 @@ async def _funasr_stream(ws_url: str, pcm: bytes) -> str:
             raise HTTPException(504, "平台语音识别连接超时") from None
         if isinstance(ready, dict) and ready.get("type") == "error":
             raise HTTPException(503, "平台语音识别服务未启动")
-        await ws.send(
-            _json.dumps(
-                {
-                    "mode": "2pass",
-                    "chunk_size": [5, 10, 5],
-                    "chunk_interval": 10,
-                    "encoder_chunk_look_back": 4,
-                    "decoder_chunk_look_back": 0,
-                    "wav_name": "mic",
-                    "wav_format": "pcm",
-                    "audio_fs": 16000,
-                    "is_speaking": True,
-                    "itn": True,
-                }
-            )
-        )
+        await ws.send(_json.dumps(_FUNASR_STREAM_CONFIG))
         # 60ms 一包（16k mono s16le），与平台前端一致。
         for offset in range(0, len(pcm), 1920):
             await ws.send(pcm[offset : offset + 1920])
@@ -413,6 +424,29 @@ async def transcribe_audio(
             "bytes": len(raw),
         },
     }
+
+
+@router.post("/turn-detect")
+async def detect_turn_complete(
+    file: UploadFile = File(..., description="16 kHz 单声道 PCM16 WAV，用于判断这句话是否说完"),
+    threshold: float = Form(default=0.5, description="判停阈值（0.05–0.95），越低越容易判定说完"),
+):
+    """Smart Turn v3.2 本地端点检测：避免把语气词或半句话直接发出去。"""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="录音内容为空")
+    if len(raw) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"录音文件过大：{len(raw)} 字节")
+    try:
+        from app.application.voice.smart_turn import predict_turn_complete
+
+        result = await asyncio.to_thread(predict_turn_complete, raw, threshold)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("smart-turn 判断失败，按“已说完”继续：%s", exc)
+        return {"success": True, "data": {"complete": True, "probability": None, "degraded": True}}
+    return {"success": True, "data": result}
 
 
 @router.get("/health")
@@ -602,3 +636,137 @@ async def voice_command(
             "elapsed_ms_asr": elapsed_ms,
         },
     }
+
+
+def _ws_session_id(ws: WebSocket) -> str:
+    try:
+        from app.config import Config
+
+        cookie_name = getattr(Config, "SESSION_COOKIE_NAME", "session_id")
+        return str(ws.cookies.get(cookie_name) or ws.query_params.get("session_id") or "").strip()
+    except RECOVERABLE_ERRORS:
+        return ""
+
+
+def _ws_market_token(ws: WebSocket) -> str:
+    session_id = _ws_session_id(ws)
+    if not session_id:
+        return ""
+    try:
+        from app.fastapi_routes.market_account import session_market_token
+
+        return str(session_market_token(session_id) or "").strip()
+    except RECOVERABLE_ERRORS:
+        return ""
+
+
+@router.websocket("/stream")
+async def voice_stream(ws: WebSocket):
+    """浏览器 PCM 分片 → 平台 FunASR 2pass 流式识别。
+
+    流式通道不可用（未登录平台/平台 ASR 未启动）时立即回 unavailable，
+    前端据此回退到「录完整段再上传」，不会让通话失败。
+    """
+    import json as _json
+
+    await ws.accept()
+    token = _ws_market_token(ws)
+    if not token:
+        await ws.send_json({"type": "unavailable", "reason": "no_session"})
+        await ws.close()
+        return
+    try:
+        import websockets
+        from websockets.exceptions import WebSocketException
+    except ImportError:
+        await ws.send_json({"type": "unavailable", "reason": "no_component"})
+        await ws.close()
+        return
+    try:
+        upstream = await websockets.connect(
+            _funasr_ws_url(token), open_timeout=6, close_timeout=2
+        )
+    except (OSError, TimeoutError, WebSocketException):
+        await ws.send_json({"type": "unavailable", "reason": "platform"})
+        await ws.close()
+        return
+
+    state = {"done": False, "text": ""}
+
+    async def send_json(payload: dict[str, Any]) -> None:
+        try:
+            await ws.send_json(payload)
+        except RECOVERABLE_ERRORS:
+            return
+
+    async def pump_upstream() -> None:
+        try:
+            ready = _json.loads(await asyncio.wait_for(upstream.recv(), timeout=6))
+            if isinstance(ready, dict) and ready.get("type") == "error":
+                await send_json({"type": "unavailable", "reason": "platform"})
+                return
+            await upstream.send(_json.dumps(_FUNASR_STREAM_CONFIG))
+            await send_json({"type": "ready"})
+            while True:
+                message = _json.loads(await upstream.recv())
+                if not isinstance(message, dict):
+                    continue
+                if message.get("type") == "error":
+                    await send_json({"type": "error"})
+                    return
+                text = _funasr_text(message)
+                if not text:
+                    continue
+                state["text"] = text
+                if "offline" in str(message.get("mode") or ""):
+                    state["done"] = True
+                    await send_json({"type": "final", "text": text})
+                    return
+                await send_json({"type": "partial", "text": text})
+        except asyncio.CancelledError:
+            raise
+        except (TimeoutError, ValueError, TypeError, OSError, WebSocketException):
+            return
+
+    async def pump_client() -> None:
+        try:
+            while True:
+                message = await ws.receive()
+                if message.get("type") == "websocket.disconnect":
+                    return
+                chunk = message.get("bytes")
+                if chunk:
+                    await upstream.send(chunk)
+                    continue
+                raw = message.get("text") or ""
+                try:
+                    control = _json.loads(raw)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(control, dict) or control.get("type") != "end":
+                    continue
+                await upstream.send(_json.dumps({"is_speaking": False}))
+                deadline = time.monotonic() + 8
+                while not state["done"] and time.monotonic() < deadline:
+                    await asyncio.sleep(0.05)
+                state["done"] = True
+                await send_json({"type": "final", "text": state["text"]})
+                return
+        except (WebSocketDisconnect, RECOVERABLE_ERRORS):
+            return
+
+    tasks = [asyncio.create_task(pump_upstream()), asyncio.create_task(pump_client())]
+    try:
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            await upstream.close()
+        except RECOVERABLE_ERRORS:
+            pass
+        try:
+            await ws.close()
+        except RECOVERABLE_ERRORS:
+            pass
