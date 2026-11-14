@@ -32,6 +32,21 @@ describe('shellRoutePrefetch', () => {
     await vi.waitFor(() => expect(component).toHaveBeenCalledTimes(2))
   })
 
+  it('loads the messenger immediately and does not schedule the same router twice', async () => {
+    vi.useFakeTimers()
+    delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback
+    const im = vi.fn().mockResolvedValue({ ready: true })
+    const router = {
+      getRoutes: () => [{ name: 'im', components: { default: im } }],
+    } as never
+    prefetchShellRouteChunks(router)
+    await Promise.resolve()
+    expect(im).toHaveBeenCalledOnce()
+    prefetchShellRouteChunks(router)
+    await vi.advanceTimersByTimeAsync(200)
+    expect(im).toHaveBeenCalledOnce()
+  })
+
   it('warms a shell route from the idle timer and from requestIdleCallback', async () => {
     vi.useFakeTimers()
     delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback

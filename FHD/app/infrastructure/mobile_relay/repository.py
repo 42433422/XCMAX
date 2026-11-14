@@ -2,14 +2,33 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import secrets
 from typing import Any
 
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.application.mobile_relay_ports import Database, Projection, Schema
 from app.domain.shared_services.mobile_relay_utils import _row_dict, _token_hash
+
+
+def _ensure_public_key_column(db: Session) -> None:
+    """旧库补列：公钥只增不改，缺列时按空串补齐。"""
+    inspector = sa_inspect(db.get_bind())
+    if not inspector.has_table("mobile_relay_desktops"):
+        return
+    columns = {str(c["name"]) for c in inspector.get_columns("mobile_relay_desktops")}
+    if "desktop_public_key" in columns:
+        return
+    db.execute(
+        text(
+            "ALTER TABLE mobile_relay_desktops "
+            "ADD COLUMN desktop_public_key VARCHAR(256) NOT NULL DEFAULT ''"
+        )
+    )
 
 
 def ensure_tables(db: Session) -> None:
@@ -27,6 +46,7 @@ def ensure_tables(db: Session) -> None:
                 mobile_user_id INTEGER,
                 mobile_username VARCHAR(200) NOT NULL DEFAULT '',
                 capabilities_json TEXT NOT NULL DEFAULT '{}',
+                desktop_public_key VARCHAR(256) NOT NULL DEFAULT '',
                 last_seen_at VARCHAR(64),
                 expires_at VARCHAR(64) NOT NULL,
                 created_at VARCHAR(64) NOT NULL,
@@ -66,6 +86,7 @@ def ensure_tables(db: Session) -> None:
             "ON mobile_relay_tasks(relay_id, status, created_at)"
         )
     )
+    _ensure_public_key_column(db)
 
 
 def list_desktops(
@@ -122,6 +143,25 @@ def desktop_belongs_to_user(
         )
 
 
+def desktop_public_key_for_user(
+    *, user_id: int, relay_id: str, database: Database, ensure_schema: Schema
+) -> str:
+    with database() as db:
+        ensure_schema(db)
+        row = db.execute(
+            text(
+                """
+                SELECT desktop_public_key FROM mobile_relay_desktops
+                WHERE relay_id = :relay_id
+                  AND mobile_user_id = :user_id
+                  AND status = 'paired'
+                """
+            ),
+            {"relay_id": relay_id.strip(), "user_id": int(user_id)},
+        ).first()
+    return str(row[0] or "").strip() if row else ""
+
+
 def desktop_for_token(db: Session, *, relay_id: str, desktop_token: str) -> dict[str, Any] | None:
     token = (desktop_token or "").strip()
     if not token:
@@ -144,10 +184,23 @@ def desktop_for_token(db: Session, *, relay_id: str, desktop_token: str) -> dict
     return _row_dict(row) if row else None
 
 
+def public_key_fingerprint(public_key: str) -> str:
+    """公钥指纹：手机端首次配对后固定，云端换钥会被手机发现。"""
+    raw = (public_key or "").strip()
+    if not raw:
+        return ""
+    try:
+        digest = hashlib.sha256(base64.b64decode(raw, validate=True)).hexdigest()
+    except (ValueError, TypeError):
+        return ""
+    return digest[:32]
+
+
 def public_desktop(data: dict[str, Any]) -> dict[str, Any]:
     capabilities = data.get("capabilities") if isinstance(data.get("capabilities"), dict) else {}
     if not isinstance(capabilities, dict):
         capabilities = {}
+    public_key = str(data.get("desktop_public_key") or "").strip()
     host = str(capabilities.get("host") or "").strip()
     port = int(capabilities.get("port") or 0)
     local_base_url = ""
@@ -168,4 +221,7 @@ def public_desktop(data: dict[str, Any]) -> dict[str, Any]:
         "updated_at": data.get("updated_at") or "",
         # 已绑定手机的账号名；供桌面端设置页展示「已连接：xxx 的手机」，与手机端「服务」文案对齐。
         "mobile_username": data.get("mobile_username") or "",
+        # 端到端加密公钥与指纹；任务内容在手机与桌面间加解密，云端只见密文。
+        "public_key": public_key,
+        "key_fingerprint": public_key_fingerprint(public_key),
     }

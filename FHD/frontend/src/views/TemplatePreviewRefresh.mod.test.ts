@@ -2,8 +2,8 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, KeepAlive } from 'vue'
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
-import { assembleTemplatePreview } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/template-preview/assemble'
-import TpPreviewModal from '../../../mods/xcagi-erp-domain-bridge/frontend/views/template-preview/TpPreviewModal.vue'
+import { assembleTemplatePreview } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/assemble'
+import TpPreviewModal from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/TpPreviewModal.vue'
 
 const listTemplates = vi.hoisted(() => vi.fn())
 vi.mock('@/api/templatePreview', () => ({ default: { listTemplates } }))

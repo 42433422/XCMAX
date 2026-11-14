@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 ROOTS = ("FHD/mods/_employees", "FHD/mods", "FHD/XCAGI/mods")
+LAYERS = ("industry", "bridge", "employees", "tools")
 
 
 def run(root: Path, *command: str) -> str:
@@ -38,11 +39,40 @@ def source_root(path: str) -> str | None:
         return None
     for prefix in ROOTS:
         base = PurePosixPath(prefix).parts
-        if parts[: len(base)] == base and len(parts) > len(base) + 1:
-            mod_id = parts[len(base)]
+        if parts[: len(base)] != base or len(parts) <= len(base) + 1:
+            continue
+        index = len(base)
+        if parts[index] in LAYERS and len(parts) > index + 2:
+            layer = parts[index]
+            mod_id = parts[index + 1]
             if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", mod_id):
-                return f"{prefix}/{mod_id}"
+                return f"{prefix}/{layer}/{mod_id}"
+            continue
+        mod_id = parts[index]
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", mod_id):
+            return f"{prefix}/{mod_id}"
     return None
+
+
+def source_candidates(pkg_id: str) -> list[str]:
+    return [
+        candidate
+        for prefix in ROOTS
+        for candidate in (
+            f"{prefix}/{pkg_id}",
+            *(f"{prefix}/{layer}/{pkg_id}" for layer in LAYERS),
+        )
+    ]
+
+
+def source_rank(source: str) -> int:
+    for index, prefix in enumerate(ROOTS):
+        if source == f"{prefix}/{PurePosixPath(source).name}":
+            return index * 10
+        for layer_index, layer in enumerate(LAYERS):
+            if source == f"{prefix}/{layer}/{PurePosixPath(source).name}":
+                return index * 10 + layer_index + 1
+    return 999
 
 
 def discover(root: Path, source_sha: str, mod_id: str = "") -> list[dict[str, str]]:
@@ -58,9 +88,9 @@ def discover(root: Path, source_sha: str, mod_id: str = "") -> list[dict[str, st
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", mod_id):
             raise ValueError("invalid mod_id")
         sources = {
-            f"{prefix}/{mod_id}"
-            for prefix in ROOTS
-            if (root / prefix / mod_id / "manifest.json").is_file()
+            candidate
+            for candidate in source_candidates(mod_id)
+            if (root / candidate / "manifest.json").is_file()
         }
         if not sources:
             raise ValueError("requested mod_id has no source manifest")
@@ -91,9 +121,9 @@ def discover(root: Path, source_sha: str, mod_id: str = "") -> list[dict[str, st
         # Do not publish an updated mirror while the canonical host source is
         # still stale. This also avoids two packages sharing one id/version.
         canonical = next(
-            f"{prefix}/{pkg_id}"
-            for prefix in ROOTS
-            if (root / prefix / pkg_id / "manifest.json").is_file()
+            candidate
+            for candidate in source_candidates(pkg_id)
+            if (root / candidate / "manifest.json").is_file()
         )
         if canonical != source:
             canonical_manifest = json.loads((root / canonical / "manifest.json").read_text())
@@ -103,7 +133,7 @@ def discover(root: Path, source_sha: str, mod_id: str = "") -> list[dict[str, st
                 raise ValueError(
                     f"{pkg_id}: changed mirror and canonical source disagree; synchronize {canonical}"
                 )
-        rank = next(i for i, prefix in enumerate(ROOTS) if source == f"{prefix}/{pkg_id}")
+        rank = source_rank(source)
         old_row = result.get(pkg_id)
         if old_row is None or rank < int(old_row["rank"]):
             result[pkg_id] = {

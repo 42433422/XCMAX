@@ -33,6 +33,7 @@ class RelayPairing:
         device_id: str,
         capabilities: dict[str, Any] | None = None,
         relay_base_url: str = "",
+        public_key: str = "",
         ttl_seconds: int = 24 * 3600,
     ) -> dict[str, Any]:
         relay_id = uuid.uuid4().hex
@@ -62,11 +63,11 @@ class RelayPairing:
                     INSERT INTO mobile_relay_desktops (
                         relay_id, pairing_code, desktop_token_hash, desktop_label,
                         device_id, relay_base_url, status, capabilities_json,
-                        expires_at, created_at, updated_at
+                        desktop_public_key, expires_at, created_at, updated_at
                     ) VALUES (
                         :relay_id, :pairing_code, :desktop_token_hash, :desktop_label,
                         :device_id, :relay_base_url, 'pending', :capabilities_json,
-                        :expires_at, :created_at, :updated_at
+                        :desktop_public_key, :expires_at, :created_at, :updated_at
                     )
                     """
                 ),
@@ -78,6 +79,7 @@ class RelayPairing:
                     "device_id": (device_id or "").strip()[:128],
                     "relay_base_url": normalized_base,
                     "capabilities_json": _json_dumps(capabilities or {}),
+                    "desktop_public_key": (public_key or "").strip()[:256],
                     "expires_at": expires_at,
                     "created_at": now,
                     "updated_at": now,
@@ -101,7 +103,12 @@ class RelayPairing:
         }
 
     def renew_desktop_pairing(
-        self, *, relay_id: str, desktop_token: str, ttl_seconds: int = 24 * 3600
+        self,
+        *,
+        relay_id: str,
+        desktop_token: str,
+        public_key: str = "",
+        ttl_seconds: int = 24 * 3600,
     ) -> dict[str, Any] | None:
         now = _utc_now()
         expires_at = _utc_after(ttl_seconds)
@@ -117,7 +124,10 @@ class RelayPairing:
                 text(
                     """
                     UPDATE mobile_relay_desktops
-                    SET pairing_code = :code, expires_at = :expires_at, updated_at = :now
+                    SET pairing_code = :code, expires_at = :expires_at, updated_at = :now,
+                        desktop_public_key = COALESCE(
+                            NULLIF(:public_key, ''), desktop_public_key
+                        )
                     WHERE relay_id = :relay_id AND desktop_token_hash = :token_hash
                       AND status IN ('pending', 'paired')
                     """
@@ -128,6 +138,7 @@ class RelayPairing:
                     "now": now,
                     "relay_id": relay_id.strip(),
                     "token_hash": _token_hash(desktop_token.strip()),
+                    "public_key": (public_key or "").strip()[:256],
                 },
             )
             if cast(CursorResult[Any], updated).rowcount != 1:

@@ -175,9 +175,10 @@ def test_completion_push_static_helper_covers_statuses_and_body_sources(monkeypa
 
     assert [c[0] for c in calls] == [7, 8, 9]
     assert "任务失败" in calls[0][1]
-    assert calls[0][2] == "依赖安装失败"
+    # 结果已是端到端密文，云端推送不再携带任何业务正文。
+    assert calls[0][2] == "cursor 已结束本次任务，打开对话查看详情。"
     assert "任务受阻" in calls[1][1]
-    assert calls[1][2] == "需要你确认分支"
+    assert calls[1][2] == "trae 已结束本次任务，打开对话查看详情。"
     assert calls[2][2] == "codex 已结束本次任务，打开对话查看详情。"
     assert calls[2][3]["task_status"] == "completed"
 

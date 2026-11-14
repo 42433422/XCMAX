@@ -26,8 +26,8 @@
     "types": ["vite/client"]
   },
   "include": [
-    "../mods/xcagi-customer-service-bridge/frontend/views/InternalCustomerServiceView.vue",
-    "../mods/xcagi-customer-service-bridge/frontend/composables/**/*.ts",
-    "../mods/xcagi-customer-service-bridge/frontend/components/**/*.vue"
+    "../mods/bridge/xcagi-customer-service-bridge/frontend/views/InternalCustomerServiceView.vue",
+    "../mods/bridge/xcagi-customer-service-bridge/frontend/composables/**/*.ts",
+    "../mods/bridge/xcagi-customer-service-bridge/frontend/components/**/*.vue"
   ]
 }

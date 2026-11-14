@@ -37,7 +37,7 @@
 - Use `/api/mobile/v1/admin/home` for admin employee conversations.
 - Keep fixed conversation visibility stable: Xiao C always, super
   employees for enterprise/admin, customer service only for non-admin enterprise.
-- Generate Dart DTOs from `FHD/contracts/openapi.json` or a narrowed mobile contract.
+- Generate Dart DTOs from `FHD/assets/contracts/openapi.json` or a narrowed mobile contract.
 - Keep mobile endpoints under `/api/mobile/v1` and preserve the published route contract.
 
 ## Stage 3: screen parity

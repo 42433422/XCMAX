@@ -127,7 +127,7 @@ class _AdminCsConversationScreenState
       }
       return messages;
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = mobileErrorText(error));
       return const [];
     }
   }
@@ -162,7 +162,7 @@ class _AdminCsConversationScreenState
       );
       await _refreshMessages();
     } catch (error) {
-      if (mounted) _showSnack(error.toString());
+      if (mounted) _showSnack(mobileErrorText(error));
     } finally {
       if (mounted) setState(() => _sending = false);
     }

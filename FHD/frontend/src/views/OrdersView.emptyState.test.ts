@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, expect, it, vi } from 'vitest'
-import OrdersView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/OrdersView.vue'
+import OrdersView from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/OrdersView.vue'
 import { useOrdersStore } from '@/stores/orders'
 
 const { clearOrders, prompt } = vi.hoisted(() => ({ clearOrders: vi.fn(), prompt: vi.fn() }))

@@ -118,15 +118,24 @@ def read_manifest_dicts() -> list[dict[str, Any]]:
     if not d:
         return []
     out: list[dict[str, Any]] = []
+    candidates: list[Path] = []
     for child in sorted(d.iterdir()):
-        if not child.is_dir():
+        if not child.is_dir() or child.name.startswith(("_", ".")):
             continue
+        if (child / "manifest.json").is_file():
+            candidates.append(child)
+        else:
+            # 分层容器（industry/ bridge/ employees/ tools/）
+            candidates.extend(
+                sub
+                for sub in sorted(child.iterdir())
+                if sub.is_dir()
+                and not sub.name.startswith(("_", "."))
+                and (sub / "manifest.json").is_file()
+            )
+    for child in candidates:
         folder_id = child.name
-        if folder_id.startswith("."):
-            continue
         mf = child / "manifest.json"
-        if not mf.is_file():
-            continue
         try:
             raw = json.loads(mf.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as e:

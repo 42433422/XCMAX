@@ -32,6 +32,7 @@ import { bootstrapHostConfig } from '@/stores/hostConfig'
 import { waitForInitialBootstrapDependencies } from './bootstrapDependencies'
 import { prefetchRouteChunks } from './utils/routePrefetch'
 import { prefetchShellRouteChunks } from './utils/shellRoutePrefetch'
+import { installDesktopDeviceHeartbeat } from './utils/desktopDeviceHeartbeat'
 
 import './styles/tokens.css'
 import './styles/css/base.css'
@@ -210,6 +211,7 @@ async function bootstrap() {
     if (import.meta.env.DEV || host === '127.0.0.1' || host === 'localhost') prefetchStaticRouteChunks()
   }, { once: true })
   app.mount('#app')
+  installDesktopDeviceHeartbeat()
   const startupRoot = document.getElementById('app')
   if (startupRoot) startupRoot.dataset.startupMounted = 'true'
 

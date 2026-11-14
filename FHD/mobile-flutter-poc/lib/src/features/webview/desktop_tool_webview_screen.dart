@@ -37,7 +37,6 @@ class DesktopToolWebViewScreen extends StatefulWidget {
 class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
   late final WebViewController _controller;
   late final MobileApiClient _api;
-  var _loadingProgress = 0;
 
   @override
   void initState() {
@@ -59,9 +58,6 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
               unawaited(widget.externalUrlLauncher(uri));
             }
             return NavigationDecision.prevent;
-          },
-          onProgress: (progress) {
-            if (mounted) setState(() => _loadingProgress = progress);
           },
           onPageFinished: (_) =>
               _injectMobileWebTokens(_controller, uri, widget.config, _api),
@@ -101,7 +97,6 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
                 ),
               ],
             ),
-            _WebLoadingProgress(progress: _loadingProgress),
             Expanded(child: WebViewWidget(controller: _controller)),
           ],
         ),
@@ -132,7 +127,6 @@ class _ModWebViewScreenState extends State<ModWebViewScreen> {
   late final WebViewController _controller;
   late final MobileApiClient _api;
   late final Uri _uri;
-  var _loadingProgress = 0;
 
   @override
   void initState() {
@@ -143,9 +137,6 @@ class _ModWebViewScreenState extends State<ModWebViewScreen> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onProgress: (progress) {
-            if (mounted) setState(() => _loadingProgress = progress);
-          },
           onPageFinished: (_) =>
               _injectMobileWebTokens(_controller, _uri, widget.config, _api),
         ),
@@ -184,29 +175,10 @@ class _ModWebViewScreenState extends State<ModWebViewScreen> {
                 ),
               ],
             ),
-            _WebLoadingProgress(progress: _loadingProgress),
             Expanded(child: WebViewWidget(controller: _controller)),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _WebLoadingProgress extends StatelessWidget {
-  const _WebLoadingProgress({required this.progress});
-
-  final int progress;
-
-  @override
-  Widget build(BuildContext context) {
-    if (progress >= 100) return const SizedBox.shrink();
-    final colors = AppTheme.colors(context);
-    return LinearProgressIndicator(
-      minHeight: 2,
-      value: progress / 100,
-      color: colors.brand,
-      backgroundColor: colors.surfaceHigh,
     );
   }
 }

@@ -9,6 +9,7 @@ import '../../theme/app_assets.dart';
 import '../../theme/app_theme.dart';
 import '../scan/scan_qr_screen.dart';
 import 'register_screen.dart';
+import '../../policy/mobile_error_policy.dart';
 
 part 'auth_screen_state.part.dart';
 part 'auth_screen_login_widgets.part.dart';

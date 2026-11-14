@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
+import '../theme/app_icons.dart';
 part 'we_ui_cells.part.dart';
 part 'we_ui_dialog.part.dart';
 
@@ -38,7 +39,7 @@ class WeTopBar extends StatelessWidget {
               if (showBack || onBack != null)
                 IconButton(
                   onPressed: onBack ?? () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.arrow_back, size: 24),
+                  icon: const Icon(AppIcons.back, size: 24),
                   color: colors.textPrimary,
                   tooltip: '返回',
                 )

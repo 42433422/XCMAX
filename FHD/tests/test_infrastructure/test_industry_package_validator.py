@@ -4,7 +4,7 @@
 
 铁律 3 禁止只测 happy path；铁律 6 分支覆盖 ≠ 行覆盖。
 真实集成测试 + tmp_path 边界场景双管齐下：
-- 真实场景：FHD/mods/coating-industry + FHD/XCAGI/mods/attendance-industry 双路径命中
+- 真实场景：FHD/mods/industry/coating-industry + FHD/XCAGI/mods/attendance-industry 双路径命中
 - tmp_path：mods_root 缺失 / 非 -industry 跳过 / manifest 缺失 / 同名去重 / fallback 补齐
 """
 

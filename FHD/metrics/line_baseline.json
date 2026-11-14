@@ -1,5 +1,5 @@
 {
-  "lines": 2397506,
-  "updated": "2026-11-11",
-  "note": "把已含 main 的下层合入 cursor/idempotency-conflict-b845"
+  "lines": 2400047,
+  "updated": "2026-11-14",
+  "note": "PR#3145 表头空预演边界：新增 ETL 预演边界用例与业务合同证据校验，净增 74 行"
 }

@@ -11,7 +11,7 @@ class AppTheme {
   static const momentAccent = Color(0xFF5145CD);
   static const momentChipBg = Color(0xFFECEDFE);
   static const replyBoxBg = Color(0xFFF4F5F7);
-  static const page = Color(0xFFF5F6F7);
+  static const page = Color(0xFFF3F4F7);
   static const surface = Color(0xFFFFFFFF);
   static const surfaceHigh = Color(0xFFE8E9EB);
   static const divider = Color(0xFFDEE0E3);
@@ -69,7 +69,14 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
-        indicatorColor: page,
+        indicatorColor: brandContainer,
+        height: 66,
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            size: 24,
+            color: states.contains(WidgetState.selected) ? brand : textSecondary,
+          ),
+        ),
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
             fontSize: 11,
@@ -86,17 +93,38 @@ class AppTheme {
         thickness: 0.6,
         space: 0,
       ),
+      cardTheme: CardThemeData(
+        color: surface,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, 48),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      inputDecorationTheme: const InputDecorationTheme(
+        border: InputBorder.none,
+        filled: false,
+        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      ),
       textTheme: _typography(textPrimary),
     );
   }
 
   static ThemeData dark() {
-    const darkBg = Color(0xFF1A1A1A);
-    const darkSurface = Color(0xFF242424);
-    const darkSurfaceVariant = Color(0xFF2E2E2E);
-    const darkBorder = Color(0xFF383838);
-    const darkTextPrimary = Color(0xFFE5E5E5);
-    const darkTextSecondary = Color(0xFF888888);
+    const darkBg = Color(0xFF0E0F11);
+    const darkSurface = Color(0xFF161719);
+    const darkSurfaceVariant = Color(0xFF1F2124);
+    const darkBorder = Color(0xFF2A2C30);
+    const darkTextPrimary = Color(0xFFF2F3F5);
+    const darkTextSecondary = Color(0xFF9AA0A6);
     const darkBrand = Color(0xFF818CF8);
 
     final scheme = ColorScheme.fromSeed(
@@ -292,14 +320,14 @@ class XcagiThemeColors extends ThemeExtension<XcagiThemeColors> {
     momentAccent: Color(0xFFA5B0FF),
     momentChipBg: Color(0xFF2A2A3D),
     replyBoxBg: Color(0xFF26262E),
-    page: Color(0xFF1A1A1A),
-    surface: Color(0xFF242424),
-    surfaceHigh: Color(0xFF2E2E2E),
-    divider: Color(0xFF383838),
-    textPrimary: Color(0xFFE5E5E5),
-    textSecondary: Color(0xFF888888),
-    textStrongSecondary: Color(0xFF5C5C5C),
-    textTertiary: Color(0xFF5C5C5C),
+    page: Color(0xFF0E0F11),
+    surface: Color(0xFF161719),
+    surfaceHigh: Color(0xFF1F2124),
+    divider: Color(0xFF2A2C30),
+    textPrimary: Color(0xFFF2F3F5),
+    textSecondary: Color(0xFF9AA0A6),
+    textStrongSecondary: Color(0xFFB6BBC2),
+    textTertiary: Color(0xFF7A7F87),
   );
 
   final Color brand;

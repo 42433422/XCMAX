@@ -11,7 +11,7 @@ import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
 const MOD_FACADE_BASE = `/api/mod/${ERP_DOMAIN_BRIDGE_MOD_ID}`
 
 /**
- * 太阳鸟等客户 Mod 自管 API（见 mods/taiyangniao-pro/backend/blueprints.py）。
+ * 太阳鸟等客户 Mod 自管 API（见 mods/industry/taiyangniao-pro/backend/blueprints.py）。
  * 订单/考勤记录等仍由 xcagi-erp-domain-bridge 提供；购买单位与客户同源走客户 Mod。
  */
 const ERP_ON_CLIENT_MOD_PREFIXES: readonly string[] = [

@@ -9,6 +9,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
   Future<List<ChatMessage>> loadInitialMessages(
     ConversationItem conversation,
   ) async {
+    unawaited(flushPendingMessages());
     final cached = await _loadCachedChat(conversation.id);
     if (cached.isNotEmpty) return cached;
 
@@ -62,6 +63,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     required String body,
     int userId = 0,
     List<ChatMessage> recentMessages = const [],
+    bool cacheUserMessage = true,
     void Function(String token)? onToken,
     void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
@@ -73,7 +75,10 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     }
 
     if (tool != null) {
-      await _cacheChatMessage(conversation.id, role: ChatRole.user, body: text);
+      if (cacheUserMessage) {
+        await _cacheChatMessage(conversation.id,
+            role: ChatRole.user, body: text);
+      }
       final localBaseUrl = await _superEmployeeLanBaseUrl();
       if (localBaseUrl.isNotEmpty) {
         // 第 1 级：LAN SSE 流式（逐 token 输出，体验最佳）
@@ -159,7 +164,10 @@ abstract class _RepoChatBase extends _RepoRelayBase {
 
     final employeeRef = _employeeConversationRef(conversation.id);
     if (employeeRef != null) {
-      await _cacheChatMessage(conversation.id, role: ChatRole.user, body: text);
+      if (cacheUserMessage) {
+        await _cacheChatMessage(conversation.id,
+            role: ChatRole.user, body: text);
+      }
       final effectiveUserId = userId > 0 ? userId : await _loadCurrentUserId();
       final reply = await _client.streamEmployeeChat(
         message: text,
@@ -178,7 +186,9 @@ abstract class _RepoChatBase extends _RepoRelayBase {
       return reply;
     }
 
-    await _cacheChatMessage(conversation.id, role: ChatRole.user, body: text);
+    if (cacheUserMessage) {
+      await _cacheChatMessage(conversation.id, role: ChatRole.user, body: text);
+    }
     final effectiveUserId = userId > 0 ? userId : await _loadCurrentUserId();
     final reply = await _client.streamChat(
       text,
@@ -249,6 +259,11 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     if (id.isEmpty) return;
     final targetTs = message.cacheTimestampMs;
     if (targetTs <= 0) return;
+    final store = await openOfflineStore();
+    if (store != null) {
+      await store.removeMessageByTimestamp(id, targetTs);
+      return;
+    }
     final session = await _client.loadSession();
     final rows = [
       ...(session.cachedChatMessages[id] ?? const <Map<String, Object?>>[]),
@@ -271,5 +286,76 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     }
     await _client.saveSession(session.copyWith(cachedChatMessages: cache),
         authGeneration: generation);
+  }
+
+  // ── 离线待发送队列 ──────────────────────────────────────────
+
+  bool _flushingOutbox = false;
+
+  /// 断网时把消息写入 SQLite 队列；返回 0 表示离线库不可用或内容为空。
+  Future<int> enqueuePendingMessage({
+    required ConversationItem conversation,
+    required String body,
+  }) async {
+    final store = await openOfflineStore();
+    if (store == null) return 0;
+    return store.enqueueMessage(
+      conversationId: conversation.id,
+      conversationType: conversation.type,
+      title: conversation.title,
+      body: body,
+      authGeneration: _client.authGeneration,
+    );
+  }
+
+  Future<int> pendingMessageCount() async {
+    final store = await openOfflineStore();
+    if (store == null) return 0;
+    return store.pendingMessageCount();
+  }
+
+  /// 手动重发或重连成功后，清掉同一内容的排队记录，避免重复发送。
+  Future<void> removeQueuedMessage(String conversationId, String body) async {
+    final store = await openOfflineStore();
+    await store?.removePendingByBody(conversationId, body);
+  }
+
+  /// 依次重放待发送消息；跨账号的旧队列直接丢弃，避免串号。
+  Future<int> flushPendingMessages() async {
+    if (_flushingOutbox) return 0;
+    final store = await openOfflineStore();
+    if (store == null) return 0;
+    _flushingOutbox = true;
+    var sent = 0;
+    try {
+      final pending = await store.pendingMessages(limit: 5);
+      for (final item in pending) {
+        if (item.authGeneration != _client.authGeneration) {
+          await store.markSent(item.id);
+          continue;
+        }
+        await store.markSending(item.id);
+        try {
+          await streamMessage(
+            conversation: ConversationItem(
+              id: item.conversationId,
+              type: item.conversationType,
+              title: item.title,
+              subtitle: '',
+              timestampText: '',
+            ),
+            body: item.body,
+            cacheUserMessage: false,
+          );
+          await store.markSent(item.id);
+          sent++;
+        } catch (error) {
+          await store.markFailed(item.id, error.toString());
+        }
+      }
+    } finally {
+      _flushingOutbox = false;
+    }
+    return sent;
   }
 }
