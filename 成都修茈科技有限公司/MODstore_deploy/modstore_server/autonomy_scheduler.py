@@ -365,9 +365,7 @@ def _reserve_remediation_attempt(pending: dict[str, Any]) -> set[tuple[str, ...]
     return blocked - {tuple(key)}
 
 
-def _handoff_exhausted_remediations(
-    keys: set[tuple[str, ...]], *, attempts: int
-) -> bool:
+def _handoff_exhausted_remediations(keys: set[tuple[str, ...]], *, attempts: int) -> bool:
     """Hand remediation items that can never dispatch again to a human queue.
 
     The retry budget stays fail-closed, but an exhausted item must not trap the
