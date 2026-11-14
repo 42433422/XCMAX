@@ -163,15 +163,6 @@
         ></textarea>
         <button
           type="button"
-          class="btn voice-call-entry-btn"
-          title="语音通话"
-          aria-label="语音通话"
-          @click="startVoiceCall"
-        >
-          <i class="fa fa-phone" aria-hidden="true"></i>
-        </button>
-        <button
-          type="button"
           class="btn voice-input-btn"
           :class="voiceButtonClass"
           :disabled="voiceButtonDisabled"
@@ -241,21 +232,6 @@
       @confirm="confirmOfficeDockingReview"
       @close="clearOfficeDockingReview"
     />
-    <VoiceCallOverlay
-      v-if="voiceCallOpen"
-      :title="voiceCallTitle"
-      :stage="voiceCallStage"
-      :duration-text="voiceCallDuration"
-      :status-text="voiceCallStatus"
-      :heard-text="voiceCallHeard"
-      :reply-text="voiceCallReply"
-      :error-text="voiceCallError"
-      :muted="voiceCallMuted"
-      :speaker-on="voiceCallSpeakerOn"
-      @hangup="hangUpVoiceCall"
-      @toggle-mute="toggleVoiceCallMute"
-      @toggle-speaker="toggleVoiceCallSpeaker"
-    />
   </div>
 </template>
 
@@ -275,14 +251,12 @@ import ChatSidePanel from '@/components/chat/ChatSidePanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
 import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
-import VoiceCallOverlay from '@/components/chat/VoiceCallOverlay.vue'
 import TaskWorkspaceContextBar from '@/components/chat/TaskWorkspaceContextBar.vue'
 import { useChatOfficeDocking } from '@/composables/useChatOfficeDocking'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
-import { useVoiceCall } from '@/composables/useVoiceCall'
 import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
@@ -414,26 +388,6 @@ const {
   addAndSaveMessage,
   stageExcelAnalysisContext,
 } = chatViewApi
-
-const {
-  open: voiceCallOpen,
-  stage: voiceCallStage,
-  durationText: voiceCallDuration,
-  statusText: voiceCallStatus,
-  callTitle: voiceCallTitle,
-  heardText: voiceCallHeard,
-  replyText: voiceCallReply,
-  errorText: voiceCallError,
-  muted: voiceCallMuted,
-  speakerOn: voiceCallSpeakerOn,
-  start: startVoiceCall,
-  hangUp: hangUpVoiceCall,
-  toggleMute: toggleVoiceCallMute,
-  toggleSpeaker: toggleVoiceCallSpeaker,
-} = useVoiceCall({
-  sendMessage: (message: string) => chatSendMessage(message),
-  messages,
-})
 
 const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList, visibleActiveTaskId, workspaceHeader } =
   useRoutedTaskWorkspace({
