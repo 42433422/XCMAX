@@ -61,6 +61,19 @@ def _write(directory: Path, body: str, name: str = "full.xml") -> Path:
     return path
 
 
+def _evidence(paths: list[Path]) -> dict:
+    return evidence_from_junit(paths, source_sha="abc", run_id="9", run_attempt="1")
+
+
+def _validate(evidence: dict, expected_sha: str = "abc") -> list[str]:
+    return validate(
+        evidence,
+        expected_sha=expected_sha,
+        required_ids=MINIMUM_REQUIRED,
+        allow_not_applicable=False,
+    )
+
+
 def test_catalog_keeps_the_required_readback_scenario():
     assert catalog_errors(load_catalog()) == []
 
@@ -122,36 +135,17 @@ def test_floor_from_main_rejects_a_shrunk_required_set():
 
 def test_passed_junit_is_accepted(tmp_path: Path):
     body = _passing_pair()
-    evidence = evidence_from_junit(
-        [_write(tmp_path, body)], source_sha="abc", run_id="9", run_attempt="1"
-    )
-    assert (
-        validate(
-            evidence, expected_sha="abc", required_ids=MINIMUM_REQUIRED, allow_not_applicable=False
-        )
-        == []
-    )
+    evidence = _evidence([_write(tmp_path, body)])
+    assert _validate(evidence) == []
 
 
 def test_missing_required_result_is_rejected(tmp_path: Path):
-    evidence = evidence_from_junit(
-        [_write(tmp_path, "<testcase classname='other' name='other'/>")],
-        source_sha="abc",
-        run_id="9",
-        run_attempt="1",
-    )
-    errors = validate(
-        evidence, expected_sha="abc", required_ids=MINIMUM_REQUIRED, allow_not_applicable=False
-    )
+    evidence = _evidence([_write(tmp_path, "<testcase classname='other' name='other'/>")])
+    errors = _validate(evidence)
     assert any("NOT RUN is not PASS" in error for error in errors)
     absent = dict(evidence)
     absent["scenarios"] = []
-    assert any(
-        "no result" in error
-        for error in validate(
-            absent, expected_sha="abc", required_ids=MINIMUM_REQUIRED, allow_not_applicable=False
-        )
-    )
+    assert any("no result" in error for error in _validate(absent))
 
 
 def test_wrong_sha_skip_and_retry_cover_are_rejected(tmp_path: Path):
@@ -160,12 +154,8 @@ def test_wrong_sha_skip_and_retry_cover_are_rejected(tmp_path: Path):
         + _case(CLASSNAME, NAME)
         + _case(EXPORT_CLASS, EXPORT_NAME)
     )
-    evidence = evidence_from_junit(
-        [_write(tmp_path, failed)], source_sha="abc", run_id="9", run_attempt="1"
-    )
-    errors = validate(
-        evidence, expected_sha="wrong", required_ids=MINIMUM_REQUIRED, allow_not_applicable=False
-    )
+    evidence = _evidence([_write(tmp_path, failed)])
+    errors = _validate(evidence, expected_sha="wrong")
     assert any("source sha" in error for error in errors)
     assert any("FAIL is not PASS" in error for error in errors)
     covered = dict(evidence)
@@ -185,38 +175,15 @@ def test_wrong_sha_skip_and_retry_cover_are_rejected(tmp_path: Path):
             "attempts": [{"n": 1, "status": "PASS", "failure": ""}],
         },
     ]
-    assert any(
-        "PASS hides" in error
-        for error in validate(
-            covered, expected_sha="abc", required_ids=MINIMUM_REQUIRED, allow_not_applicable=False
-        )
-    )
+    assert any("PASS hides" in error for error in _validate(covered))
 
     skipped = _case(CLASSNAME, NAME, "<skipped message='skip'/>") + _case(EXPORT_CLASS, EXPORT_NAME)
-    skipped_evidence = evidence_from_junit(
-        [_write(tmp_path / "skip", skipped)],
-        source_sha="abc",
-        run_id="9",
-        run_attempt="1",
-    )
-    assert any(
-        "NOT RUN" in error
-        for error in validate(
-            skipped_evidence,
-            expected_sha="abc",
-            required_ids=MINIMUM_REQUIRED,
-            allow_not_applicable=False,
-        )
-    )
+    skipped_evidence = _evidence([_write(tmp_path / "skip", skipped)])
+    assert any("NOT RUN" in error for error in _validate(skipped_evidence))
 
 
 def test_damaged_evidence_and_blocked_are_rejected():
-    damaged = validate(
-        {"source_sha": "abc"},
-        expected_sha="abc",
-        required_ids=MINIMUM_REQUIRED,
-        allow_not_applicable=False,
-    )
+    damaged = _validate({"source_sha": "abc"})
     assert any("scenarios missing" in error for error in damaged)
     blocked = {
         "source_sha": "abc",
@@ -225,23 +192,14 @@ def test_damaged_evidence_and_blocked_are_rejected():
             for scenario_id in MINIMUM_REQUIRED
         ],
     }
-    assert any(
-        "BLOCKED" in error
-        for error in validate(
-            blocked, expected_sha="abc", required_ids=MINIMUM_REQUIRED, allow_not_applicable=False
-        )
-    )
+    assert any("BLOCKED" in error for error in _validate(blocked))
 
 
 def test_evidence_without_run_binding_is_rejected(tmp_path: Path):
-    evidence = evidence_from_junit(
-        [_write(tmp_path, _passing_pair())], source_sha="abc", run_id="9", run_attempt="1"
-    )
+    evidence = _evidence([_write(tmp_path, _passing_pair())])
     evidence["run_id"] = ""
     evidence["data_version"] = ""
-    errors = validate(
-        evidence, expected_sha="abc", required_ids=MINIMUM_REQUIRED, allow_not_applicable=False
-    )
+    errors = _validate(evidence)
     assert any("run_id is not bound" in error for error in errors)
     assert any("data_version is not bound" in error for error in errors)
 
@@ -265,9 +223,7 @@ def test_a_lookalike_name_is_not_the_required_node(tmp_path: Path):
         body += _case(module[:-3].replace("/", "."), name + "_other")
         if "[" in name:
             body += _case(module[:-3].replace("/", "."), name.split("[", 1)[0])
-    evidence = evidence_from_junit(
-        [_write(tmp_path, body)], source_sha="abc", run_id="9", run_attempt="1"
-    )
+    evidence = _evidence([_write(tmp_path, body)])
     assert all(item["status"] == "NOT RUN" for item in evidence["scenarios"])
     with pytest.raises(ValueError, match="NOT RUN"):
         ci_gate(tmp_path, source_sha="a" * 40, run_id="9", run_attempt="1", backend="ran")
