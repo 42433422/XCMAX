@@ -109,11 +109,14 @@ def test_confirmation_cannot_resume_another_sessions_pending_plan():
     assert pending["owner"]["runtime_context"]["session_id"] == "original"
 
 
-def test_injected_validation_rejects_before_dispatch_or_billing():
+@pytest.mark.parametrize("missing_spec", [False, True])
+def test_injected_validation_rejects_before_dispatch_or_billing(missing_spec):
     repository = InMemoryAgentRunRepository()
     executor = Mock()
     dependencies = RuntimeDependencies(
-        action_spec=lambda tool, action: ToolActionSpecV2(tool_id=tool, action=action),
+        action_spec=lambda tool, action: (
+            None if missing_spec else ToolActionSpecV2(tool_id=tool, action=action)
+        ),
         validate=lambda tool, action, params: ToolValidationResult(
             ok=False, tool_id=tool, action=action, error_code="invalid_input", message="blocked"
         ),
@@ -137,6 +140,9 @@ def test_injected_validation_rejects_before_dispatch_or_billing():
     execute.execute_step(run, step, runtime_context={}, node_outputs={})
 
     executor.execute.assert_not_called()
+    executor.execute_with_deadline.assert_not_called()
+    assert run.tool_calls[0].permission == ""
+    assert "authorization_permission" not in run.tool_calls[0].metadata
     usage.record_tool_usage_entry.assert_not_called()
     assert step.status == "failed" and step.output["error_code"] == "invalid_input"
 

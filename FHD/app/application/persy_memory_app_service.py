@@ -234,10 +234,10 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         listed = self.list_memories(access_context=list_access, limit=1000)
         if not listed.get("success"):
             return {**listed, "deleted_memories": 0}
-        memories = listed.get("memories")
+        listed_memories = listed.get("memories")
         rows = [
             row
-            for row in (memories if isinstance(memories, list) else [])
+            for row in (listed_memories if isinstance(listed_memories, list) else [])
             if isinstance(row, dict) and row.get("status") in _VISIBLE_MEMORY_STATUSES
         ]
         deleted = 0
@@ -286,10 +286,10 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         # 知识库页面展示的是 pending + active 记忆，对话检索同一份内容，
         # 否则页面上能看到的记忆在对话里永远检索不到。
         listed = self.list_memories(access_context=access, limit=1000)
-        memories = listed.get("memories")
+        listed_memories = listed.get("memories")
         rows = [
             row
-            for row in (memories if isinstance(memories, list) else [])
+            for row in (listed_memories if isinstance(listed_memories, list) else [])
             if isinstance(row, dict) and row.get("status") in _VISIBLE_MEMORY_STATUSES
         ]
         scored: list[tuple[float, dict[str, Any]]] = []
