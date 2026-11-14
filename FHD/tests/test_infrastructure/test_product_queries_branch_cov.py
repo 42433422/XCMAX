@@ -24,6 +24,69 @@ from app.infrastructure.persistence.compat_db.product_queries import (
 )
 
 
+def _assert_shared_meta_timeout_invalid_falls_back_to_2000_0(
+    self, _shared_literal_0, _shared_literal_1
+):
+    mock_eng = _make_mock_engine()
+    mock_insp = MagicMock()
+    mock_insp.get_table_names.return_value = ["products"]
+    mock_insp.get_columns.return_value = [
+        {"name": "id"},
+        {"name": "model_number"},
+        {"name": "name"},
+    ]
+    with (
+        patch(
+            "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
+            return_value=mock_eng,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.product_queries.inspect",
+            return_value=mock_insp,
+        ),
+        patch.dict(os.environ, {_shared_literal_0: _shared_literal_1}, clear=False),
+        patch("app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where"),
+    ):
+        rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
+    assert isinstance(rows, list)
+
+
+def _assert_shared_order_by_created_at_enabled_1(self, _shared_literal_0):
+    mock_eng = _make_mock_engine()
+    mock_insp = MagicMock()
+    mock_insp.get_table_names.return_value = ["products"]
+    mock_insp.get_columns.return_value = [
+        {"name": "id"},
+        {"name": "model_number"},
+        {"name": "name"},
+        {"name": "created_at"},
+    ]
+    mock_conn = _make_mock_conn()
+    mock_eng.connect.return_value = mock_conn
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 0
+    mock_mappings = MagicMock()
+    mock_mappings.all.return_value = []
+    count_result.mappings.return_value = mock_mappings
+    mock_conn.execute.return_value = count_result
+    with (
+        patch(
+            "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
+            return_value=mock_eng,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.product_queries.inspect",
+            return_value=mock_insp,
+        ),
+        patch("app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where"),
+        patch.dict(
+            os.environ, {"FHD_PRODUCTS_ORDER_BY_CREATED_AT": _shared_literal_0}, clear=False
+        ),
+    ):
+        rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
+    assert isinstance(rows, list)
+
+
 def _make_mock_conn() -> MagicMock:
     """Build a mock connection usable as context manager."""
     mock_conn = MagicMock()
@@ -121,59 +184,14 @@ class TestGetSyncEngineFailure:
 
 class TestMetaTimeoutParsing:
     def test_meta_timeout_invalid_falls_back_to_2000(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-        ]
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch.dict(os.environ, {"FHD_PRODUCTS_META_TIMEOUT_MS": "invalid"}, clear=False),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
-            ),
-        ):
-            # Will fail later on count query but meta timeout parsing should work
-            rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
-        # Should reach the missing columns check (id, model_number, name present)
-        # then proceed to count query which uses mock_conn returning MagicMock
-        assert isinstance(rows, list)
+        return _assert_shared_meta_timeout_invalid_falls_back_to_2000_0(
+            self, "FHD_PRODUCTS_META_TIMEOUT_MS", "invalid"
+        )
 
     def test_meta_timeout_zero_skips_set(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-        ]
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch.dict(os.environ, {"FHD_PRODUCTS_META_TIMEOUT_MS": "0"}, clear=False),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
-            ),
-        ):
-            rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
-        assert isinstance(rows, list)
+        return _assert_shared_meta_timeout_invalid_falls_back_to_2000_0(
+            self, "FHD_PRODUCTS_META_TIMEOUT_MS", "0"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -183,60 +201,14 @@ class TestMetaTimeoutParsing:
 
 class TestCountQueryBranches:
     def test_count_timeout_invalid_falls_back_to_1500(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-        ]
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch.dict(
-                os.environ,
-                {"FHD_PRODUCTS_COUNT_TIMEOUT_MS": "invalid"},
-                clear=False,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
-            ),
-        ):
-            rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
-        assert isinstance(rows, list)
+        return _assert_shared_meta_timeout_invalid_falls_back_to_2000_0(
+            self, "FHD_PRODUCTS_COUNT_TIMEOUT_MS", "invalid"
+        )
 
     def test_count_timeout_zero_skips_set(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-        ]
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch.dict(os.environ, {"FHD_PRODUCTS_COUNT_TIMEOUT_MS": "0"}, clear=False),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
-            ),
-        ):
-            rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
-        assert isinstance(rows, list)
+        return _assert_shared_meta_timeout_invalid_falls_back_to_2000_0(
+            self, "FHD_PRODUCTS_COUNT_TIMEOUT_MS", "0"
+        )
 
     def test_count_query_failure_returns_none_total(self) -> None:
         mock_eng = _make_mock_engine()
@@ -278,60 +250,14 @@ class TestCountQueryBranches:
 
 class TestDataQueryBranches:
     def test_query_timeout_invalid_falls_back_to_8000(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-        ]
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch.dict(
-                os.environ,
-                {"FHD_PRODUCTS_QUERY_TIMEOUT_MS": "invalid"},
-                clear=False,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
-            ),
-        ):
-            rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
-        assert isinstance(rows, list)
+        return _assert_shared_meta_timeout_invalid_falls_back_to_2000_0(
+            self, "FHD_PRODUCTS_QUERY_TIMEOUT_MS", "invalid"
+        )
 
     def test_query_timeout_zero_skips_set(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-        ]
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch.dict(os.environ, {"FHD_PRODUCTS_QUERY_TIMEOUT_MS": "0"}, clear=False),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
-            ),
-        ):
-            rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
-        assert isinstance(rows, list)
+        return _assert_shared_meta_timeout_invalid_falls_back_to_2000_0(
+            self, "FHD_PRODUCTS_QUERY_TIMEOUT_MS", "0"
+        )
 
     def test_data_query_failure_with_total_none(self) -> None:
         mock_eng = _make_mock_engine()
@@ -674,84 +600,10 @@ class TestIsActiveColumn:
 
 class TestOrderByCreatedAt:
     def test_order_by_created_at_enabled(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-            {"name": "created_at"},
-        ]
-        mock_conn = _make_mock_conn()
-        mock_eng.connect.return_value = mock_conn
-        count_result = MagicMock()
-        count_result.scalar_one.return_value = 0
-        mock_mappings = MagicMock()
-        mock_mappings.all.return_value = []
-        count_result.mappings.return_value = mock_mappings
-        mock_conn.execute.return_value = count_result
-
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
-            ),
-            patch.dict(
-                os.environ,
-                {"FHD_PRODUCTS_ORDER_BY_CREATED_AT": "1"},
-                clear=False,
-            ),
-        ):
-            rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
-        assert isinstance(rows, list)
+        return _assert_shared_order_by_created_at_enabled_1(self, "1")
 
     def test_order_by_created_at_disabled(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-            {"name": "created_at"},
-        ]
-        mock_conn = _make_mock_conn()
-        mock_eng.connect.return_value = mock_conn
-        count_result = MagicMock()
-        count_result.scalar_one.return_value = 0
-        mock_mappings = MagicMock()
-        mock_mappings.all.return_value = []
-        count_result.mappings.return_value = mock_mappings
-        mock_conn.execute.return_value = count_result
-
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
-            ),
-            patch.dict(
-                os.environ,
-                {"FHD_PRODUCTS_ORDER_BY_CREATED_AT": "0"},
-                clear=False,
-            ),
-        ):
-            rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
-        assert isinstance(rows, list)
+        return _assert_shared_order_by_created_at_enabled_1(self, "0")
 
 
 # ---------------------------------------------------------------------------

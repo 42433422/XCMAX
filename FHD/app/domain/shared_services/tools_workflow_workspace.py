@@ -45,16 +45,15 @@ def _registered_router_template_preview(
                 "templates": templates if isinstance(templates, list) else [],
                 "count": len(templates) if isinstance(templates, list) else 0,
             }
-        return {"success": True, "templates": list(result or []), "count": len(result or [])}
+        templates = list(result or [])
+        return {"success": True, "data": templates, "templates": templates, "count": len(templates)}
     if action == "create":
         import json
         import re
         import uuid
         from datetime import datetime
 
-        from sqlalchemy import text
-
-        from app.db.session import get_db
+        from app.application.template_app_service import persist_workflow_preview_template
         from app.domain.shared_services.document_templates_service import (
             _ensure_template_tables_ready,
             _infer_business_scope,
@@ -166,35 +165,24 @@ def _registered_router_template_preview(
         template_key = (
             f"TPL_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8].upper()}"
         )
-        from app.infrastructure.templates.tenant_scope import templates_tenant_id_for_insert
-        from app.infrastructure.tenant_scope import TenantScopeError
-
-        try:
-            tenant_id = templates_tenant_id_for_insert()
-        except TenantScopeError:
-            return {"success": False, "message": "缺少租户上下文，无法创建模板"}
-        with get_db() as db:
-            result = db.execute(
-                text(
-                    "\n                    INSERT INTO templates (\n                        template_key, template_name, template_type,\n                        original_file_path, analyzed_data, editable_config,\n                        zone_config, merged_cells_config, style_config,\n                        business_rules, is_active, tenant_id\n                    ) VALUES (\n                        :template_key, :template_name, :template_type,\n                        :original_file_path, :analyzed_data, :editable_config,\n                        :zone_config, :merged_cells_config, :style_config,\n                        :business_rules, :is_active, :tenant_id\n                    )\n                "
-                ),
-                {
-                    "template_key": template_key,
-                    "template_name": template_name,
-                    "template_type": template_type,
-                    "original_file_path": file_path,
-                    "analyzed_data": json.dumps(analyzed_data, ensure_ascii=False),
-                    "editable_config": json.dumps(editable_config, ensure_ascii=False),
-                    "zone_config": json.dumps({}, ensure_ascii=False),
-                    "merged_cells_config": json.dumps({}, ensure_ascii=False),
-                    "style_config": json.dumps({}, ensure_ascii=False),
-                    "business_rules": json.dumps(business_rules, ensure_ascii=False),
-                    "is_active": 1,
-                    "tenant_id": tenant_id,
-                },
-            )
-            template_id = result.lastrowid
-            db.commit()
+        saved = persist_workflow_preview_template(
+            {
+                "template_key": template_key,
+                "template_name": template_name,
+                "template_type": template_type,
+                "original_file_path": file_path,
+                "analyzed_data": json.dumps(analyzed_data, ensure_ascii=False),
+                "editable_config": json.dumps(editable_config, ensure_ascii=False),
+                "zone_config": json.dumps({}, ensure_ascii=False),
+                "merged_cells_config": json.dumps({}, ensure_ascii=False),
+                "style_config": json.dumps({}, ensure_ascii=False),
+                "business_rules": json.dumps(business_rules, ensure_ascii=False),
+                "is_active": 1,
+            }
+        )
+        if not saved["success"]:
+            return saved
+        template_id = saved["template_id"]
         return {
             "success": True,
             "message": "已按指定 sheet 加入模板库",

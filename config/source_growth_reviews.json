@@ -135,9 +135,9 @@
     },
     "FHD/app/application/agent_orchestrator/tool_permission.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_permission.py",
-      "base_blob": "82a6469e1c22296d1b1d3fa08d98c9217edd5da3",
+      "base_blob": "30af3a3fad9ac8cabfb72201a101ada1d66ef85b",
       "head_blob": "2a21f0cf13de4e5026206794cdaa54ebc4f1c83f",
-      "before_lines": 1111,
+      "before_lines": 1108,
       "after_lines": 1117,
       "reason": "Review request only: Seal workspace_root from server configuration, reject injected approval/bulk-preview/mutation controls, and require product.view for business_db product reads.",
       "boundary": "Execution-context authority filtering and action-specific permission selection only; payload fields never establish authority.",
@@ -335,6 +335,18 @@
       "boundary": "Route assembly and late-bound port callbacks only; task, device and encryption behavior live in dedicated mobile_extensions and shared_services modules. Authentication and tenant scoping are unchanged.",
       "validation": "512 relay and mobile route tests passed, including encrypted roundtrip, ciphertext-at-rest, desktop heartbeat and plaintext rejection; Flutter analyze has no errors. Full integration CI and human architecture review remain outstanding; this request is not approval.",
       "follow_up": "Split the mobile extension assembly into per-domain registries in the next structure pass instead of accumulating more registrations here.",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/ai_group_chat_service.py": {
+      "base_file": "FHD/app/application/ai_group_chat_service.py",
+      "base_blob": "b81c1d77f6ccd8aa617fbadc1f3e3fb8e00bb961",
+      "head_blob": "1faa754a770559f61560d19562aaf25b9045e12f",
+      "before_lines": 748,
+      "after_lines": 835,
+      "reason": "Review request only: enforce tenant isolation for AI group chat storage and admin/mobile routes.",
+      "boundary": "Tenant scoping of AI group JSONL storage and route ownership checks only; no cross-tenant reads or writes are authorized.",
+      "validation": "Local tenant isolation and route isolation tests passed; full integration CI and human architecture review remain outstanding; this request is not approval.",
+      "follow_up": "Keep tenant ownership checks centralized as group routes evolve.",
       "review_owner": "@42433422"
     }
   }

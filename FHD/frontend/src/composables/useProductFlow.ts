@@ -8,7 +8,7 @@ import {
   readProductFlowCompleted,
   type ProductFlowStepId,
 } from '@/constants/productFlow'
-import { isGenericEditionBuild, isMinimalEditionBuild } from '@/constants/platformShellMode'
+import { isShellEditionBuild } from '@/constants/platformShellMode'
 import type { DeliverableStatus } from '@/constants/platformShell'
 import { fetchDeliverableStatus } from '@/utils/platformShellApi'
 
@@ -34,8 +34,7 @@ export function useProductFlow() {
   }
 
   function needsProductFlow(): boolean {
-    // 首次配置独立于已退役的壳路由裁剪，保留旧构建参数的引导语义。
-    if (!isMinimalEditionBuild() && !isGenericEditionBuild()) return false
+    if (!isShellEditionBuild()) return false
     return !readProductFlowCompleted()
   }
 
@@ -84,7 +83,7 @@ export function shouldRouteToProductOnboarding(toName: string | symbol | null | 
 }
 
 function needsProductFlowStatic(): boolean {
-  if (!isMinimalEditionBuild() && !isGenericEditionBuild()) return false
+  if (!isShellEditionBuild()) return false
   // The first-order prompt must be allowed to enter chat before its bound run can
   // produce completion evidence. Pending is not the same as completed.
   if (isFirstAiTaskPending()) return false

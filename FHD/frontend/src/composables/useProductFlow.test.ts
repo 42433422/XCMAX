@@ -22,8 +22,9 @@ describe('useProductFlow', () => {
       localStorage.clear()
     })
 
-    it('routes enterprise generic host builds through product onboarding', () => {
-      expect(shouldRouteToProductOnboarding('chat')).toBe(true)
+    it('does not route enterprise generic host builds through product onboarding anymore', () => {
+      // 客户端只保留企业版完整路由，通用壳的首单引导链路已移除。
+      expect(shouldRouteToProductOnboarding('chat')).toBe(false)
     })
 
     it('does not route enterprise full host builds through product onboarding', () => {
@@ -40,7 +41,7 @@ describe('useProductFlow', () => {
       expect(shouldRouteToProductOnboarding('attendance-industry-personnel')).toBe(false)
       expect(shouldRouteToProductOnboarding('attendance-industry-departments')).toBe(false)
       expect(useProductFlow().readProductFlowCompleted()).toBe(false)
-      expect(shouldRouteToProductOnboarding('chat')).toBe(true)
+      expect(shouldRouteToProductOnboarding('chat')).toBe(false)
     })
 
     it('excludes login route from onboarding redirect', () => {
@@ -75,15 +76,14 @@ describe('useProductFlow', () => {
       expect(shouldRouteToProductOnboarding('workflow-employee-stitch-full')).toBe(false)
     })
 
-    it('routes symbol route names through onboarding (not in exclusion list)', () => {
-      // Symbol gets stringified to "Symbol(sym)" — not in the exclusion list, so falls through
-      expect(shouldRouteToProductOnboarding(Symbol('sym'))).toBe(true)
+    it('does not route symbol route names through onboarding', () => {
+      // Symbol gets stringified to "Symbol(sym)" — 企业版不再按壳模式拦截路由。
+      expect(shouldRouteToProductOnboarding(Symbol('sym'))).toBe(false)
     })
 
-    it('routes null/undefined route names through onboarding (empty string not excluded)', () => {
-      // null/undefined become "" — not in the exclusion list, so falls through
-      expect(shouldRouteToProductOnboarding(null)).toBe(true)
-      expect(shouldRouteToProductOnboarding(undefined)).toBe(true)
+    it('does not route null/undefined route names through onboarding', () => {
+      expect(shouldRouteToProductOnboarding(null)).toBe(false)
+      expect(shouldRouteToProductOnboarding(undefined)).toBe(false)
     })
   })
 
@@ -134,12 +134,12 @@ describe('useProductFlow', () => {
       expect(flow.needsProductFlow()).toBe(false)
     })
 
-    it('needsProductFlow returns true when shell edition and not completed', () => {
+    it('needsProductFlow is false because shell edition is gone', () => {
       vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
       vi.stubEnv('VITE_XCAGI_EDITION', 'generic')
       localStorage.clear()
       const flow = useProductFlow()
-      expect(flow.needsProductFlow()).toBe(true)
+      expect(flow.needsProductFlow()).toBe(false)
     })
 
     it('needsProductFlow returns false when already completed', () => {

@@ -321,6 +321,13 @@ function tagDesktopWebContents(win: BrowserWindow): void {
     : platformClass === 'xcagi-electron-win'
       ? 'win'
       : ''
+  // 闪屏是 file:// 内联页面，根相对路径 /platform/*.css 会被解析到磁盘根目录而 404。
+  // 仅对本地应用页注入平台样式，且用应用基址拼出绝对 URL，与闪屏的内联样式一致地
+  // 不依赖文档自身来源。
+  const appOrigin = new URL(desktopInitialUrl()).origin
+  const currentUrl = win.webContents.getURL()
+  const injectSheet = sheet !== '' && currentUrl.startsWith(appOrigin)
+  const sheetUrl = injectSheet ? new URL(`/platform/electron-${sheet}.css`, appOrigin).href : ''
   void win.webContents
     .executeJavaScript(
       `(() => {
@@ -328,7 +335,7 @@ function tagDesktopWebContents(win: BrowserWindow): void {
         root.classList.add('xcagi-electron');
         root.classList.remove('xcagi-electron-mac', 'xcagi-electron-win');
         ${platformClass ? `root.classList.add('${platformClass}');` : ''}
-        const sheet = ${sheet ? `'${sheet}'` : 'null'};
+        const sheet = ${injectSheet ? `'${sheet}'` : 'null'};
         if (!sheet) return;
         const other = sheet === 'win' ? 'mac' : 'win';
         const stale = document.getElementById('xcagi-platform-chrome-' + other);
@@ -338,7 +345,7 @@ function tagDesktopWebContents(win: BrowserWindow): void {
         const link = document.createElement('link');
         link.id = id;
         link.rel = 'stylesheet';
-        link.href = '/platform/electron-' + sheet + '.css';
+        link.href = '${sheetUrl}';
         document.head.appendChild(link);
       })();`
     )
@@ -471,7 +478,10 @@ export async function createWindow(): Promise<void> {
     reportMainRenderer('renderer:unresponsive', 'renderer process is unresponsive')
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    if (details.reason === 'clean-exit') return
+    // 各平台对「正常退出」的判定不同：macOS 常见 clean-exit，Windows 也会用
+    // clean-exit 配非零 exitCode，或直接报 killed。只把无异常的退出当作正常。
+    const cleanExit = details.reason === 'clean-exit' && (details.exitCode ?? 0) === 0
+    if (cleanExit) return
     let crashDumpsPath = 'unavailable'
     let source = desktopInitialUrl()
     try {

@@ -30,6 +30,21 @@ from app.fastapi_routes.voice_routes import (
 )
 
 
+def _assert_shared_with_no_filename_uses_content_type_webm_0(
+    self, _shared_literal_0, _shared_literal_1, _shared_literal_2
+):
+    upload = MagicMock()
+    upload.filename = None
+    upload.content_type = _shared_literal_0
+    with patch("tempfile.NamedTemporaryFile") as mock_tmp:
+        mock_file = MagicMock()
+        mock_file.name = _shared_literal_1
+        mock_tmp.return_value = mock_file
+        _save_upload_to_tempfile(upload, b"data")
+        _, kwargs = mock_tmp.call_args
+        assert kwargs.get("suffix") == _shared_literal_2
+
+
 @pytest.fixture(autouse=True)
 def legacy_local_voice(monkeypatch):
     monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "local")
@@ -362,102 +377,39 @@ class TestSaveUploadToTempfile:
             mock_file.close.assert_called_once()
 
     def test_with_no_filename_uses_content_type_webm(self):
-        upload = MagicMock()
-        upload.filename = None
-        upload.content_type = "audio/webm"
-
-        with patch("tempfile.NamedTemporaryFile") as mock_tmp:
-            mock_file = MagicMock()
-            mock_file.name = "/tmp/test.webm"
-            mock_tmp.return_value = mock_file
-
-            _save_upload_to_tempfile(upload, b"data")
-            _, kwargs = mock_tmp.call_args
-            assert kwargs.get("suffix") == ".webm"
+        return _assert_shared_with_no_filename_uses_content_type_webm_0(
+            self, "audio/webm", "/tmp/test.webm", ".webm"
+        )
 
     def test_with_no_filename_uses_content_type_ogg(self):
-        upload = MagicMock()
-        upload.filename = None
-        upload.content_type = "audio/ogg"
-
-        with patch("tempfile.NamedTemporaryFile") as mock_tmp:
-            mock_file = MagicMock()
-            mock_file.name = "/tmp/test.ogg"
-            mock_tmp.return_value = mock_file
-
-            _save_upload_to_tempfile(upload, b"data")
-            _, kwargs = mock_tmp.call_args
-            assert kwargs.get("suffix") == ".ogg"
+        return _assert_shared_with_no_filename_uses_content_type_webm_0(
+            self, "audio/ogg", "/tmp/test.ogg", ".ogg"
+        )
 
     def test_with_no_filename_uses_content_type_mp4(self):
-        upload = MagicMock()
-        upload.filename = None
-        upload.content_type = "audio/mp4"
-
-        with patch("tempfile.NamedTemporaryFile") as mock_tmp:
-            mock_file = MagicMock()
-            mock_file.name = "/tmp/test.m4a"
-            mock_tmp.return_value = mock_file
-
-            _save_upload_to_tempfile(upload, b"data")
-            _, kwargs = mock_tmp.call_args
-            assert kwargs.get("suffix") == ".m4a"
+        return _assert_shared_with_no_filename_uses_content_type_webm_0(
+            self, "audio/mp4", "/tmp/test.m4a", ".m4a"
+        )
 
     def test_with_no_filename_uses_content_type_m4a(self):
-        upload = MagicMock()
-        upload.filename = None
-        upload.content_type = "audio/m4a"
-
-        with patch("tempfile.NamedTemporaryFile") as mock_tmp:
-            mock_file = MagicMock()
-            mock_file.name = "/tmp/test.m4a"
-            mock_tmp.return_value = mock_file
-
-            _save_upload_to_tempfile(upload, b"data")
-            _, kwargs = mock_tmp.call_args
-            assert kwargs.get("suffix") == ".m4a"
+        return _assert_shared_with_no_filename_uses_content_type_webm_0(
+            self, "audio/m4a", "/tmp/test.m4a", ".m4a"
+        )
 
     def test_with_no_filename_uses_content_type_wav(self):
-        upload = MagicMock()
-        upload.filename = None
-        upload.content_type = "audio/wav"
-
-        with patch("tempfile.NamedTemporaryFile") as mock_tmp:
-            mock_file = MagicMock()
-            mock_file.name = "/tmp/test.wav"
-            mock_tmp.return_value = mock_file
-
-            _save_upload_to_tempfile(upload, b"data")
-            _, kwargs = mock_tmp.call_args
-            assert kwargs.get("suffix") == ".wav"
+        return _assert_shared_with_no_filename_uses_content_type_webm_0(
+            self, "audio/wav", "/tmp/test.wav", ".wav"
+        )
 
     def test_with_no_filename_uses_content_type_wave(self):
-        upload = MagicMock()
-        upload.filename = None
-        upload.content_type = "audio/wave"
-
-        with patch("tempfile.NamedTemporaryFile") as mock_tmp:
-            mock_file = MagicMock()
-            mock_file.name = "/tmp/test.wav"
-            mock_tmp.return_value = mock_file
-
-            _save_upload_to_tempfile(upload, b"data")
-            _, kwargs = mock_tmp.call_args
-            assert kwargs.get("suffix") == ".wav"
+        return _assert_shared_with_no_filename_uses_content_type_webm_0(
+            self, "audio/wave", "/tmp/test.wav", ".wav"
+        )
 
     def test_with_no_filename_unknown_content_type(self):
-        upload = MagicMock()
-        upload.filename = None
-        upload.content_type = "audio/unknown"
-
-        with patch("tempfile.NamedTemporaryFile") as mock_tmp:
-            mock_file = MagicMock()
-            mock_file.name = "/tmp/test.bin"
-            mock_tmp.return_value = mock_file
-
-            _save_upload_to_tempfile(upload, b"data")
-            _, kwargs = mock_tmp.call_args
-            assert kwargs.get("suffix") == ".bin"
+        return _assert_shared_with_no_filename_uses_content_type_webm_0(
+            self, "audio/unknown", "/tmp/test.bin", ".bin"
+        )
 
     def test_with_empty_filename_and_content_type(self):
         upload = MagicMock()

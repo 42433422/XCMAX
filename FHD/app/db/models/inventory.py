@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    false,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -115,11 +117,11 @@ class InventoryTransaction(TenantScopedMixin, Base):
             "reference_id",
             unique=True,
             sqlite_where=text(
-                "transaction_type = 'out' AND reference_type IS NOT NULL "
+                "document_posting IS TRUE AND transaction_type = 'out' AND reference_type IS NOT NULL "
                 "AND reference_id IS NOT NULL"
             ),
             postgresql_where=text(
-                "transaction_type = 'out' AND reference_type IS NOT NULL "
+                "document_posting IS TRUE AND transaction_type = 'out' AND reference_type IS NOT NULL "
                 "AND reference_id IS NOT NULL"
             ),
         ),
@@ -128,6 +130,10 @@ class InventoryTransaction(TenantScopedMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ledger_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("inventory_ledger.id"))
     transaction_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Only new document-level postings claim this key; legacy/fulfillment rows remain valid.
+    document_posting: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
     location_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("storage_locations.id"))

@@ -122,7 +122,7 @@ jobs:
 
 
       - name: Start production UI preview
-        working-directory: FHD/frontend
+        working-directory: frontend
         run: |
           node --version > ../performance-results/node-version.txt
           npm run preview -- --host 127.0.0.1 --port 5001 > ../performance-results/preview.log 2>&1 &

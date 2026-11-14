@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '@/api/core'
+import { noteTransportSuccess } from '@/utils/networkStability'
 import type { ApiResponse } from '@/types/api'
 import { authApi } from '@/api/auth'
 
@@ -71,10 +72,14 @@ describe('api core types', () => {
     expect(document.getElementById('stability-notice')).toBeNull()
   })
 
-  it('still displays non-timeout transport failures', async () => {
+  it('shows the lightweight notice only when transport failures persist', async () => {
+    noteTransportSuccess()
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
     await expect(api.get('/api/unreachable', {}, { retry: false })).rejects.toMatchObject({ status: 0 })
+    expect(document.getElementById('stability-notice')).toBeNull()
+    await expect(api.get('/api/unreachable-again', {}, { retry: false })).rejects.toMatchObject({ status: 0 })
     expect(document.getElementById('stability-notice')?.textContent).toBeTruthy()
+    noteTransportSuccess()
   })
 
   it('waits for a long request when no client timeout is configured', async () => {

@@ -139,7 +139,7 @@ function fakeLaunchCase(t, healthResponse, port = 50123, useDirectHealth = false
     getByRole: (role, options) => ({
       waitFor: async () => {
         if (role === 'heading') assert.equal(options.name, '企业账号登录')
-        if (role === 'button') assert.match(String(options.name), /登/)
+        if (role === 'button') assert.ok(options.name.test('同意说明并登录'))
       },
     }),
     evaluate: async callback => {

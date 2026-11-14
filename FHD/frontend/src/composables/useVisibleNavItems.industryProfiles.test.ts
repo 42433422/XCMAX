@@ -80,11 +80,11 @@ describe('industry menus with real Mod and role filtering', () => {
     expect(entries.some((entry) => entry.key.includes('brain'))).toBe(false)
   })
 
-  it('does not display business profile entries before the generic foundation is prepared', () => {
+  it('keeps business profile entries visible now that the shell edition is gone', () => {
     approvedListing(MINIMAL_HOST_MOD_IDS)
     const keys = useVisibleNavItems().visibleNavItems.value.map((entry) => entry.key)
-    expect(keys).not.toContain('products')
-    expect(keys).not.toContain('orders')
+    expect(keys).toContain('products')
+    expect(keys).toContain('orders')
     expect(keys).not.toContain('mod-erp-products')
     expect(keys.some((key) => key === 'chat' || key === 'mod-planner-chat')).toBe(true)
   })

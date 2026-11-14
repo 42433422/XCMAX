@@ -24,6 +24,38 @@ from app.infrastructure.skills.excel_analyzer.excel_template_analyzer import (
     get_excel_analyzer_skill,
 )
 
+
+def _assert_shared_merged_cell_with_summary_purpose_0(
+    self,
+    tmp_path,
+    _shared_literal_0,
+    _shared_literal_1,
+    _shared_literal_2,
+    _shared_literal_3,
+    _shared_literal_4,
+):
+    excel_path = tmp_path / "test.xlsx"
+    excel_path.write_bytes(b"fake")
+    cells = {(_shared_literal_1, 1): _shared_literal_0}
+    ws = _make_ws(
+        max_row=10,
+        max_col=5,
+        cells=cells,
+        merged_ranges=[(_shared_literal_3, _shared_literal_4, 1, 5)],
+        title="Sheet1",
+    )
+    wb = MagicMock()
+    wb.sheetnames = ["Sheet1"]
+    wb.active = ws
+    wb.__getitem__ = MagicMock(return_value=ws)
+    with (
+        patch("openpyxl.load_workbook", return_value=wb),
+        patch("openpyxl.utils.get_column_letter", return_value="E"),
+    ):
+        result = analyze_template(str(excel_path))
+        assert result["merged_cells"][0]["purpose"] == _shared_literal_2
+
+
 # ---------------------------------------------------------------------------
 # Helper to create a mock worksheet
 # ---------------------------------------------------------------------------
@@ -236,94 +268,19 @@ class TestAnalyzeTemplateMergedCells:
             assert mc["value"] == "标题区域"
 
     def test_merged_cell_with_summary_purpose(self, tmp_path):
-        excel_path = tmp_path / "test.xlsx"
-        excel_path.write_bytes(b"fake")
-
-        cells = {(8, 1): "合计金额"}
-        ws = _make_ws(
-            max_row=10,
-            max_col=5,
-            cells=cells,
-            merged_ranges=[(8, 8, 1, 5)],
-            title="Sheet1",
+        return _assert_shared_merged_cell_with_summary_purpose_0(
+            self, tmp_path, "合计金额", 8, "汇总区域", 8, 8
         )
-        wb = MagicMock()
-        wb.sheetnames = ["Sheet1"]
-        wb.active = ws
-        wb.__getitem__ = MagicMock(return_value=ws)
-
-        with (
-            patch(
-                "openpyxl.load_workbook",
-                return_value=wb,
-            ),
-            patch(
-                "openpyxl.utils.get_column_letter",
-                return_value="E",
-            ),
-        ):
-            result = analyze_template(str(excel_path))
-            assert result["merged_cells"][0]["purpose"] == "汇总区域"
 
     def test_merged_cell_with_signature_purpose(self, tmp_path):
-        excel_path = tmp_path / "test.xlsx"
-        excel_path.write_bytes(b"fake")
-
-        cells = {(9, 1): "签名处"}
-        ws = _make_ws(
-            max_row=10,
-            max_col=5,
-            cells=cells,
-            merged_ranges=[(9, 9, 1, 5)],
-            title="Sheet1",
+        return _assert_shared_merged_cell_with_summary_purpose_0(
+            self, tmp_path, "签名处", 9, "签名区域", 9, 9
         )
-        wb = MagicMock()
-        wb.sheetnames = ["Sheet1"]
-        wb.active = ws
-        wb.__getitem__ = MagicMock(return_value=ws)
-
-        with (
-            patch(
-                "openpyxl.load_workbook",
-                return_value=wb,
-            ),
-            patch(
-                "openpyxl.utils.get_column_letter",
-                return_value="E",
-            ),
-        ):
-            result = analyze_template(str(excel_path))
-            assert result["merged_cells"][0]["purpose"] == "签名区域"
 
     def test_merged_cell_with_data_purpose(self, tmp_path):
-        excel_path = tmp_path / "test.xlsx"
-        excel_path.write_bytes(b"fake")
-
-        cells = {(5, 1): "普通数据"}
-        ws = _make_ws(
-            max_row=10,
-            max_col=5,
-            cells=cells,
-            merged_ranges=[(5, 5, 1, 5)],
-            title="Sheet1",
+        return _assert_shared_merged_cell_with_summary_purpose_0(
+            self, tmp_path, "普通数据", 5, "数据区域", 5, 5
         )
-        wb = MagicMock()
-        wb.sheetnames = ["Sheet1"]
-        wb.active = ws
-        wb.__getitem__ = MagicMock(return_value=ws)
-
-        with (
-            patch(
-                "openpyxl.load_workbook",
-                return_value=wb,
-            ),
-            patch(
-                "openpyxl.utils.get_column_letter",
-                return_value="E",
-            ),
-        ):
-            result = analyze_template(str(excel_path))
-            assert result["merged_cells"][0]["purpose"] == "数据区域"
 
     def test_merged_cell_without_value(self, tmp_path):
         excel_path = tmp_path / "test.xlsx"

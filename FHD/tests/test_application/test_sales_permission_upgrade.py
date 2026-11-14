@@ -100,8 +100,11 @@ def test_delivery_merge_preserves_both_upgrade_histories():
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
     scripts = ScriptDirectory.from_config(config)
-    assert scripts.get_heads() == ["2026_11_15_delivery_ref_merge"]
-    head = scripts.get_revision(scripts.get_current_head())
+    assert scripts.get_heads() == ["2026_11_15_stock_posting_key"]
+    assert scripts.get_revision(scripts.get_current_head()).down_revision == (
+        "2026_11_15_delivery_ref_merge"
+    )
+    head = scripts.get_revision("2026_11_15_delivery_ref_merge")
     assert set(head.down_revision) == {
         "2026_11_11_delivery_merge",
         "2026_11_11_business_ref_unique",

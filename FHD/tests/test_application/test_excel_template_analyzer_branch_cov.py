@@ -25,6 +25,28 @@ from app.utils.excel.excel_template_analyzer import (
     extract_entries,
 )
 
+
+def _assert_shared_empty_cell_0(
+    self,
+    tmp_path,
+    _shared_literal_0,
+    _shared_literal_1,
+    _shared_literal_2,
+    _shared_literal_3,
+    _shared_literal_4,
+):
+    path = _create_workbook_with_content(
+        tmp_path, cells={(_shared_literal_3, _shared_literal_4): _shared_literal_2}
+    )
+    analyzer = ExcelTemplateAnalyzer(str(path))
+    analyzer._load_workbook()
+    analyzer._extract_structure()
+    analyzer._extract_merged_cells()
+    analyzer._extract_cells()
+    cell = analyzer.cells[_shared_literal_0]
+    assert cell.type == _shared_literal_1
+
+
 # ---------------------------------------------------------------------------
 # Helpers — build real .xlsx files with openpyxl
 # ---------------------------------------------------------------------------
@@ -165,146 +187,49 @@ class TestClassifyCellType:
 
     def test_empty_cell(self, tmp_path):
         # Write to E5 to force worksheet dimensions to include row 5, col 5
-        path = _create_workbook_with_content(tmp_path, cells={(5, 5): "anchor"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["A5"]
-        assert cell.type == "empty"
+        return _assert_shared_empty_cell_0(self, tmp_path, "A5", "empty", "anchor", 5, 5)
 
     def test_row_le_3_template(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(2, 3): "标题文字"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["C2"]
-        assert cell.type == "template"
+        return _assert_shared_empty_cell_0(self, tmp_path, "C2", "template", "标题文字", 2, 3)
 
     def test_col_1_editable(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(5, 1): "数据值"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["A5"]
-        assert cell.type == "editable"
+        return _assert_shared_empty_cell_0(self, tmp_path, "A5", "editable", "数据值", 5, 1)
 
     def test_col_2_editable(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(5, 2): "数据值"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["B5"]
-        assert cell.type == "editable"
+        return _assert_shared_empty_cell_0(self, tmp_path, "B5", "editable", "数据值", 5, 2)
 
     def test_col_1_formula_not_editable(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(5, 1): "=A1+A2"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["A5"]
-        assert cell.type == "formula"
+        return _assert_shared_empty_cell_0(self, tmp_path, "A5", "formula", "=A1+A2", 5, 1)
 
     def test_summary_keyword_template(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(8, 3): "合计"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["C8"]
-        assert cell.type == "template"
+        return _assert_shared_empty_cell_0(self, tmp_path, "C8", "template", "合计", 8, 3)
 
     def test_subtotal_keyword_template(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(8, 3): "小计"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["C8"]
-        assert cell.type == "template"
+        return _assert_shared_empty_cell_0(self, tmp_path, "C8", "template", "小计", 8, 3)
 
     def test_total_keyword_template(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(8, 3): "总计"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["C8"]
-        assert cell.type == "template"
+        return _assert_shared_empty_cell_0(self, tmp_path, "C8", "template", "总计", 8, 3)
 
     def test_date_keyword_template(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(8, 3): "日期：2026-01-01"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["C8"]
-        assert cell.type == "template"
+        return _assert_shared_empty_cell_0(
+            self, tmp_path, "C8", "template", "日期：2026-01-01", 8, 3
+        )
 
     def test_unit_keyword_template(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(8, 3): "单位：个"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["C8"]
-        assert cell.type == "template"
+        return _assert_shared_empty_cell_0(self, tmp_path, "C8", "template", "单位：个", 8, 3)
 
     def test_numeric_string_editable(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(5, 3): "123-456"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["C5"]
-        assert cell.type == "editable"
+        return _assert_shared_empty_cell_0(self, tmp_path, "C5", "editable", "123-456", 5, 3)
 
     def test_chinese_long_string_template(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(5, 3): "产品名称列表"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["C5"]
-        assert cell.type == "template"
+        return _assert_shared_empty_cell_0(self, tmp_path, "C5", "template", "产品名称列表", 5, 3)
 
     def test_col_ge_2_editable(self, tmp_path):
-        path = _create_workbook_with_content(tmp_path, cells={(5, 3): "ab"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["C5"]
-        assert cell.type == "editable"
+        return _assert_shared_empty_cell_0(self, tmp_path, "C5", "editable", "ab", 5, 3)
 
     def test_col_1_short_string_editable(self, tmp_path):
         """Col 1 with short string (not starting with =) is editable."""
-        path = _create_workbook_with_content(tmp_path, cells={(5, 1): "ab"})
-        analyzer = ExcelTemplateAnalyzer(str(path))
-        analyzer._load_workbook()
-        analyzer._extract_structure()
-        analyzer._extract_merged_cells()
-        analyzer._extract_cells()
-        cell = analyzer.cells["A5"]
-        # col==1, value_str="ab" truthy and not starting with "=" → editable
-        assert cell.type == "editable"
+        return _assert_shared_empty_cell_0(self, tmp_path, "A5", "editable", "ab", 5, 1)
 
     def test_col_1_whitespace_falls_through_to_template(self, tmp_path):
         """Col 1 with whitespace-only value falls through to template (value_str empty)."""

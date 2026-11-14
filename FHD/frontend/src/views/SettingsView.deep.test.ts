@@ -4,6 +4,12 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import SettingsView from './SettingsView.vue'
 
+const knownSession = vi.hoisted(() => vi.fn(() => true))
+vi.mock('@/utils/authSessionCache', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/utils/authSessionCache')>(),
+  hasKnownEnterpriseSession: knownSession,
+}))
+
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, data: {} }) }),
   getApiBase: () => '',
@@ -83,6 +89,7 @@ describe('SettingsView deep', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    knownSession.mockReturnValue(true)
     // api/core uses fetch, not apiFetch. Resolve its reads before jsdom teardown
     // instead of leaving real failed requests and retry timers behind.
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
@@ -97,6 +104,14 @@ describe('SettingsView deep', () => {
     expect(wrapper.exists()).toBe(true)
     expect(wrapper.find('#view-settings').exists()).toBe(true)
     expect(localStorage.getItem('assistantName')).toBe('Settings test')
+  })
+
+  it('does not fetch preferences before a known login', async () => {
+    knownSession.mockReturnValue(false)
+    await mountSettings()
+    const requests = vi.mocked(fetch).mock.calls.map(([url]) => String(url))
+    expect(requests.some((url) => url.includes('/api/preferences'))).toBe(false)
+    expect(localStorage.getItem('assistantName')).toBeNull()
   })
 
   it('contains settings profile section', async () => {

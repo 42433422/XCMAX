@@ -768,6 +768,8 @@ class TestTemplatePreviewRouter:
             result = _registered_router_template_preview("query", {}, _ctx(), "normal", "")
             assert result["success"] is True
             assert result["data"] == [{"id": 1}]
+            assert result["templates"] == result["data"]
+            assert result["count"] == 1
 
 
 class TestPrintRouter:

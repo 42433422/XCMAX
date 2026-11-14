@@ -260,3 +260,53 @@ def test_r08_readback_fails_when_recovery_inserts_again(monkeypatch):
     assert "客户名称已存在" in message or "客户名称已存在" in folded
     monkeypatch.undo()
     test_e23_kill_after_commit_returns_the_same_row()
+
+
+def test_parameterized_required_test_fails_when_one_instance_fails(tmp_path: Path):
+    """整体 nodeid 会聚合全部参数实例：任一参数失败，场景不能算通过。"""
+    base = REQUIRED_TESTS["R03-confirm-binding"]
+    module, _, name = base.partition("::")
+    classname = module[:-3].replace("/", ".")
+    body = ""
+    seen: set[str] = set()
+    for scenario_id, node_id in REQUIRED_TESTS.items():
+        if scenario_id == "R03-confirm-binding" or node_id in seen:
+            continue
+        seen.add(node_id)
+        bits = node_id.split("::")
+        cn = bits[0][:-3].replace("/", ".")
+        if len(bits) > 2:
+            cn += "." + ".".join(bits[1:-1])
+        body += _case(cn, bits[-1])
+    body += _case(classname, f"{name}[None]")
+    body += _case(classname, f'{name}[""]', "<failure message='boom'/>")
+    evidence = _evidence([_write(tmp_path, body)])
+    r03 = next(
+        item for item in evidence["scenarios"] if item["scenario_id"] == "R03-confirm-binding"
+    )
+    assert r03["status"] == "FAIL"
+
+
+def test_parameterized_required_test_passes_when_every_instance_passes(tmp_path: Path):
+    base = REQUIRED_TESTS["R03-confirm-binding"]
+    module, _, name = base.partition("::")
+    classname = module[:-3].replace("/", ".")
+    body = ""
+    seen: set[str] = set()
+    for scenario_id, node_id in REQUIRED_TESTS.items():
+        if scenario_id == "R03-confirm-binding" or node_id in seen:
+            continue
+        seen.add(node_id)
+        bits = node_id.split("::")
+        cn = bits[0][:-3].replace("/", ".")
+        if len(bits) > 2:
+            cn += "." + ".".join(bits[1:-1])
+        body += _case(cn, bits[-1])
+    body += _case(classname, f"{name}[None]")
+    body += _case(classname, f'{name}[""]')
+    evidence = _evidence([_write(tmp_path, body)])
+    r03 = next(
+        item for item in evidence["scenarios"] if item["scenario_id"] == "R03-confirm-binding"
+    )
+    assert r03["status"] == "PASS"
+    assert len(r03["attempts"]) == 2

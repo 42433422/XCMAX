@@ -19,6 +19,30 @@ from sqlalchemy.exc import IntegrityError
 
 from alembic import command
 
+
+def _assert_shared_product_uom_factor_zero_rejected_0(self, _db_url, _shared_literal_0):
+    self._head_up(_db_url)
+    engine = _fk_engine(_db_url)
+    try:
+        with engine.connect() as conn:
+            with pytest.raises(IntegrityError):
+                conn.execute(text(_shared_literal_0))
+    finally:
+        engine.dispose()
+
+
+def _assert_shared_negative_debit_rejected_1(self, _db_url, _shared_literal_0):
+    self._head_up(_db_url)
+    engine = _fk_engine(_db_url)
+    try:
+        with engine.connect() as conn:
+            entry_id = self._insert_entry(conn, "JE-1", "draft", 0, 0)
+            with pytest.raises(IntegrityError):
+                conn.execute(text(_shared_literal_0), {"e": entry_id})
+    finally:
+        engine.dispose()
+
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _PROJECT_ROOT / "alembic.ini"
 
@@ -538,36 +562,18 @@ class TestDatabaseConstraintRejection:
             engine.dispose()
 
     def test_product_uom_factor_zero_rejected(self, _db_url: str) -> None:
-        self._head_up(_db_url)
-        engine = _fk_engine(_db_url)
-        try:
-            with engine.connect() as conn:
-                with pytest.raises(IntegrityError):
-                    conn.execute(
-                        text(
-                            "INSERT INTO products "
-                            "(tenant_id, name, unit, is_active, uom_factor) "
-                            "VALUES (1, 'P', '个', 1, 0)"
-                        )
-                    )
-        finally:
-            engine.dispose()
+        return _assert_shared_product_uom_factor_zero_rejected_0(
+            self,
+            _db_url,
+            "INSERT INTO products (tenant_id, name, unit, is_active, uom_factor) VALUES (1, 'P', '个', 1, 0)",
+        )
 
     def test_product_min_stock_gt_max_stock_rejected(self, _db_url: str) -> None:
-        self._head_up(_db_url)
-        engine = _fk_engine(_db_url)
-        try:
-            with engine.connect() as conn:
-                with pytest.raises(IntegrityError):
-                    conn.execute(
-                        text(
-                            "INSERT INTO products "
-                            "(tenant_id, name, unit, is_active, min_stock, max_stock) "
-                            "VALUES (1, 'P', '个', 1, 10, 5)"
-                        )
-                    )
-        finally:
-            engine.dispose()
+        return _assert_shared_product_uom_factor_zero_rejected_0(
+            self,
+            _db_url,
+            "INSERT INTO products (tenant_id, name, unit, is_active, min_stock, max_stock) VALUES (1, 'P', '个', 1, 10, 5)",
+        )
 
 
 def _seed_product_and_warehouse(conn, tenant: int = 1) -> tuple[int, int]:
@@ -830,35 +836,19 @@ class TestJournalConstraintRejection:
         ).lastrowid
 
     def test_invalid_chart_account_type_rejected(self, _db_url: str) -> None:
-        self._head_up(_db_url)
-        engine = _fk_engine(_db_url)
-        try:
-            with engine.connect() as conn:
-                with pytest.raises(IntegrityError):
-                    conn.execute(
-                        text(
-                            "INSERT INTO chart_of_accounts (tenant_id, code, name, type, "
-                            "debit_credit) VALUES (1, 'ACCT', 'A', 'bogus', 'debit')"
-                        )
-                    )
-        finally:
-            engine.dispose()
+        return _assert_shared_product_uom_factor_zero_rejected_0(
+            self,
+            _db_url,
+            "INSERT INTO chart_of_accounts (tenant_id, code, name, type, debit_credit) VALUES (1, 'ACCT', 'A', 'bogus', 'debit')",
+        )
 
     def test_invalid_chart_of_accounts_debit_credit_rejected(self, _db_url: str) -> None:
         """chart_of_accounts.debit_credit 取值非法（非 debit/credit）→ CHECK 拒绝。"""
-        self._head_up(_db_url)
-        engine = _fk_engine(_db_url)
-        try:
-            with engine.connect() as conn:
-                with pytest.raises(IntegrityError):
-                    conn.execute(
-                        text(
-                            "INSERT INTO chart_of_accounts (tenant_id, code, name, type, "
-                            "debit_credit) VALUES (1, 'ACCT', 'A', 'asset', 'bogus')"
-                        )
-                    )
-        finally:
-            engine.dispose()
+        return _assert_shared_product_uom_factor_zero_rejected_0(
+            self,
+            _db_url,
+            "INSERT INTO chart_of_accounts (tenant_id, code, name, type, debit_credit) VALUES (1, 'ACCT', 'A', 'asset', 'bogus')",
+        )
 
     def test_unbalanced_posted_entry_rejected(self, _db_url: str) -> None:
         self._head_up(_db_url)
@@ -882,88 +872,40 @@ class TestJournalConstraintRejection:
 
     def test_missing_reversed_of_fk_target_rejected(self, _db_url: str) -> None:
         """reversed_of_id 指向不存在的凭证 → 自引用 FK 拒绝。"""
-        self._head_up(_db_url)
-        engine = _fk_engine(_db_url)
-        try:
-            with engine.connect() as conn:
-                with pytest.raises(IntegrityError):
-                    conn.execute(
-                        text(
-                            "INSERT INTO journal_entries (tenant_id, entry_no, status, "
-                            "is_credit_note, reversed_of_id) "
-                            "VALUES (1, 'JE-REV', 'draft', 0, 999999)"
-                        )
-                    )
-        finally:
-            engine.dispose()
+        return _assert_shared_product_uom_factor_zero_rejected_0(
+            self,
+            _db_url,
+            "INSERT INTO journal_entries (tenant_id, entry_no, status, is_credit_note, reversed_of_id) VALUES (1, 'JE-REV', 'draft', 0, 999999)",
+        )
 
     def test_missing_credit_note_of_fk_target_rejected(self, _db_url: str) -> None:
         """credit_note_of_id 指向不存在的凭证 → 自引用 FK 拒绝。"""
-        self._head_up(_db_url)
-        engine = _fk_engine(_db_url)
-        try:
-            with engine.connect() as conn:
-                with pytest.raises(IntegrityError):
-                    conn.execute(
-                        text(
-                            "INSERT INTO journal_entries (tenant_id, entry_no, status, "
-                            "is_credit_note, credit_note_of_id) "
-                            "VALUES (1, 'JE-CNOF', 'draft', 0, 999999)"
-                        )
-                    )
-        finally:
-            engine.dispose()
+        return _assert_shared_product_uom_factor_zero_rejected_0(
+            self,
+            _db_url,
+            "INSERT INTO journal_entries (tenant_id, entry_no, status, is_credit_note, credit_note_of_id) VALUES (1, 'JE-CNOF', 'draft', 0, 999999)",
+        )
 
     def test_negative_debit_rejected(self, _db_url: str) -> None:
-        self._head_up(_db_url)
-        engine = _fk_engine(_db_url)
-        try:
-            with engine.connect() as conn:
-                entry_id = self._insert_entry(conn, "JE-1", "draft", 0, 0)
-                with pytest.raises(IntegrityError):
-                    conn.execute(
-                        text(
-                            "INSERT INTO journal_entry_lines (tenant_id, entry_id, debit, credit) "
-                            "VALUES (1, :e, -1, 0)"
-                        ),
-                        {"e": entry_id},
-                    )
-        finally:
-            engine.dispose()
+        return _assert_shared_negative_debit_rejected_1(
+            self,
+            _db_url,
+            "INSERT INTO journal_entry_lines (tenant_id, entry_id, debit, credit) VALUES (1, :e, -1, 0)",
+        )
 
     def test_negative_credit_rejected(self, _db_url: str) -> None:
-        self._head_up(_db_url)
-        engine = _fk_engine(_db_url)
-        try:
-            with engine.connect() as conn:
-                entry_id = self._insert_entry(conn, "JE-1", "draft", 0, 0)
-                with pytest.raises(IntegrityError):
-                    conn.execute(
-                        text(
-                            "INSERT INTO journal_entry_lines (tenant_id, entry_id, debit, credit) "
-                            "VALUES (1, :e, 0, -1)"
-                        ),
-                        {"e": entry_id},
-                    )
-        finally:
-            engine.dispose()
+        return _assert_shared_negative_debit_rejected_1(
+            self,
+            _db_url,
+            "INSERT INTO journal_entry_lines (tenant_id, entry_id, debit, credit) VALUES (1, :e, 0, -1)",
+        )
 
     def test_both_debit_and_credit_positive_rejected(self, _db_url: str) -> None:
-        self._head_up(_db_url)
-        engine = _fk_engine(_db_url)
-        try:
-            with engine.connect() as conn:
-                entry_id = self._insert_entry(conn, "JE-1", "draft", 0, 0)
-                with pytest.raises(IntegrityError):
-                    conn.execute(
-                        text(
-                            "INSERT INTO journal_entry_lines (tenant_id, entry_id, debit, credit) "
-                            "VALUES (1, :e, 10, 10)"
-                        ),
-                        {"e": entry_id},
-                    )
-        finally:
-            engine.dispose()
+        return _assert_shared_negative_debit_rejected_1(
+            self,
+            _db_url,
+            "INSERT INTO journal_entry_lines (tenant_id, entry_id, debit, credit) VALUES (1, :e, 10, 10)",
+        )
 
     def test_balanced_posted_entry_accepted(self, _db_url: str) -> None:
         """借贷平衡的 posted 分录落库成功。"""
