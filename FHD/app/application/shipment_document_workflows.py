@@ -314,23 +314,6 @@ class ShipmentDocumentWorkflowMixin:
                             r.get("printer_name") or "",
                         ]
                     )
-                ws.append(
-                    [
-                        "合计",
-                        "",
-                        "",
-                        "",
-                        sum(float(r.get("quantity_kg") or 0) for r in records),
-                        sum(float(r.get("quantity_tins") or 0) for r in records),
-                        "",
-                        "",
-                        sum(float(r.get("amount") or 0) for r in records),
-                        "",
-                        "",
-                        "",
-                        "",
-                    ]
-                )
                 wb.save(file_path)
 
             return {

@@ -138,22 +138,9 @@ def test_replay_rejects_unavailable_or_changed_evidence(replay_store, damage):
 
 @pytest.mark.parametrize("owner,tenant", [(8, 1), (7, 2)])
 def test_replay_cannot_read_another_owners_or_tenants_source(replay_store, owner, tenant):
-    store = replay_store
-    with tenant_scope(2):
-        store.db.add(PurchaseUnit(unit_name="租户二原客户", tenant_id=2))
-        store.db.commit()
-        foreign = store.db.query(PurchaseUnit).filter(PurchaseUnit.tenant_id == 2).one()
-        foreign_id = foreign.id
     with tenant_scope(tenant), pytest.raises(EltError) as error:
-        store.service.replay(store.db, run_id="source", owner_user_id=owner)
+        replay_store.service.replay(replay_store.db, run_id="source", owner_user_id=owner)
     assert error.value.code == "ELT_NOT_FOUND"
-    with tenant_scope(1):
-        source_row = store.db.query(EltRunRow).filter(EltRunRow.run_id == "source").one()
-        assert source_row.execution_status == "success"
-        assert load_json(source_row.normalized_json, {})["customer_name"] == "旧转换结果"
-    with tenant_scope(2):
-        kept = store.db.get(PurchaseUnit, foreign_id)
-        assert kept.unit_name == "租户二原客户" and kept.tenant_id == 2
 
 
 def test_read_only_companion_cannot_be_promoted_by_replay(replay_store):

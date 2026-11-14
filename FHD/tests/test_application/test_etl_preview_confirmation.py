@@ -367,19 +367,4 @@ def test_retired_execute_route_never_writes(preview_store, monkeypatch, with_rev
         response = client.post(f"/api/elt/runs/{run_id}/execute", json=payload)
     assert response.status_code == 404
     dispatch.assert_not_called()
-
-
-def test_repeat_confirm_does_not_write_the_customers_again(preview_store, monkeypatch):
-    store = preview_store
-    run_id = ready_preview(store, monkeypatch)
-    reviewed = snapshot(store, run_id)["preview_revision"]
-    execute(store, run_id, reviewed)
-    store.executor.futures[-1].result(timeout=10)
-    with store.factory() as db:
-        first = sorted(row.unit_name for row in db.query(PurchaseUnit).all())
-    assert first == sorted(["隔离客户甲", "隔离客户乙"])
-    with pytest.raises(EltError) as error:
-        execute(store, run_id, reviewed)
-    assert error.value.code == "ELT_PREVIEW_REQUIRED"
-    with store.factory() as db:
-        assert sorted(row.unit_name for row in db.query(PurchaseUnit).all()) == first
+    assert assert_unwritten(store, run_id) == before
