@@ -9,12 +9,32 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager as _shared_scope_contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 from app.domain import value_objects_industry as voi
+
+
+@_shared_scope_contextmanager
+def _shared_scope_get_0(fake_profile):
+    with (
+        patch(
+            "app.infrastructure.request_context.get_current_request",
+            return_value=None,
+        ),
+        patch(
+            "resources.config.industry_config.get_current_industry",
+            return_value="电商",
+        ),
+        patch(
+            "resources.config.industry_config.get_industry_profile",
+            return_value=fake_profile,
+        ),
+    ):
+        yield None
 
 
 class TestReadOnlyModuleState:
@@ -89,20 +109,7 @@ class TestOnDemandLoading:
             units={"primary": "件", "secondary": "箱"},
             quantity_fields={"primary_field": "pieces"},
         )
-        with (
-            patch(
-                "app.infrastructure.request_context.get_current_request",
-                return_value=None,
-            ),
-            patch(
-                "resources.config.industry_config.get_current_industry",
-                return_value="电商",
-            ),
-            patch(
-                "resources.config.industry_config.get_industry_profile",
-                return_value=fake_profile,
-            ),
-        ):
+        with _shared_scope_get_0(fake_profile):
             config = voi.get_current_industry_config()
             assert config == {"primary": "件", "secondary": "箱"}
 
@@ -112,20 +119,7 @@ class TestOnDemandLoading:
             units={},
             quantity_fields={"primary_field": "pieces", "secondary_field": "cartons"},
         )
-        with (
-            patch(
-                "app.infrastructure.request_context.get_current_request",
-                return_value=None,
-            ),
-            patch(
-                "resources.config.industry_config.get_current_industry",
-                return_value="电商",
-            ),
-            patch(
-                "resources.config.industry_config.get_industry_profile",
-                return_value=fake_profile,
-            ),
-        ):
+        with _shared_scope_get_0(fake_profile):
             fields = voi.get_current_industry_fields()
             assert fields == {"primary_field": "pieces", "secondary_field": "cartons"}
 
@@ -164,20 +158,7 @@ class TestFieldHelpers:
                 "spec_field": "spec_per_box",
             },
         )
-        with (
-            patch(
-                "app.infrastructure.request_context.get_current_request",
-                return_value=None,
-            ),
-            patch(
-                "resources.config.industry_config.get_current_industry",
-                return_value="电商",
-            ),
-            patch(
-                "resources.config.industry_config.get_industry_profile",
-                return_value=fake_profile,
-            ),
-        ):
+        with _shared_scope_get_0(fake_profile):
             assert voi.get_primary_field_name() == "pieces"
             assert voi.get_secondary_field_name() == "cartons"
             assert voi.get_spec_field_name() == "spec_per_box"

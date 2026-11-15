@@ -7,6 +7,7 @@ not covered by ext/ext2 test suites.
 from __future__ import annotations
 
 import math
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -19,6 +20,30 @@ from app.application.ai_chat_app_service import (
 from tests.test_application.ai_chat_test_helpers import (
     _make_svc as _make_service,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(service, case_value_1, case_value_2, case_value_3, case_value_4):
+    with (
+        patch.object(service, "_try_structured_reload_records", return_value=None),
+        patch.object(
+            service,
+            "_infer_excel_column_roles",
+            return_value=(
+                {
+                    "unit_name": case_value_2,
+                    "product_name": case_value_3,
+                    "model_number": case_value_4,
+                    "unit_price": "单价",
+                },
+                0.9,
+            ),
+        ),
+        patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
+        patch.object(service, "_default_purchase_unit_for_import", return_value=case_value_1),
+    ):
+        yield None
+
 
 # ========================= _skip_pro_excel_deterministic_import - extended =
 
@@ -814,23 +839,12 @@ class TestExtractExcelImportRecordsDeep:
                 }
             }
         }
-        with (
-            patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(
-                service,
-                "_infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "客户",
-                        "product_name": "产品名称",
-                        "model_number": "",
-                        "unit_price": "单价",
-                    },
-                    0.9,
-                ),
-            ),
-            patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
-            patch.object(service, "_default_purchase_unit_for_import", return_value="公司A"),
+        with _shared_scope_case_0(
+            service,
+            case_value_1="公司A",
+            case_value_2="客户",
+            case_value_3="产品名称",
+            case_value_4="",
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
@@ -848,23 +862,12 @@ class TestExtractExcelImportRecordsDeep:
                 ]
             }
         }
-        with (
-            patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(
-                service,
-                "_infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "客户",
-                        "product_name": "产品名称",
-                        "model_number": "",
-                        "unit_price": "单价",
-                    },
-                    0.9,
-                ),
-            ),
-            patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
-            patch.object(service, "_default_purchase_unit_for_import", return_value="公司A"),
+        with _shared_scope_case_0(
+            service,
+            case_value_1="公司A",
+            case_value_2="客户",
+            case_value_3="产品名称",
+            case_value_4="",
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
@@ -881,23 +884,12 @@ class TestExtractExcelImportRecordsDeep:
                 ]
             }
         }
-        with (
-            patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(
-                service,
-                "_infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "单位",
-                        "product_name": "产品名称",
-                        "model_number": "",
-                        "unit_price": "单价",
-                    },
-                    0.9,
-                ),
-            ),
-            patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
-            patch.object(service, "_default_purchase_unit_for_import", return_value="默认公司"),
+        with _shared_scope_case_0(
+            service,
+            case_value_1="默认公司",
+            case_value_2="单位",
+            case_value_3="产品名称",
+            case_value_4="",
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         # unit_key should be cleared because packaging ratio >= 0.45
@@ -913,23 +905,8 @@ class TestExtractExcelImportRecordsDeep:
                 ]
             }
         }
-        with (
-            patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(
-                service,
-                "_infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "名称",
-                        "product_name": "名称",
-                        "model_number": "",
-                        "unit_price": "单价",
-                    },
-                    0.9,
-                ),
-            ),
-            patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
-            patch.object(service, "_default_purchase_unit_for_import", return_value=""),
+        with _shared_scope_case_0(
+            service, case_value_1="", case_value_2="名称", case_value_3="名称", case_value_4=""
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
@@ -943,23 +920,12 @@ class TestExtractExcelImportRecordsDeep:
                 ]
             }
         }
-        with (
-            patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(
-                service,
-                "_infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "客户",
-                        "product_name": "产品名称",
-                        "model_number": "",
-                        "unit_price": "单价",
-                    },
-                    0.9,
-                ),
-            ),
-            patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
-            patch.object(service, "_default_purchase_unit_for_import", return_value="公司A"),
+        with _shared_scope_case_0(
+            service,
+            case_value_1="公司A",
+            case_value_2="客户",
+            case_value_3="产品名称",
+            case_value_4="",
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
@@ -976,23 +942,12 @@ class TestExtractExcelImportRecordsDeep:
                 ]
             }
         }
-        with (
-            patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(
-                service,
-                "_infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "客户",
-                        "product_name": "产品名称",
-                        "model_number": "型号",
-                        "unit_price": "单价",
-                    },
-                    0.9,
-                ),
-            ),
-            patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
-            patch.object(service, "_default_purchase_unit_for_import", return_value="公司A"),
+        with _shared_scope_case_0(
+            service,
+            case_value_1="公司A",
+            case_value_2="客户",
+            case_value_3="产品名称",
+            case_value_4="型号",
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
@@ -1007,23 +962,12 @@ class TestExtractExcelImportRecordsDeep:
                 ]
             }
         }
-        with (
-            patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(
-                service,
-                "_infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "客户",
-                        "product_name": "产品名称",
-                        "model_number": "型号",
-                        "unit_price": "单价",
-                    },
-                    0.9,
-                ),
-            ),
-            patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
-            patch.object(service, "_default_purchase_unit_for_import", return_value=""),
+        with _shared_scope_case_0(
+            service,
+            case_value_1="",
+            case_value_2="客户",
+            case_value_3="产品名称",
+            case_value_4="型号",
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None
@@ -1039,23 +983,12 @@ class TestExtractExcelImportRecordsDeep:
                 ]
             }
         }
-        with (
-            patch.object(service, "_try_structured_reload_records", return_value=None),
-            patch.object(
-                service,
-                "_infer_excel_column_roles",
-                return_value=(
-                    {
-                        "unit_name": "客户",
-                        "product_name": "产品名称",
-                        "model_number": "",
-                        "unit_price": "单价",
-                    },
-                    0.9,
-                ),
-            ),
-            patch.object(service, "_infer_excel_column_roles_with_llm", return_value={}),
-            patch.object(service, "_default_purchase_unit_for_import", return_value="默认公司"),
+        with _shared_scope_case_0(
+            service,
+            case_value_1="默认公司",
+            case_value_2="客户",
+            case_value_3="产品名称",
+            case_value_4="",
         ):
             records, err = service._extract_excel_import_records(excel_analysis)
         assert err is None

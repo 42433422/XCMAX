@@ -25,6 +25,32 @@ import app.application
 from app.domain.shared_services.kitten_report.plugins import PluginResult
 from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
+
+def _shared_setup_case_0(service, case_value_1, case_value_2):
+    content = service._build_workbook(
+        dataset={},
+        messages=[],
+        result={},
+        phase=case_value_1,
+        industry=case_value_2,
+        plugin_results=[],
+    )
+    return content
+
+
+def _shared_setup_case_1(service, messages):
+    content = service._build_workbook(
+        dataset={},
+        messages=messages,
+        result={},
+        phase="analysis",
+        industry="通用",
+        plugin_results=[],
+    )
+    wb = _load_workbook(content)
+    return content, wb
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -237,14 +263,7 @@ class TestBuildWorkbookDataset:
     def test_without_dataset_no_data_summary_sheet(
         self, service: KittenReportExportService
     ) -> None:
-        content = service._build_workbook(
-            dataset={},
-            messages=[],
-            result={},
-            phase="analysis",
-            industry="通用",
-            plugin_results=[],
-        )
+        content = _shared_setup_case_0(service, case_value_1="analysis", case_value_2="通用")
         wb = _load_workbook(content)
         assert "数据摘要" not in wb.sheetnames
 
@@ -280,15 +299,7 @@ class TestBuildWorkbookMessages:
             {"role": "user", "content": "hello", "time": "10:00"},
             {"role": "ai", "content": "hi there", "time": "10:01"},
         ]
-        content = service._build_workbook(
-            dataset={},
-            messages=messages,
-            result={},
-            phase="analysis",
-            industry="通用",
-            plugin_results=[],
-        )
-        wb = _load_workbook(content)
+        content, wb = _shared_setup_case_1(service, messages)
         ws = wb["对话记录"]
         # Header + 2 messages
         assert ws.max_row == 3
@@ -296,14 +307,7 @@ class TestBuildWorkbookMessages:
     def test_without_messages_shows_system_message(
         self, service: KittenReportExportService
     ) -> None:
-        content = service._build_workbook(
-            dataset={},
-            messages=[],
-            result={},
-            phase="analysis",
-            industry="通用",
-            plugin_results=[],
-        )
+        content = _shared_setup_case_0(service, case_value_1="analysis", case_value_2="通用")
         wb = _load_workbook(content)
         ws = wb["对话记录"]
         # Header + system message
@@ -314,15 +318,7 @@ class TestBuildWorkbookMessages:
         messages = [
             {"role": "ai", "content": "<strong>bold</strong><br>line2", "time": "10:00"},
         ]
-        content = service._build_workbook(
-            dataset={},
-            messages=messages,
-            result={},
-            phase="analysis",
-            industry="通用",
-            plugin_results=[],
-        )
-        wb = _load_workbook(content)
+        content, wb = _shared_setup_case_1(service, messages)
         ws = wb["对话记录"]
         cell_value = ws.cell(row=2, column=4).value
         assert "bold" in cell_value
@@ -330,29 +326,13 @@ class TestBuildWorkbookMessages:
 
     def test_message_role_ai_shows_ai_label(self, service: KittenReportExportService) -> None:
         messages = [{"role": "ai", "content": "response", "time": "10:00"}]
-        content = service._build_workbook(
-            dataset={},
-            messages=messages,
-            result={},
-            phase="analysis",
-            industry="通用",
-            plugin_results=[],
-        )
-        wb = _load_workbook(content)
+        content, wb = _shared_setup_case_1(service, messages)
         ws = wb["对话记录"]
         assert ws.cell(row=2, column=2).value == "AI"
 
     def test_message_role_other_shows_user_label(self, service: KittenReportExportService) -> None:
         messages = [{"role": "user", "content": "question", "time": "10:00"}]
-        content = service._build_workbook(
-            dataset={},
-            messages=messages,
-            result={},
-            phase="analysis",
-            industry="通用",
-            plugin_results=[],
-        )
-        wb = _load_workbook(content)
+        content, wb = _shared_setup_case_1(service, messages)
         ws = wb["对话记录"]
         assert ws.cell(row=2, column=2).value == "用户"
 
@@ -379,14 +359,7 @@ class TestBuildWorkbookResultFields:
         assert "Custom Title" in titles
 
     def test_result_without_title_uses_default(self, service: KittenReportExportService) -> None:
-        content = service._build_workbook(
-            dataset={},
-            messages=[],
-            result={},
-            phase="analysis",
-            industry="通用",
-            plugin_results=[],
-        )
+        content = _shared_setup_case_0(service, case_value_1="analysis", case_value_2="通用")
         wb = _load_workbook(content)
         ws = wb["报告摘要"]
         titles = [ws.cell(row=r, column=2).value for r in range(1, ws.max_row + 1)]
@@ -407,28 +380,14 @@ class TestBuildWorkbookResultFields:
         assert "My summary" in values
 
     def test_phase_displayed(self, service: KittenReportExportService) -> None:
-        content = service._build_workbook(
-            dataset={},
-            messages=[],
-            result={},
-            phase="custom_phase",
-            industry="通用",
-            plugin_results=[],
-        )
+        content = _shared_setup_case_0(service, case_value_1="custom_phase", case_value_2="通用")
         wb = _load_workbook(content)
         ws = wb["报告摘要"]
         values = [ws.cell(row=r, column=2).value for r in range(1, ws.max_row + 1)]
         assert "custom_phase" in values
 
     def test_industry_displayed(self, service: KittenReportExportService) -> None:
-        content = service._build_workbook(
-            dataset={},
-            messages=[],
-            result={},
-            phase="analysis",
-            industry="制造业",
-            plugin_results=[],
-        )
+        content = _shared_setup_case_0(service, case_value_1="analysis", case_value_2="制造业")
         wb = _load_workbook(content)
         ws = wb["报告摘要"]
         values = [ws.cell(row=r, column=2).value for r in range(1, ws.max_row + 1)]

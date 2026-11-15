@@ -31,6 +31,33 @@ from app.services.skills.label_template_generator.label_template_generator impor
     get_label_template_generator_skill,
 )
 
+
+def _shared_setup_case_0(case_value_1):
+    blocks = [
+        {
+            "text": "品名",
+            "y_center": 50,
+            "center": (25, 50),
+            "left": 10,
+            "top": 40,
+            "width": 40,
+            "height": 20,
+            "conf": 0.9,
+        },
+        {
+            "text": case_value_1,
+            "y_center": 50,
+            "center": (75, 50),
+            "left": 60,
+            "top": 40,
+            "width": 40,
+            "height": 20,
+            "conf": 0.8,
+        },
+    ]
+    return blocks
+
+
 # ---------------------------------------------------------------------------
 # _pair_fields_by_grid — additional edge cases
 # ---------------------------------------------------------------------------
@@ -88,28 +115,7 @@ class TestPairFieldsByGridEdgeCases:
 
     def test_block_in_merged_not_start_col_skipped(self):
         """Block in merged cell but not at start_col should be skipped."""
-        blocks = [
-            {
-                "text": "品名",
-                "y_center": 50,
-                "center": (25, 50),
-                "left": 10,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.9,
-            },
-            {
-                "text": "extra",
-                "y_center": 50,
-                "center": (75, 50),
-                "left": 60,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.8,
-            },
-        ]
+        blocks = _shared_setup_case_0(case_value_1="extra")
         merged = [{"row": 0, "start_col": 0, "end_col": 1}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100], merged)
         labels = [f["label"] for f in result]
@@ -117,28 +123,7 @@ class TestPairFieldsByGridEdgeCases:
 
     def test_next_block_in_merged_not_paired(self):
         """When next block is in merged cell, current block should not be paired with it."""
-        blocks = [
-            {
-                "text": "品名",
-                "y_center": 50,
-                "center": (25, 50),
-                "left": 10,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.9,
-            },
-            {
-                "text": "merged_val",
-                "y_center": 50,
-                "center": (75, 50),
-                "left": 60,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.8,
-            },
-        ]
+        blocks = _shared_setup_case_0(case_value_1="merged_val")
         merged = [{"row": 0, "start_col": 1, "end_col": 2}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 33, 66, 100], merged)
         first_field = result[0]

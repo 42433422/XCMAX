@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,6 +23,25 @@ from app.domain.shared_services.distillation_trainer import (
     DistillationTrainer,
     main,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_train_0(ckpt_dir, log_dir):
+    with (
+        patch("app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()),
+        patch(
+            "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.domain.shared_services.distillation_trainer.classification_report",
+            return_value="report",
+        ),
+        patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
+        patch("app.domain.shared_services.distillation_trainer.LOG_DIR", log_dir),
+    ):
+        yield None
+
 
 torch_available = True
 try:
@@ -284,21 +304,7 @@ class TestDistillationTrainerTrainBranches:
         )
         trainer.save_checkpoint = MagicMock()
 
-        with (
-            patch(
-                "app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()
-            ),
-            patch(
-                "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "app.domain.shared_services.distillation_trainer.classification_report",
-                return_value="report",
-            ),
-            patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
-            patch("app.domain.shared_services.distillation_trainer.LOG_DIR", log_dir),
-        ):
+        with _shared_scope_train_0(ckpt_dir, log_dir):
             trainer.train(data_path, output_dir=ckpt_dir)
 
         # save_checkpoint called for last + best for each epoch
@@ -343,21 +349,7 @@ class TestDistillationTrainerTrainBranches:
         )
         trainer.save_checkpoint = MagicMock()
 
-        with (
-            patch(
-                "app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()
-            ),
-            patch(
-                "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "app.domain.shared_services.distillation_trainer.classification_report",
-                return_value="report",
-            ),
-            patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
-            patch("app.domain.shared_services.distillation_trainer.LOG_DIR", log_dir),
-        ):
+        with _shared_scope_train_0(ckpt_dir, log_dir):
             trainer.train(data_path, output_dir=ckpt_dir)
 
         # Each epoch: last checkpoint + best (since 0.5 > 0 initial)
@@ -399,21 +391,7 @@ class TestDistillationTrainerTrainBranches:
         )
         trainer.save_checkpoint = MagicMock()
 
-        with (
-            patch(
-                "app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()
-            ),
-            patch(
-                "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "app.domain.shared_services.distillation_trainer.classification_report",
-                return_value="report",
-            ),
-            patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
-            patch("app.domain.shared_services.distillation_trainer.LOG_DIR", log_dir),
-        ):
+        with _shared_scope_train_0(ckpt_dir, log_dir):
             trainer.train(data_path, output_dir=ckpt_dir)
 
         trainer.train_epoch.assert_called_once()

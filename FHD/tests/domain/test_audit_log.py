@@ -27,6 +27,33 @@ from app.domain.autonomy.audit_log import (
 )
 from app.domain.autonomy.autonomy_guard import reload_autonomy_guard
 
+
+def _shared_setup_case_0(case_value_1, case_value_2, case_value_3):
+    append_autonomy_audit(
+        {
+            "action_id": case_value_1,
+            "action": case_value_2,
+            "risk_level": "LOW",
+            "decision": "allow",
+            "source": case_value_3,
+        }
+    )
+    return None
+
+
+def _shared_setup_case_1(case_value_1, case_value_2, case_value_3, case_value_4):
+    append_autonomy_audit(
+        {
+            "action_id": case_value_1,
+            "action": case_value_2,
+            "risk_level": case_value_3,
+            "decision": case_value_4,
+            "source": "prod",
+        }
+    )
+    return None
+
+
 UTC = UTC
 
 
@@ -595,14 +622,8 @@ class TestSummarizeAutonomyAudit:
         assert summary["window_days"] == 3650
 
     def test_include_synthetic_changes_cohort_label(self):
-        append_autonomy_audit(
-            {
-                "action_id": "e2e-synthetic-1",
-                "action": "test_action",
-                "risk_level": "LOW",
-                "decision": "allow",
-                "source": "test",
-            }
+        _shared_setup_case_0(
+            case_value_1="e2e-synthetic-1", case_value_2="test_action", case_value_3="test"
         )
         operational = summarize_autonomy_audit(days=1, include_synthetic=False)
         all_cohort = summarize_autonomy_audit(days=1, include_synthetic=True)
@@ -615,23 +636,12 @@ class TestSummarizeAutonomyAudit:
 
     def test_veto_rate_calculation(self):
         # 2 条 operational：1 allow + 1 require_human
-        append_autonomy_audit(
-            {
-                "action_id": "rate-allow",
-                "action": "a1",
-                "risk_level": "LOW",
-                "decision": "allow",
-                "source": "prod",
-            }
-        )
-        append_autonomy_audit(
-            {
-                "action_id": "rate-veto",
-                "action": "a2",
-                "risk_level": "MEDIUM",
-                "decision": "require_human",
-                "source": "prod",
-            }
+        _shared_setup_case_0(case_value_1="rate-allow", case_value_2="a1", case_value_3="prod")
+        _shared_setup_case_1(
+            case_value_1="rate-veto",
+            case_value_2="a2",
+            case_value_3="MEDIUM",
+            case_value_4="require_human",
         )
         summary = summarize_autonomy_audit(days=1)
         assert summary["total"] == 2
@@ -661,14 +671,11 @@ class TestSummarizeAutonomyAudit:
         assert summary["observed_days"] == 0.0
 
     def test_prohibited_event_count(self):
-        append_autonomy_audit(
-            {
-                "action_id": "prohib-1",
-                "action": "db_migration",
-                "risk_level": "BLOCKED",
-                "decision": "prohibited",
-                "source": "prod",
-            }
+        _shared_setup_case_1(
+            case_value_1="prohib-1",
+            case_value_2="db_migration",
+            case_value_3="BLOCKED",
+            case_value_4="prohibited",
         )
         summary = summarize_autonomy_audit(days=1)
         assert summary["prohibited_event_count"] == 1
@@ -688,23 +695,12 @@ class TestSummarizeAutonomyAudit:
         assert summary["human_approval_count"] == 1
 
     def test_by_decision_and_by_risk_level_breakdowns(self):
-        append_autonomy_audit(
-            {
-                "action_id": "break-1",
-                "action": "a1",
-                "risk_level": "LOW",
-                "decision": "allow",
-                "source": "prod",
-            }
-        )
-        append_autonomy_audit(
-            {
-                "action_id": "break-2",
-                "action": "a2",
-                "risk_level": "MEDIUM",
-                "decision": "require_human",
-                "source": "prod",
-            }
+        _shared_setup_case_0(case_value_1="break-1", case_value_2="a1", case_value_3="prod")
+        _shared_setup_case_1(
+            case_value_1="break-2",
+            case_value_2="a2",
+            case_value_3="MEDIUM",
+            case_value_4="require_human",
         )
         summary = summarize_autonomy_audit(days=1)
         assert summary["by_decision"].get("allow") == 1
@@ -734,14 +730,8 @@ class TestDailyDigestHtml:
         assert "0 次" in html
 
     def test_renders_with_data(self):
-        append_autonomy_audit(
-            {
-                "action_id": "digest-1",
-                "action": "restart_service",
-                "risk_level": "LOW",
-                "decision": "allow",
-                "source": "prod",
-            }
+        _shared_setup_case_0(
+            case_value_1="digest-1", case_value_2="restart_service", case_value_3="prod"
         )
         html = autonomy_daily_digest_html(days=1)
         assert "Autonomy 决策" in html
@@ -749,28 +739,19 @@ class TestDailyDigestHtml:
         assert "90天" in html
 
     def test_tone_is_red_when_veto_exists(self):
-        append_autonomy_audit(
-            {
-                "action_id": "veto-digest",
-                "action": "rollback_release",
-                "risk_level": "MEDIUM",
-                "decision": "require_human",
-                "source": "prod",
-            }
+        _shared_setup_case_1(
+            case_value_1="veto-digest",
+            case_value_2="rollback_release",
+            case_value_3="MEDIUM",
+            case_value_4="require_human",
         )
         html = autonomy_daily_digest_html(days=1)
         # veto_count > 0 → tone 为红色 #b91c1c
         assert "#b91c1c" in html
 
     def test_tone_is_green_when_no_veto(self):
-        append_autonomy_audit(
-            {
-                "action_id": "clean-digest",
-                "action": "restart_service",
-                "risk_level": "LOW",
-                "decision": "allow",
-                "source": "prod",
-            }
+        _shared_setup_case_0(
+            case_value_1="clean-digest", case_value_2="restart_service", case_value_3="prod"
         )
         html = autonomy_daily_digest_html(days=1)
         assert "#047857" in html

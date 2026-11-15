@@ -27,6 +27,25 @@ import pytest
 from app.services import capability_proposal_recorder as recorder
 from app.services import work_order_ssot as wo
 
+
+def _shared_setup_case_0(version, sha, pipeline):
+    pipeline.store.stage(
+        install_id="dev-win",
+        platform="win32",
+        status="installed",
+        version=version,
+        build_sha=sha,
+    )
+    pipeline.store.stage(
+        install_id="dev-mac",
+        platform="darwin",
+        status="installed",
+        version=version,
+        build_sha=sha,
+    )
+    return None
+
+
 _FHD_ROOT = Path(__file__).resolve().parents[2]
 _REPO_ROOT = _FHD_ROOT.parent
 
@@ -272,20 +291,7 @@ class TestDeliveryCloseout:
         number = 901
         wo_id = _make_work_order(isolates, number)
         pipeline.gh.new_issue(number)
-        pipeline.store.stage(
-            install_id="dev-win",
-            platform="win32",
-            status="installed",
-            version=version,
-            build_sha=sha,
-        )
-        pipeline.store.stage(
-            install_id="dev-mac",
-            platform="darwin",
-            status="installed",
-            version=version,
-            build_sha=sha,
-        )
+        _shared_setup_case_0(version, sha, pipeline)
 
         rc = closeout.run(_args(_config(isolates, version, sha, [number])))
 
@@ -315,20 +321,7 @@ class TestDeliveryCloseout:
         wo_id = _make_work_order(isolates, number)
         pipeline.gh.new_issue(number)
         pipeline.gh.wo_acceptance_fail = True
-        pipeline.store.stage(
-            install_id="dev-win",
-            platform="win32",
-            status="installed",
-            version=version,
-            build_sha=sha,
-        )
-        pipeline.store.stage(
-            install_id="dev-mac",
-            platform="darwin",
-            status="installed",
-            version=version,
-            build_sha=sha,
-        )
+        _shared_setup_case_0(version, sha, pipeline)
 
         rc = closeout.run(_args(_config(isolates, version, sha, [number])))
         assert rc == 1
@@ -390,20 +383,7 @@ class TestDeliveryCloseout:
         number = 903
         wo_id = _make_work_order(isolates, number)
         pipeline.gh.new_issue(number)
-        pipeline.store.stage(
-            install_id="dev-win",
-            platform="win32",
-            status="installed",
-            version=version,
-            build_sha=sha,
-        )
-        pipeline.store.stage(
-            install_id="dev-mac",
-            platform="darwin",
-            status="installed",
-            version=version,
-            build_sha=sha,
-        )
+        _shared_setup_case_0(version, sha, pipeline)
         pipeline.gh.fail_after = "/comments"
 
         rc = closeout.run(_args(_config(isolates, version, sha, [number])))
@@ -418,20 +398,7 @@ class TestDeliveryCloseout:
         number = 904
         wo_id = _make_work_order(isolates, number)
         pipeline.gh.new_issue(number)
-        pipeline.store.stage(
-            install_id="dev-win",
-            platform="win32",
-            status="installed",
-            version=version,
-            build_sha=sha,
-        )
-        pipeline.store.stage(
-            install_id="dev-mac",
-            platform="darwin",
-            status="installed",
-            version=version,
-            build_sha=sha,
-        )
+        _shared_setup_case_0(version, sha, pipeline)
 
         cfg = _config(isolates, version, sha, [number])
         assert closeout.run(_args(cfg)) == 0

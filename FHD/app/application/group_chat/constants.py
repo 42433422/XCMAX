@@ -2,21 +2,15 @@
 
 from __future__ import annotations
 
-import os
 import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from app.utils.deployment import env_float as _env_float
+
 MAX_RESPONDERS = 6
 # 喂给单个 AI 的群历史条数。
 CONTEXT_TURNS = 10
-
-
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(os.environ.get(name) or default)
-    except (TypeError, ValueError):
-        return default
 
 
 # 超级员工执行任务前的群内讨论轮数：每轮每个超级员工最多发言一次。

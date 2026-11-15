@@ -15,10 +15,28 @@ import json
 import os
 import sys
 import tempfile
+from contextlib import contextmanager as _shared_scope_contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(tmp_path):
+    with (
+        patch(
+            "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
+            return_value=[],
+        ),
+        patch.dict(
+            "os.environ",
+            {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
+            clear=False,
+        ),
+    ):
+        yield None
+
 
 # ---------------------------------------------------------------------------
 # is_mods_disabled
@@ -317,17 +335,7 @@ class TestScanMods:
         from app.infrastructure.mods.mod_manager import ModManager
 
         mgr = ModManager(mods_root=str(tmp_path))
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-                return_value=[],
-            ),
-            patch.dict(
-                "os.environ",
-                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-                clear=False,
-            ),
-        ):
+        with _shared_scope_case_0(tmp_path):
             result = mgr.scan_mods(use_cache=False)
             assert isinstance(result, list)
             assert len(result) == 0
@@ -341,17 +349,7 @@ class TestScanMods:
             json.dumps({"id": "test_mod", "name": "Test Mod", "version": "1.0"})
         )
         mgr = ModManager(mods_root=str(tmp_path))
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-                return_value=[],
-            ),
-            patch.dict(
-                "os.environ",
-                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-                clear=False,
-            ),
-        ):
+        with _shared_scope_case_0(tmp_path):
             result = mgr.scan_mods(use_cache=False)
             assert len(result) == 1
             assert result[0].id == "test_mod"
@@ -365,17 +363,7 @@ class TestScanMods:
             json.dumps({"id": "_internal", "name": "Internal", "version": "1.0"})
         )
         mgr = ModManager(mods_root=str(tmp_path))
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-                return_value=[],
-            ),
-            patch.dict(
-                "os.environ",
-                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-                clear=False,
-            ),
-        ):
+        with _shared_scope_case_0(tmp_path):
             result = mgr.scan_mods(use_cache=False)
             assert len(result) == 0
 
@@ -383,17 +371,7 @@ class TestScanMods:
         from app.infrastructure.mods.mod_manager import ModManager
 
         mgr = ModManager(mods_root=str(tmp_path))
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-                return_value=[],
-            ),
-            patch.dict(
-                "os.environ",
-                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-                clear=False,
-            ),
-        ):
+        with _shared_scope_case_0(tmp_path):
             # First scan populates cache
             result1 = mgr.scan_mods()
             # Second scan should use cache
@@ -404,17 +382,7 @@ class TestScanMods:
         from app.infrastructure.mods.mod_manager import ModManager
 
         mgr = ModManager(mods_root=str(tmp_path))
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates",
-                return_value=[],
-            ),
-            patch.dict(
-                "os.environ",
-                {"XCAGI_MODS_ROOT": str(tmp_path), "XCAGI_MODS_DIR": ""},
-                clear=False,
-            ),
-        ):
+        with _shared_scope_case_0(tmp_path):
             mgr.scan_mods()
             assert mgr._scan_cache_fp != "" or len(mgr._scan_cache_mods) == 0
             mgr.invalidate_scan_cache()

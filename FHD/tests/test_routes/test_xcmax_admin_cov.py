@@ -14,6 +14,7 @@ import json
 import os
 import tempfile
 from contextlib import ExitStack
+from contextlib import contextmanager as _shared_scope_contextmanager
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -31,6 +32,38 @@ from app.fastapi_routes.xcmax_admin import (
     _to_float,
     _to_int,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(status_result, case_value_1, case_value_2):
+    with (
+        patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+        patch(
+            "app.application.modstore_local_client.prefer_local_modstore",
+            return_value=case_value_2,
+        ),
+        patch(
+            case_value_1,
+            new=AsyncMock(return_value=status_result),
+        ),
+    ):
+        yield None
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_1(proxy_result, case_value_1):
+    with (
+        patch(
+            "app.application.modstore_local_client.prefer_local_modstore",
+            return_value=True,
+        ),
+        patch(
+            case_value_1,
+            new=AsyncMock(return_value=proxy_result),
+        ),
+    ):
+        yield None
+
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -271,15 +304,8 @@ class TestDigestLocalOrProxyBranches:
         """Lines 175: prefer_local=True but method POST → skips local, goes to proxy."""
         req = _mock_request()
         proxy_result = {"proxied": True}
-        with (
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-                new=AsyncMock(return_value=proxy_result),
-            ),
+        with _shared_scope_case_1(
+            proxy_result, case_value_1="app.fastapi_routes.xcmax_admin._market_admin_proxy"
         ):
             result = await admin_routes._digest_local_or_proxy(req, "POST", "/api/other")
         assert result == proxy_result
@@ -333,15 +359,9 @@ class TestDigestLocalOrProxyBranches:
         """Lines 188-190: path ends with /artifacts."""
         req = _mock_request()
         arts_result = {"artifacts": []}
-        with (
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.application.digest_email_app_service.get_daily_digest_artifacts_local",
-                new=AsyncMock(return_value=arts_result),
-            ),
+        with _shared_scope_case_1(
+            arts_result,
+            case_value_1="app.application.digest_email_app_service.get_daily_digest_artifacts_local",
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/agent/butler/daily-digests/42/artifacts"
@@ -353,15 +373,9 @@ class TestDigestLocalOrProxyBranches:
         """Lines 194-202: action-items/stats path with kind and day."""
         req = _mock_request()
         stats_result = {"total": 10}
-        with (
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.application.digest_email_app_service.action_items_stats_local",
-                new=AsyncMock(return_value=stats_result),
-            ),
+        with _shared_scope_case_1(
+            stats_result,
+            case_value_1="app.application.digest_email_app_service.action_items_stats_local",
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/admin/action-items/stats?kind=patch&day=2026-01-01"
@@ -373,15 +387,9 @@ class TestDigestLocalOrProxyBranches:
         """Lines 203-211: action-items list path with kind and day."""
         req = _mock_request()
         list_result = {"items": []}
-        with (
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.application.digest_email_app_service.list_action_items_local",
-                new=AsyncMock(return_value=list_result),
-            ),
+        with _shared_scope_case_1(
+            list_result,
+            case_value_1="app.application.digest_email_app_service.list_action_items_local",
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/admin/action-items?kind=update&day=2026-06-01"
@@ -440,18 +448,10 @@ class TestSelfMaintenanceLocalOrProxy:
         """Lines 243-255: status path with ?limit=50 parsed correctly."""
         req = _mock_request()
         status_result = {"running": True}
-        with (
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
-            ),
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.application.self_maintenance_app_service.get_runtime_status_local",
-                new=AsyncMock(return_value=status_result),
-            ),
+        with _shared_scope_case_0(
+            status_result,
+            case_value_1="app.application.self_maintenance_app_service.get_runtime_status_local",
+            case_value_2=True,
         ):
             result = await admin_routes._self_maintenance_local_or_proxy(
                 req, "GET", "/api/ops/self-maintenance/status?limit=50"
@@ -491,18 +491,10 @@ class TestSelfMaintenanceLocalOrProxy:
         """Lines 256-261: governance-review POST path."""
         req = _mock_request()
         review_result = {"reviewed": True}
-        with (
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
-            ),
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.application.self_maintenance_app_service.governance_review_local",
-                new=AsyncMock(return_value=review_result),
-            ),
+        with _shared_scope_case_0(
+            review_result,
+            case_value_1="app.application.self_maintenance_app_service.governance_review_local",
+            case_value_2=True,
         ):
             result = await admin_routes._self_maintenance_local_or_proxy(
                 req,
@@ -517,18 +509,10 @@ class TestSelfMaintenanceLocalOrProxy:
         """Lines 267-268: prefer_local=True, _call_local returns None → go to proxy."""
         req = _mock_request()
         proxy_result = {"proxied": True}
-        with (
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
-            ),
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-                new=AsyncMock(return_value=proxy_result),
-            ),
+        with _shared_scope_case_0(
+            proxy_result,
+            case_value_1="app.fastapi_routes.xcmax_admin._market_admin_proxy",
+            case_value_2=True,
         ):
             # Use a path that matches self-maintenance prefix but not status or governance-review
             result = await admin_routes._self_maintenance_local_or_proxy(
@@ -623,18 +607,10 @@ class TestSelfMaintenanceLocalOrProxy:
         """Lines 293: proxied 500 not 404 → returned directly without local attempt."""
         req = _mock_request()
         proxy_500 = JSONResponse({"error": True}, status_code=500)
-        with (
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request", return_value="tok"
-            ),
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=False,
-            ),
-            patch(
-                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-                new=AsyncMock(return_value=proxy_500),
-            ),
+        with _shared_scope_case_0(
+            proxy_500,
+            case_value_1="app.fastapi_routes.xcmax_admin._market_admin_proxy",
+            case_value_2=False,
         ):
             result = await admin_routes._self_maintenance_local_or_proxy(
                 req, "GET", "/api/ops/self-maintenance/status"

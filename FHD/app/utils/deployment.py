@@ -26,6 +26,13 @@ def env_flag(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in _TRUTHY
 
 
+def env_float(name: str, default: float) -> float:
+    try:
+        return float(str(os.environ.get(name) or "").strip())
+    except ValueError:
+        return default
+
+
 def deployment_env() -> str:
     """部署环境标识（``FHD_ENV``，去空白小写）；未设置返回空串。"""
     return (os.environ.get("FHD_ENV") or "").strip().lower()

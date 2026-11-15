@@ -26,6 +26,38 @@ from app.domain.shared_services.hybrid_intent_service import (
 from app.infrastructure.payment import order_store
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
+
+def _shared_setup_recognize_rasa_0(case_value_1, case_value_2, case_value_3):
+    fake_rasa = MagicMock()
+    fake_rasa.parse = AsyncMock(
+        return_value={
+            "intent": {"name": case_value_2, "confidence": case_value_3},
+            "text": case_value_1,
+        }
+    )
+    svc = _make_service(
+        use_rasa=True,
+        rasa_service=fake_rasa,
+        use_bert=False,
+        rasa_confidence_threshold=0.7,
+    )
+    return fake_rasa, svc
+
+
+def _shared_setup_recognize_bert_1(case_value_1, case_value_2):
+    fake_bert = MagicMock()
+    fake_bert.recognize.return_value = {
+        "intent": case_value_1,
+        "confidence": case_value_2,
+    }
+    svc = _make_service(
+        use_bert=True,
+        bert_service=fake_bert,
+        bert_confidence_threshold=0.7,
+    )
+    return fake_bert, svc
+
+
 # ---------------------------------------------------------------------------
 # order_store — fixtures
 # ---------------------------------------------------------------------------
@@ -750,16 +782,7 @@ async def test_recognize_bert_low_confidence_marks_fallback() -> None:
 
 @pytest.mark.asyncio
 async def test_recognize_bert_high_confidence_overrides_primary_intent() -> None:
-    fake_bert = MagicMock()
-    fake_bert.recognize.return_value = {
-        "intent": "customers",
-        "confidence": 0.95,
-    }
-    svc = _make_service(
-        use_bert=True,
-        bert_service=fake_bert,
-        bert_confidence_threshold=0.7,
-    )
+    fake_bert, svc = _shared_setup_recognize_bert_1(case_value_1="customers", case_value_2=0.95)
     result = await svc.recognize("随便一句话")
     assert result["bert_confidence"] == 0.95
     assert result["primary_intent"] == "customers"
@@ -769,16 +792,7 @@ async def test_recognize_bert_high_confidence_overrides_primary_intent() -> None
 
 @pytest.mark.asyncio
 async def test_recognize_bert_high_confidence_skipped_when_negated() -> None:
-    fake_bert = MagicMock()
-    fake_bert.recognize.return_value = {
-        "intent": "customers",
-        "confidence": 0.95,
-    }
-    svc = _make_service(
-        use_bert=True,
-        bert_service=fake_bert,
-        bert_confidence_threshold=0.7,
-    )
+    fake_bert, svc = _shared_setup_recognize_bert_1(case_value_1="customers", case_value_2=0.95)
     # Use a negated message — rule engine should mark is_negated=True
     result = await svc.recognize("不查客户")
     # Even if bert says high confidence, negation blocks override
@@ -791,15 +805,8 @@ async def test_recognize_bert_high_confidence_skipped_when_negated() -> None:
 
 @pytest.mark.asyncio
 async def test_recognize_bert_unmapped_intent_does_not_override() -> None:
-    fake_bert = MagicMock()
-    fake_bert.recognize.return_value = {
-        "intent": "totally_unknown_intent",
-        "confidence": 0.99,
-    }
-    svc = _make_service(
-        use_bert=True,
-        bert_service=fake_bert,
-        bert_confidence_threshold=0.7,
+    fake_bert, svc = _shared_setup_recognize_bert_1(
+        case_value_1="totally_unknown_intent", case_value_2=0.99
     )
     result = await svc.recognize("hello")
     # bert fields populated but primary_intent not overridden (no mapping)
@@ -811,16 +818,7 @@ async def test_recognize_bert_unmapped_intent_does_not_override() -> None:
 
 @pytest.mark.asyncio
 async def test_recognize_bert_appends_hint_only_when_new() -> None:
-    fake_bert = MagicMock()
-    fake_bert.recognize.return_value = {
-        "intent": "customers",
-        "confidence": 0.9,
-    }
-    svc = _make_service(
-        use_bert=True,
-        bert_service=fake_bert,
-        bert_confidence_threshold=0.7,
-    )
+    fake_bert, svc = _shared_setup_recognize_bert_1(case_value_1="customers", case_value_2=0.9)
     # Use a message that rule engine already maps to customers
     result = await svc.recognize("查询客户")
     # customers should appear in intent_hints (possibly twice if rule also added)
@@ -834,18 +832,8 @@ async def test_recognize_bert_appends_hint_only_when_new() -> None:
 
 @pytest.mark.asyncio
 async def test_recognize_rasa_high_confidence_overrides_primary_intent() -> None:
-    fake_rasa = MagicMock()
-    fake_rasa.parse = AsyncMock(
-        return_value={
-            "intent": {"name": "customers", "confidence": 0.9},
-            "text": "查客户",
-        }
-    )
-    svc = _make_service(
-        use_rasa=True,
-        rasa_service=fake_rasa,
-        use_bert=False,
-        rasa_confidence_threshold=0.7,
+    fake_rasa, svc = _shared_setup_recognize_rasa_0(
+        case_value_1="查客户", case_value_2="customers", case_value_3=0.9
     )
     result = await svc.recognize("查客户")
     assert result["rasa_available"] is True
@@ -858,18 +846,8 @@ async def test_recognize_rasa_high_confidence_overrides_primary_intent() -> None
 
 @pytest.mark.asyncio
 async def test_recognize_rasa_low_confidence_does_not_override() -> None:
-    fake_rasa = MagicMock()
-    fake_rasa.parse = AsyncMock(
-        return_value={
-            "intent": {"name": "customers", "confidence": 0.3},
-            "text": "x",
-        }
-    )
-    svc = _make_service(
-        use_rasa=True,
-        rasa_service=fake_rasa,
-        use_bert=False,
-        rasa_confidence_threshold=0.7,
+    fake_rasa, svc = _shared_setup_recognize_rasa_0(
+        case_value_1="x", case_value_2="customers", case_value_3=0.3
     )
     result = await svc.recognize("随便说点啥")
     assert result["rasa_available"] is True
@@ -880,18 +858,8 @@ async def test_recognize_rasa_low_confidence_does_not_override() -> None:
 
 @pytest.mark.asyncio
 async def test_recognize_rasa_unmapped_intent_does_not_override() -> None:
-    fake_rasa = MagicMock()
-    fake_rasa.parse = AsyncMock(
-        return_value={
-            "intent": {"name": "unknown_intent_xyz", "confidence": 0.95},
-            "text": "x",
-        }
-    )
-    svc = _make_service(
-        use_rasa=True,
-        rasa_service=fake_rasa,
-        use_bert=False,
-        rasa_confidence_threshold=0.7,
+    fake_rasa, svc = _shared_setup_recognize_rasa_0(
+        case_value_1="x", case_value_2="unknown_intent_xyz", case_value_3=0.95
     )
     result = await svc.recognize("hello")
     assert result["rasa_intent"] == "unknown_intent_xyz"
@@ -901,18 +869,8 @@ async def test_recognize_rasa_unmapped_intent_does_not_override() -> None:
 
 @pytest.mark.asyncio
 async def test_recognize_rasa_negation_intent_does_not_override() -> None:
-    fake_rasa = MagicMock()
-    fake_rasa.parse = AsyncMock(
-        return_value={
-            "intent": {"name": "negation", "confidence": 0.95},
-            "text": "x",
-        }
-    )
-    svc = _make_service(
-        use_rasa=True,
-        rasa_service=fake_rasa,
-        use_bert=False,
-        rasa_confidence_threshold=0.7,
+    fake_rasa, svc = _shared_setup_recognize_rasa_0(
+        case_value_1="x", case_value_2="negation", case_value_3=0.95
     )
     # Use a message that rule engine does NOT mark as negated, so rasa_intent
     # survives the is_negated clearing branch.
@@ -925,18 +883,8 @@ async def test_recognize_rasa_negation_intent_does_not_override() -> None:
 
 @pytest.mark.asyncio
 async def test_recognize_rasa_negated_message_clears_rasa_fields() -> None:
-    fake_rasa = MagicMock()
-    fake_rasa.parse = AsyncMock(
-        return_value={
-            "intent": {"name": "customers", "confidence": 0.95},
-            "text": "x",
-        }
-    )
-    svc = _make_service(
-        use_rasa=True,
-        rasa_service=fake_rasa,
-        use_bert=False,
-        rasa_confidence_threshold=0.7,
+    fake_rasa, svc = _shared_setup_recognize_rasa_0(
+        case_value_1="x", case_value_2="customers", case_value_3=0.95
     )
     result = await svc.recognize("不查客户")
     if result.get("is_negated"):

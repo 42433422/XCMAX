@@ -41,6 +41,28 @@ from app.application.dataset_rag_app_service import (
 )
 from app.infrastructure.rag.hybrid_retriever import RetrievedChunk
 
+
+def _shared_setup_case_0(tmp_path, case_value_1, case_value_2):
+    svc = _make_svc(tmp_path)
+    svc.ingest_document(
+        dataset_id="ds",
+        text=case_value_1,
+        source="doc.txt",
+        chunk_strategy="fixed",
+        chunk_size=200,
+        version=1,
+    )
+    svc.ingest_document(
+        dataset_id="ds",
+        text=case_value_2,
+        source="doc.txt",
+        chunk_strategy="fixed",
+        chunk_size=200,
+        version=2,
+    )
+    return svc
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -255,43 +277,17 @@ class TestDiffVersions:
         assert r["success"] is False
 
     def test_diff_same_content(self, tmp_path):
-        svc = _make_svc(tmp_path)
-        svc.ingest_document(
-            dataset_id="ds",
-            text="same content text",
-            source="doc.txt",
-            chunk_strategy="fixed",
-            chunk_size=200,
-            version=1,
-        )
-        svc.ingest_document(
-            dataset_id="ds",
-            text="same content text",
-            source="doc.txt",
-            chunk_strategy="fixed",
-            chunk_size=200,
-            version=2,
+        svc = _shared_setup_case_0(
+            tmp_path, case_value_1="same content text", case_value_2="same content text"
         )
         r = svc.diff_versions(dataset_id="ds", source="doc.txt", from_version=1, to_version=2)
         assert r["success"] is True
 
     def test_diff_different_content(self, tmp_path):
-        svc = _make_svc(tmp_path)
-        svc.ingest_document(
-            dataset_id="ds",
-            text="version one content text here",
-            source="doc.txt",
-            chunk_strategy="fixed",
-            chunk_size=200,
-            version=1,
-        )
-        svc.ingest_document(
-            dataset_id="ds",
-            text="version two content text different",
-            source="doc.txt",
-            chunk_strategy="fixed",
-            chunk_size=200,
-            version=2,
+        svc = _shared_setup_case_0(
+            tmp_path,
+            case_value_1="version one content text here",
+            case_value_2="version two content text different",
         )
         r = svc.diff_versions(dataset_id="ds", source="doc.txt", from_version=1, to_version=2)
         assert r["success"] is True
@@ -324,22 +320,10 @@ class TestRollback:
         assert r["success"] is False
 
     def test_rollback_success(self, tmp_path):
-        svc = _make_svc(tmp_path)
-        svc.ingest_document(
-            dataset_id="ds",
-            text="original version text",
-            source="doc.txt",
-            chunk_strategy="fixed",
-            chunk_size=200,
-            version=1,
-        )
-        svc.ingest_document(
-            dataset_id="ds",
-            text="updated version text different content",
-            source="doc.txt",
-            chunk_strategy="fixed",
-            chunk_size=200,
-            version=2,
+        svc = _shared_setup_case_0(
+            tmp_path,
+            case_value_1="original version text",
+            case_value_2="updated version text different content",
         )
         r = svc.rollback_document_version(dataset_id="ds", source="doc.txt", target_version=1)
         assert r["success"] is True

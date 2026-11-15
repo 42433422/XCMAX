@@ -1,3 +1,4 @@
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import Mock, patch
 
 import pytest
@@ -5,6 +6,71 @@ import pytest
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+@_shared_scope_contextmanager
+def _shared_scope_ai_chat_0(repo, case_value_1_value):
+    with (
+        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
+        patch(
+            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
+            return_value=case_value_1_value,
+        ),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        ) as mock_dispatch,
+    ):
+        yield mock_dispatch
+
+
+def _shared_setup_ai_chat_0(AIChatApplicationService, plan, case_value_1):
+    service = AIChatApplicationService()
+    service.workflow_planner.plan = Mock(return_value=plan)
+    service.risk_gate.evaluate = Mock(
+        return_value=Mock(
+            requires_confirmation=False,
+            allowed=True,
+            denied_nodes=[],
+            blocking_nodes=[],
+            reason=case_value_1,
+        )
+    )
+    service.approval_service = Mock()
+    service.approval_service.get_approval_required_nodes.return_value = []
+    return service
+
+
+def _shared_setup_ai_chat_1(trusted_actor, case_value_1):
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    actor = trusted_actor(role="admin")
+    repo = InMemoryAgentRunRepository()
+    plan = PlanGraph(
+        plan_id=case_value_1,
+        intent="business_db_write",
+        todo_steps=["write customer"],
+        nodes=[
+            WorkflowNode(
+                node_id="write_customer",
+                tool_id="business_db",
+                action="write",
+                params={
+                    "entity": "customers",
+                    "operation": "upsert",
+                    "payload": {"unit_name": "星光贸易"},
+                },
+                risk="medium",
+                idempotent=True,
+                description="write customer",
+            )
+        ],
+        risk_level="medium",
+    )
+    return AIChatApplicationService, actor, repo, plan
 
 
 def test_workflow_registry_exposes_employee_and_business_db_tools():
@@ -567,33 +633,10 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools, trusted_ac
         risk_level="medium",
     )
 
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch(
-            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
-            return_value="pro_default",
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
-        ),
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-        ) as mock_dispatch,
-    ):
-        service = AIChatApplicationService()
-        service.workflow_planner.plan = Mock(return_value=plan)
-        service.risk_gate.evaluate = Mock(
-            return_value=Mock(
-                requires_confirmation=False,
-                allowed=True,
-                denied_nodes=[],
-                blocking_nodes=[],
-                reason="test low enough",
-            )
+    with _shared_scope_ai_chat_0(repo, case_value_1_value="pro_default") as mock_dispatch:
+        service = _shared_setup_ai_chat_0(
+            AIChatApplicationService, plan, case_value_1="test low enough"
         )
-        service.approval_service = Mock()
-        service.approval_service.get_approval_required_nodes.return_value = []
 
         result = service._try_handle_dynamic_workflow(
             user_id="u1",
@@ -674,19 +717,7 @@ def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(local_tools, 
             return_value={"success": True, "data": [{"model_number": "5003"}]},
         ) as mock_dispatch,
     ):
-        service = AIChatApplicationService()
-        service.workflow_planner.plan = Mock(return_value=plan)
-        service.risk_gate.evaluate = Mock(
-            return_value=Mock(
-                requires_confirmation=False,
-                allowed=True,
-                denied_nodes=[],
-                blocking_nodes=[],
-                reason="low risk",
-            )
-        )
-        service.approval_service = Mock()
-        service.approval_service.get_approval_required_nodes.return_value = []
+        service = _shared_setup_ai_chat_0(AIChatApplicationService, plan, case_value_1="low risk")
 
         result = service._try_handle_dynamic_workflow(
             user_id="u1",
@@ -866,33 +897,10 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools, t
         risk_level="medium",
     )
 
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch(
-            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
-            return_value="normal",
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
-        ),
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-        ) as mock_dispatch,
-    ):
-        service = AIChatApplicationService()
-        service.workflow_planner.plan = Mock(return_value=plan)
-        service.risk_gate.evaluate = Mock(
-            return_value=Mock(
-                requires_confirmation=False,
-                allowed=True,
-                denied_nodes=[],
-                blocking_nodes=[],
-                reason="explicit employee intent",
-            )
+    with _shared_scope_ai_chat_0(repo, case_value_1_value="normal") as mock_dispatch:
+        service = _shared_setup_ai_chat_0(
+            AIChatApplicationService, plan, case_value_1="explicit employee intent"
         )
-        service.approval_service = Mock()
-        service.approval_service.get_approval_required_nodes.return_value = []
 
         result = service._try_handle_dynamic_workflow(
             user_id="u1",
@@ -937,59 +945,14 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
     trusted_actor,
 ):
 
-    from app.application.ai_chat_app_service import AIChatApplicationService
-
-    actor = trusted_actor(role="admin")
-    repo = InMemoryAgentRunRepository()
-    plan = PlanGraph(
-        plan_id="p-db-normal",
-        intent="business_db_write",
-        todo_steps=["write customer"],
-        nodes=[
-            WorkflowNode(
-                node_id="write_customer",
-                tool_id="business_db",
-                action="write",
-                params={
-                    "entity": "customers",
-                    "operation": "upsert",
-                    "payload": {"unit_name": "星光贸易"},
-                },
-                risk="medium",
-                idempotent=True,
-                description="write customer",
-            )
-        ],
-        risk_level="medium",
+    AIChatApplicationService, actor, repo, plan = _shared_setup_ai_chat_1(
+        trusted_actor, case_value_1="p-db-normal"
     )
 
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch(
-            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
-            return_value="normal",
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
-        ),
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-        ) as mock_dispatch,
-    ):
-        service = AIChatApplicationService()
-        service.workflow_planner.plan = Mock(return_value=plan)
-        service.risk_gate.evaluate = Mock(
-            return_value=Mock(
-                requires_confirmation=False,
-                allowed=True,
-                denied_nodes=[],
-                blocking_nodes=[],
-                reason="explicit db intent",
-            )
+    with _shared_scope_ai_chat_0(repo, case_value_1_value="normal") as mock_dispatch:
+        service = _shared_setup_ai_chat_0(
+            AIChatApplicationService, plan, case_value_1="explicit db intent"
         )
-        service.approval_service = Mock()
-        service.approval_service.get_approval_required_nodes.return_value = []
 
         result = service._try_handle_dynamic_workflow(
             user_id="u1",
@@ -1034,46 +997,11 @@ def test_ai_chat_medium_risk_confirmation_stays_pending_until_user_confirms(
     local_tools, trusted_actor
 ):
 
-    from app.application.ai_chat_app_service import AIChatApplicationService
-
-    actor = trusted_actor(role="admin")
-    repo = InMemoryAgentRunRepository()
-    plan = PlanGraph(
-        plan_id="p-db-confirm-agent",
-        intent="business_db_write",
-        todo_steps=["write customer"],
-        nodes=[
-            WorkflowNode(
-                node_id="write_customer",
-                tool_id="business_db",
-                action="write",
-                params={
-                    "entity": "customers",
-                    "operation": "upsert",
-                    "payload": {"unit_name": "星光贸易"},
-                },
-                risk="medium",
-                idempotent=True,
-                description="write customer",
-            )
-        ],
-        risk_level="medium",
+    AIChatApplicationService, actor, repo, plan = _shared_setup_ai_chat_1(
+        trusted_actor, case_value_1="p-db-confirm-agent"
     )
 
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch(
-            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
-            return_value="normal",
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
-        ),
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool"
-        ) as mock_dispatch,
-    ):
+    with _shared_scope_ai_chat_0(repo, case_value_1_value="normal") as mock_dispatch:
         service = AIChatApplicationService()
         service.workflow_planner.plan = Mock(return_value=plan)
         service.risk_gate.evaluate = Mock(

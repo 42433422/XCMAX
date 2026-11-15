@@ -13,6 +13,20 @@ from sqlalchemy import func as sa_func
 
 from app.domain.shared_services.report_service import ReportService
 
+
+def _shared_setup_case_0(mock_record, mock_get_db, service, case_value_1):
+    mock_record.created_at = datetime(2026, 1, 15)
+
+    mock_db = MagicMock()
+    mock_db.query.return_value.group_by.return_value.all.return_value = [
+        (mock_record, 1),
+    ]
+    mock_get_db.return_value = _mock_db_ctx(mock_db)
+
+    result = service.get_sales_report(group_by=case_value_1, source="shipment")
+    return mock_db, result
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -88,15 +102,9 @@ class TestGetSalesReport:
         mock_record.amount = 100.0
         mock_record.purchase_unit = "客户1"
         mock_record.unit_id = 1
-        mock_record.created_at = datetime(2026, 1, 15)
-
-        mock_db = MagicMock()
-        mock_db.query.return_value.group_by.return_value.all.return_value = [
-            (mock_record, 1),
-        ]
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        result = service.get_sales_report(group_by="product", source="shipment")
+        mock_db, result = _shared_setup_case_0(
+            mock_record, mock_get_db, service, case_value_1="product"
+        )
         assert result["success"] is True
         assert "data" in result
         assert "summary" in result
@@ -109,15 +117,9 @@ class TestGetSalesReport:
         mock_record.purchase_unit = "客户A"
         mock_record.unit_id = 1
         mock_record.amount = 500.0
-        mock_record.created_at = datetime(2026, 1, 15)
-
-        mock_db = MagicMock()
-        mock_db.query.return_value.group_by.return_value.all.return_value = [
-            (mock_record, 1),
-        ]
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        result = service.get_sales_report(group_by="customer", source="shipment")
+        mock_db, result = _shared_setup_case_0(
+            mock_record, mock_get_db, service, case_value_1="customer"
+        )
         assert result["success"] is True
         assert "data" in result
 
@@ -129,15 +131,9 @@ class TestGetSalesReport:
         mock_record.purchase_unit = "客户A"
         mock_record.unit_id = 1
         mock_record.amount = 300.0
-        mock_record.created_at = datetime(2026, 1, 15)
-
-        mock_db = MagicMock()
-        mock_db.query.return_value.group_by.return_value.all.return_value = [
-            (mock_record, 1),
-        ]
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        result = service.get_sales_report(group_by="date", source="shipment")
+        mock_db, result = _shared_setup_case_0(
+            mock_record, mock_get_db, service, case_value_1="date"
+        )
         assert result["success"] is True
         assert "data" in result
 
@@ -249,15 +245,9 @@ class TestGetSalesReport:
         mock_record.amount = 50.0
         mock_record.purchase_unit = "客户1"
         mock_record.unit_id = 1
-        mock_record.created_at = datetime(2026, 1, 15)
-
-        mock_db = MagicMock()
-        mock_db.query.return_value.group_by.return_value.all.return_value = [
-            (mock_record, 1),
-        ]
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        result = service.get_sales_report(group_by="product", source="shipment")
+        mock_db, result = _shared_setup_case_0(
+            mock_record, mock_get_db, service, case_value_1="product"
+        )
         assert result["success"] is True
         assert any("产品42" in d.get("product_name", "") for d in result["data"])
 
@@ -269,15 +259,9 @@ class TestGetSalesReport:
         mock_record.purchase_unit = None
         mock_record.unit_id = 7
         mock_record.amount = 200.0
-        mock_record.created_at = datetime(2026, 1, 15)
-
-        mock_db = MagicMock()
-        mock_db.query.return_value.group_by.return_value.all.return_value = [
-            (mock_record, 1),
-        ]
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        result = service.get_sales_report(group_by="customer", source="shipment")
+        mock_db, result = _shared_setup_case_0(
+            mock_record, mock_get_db, service, case_value_1="customer"
+        )
         assert result["success"] is True
         assert any("客户7" in d.get("customer_name", "") for d in result["data"])
 

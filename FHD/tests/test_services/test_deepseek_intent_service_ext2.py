@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager as _shared_scope_contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,6 +19,21 @@ from app.domain.shared_services.deepseek_intent_service import (
     get_hybrid_intent_with_deepseek,
     reset_deepseek_intent_services,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(rule):
+    with (
+        patch(
+            "app.domain.shared_services.intent_service.recognize_intents",
+            return_value=dict(rule),
+        ),
+        patch(
+            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+            return_value=None,
+        ),
+    ):
+        yield None
 
 
 class TestGetApiKeyExtended:
@@ -302,16 +318,7 @@ class TestHybridRecognizeExtended:
         h.distilled_recognizer = mock_distilled
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
-        with (
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value=dict(rule),
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(rule):
             out = await h.recognize("msg")
         assert out["intent_source"] == "distilled"
         assert out["final_intent"] == "products"
@@ -330,16 +337,7 @@ class TestHybridRecognizeExtended:
         h.distilled_recognizer = mock_distilled
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
-        with (
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value=dict(rule),
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(rule):
             out = await h.recognize("msg")
         # 置信度纪律：低置信不采纳蒸馏结果，规则也无命中 → unclear + 澄清标记
         assert out["intent_source"] == "distilled_low_confidence"
@@ -363,16 +361,7 @@ class TestHybridRecognizeExtended:
         h.distilled_recognizer = mock_distilled
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
-        with (
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value=dict(rule),
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(rule):
             out = await h.recognize("msg")
         assert out["intent_source"] == "rule"
 
@@ -386,16 +375,7 @@ class TestHybridRecognizeExtended:
         h.distilled_recognizer = mock_distilled
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
-        with (
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value=dict(rule),
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(rule):
             out = await h.recognize("msg")
         # Should fall through to no-deepseek branch
         assert out["intent_source"] == "rule"
@@ -403,16 +383,7 @@ class TestHybridRecognizeExtended:
     async def test_goodbye_returns_rule_directly(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "goodbye", "is_goodbye": True, "tool_key": "goodbye"}
-        with (
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value=dict(rule),
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(rule):
             out = await h.recognize("再见")
         assert out["intent_source"] == "rule"
         assert out["final_intent"] == "goodbye"
@@ -420,16 +391,7 @@ class TestHybridRecognizeExtended:
     async def test_help_returns_rule_directly(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "help", "is_help": True, "tool_key": "help"}
-        with (
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value=dict(rule),
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(rule):
             out = await h.recognize("帮助")
         assert out["intent_source"] == "rule"
         assert out["final_intent"] == "help"

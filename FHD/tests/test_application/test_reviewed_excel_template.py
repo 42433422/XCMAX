@@ -18,6 +18,18 @@ from tests.fixtures.etl_template.sources.generate import large_quotation, sample
 from tests.test_application.test_reviewed_excel_boundaries import synthetic_document_answer
 
 
+def _shared_setup_case_0(monkeypatch, case_value_1, case_value_2):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_template import classify_semantic_workbook
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", case_value_2)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = case_value_1
+    return LlmAssistResult, classify_semantic_workbook, wb, ws
+
+
 @pytest.fixture(autouse=True)
 def _no_external_network(monkeypatch):
     """All workbook/provider fixtures are synthetic; never contact the live market."""
@@ -3646,14 +3658,9 @@ def test_concurrent_checkpoint_resume_never_sends_twice(review_store, monkeypatc
 def test_dense_sheet_tail_block_is_sampled_without_keyword_classification(monkeypatch):
     import json
 
-    from app.application.elt.llm_assist_runtime import LlmAssistResult
-    from app.application.reviewed_excel_template import classify_semantic_workbook
-
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "4")
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "往来资料"
+    LlmAssistResult, classify_semantic_workbook, wb, ws = _shared_setup_case_0(
+        monkeypatch, case_value_1="往来资料", case_value_2="4"
+    )
     for row in range(3, 39):
         for col in range(1, 13):
             ws.cell(row, col, f"合成记录{row}-{col}")
@@ -3778,14 +3785,9 @@ def test_preview_budget_covers_the_worst_case_and_length_is_not_resent(monkeypat
 
 
 def test_real_failure_outside_region_evidence_is_rejected(monkeypatch):
-    from app.application.elt.llm_assist_runtime import LlmAssistResult
-    from app.application.reviewed_excel_template import classify_semantic_workbook
-
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1")
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "往来资料"
+    LlmAssistResult, classify_semantic_workbook, wb, ws = _shared_setup_case_0(
+        monkeypatch, case_value_1="往来资料", case_value_2="1"
+    )
     for address in ["H20", "L20", "M21", "H21", "L19", "H22", "M40"]:
         ws[address] = "合成数据"
     out = BytesIO()
@@ -3816,14 +3818,9 @@ def test_real_failure_outside_region_evidence_is_rejected(monkeypatch):
 
 
 def test_repeated_generic_header_does_not_establish_purchase(monkeypatch):
-    from app.application.elt.llm_assist_runtime import LlmAssistResult
-    from app.application.reviewed_excel_template import classify_semantic_workbook
-
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1")
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "往来资料"
+    LlmAssistResult, classify_semantic_workbook, wb, ws = _shared_setup_case_0(
+        monkeypatch, case_value_1="往来资料", case_value_2="1"
+    )
     for address, value in {
         "A1": "报价单",
         "A3": "品名",
@@ -3948,14 +3945,9 @@ def test_relationship_payload_shows_observed_header_positions_without_guessing(
 ):
     import json
 
-    from app.application.elt.llm_assist_runtime import LlmAssistResult
-    from app.application.reviewed_excel_template import classify_semantic_workbook
-
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1")
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "往来资料"
+    LlmAssistResult, classify_semantic_workbook, wb, ws = _shared_setup_case_0(
+        monkeypatch, case_value_1="往来资料", case_value_2="1"
+    )
     for address, value in {
         "A1": "报价单",
         "B5": "参数",
@@ -4203,14 +4195,9 @@ def test_oversized_single_row_refused_before_provider_and_checkpoint(review_stor
 def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
     import json
 
-    from app.application.elt.llm_assist_runtime import LlmAssistResult
-    from app.application.reviewed_excel_template import classify_semantic_workbook
-
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "4")
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "大表"
+    LlmAssistResult, classify_semantic_workbook, wb, ws = _shared_setup_case_0(
+        monkeypatch, case_value_1="大表", case_value_2="4"
+    )
     for row in range(1, 4002):
         ws.cell(row, 1, f"合成记录{row}")
     ws["A1"], ws["H4002"] = "报价单", "图例：单位为件"

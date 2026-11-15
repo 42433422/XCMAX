@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from collections import Counter
+from itertools import groupby
 from pathlib import Path
 from typing import Any, cast
 
@@ -229,29 +231,38 @@ def build_absorption_saturation_report(
         radar_summary = dict(radar.get("summary") or {})
         radar_status = str(radar.get("status") or radar_status)
         search_error = str(radar_summary.get("search_stderr_tail") or search_error)
-    runs = _load_absorption_runs(root)
+    ordered_runs = _load_absorption_runs(root)
     seen: set[str] = set()
     enriched: list[dict[str, Any]] = []
-    for run in runs:
-        signals = set(_core_signals(run))
-        new_signals = sorted(signals - seen)
-        seen.update(signals)
-        enriched.append(
-            {
-                "source": run.get("source", ""),
-                "status": run.get("status", ""),
-                "gates_passed": bool(run.get("gates_passed")),
-                "core_signals": sorted(signals),
-                "new_core_signal_count": len(new_signals),
-                "changed_file_count": len(run.get("changed_files") or []),
-            }
-        )
-    recent = enriched[-recent_limit:]
     consecutive_no_new = 0
-    for item in reversed(enriched):
-        if item["new_core_signal_count"] != 0:
-            break
-        consecutive_no_new += 1
+    for _, group in groupby(ordered_runs, key=lambda item: item[0]):
+        batch = list(group)
+        # Filesystems may assign identical mtimes to different completed runs.
+        # Use the minimum trailing no-new count over every order of that batch:
+        # a newly seen signal can first occur as late as its final carrier group.
+        occurrences = Counter(
+            signal for _, _, run in batch for signal in set(_core_signals(run)) - seen
+        )
+        consecutive_no_new = (
+            min(occurrences.values()) - 1
+            if occurrences
+            else consecutive_no_new + len(batch)
+        )
+        for _, _, run in batch:
+            signals = set(_core_signals(run))
+            new_signals = sorted(signals - seen)
+            seen.update(signals)
+            enriched.append(
+                {
+                    "source": run.get("source", ""),
+                    "status": run.get("status", ""),
+                    "gates_passed": bool(run.get("gates_passed")),
+                    "core_signals": sorted(signals),
+                    "new_core_signal_count": len(new_signals),
+                    "changed_file_count": len(run.get("changed_files") or []),
+                }
+            )
+    recent = enriched[-recent_limit:]
     remaining_count = 0 if remaining_candidates is None else len(remaining_candidates)
     strong_remaining = [
         item
@@ -259,9 +270,14 @@ def build_absorption_saturation_report(
         if _is_open_depth_candidate(item, min_score=min_score)
     ]
     strong_remaining_count = len(strong_remaining)
-    recent_green = len(recent) >= recent_limit and all(
-        item["gates_passed"] for item in recent
-    )
+    recent_green = bool(ordered_runs) and len(recent) >= recent_limit
+    if recent_green:
+        cutoff = ordered_runs[-recent_limit][0]
+        recent_green = all(
+            run.get("gates_passed")
+            for timestamp, _, run in ordered_runs
+            if timestamp >= cutoff
+        )
     no_new_depth = consecutive_no_new >= recent_limit
     no_strong_remaining = (
         remaining_candidates is not None and strong_remaining_count == 0
@@ -481,7 +497,7 @@ def _full_name_from_url(url: str) -> str:
 
 def _absorbed_sources(root: Path) -> set[str]:
     values: set[str] = set()
-    for run in _load_absorption_runs(root):
+    for _, _, run in _load_absorption_runs(root):
         source = str(run.get("source") or "").lower()
         if source:
             values.add(source)
@@ -489,17 +505,18 @@ def _absorbed_sources(root: Path) -> set[str]:
     return values
 
 
-def _load_absorption_runs(root: Path) -> list[dict[str, Any]]:
+def _load_absorption_runs(root: Path) -> list[tuple[int, str, dict[str, Any]]]:
     runs_dir = root / ".retort" / "real_absorption_runs"
-    rows: list[dict[str, Any]] = []
-    for path in sorted(runs_dir.glob("*.json"), key=lambda item: item.stat().st_mtime):
+    rows: list[tuple[int, str, dict[str, Any]]] = []
+    for path in runs_dir.glob("*.json"):
         try:
+            timestamp = path.stat().st_mtime_ns
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
         if isinstance(payload, dict):
-            rows.append(payload)
-    return rows
+            rows.append((timestamp, path.name, payload))
+    return sorted(rows, key=lambda item: (item[0], item[1]))
 
 
 def _core_signals(run: dict[str, Any]) -> list[str]:

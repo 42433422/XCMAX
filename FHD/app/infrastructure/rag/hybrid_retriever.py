@@ -154,9 +154,17 @@ class HybridRetriever:
         else:
             self._embeddings = []
 
-    def retrieve(self, query: str) -> list[RetrievedChunk]:
+    def retrieve(
+        self,
+        query: str,
+        *,
+        top_k: int | None = None,
+        min_vector_score: float = 0.0,
+    ) -> list[RetrievedChunk]:
+        """融合检索；低于 ``min_vector_score`` 的向量命中不参与融合。"""
         if not self._chunks:
             return []
+        limit = max(1, int(top_k or self._top_k))
 
         # 1) BM25
         bm25_scores = self._bm25.score(query)
@@ -172,8 +180,9 @@ class HybridRetriever:
             try:
                 q_vec = self._embedder(query)
                 sims = [self._cosine(q_vec, e) for e in self._embeddings]
+                floor = max(0.0, float(min_vector_score))
                 vector_ranked = sorted(
-                    (i for i in range(len(self._chunks)) if sims[i] > 0),
+                    (i for i in range(len(self._chunks)) if sims[i] > floor),
                     key=lambda i: sims[i],
                     reverse=True,
                 )[: self._top_k_vector]
@@ -188,7 +197,7 @@ class HybridRetriever:
             scores[idx] = scores.get(idx, 0.0) + 1.0 / (self._k + rank + 1)
 
         # 4) 取 top_k
-        ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[: self._top_k]
+        ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:limit]
         results: list[RetrievedChunk] = []
         for idx, score in ranked:
             c = self._chunks[idx]

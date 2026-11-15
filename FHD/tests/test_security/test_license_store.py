@@ -12,6 +12,20 @@ import pytest
 from app.security import license_store
 
 
+def _shared_setup_case_0(case_value_1):
+    now = int(time.time())
+    license_store.record_session(
+        jti=case_value_1,
+        key_id=None,
+        kid="k",
+        ip="",
+        user_agent="",
+        issued_at=now,
+        expires_at=now + 3600,
+    )
+    return now
+
+
 @pytest.fixture(autouse=True)
 def _use_tmp_db(monkeypatch, tmp_path):
     """每个测试使用独立的临时 SQLite 文件，并重置 schema 初始化状态。"""
@@ -180,61 +194,25 @@ class TestRecordSession:
         assert sess.key_id == key.id
 
     def test_get_active_session(self):
-        now = int(time.time())
-        license_store.record_session(
-            jti="jti-active",
-            key_id=None,
-            kid="k",
-            ip="",
-            user_agent="",
-            issued_at=now,
-            expires_at=now + 3600,
-        )
+        now = _shared_setup_case_0(case_value_1="jti-active")
         sess = license_store.get_active_session_by_jti("jti-active")
         assert sess is not None
         assert sess.jti == "jti-active"
 
     def test_get_revoked_session_returns_none(self):
-        now = int(time.time())
-        license_store.record_session(
-            jti="jti-rev",
-            key_id=None,
-            kid="k",
-            ip="",
-            user_agent="",
-            issued_at=now,
-            expires_at=now + 3600,
-        )
+        now = _shared_setup_case_0(case_value_1="jti-rev")
         license_store.revoke_session("jti-rev")
         assert license_store.get_active_session_by_jti("jti-rev") is None
 
 
 class TestListSessions:
     def test_active_only(self):
-        now = int(time.time())
-        license_store.record_session(
-            jti="jti-a",
-            key_id=None,
-            kid="k",
-            ip="",
-            user_agent="",
-            issued_at=now,
-            expires_at=now + 3600,
-        )
+        now = _shared_setup_case_0(case_value_1="jti-a")
         sessions = license_store.list_sessions(active_only=True)
         assert len(sessions) >= 1
 
     def test_all_includes_revoked(self):
-        now = int(time.time())
-        license_store.record_session(
-            jti="jti-b",
-            key_id=None,
-            kid="k",
-            ip="",
-            user_agent="",
-            issued_at=now,
-            expires_at=now + 3600,
-        )
+        now = _shared_setup_case_0(case_value_1="jti-b")
         license_store.revoke_session("jti-b")
         sessions = license_store.list_sessions(active_only=False)
         assert len(sessions) >= 1
@@ -242,16 +220,7 @@ class TestListSessions:
 
 class TestRevokeSession:
     def test_revoke_active(self):
-        now = int(time.time())
-        license_store.record_session(
-            jti="jti-r",
-            key_id=None,
-            kid="k",
-            ip="",
-            user_agent="",
-            issued_at=now,
-            expires_at=now + 3600,
-        )
+        now = _shared_setup_case_0(case_value_1="jti-r")
         ok = license_store.revoke_session("jti-r", actor="admin")
         assert ok is True
 
@@ -262,16 +231,7 @@ class TestRevokeSession:
 
 class TestTouchSession:
     def test_touch(self):
-        now = int(time.time())
-        license_store.record_session(
-            jti="jti-t",
-            key_id=None,
-            kid="k",
-            ip="",
-            user_agent="",
-            issued_at=now,
-            expires_at=now + 3600,
-        )
+        now = _shared_setup_case_0(case_value_1="jti-t")
         license_store.touch_session("jti-t")
         sess = license_store.get_active_session_by_jti("jti-t")
         assert sess is not None

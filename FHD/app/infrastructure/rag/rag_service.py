@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from app.utils.deployment import env_float as _env_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .citation_tracker import CitationTracker
@@ -37,10 +38,20 @@ class RagService:
         self,
         embedder: Callable[[str], list[float]] | None = None,
         chunk_threshold: float = 0.5,
+        min_score: float | None = None,
+        prompt_char_budget: int | None = None,
     ) -> None:
         self._embedder = embedder
         self._chunker = SemanticChunker(embedder=embedder, threshold=chunk_threshold)
         self._retriever = HybridRetriever(embedder=embedder)
+        self._min_score = (
+            _env_float("XCAGI_RAG_MIN_SCORE", 0.0) if min_score is None else float(min_score)
+        )
+        self._prompt_char_budget = (
+            int(_env_float("XCAGI_RAG_PROMPT_CHARS", 3000))
+            if prompt_char_budget is None
+            else int(prompt_char_budget)
+        )
 
     def answer(
         self,
@@ -77,7 +88,7 @@ class RagService:
             for c in chunks
         ]
         self._retriever.index(retrieved_chunks)
-        top = self._retriever.retrieve(user_message)
+        top = self._retriever.retrieve(user_message, top_k=top_k, min_vector_score=self._min_score)
         if not top:
             return {
                 "answer": llm_call(user_message, ""),
@@ -87,7 +98,7 @@ class RagService:
             }
 
         tracker = CitationTracker(retrieved_chunks=top)
-        cite_prompt = tracker.format_for_prompt()
+        cite_prompt = tracker.format_for_prompt(max_chars=self._prompt_char_budget)
         llm_output = llm_call(user_message, cite_prompt)
         clean_answer, citations = tracker.attach_citations(llm_output)
 

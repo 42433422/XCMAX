@@ -227,3 +227,11 @@ def test_distributed_rate_limit_required_explicit_flag(monkeypatch: pytest.Monke
         from app.utils.deployment import distributed_rate_limit_required
 
         assert distributed_rate_limit_required() is True
+
+
+@pytest.mark.parametrize("raw, expected", [(" 1.25 ", 1.25), ("", 0.7), ("invalid", 0.7)])
+def test_env_float_fallback(monkeypatch, raw, expected):
+    from app.utils.deployment import env_float
+
+    monkeypatch.setenv("MEMORY_NUMBER", raw)
+    assert env_float("MEMORY_NUMBER", 0.7) == expected

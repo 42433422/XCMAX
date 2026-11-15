@@ -22,6 +22,18 @@ import pytest
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
+def _shared_setup_case_0(case_value_1, case_value_2, case_value_3):
+    hunks = [
+        review.DiffHunk(
+            file_path=case_value_1,
+            start_line=1,
+            lines=[(1, "+", case_value_3)],
+            raw_header=case_value_2,
+        )
+    ]
+    return hunks
+
+
 def _assert_shared_eval_detected_0(self, _shared_literal_0, _shared_literal_1, _shared_literal_2):
     hunks = [
         review.DiffHunk(
@@ -181,41 +193,32 @@ class TestMatchRules:
         )
 
     def test_hardcoded_github_token_detected(self) -> None:
-        hunks = [
-            review.DiffHunk(
-                file_path="config.py",
-                start_line=1,
-                lines=[(1, "+", "TOKEN = 'ghp_' + 'a' * 36")],
-                raw_header="@@ -1,1 +1,1 @@",
-            )
-        ]
+        hunks = _shared_setup_case_0(
+            case_value_1="config.py",
+            case_value_2="@@ -1,1 +1,1 @@",
+            case_value_3="TOKEN = 'ghp_' + 'a' * 36",
+        )
         # 简化：直接构造完整 token 字符串
         hunks[0].lines = [(1, "+", "TOKEN = 'ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'")]
         findings = review.match_high_risk_rules(hunks)
         assert any(f.rule == "hardcoded-aws-secret" for f in findings)
 
     def test_yaml_load_no_loader_detected(self) -> None:
-        hunks = [
-            review.DiffHunk(
-                file_path="config.py",
-                start_line=1,
-                lines=[(1, "+", "data = yaml.load(text)")],
-                raw_header="@@ -1,1 +1,1 @@",
-            )
-        ]
+        hunks = _shared_setup_case_0(
+            case_value_1="config.py",
+            case_value_2="@@ -1,1 +1,1 @@",
+            case_value_3="data = yaml.load(text)",
+        )
         findings = review.match_high_risk_rules(hunks)
         assert any(f.rule == "yaml-load-no-loader" for f in findings)
         assert findings[0].severity == "medium"
 
     def test_yaml_load_with_safe_loader_not_detected(self) -> None:
-        hunks = [
-            review.DiffHunk(
-                file_path="config.py",
-                start_line=1,
-                lines=[(1, "+", "data = yaml.load(text, Loader=yaml.SafeLoader)")],
-                raw_header="@@ -1,1 +1,1 @@",
-            )
-        ]
+        hunks = _shared_setup_case_0(
+            case_value_1="config.py",
+            case_value_2="@@ -1,1 +1,1 @@",
+            case_value_3="data = yaml.load(text, Loader=yaml.SafeLoader)",
+        )
         findings = review.match_high_risk_rules(hunks)
         assert all(f.rule != "yaml-load-no-loader" for f in findings)
 
@@ -277,20 +280,11 @@ class TestMatchRules:
         assert len(findings) == 0
 
     def test_retort_fixture_json_does_not_trigger_executable_code_rules(self) -> None:
-        hunks = [
-            review.DiffHunk(
-                file_path="packages/retort_engine/tests/data/behavior_matrix_density.json",
-                start_line=1,
-                lines=[
-                    (
-                        1,
-                        "+",
-                        '"value = eval(user_input)","subprocess.run(cmd, shell=True)","pickle.loads(payload)"',
-                    )
-                ],
-                raw_header="@@ -1,1 +1,1 @@",
-            )
-        ]
+        hunks = _shared_setup_case_0(
+            case_value_1="packages/retort_engine/tests/data/behavior_matrix_density.json",
+            case_value_2="@@ -1,1 +1,1 @@",
+            case_value_3='"value = eval(user_input)","subprocess.run(cmd, shell=True)","pickle.loads(payload)"',
+        )
         findings = review.match_high_risk_rules(hunks)
         assert not any(
             finding.rule in {"subprocess-shell-true", "eval", "exec", "pickle-loads"}
@@ -318,14 +312,11 @@ class TestMatchRules:
         )
 
     def test_generated_corp_butler_ignores_vue_runtime_innerhtml(self) -> None:
-        hunks = [
-            review.DiffHunk(
-                file_path="\\346\\210\\220\\351\\203\\275/corp-butler/corp-butler.js",
-                start_line=1,
-                lines=[(1, "+", "el.innerHTML = html")],
-                raw_header="@@ -1,0 +1,1 @@",
-            )
-        ]
+        hunks = _shared_setup_case_0(
+            case_value_1="\\346\\210\\220\\351\\203\\275/corp-butler/corp-butler.js",
+            case_value_2="@@ -1,0 +1,1 @@",
+            case_value_3="el.innerHTML = html",
+        )
         assert review.match_high_risk_rules(hunks) == []
         source = [
             review.DiffHunk(
