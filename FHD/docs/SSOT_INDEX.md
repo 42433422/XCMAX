@@ -65,6 +65,14 @@
 |------|------|------|
 | DOMAIN 05 意图与工具路由 | [architecture/intent-tool-routing/05-intent-tool-routing-architecture.html](architecture/intent-tool-routing/05-intent-tool-routing-architecture.html) | 全链路 14 步、L0–L7 指标与 L2 记忆事实化；证据级别 E2，含离线图表资源 |
 
+## 审计记录（非 SSOT）
+
+> 历史审计记录，保持原文；审计发现不自动修改产品代码或 SSOT。
+
+| 日期 | 记录 | 结论 |
+|------|------|------|
+| 2026-11-15 | [audit/xcmax-18-domain-evidence-audit-2026-11-15.md](audit/xcmax-18-domain-evidence-audit-2026-11-15.md) | 18 域全部 UNRATED，正式分 null；E2 为主，E3/E4 未采集 |
+
 ## 机器注册表（ssot.yaml）
 
 > 与 `FHD/config/ssot.yaml` 的 **enabled 域** 一一对应；由 `scripts/dev/ssot_registry_crosscheck.py` 互校验（CI blocking）。
