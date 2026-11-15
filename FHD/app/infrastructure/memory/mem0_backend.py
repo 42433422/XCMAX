@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 import threading
@@ -319,17 +320,53 @@ class Mem0LongTermMemory:
         threshold: float,
         filters_extra: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        filters = {"user_id": str(user_id), **dict(filters_extra or {})}
+        filters = {**dict(filters_extra or {}), "user_id": str(user_id)}
         try:
-            try:
+            parameters = inspect.signature(memory.search).parameters
+            if "filters" in parameters:
                 raw = memory.search(text, filters=filters, top_k=limit, threshold=threshold)
-            except TypeError:
+            elif "user_id" in parameters:
                 raw = memory.search(text, user_id=str(user_id), limit=limit, threshold=threshold)
+            else:
+                return []
         except RECOVERABLE_ERRORS as exc:
             logger.warning("长期记忆检索失败：%s", exc)
             return []
         rows = raw.get("results") if isinstance(raw, dict) else raw
-        return [item for item in (rows or []) if isinstance(item, dict)]
+        return [
+            item
+            for item in (rows or [])
+            if isinstance(item, dict) and self._matches_owner(item, user_id)
+        ]
+
+    @staticmethod
+    def _matches_owner(item: dict[str, Any], user_id: str, mod_id: str | None = None) -> bool:
+        metadata = item.get("metadata")
+        meta = metadata if isinstance(metadata, dict) else {}
+        owners = [source["user_id"] for source in (item, meta) if "user_id" in source]
+        if not user_id or not owners or any(str(owner) != str(user_id) for owner in owners):
+            return False
+        mods = [source["mod_id"] for source in (item, meta) if "mod_id" in source]
+        return mod_id is None or bool(mods and all(str(mod) == str(mod_id) for mod in mods))
+
+    def _owned_memory(
+        self, memory: Any, user_id: str, memory_id: str, mod_id: str | None = None
+    ) -> dict[str, Any] | None:
+        # SDK identities are immutable; never authorize a mutation from an unscoped id alone.
+        getter = getattr(memory, "get", None)
+        if not callable(getter) or not user_id or not memory_id:
+            return None
+        try:
+            item = getter(str(memory_id))
+        except RECOVERABLE_ERRORS:
+            return None
+        if (
+            isinstance(item, dict)
+            and str(item.get("id") or "") == str(memory_id)
+            and self._matches_owner(item, user_id, mod_id)
+        ):
+            return item
+        return None
 
     def search_facts(
         self, user_id: str, fact: dict[str, Any], limit: int = 5
@@ -409,14 +446,33 @@ class Mem0LongTermMemory:
     ) -> bool:
         """把旧事实标记为失效；兼容 mem0 各版本的 text/data 参数名。"""
         memory = self._active()
-        if memory is None or not memory_id:
+        if memory is None or not new_id or memory_id == new_id:
             return False
-        metadata = {"valid_to": today, "superseded_by": new_id or "replacement"}
+        current = self._owned_memory(memory, user_id, memory_id)
+        replacement = self._owned_memory(memory, user_id, new_id)
+        if current is None or replacement is None:
+            return False
+        old_meta, new_meta = current.get("metadata"), replacement.get("metadata")
+        if (
+            not isinstance(old_meta, dict)
+            or not isinstance(new_meta, dict)
+            or old_meta.get("memory_type") != "fact"
+            or new_meta.get("memory_type") != "fact"
+            or not old_meta.get("fact_key")
+            or old_meta.get("fact_key") != new_meta.get("fact_key")
+        ):
+            return False
+        metadata = {**old_meta, "valid_to": today, "superseded_by": new_id}
         try:
-            try:
-                memory.update(memory_id=memory_id, text=content or "", metadata=metadata)
-            except TypeError:
-                memory.update(memory_id=memory_id, data=content or "", metadata=metadata)
+            parameters = inspect.signature(memory.update).parameters
+            field = "text" if "text" in parameters else "data" if "data" in parameters else ""
+            if not field:
+                return False
+            memory.update(
+                memory_id=memory_id,
+                **{field: str(current.get("memory") or current.get("data") or content or "")},
+                metadata=metadata,
+            )
             return True
         except RECOVERABLE_ERRORS as exc:
             logger.warning("长期记忆失效标记失败：%s", exc)
@@ -442,36 +498,61 @@ class Mem0LongTermMemory:
         memory = self._active()
         if memory is None or not user_id:
             return 0
-        if memory_ids:
+        if mod_id is not None and not str(mod_id).strip():
+            return 0
+        if memory_ids is not None:
+            return self._forget_ids(memory, user_id, memory_ids, mod_id)
+        if mod_id is not None:
+            # No delete_all fallback may widen a Mod-scoped request to the whole user.
             deleted = 0
-            for memory_id in memory_ids:
+            seen: set[str] = set()
+            while True:
                 try:
-                    memory.delete(str(memory_id))
-                    deleted += 1
+                    if "filters" not in inspect.signature(memory.get_all).parameters:
+                        return deleted
+                    rows = memory.get_all(
+                        filters={"user_id": str(user_id), "mod_id": str(mod_id)},
+                        top_k=100,
+                        show_expired=True,
+                    )
                 except RECOVERABLE_ERRORS as exc:
-                    logger.warning("长期记忆删除失败：%s", exc)
-            return deleted
-        result: Any = {}
+                    logger.warning("长期记忆按 Mod 清理失败：%s", exc)
+                    return deleted
+                items = rows.get("results", []) if isinstance(rows, dict) else rows
+                ids = [
+                    str(row.get("id") or "")
+                    for row in (items or [])
+                    if isinstance(row, dict) and self._matches_owner(row, user_id, mod_id)
+                ]
+                pending = [mid for mid in ids if mid and mid not in seen]
+                if not pending:
+                    return deleted
+                seen.update(pending)
+                deleted += self._forget_ids(memory, user_id, pending, mod_id)
         try:
-            if mod_id:
-                result = memory.delete_all(user_id=str(user_id), mod_id=str(mod_id))
-            else:
-                result = memory.delete_all(user_id=str(user_id))
-        except TypeError:
-            if mod_id:
-                logger.warning("存储不支持按 Mod 删除，已跳过该清理请求")
-                return 0
-            try:
-                result = memory.delete_all(user_id=str(user_id))
-            except RECOVERABLE_ERRORS as exc:
-                logger.warning("长期记忆批量删除失败：%s", exc)
-                return 0
+            result = memory.delete_all(user_id=str(user_id))
         except RECOVERABLE_ERRORS as exc:
             logger.warning("长期记忆批量删除失败：%s", exc)
             return 0
-        if isinstance(result, dict):
-            return int(result.get("deleted_count") or result.get("count") or 0)
-        return 0
+        return (
+            int(result.get("deleted_count") or result.get("count") or 0)
+            if isinstance(result, dict)
+            else 0
+        )
+
+    def _forget_ids(
+        self, memory: Any, user_id: str, memory_ids: list[str], mod_id: str | None
+    ) -> int:
+        deleted = 0
+        for memory_id in dict.fromkeys(memory_ids):
+            if self._owned_memory(memory, user_id, str(memory_id), mod_id) is None:
+                continue
+            try:
+                memory.delete(str(memory_id))
+                deleted += 1
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("长期记忆删除失败：%s", exc)
+        return deleted
 
     def close(self) -> None:
         """释放本地向量库句柄；进程退出与测试清理都会调用。"""

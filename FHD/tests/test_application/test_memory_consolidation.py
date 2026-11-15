@@ -269,3 +269,55 @@ def test_mem0_forget_by_user(backend) -> None:
     assert backend.recall(user_id="owner-2", query="客户甲", limit=3)
     backend.forget(user_id="owner-2")
     assert backend.recall(user_id="owner-2", query="客户甲", limit=3) == []
+
+
+@pytest.mark.skipif(not _HAS_MEM0, reason="mem0 未安装")
+def test_native_sdk_rejects_cross_owner_mutations_and_preserves_valid_supersession(backend):
+    old = backend.add_fact("alice", _fact("finance.budget", "50万元"))
+    replacement = backend.add_fact("alice", _fact("finance.budget", "80万元"))
+    foreign = backend.add_fact("bob", _fact("finance.budget", "90万元"))
+    assert old and replacement and foreign
+    memory = backend._active()
+    before = memory.get(foreign)
+    assert backend.forget(user_id="alice", memory_ids=[foreign]) == 0
+    assert (
+        backend.supersede_fact(
+            "alice", foreign, content="forged", new_id=replacement, today="2026-11-15"
+        )
+        is False
+    )
+    assert (
+        backend.supersede_fact("alice", old, content="forged", new_id=foreign, today="2026-11-15")
+        is False
+    )
+    assert memory.get(foreign) == before
+    assert backend.supersede_fact(
+        "alice", old, content="stale", new_id=replacement, today="2026-11-15"
+    )
+    persisted = memory.get(old)
+    assert "50万元" in persisted["memory"]
+    assert persisted["metadata"]["superseded_by"] == replacement
+    assert persisted["metadata"]["fact_key"] == "finance.budget"
+    assert persisted["metadata"]["fact_value"] == "50万元"
+    assert backend.forget(user_id="alice", memory_ids=[]) == 0
+    assert memory.get(replacement) is not None
+    assert backend.forget(user_id="alice", memory_ids=[old, foreign]) == 1
+    assert memory.get(old) is None and memory.get(foreign) == before
+
+
+@pytest.mark.skipif(not _HAS_MEM0, reason="mem0 未安装")
+def test_native_sdk_mod_cleanup_preserves_other_mods_and_owners(backend):
+    for owner, mod_id in [("alice", "sales"), ("alice", "finance"), ("bob", "sales")]:
+        assert backend.remember(
+            user_id=owner,
+            user_message=f"{owner} {mod_id}",
+            assistant_message="saved",
+            metadata={"mod_id": mod_id},
+        )
+    assert backend.forget(user_id="alice", mod_id="sales") == 1
+    memory = backend._active()
+    alice = memory.get_all(filters={"user_id": "alice"})["results"]
+    bob = memory.get_all(filters={"user_id": "bob"})["results"]
+    assert len(alice) == 1 and alice[0]["metadata"]["mod_id"] == "finance"
+    assert len(bob) == 1 and bob[0]["metadata"]["mod_id"] == "sales"
+    assert backend.forget(user_id="alice", mod_id="sales") == 0

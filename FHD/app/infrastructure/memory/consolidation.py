@@ -85,17 +85,22 @@ def consolidate(
         except RECOVERABLE_ERRORS:
             results.append({**record, "action": "SKIPPED", "reason": "add_failed"})
             continue
-        record["memory_id"] = new_id or ""
+        if not new_id:
+            results.append({**record, "action": "SKIPPED", "reason": "add_unconfirmed"})
+            continue
+        record["memory_id"] = new_id
         if action == "SUPERSEDE" and old_id:
             old_content = str((target or {}).get("content") or "")
             try:
-                store.supersede_fact(
+                superseded = store.supersede_fact(
                     user_id,
                     old_id,
                     content=old_content,
                     new_id=str(new_id or ""),
                     today=today,
                 )
+                if not superseded:
+                    record["supersede_failed"] = True
             except RECOVERABLE_ERRORS:
                 record["supersede_failed"] = True
         results.append(record)
