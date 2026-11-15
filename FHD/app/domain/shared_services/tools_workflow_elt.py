@@ -273,6 +273,7 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
     upload_id = str(data.get("upload_id") or "")
     if not upload_id:
         return {"action": "skip", "reason": "missing_upload"}
+    from app.application import template_ai
     from app.application.template_app_service import get_template_app_service
     from app.db.models.elt import EltUpload
     from app.infrastructure.tenant_scope import TenantScopeError, tenant_scope
@@ -319,6 +320,11 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
             for item in templates
         }
         existing_keys = {str(item.get("template_key") or "").strip() for item in templates}
+        # 已登记过的机器占位名（如“…-Sheet1”）有界地换成业务名，避免模板库越积越乱。
+        renamed = template_ai.rename_meaningless_templates(service)
+        for entry in renamed:
+            existing_names.pop(entry["from"], None)
+            existing_names[entry["to"]] = ""
         digest = "".join(
             char for char in str(data.get("file_sha256") or "")[:12].lower() if char in "0123456789abcdef"
         )
@@ -356,12 +362,22 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
             except RECOVERABLE_ERRORS as exc:
                 failures.append(str(exc)[:120])
                 continue
-            base = _template_name(
-                meta,
-                stem,
-                target_type,
-                primary=region.get("status") == "selected",
-            )
+            base = ""
+            if region.get("status") == "selected":
+                base = template_ai.suggest_template_name(
+                    file_name=file_name,
+                    sheet_title=str(meta.get("sheet") or ""),
+                    region_label=str(region.get("range") or ""),
+                    target_type=target_type,
+                    headers=meta.get("headers") or [],
+                )
+            if not base:
+                base = _template_name(
+                    meta,
+                    stem,
+                    target_type,
+                    primary=region.get("status") == "selected",
+                )
             if region_key in existing_keys:
                 continue
             name = base
@@ -398,7 +414,14 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
             if failures:
                 return {"action": "error", "reason": failures[0]}
             return {"action": "skip", "reason": "duplicate_name"}
-        return {"action": "new", "names": names, "template_ids": template_ids}
+        receipt: dict[str, Any] = {
+            "action": "new",
+            "names": names,
+            "template_ids": template_ids,
+        }
+        if renamed:
+            receipt["renamed"] = renamed
+        return receipt
     except TenantScopeError:
         return {"action": "error", "reason": "missing_tenant"}
     except RECOVERABLE_ERRORS as exc:
@@ -406,10 +429,10 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
 
 
 def _resolve_template(upload: dict[str, str], owner_id: int) -> tuple[str, dict]:
-    """识别目标类型，并在模板唯一匹配时自动套用。
+    """识别目标类型，并在模板可确定时自动套用。
 
-    多个候选模板时不自动选，避免用错映射把数据写进错误字段；
-    此时回退到 ELT 的默认草稿 + 自动映射建议。
+    唯一候选直接套用；多个候选交给模型按语义排序，置信度不足时不自动选，
+    回退到 ELT 的默认草稿 + 自动映射建议，避免用错映射写进错误字段。
     """
     from app.application.elt.target_detection import detect_elt_target
 
@@ -438,9 +461,21 @@ def _resolve_template(upload: dict[str, str], owner_id: int) -> tuple[str, dict]
             ]
     except RECOVERABLE_ERRORS:
         return target_type, {}
+    if not candidates:
+        return target_type, {}
     if len(candidates) == 1:
         return target_type, candidates[0]
-    return target_type, {}
+    # 多个候选时每次都用模型按文件名语义排序；模型不可用或置信度不足则回退到人工确认。
+    from app.application.template_ai import rank_templates
+
+    requirement = f"{Path(str(upload.get('storage_path') or '')).stem}（导入目标：{target_type}）"
+    picked = rank_templates(requirement=requirement, candidates=candidates)
+    if not picked:
+        return target_type, {}
+    template = dict(picked["template"])
+    template["match_confidence"] = picked["confidence"]
+    template["match_reason"] = picked["reason"]
+    return target_type, template
 
 
 def _preview(params: dict, runtime_context: dict) -> dict:

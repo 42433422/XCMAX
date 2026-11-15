@@ -27,6 +27,29 @@ def _registered_router_desktop_automation(
     return {**result, "message": result.get("error") or message}
 
 
+def _match_template_requirement(
+    payload: dict[str, Any], params: dict, user_message: str, action: str
+) -> dict[str, Any]:
+    """用户说“用某某模板”时，让模型在模板库里挑最匹配的一个；不可用时保持原样。"""
+    requirement = str(params.get("query") or params.get("requirement") or "").strip()
+    if not requirement and action == "query":
+        requirement = str(user_message or "").strip()
+    templates = payload.get("templates")
+    if not requirement or not isinstance(templates, list) or not templates:
+        return payload
+    from app.application.template_ai import rank_templates
+
+    picked = rank_templates(requirement=requirement, candidates=templates[:30])
+    if not picked:
+        return payload
+    payload["matched"] = {
+        **picked["template"],
+        "match_confidence": picked["confidence"],
+        "match_reason": picked["reason"],
+    }
+    return payload
+
+
 def _registered_router_template_preview(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -44,13 +67,15 @@ def _registered_router_template_preview(
             result = svc.get_templates()
         if isinstance(result, dict):
             templates = result.get("templates")
-            return {
+            payload = {
                 **result,
                 "success": True,
                 "templates": templates if isinstance(templates, list) else [],
                 "count": len(templates) if isinstance(templates, list) else 0,
             }
-        return {"success": True, "templates": list(result or []), "count": len(result or [])}
+        else:
+            payload = {"success": True, "templates": list(result or []), "count": len(result or [])}
+        return _match_template_requirement(payload, params, user_message, action)
     if action == "create":
         import json
         import re

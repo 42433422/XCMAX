@@ -475,6 +475,35 @@ class FileSystemTemplateStore(TemplateStorePort):
             "template_path": target_path,
         }
 
+    def update_template(self, template_id: int, template_data: dict[str, Any]) -> dict[str, Any]:
+        """更新模板元数据（当前只支持改名，用于把机器占位名换成业务名）。"""
+        name = str(template_data.get("template_name") or template_data.get("name") or "").strip()
+        if not name:
+            return {"success": False, "message": "模板名称不能为空"}
+        try:
+            from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
+
+            tenant_sql, tenant_bind = templates_tenant_where_sql()
+            with db_session.get_db() as db:
+                res = db.execute(
+                    text(
+                        f"""
+                        UPDATE templates
+                        SET template_name = :template_name, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = :id AND ({tenant_sql})
+                        """
+                    ),
+                    {"id": int(template_id), "template_name": name, **tenant_bind},
+                )
+                db.commit()
+                updated = int(getattr(res, "rowcount", 0) or 0)
+            if not updated:
+                return {"success": False, "message": "模板不存在或不属于当前租户"}
+            return {"success": True, "message": "模板已更新", "id": int(template_id)}
+        except RECOVERABLE_ERRORS as e:
+            logger.error("update_template failed: %s", e, exc_info=True)
+            return {"success": False, "message": str(e)}
+
     def save_template(self, template_data: dict[str, Any]) -> dict[str, Any]:
         """将模板元数据写入 templates 表（供 POST /api/excel/templates 等使用）。"""
         name = (template_data.get("template_name") or "").strip()
