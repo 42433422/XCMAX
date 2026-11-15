@@ -102,9 +102,27 @@ def _load_intent_runtime_rules() -> None:
 _load_intent_runtime_rules()
 
 
+_INTENT_PIPELINE_VERSION = "v3-semantic-2"
+
+
 def _make_intent_cache_key(message: Any) -> str:
     normalized = _normalize(message if isinstance(message, str) else str(message or ""))
-    return hashlib.md5(normalized.lower().encode(), usedforsecurity=False).hexdigest()
+    try:
+        from app.domain.shared_services.intent_semantic_router import (
+            semantic_enabled,
+            semantic_override_max_priority,
+            semantic_override_threshold,
+            semantic_threshold,
+        )
+
+        semantic_tag = (
+            f"{int(semantic_enabled())}:{semantic_threshold():.2f}"
+            f":{semantic_override_threshold():.2f}:{semantic_override_max_priority()}"
+        )
+    except RECOVERABLE_ERRORS:
+        semantic_tag = "0:n/a"
+    raw = f"{normalized.lower()}|{_INTENT_PIPELINE_VERSION}|{semantic_tag}"
+    return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
 
 
 def _normalize(msg: str | None) -> str:
@@ -156,7 +174,19 @@ def is_negation(message: str, action_keywords: list[str] | None = None) -> bool:
             return any(kw.lower() in msg_lower for kw in action_keywords)
         return True
     if action_keywords:
-        negation_words = ["不要", "别", "不用", "不需要", "no", "not", "别开", "不要开"]
+        negation_words = [
+            "不要",
+            "别",
+            "不用",
+            "不需要",
+            "no",
+            "not",
+            "别开",
+            "不要开",
+            "取消",
+            "先不",
+            "不开",
+        ]
         msg_lower = message.lower()
         has_neg = any(nw in msg_lower for nw in negation_words)
         if has_neg:
