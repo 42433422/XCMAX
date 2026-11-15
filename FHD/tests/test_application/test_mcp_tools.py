@@ -230,7 +230,8 @@ def test_resource_actions_are_registered(monkeypatch) -> None:
     assert actions["mcp_get_prompt"]["required_params"] == ["name"]
 
 
-def test_oauth_header_is_cached(monkeypatch) -> None:
+@pytest.mark.asyncio
+async def test_oauth_header_is_cached(monkeypatch) -> None:
     from types import SimpleNamespace
 
     from app.infrastructure.mcp import client as mcp_client
@@ -238,14 +239,14 @@ def test_oauth_header_is_cached(monkeypatch) -> None:
 
     calls: list[dict] = []
 
-    def fake_post(url, data=None, timeout=None):
+    async def fake_post(self, url, data=None, timeout=None):
         calls.append({"url": url, "data": data})
         return SimpleNamespace(
             raise_for_status=lambda: None,
             json=lambda: {"access_token": "tok", "expires_in": 3600},
         )
 
-    monkeypatch.setattr("httpx.post", fake_post)
+    monkeypatch.setattr("httpx.AsyncClient.post", fake_post)
     mcp_client._TOKEN_CACHE.clear()
     config = McpServerConfig(
         name="remote",
@@ -258,8 +259,8 @@ def test_oauth_header_is_cached(monkeypatch) -> None:
         },
     )
 
-    first = mcp_client._oauth_header(config)
-    second = mcp_client._oauth_header(config)
+    first = await mcp_client._oauth_header(config)
+    second = await mcp_client._oauth_header(config)
 
     assert first == {"Authorization": "Bearer tok"}
     assert second == first
@@ -365,21 +366,22 @@ def test_only_trusted_reads_may_reconnect_after_unknown_transport_outcome(
         assert result["reconciliation_required"] is True
 
 
-def test_oauth_scope_and_rotated_secret_do_not_share_token_cache(monkeypatch):
+@pytest.mark.asyncio
+async def test_oauth_scope_and_rotated_secret_do_not_share_token_cache(monkeypatch):
     from types import SimpleNamespace
 
     from app.infrastructure.mcp import client
 
     calls = []
 
-    def post(url, **kwargs):
+    async def post(self, url, **kwargs):
         calls.append(kwargs["data"])
         return SimpleNamespace(
             raise_for_status=lambda: None,
             json=lambda: {"access_token": f"t{len(calls)}", "expires_in": 1},
         )
 
-    monkeypatch.setattr("httpx.post", post)
+    monkeypatch.setattr("httpx.AsyncClient.post", post)
     client._TOKEN_CACHE.clear()
 
     def config(scope, secret="s1"):
@@ -394,8 +396,10 @@ def test_oauth_scope_and_rotated_secret_do_not_share_token_cache(monkeypatch):
             },
         )
 
-    assert client._oauth_header(config("alice")) != client._oauth_header(config("bob"))
-    assert client._oauth_header(config("alice", "s2")) != client._oauth_header(config("alice"))
+    assert await client._oauth_header(config("alice")) != await client._oauth_header(config("bob"))
+    assert await client._oauth_header(config("alice", "s2")) != await client._oauth_header(
+        config("alice")
+    )
     assert len(calls) == 3
     assert all(expiry <= client.time.time() + 1 for _, expiry in client._TOKEN_CACHE.values())
     client._TOKEN_CACHE.clear()
@@ -414,3 +418,51 @@ def test_internal_serialization_error_is_never_retried():
     with pytest.raises(TypeError, match="internal serialization bug"):
         _serialize(Broken())
     assert calls == ["json"]
+
+
+@pytest.mark.asyncio
+async def test_oauth_network_io_is_cancellable_before_session_start(monkeypatch):
+    import asyncio
+
+    import httpx
+
+    from app.infrastructure.mcp import client
+
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+    client._TOKEN_CACHE.clear()
+
+    async def stalled_post(self, url, **kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    def forbid_blocking_post(*args, **kwargs):
+        raise AssertionError("OAuth must not block the MCP event-loop worker")
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", stalled_post)
+    monkeypatch.setattr(httpx, "post", forbid_blocking_post)
+    config = mcp_config.McpServerConfig(
+        name="cancellable-auth",
+        transport="http",
+        url="https://mcp.example.invalid",
+        timeout_seconds=0.03,
+        auth={
+            "token_url": "https://auth.example.invalid/token",
+            "client_id": "test-client",
+            "client_secret": "synthetic-test-secret",
+        },
+    )
+
+    async def unexpected_session(session):
+        raise AssertionError("Session must not start without its OAuth token")
+
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(config.timeout_seconds):
+            await client._with_session(config, unexpected_session)
+
+    assert started.is_set()
+    assert cancelled.is_set()
+    assert client._TOKEN_CACHE == {}

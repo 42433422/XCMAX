@@ -70,8 +70,8 @@ def _sync(coro_factory: Callable[[], Coroutine[Any, Any, T]], timeout: float) ->
         raise McpClientError("MCP 服务器响应超时") from exc
 
 
-def _oauth_header(config: McpServerConfig) -> dict[str, str]:
-    """client_credentials 令牌获取与缓存；配置缺失时返回空。"""
+async def _oauth_header(config: McpServerConfig) -> dict[str, str]:
+    """可取消的 client_credentials 请求与隔离缓存；配置缺失时返回空。"""
     auth = dict(config.auth or {})
     if not auth:
         return {}
@@ -84,16 +84,17 @@ def _oauth_header(config: McpServerConfig) -> dict[str, str]:
     try:
         import httpx
 
-        response = httpx.post(
-            str(auth.get("token_url") or ""),
-            data={
-                "grant_type": "client_credentials",
-                "client_id": str(auth.get("client_id") or ""),
-                "client_secret": str(auth.get("client_secret") or ""),
-                "scope": str(auth.get("scope") or ""),
-            },
-            timeout=config.timeout_seconds,
-        )
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                str(auth.get("token_url") or ""),
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": str(auth.get("client_id") or ""),
+                    "client_secret": str(auth.get("client_secret") or ""),
+                    "scope": str(auth.get("scope") or ""),
+                },
+                timeout=config.timeout_seconds,
+            )
         response.raise_for_status()
         payload = response.json()
     except RECOVERABLE_ERRORS as exc:
@@ -123,7 +124,7 @@ async def _with_session(
     if config.transport == "http":
         from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
-        headers = {**dict(config.headers), **_oauth_header(config)}
+        headers = {**dict(config.headers), **(await _oauth_header(config))}
         client = create_mcp_http_client(headers=headers or None)
         async with client:
             async with streamable_http_client(config.url, http_client=client) as streams:
