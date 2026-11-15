@@ -514,7 +514,8 @@ jobs:
             --source-sha "$BACKEND_SOURCE_SHA" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
-            --backend skipped
+            --backend skipped \
+            --evidence-out business-contract-evidence.json
       - uses: actions/setup-python@v7
         if: needs.classify.outputs.backend == 'true'
         with:
@@ -536,7 +537,8 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --shards shards \
-            --backend ran
+            --backend ran \
+            --evidence-out business-contract-evidence.json
       - name: Install the verified coverage version
         if: needs.classify.outputs.backend == 'true'
         env:
@@ -559,6 +561,7 @@ jobs:
             FHD/coverage.json
             FHD/coverage-behavior.json
             FHD/coverage.xml
+            FHD/business-contract-evidence.json
           if-no-files-found: error
           retention-days: 7
 
@@ -842,6 +845,14 @@ jobs:
           E2E_VITE_MOCK_API: "1"
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:5001
         run: npm run test:e2e:p0 -- --reporter=line
+      - name: Preserve mock E2E layout screenshots and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-e2e-evidence-${{ github.run_attempt }}
+          path: FHD/frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   arch-fitness:
     needs: guard-temp-scripts

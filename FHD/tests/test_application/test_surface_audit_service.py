@@ -36,6 +36,27 @@ from app.application.surface_audit_service import (
     run_surface_audit_lane,
 )
 
+
+def _assert_shared_adb_device_connected_0(self, tmp_path, _shared_literal_0, _shared_literal_1):
+    with (
+        patch("app.application.surface_audit_service._FHD_ROOT", tmp_path),
+        patch("subprocess.run") as mock_run,
+    ):
+        adb_path = (
+            tmp_path
+            / "mobile-flutter-poc"
+            / ".toolchain"
+            / "android-sdk"
+            / "platform-tools"
+            / "adb"
+        )
+        adb_path.parent.mkdir(parents=True)
+        adb_path.write_text("fake adb")
+        mock_run.return_value = Mock(stdout=_shared_literal_1)
+        result = _adb_has_device()
+        assert result is _shared_literal_0
+
+
 # ========================= _today_key ====================================
 
 
@@ -360,45 +381,14 @@ class TestAdbHasDevice:
             assert result is False
 
     def test_adb_device_connected(self, tmp_path):
-        with (
-            patch("app.application.surface_audit_service._FHD_ROOT", tmp_path),
-            patch("subprocess.run") as mock_run,
-        ):
-            # Create the adb path so is_file() returns True
-            adb_path = (
-                tmp_path
-                / "mobile-flutter-poc"
-                / ".toolchain"
-                / "android-sdk"
-                / "platform-tools"
-                / "adb"
-            )
-            adb_path.parent.mkdir(parents=True)
-            adb_path.write_text("fake adb")
-
-            mock_run.return_value = Mock(stdout="List of devices attached\nemulator-5554\tdevice\n")
-            result = _adb_has_device()
-            assert result is True
+        return _assert_shared_adb_device_connected_0(
+            self, tmp_path, True, "List of devices attached\nemulator-5554\tdevice\n"
+        )
 
     def test_adb_no_device(self, tmp_path):
-        with (
-            patch("app.application.surface_audit_service._FHD_ROOT", tmp_path),
-            patch("subprocess.run") as mock_run,
-        ):
-            adb_path = (
-                tmp_path
-                / "mobile-flutter-poc"
-                / ".toolchain"
-                / "android-sdk"
-                / "platform-tools"
-                / "adb"
-            )
-            adb_path.parent.mkdir(parents=True)
-            adb_path.write_text("fake adb")
-
-            mock_run.return_value = Mock(stdout="List of devices attached\n")
-            result = _adb_has_device()
-            assert result is False
+        return _assert_shared_adb_device_connected_0(
+            self, tmp_path, False, "List of devices attached\n"
+        )
 
     def test_adb_error(self, tmp_path):
         with (

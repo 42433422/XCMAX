@@ -24,6 +24,37 @@ import pytest
 from app.neuro_bus.events.events_base import NeuroEvent
 
 
+async def _assert_shared_approved_marks_inbound_as_approved_0(
+    self, fake_bus, _shared_literal_0, _shared_literal_1, _shared_literal_2, _shared_literal_3
+):
+    from app.neuro_bus.domains.finance_domain_handlers import handle_approval_completed
+
+    event = _make_event(
+        "finance.approval_completed",
+        {
+            "approval_id": "approval-001",
+            "business_type": "purchase_inbound",
+            "business_id": 42,
+            "decision": _shared_literal_1,
+            "approver_id": 99,
+            "comment": _shared_literal_2,
+        },
+        domain="finance",
+    )
+    with patch("app.neuro_bus.domains.finance_domain_handlers.PurchaseService") as MockPurchase:
+        mock_instance = MockPurchase.return_value
+        mock_instance.update_inbound_approval_status.return_value = {
+            "success": True,
+            "status": _shared_literal_3,
+        }
+        result = await handle_approval_completed(event)
+    mock_instance.update_inbound_approval_status.assert_called_once()
+    call_args = mock_instance.update_inbound_approval_status.call_args[0]
+    assert call_args[0] == 42
+    assert call_args[1] == _shared_literal_0
+    assert result["success"] is True
+
+
 # ---------------------------------------------------------------------------
 # 工具：构造 NeuroEvent
 # ---------------------------------------------------------------------------
@@ -333,36 +364,9 @@ class TestApprovalRequestedCallsCreateApprovalRequest:
 class TestApprovalCompletedApprovedUpdatesInbound:
     @pytest.mark.asyncio
     async def test_approved_marks_inbound_as_approved(self, fake_bus):
-        from app.neuro_bus.domains.finance_domain_handlers import (
-            handle_approval_completed,
+        return await _assert_shared_approved_marks_inbound_as_approved_0(
+            self, fake_bus, "approved", "approved", "金额核对无误", "approved"
         )
-
-        event = _make_event(
-            "finance.approval_completed",
-            {
-                "approval_id": "approval-001",
-                "business_type": "purchase_inbound",
-                "business_id": 42,
-                "decision": "approved",
-                "approver_id": 99,
-                "comment": "金额核对无误",
-            },
-            domain="finance",
-        )
-
-        with patch("app.neuro_bus.domains.finance_domain_handlers.PurchaseService") as MockPurchase:
-            mock_instance = MockPurchase.return_value
-            mock_instance.update_inbound_approval_status.return_value = {
-                "success": True,
-                "status": "approved",
-            }
-            result = await handle_approval_completed(event)
-
-        mock_instance.update_inbound_approval_status.assert_called_once()
-        call_args = mock_instance.update_inbound_approval_status.call_args[0]
-        assert call_args[0] == 42  # business_id
-        assert call_args[1] == "approved"
-        assert result["success"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -371,36 +375,9 @@ class TestApprovalCompletedApprovedUpdatesInbound:
 class TestApprovalCompletedRejectedMarksRejected:
     @pytest.mark.asyncio
     async def test_rejected_marks_inbound_as_rejected(self, fake_bus):
-        from app.neuro_bus.domains.finance_domain_handlers import (
-            handle_approval_completed,
+        return await _assert_shared_approved_marks_inbound_as_approved_0(
+            self, fake_bus, "rejected", "rejected", "金额不符", "rejected"
         )
-
-        event = _make_event(
-            "finance.approval_completed",
-            {
-                "approval_id": "approval-001",
-                "business_type": "purchase_inbound",
-                "business_id": 42,
-                "decision": "rejected",
-                "approver_id": 99,
-                "comment": "金额不符",
-            },
-            domain="finance",
-        )
-
-        with patch("app.neuro_bus.domains.finance_domain_handlers.PurchaseService") as MockPurchase:
-            mock_instance = MockPurchase.return_value
-            mock_instance.update_inbound_approval_status.return_value = {
-                "success": True,
-                "status": "rejected",
-            }
-            result = await handle_approval_completed(event)
-
-        mock_instance.update_inbound_approval_status.assert_called_once()
-        call_args = mock_instance.update_inbound_approval_status.call_args[0]
-        assert call_args[0] == 42
-        assert call_args[1] == "rejected"
-        assert result["success"] is True
 
 
 # ---------------------------------------------------------------------------

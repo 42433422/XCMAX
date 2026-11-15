@@ -27,6 +27,18 @@ from __future__ import annotations
 
 import os
 
+
+def _assert_shared_trailing_slash_alias_0(self, _shared_literal_0, _shared_literal_1):
+    mock_svc = MagicMock()
+    mock_svc.get_templates.return_value = {"templates": []}
+    with patch(
+        "app.application.template_app_service.get_template_app_service", return_value=mock_svc
+    ):
+        client = _template_api_client()
+        r = client.get(_shared_literal_1)
+    assert r.status_code == _shared_literal_0
+
+
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
 import json
@@ -1626,30 +1638,14 @@ class TestTemplatesListCompat:
         assert r.status_code == 503
 
     def test_trailing_slash_alias(self):
-        mock_svc = MagicMock()
-        mock_svc.get_templates.return_value = {"templates": []}
-        with patch(
-            "app.application.template_app_service.get_template_app_service",
-            return_value=mock_svc,
-        ):
-            client = _template_api_client()
-            r = client.get("/api/templates/")
-        assert r.status_code == 200
+        return _assert_shared_trailing_slash_alias_0(self, 200, "/api/templates/")
 
 
 class TestTemplatesListLegacyAlias:
     """Cover ``templates_list_legacy_alias`` route."""
 
     def test_legacy_list_path(self):
-        mock_svc = MagicMock()
-        mock_svc.get_templates.return_value = {"templates": []}
-        with patch(
-            "app.application.template_app_service.get_template_app_service",
-            return_value=mock_svc,
-        ):
-            client = _template_api_client()
-            r = client.get("/api/templates/list")
-        assert r.status_code == 200
+        return _assert_shared_trailing_slash_alias_0(self, 200, "/api/templates/list")
 
 
 class TestTemplatesDetailCompat:
@@ -1670,15 +1666,7 @@ class TestTemplatesDetailCompat:
         assert r.json()["success"] is True
 
     def test_detail_not_found(self):
-        mock_svc = MagicMock()
-        mock_svc.get_templates.return_value = {"templates": []}
-        with patch(
-            "app.application.template_app_service.get_template_app_service",
-            return_value=mock_svc,
-        ):
-            client = _template_api_client()
-            r = client.get("/api/templates/detail/db:999")
-        assert r.status_code == 404
+        return _assert_shared_trailing_slash_alias_0(self, 404, "/api/templates/detail/db:999")
 
 
 class TestTemplatesGetOne:
@@ -1716,15 +1704,7 @@ class TestTemplatesGetOne:
         assert exc.value.status_code == 404
 
     def test_get_one_not_found(self):
-        mock_svc = MagicMock()
-        mock_svc.get_templates.return_value = {"templates": []}
-        with patch(
-            "app.application.template_app_service.get_template_app_service",
-            return_value=mock_svc,
-        ):
-            client = _template_api_client()
-            r = client.get("/api/templates/nonexistent")
-        assert r.status_code == 404
+        return _assert_shared_trailing_slash_alias_0(self, 404, "/api/templates/nonexistent")
 
 
 class TestFindTemplateRow:

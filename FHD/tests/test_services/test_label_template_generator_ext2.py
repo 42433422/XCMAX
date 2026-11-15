@@ -39,6 +39,19 @@ from app.services.skills.label_template_generator.label_template_generator impor
     get_label_template_generator_skill,
 )
 
+
+def _assert_shared_no_colon_production_date_fixed_label_0(
+    self, _shared_literal_0, _shared_literal_1
+):
+    blocks = [
+        {"text": _shared_literal_1, "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
+    ]
+    fields = _identify_fields(blocks)
+    assert len(fields) == 1
+    assert fields[0]["type"] == "fixed_label"
+    assert fields[0]["field_key"] == _shared_literal_0
+
+
 # ---------------------------------------------------------------------------
 # analyze_image — additional edge cases
 # ---------------------------------------------------------------------------
@@ -321,91 +334,39 @@ class TestIdentifyFieldsAdditional:
 
     def test_no_colon_production_date_fixed_label(self):
         """生产日期 should be fixed_label."""
-        blocks = [
-            {
-                "text": "生产日期 2026-01-01",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "production_date"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "production_date", "生产日期 2026-01-01"
+        )
 
     def test_no_colon_shelf_life_fixed_label(self):
         """保质期 should be fixed_label."""
-        blocks = [
-            {
-                "text": "保质期 12个月",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "shelf_life"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "shelf_life", "保质期 12个月"
+        )
 
     def test_no_colon_inspector_fixed_label(self):
         """检验员 should be fixed_label."""
-        blocks = [
-            {"text": "检验员 张三", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "inspector"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "inspector", "检验员 张三"
+        )
 
     def test_no_colon_product_spec_fixed_label(self):
         """产品规格 should be fixed_label."""
-        blocks = [
-            {"text": "产品规格 A4", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "product_spec"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "product_spec", "产品规格 A4"
+        )
 
     def test_no_colon_product_number_fixed_label(self):
         """产品编号 should be fixed_label."""
-        blocks = [
-            {
-                "text": "产品编号 ABC123",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "product_number"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "product_number", "产品编号 ABC123"
+        )
 
     def test_no_colon_product_name_fixed_label(self):
         """产品名称 should be fixed_label."""
-        blocks = [
-            {
-                "text": "产品名称 PE漆",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "product_name"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "product_name", "产品名称 PE漆"
+        )
 
     def test_block_missing_text_key_skipped(self):
         """Block without 'text' key should be skipped (KeyError caught)."""

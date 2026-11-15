@@ -307,6 +307,13 @@
           "availability": "shared",
           "action_class": "delete.batch"
         },
+        "clear": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared",
+          "action_class": "delete.batch"
+        },
         "add_address": {
           "risk": "medium",
           "idempotent": false,
@@ -427,6 +434,13 @@
           ],
           "availability": "shared",
           "action_class": "delete.batch"
+        },
+        "clear": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared",
+          "action_class": "delete.batch"
         }
       }
     },
@@ -486,6 +500,12 @@
           "required_params": [],
           "availability": "shared"
         },
+        "clear": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
         "export": {
           "risk": "low",
           "idempotent": true,
@@ -534,6 +554,12 @@
           "required_params": [
             "id"
           ],
+          "availability": "shared"
+        },
+        "clear": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
           "availability": "shared"
         },
         "export": {
@@ -1390,6 +1416,12 @@
           ],
           "availability": "shared"
         },
+        "clear": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
         "ingest": {
           "risk": "medium",
           "idempotent": false,
@@ -1777,6 +1809,14 @@
             "document_id"
           ],
           "availability": "shared"
+        },
+        "clear_dataset": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "dataset_id"
+          ],
+          "availability": "shared"
         }
       }
     },
@@ -1878,6 +1918,22 @@
             "rows"
           ],
           "availability": "shared"
+        }
+      }
+    },
+    "import_excel_to_database": {
+      "description": "把已分析的 Excel 数据导入业务数据库：按表头映射写入产品、客户或订单，写入前需审批。",
+      "availability": "shared",
+      "actions": {
+        "import": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared",
+          "action_class": "bulk_import",
+          "timeout_seconds": 180
         }
       }
     },

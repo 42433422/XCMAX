@@ -30,6 +30,15 @@ def _lock_claim(db, execution, owner_id):
     )
 
 
+def recheck_worker_claim():
+    """Fence live ownership again after a server-side lock wait, without holding HOST."""
+    claim = _claim.get()
+    if claim is not None:
+        repository, execution, owner_id = claim
+        with repository.transaction() as db:
+            _lock_claim(db, execution, owner_id)
+
+
 def capture_worker_claim():
     """Pass only the server-held fence across spawn, never caller runtime fields."""
     claim = _claim.get()

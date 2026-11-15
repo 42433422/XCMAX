@@ -57,6 +57,18 @@ from app.domain.shared_services.tools_workflow_registered import (
     execute_registered_workflow_tool,
 )
 
+
+def _assert_shared_write_customers_unsupported_op_0(self, _shared_literal_0, _shared_literal_1):
+    result = _registered_router_business_db(
+        "write",
+        {"entity": _shared_literal_0, "operation": _shared_literal_1, "payload": {}},
+        {},
+        "admin",
+        "",
+    )
+    assert result["success"] is False
+
+
 # ===========================================================================
 # _registered_router_business_event
 # ===========================================================================
@@ -524,6 +536,34 @@ class TestDocumentTemplateRouter:
         mock.assert_called_once()
         assert result["http_status_code"] == 400
 
+    def test_clear_deletes_every_deletable_template(self):
+        templates = [
+            {"id": "db:1"},
+            {"id": "fs:custom.xlsx"},
+            {"id": "starter:builtin"},
+            {"id": "db:2"},
+        ]
+        delete_results = [
+            ({"success": True}, 200),
+            ({"success": False, "message": "内置模板不可删除"}, 403),
+            ({"success": True}, 200),
+        ]
+        with (
+            patch(
+                "app.application.get_template_app_service",
+                return_value=MagicMock(get_templates=lambda: {"templates": templates}),
+            ),
+            patch(
+                "app.legacy.routes.document_templates_compat.run_archive_template_delete",
+                side_effect=delete_results,
+            ) as delete,
+        ):
+            result = _registered_router_document_template("clear", {}, {}, "admin", "")
+        assert delete.call_count == 3
+        assert result["success"] is True
+        assert result["deleted_templates"] == 2
+        assert result["skipped_templates"] == 2
+
     def test_unknown_action(self):
         result = _registered_router_document_template("fly", {}, {}, "admin", "")
         assert result["success"] is False
@@ -569,7 +609,7 @@ class TestTemplatePreviewRouter:
         with patch("app.application.get_template_app_service", return_value=mock_svc):
             result = _registered_router_template_preview("query", {}, {}, "admin", "")
         assert result["success"] is True
-        assert result["data"] == [{"id": 1}]
+        assert result["templates"] == [{"id": 1}]
 
     def test_query_alias(self):
         mock_svc = MagicMock()
@@ -833,14 +873,7 @@ class TestBusinessDbRouter:
         assert result["data"]["contact_phone"] == "13900000000"
 
     def test_write_customers_unsupported_op(self):
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "customers", "operation": "delete", "payload": {}},
-            {},
-            "admin",
-            "",
-        )
-        assert result["success"] is False
+        return _assert_shared_write_customers_unsupported_op_0(self, "customers", "delete")
 
     def test_write_products_create(self):
         with patch("app.services.get_products_service") as mock_get:
@@ -859,14 +892,7 @@ class TestBusinessDbRouter:
         assert result["success"] is True
 
     def test_write_products_unsupported_op(self):
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "products", "operation": "delete", "payload": {}},
-            {},
-            "admin",
-            "",
-        )
-        assert result["success"] is False
+        return _assert_shared_write_customers_unsupported_op_0(self, "products", "delete")
 
     def test_write_materials_create(self):
         with patch("app.application.get_material_application_service") as mock_get:
@@ -881,14 +907,7 @@ class TestBusinessDbRouter:
         assert result["success"] is True
 
     def test_write_materials_unsupported_op(self):
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "materials", "operation": "fly", "payload": {}},
-            {},
-            "admin",
-            "",
-        )
-        assert result["success"] is False
+        return _assert_shared_write_customers_unsupported_op_0(self, "materials", "fly")
 
     def test_write_shipment_records_update(self):
         with (
@@ -917,14 +936,7 @@ class TestBusinessDbRouter:
         assert result["success"] is True
 
     def test_write_shipment_records_unsupported_op(self):
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "shipment_records", "operation": "create", "payload": {}},
-            {},
-            "admin",
-            "",
-        )
-        assert result["success"] is False
+        return _assert_shared_write_customers_unsupported_op_0(self, "shipment_records", "create")
 
 
 # ===========================================================================
@@ -937,6 +949,34 @@ class TestDatasetRagRouter:
         result = _registered_router_dataset_rag("ingest_document", {}, {}, "admin", "")
         assert result["success"] is False
         assert "dataset_id" in result["message"]
+
+    def test_clear_dataset_uses_persy_memory_for_persy_knowledge(self):
+        with patch(
+            "app.application.persy_memory_app_service.get_persy_memory_app_service"
+        ) as mock_get:
+            mock_get.return_value.clear_memories.return_value = {
+                "success": True,
+                "deleted_memories": 2,
+            }
+            result = _registered_router_dataset_rag(
+                "clear_dataset", {"dataset_id": "persy-knowledge"}, {}, "admin", ""
+            )
+        assert result["success"] is True
+        assert result["deleted_memories"] == 2
+
+    def test_clear_dataset_delegates_for_document_dataset(self):
+        with patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service"
+        ) as mock_get:
+            mock_get.return_value.clear_dataset.return_value = {
+                "success": True,
+                "deleted_documents": 3,
+            }
+            result = _registered_router_dataset_rag(
+                "clear_dataset", {"dataset_id": "docs"}, {}, "admin", ""
+            )
+        assert result["success"] is True
+        assert result["deleted_documents"] == 3
 
     def test_ingest_document(self):
         with patch(

@@ -67,6 +67,7 @@ def _run_seeds(loop) -> list[dict]:
                 "category": category,
                 "lane": "fixed_tool_plan",
                 "verdict": "PASS" if ok else "FAIL",
+                "capability_verdict": "NOT RUN",
                 "detail": detail,
                 "tool_version": "2",
                 "prompt_version": "none",
@@ -365,6 +366,7 @@ def test_employee_eval_seeds_cover_six_categories():
     failed = [f"{row['scenario_id']}:{row['detail']}" for row in seeds if row["verdict"] != "PASS"]
     assert not failed, failed
     assert all(row["lane"] == "fixed_tool_plan" and row["model"] == "none" for row in seeds)
+    assert all(row["capability_verdict"] == "NOT RUN" for row in seeds)
     live = _live_model_lane()
     assert live["verdict"] in {"BLOCKED", "NOT RUN"}
     assert live["verdict"] != "PASS"

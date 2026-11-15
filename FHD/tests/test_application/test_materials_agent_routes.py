@@ -30,6 +30,7 @@ def _assert_material_run(repo: InMemoryAgentRunRepository, run_id: str, action: 
     assert run.tool_calls[0].tool_id == "materials"
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.materials.{action}"
+    assert run.tool_calls[0].metadata["authorization_permission"] == "material.edit"
     assert run.tool_calls[0].cost_units == 2
     assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
         event.event_type for event in run.events

@@ -17,6 +17,55 @@ import pytest
 from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
 
 
+def _assert_shared_view_action_0(self, _shared_literal_0, _shared_literal_1, _shared_literal_2):
+    result = _unwrap(
+        dispatch_legacy_tool_payload(
+            _shared_literal_1,
+            _shared_literal_2,
+            {},
+            json_response_fn=_json_fn,
+            hdr_getter=_hdr_getter,
+            parse_order_text_fn=_parse_order_text,
+        )
+    )
+    assert result["success"] is _shared_literal_0
+
+
+def _assert_shared_view_1(
+    self, _shared_literal_0, _shared_literal_1, _shared_literal_2, _shared_literal_3
+):
+    mock_svc = Mock()
+    with patch(_shared_literal_1, return_value=mock_svc):
+        result = _unwrap(
+            dispatch_legacy_tool_payload(
+                _shared_literal_2,
+                _shared_literal_3,
+                {},
+                json_response_fn=_json_fn,
+                hdr_getter=_hdr_getter,
+                parse_order_text_fn=_parse_order_text,
+            )
+        )
+    assert result["success"] is _shared_literal_0
+
+
+def _assert_shared_query_2(self, _shared_literal_0, _shared_literal_1):
+    mock_svc = Mock()
+    mock_svc.get_system_info.return_value = {"version": "1.0"}
+    with patch("app.services.get_system_service", return_value=mock_svc):
+        result = _unwrap(
+            dispatch_legacy_tool_payload(
+                _shared_literal_0,
+                _shared_literal_1,
+                {},
+                json_response_fn=_json_fn,
+                hdr_getter=_hdr_getter,
+                parse_order_text_fn=_parse_order_text,
+            )
+        )
+    assert result["success"] is True
+
+
 def _json_fn(data, status=200):
     """Pass-through: returns data as-is for testing (ignores status code)."""
     return data
@@ -42,17 +91,7 @@ def _unwrap(result):
 
 class TestTemplateExtractTool:
     def test_view_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "template_extract",
-                "view",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "template_extract", "view")
 
     def test_none_action(self):
         result = _unwrap(
@@ -68,30 +107,10 @@ class TestTemplateExtractTool:
         assert result["success"] is True
 
     def test_empty_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "template_extract",
-                "",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "template_extract", "")
 
     def test_missing_file_path(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "template_extract",
-                "extract",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is False
+        return _assert_shared_view_action_0(self, False, "template_extract", "extract")
 
     def test_file_not_exists(self):
         result = _unwrap(
@@ -136,17 +155,7 @@ class TestTemplateExtractTool:
 
 class TestExcelToolkitTool:
     def test_missing_file_path(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "excel_toolkit",
-                "view",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is False
+        return _assert_shared_view_action_0(self, False, "excel_toolkit", "view")
 
     def test_import_error(self):
         with patch.dict(
@@ -208,30 +217,10 @@ class TestExcelToolkitTool:
 
 class TestShipmentTemplateTool:
     def test_view(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "shipment_template",
-                "view",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "shipment_template", "view")
 
     def test_other(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "shipment_template",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "shipment_template", "other")
 
 
 # ========================= template_preview tool ===========================
@@ -271,17 +260,7 @@ class TestTemplatePreviewTool:
         assert result["success"] is True
 
     def test_fallback(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "template_preview",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "template_preview", "other")
 
 
 # ========================= settings tool ==================================
@@ -289,36 +268,10 @@ class TestTemplatePreviewTool:
 
 class TestSettingsTool:
     def test_query(self):
-        mock_svc = Mock()
-        mock_svc.get_system_info.return_value = {"version": "1.0"}
-        with patch("app.services.get_system_service", return_value=mock_svc):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "settings",
-                    "query",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
-        assert result["success"] is True
+        return _assert_shared_query_2(self, "settings", "query")
 
     def test_get_system_info(self):
-        mock_svc = Mock()
-        mock_svc.get_system_info.return_value = {"version": "1.0"}
-        with patch("app.services.get_system_service", return_value=mock_svc):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "settings",
-                    "get_system_info",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
-        assert result["success"] is True
+        return _assert_shared_query_2(self, "settings", "get_system_info")
 
     def test_get_startup_config(self):
         mock_svc = Mock()
@@ -369,17 +322,7 @@ class TestSettingsTool:
         assert result["success"] is True
 
     def test_fallback(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "settings",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "settings", "other")
 
 
 # ========================= tools_table tool ================================
@@ -422,17 +365,7 @@ class TestToolsTableTool:
         assert result["success"] is True
 
     def test_fallback(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "tools_table",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "tools_table", "other")
 
 
 # ========================= other_tools tool ================================
@@ -454,30 +387,10 @@ class TestOtherToolsTool:
         assert "tools" in result
 
     def test_query(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "other_tools",
-                "query",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "other_tools", "query")
 
     def test_fallback(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "other_tools",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "other_tools", "other")
 
 
 # ========================= database tool ==================================
@@ -485,19 +398,9 @@ class TestOtherToolsTool:
 
 class TestDatabaseTool:
     def test_view(self):
-        mock_svc = Mock()
-        with patch("app.services.get_database_service", return_value=mock_svc):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "database",
-                    "view",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
-        assert result["success"] is True
+        return _assert_shared_view_1(
+            self, True, "app.services.get_database_service", "database", "view"
+        )
 
     def test_none_action(self):
         mock_svc = Mock()
@@ -515,19 +418,9 @@ class TestDatabaseTool:
         assert result["success"] is True
 
     def test_empty_action(self):
-        mock_svc = Mock()
-        with patch("app.services.get_database_service", return_value=mock_svc):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "database",
-                    "",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
-        assert result["success"] is True
+        return _assert_shared_view_1(
+            self, True, "app.services.get_database_service", "database", ""
+        )
 
     def test_backup(self):
         mock_svc = Mock()
@@ -546,19 +439,9 @@ class TestDatabaseTool:
         assert result["success"] is True
 
     def test_restore_missing_file(self):
-        mock_svc = Mock()
-        with patch("app.services.get_database_service", return_value=mock_svc):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "database",
-                    "restore",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
-        assert result["success"] is False
+        return _assert_shared_view_1(
+            self, False, "app.services.get_database_service", "database", "restore"
+        )
 
     def test_restore_with_file(self):
         mock_svc = Mock()
@@ -593,34 +476,14 @@ class TestDatabaseTool:
         assert result["success"] is True
 
     def test_delete_missing_file(self):
-        mock_svc = Mock()
-        with patch("app.services.get_database_service", return_value=mock_svc):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "database",
-                    "delete",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
-        assert result["success"] is False
+        return _assert_shared_view_1(
+            self, False, "app.services.get_database_service", "database", "delete"
+        )
 
     def test_unknown_action(self):
-        mock_svc = Mock()
-        with patch("app.services.get_database_service", return_value=mock_svc):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "database",
-                    "unknown_action",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
-        assert result["success"] is False
+        return _assert_shared_view_1(
+            self, False, "app.services.get_database_service", "database", "unknown_action"
+        )
 
 
 # ========================= system tool ====================================
@@ -628,19 +491,9 @@ class TestDatabaseTool:
 
 class TestSystemTool:
     def test_view(self):
-        mock_svc = Mock()
-        with patch("app.services.get_system_service", return_value=mock_svc):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "system",
-                    "view",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
-        assert result["success"] is True
+        return _assert_shared_view_1(
+            self, True, "app.services.get_system_service", "system", "view"
+        )
 
     def test_none_action(self):
         mock_svc = Mock()
@@ -706,20 +559,7 @@ class TestSystemTool:
         assert result["success"] is True
 
     def test_get_system_info(self):
-        mock_svc = Mock()
-        mock_svc.get_system_info.return_value = {"version": "1.0"}
-        with patch("app.services.get_system_service", return_value=mock_svc):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "system",
-                    "get_system_info",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
-        assert result["success"] is True
+        return _assert_shared_query_2(self, "system", "get_system_info")
 
     def test_get_printer_config(self):
         mock_svc = Mock()
@@ -755,34 +595,14 @@ class TestSystemTool:
         assert result["success"] is True
 
     def test_set_default_printer_missing_name(self):
-        mock_svc = Mock()
-        with patch("app.services.get_system_service", return_value=mock_svc):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "system",
-                    "set_default_printer",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
-        assert result["success"] is False
+        return _assert_shared_view_1(
+            self, False, "app.services.get_system_service", "system", "set_default_printer"
+        )
 
     def test_unknown_action(self):
-        mock_svc = Mock()
-        with patch("app.services.get_system_service", return_value=mock_svc):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "system",
-                    "unknown_action",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
-        assert result["success"] is False
+        return _assert_shared_view_1(
+            self, False, "app.services.get_system_service", "system", "unknown_action"
+        )
 
 
 # ========================= upload_file tool ================================
@@ -842,30 +662,10 @@ class TestAiEcosystemTool:
         assert "views" in result.get("data", {})
 
     def test_query(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "ai_ecosystem",
-                "query",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "ai_ecosystem", "query")
 
     def test_fallback(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "ai_ecosystem",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "ai_ecosystem", "other")
 
 
 # ========================= materials_list tool =============================
@@ -905,17 +705,7 @@ class TestMaterialsListTool:
         assert result["success"] is True
 
     def test_fallback(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "materials_list",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "materials_list", "other")
 
 
 # ========================= customers search with keyword from params =======
@@ -1033,17 +823,7 @@ class TestCustomersSearchKeywordFromParams:
         assert result["success"] is True
 
     def test_fallback_message(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "customers",
-                "unknown",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["success"] is True
+        return _assert_shared_view_action_0(self, True, "customers", "unknown")
 
 
 # ========================= shipment_records list ===========================

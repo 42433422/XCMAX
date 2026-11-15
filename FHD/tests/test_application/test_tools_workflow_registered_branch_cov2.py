@@ -35,6 +35,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
+def _assert_shared_write_customers_unsupported_operation_0(
+    self, _shared_literal_0, _shared_literal_1
+):
+    result = _registered_router_business_db(
+        "write",
+        {"entity": _shared_literal_0, "operation": _shared_literal_1, "payload": {}},
+        _ctx(),
+        "normal",
+        "",
+    )
+    assert result["success"] is False
+
+
 _spec = importlib.util.spec_from_file_location(
     "_twr_module",
     Path(__file__).resolve().parents[2]
@@ -768,6 +782,8 @@ class TestTemplatePreviewRouter:
             result = _registered_router_template_preview("query", {}, _ctx(), "normal", "")
             assert result["success"] is True
             assert result["data"] == [{"id": 1}]
+            assert result["templates"] == result["data"]
+            assert result["count"] == 1
 
 
 class TestPrintRouter:
@@ -1151,14 +1167,7 @@ class TestBusinessDbRouter:
             assert isinstance(result, dict)
 
     def test_write_customers_unsupported_operation(self) -> None:
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "customers", "operation": "delete", "payload": {}},
-            _ctx(),
-            "normal",
-            "",
-        )
-        assert result["success"] is False
+        return _assert_shared_write_customers_unsupported_operation_0(self, "customers", "delete")
 
     def test_write_products_create(self) -> None:
         with patch("app.services.get_products_service"):
@@ -1172,14 +1181,7 @@ class TestBusinessDbRouter:
             assert isinstance(result, dict)
 
     def test_write_products_unsupported_operation(self) -> None:
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "products", "operation": "delete", "payload": {}},
-            _ctx(),
-            "normal",
-            "",
-        )
-        assert result["success"] is False
+        return _assert_shared_write_customers_unsupported_operation_0(self, "products", "delete")
 
     def test_write_materials_create(self) -> None:
         mock_svc = MagicMock()
@@ -1195,14 +1197,7 @@ class TestBusinessDbRouter:
             assert isinstance(result, dict)
 
     def test_write_materials_unsupported_operation(self) -> None:
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "materials", "operation": "export", "payload": {}},
-            _ctx(),
-            "normal",
-            "",
-        )
-        assert result["success"] is False
+        return _assert_shared_write_customers_unsupported_operation_0(self, "materials", "export")
 
     def test_write_shipment_records_update(self) -> None:
         mock_svc = MagicMock()
@@ -1235,14 +1230,9 @@ class TestBusinessDbRouter:
         prepared_target.assert_called_once()
 
     def test_write_shipment_records_unsupported_operation(self) -> None:
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "shipment_records", "operation": "create", "payload": {}},
-            _ctx(),
-            "normal",
-            "",
+        return _assert_shared_write_customers_unsupported_operation_0(
+            self, "shipment_records", "create"
         )
-        assert result["success"] is False
 
 
 class TestBusinessEventRouter:

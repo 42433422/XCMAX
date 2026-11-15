@@ -20,6 +20,14 @@ from app.fastapi_routes.founder_autonomy_api import router as founder_autonomy_r
 from app.fastapi_routes.xcmax_admin import router
 
 
+def _assert_shared_unauthenticated_returns_401_0(self, client, _shared_literal_0):
+    with patch(
+        "app.fastapi_routes.domains.misc.helpers._session_id_from_request", return_value=None
+    ):
+        resp = client.get(_shared_literal_0)
+    assert resp.status_code == 401
+
+
 @pytest.fixture
 def app_with_router() -> FastAPI:
     app = FastAPI()
@@ -390,12 +398,9 @@ class TestRemoteStatus:
 
 class TestLocalDutyGraphHealth:
     def test_unauthenticated_returns_401(self, client: TestClient) -> None:
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.get("/api/xcmax/local/duty-graph/health")
-        assert resp.status_code == 401
+        return _assert_shared_unauthenticated_returns_401_0(
+            self, client, "/api/xcmax/local/duty-graph/health"
+        )
 
     def test_authenticated_returns_health(self, client: TestClient) -> None:
         with (
@@ -414,12 +419,9 @@ class TestLocalDutyGraphHealth:
 
 class TestLocalEmployeeStatus:
     def test_unauthenticated_returns_401(self, client: TestClient) -> None:
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.get("/api/xcmax/local/employees/emp1/status")
-        assert resp.status_code == 401
+        return _assert_shared_unauthenticated_returns_401_0(
+            self, client, "/api/xcmax/local/employees/emp1/status"
+        )
 
     def test_empty_employee_id_returns_400(self, client: TestClient) -> None:
         with patch(
@@ -446,12 +448,9 @@ class TestLocalEmployeeStatus:
 
 class TestLocalEmployeeManifest:
     def test_unauthenticated_returns_401(self, client: TestClient) -> None:
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.get("/api/xcmax/local/employees/emp1/manifest")
-        assert resp.status_code == 401
+        return _assert_shared_unauthenticated_returns_401_0(
+            self, client, "/api/xcmax/local/employees/emp1/manifest"
+        )
 
     def test_empty_employee_id_returns_400(self, client: TestClient) -> None:
         with patch(
@@ -1160,12 +1159,9 @@ class TestOpsDutyRunDetail:
 
 class TestOpsClosureStatus:
     def test_unauthenticated_returns_401(self, client: TestClient) -> None:
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.get("/api/xcmax/ops/closure-status")
-        assert resp.status_code == 401
+        return _assert_shared_unauthenticated_returns_401_0(
+            self, client, "/api/xcmax/ops/closure-status"
+        )
 
     def test_authenticated_returns_status(self, client: TestClient) -> None:
         with (
@@ -1194,12 +1190,9 @@ class TestOpsClosureStatus:
 
 class TestOpsFounderAutonomy:
     def test_unauthenticated_returns_401(self, client: TestClient) -> None:
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.get("/api/xcmax/ops/founder-autonomy")
-        assert resp.status_code == 401
+        return _assert_shared_unauthenticated_returns_401_0(
+            self, client, "/api/xcmax/ops/founder-autonomy"
+        )
 
     def test_authenticated_aggregates_live_evidence(self, client: TestClient) -> None:
         snapshot = {

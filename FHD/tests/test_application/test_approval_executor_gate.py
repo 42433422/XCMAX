@@ -175,6 +175,23 @@ def test_resubmit_after_reject_still_has_no_row(customers_db) -> None:
     assert REJECTED_NAME not in _names(engine)
 
 
+def test_cancelled_approval_does_not_insert_a_customer(customers_db) -> None:
+    engine, _audit = customers_db
+    queue = InMemoryTaskExecutionRepository()
+    run = AgentRun(user_id="11", message="cancel", status="queued")
+    run.metadata["runtime_context"] = {"tenant_id": "11"}
+    queue.enqueue(run)
+    assert queue.claim("worker", lease_seconds=30) is not None
+    queue.request_approval(run.run_id, "boss")
+    moved = queue.transition(run.run_id, "cancelled")
+    assert moved is not None and moved.state == "cancelled"
+    result = _execute(run.run_id, REJECTED_NAME)
+    assert result.get("success") is not True
+    assert result.get("reason") == "approval_cancelled"
+    assert REJECTED_NAME not in _names(engine)
+    assert queue.get(run.run_id).state == "cancelled"
+
+
 def test_waiting_approval_denies_before_write(customers_db) -> None:
     engine, _audit = customers_db
     queue = InMemoryTaskExecutionRepository()

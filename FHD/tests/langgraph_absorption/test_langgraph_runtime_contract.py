@@ -57,6 +57,35 @@ from app.infrastructure.workflow.langgraph_assert import (
 )
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
 
+
+def _assert_shared_high_risk_writer_exclusive_no_overlap_0(
+    self, monkeypatch, _shared_literal_0, _shared_literal_1, _shared_literal_2, _shared_literal_3
+):
+    plan = PlanGraph(
+        plan_id=_shared_literal_0,
+        intent=_shared_literal_1,
+        nodes=[
+            WorkflowNode(
+                node_id="w1",
+                tool_id="s",
+                action="write",
+                params={},
+                risk=_shared_literal_2,
+                idempotent=False,
+            ),
+            WorkflowNode(
+                node_id="w2",
+                tool_id="s",
+                action="write",
+                params={},
+                risk=_shared_literal_3,
+                idempotent=False,
+            ),
+        ],
+    )
+    _assert_gate_serializes(monkeypatch, plan, parallel=True)
+
+
 _FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 _FIXTURE_PATH = _FIXTURE_DIR / "langgraph_runtime_contract.json"
 
@@ -1057,54 +1086,14 @@ class TestConcurrency:
         ]
 
     def test_high_risk_writer_exclusive_no_overlap(self, monkeypatch):
-        plan = PlanGraph(
-            plan_id="p_w",
-            intent="writer",
-            nodes=[
-                WorkflowNode(
-                    node_id="w1",
-                    tool_id="s",
-                    action="write",
-                    params={},
-                    risk="high",
-                    idempotent=False,
-                ),
-                WorkflowNode(
-                    node_id="w2",
-                    tool_id="s",
-                    action="write",
-                    params={},
-                    risk="high",
-                    idempotent=False,
-                ),
-            ],
+        return _assert_shared_high_risk_writer_exclusive_no_overlap_0(
+            self, monkeypatch, "p_w", "writer", "high", "high"
         )
-        _assert_gate_serializes(monkeypatch, plan, parallel=True)
 
     def test_non_idempotent_writer_exclusive_no_overlap(self, monkeypatch):
-        plan = PlanGraph(
-            plan_id="p_ni",
-            intent="nonidem",
-            nodes=[
-                WorkflowNode(
-                    node_id="w1",
-                    tool_id="s",
-                    action="write",
-                    params={},
-                    risk="low",
-                    idempotent=False,
-                ),
-                WorkflowNode(
-                    node_id="w2",
-                    tool_id="s",
-                    action="write",
-                    params={},
-                    risk="low",
-                    idempotent=False,
-                ),
-            ],
+        return _assert_shared_high_risk_writer_exclusive_no_overlap_0(
+            self, monkeypatch, "p_ni", "nonidem", "low", "low"
         )
-        _assert_gate_serializes(monkeypatch, plan, parallel=True)
 
     def test_parallel_false_serializes_all_nodes(self, monkeypatch):
         plan = _parallel_read_plan()

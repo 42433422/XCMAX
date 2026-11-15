@@ -39,6 +39,24 @@ from fastapi.testclient import TestClient
 import app.fastapi_routes.xcmax_admin as admin_routes
 
 
+async def _assert_shared_yuangon_path_with_put_method_falls_through_to_proxy_0(
+    self, _shared_literal_0, _shared_literal_1
+):
+    req = _mock_request()
+    with (
+        _admin_session_ok(),
+        patch("app.application.modstore_local_client.prefer_local_modstore", return_value=True),
+        patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+        patch(
+            "app.fastapi_routes.market_account._proxy_json",
+            new=AsyncMock(return_value={"ok": True}),
+        ),
+        patch("app.fastapi_routes.market_account._error_message", return_value="e"),
+    ):
+        result = await admin_routes._market_admin_proxy(req, _shared_literal_0, _shared_literal_1)
+    assert result == {"ok": True}
+
+
 @pytest.fixture
 def app_with_router() -> FastAPI:
     app = FastAPI()
@@ -114,52 +132,16 @@ class TestMarketAdminProxyYuangonFallThrough:
     @pytest.mark.asyncio
     async def test_yuangon_path_with_put_method_falls_through_to_proxy(self):
         """Lines 105->119: prefer_local=True, path is yuangon, but method=PUT → falls through."""
-        req = _mock_request()
-        with (
-            _admin_session_ok(),
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request",
-                return_value="tok",
-            ),
-            patch(
-                "app.fastapi_routes.market_account._proxy_json",
-                new=AsyncMock(return_value={"ok": True}),
-            ),
-            patch("app.fastapi_routes.market_account._error_message", return_value="e"),
-        ):
-            result = await admin_routes._market_admin_proxy(
-                req, "PUT", "/api/admin/yuangon-onboard/status"
-            )
-        assert result == {"ok": True}
+        return await _assert_shared_yuangon_path_with_put_method_falls_through_to_proxy_0(
+            self, "PUT", "/api/admin/yuangon-onboard/status"
+        )
 
     @pytest.mark.asyncio
     async def test_yuangon_path_with_delete_method_falls_through(self):
         """Lines 111->119: prefer_local=True, path is yuangon/run, but method=DELETE → falls through."""
-        req = _mock_request()
-        with (
-            _admin_session_ok(),
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request",
-                return_value="tok",
-            ),
-            patch(
-                "app.fastapi_routes.market_account._proxy_json",
-                new=AsyncMock(return_value={"ok": True}),
-            ),
-            patch("app.fastapi_routes.market_account._error_message", return_value="e"),
-        ):
-            result = await admin_routes._market_admin_proxy(
-                req, "DELETE", "/api/admin/yuangon-onboard/run"
-            )
-        assert result == {"ok": True}
+        return await _assert_shared_yuangon_path_with_put_method_falls_through_to_proxy_0(
+            self, "DELETE", "/api/admin/yuangon-onboard/run"
+        )
 
 
 # ---------------------------------------------------------------------------

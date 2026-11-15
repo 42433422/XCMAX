@@ -10,6 +10,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
+def _assert_shared_negation_intent_via_cancel_keyword_0(self, _shared_literal_0, _shared_literal_1):
+    from app.domain.neuro.reflex_arc import ReflexType
+    from app.domain.shared_services.intent_service import is_negation_intent
+
+    rr = _make_reflex(ReflexType.GREETING, triggered=False)
+    with patch("app.domain.shared_services.intent_service._reflex_arc") as arc:
+        arc.process.return_value = rr
+        assert is_negation_intent(_shared_literal_1) is _shared_literal_0
+
+
 # ---------------------------------------------------------------------------
 # Module-level patch helpers
 # ---------------------------------------------------------------------------
@@ -906,41 +917,17 @@ class TestIsNegationIntentBranches:
 
     def test_negation_intent_via_cancel_keyword(self):
         """算了/取消/不用了 keyword path (line 197)."""
-        from app.domain.neuro.reflex_arc import ReflexType
-        from app.domain.shared_services.intent_service import is_negation_intent
-
-        rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        with patch("app.domain.shared_services.intent_service._reflex_arc") as arc:
-            arc.process.return_value = rr
-            assert is_negation_intent("算了吧") is True
+        return _assert_shared_negation_intent_via_cancel_keyword_0(self, True, "算了吧")
 
     def test_negation_intent_via_cancel_keyword_quxi(self):
-        from app.domain.neuro.reflex_arc import ReflexType
-        from app.domain.shared_services.intent_service import is_negation_intent
-
-        rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        with patch("app.domain.shared_services.intent_service._reflex_arc") as arc:
-            arc.process.return_value = rr
-            assert is_negation_intent("取消操作") is True
+        return _assert_shared_negation_intent_via_cancel_keyword_0(self, True, "取消操作")
 
     def test_negation_intent_falls_through_to_is_negation(self):
         """No DENIAL, no cancel keyword, but 不要 in msg -> True via is_negation."""
-        from app.domain.neuro.reflex_arc import ReflexType
-        from app.domain.shared_services.intent_service import is_negation_intent
-
-        rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        with patch("app.domain.shared_services.intent_service._reflex_arc") as arc:
-            arc.process.return_value = rr
-            assert is_negation_intent("不要开单") is True
+        return _assert_shared_negation_intent_via_cancel_keyword_0(self, True, "不要开单")
 
     def test_negation_intent_false_plain_message(self):
-        from app.domain.neuro.reflex_arc import ReflexType
-        from app.domain.shared_services.intent_service import is_negation_intent
-
-        rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        with patch("app.domain.shared_services.intent_service._reflex_arc") as arc:
-            arc.process.return_value = rr
-            assert is_negation_intent("查一下产品") is False
+        return _assert_shared_negation_intent_via_cancel_keyword_0(self, False, "查一下产品")
 
 
 # ---------------------------------------------------------------------------

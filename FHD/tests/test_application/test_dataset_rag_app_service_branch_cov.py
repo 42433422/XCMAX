@@ -71,6 +71,37 @@ from app.infrastructure.rag.hybrid_retriever import RetrievedChunk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import UnsafeDownloadPathError
 
+
+def _assert_shared_latest_version_0(self, tmp_path, _shared_literal_0, _shared_literal_1):
+    svc = _make_svc(tmp_path)
+    from app.application.dataset_rag_app_service import _DatasetState
+
+    state = _DatasetState("ds1")
+    state.documents["doc1"] = DatasetDocument(
+        document_id="doc1",
+        source="src",
+        parser="p",
+        text_length=10,
+        chunk_count=1,
+        tenant_id="t1",
+        version=1,
+    )
+    state.documents["doc2"] = DatasetDocument(
+        document_id="doc2",
+        source="src",
+        parser="p",
+        text_length=10,
+        chunk_count=1,
+        tenant_id="t1",
+        version=2,
+    )
+    result = svc._resolve_document_for_version(
+        state, source="src", tenant_id="t1", version=_shared_literal_1
+    )
+    assert result is not None
+    assert result.version == _shared_literal_0
+
+
 # ─────────────────────────── helpers ────────────────────────────
 
 
@@ -2086,36 +2117,7 @@ class TestResolveDocumentForVersionBoundary:
         assert result is None
 
     def test_latest_version(self, tmp_path):
-        svc = _make_svc(tmp_path)
-        from app.application.dataset_rag_app_service import _DatasetState
-
-        state = _DatasetState("ds1")
-        state.documents["doc1"] = DatasetDocument(
-            document_id="doc1",
-            source="src",
-            parser="p",
-            text_length=10,
-            chunk_count=1,
-            tenant_id="t1",
-            version=1,
-        )
-        state.documents["doc2"] = DatasetDocument(
-            document_id="doc2",
-            source="src",
-            parser="p",
-            text_length=10,
-            chunk_count=1,
-            tenant_id="t1",
-            version=2,
-        )
-        result = svc._resolve_document_for_version(
-            state,
-            source="src",
-            tenant_id="t1",
-            version="latest",
-        )
-        assert result is not None
-        assert result.version == 2
+        return _assert_shared_latest_version_0(self, tmp_path, 2, "latest")
 
     def test_empty_version_returns_latest(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -2140,36 +2142,7 @@ class TestResolveDocumentForVersionBoundary:
         assert result is not None
 
     def test_specific_version_match(self, tmp_path):
-        svc = _make_svc(tmp_path)
-        from app.application.dataset_rag_app_service import _DatasetState
-
-        state = _DatasetState("ds1")
-        state.documents["doc1"] = DatasetDocument(
-            document_id="doc1",
-            source="src",
-            parser="p",
-            text_length=10,
-            chunk_count=1,
-            tenant_id="t1",
-            version=1,
-        )
-        state.documents["doc2"] = DatasetDocument(
-            document_id="doc2",
-            source="src",
-            parser="p",
-            text_length=10,
-            chunk_count=1,
-            tenant_id="t1",
-            version=2,
-        )
-        result = svc._resolve_document_for_version(
-            state,
-            source="src",
-            tenant_id="t1",
-            version="1",
-        )
-        assert result is not None
-        assert result.version == 1
+        return _assert_shared_latest_version_0(self, tmp_path, 1, "1")
 
     def test_v_prefix_version_match(self, tmp_path):
         svc = _make_svc(tmp_path)
