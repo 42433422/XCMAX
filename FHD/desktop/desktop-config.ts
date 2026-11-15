@@ -131,15 +131,14 @@ export function readPackagedProductSku(): ProductSku | null {
 export function backendEditionEnv(): Record<string, string> {
   const sku = readPackagedProductSku()
   if (!sku) {
-    // dev 模式未指定 SKU：默认 generic，与前端 generic 构建产物一致。
-    // 显式注入 XCAGI_PRODUCT_SKU=generic 覆盖 XCAGI/.env 中可能的 enterprise 设置，
-    // 避免前后端 SKU 不一致导致路由守卫误触发 admin 跳转。
+    // 未显式指定 SKU 时默认按企业版运行：本地/开发环境直接获得完整能力，
+    // 需要个人版时显式注入 XCAGI_PRODUCT_SKU=personal。
     return {
-      XCAGI_PRODUCT_SKU: 'generic',
-      XCAGI_GENERIC_EDITION: '1',
-      XCAGI_PLATFORM_SHELL: '1',
-      XCAGI_DEFAULT_EDITION: 'generic',
-      FHD_ELT_CENTER_ENABLED: process.env.FHD_ELT_CENTER_ENABLED || '0'
+      XCAGI_PRODUCT_SKU: 'enterprise',
+      XCAGI_DEFAULT_EDITION: 'full',
+      XCAGI_EDITION: 'full',
+      XCAGI_PLATFORM_SHELL: '0',
+      FHD_ELT_CENTER_ENABLED: process.env.FHD_ELT_CENTER_ENABLED || '1'
     }
   }
   const edition = SKU_RUNTIME_EDITION[sku]

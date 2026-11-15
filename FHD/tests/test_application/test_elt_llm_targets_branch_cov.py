@@ -146,7 +146,7 @@ def test_llm_assist_mode_and_limits(monkeypatch):
     assert llm_assist.elt_llm_mode() == "auto"
 
     monkeypatch.delenv("FHD_ELT_LLM_TIMEOUT", raising=False)
-    assert llm_assist.elt_llm_timeout_seconds() == 6.0
+    assert llm_assist.elt_llm_timeout_seconds() == 30.0
     monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT", "5")
     assert llm_assist.elt_llm_timeout_seconds() == 5.0
     monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT", "99")
@@ -156,7 +156,7 @@ def test_llm_assist_mode_and_limits(monkeypatch):
     monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT", "-1")
     assert llm_assist.elt_llm_timeout_seconds() == 1.0
     monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT", "abc")
-    assert llm_assist.elt_llm_timeout_seconds() == 6.0
+    assert llm_assist.elt_llm_timeout_seconds() == 30.0
     monkeypatch.delenv("FHD_ELT_IMPORT_LLM_TIMEOUT", raising=False)
     assert llm_assist.elt_llm_timeout_seconds(full_sheet=True) == 180.0
     monkeypatch.setenv("FHD_ELT_IMPORT_LLM_TIMEOUT", "30")
@@ -635,7 +635,9 @@ def test_llm_assist_active_software_llm(monkeypatch):
             return_value=FakeProvider(),
         ),
     ):
-        assert llm_assist._active_software_llm() == (True, None, None)
+        configured, service, _provider = llm_assist._active_software_llm()
+        # 统一入口：registry 有 provider 时与对话链路共用同一个 service。
+        assert configured is True and service is not None
 
     # conversation service path
     with (

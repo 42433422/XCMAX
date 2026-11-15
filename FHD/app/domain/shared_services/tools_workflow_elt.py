@@ -196,7 +196,7 @@ def _wait(service, run_id: str, owner_id: int, *, pending: set[str], timeout: fl
         time.sleep(POLL_INTERVAL_SECONDS)
 
 
-def _execution_message(summary: dict, knowledge_note: str, template_note: str) -> str:
+def _execution_message(summary: dict, notes: str) -> str:
     """导入回执必须说清「写了多少 / 跳过多少」，否则全量重复时会误报导入成功。"""
     executed = int(summary.get("executed_rows") or 0)
     skipped = int(summary.get("skip_rows") or 0)
@@ -205,7 +205,7 @@ def _execution_message(summary: dict, knowledge_note: str, template_note: str) -
         message += f"，重复跳过 {skipped} 行"
         if executed == 0:
             message += "（本次全部判定为重复，业务库没有新增数据）"
-    return f"{message}{knowledge_note}{template_note}。"
+    return f"{message}{notes}。"
 
 
 def _summary(data: dict) -> dict[str, Any]:
@@ -383,6 +383,114 @@ def _safe_file_component(value: str) -> str:
     return text.strip(" .-")[:80] or "elt-template"
 
 
+def _template_target_type(data: dict[str, Any]) -> str:
+    """模板登记必须用真实注册过的目标类型；auto/abnormal 一律按通用表处理。"""
+    target_type = str(data.get("target_type") or "").strip()
+    if target_type in {"", "auto", "abnormal"}:
+        return "dynamic_table"
+    return target_type
+
+
+def _register_header_template(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
+    """通用表已经是模板库里的表：按每张通用表写一个可见模板。
+
+    模板库页面读的是 ``templates`` 表 + 模板文件；只写 ``elt_templates``
+    在页面上是看不见的，所以这里直接落成可见模板，名字与列沿用通用表本身。
+    """
+    import json
+
+    from app.application.template_app_service import get_template_app_service
+    from app.db.models.elt import EltDynamicTable
+    from app.utils.path_io.path_utils import get_app_data_dir
+
+    file_name = str(data.get("file_name") or "")
+    specs: list[tuple[str, list[str]]] = []
+    existing_names: set[str] = set()
+    try:
+        with get_db() as db:
+            tables = (
+                db.query(EltDynamicTable)
+                .filter(
+                    EltDynamicTable.tenant_id == tenant_id_for_write(),
+                    EltDynamicTable.owner_user_id == owner_id,
+                    EltDynamicTable.source_file == file_name,
+                )
+                .order_by(EltDynamicTable.created_at.asc())
+                .all()
+            )
+            for table in tables:
+                name = str(table.name or "").strip()
+                headers = [str(h) for h in json.loads(table.headers_json or "[]") or [] if str(h)]
+                if name and headers:
+                    specs.append((name, headers))
+    except RECOVERABLE_ERRORS:
+        return {}
+    if not specs:
+        return {}
+    service = get_template_app_service()
+    try:
+        existing_names = {
+            str(item.get("name") or "").strip()
+            for item in (service.get_templates().get("templates") or [])
+            if str(item.get("source") or "") == "db"
+        }
+    except RECOVERABLE_ERRORS:
+        existing_names = set()
+    out_dir = (
+        Path(get_app_data_dir()).resolve()
+        / "tenants"
+        / str(tenant_id_for_write())
+        / "template_library"
+        / str(owner_id)
+    )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    names: list[str] = []
+    template_ids: list[Any] = []
+    for name, headers in specs:
+        if name in existing_names:
+            continue
+        try:
+            from openpyxl import Workbook
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = name[:31] or "Sheet1"
+            sheet.append(headers)
+            digest = hashlib.sha1("|".join(headers).encode("utf-8")).hexdigest()[:12]
+            destination = out_dir / f"{_safe_file_component(name)}-{digest}.xlsx"
+            workbook.save(destination)
+            workbook.close()
+            result = service.save_template(
+                {
+                    "template_name": name,
+                    "template_key": f"ELT_{digest}",
+                    "template_type": "Excel",
+                    "original_file_path": str(destination),
+                    "analyzed_data": {
+                        "category": "excel",
+                        "fields": [
+                            {"label": header, "value": "", "type": "dynamic"} for header in headers
+                        ],
+                        "preview_data": {
+                            "sample_rows": [],
+                            "sheet_name": name,
+                            "grid_preview": _grid_preview(str(destination)),
+                        },
+                    },
+                }
+            )
+        except RECOVERABLE_ERRORS:
+            continue
+        if not result.get("success"):
+            continue
+        existing_names.add(name)
+        names.append(name)
+        template_ids.append(result.get("id"))
+    if not names:
+        return {"action": "skip", "reason": "duplicate_name"}
+    return {"action": "new", "names": names, "template_ids": template_ids}
+
+
 def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
     """业务入库完成后，把预演切出的区段登记进模板库。
 
@@ -406,6 +514,10 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
     ]
     # 模板库保存预演切出的全部区段；业务数据仍只写入预演选中的区段。
     if not all_regions:
+        # 通用表没有区段信息时按表头登记，避免「导入完成但模板库空白」。
+        fallback = _register_header_template(data, owner_id)
+        if fallback:
+            return fallback
         return {"action": "skip", "reason": "no_region"}
     try:
         from app.application.elt.errors import EltError
@@ -430,9 +542,7 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
         if not storage_path or not os.path.exists(storage_path):
             return {"action": "skip", "reason": "upload_missing"}
         stem = Path(file_name).stem.strip() or Path(storage_path).stem or "ELT 模板"
-        template_type = (
-            target_type if target_type and target_type not in {"auto", "abnormal"} else "Excel"
-        )
+        template_type = _template_target_type(data)
         service = get_template_app_service()
         templates = [item for item in (service.get_templates().get("templates") or []) if str(item.get("source") or "") == "db"]
         existing_names = {
@@ -955,6 +1065,16 @@ def _preview(params: dict, runtime_context: dict) -> dict:
         resume_params["valid_rows_only"] = True
     if requires_decision and pending_mappings and not blocked_by_errors:
         resume_params["accept_suggested"] = True
+    # 自动审批档：预演通过后直接入库，避免计划只排了预演就停在 preview_ready，
+    # 导致「导入成功但模板库/知识库空白」。
+    if ok and summary["executable"] and str(runtime_context.get("chat_approval_mode") or "") == "auto":
+        executed = _execute({"run_id": run_id}, runtime_context)
+        if executed.get("success"):
+            data = executed.get("data") if isinstance(executed.get("data"), dict) else {}
+            data["preview"] = summary
+            executed["data"] = data
+            executed["preview"] = True
+            return executed
     return {
         "success": ok,
         "preview": True,
@@ -966,6 +1086,99 @@ def _preview(params: dict, runtime_context: dict) -> dict:
         "resume_params": resume_params,
         "data": summary,
     }
+
+
+def _receipt_tenant(data: dict[str, Any]) -> int:
+    """登记线程拿不到调用线程的租户上下文，先固定本次运行的租户再进线程。"""
+    from app.infrastructure.tenant_scope import TenantScopeError, tenant_id_for_write
+
+    try:
+        return tenant_id_for_write()
+    except TenantScopeError:
+        pass
+    from app.db.models.elt import EltRun
+
+    with get_db() as db:
+        row = (
+            db.query(EltRun.tenant_id)
+            .filter(EltRun.id == str(data.get("id") or data.get("run_id") or ""))
+            .first()
+        )
+    if row is None:
+        raise TenantScopeError("写入业务数据缺少 tenant_id")
+    return int(row[0])
+
+
+def _parallel_receipts(data: dict[str, Any], owner_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
+    """知识库与模板库互不依赖，一次导入内并行写，互不拖累。"""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    tenant = _receipt_tenant(data)
+
+    def knowledge_receipt() -> dict[str, Any]:
+        with tenant_scope(tenant):
+            return _knowledge_receipt(data, owner_id)
+
+    def template_receipt() -> dict[str, Any]:
+        with tenant_scope(tenant):
+            return _template_receipt(data, owner_id)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        knowledge_future = pool.submit(knowledge_receipt)
+        template_future = pool.submit(template_receipt)
+        try:
+            knowledge = knowledge_future.result()
+        except RECOVERABLE_ERRORS as exc:
+            knowledge = {"action": "error", "reason": str(exc)[:200]}
+        try:
+            template = template_future.result()
+        except RECOVERABLE_ERRORS as exc:
+            template = {"action": "error", "reason": str(exc)[:200]}
+    return knowledge, template
+
+
+def _finalize_import(
+    data: dict[str, Any], owner_id: int
+) -> tuple[dict[str, Any], dict[str, Any], str]:
+    """一次导入的唯一收口：并行写知识库与模板库，并生成如实回执。
+
+    预演自动入库、正常执行、「已完成」补登三条路径都只调用它，不再各写一份。
+    """
+    knowledge, template = _parallel_receipts(data, owner_id)
+    return knowledge, template, _receipt_notes(knowledge, template)
+
+
+def _receipt_notes(knowledge: dict[str, Any], template: dict[str, Any]) -> str:
+    """把知识库与模板库的登记结果转成一句说明；跳过与失败都必须写清原因。"""
+    note = ""
+    action = str(knowledge.get("action") or "")
+    if action == "error":
+        note += "；知识库同步失败，业务数据已入库"
+    elif action in {"new", "update"}:
+        note += "；原件已同步到知识库"
+    elif action == "skip":
+        note += "；" + {
+            "empty_document": "原件没有可提取的正文，未写入知识库",
+            "upload_missing": "上传文件已过期，未同步知识库",
+            "missing_upload": "缺少上传记录，未同步知识库",
+            "upload_not_found": "未找到上传记录，未同步知识库",
+        }.get(str(knowledge.get("reason") or ""), "知识库已有相同内容，已跳过")
+    template_action = str(template.get("action") or "")
+    if template_action == "error":
+        note += "；模板库登记失败，业务数据已入库"
+    elif template_action == "new":
+        names = [str(name) for name in template.get("names") or [] if name]
+        note += f"；已登记模板到模板库（{'、'.join(names)}）" if names else "；模板已登记到模板库"
+    elif template_action == "skip":
+        note += "；" + {
+            "no_region": "未切出模板区段，模板库未登记",
+            "upload_not_found": "未找到上传记录，模板库未登记",
+            "upload_missing": "上传文件已过期，模板库未登记",
+            "missing_upload": "缺少上传记录，模板库未登记",
+        }.get(str(template.get("reason") or ""), "模板库已有同名模板，已跳过")
+    return note
 
 
 def _execute(params: dict, runtime_context: dict) -> dict:
@@ -985,6 +1198,25 @@ def _execute(params: dict, runtime_context: dict) -> dict:
         with get_db() as db:
             # 执行必须绑定本次预演内容的修订号，否则 ELT 会拒绝（防止预演后被改动）。
             current = service.get_run(db, run_id=run_id, owner_user_id=actor.id)
+            if str(current.get("status") or "") == "completed":
+                # 自动审批档下预演会顺手入库；计划里的 execute 步骤再执行一次不能报失败。
+                # 预演已入库时同样要补做知识库与模板库登记，否则会出现「导入成功但模板库空白」。
+                done = _summary(current)
+                executed = int(done.get("executed_rows") or 0)
+                knowledge, template, notes = _finalize_import(current, actor.id)
+                done["knowledge"] = knowledge
+                done["template"] = template
+                return {
+                    "success": True,
+                    "error_code": None,
+                    "message": (
+                        f"该文件已在预演阶段自动入库（写入 {executed} 行），无需重复执行"
+                        if executed
+                        else "该文件已在预演阶段处理完成（未写入业务行），无需重复执行"
+                    )
+                    + notes,
+                    "data": done,
+                }
             revision = str(current.get("preview_revision") or "")
             service.execute(
                 db,
@@ -1009,37 +1241,12 @@ def _execute(params: dict, runtime_context: dict) -> dict:
     companion = _execute_linked_companion(service, actor, data) if ok else {}
     if companion:
         summary["customer_products"] = companion
-    knowledge = _knowledge_receipt(data, actor.id) if ok else {}
+    # 业务数据已入库；知识库与模板库并行写，一个慢或失败不影响另一个。
+    knowledge, template, notes = _finalize_import(data, actor.id) if ok else ({}, {}, "")
     summary["knowledge"] = knowledge
-    template = _template_receipt(data, actor.id) if ok else {}
     summary["template"] = template
-    knowledge_note = ""
-    if ok:
-        action = str(knowledge.get("action") or "")
-        reason = str(knowledge.get("reason") or "")
-        if action == "error":
-            knowledge_note = "；知识库同步失败，业务数据已入库，可稍后在数据对接中心重试"
-        elif action in {"new", "update"}:
-            knowledge_note = "；原件已同步到知识库"
-        elif action == "skip" and reason not in {"missing_upload", "upload_not_found"}:
-            knowledge_note = "；知识库已有相同内容，已跳过"
-    template_note = ""
-    if ok:
-        action = str(template.get("action") or "")
-        if action == "error":
-            template_note = "；模板库登记失败，业务数据已入库"
-        elif action == "new":
-            names = [str(name) for name in template.get("names") or [] if name]
-            template_note = (
-                f"；已从原件切出 {len(names)} 个模板并登记到模板库（{'、'.join(names)}）"
-                if names
-                else "；原件区段已登记到模板库"
-            )
-        elif action == "skip" and str(template.get("reason") or "") == "duplicate_name":
-            template_note = "；模板库已有同名模板，已跳过"
-    companion_note = _companion_note(companion)
     message = (
-        _execution_message(summary, knowledge_note, f"{template_note}{companion_note}")
+        _execution_message(summary, notes + _companion_note(companion))
         if ok
         else f"ELT 导入未完成：{summary.get('error') or data.get('stage')}"
     )
@@ -1188,6 +1395,52 @@ def _split_run_ids(value: object) -> list[str]:
 
 
 _MAX_BATCH_IMPORTS = 50
+_IMPORT_SUFFIXES = (".xlsx", ".xlsm", ".xls", ".csv", ".docx", ".pdf")
+_DIRECTORY_SCAN_LIMIT = 400
+
+
+def _expand_directory_paths(
+    paths: list[str], runtime_context: dict[str, Any]
+) -> tuple[list[str], list[dict]]:
+    """模型把本地目录当文件传时，展开为目录内已上传的文件；展开不了给出可操作提示。"""
+    expanded: list[str] = []
+    unresolved: list[dict] = []
+    for path in paths:
+        candidate = Path(str(path)).expanduser()
+        try:
+            is_dir = candidate.is_dir()
+        except OSError:
+            is_dir = False
+        if not is_dir:
+            expanded.append(path)
+            continue
+        names: list[str] = []
+        try:
+            for entry in candidate.rglob("*"):
+                if len(names) >= _DIRECTORY_SCAN_LIMIT:
+                    break
+                if entry.is_file() and entry.suffix.lower() in _IMPORT_SUFFIXES:
+                    names.append(entry.name)
+        except OSError:
+            names = []
+        matched = [name for name in names if _owned_upload(name, runtime_context)]
+        if matched:
+            expanded.extend(matched)
+            continue
+        unresolved.append(
+            {
+                "file_path": str(path),
+                "file_name": candidate.name,
+                "success": False,
+                "error_code": "directory_needs_upload",
+                "message": (
+                    f"「{candidate.name}」是本地目录，ELT 只导入已上传到本账号的文件；"
+                    f"目录内 {len(names)} 个可导入文件尚无上传记录，"
+                    "请先用「上传附件」或数据对接中心上传后再导入。"
+                ),
+            }
+        )
+    return expanded, unresolved
 
 
 def _single_params(payload: dict) -> dict:
@@ -1198,9 +1451,10 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
     """整批预演：每个文件独立出结果，单个失败不影响其余。"""
     targets = paths[:_MAX_BATCH_IMPORTS]
     base = _single_params(payload)
-    items: list[dict] = []
-    total = len(targets)
-    processed = 0
+    targets, unresolved = _expand_directory_paths(targets, runtime_context)
+    items: list[dict] = list(unresolved)
+    total = len(targets) + len(unresolved)
+    processed = len(unresolved)
     for index, path in enumerate(targets, start=1):
         remaining = _remaining_budget(runtime_context)
         if remaining is not None and remaining <= _MIN_WAIT_SECONDS:

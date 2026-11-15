@@ -791,12 +791,15 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("elt_import", "preview"): _object_schema(
         [],
         {
-            "file_path": {"type": "string", "description": "单个文件路径或文件名"},
+            "file_path": {
+                "type": "string",
+                "description": "已上传的单个文件名或上传记录 ID（不是本地目录路径）",
+            },
             "file_paths": {
                 "type": "array",
                 "items": {"type": "string"},
                 "maxItems": 50,
-                "description": "整批文件（最多 50 个），与 file_path 二选一",
+                "description": "已上传的多个文件名/ID（最多 50 个），与 file_path 二选一；整个目录请逐个列出或留空按本轮上传处理",
             },
             "valid_rows_only": {"type": "boolean"},
             "accept_suggested": {

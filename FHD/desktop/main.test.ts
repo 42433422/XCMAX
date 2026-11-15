@@ -458,13 +458,14 @@ describe('main — backendEditionEnv', () => {
     delete process.env.XCAGI_PRODUCT_SKU
   })
 
-  it('returns generic edition env when no SKU (dev mode)', async () => {
+  it('returns enterprise edition env when no SKU (dev mode default)', async () => {
     const { backendEditionEnv } = await import('./main.js')
     const env = backendEditionEnv()
-    expect(env.XCAGI_PRODUCT_SKU).toBe('generic')
-    expect(env.XCAGI_GENERIC_EDITION).toBe('1')
-    expect(env.XCAGI_PLATFORM_SHELL).toBe('1')
-    expect(env.XCAGI_DEFAULT_EDITION).toBe('generic')
+    expect(env.XCAGI_PRODUCT_SKU).toBe('enterprise')
+    expect(env.XCAGI_PLATFORM_SHELL).toBe('0')
+    expect(env.XCAGI_DEFAULT_EDITION).toBe('full')
+    expect(env.XCAGI_EDITION).toBe('full')
+    expect(env.FHD_ELT_CENTER_ENABLED).toBe('1')
   })
 
   it('returns full edition env for enterprise SKU', async () => {

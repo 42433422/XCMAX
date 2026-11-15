@@ -55,9 +55,10 @@ _ETL_LLM_TIMEOUT_CAP = 180.0
 
 
 def elt_llm_timeout_seconds(*, full_sheet: bool = False) -> float:
-    """Probe calls stay short. A full archived sheet uses the template-analysis ceiling.
+    """Probe calls stay bounded. A full archived sheet uses the template-analysis ceiling.
 
-    ``FHD_ELT_LLM_TIMEOUT`` defaults to 6 seconds and cannot exceed 180.
+    ``FHD_ELT_LLM_TIMEOUT`` 默认 30 秒，上限 180。原先默认 6 秒会让远端模型
+    在正常写结构时被判超时，导致识别一律降级成表头兜底。
     ``FHD_ELT_IMPORT_LLM_TIMEOUT`` bounds each database unit or knowledge import,
     default 180, same ceiling. The old 12-second clamp cut a real delivery
     note off while the remote model was still writing rows.
@@ -66,8 +67,8 @@ def elt_llm_timeout_seconds(*, full_sheet: bool = False) -> float:
         raw = str(os.environ.get("FHD_ELT_IMPORT_LLM_TIMEOUT") or "180").strip()
         fallback = _ETL_LLM_TIMEOUT_CAP
     else:
-        raw = str(os.environ.get("FHD_ELT_LLM_TIMEOUT") or "6").strip()
-        fallback = 6.0
+        raw = str(os.environ.get("FHD_ELT_LLM_TIMEOUT") or "30").strip()
+        fallback = 30.0
     try:
         return min(_ETL_LLM_TIMEOUT_CAP, max(1.0, float(raw)))
     except ValueError:

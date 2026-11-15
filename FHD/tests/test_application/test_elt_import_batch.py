@@ -213,5 +213,50 @@ def test_register_elt_upload_skips_without_identity(tmp_path):
     assert _register_elt_upload(target, "note.docx", None, (1, 2)) == ""
 
 
+def test_preview_batch_expands_uploaded_directory(tmp_path, monkeypatch):
+    """模型把本地目录当文件传时，按目录内已上传文件展开，不再报 upload_not_found。"""
+    folder = tmp_path / "2026.10月综合系列"
+    folder.mkdir()
+    (folder / "26年材料总表.xlsx").write_bytes(b"x")
+    (folder / "忽略.txt").write_text("x", encoding="utf-8")
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        tools_workflow_elt,
+        "_owned_upload",
+        lambda path, _context: {"id": "u1"} if path == "26年材料总表.xlsx" else {},
+    )
+    monkeypatch.setattr(
+        tools_workflow_elt,
+        "_preview",
+        lambda params, _context: calls.append(params["file_path"]) or {"success": True, "data": {}},
+    )
+
+    out = tools_workflow_elt._preview_batch([str(folder)], {}, {})
+
+    assert calls == ["26年材料总表.xlsx"]
+    assert out["ready_count"] == 1
+
+
+def test_preview_batch_reports_directory_without_uploads(tmp_path, monkeypatch):
+    """目录里没有已上传记录时，给出可执行提示而不是「找不到上传文件」。"""
+    folder = tmp_path / "空目录"
+    folder.mkdir()
+    (folder / "26年材料总表.xlsx").write_bytes(b"x")
+
+    monkeypatch.setattr(tools_workflow_elt, "_owned_upload", lambda *_args: {})
+    monkeypatch.setattr(
+        tools_workflow_elt,
+        "_preview",
+        lambda *_args: pytest.fail("不应把目录当文件预演"),
+    )
+
+    out = tools_workflow_elt._preview_batch([str(folder)], {}, {})
+
+    assert out["ready_count"] == 0
+    assert out["results"][0]["error_code"] == "directory_needs_upload"
+    assert "上传" in out["results"][0]["message"]
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))

@@ -59,6 +59,27 @@ def _control_reply(
     }
 
 
+def _failed_step_detail(agent_run: object) -> str:
+    """取第一个失败步骤的可读原因，替代「审批通过后执行失败」这类泛化文案。"""
+    for step in getattr(agent_run, "steps", None) or []:
+        if str(getattr(step, "status", "") or "").lower() not in {"failed", "error"}:
+            continue
+        output = getattr(step, "output", None)
+        if isinstance(output, dict):
+            for result in output.get("results") or []:
+                if isinstance(result, dict):
+                    text = str(result.get("message") or "").strip()
+                    if text:
+                        return text
+            text = str(output.get("message") or "").strip()
+            if text:
+                return text
+        text = str(getattr(step, "error", "") or "").strip()
+        if text:
+            return text
+    return ""
+
+
 class SessionCallbacks(Protocol):
     def _continue_after_clarification(
         self, user_id: str, pending: dict[str, Any], message: str
@@ -662,6 +683,8 @@ class WorkflowSession:
         run_id = str(getattr(agent_run, "run_id", "") or "")
         accepted = bool(result.get("accepted"))
         waiting_decision = bool(execution.get("waiting_user_decision"))
+        executed_nodes = int(execution.get("nodes_executed") or 0)
+        wrote_nothing = not success and not waiting_decision and executed_nodes <= 0
         if accepted and waiting_decision:
             # 自动审批已通过，但预演要求用户确认目标表/字段：如实说明在等什么。
             text = f"自动审批已通过，但需要你确认后才会写入：{message}"
@@ -669,6 +692,10 @@ class WorkflowSession:
             text = f"审批已通过，执行已提交。{message}"
         elif success:
             text = f"自动审批已通过并执行完成。{message}"
+        elif wrote_nothing:
+            # 写入前就失败：必须说清「一行都没写」，不能留成「结果未知」。
+            detail = _failed_step_detail(agent_run) or message or "请到任务中核对结果"
+            text = f"本轮未执行任何写入（自动审批在写入前终止）：{detail}"
         else:
             text = f"自动审批未完成执行：{message or '请到任务中核对结果'}"
         # 自动审批在同一轮返回，必须把节点产物（如生成的 Excel）与下载链接写回回复，
@@ -703,6 +730,13 @@ class WorkflowSession:
                 "agent_run_id": run_id,
                 "approval_request_id": request_id,
                 "auto_approved": True,
+                # 失败语义交给前端三档：写入前失败必须是 not_executed，
+                # 不能让界面退化成「已执行但结果未知，不要重复提交」。
+                "execution": {
+                    "committed": bool(success) and executed_nodes > 0,
+                    "effect": "none" if wrote_nothing else ("partial" if not success else "write"),
+                    "outcome": "not_executed" if wrote_nothing else ("unknown" if not success else "succeeded"),
+                },
                 "artifacts": [
                     artifact.to_dict()
                     for artifact in (getattr(agent_run, "artifacts", None) or [])

@@ -118,9 +118,68 @@ def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
             )
             if by_name is not None:
                 return str(by_name.storage_path)
+            adopted = _adopt_uploads_file(value, actor=actor, db=db)
+            if adopted:
+                return adopted
     except (PermissionError, ValueError):
         return value
     return value
+
+
+def _adopt_uploads_file(value: str, *, actor: Any, db: Any) -> str:
+    """聊天附件只落在 uploads/ 目录、没有 EltUpload 记录时补登记。
+
+    否则模型把 ``uploads/xxxx.xlsx`` 传进来时会被判成「找不到当前账号可用上传文件」。
+    只接受应用数据目录内已存在的文件，仍按当前账号与租户归属。
+    """
+    from uuid import uuid4
+
+    root = (Path(get_app_data_dir()) / "uploads").resolve()
+    raw = Path(value)
+    candidate = raw if raw.is_absolute() else (root / (raw.name or value))
+    try:
+        candidate = candidate.resolve()
+        candidate.relative_to(root)
+    except (ValueError, OSError):
+        return ""
+    if not candidate.is_file():
+        return ""
+    digest = hashlib.sha256()
+    with candidate.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    sha = digest.hexdigest()
+    existing = (
+        db.query(EltUpload)
+        .filter(
+            EltUpload.owner_user_id == actor.id,
+            EltUpload.tenant_id == tenant_id_for_write(),
+            EltUpload.sha256 == sha,
+        )
+        .first()
+    )
+    if existing is not None:
+        # 同内容的上传记录若已过期，续期而不是返回一条会被判「找不到上传文件」的死路径。
+        expires_at = getattr(existing, "expires_at", None)
+        if expires_at is None or expires_at <= utc_now_naive():
+            existing.expires_at = utc_now_naive() + timedelta(days=7)
+            db.commit()
+        return str(existing.storage_path or candidate)
+    db.add(
+        EltUpload(
+            id=str(uuid4()),
+            owner_user_id=actor.id,
+            tenant_id=tenant_id_for_write(),
+            file_name=candidate.name,
+            suffix=candidate.suffix.lower(),
+            size_bytes=candidate.stat().st_size,
+            sha256=sha,
+            storage_path=str(candidate),
+            expires_at=utc_now_naive() + timedelta(days=7),
+        )
+    )
+    db.commit()
+    return str(candidate)
 
 
 @contextmanager

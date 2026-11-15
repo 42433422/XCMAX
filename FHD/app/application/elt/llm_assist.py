@@ -137,10 +137,28 @@ def _bounded_structured_completion(
     return box["result"]
 
 
-def _active_software_llm(
+def _software_llm_candidates(
     timeout_seconds: float | None = None,
-) -> tuple[bool, Any | None, Any | None]:
-    """Resolve the current user's software-account LLM, then app-wide providers."""
+) -> list[tuple[Any | None, Any | None]]:
+    """模型入口的唯一解析：按顺序给出可尝试的 provider。
+
+    ELT 不再自己判定「哪条路可用」。统一 registry 排第一，与对话链路同源；
+    租户会话 token 只作为没有 registry 配置时的兜底，避免它一存在就独占入口。
+    """
+    candidates: list[tuple[Any | None, Any | None]] = []
+    try:
+        from app.domain.shared_services.ai_conversation_service import (
+            get_ai_conversation_service,
+        )
+        from app.infrastructure.llm.providers.registry import get_active_provider
+
+        service = get_ai_conversation_service()
+        if get_active_provider(conversation_service=service, profile="elt") is not None:
+            candidates.append((service, None))
+        elif get_active_provider(profile="elt") is not None:
+            candidates.append((None, None))
+    except RECOVERABLE_ERRORS:
+        pass
     try:
         from app.application.elt.llm_session_provider import current_owner_market_provider
 
@@ -150,19 +168,21 @@ def _active_software_llm(
             )
         )
         if market_provider is not None:
-            return True, None, market_provider
-        from app.infrastructure.llm.providers.registry import get_active_provider
-
-        if get_active_provider(profile="elt") is not None:
-            return True, None, None
-        from app.domain.shared_services.ai_conversation_service import get_ai_conversation_service
-
-        service = get_ai_conversation_service()
-        if get_active_provider(conversation_service=service, profile="elt") is not None:
-            return True, service, None
-        return False, None, None
+            candidates.append((None, market_provider))
     except RECOVERABLE_ERRORS:
+        pass
+    return candidates
+
+
+def _active_software_llm(
+    timeout_seconds: float | None = None,
+) -> tuple[bool, Any | None, Any | None]:
+    """统一入口的首选 provider；``False`` 表示没有任何可用候选。"""
+    candidates = _software_llm_candidates(timeout_seconds)
+    if not candidates:
         return False, None, None
+    service, provider = candidates[0]
+    return True, service, provider
 
 
 def elt_llm_enabled() -> bool:
@@ -227,7 +247,7 @@ def _complete(
             return LlmAssistResult(
                 used_llm=False, degraded=True, degradation_code="ELT_LLM_QUEUE_TIMEOUT"
             )
-        configured, conversation_service, provider = _active_software_llm(remaining)
+        configured, first_service, first_provider = _active_software_llm(remaining)
         if not configured:
             return LlmAssistResult(
                 used_llm=False,
@@ -240,23 +260,57 @@ def _complete(
                 used_llm=False, degraded=True, degradation_code="ELT_LLM_QUEUE_TIMEOUT"
             )
         called = False
+        auditor = _CALL_AUDITOR.get()
+        call_id: str | None = None
+        attempts: list[tuple[Any | None, Any | None]] = [(first_service, first_provider)]
+        # 统一入口里 registry 在前、租户 token 兜底；首个失败后仍可试其余候选。
+        attempts.extend(_software_llm_candidates(remaining)[1:])
         try:
             from app.application.reviewed_excel_audit import call_key
 
-            auditor = _CALL_AUDITOR.get()
-            call_id = uuid4().hex if auditor else None
-            if auditor:
-                auditor(call_id, lane, "sent")
-            with call_key(call_id):
-                called = True
-                result = _bounded_structured_completion(
-                    messages,
-                    schema=schema,
-                    max_tokens=max_tokens,
-                    timeout_seconds=budget,
-                    conversation_service=conversation_service,
-                    provider=provider,
-                    max_repairs=max_repairs,
+            result = None
+            last_error: BaseException | None = None
+            for index, (attempt_service, attempt_provider) in enumerate(attempts):
+                budget = deadline - time.monotonic()
+                if budget <= 0:
+                    break
+                call_id = uuid4().hex if auditor else None
+                if auditor:
+                    auditor(call_id, lane, "sent")
+                try:
+                    with call_key(call_id):
+                        called = True
+                        result = _bounded_structured_completion(
+                            messages,
+                            schema=schema,
+                            max_tokens=max_tokens,
+                            timeout_seconds=budget,
+                            conversation_service=attempt_service,
+                            provider=attempt_provider,
+                            max_repairs=max_repairs,
+                        )
+                except BOUNDARY_ERRORS as exc:
+                    from app.infrastructure.llm.structured_output import (
+                        StructuredOutputError,
+                    )
+
+                    last_error = exc
+                    retryable = (
+                        not isinstance(exc, StructuredOutputError)
+                        and _degradation_code(exc) == "ELT_LLM_UNAVAILABLE"
+                        and index + 1 < len(attempts)
+                    )
+                    if retryable:
+                        continue
+                    raise
+                break
+            if result is None:
+                if last_error is not None:
+                    raise last_error
+                return LlmAssistResult(
+                    used_llm=False,
+                    degraded=True,
+                    degradation_code="ELT_LLM_BUDGET_EXHAUSTED",
                 )
             if auditor:
                 auditor(call_id, lane, "answered")

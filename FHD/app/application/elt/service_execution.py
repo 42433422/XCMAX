@@ -349,6 +349,21 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                                     "slice_id": (provenance.get("slice") or {}).get("slice_id"),
                                     "validation_result": load_json(row.validation_json, []),
                                 }
+                            elif run.target_type == "dynamic_table" and isinstance(payload, dict):
+                                # 通用表按 sheet / 区块分表：把来源坐标带进批次，适配器据此建多张表。
+                                from app.application.elt.targets.dynamic import PARTITION_MARKER
+
+                                provenance = load_json(row.provenance_json, {})
+                                payload = {
+                                    **payload,
+                                    PARTITION_MARKER: {
+                                        "sheet": str(row.source_sheet or ""),
+                                        "table_id": str(provenance.get("table_id") or ""),
+                                        "table_title": str(provenance.get("table_title") or ""),
+                                        "table_range": str(provenance.get("table_range") or ""),
+                                        "row": int(row.source_row or 0),
+                                    },
+                                }
                             yield payload
 
                 external_started = True
