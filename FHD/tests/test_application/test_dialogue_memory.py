@@ -158,6 +158,47 @@ def test_transcript_is_encrypted_and_legacy_plaintext_is_migrated(memory_dir: Pa
     assert turn_status(key, "first") == "processing"
 
 
+def test_older_turns_are_summarized_to_disk_and_reused(memory_dir: Path) -> None:
+    from app.application.ai_chat import dialogue_memory as memory
+    from app.application.ai_chat.dialogue_memory import enrich_model_messages
+
+    for index in range(25):
+        context = _context("summary", str(index))
+        message = f"第{index}条消息"
+        prepare_chat_turn(message, context)
+        settle_chat_turn(
+            message, context, {"success": True, "response": f"第{index}条回复"}, "completed"
+        )
+
+    key = conversation_key(_context("summary", "0"))
+    stored = memory._read(key)
+    summary = stored["summary"]
+    assert summary and summary["text"]
+    assert summary["count"] == len(stored["turns"]) - memory._SUMMARY_KEEP_RECENT
+    assert summary["text"].startswith("用户：第0条消息")
+    # 摘要与已落盘前缀一致，下一次读取直接复用，不会重新生成。
+    assert memory._apply_summary(summary, stored["turns"])[0] == summary["text"]
+
+    next_context = _context("summary", "next")
+    enriched = enrich_model_messages(
+        [{"role": "user", "content": "下一条消息"}], "下一条消息", next_context
+    )
+    system = enriched[0]["content"]
+    assert "较早对话摘录" in system
+    assert "第0条消息" in system
+    history_text = json.dumps(enriched[1:], ensure_ascii=False)
+    assert "第0条消息" not in history_text
+
+
+def test_summary_is_cleared_when_transcript_is_too_short(memory_dir: Path) -> None:
+    from app.application.ai_chat import dialogue_memory as memory
+
+    context = _context("short", "1")
+    prepare_chat_turn("只有一条", context)
+    settle_chat_turn("只有一条", context, {"response": "收到"}, "completed")
+    assert memory._read(conversation_key(context)).get("summary") is None
+
+
 def test_failed_transcript_write_does_not_leave_turn_in_flight(memory_dir, monkeypatch):
     from app.application.ai_chat import dialogue_memory as memory
 

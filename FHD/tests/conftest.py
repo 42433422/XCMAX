@@ -106,6 +106,12 @@ asyncio.set_event_loop_policy(_AutoCreatingEventLoopPolicy())
 
 def pytest_sessionfinish(session, exitstatus):
     """Close event loops created for legacy synchronous coroutine tests."""
+    try:
+        from app.infrastructure.memory.mem0_backend import reset_long_term_memory_for_tests
+
+        reset_long_term_memory_for_tests()
+    except BOUNDARY_ERRORS:
+        pass
     for loop in tuple(_legacy_sync_test_loops):
         if not loop.is_closed():
             loop.close()

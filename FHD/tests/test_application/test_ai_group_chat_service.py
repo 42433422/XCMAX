@@ -12,6 +12,45 @@ from tests.pure_builders import department_catalog as fake_departments
 from tests.pure_builders import enterprise_department_catalog as fake_enterprise_departments
 
 
+def _shared_setup_acceptance_0(
+    svc, work_order_id, group, case_value_1, case_value_2, case_value_3, case_value_4
+):
+    svc._append_messages(
+        [
+            svc._message_row(
+                user_id=1,
+                group_id=group["id"],
+                role="ai",
+                sender_id="ai-group-dispatcher",
+                sender_name="工作流调度",
+                sender_avatar="",
+                body=svc._format_work_order_message(
+                    case_value_2,
+                    ["超级员工-Codex"],
+                ),
+                kind="work_order",
+                status="assigned",
+                work_order_id=work_order_id,
+                payload={"task": case_value_3},
+            ),
+            svc._message_row(
+                user_id=1,
+                group_id=group["id"],
+                role="ai",
+                sender_id="codex-super-employee",
+                sender_name="超级员工-Codex",
+                sender_avatar="",
+                body=case_value_1,
+                kind="work_report",
+                status="queued",
+                work_order_id=work_order_id,
+                payload={"raw": {"task_id": case_value_4}},
+            ),
+        ]
+    )
+    return None
+
+
 def _assert_shared_append_relay_work_report_marks_acceptance_needs_review_on_blocked_body_0(
     tmp_path,
     _shared_literal_0,
@@ -828,38 +867,14 @@ async def test_acceptance_followup_reports_pending_work_order_progress(tmp_path:
         member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
     )
     work_order_id = "work-order-pending"
-    svc._append_messages(
-        [
-            svc._message_row(
-                user_id=1,
-                group_id=group["id"],
-                role="ai",
-                sender_id="ai-group-dispatcher",
-                sender_name="工作流调度",
-                sender_avatar="",
-                body=svc._format_work_order_message(
-                    "修复手机端消息长按复制删除",
-                    ["超级员工-Codex"],
-                ),
-                kind="work_order",
-                status="assigned",
-                work_order_id=work_order_id,
-                payload={"task": "修复手机端消息长按复制删除"},
-            ),
-            svc._message_row(
-                user_id=1,
-                group_id=group["id"],
-                role="ai",
-                sender_id="codex-super-employee",
-                sender_name="超级员工-Codex",
-                sender_avatar="",
-                body="Codex 已接单，正在处理长按菜单。",
-                kind="work_report",
-                status="queued",
-                work_order_id=work_order_id,
-                payload={"raw": {"task_id": "relay-task-pending"}},
-            ),
-        ]
+    _shared_setup_acceptance_0(
+        svc,
+        work_order_id,
+        group,
+        case_value_1="Codex 已接单，正在处理长按菜单。",
+        case_value_2="修复手机端消息长按复制删除",
+        case_value_3="修复手机端消息长按复制删除",
+        case_value_4="relay-task-pending",
     )
 
     result = await svc.post_message(
@@ -1176,38 +1191,14 @@ def test_acceptance_rejects_read_only_patch_not_applied_report(tmp_path: Path):
         member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
     )
     work_order_id = "work-order-read-only"
-    svc._append_messages(
-        [
-            svc._message_row(
-                user_id=1,
-                group_id=group["id"],
-                role="ai",
-                sender_id="ai-group-dispatcher",
-                sender_name="工作流调度",
-                sender_avatar="",
-                body=svc._format_work_order_message(
-                    "任务1：解决软件老是闪退的问题",
-                    ["超级员工-Codex"],
-                ),
-                kind="work_order",
-                status="assigned",
-                work_order_id=work_order_id,
-                payload={"task": "任务1：解决软件老是闪退的问题"},
-            ),
-            svc._message_row(
-                user_id=1,
-                group_id=group["id"],
-                role="ai",
-                sender_id="codex-super-employee",
-                sender_name="超级员工-Codex",
-                sender_avatar="",
-                body="Codex 已接单",
-                kind="work_report",
-                status="queued",
-                work_order_id=work_order_id,
-                payload={"raw": {"task_id": "relay-task-read-only"}},
-            ),
-        ]
+    _shared_setup_acceptance_0(
+        svc,
+        work_order_id,
+        group,
+        case_value_1="Codex 已接单",
+        case_value_2="任务1：解决软件老是闪退的问题",
+        case_value_3="任务1：解决软件老是闪退的问题",
+        case_value_4="relay-task-read-only",
     )
 
     svc.append_relay_work_report(

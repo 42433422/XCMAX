@@ -8,6 +8,7 @@ Covers:
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager as _shared_scope_contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -16,6 +17,28 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes.desktop_runtime import router
+
+
+@_shared_scope_contextmanager
+def _shared_scope_status_includes_db_recovery_0():
+    with (
+        patch(
+            "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
+            return_value={
+                "root": Path("/tmp/x"),
+                "data": Path("/tmp/x/data"),
+                "mods": Path("/tmp/x/mods"),
+                "models": Path("/tmp/x/models"),
+            },
+        ),
+        patch(
+            "app.fastapi_routes.desktop_runtime.load_or_create_profile",
+            return_value=(MagicMock(), MagicMock()),
+        ),
+        patch("app.fastapi_routes.desktop_runtime.resolve_storage_mode", return_value="sqlite"),
+        patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
+    ):
+        yield None
 
 
 @pytest.fixture
@@ -106,23 +129,7 @@ class TestDesktopStatus:
         import os as _os
 
         _os.environ.pop("XCAGI_DESKTOP_DB_RECOVERY", None)
-        with (
-            patch(
-                "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
-                return_value={
-                    "root": Path("/tmp/x"),
-                    "data": Path("/tmp/x/data"),
-                    "mods": Path("/tmp/x/mods"),
-                    "models": Path("/tmp/x/models"),
-                },
-            ),
-            patch(
-                "app.fastapi_routes.desktop_runtime.load_or_create_profile",
-                return_value=(MagicMock(), MagicMock()),
-            ),
-            patch("app.fastapi_routes.desktop_runtime.resolve_storage_mode", return_value="sqlite"),
-            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
-        ):
+        with _shared_scope_status_includes_db_recovery_0():
             r = client.get("/api/desktop/status")
         data = r.json()
         assert data["dbRecovery"]["action"] == "ok"
@@ -131,23 +138,7 @@ class TestDesktopStatus:
     def test_status_includes_db_recovery_restored(self, client: TestClient, monkeypatch) -> None:
         """XCAGI_DESKTOP_DB_RECOVERY=restored:xxx 时 dbRecovery 应反映恢复来源。"""
         monkeypatch.setenv("XCAGI_DESKTOP_DB_RECOVERY", "restored:xcagi-v1-20260705.db")
-        with (
-            patch(
-                "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
-                return_value={
-                    "root": Path("/tmp/x"),
-                    "data": Path("/tmp/x/data"),
-                    "mods": Path("/tmp/x/mods"),
-                    "models": Path("/tmp/x/models"),
-                },
-            ),
-            patch(
-                "app.fastapi_routes.desktop_runtime.load_or_create_profile",
-                return_value=(MagicMock(), MagicMock()),
-            ),
-            patch("app.fastapi_routes.desktop_runtime.resolve_storage_mode", return_value="sqlite"),
-            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
-        ):
+        with _shared_scope_status_includes_db_recovery_0():
             r = client.get("/api/desktop/status")
         data = r.json()
         assert data["dbRecovery"]["action"] == "restored"
@@ -158,23 +149,7 @@ class TestDesktopStatus:
     ) -> None:
         """XCAGI_DESKTOP_DB_RECOVERY=corrupt_no_backup 时 dbRecovery.action 应为 'corrupt_no_backup'。"""
         monkeypatch.setenv("XCAGI_DESKTOP_DB_RECOVERY", "corrupt_no_backup")
-        with (
-            patch(
-                "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
-                return_value={
-                    "root": Path("/tmp/x"),
-                    "data": Path("/tmp/x/data"),
-                    "mods": Path("/tmp/x/mods"),
-                    "models": Path("/tmp/x/models"),
-                },
-            ),
-            patch(
-                "app.fastapi_routes.desktop_runtime.load_or_create_profile",
-                return_value=(MagicMock(), MagicMock()),
-            ),
-            patch("app.fastapi_routes.desktop_runtime.resolve_storage_mode", return_value="sqlite"),
-            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
-        ):
+        with _shared_scope_status_includes_db_recovery_0():
             r = client.get("/api/desktop/status")
         data = r.json()
         assert data["dbRecovery"]["action"] == "corrupt_no_backup"

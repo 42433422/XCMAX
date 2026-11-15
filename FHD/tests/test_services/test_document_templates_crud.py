@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,6 +16,40 @@ from app.domain.shared_services.document_templates.crud import (
     update_template_with_payload,
 )
 from app.infrastructure.tenant_scope import tenant_scope
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0():
+    with (
+        patch("app.db.session.get_db") as mock_get_db,
+        patch("app.db.init_db.init_template_tables"),
+        patch(
+            "app.domain.shared_services.document_templates.crud._validate_required_terms",
+            return_value=(True, []),
+        ),
+    ):
+        yield mock_get_db
+
+
+def _shared_setup_case_0(case_value_1):
+    mock_row = MagicMock()
+    mock_row.id = 1
+    mock_row.template_name = case_value_1
+    mock_row.template_type = "出货明细"
+    mock_row.original_file_path = None
+    mock_row.analyzed_data = json.dumps({"business_scope": "orders", "category": "excel"})
+    mock_row.business_rules = json.dumps({"business_scope": "orders", "source": "db"})
+    mock_row.editable_config = json.dumps([])
+
+    mock_db = MagicMock()
+    mock_db.execute.side_effect = [
+        MagicMock(fetchone=MagicMock(return_value=mock_row)),  # SELECT
+        MagicMock(),  # UPDATE
+        MagicMock(),  # usage log
+        MagicMock(fetchone=MagicMock(return_value=mock_row)),  # refreshed SELECT
+    ]
+    mock_db.commit = MagicMock()
+    return mock_row, mock_db
 
 
 def _assert_shared_create_with_invalid_category_defaults_excel_0(
@@ -310,14 +345,7 @@ class TestCreateTemplateWithPayload:
         mock_db.execute.return_value = mock_result
         mock_db.commit = MagicMock()
 
-        with (
-            patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.init_db.init_template_tables"),
-            patch(
-                "app.domain.shared_services.document_templates.crud._validate_required_terms",
-                return_value=(True, []),
-            ),
-        ):
+        with _shared_scope_case_0() as mock_get_db:
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -343,14 +371,7 @@ class TestCreateTemplateWithPayload:
         mock_db.execute.return_value = mock_result
         mock_db.commit = MagicMock()
 
-        with (
-            patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.init_db.init_template_tables"),
-            patch(
-                "app.domain.shared_services.document_templates.crud._validate_required_terms",
-                return_value=(True, []),
-            ),
-        ):
+        with _shared_scope_case_0() as mock_get_db:
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -410,14 +431,7 @@ class TestCreateTemplateWithPayload:
         mock_db.execute.return_value = mock_result
         mock_db.commit = MagicMock()
 
-        with (
-            patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.init_db.init_template_tables"),
-            patch(
-                "app.domain.shared_services.document_templates.crud._validate_required_terms",
-                return_value=(True, []),
-            ),
-        ):
+        with _shared_scope_case_0() as mock_get_db:
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -435,14 +449,7 @@ class TestCreateTemplateWithPayload:
         mock_db.execute.side_effect = [mock_result, RuntimeError("log table missing")]
         mock_db.commit = MagicMock()
 
-        with (
-            patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.init_db.init_template_tables"),
-            patch(
-                "app.domain.shared_services.document_templates.crud._validate_required_terms",
-                return_value=(True, []),
-            ),
-        ):
+        with _shared_scope_case_0() as mock_get_db:
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -502,32 +509,9 @@ class TestUpdateTemplateWithPayload:
         assert result.status_code == 404
 
     def test_successful_update_name(self):
-        mock_row = MagicMock()
-        mock_row.id = 1
-        mock_row.template_name = "旧名"
-        mock_row.template_type = "出货明细"
-        mock_row.original_file_path = None
-        mock_row.analyzed_data = json.dumps({"business_scope": "orders", "category": "excel"})
-        mock_row.business_rules = json.dumps({"business_scope": "orders", "source": "db"})
-        mock_row.editable_config = json.dumps([])
+        mock_row, mock_db = _shared_setup_case_0(case_value_1="旧名")
 
-        mock_db = MagicMock()
-        mock_db.execute.side_effect = [
-            MagicMock(fetchone=MagicMock(return_value=mock_row)),  # SELECT
-            MagicMock(),  # UPDATE
-            MagicMock(),  # usage log
-            MagicMock(fetchone=MagicMock(return_value=mock_row)),  # refreshed SELECT
-        ]
-        mock_db.commit = MagicMock()
-
-        with (
-            patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.init_db.init_template_tables"),
-            patch(
-                "app.domain.shared_services.document_templates.crud._validate_required_terms",
-                return_value=(True, []),
-            ),
-        ):
+        with _shared_scope_case_0() as mock_get_db:
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -620,32 +604,9 @@ class TestUpdateTemplateWithPayload:
         assert result.status_code == 500
 
     def test_update_with_fields(self):
-        mock_row = MagicMock()
-        mock_row.id = 1
-        mock_row.template_name = "模板"
-        mock_row.template_type = "出货明细"
-        mock_row.original_file_path = None
-        mock_row.analyzed_data = json.dumps({"business_scope": "orders", "category": "excel"})
-        mock_row.business_rules = json.dumps({"business_scope": "orders", "source": "db"})
-        mock_row.editable_config = json.dumps([])
+        mock_row, mock_db = _shared_setup_case_0(case_value_1="模板")
 
-        mock_db = MagicMock()
-        mock_db.execute.side_effect = [
-            MagicMock(fetchone=MagicMock(return_value=mock_row)),
-            MagicMock(),  # UPDATE
-            MagicMock(),  # usage log
-            MagicMock(fetchone=MagicMock(return_value=mock_row)),
-        ]
-        mock_db.commit = MagicMock()
-
-        with (
-            patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.init_db.init_template_tables"),
-            patch(
-                "app.domain.shared_services.document_templates.crud._validate_required_terms",
-                return_value=(True, []),
-            ),
-        ):
+        with _shared_scope_case_0() as mock_get_db:
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -684,14 +645,7 @@ class TestUpdateTemplateWithPayload:
         ]
         mock_db.commit = MagicMock()
 
-        with (
-            patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.init_db.init_template_tables"),
-            patch(
-                "app.domain.shared_services.document_templates.crud._validate_required_terms",
-                return_value=(True, []),
-            ),
-        ):
+        with _shared_scope_case_0() as mock_get_db:
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -706,32 +660,9 @@ class TestUpdateTemplateWithPayload:
         assert data["success"] is True
 
     def test_update_with_file_path(self):
-        mock_row = MagicMock()
-        mock_row.id = 1
-        mock_row.template_name = "模板"
-        mock_row.template_type = "出货明细"
-        mock_row.original_file_path = None
-        mock_row.analyzed_data = json.dumps({"business_scope": "orders", "category": "excel"})
-        mock_row.business_rules = json.dumps({"business_scope": "orders", "source": "db"})
-        mock_row.editable_config = json.dumps([])
+        mock_row, mock_db = _shared_setup_case_0(case_value_1="模板")
 
-        mock_db = MagicMock()
-        mock_db.execute.side_effect = [
-            MagicMock(fetchone=MagicMock(return_value=mock_row)),
-            MagicMock(),
-            MagicMock(),
-            MagicMock(fetchone=MagicMock(return_value=mock_row)),
-        ]
-        mock_db.commit = MagicMock()
-
-        with (
-            patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.init_db.init_template_tables"),
-            patch(
-                "app.domain.shared_services.document_templates.crud._validate_required_terms",
-                return_value=(True, []),
-            ),
-        ):
+        with _shared_scope_case_0() as mock_get_db:
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -764,14 +695,7 @@ class TestUpdateTemplateWithPayload:
         ]
         mock_db.commit = MagicMock()
 
-        with (
-            patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.init_db.init_template_tables"),
-            patch(
-                "app.domain.shared_services.document_templates.crud._validate_required_terms",
-                return_value=(True, []),
-            ),
-        ):
+        with _shared_scope_case_0() as mock_get_db:
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 

@@ -20,6 +20,7 @@ Focuses on:
 
 from __future__ import annotations
 
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -42,6 +43,75 @@ from app.infrastructure.persistence.compat_db.queries import (
     _products_units_for_select,
     _units_select_data_unified,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(mock_eng, mock_insp):
+    with (
+        patch(
+            "app.shell.mod_business_scope.business_data_exposed",
+            return_value=True,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
+            return_value=mock_eng,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.queries.inspect",
+            return_value=mock_insp,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.queries.append_mod_scope_where",
+            return_value=None,
+        ),
+    ):
+        yield None
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_1(mock_eng, mock_insp):
+    with (
+        patch(
+            "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
+            return_value=mock_eng,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.queries.inspect",
+            return_value=mock_insp,
+        ),
+    ):
+        yield None
+
+
+@_shared_scope_contextmanager
+def _shared_scope_query_2(mock_eng, mock_insp, case_value_1):
+    with (
+        patch(
+            "app.shell.mod_business_scope.business_data_exposed",
+            return_value=True,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
+            return_value=mock_eng,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.queries.inspect",
+            return_value=mock_insp,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.queries._insp_table_exists",
+            return_value=True,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.queries._exc_chain_has_undefined_table",
+            return_value=case_value_1,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.queries.append_mod_scope_where",
+            return_value=None,
+        ),
+    ):
+        yield None
 
 
 def _assert_shared_only_purchase_units_table_0(self, _shared_literal_0, _shared_literal_1):
@@ -203,32 +273,7 @@ class TestLoadPurchaseUnitsRowsPg:
 
         mock_eng.connect.return_value.__enter__.return_value = mock_conn
 
-        with (
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries._insp_table_exists",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries._exc_chain_has_undefined_table",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.append_mod_scope_where",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_query_2(mock_eng, mock_insp, case_value_1=True):
             result = _load_purchase_units_rows_pg()
         assert result == []
 
@@ -243,32 +288,7 @@ class TestLoadPurchaseUnitsRowsPg:
 
         mock_eng.connect.return_value.__enter__.return_value = mock_conn
 
-        with (
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries._insp_table_exists",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries._exc_chain_has_undefined_table",
-                return_value=False,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.append_mod_scope_where",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_query_2(mock_eng, mock_insp, case_value_1=False):
             result = _load_purchase_units_rows_pg()
         assert result == []
 
@@ -424,24 +444,7 @@ class TestDistinctUnitsFromProductsDbPg:
         mock_conn.execute.return_value = mock_result
         mock_eng.connect.return_value.__enter__.return_value = mock_conn
 
-        with (
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.append_mod_scope_where",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(mock_eng, mock_insp):
             result = _distinct_units_from_products_db_pg()
 
         assert len(result) == 3  # SQL DISTINCT happens at DB level, mock returns all
@@ -460,24 +463,7 @@ class TestDistinctUnitsFromProductsDbPg:
         mock_conn.execute.side_effect = OperationalError("stmt", {}, None)
         mock_eng.connect.return_value.__enter__.return_value = mock_conn
 
-        with (
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.append_mod_scope_where",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(mock_eng, mock_insp):
             result = _distinct_units_from_products_db_pg()
         assert result == []
 
@@ -492,24 +478,7 @@ class TestDistinctUnitsFromProductsDbPg:
         mock_conn.execute.side_effect = OSError("db error")
         mock_eng.connect.return_value.__enter__.return_value = mock_conn
 
-        with (
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.append_mod_scope_where",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(mock_eng, mock_insp):
             result = _distinct_units_from_products_db_pg()
         assert result == []
 
@@ -526,24 +495,7 @@ class TestDistinctUnitsFromProductsDbPg:
         mock_conn.execute.return_value = mock_result
         mock_eng.connect.return_value.__enter__.return_value = mock_conn
 
-        with (
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.append_mod_scope_where",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(mock_eng, mock_insp):
             result = _distinct_units_from_products_db_pg()
 
         # None is skipped, "" becomes "" (stripped), "CoA" is included
@@ -894,16 +846,7 @@ class TestLoadCustomersRowsPg:
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["products"]
 
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-        ):
+        with _shared_scope_case_1(mock_eng, mock_insp):
             result = _load_customers_rows_pg()
         assert result == []
 
@@ -1173,16 +1116,7 @@ class TestCustomersSchemaHintIfEmptyAdditional:
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["customers"]
 
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-        ):
+        with _shared_scope_case_1(mock_eng, mock_insp):
             result = _customers_schema_hint_if_empty()
         assert result is None
 
@@ -1196,16 +1130,7 @@ class TestCustomersSchemaHintIfEmptyAdditional:
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["customers", "products"]
 
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-        ):
+        with _shared_scope_case_1(mock_eng, mock_insp):
             result = _customers_schema_hint_if_empty()
         # has_c=True, has_pu=False, has_p=True
         # not has_pu and has_p = True → returns hint about missing purchase_units
@@ -1218,16 +1143,7 @@ class TestCustomersSchemaHintIfEmptyAdditional:
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["purchase_units", "products"]
 
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-        ):
+        with _shared_scope_case_1(mock_eng, mock_insp):
             result = _customers_schema_hint_if_empty()
         assert result is None
 

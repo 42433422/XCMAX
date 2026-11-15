@@ -9,14 +9,7 @@ from retort_engine.generalization_proof import (
 )
 
 
-def _write(path: Path, text: str = "") -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-
-
-def test_generalization_proof_requires_cross_language_ci_and_pr_replay(
-    tmp_path: Path,
-) -> None:
+def _shared_setup_generalization_proof_re_0(tmp_path):
     root = tmp_path / "retort"
     _write(
         root
@@ -58,6 +51,18 @@ def test_generalization_proof_requires_cross_language_ci_and_pr_replay(
         / "src"
         / "Main.java"
     )
+    return root
+
+
+def _write(path: Path, text: str = "") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def test_generalization_proof_requires_cross_language_ci_and_pr_replay(
+    tmp_path: Path,
+) -> None:
+    root = _shared_setup_generalization_proof_re_0(tmp_path)
     for index in range(260):
         _write(
             root
@@ -86,47 +91,7 @@ def test_generalization_proof_requires_cross_language_ci_and_pr_replay(
 
 
 def test_generalization_proof_reports_missing_runtime_pr_replay(tmp_path: Path) -> None:
-    root = tmp_path / "retort"
-    _write(
-        root
-        / ".retort"
-        / "cache"
-        / "github"
-        / "one"
-        / "python-reviewer"
-        / ".github"
-        / "workflows"
-        / "ci.yml"
-    )
-    _write(
-        root
-        / ".retort"
-        / "cache"
-        / "github"
-        / "one"
-        / "python-reviewer"
-        / "reviewer.py"
-    )
-    _write(
-        root
-        / ".retort"
-        / "cache"
-        / "github"
-        / "two"
-        / "typescript-reviewer"
-        / "src"
-        / "index.ts"
-    )
-    _write(
-        root
-        / ".retort"
-        / "cache"
-        / "github"
-        / "three"
-        / "java-reviewer"
-        / "src"
-        / "Main.java"
-    )
+    root = _shared_setup_generalization_proof_re_0(tmp_path)
 
     proof = build_generalization_proof(root)
 

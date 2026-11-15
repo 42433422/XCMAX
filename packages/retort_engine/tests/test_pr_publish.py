@@ -7,6 +7,24 @@ from retort_engine.contracts import validate_contract
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 
 
+def _shared_setup_run_publish_sandbox_0(tmp_path):
+    dry_run_file = tmp_path / "publish.json"
+    dry_run_file.write_text(
+        json.dumps(
+            {
+                "pr_url": "https://github.com/acme/repo/pull/1",
+                "summary": {"idempotency_key": "key-1"},
+                "comments": [
+                    {"path": "app.py", "line": 3, "body": "Fix token handling."}
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return dry_run_file
+
+
 def test_build_publish_dry_run_converts_review_comments(tmp_path: Path) -> None:
     review_file = tmp_path / "review.json"
     review_file.write_text(
@@ -106,20 +124,7 @@ def test_build_publish_dry_run_uses_rank_score_before_original_order(
 
 
 def test_run_publish_sandbox_creates_and_rolls_back_receipts(tmp_path: Path) -> None:
-    dry_run_file = tmp_path / "publish.json"
-    dry_run_file.write_text(
-        json.dumps(
-            {
-                "pr_url": "https://github.com/acme/repo/pull/1",
-                "summary": {"idempotency_key": "key-1"},
-                "comments": [
-                    {"path": "app.py", "line": 3, "body": "Fix token handling."}
-                ],
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
+    dry_run_file = _shared_setup_run_publish_sandbox_0(tmp_path)
 
     result = run_publish_sandbox(dry_run_file)
 
@@ -131,20 +136,7 @@ def test_run_publish_sandbox_creates_and_rolls_back_receipts(tmp_path: Path) -> 
 
 
 def test_run_publish_sandbox_degrades_without_write_permission(tmp_path: Path) -> None:
-    dry_run_file = tmp_path / "publish.json"
-    dry_run_file.write_text(
-        json.dumps(
-            {
-                "pr_url": "https://github.com/acme/repo/pull/1",
-                "summary": {"idempotency_key": "key-1"},
-                "comments": [
-                    {"path": "app.py", "line": 3, "body": "Fix token handling."}
-                ],
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
+    dry_run_file = _shared_setup_run_publish_sandbox_0(tmp_path)
 
     result = run_publish_sandbox(
         dry_run_file, permissions={"pull_request_write": False}
@@ -157,20 +149,7 @@ def test_run_publish_sandbox_degrades_without_write_permission(tmp_path: Path) -
 
 
 def test_run_publish_sandbox_records_rollback_failure(tmp_path: Path) -> None:
-    dry_run_file = tmp_path / "publish.json"
-    dry_run_file.write_text(
-        json.dumps(
-            {
-                "pr_url": "https://github.com/acme/repo/pull/1",
-                "summary": {"idempotency_key": "key-1"},
-                "comments": [
-                    {"path": "app.py", "line": 3, "body": "Fix token handling."}
-                ],
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
+    dry_run_file = _shared_setup_run_publish_sandbox_0(tmp_path)
     first = run_publish_sandbox(dry_run_file)
     comment_id = first["created_receipts"][0]["comment_id"]
 

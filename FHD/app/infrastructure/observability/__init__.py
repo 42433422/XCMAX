@@ -1,1 +1,1 @@
-"""可观测性基础设施：OpenTelemetry 埋点。"""
+"""可观测性基础设施：指标与 OpenTelemetry 埋点。"""

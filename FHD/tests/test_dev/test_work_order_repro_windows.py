@@ -22,6 +22,19 @@ from typing import Any
 
 import pytest
 
+
+def _shared_setup_case_0(tmp_path, case_value_1):
+    spec = _needs_scenario_spec()
+    result = win.upgrade_spec(
+        spec,
+        _diag(case_value_1),
+        install_root=str(tmp_path / "acc"),
+        data_root=str(tmp_path / "iso"),
+        evidence_dir=str(tmp_path / "ev"),
+    )
+    return spec, result
+
+
 _FHD_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -82,14 +95,7 @@ def test_classify_no_scenario() -> None:
 
 
 def test_upgrade_spec_none_when_no_rule_match(tmp_path: Path) -> None:
-    spec = _needs_scenario_spec()
-    result = win.upgrade_spec(
-        spec,
-        _diag("unrelated"),
-        install_root=str(tmp_path / "acc"),
-        data_root=str(tmp_path / "iso"),
-        evidence_dir=str(tmp_path / "ev"),
-    )
+    spec, result = _shared_setup_case_0(tmp_path, case_value_1="unrelated")
     assert result is None
 
 
@@ -107,14 +113,7 @@ def test_upgrade_spec_skips_module_import(tmp_path: Path) -> None:
 
 
 def test_upgrade_spec_produces_dict_scenario(tmp_path: Path) -> None:
-    spec = _needs_scenario_spec()
-    result = win.upgrade_spec(
-        spec,
-        _diag("database is malformed"),
-        install_root=str(tmp_path / "acc"),
-        data_root=str(tmp_path / "iso"),
-        evidence_dir=str(tmp_path / "ev"),
-    )
+    spec, result = _shared_setup_case_0(tmp_path, case_value_1="database is malformed")
     assert result is not None
     assert result["kind"] == "windows_fault_injection"
     assert result["status"] == "generated"
@@ -148,14 +147,7 @@ def test_safety_gate_blocks_live_data_root(tmp_path: Path, monkeypatch: pytest.M
 
 
 def test_run_injection_reads_reproduced(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    spec = _needs_scenario_spec()
-    result = win.upgrade_spec(
-        spec,
-        _diag("database is malformed"),
-        install_root=str(tmp_path / "acc"),
-        data_root=str(tmp_path / "iso"),
-        evidence_dir=str(tmp_path / "ev"),
-    )
+    spec, result = _shared_setup_case_0(tmp_path, case_value_1="database is malformed")
     assert result is not None
     receipt = {
         "scenarios": [{"场景": "corrupt-main", "结果": "FAIL", "说明": "启动失败"}],
@@ -181,14 +173,7 @@ def test_run_injection_reads_reproduced(tmp_path: Path, monkeypatch: pytest.Monk
 
 
 def test_run_injection_pass_is_green(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    spec = _needs_scenario_spec()
-    result = win.upgrade_spec(
-        spec,
-        _diag("database is malformed"),
-        install_root=str(tmp_path / "acc"),
-        data_root=str(tmp_path / "iso"),
-        evidence_dir=str(tmp_path / "ev"),
-    )
+    spec, result = _shared_setup_case_0(tmp_path, case_value_1="database is malformed")
     assert result is not None
     receipt = {
         "scenarios": [{"场景": "corrupt-main", "结果": "PASS", "说明": "恢复正常"}],
@@ -213,14 +198,7 @@ def test_run_injection_pass_is_green(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 
 def test_run_injection_skip_not_reproduced(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    spec = _needs_scenario_spec()
-    result = win.upgrade_spec(
-        spec,
-        _diag("backup corrupt"),
-        install_root=str(tmp_path / "acc"),
-        data_root=str(tmp_path / "iso"),
-        evidence_dir=str(tmp_path / "ev"),
-    )
+    spec, result = _shared_setup_case_0(tmp_path, case_value_1="backup corrupt")
     assert result is not None
     receipt = {
         "scenarios": [{"场景": "corrupt-backup", "结果": "SKIP", "说明": "数据根无备份文件"}],

@@ -401,3 +401,71 @@ def test_absorption_saturation_consecutive_no_new_stops_at_latest_new_signal(
 
     assert report["status"] == "not_saturated"
     assert report["summary"]["consecutive_no_new_core_depth_count"] == 0
+
+
+def test_saturation_tied_run_times_do_not_invent_chronology(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import os
+
+    runs = tmp_path / ".retort" / "real_absorption_runs"
+    runs.mkdir(parents=True)
+    for index in range(5):
+        path = runs / f"run-{index}.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "source": str(index),
+                    "gates_passed": True,
+                    "external_profile": {
+                        "signals": [
+                            "static_analysis" if index == 2 else "review_pipeline"
+                        ]
+                    },
+                }
+            )
+        )
+        os.utime(path, ns=(1_000_000_000, 1_000_000_000))
+    original_glob = Path.glob
+
+    def reversed_glob(self, pattern):
+        paths = original_glob(self, pattern)
+        return iter(sorted(paths, reverse=True)) if self == runs else paths
+
+    monkeypatch.setattr(Path, "glob", reversed_glob)
+    report = build_absorption_saturation_report(
+        tmp_path,
+        remaining_candidates=[
+            {
+                "similarity_depth_score": 90,
+                "license_allowed": True,
+                "already_absorbed": False,
+            }
+        ],
+    )
+    assert report["status"] == "not_saturated"
+    assert report["summary"]["consecutive_no_new_core_depth_count"] == 0
+
+
+def test_saturation_recent_gate_includes_all_runs_tied_at_cutoff(
+    tmp_path: Path,
+) -> None:
+    import os
+
+    runs = tmp_path / ".retort" / "real_absorption_runs"
+    runs.mkdir(parents=True)
+    for index in range(5):
+        path = runs / f"run-{index}.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "source": str(index),
+                    "gates_passed": index != 0,
+                    "external_profile": {"signals": ["review_pipeline"]},
+                }
+            )
+        )
+        os.utime(path, ns=(1_000_000_000, 1_000_000_000))
+    report = build_absorption_saturation_report(tmp_path, remaining_candidates=[])
+    assert report["status"] == "not_saturated"
+    assert report["summary"]["saturated"] is False

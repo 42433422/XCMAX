@@ -9,13 +9,14 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import random
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.utils.deployment import env_flag as _env_flag
+from app.utils.deployment import env_float as _env_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 每千 token 美元费率（输入, 输出）；仅埋点估算，精细归因属批次 B
@@ -26,21 +27,6 @@ _MODEL_RATES_USD_PER_1K: dict[str, tuple[float, float]] = {
 }
 
 _MAX_CAPTURED_CONTENT = 4096
-
-
-def _env_flag(name: str, default: bool) -> bool:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _env_float(name: str, default: float) -> float:
-    raw = (os.environ.get(name) or "").strip()
-    try:
-        return float(raw)
-    except ValueError:
-        return default
 
 
 def trace_enabled() -> bool:

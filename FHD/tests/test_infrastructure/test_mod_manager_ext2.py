@@ -29,6 +29,20 @@ from app.infrastructure.mods.mod_manager import (
     is_mods_disabled,
 )
 
+
+def _shared_setup_hooks_0(case_value_1, case_value_2):
+    from app.infrastructure.mods.manifest import ModMetadata
+
+    meta = ModMetadata(
+        id="test",
+        name="Test",
+        version="1.0",
+        mod_path=case_value_1,
+        hooks={"on_chat": case_value_2},
+    )
+    return ModMetadata, meta
+
+
 # ========================= is_mods_disabled - extended ===================
 
 
@@ -98,14 +112,8 @@ class TestBackendPathForMod:
 
 class TestRegisterModHooksExtended:
     def test_hooks_with_invalid_spec(self):
-        from app.infrastructure.mods.manifest import ModMetadata
-
-        meta = ModMetadata(
-            id="test",
-            name="Test",
-            version="1.0",
-            mod_path="/tmp/test",
-            hooks={"on_chat": "invalid_no_dot"},
+        ModMetadata, meta = _shared_setup_hooks_0(
+            case_value_1="/tmp/test", case_value_2="invalid_no_dot"
         )
         with (
             patch("app.infrastructure.mods.mod_manager.import_mod_backend_py"),
@@ -116,14 +124,8 @@ class TestRegisterModHooksExtended:
         mock_sub.assert_not_called()
 
     def test_hooks_with_backend_prefix(self):
-        from app.infrastructure.mods.manifest import ModMetadata
-
-        meta = ModMetadata(
-            id="test",
-            name="Test",
-            version="1.0",
-            mod_path="/tmp/test",
-            hooks={"on_chat": "backend.services.handler"},
+        ModMetadata, meta = _shared_setup_hooks_0(
+            case_value_1="/tmp/test", case_value_2="backend.services.handler"
         )
         mock_module = Mock()
         mock_module.handler = Mock()
@@ -135,29 +137,15 @@ class TestRegisterModHooksExtended:
         mock_sub.assert_called_once()
 
     def test_hooks_no_mod_path(self):
-        from app.infrastructure.mods.manifest import ModMetadata
-
-        meta = ModMetadata(
-            id="test",
-            name="Test",
-            version="1.0",
-            mod_path="",
-            hooks={"on_chat": "services.handler"},
-        )
+        ModMetadata, meta = _shared_setup_hooks_0(case_value_1="", case_value_2="services.handler")
         with patch("app.infrastructure.mods.hooks.subscribe") as mock_sub:
             _register_mod_hooks("test", meta)
         # Empty mod_path -> cannot resolve handlers, nothing subscribed.
         mock_sub.assert_not_called()
 
     def test_hooks_handler_not_callable(self):
-        from app.infrastructure.mods.manifest import ModMetadata
-
-        meta = ModMetadata(
-            id="test",
-            name="Test",
-            version="1.0",
-            mod_path="/tmp/test",
-            hooks={"on_chat": "services.not_callable"},
+        ModMetadata, meta = _shared_setup_hooks_0(
+            case_value_1="/tmp/test", case_value_2="services.not_callable"
         )
         mock_module = Mock()
         mock_module.not_callable = "not a function"
@@ -173,14 +161,8 @@ class TestRegisterModHooksExtended:
         mock_sub.assert_not_called()
 
     def test_hooks_import_error(self):
-        from app.infrastructure.mods.manifest import ModMetadata
-
-        meta = ModMetadata(
-            id="test",
-            name="Test",
-            version="1.0",
-            mod_path="/tmp/test",
-            hooks={"on_chat": "services.handler"},
+        ModMetadata, meta = _shared_setup_hooks_0(
+            case_value_1="/tmp/test", case_value_2="services.handler"
         )
         with (
             patch(

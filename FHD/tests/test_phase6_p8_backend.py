@@ -62,6 +62,22 @@ from app.services.skills.label_template_generator.label_template_generator impor
     get_label_template_generator_skill,
 )
 
+
+def _shared_setup_block_with_0(case_value_1):
+    blocks = [
+        {
+            "text": case_value_1,
+            "left": 10,
+            "top": 20,
+            "width": 100,
+            "height": 30,
+            "conf": 0.9,
+        }
+    ]
+    fields = _identify_fields(blocks)
+    return blocks, fields
+
+
 # ---------------------------------------------------------------------------
 # Fixtures — clear lru_cache before/after each test to ensure independence
 # ---------------------------------------------------------------------------
@@ -1498,17 +1514,7 @@ class TestIdentifyFields:
         assert _identify_fields([]) == []
 
     def test_block_with_colon_known_label(self) -> None:
-        blocks = [
-            {
-                "text": "品名：测试产品",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
+        blocks, fields = _shared_setup_block_with_0(case_value_1="品名：测试产品")
         assert len(fields) == 1
         assert fields[0]["label"] == "品名"
         assert fields[0]["value"] == "测试产品"
@@ -1516,48 +1522,18 @@ class TestIdentifyFields:
         assert fields[0]["field_key"] == "product_name"
 
     def test_block_with_colon_label_ending_jia(self) -> None:
-        blocks = [
-            {
-                "text": "会员价：99",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
+        blocks, fields = _shared_setup_block_with_0(case_value_1="会员价：99")
         assert len(fields) == 1
         assert fields[0]["type"] == "fixed_label"
         assert fields[0]["field_key"] == "price"
 
     def test_block_without_colon_known_label_no_value(self) -> None:
-        blocks = [
-            {
-                "text": "产品编号",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
+        blocks, fields = _shared_setup_block_with_0(case_value_1="产品编号")
         # No value part → no field added
         assert fields == []
 
     def test_block_without_colon_unknown_label(self) -> None:
-        blocks = [
-            {
-                "text": "完全未知的内容",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
+        blocks, fields = _shared_setup_block_with_0(case_value_1="完全未知的内容")
         assert fields == []
 
 

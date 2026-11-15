@@ -22,6 +22,26 @@ import pytest
 # 通过 sys.path（tests/conftest.py 已加 PROJECT_ROOT）直接 import 脚本模块
 from scripts.dev import coverage_ratchet as cr
 
+
+def _shared_setup_case_0(isolated_ratchet, case_value_1, case_value_2, case_value_3, case_value_4):
+    path = isolated_ratchet / "coverage.json"
+    path.write_text(
+        json.dumps(
+            {
+                "totals": {
+                    "num_statements": case_value_1,
+                    "covered_lines": case_value_2,
+                    "num_branches": case_value_3,
+                    "covered_branches": case_value_4,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = cr.read_backend(path)
+    return path, result
+
+
 # --------------------------------------------------------------------------- #
 # 公共 fixture：把模块级路径常量重定向到 tmp_path，stub git
 # --------------------------------------------------------------------------- #
@@ -161,41 +181,17 @@ class TestReadBackend:
         assert cr.read_backend(path) is None
 
     def test_zero_num_statements_yields_zero_line_pct(self, isolated_ratchet: Path):
-        path = isolated_ratchet / "coverage.json"
-        path.write_text(
-            json.dumps(
-                {
-                    "totals": {
-                        "num_statements": 0,
-                        "covered_lines": 0,
-                        "num_branches": 10,
-                        "covered_branches": 5,
-                    }
-                }
-            ),
-            encoding="utf-8",
+        path, result = _shared_setup_case_0(
+            isolated_ratchet, case_value_1=0, case_value_2=0, case_value_3=10, case_value_4=5
         )
-        result = cr.read_backend(path)
         assert result is not None
         assert result["line_pct"] == 0.0
         assert result["branch_pct"] == 50.0
 
     def test_zero_num_branches_yields_none_branch_pct(self, isolated_ratchet: Path):
-        path = isolated_ratchet / "coverage.json"
-        path.write_text(
-            json.dumps(
-                {
-                    "totals": {
-                        "num_statements": 100,
-                        "covered_lines": 89,
-                        "num_branches": 0,
-                        "covered_branches": 0,
-                    }
-                }
-            ),
-            encoding="utf-8",
+        path, result = _shared_setup_case_0(
+            isolated_ratchet, case_value_1=100, case_value_2=89, case_value_3=0, case_value_4=0
         )
-        result = cr.read_backend(path)
         assert result is not None
         assert result["branch_pct"] is None
 
@@ -209,21 +205,9 @@ class TestReadBackend:
         assert result["branch_pct"] is None
 
     def test_missing_lines_field_defaults_to_diff(self, isolated_ratchet: Path):
-        path = isolated_ratchet / "coverage.json"
-        path.write_text(
-            json.dumps(
-                {
-                    "totals": {
-                        "num_statements": 100,
-                        "covered_lines": 89,
-                        "num_branches": 50,
-                        "covered_branches": 40,
-                    }
-                }
-            ),
-            encoding="utf-8",
+        path, result = _shared_setup_case_0(
+            isolated_ratchet, case_value_1=100, case_value_2=89, case_value_3=50, case_value_4=40
         )
-        result = cr.read_backend(path)
         assert result is not None
         assert result["missing_lines"] == 11
 

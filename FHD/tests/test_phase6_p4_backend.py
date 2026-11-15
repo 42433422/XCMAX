@@ -23,6 +23,27 @@ from app.domain.shared_services.conversation.context import ConversationContext
 from app.domain.shared_services.conversation.handlers import HandlersMixin
 from app.domain.shared_services.conversation.intent import IntentMixin
 
+
+def _shared_setup_pro_source_0(case_value_1, case_value_2):
+    host = _IntentHost()
+    host.user_preference_service.get_preference.return_value = "online"
+
+    recognizer_result = MagicMock()
+    recognizer_result.primary_intent = case_value_1
+    recognizer_result.tool_key = case_value_2
+    recognizer_result.intent_hints = []
+    recognizer_result.is_negated = False
+    recognizer_result.is_greeting = False
+    recognizer_result.is_goodbye = False
+    recognizer_result.is_help = False
+    recognizer_result.is_confirmation = False
+    recognizer_result.is_negation_intent = False
+    recognizer_result.is_likely_unclear = False
+    recognizer_result.slots = {}
+    recognizer_result.all_matched_tools = []
+    return host, recognizer_result
+
+
 # ---------------------------------------------------------------------------
 # Test host classes — combine Mixin with manually-injected dependencies
 # ---------------------------------------------------------------------------
@@ -540,22 +561,9 @@ class TestRecognizeIntent:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("XCAGI_NEURO_INTENT", "1")
-        host = _IntentHost()
-        host.user_preference_service.get_preference.return_value = "online"
-
-        recognizer_result = MagicMock()
-        recognizer_result.primary_intent = "shipment_generate"
-        recognizer_result.tool_key = "shipment_generate"
-        recognizer_result.intent_hints = []
-        recognizer_result.is_negated = False
-        recognizer_result.is_greeting = False
-        recognizer_result.is_goodbye = False
-        recognizer_result.is_help = False
-        recognizer_result.is_confirmation = False
-        recognizer_result.is_negation_intent = False
-        recognizer_result.is_likely_unclear = False
-        recognizer_result.slots = {}
-        recognizer_result.all_matched_tools = []
+        host, recognizer_result = _shared_setup_pro_source_0(
+            case_value_1="shipment_generate", case_value_2="shipment_generate"
+        )
 
         # NeuroIntentRecognizer.recognize returns NeuroIntentResult-like
         neuro_r = SimpleNamespace(
@@ -584,22 +592,9 @@ class TestRecognizeIntent:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("XCAGI_NEURO_INTENT", "0")
-        host = _IntentHost()
-        host.user_preference_service.get_preference.return_value = "online"
-
-        recognizer_result = MagicMock()
-        recognizer_result.primary_intent = "products"
-        recognizer_result.tool_key = "products"
-        recognizer_result.intent_hints = []
-        recognizer_result.is_negated = False
-        recognizer_result.is_greeting = False
-        recognizer_result.is_goodbye = False
-        recognizer_result.is_help = False
-        recognizer_result.is_confirmation = False
-        recognizer_result.is_negation_intent = False
-        recognizer_result.is_likely_unclear = False
-        recognizer_result.slots = {}
-        recognizer_result.all_matched_tools = []
+        host, recognizer_result = _shared_setup_pro_source_0(
+            case_value_1="products", case_value_2="products"
+        )
 
         host.unified_recognizer.recognize.return_value = recognizer_result
 
@@ -669,22 +664,9 @@ class TestRecognizeIntent:
         # Even with neuro stack on, pro source should NOT take the early
         # reflex path; it goes through the pro-mode branch instead.
         monkeypatch.setenv("XCAGI_NEURO_INTENT", "0")
-        host = _IntentHost()
-        host.user_preference_service.get_preference.return_value = "online"
-
-        recognizer_result = MagicMock()
-        recognizer_result.primary_intent = "products"
-        recognizer_result.tool_key = "products"
-        recognizer_result.intent_hints = []
-        recognizer_result.is_negated = False
-        recognizer_result.is_greeting = False
-        recognizer_result.is_goodbye = False
-        recognizer_result.is_help = False
-        recognizer_result.is_confirmation = False
-        recognizer_result.is_negation_intent = False
-        recognizer_result.is_likely_unclear = False
-        recognizer_result.slots = {}
-        recognizer_result.all_matched_tools = []
+        host, recognizer_result = _shared_setup_pro_source_0(
+            case_value_1="products", case_value_2="products"
+        )
         host.unified_recognizer.recognize.return_value = recognizer_result
 
         with patch(

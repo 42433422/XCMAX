@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import contextmanager as _shared_scope_contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +23,34 @@ from app.application.local_duty_graph_health import (
     build_local_employee_status,
     read_local_employee_manifest,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0():
+    with (
+        patch(
+            "app.application.local_duty_graph_health.all_planned_duty_employee_ids",
+            return_value=frozenset(),
+        ),
+        patch(
+            "app.application.local_duty_graph_health._local_registered_employee_pack_ids",
+            return_value=set(),
+        ),
+        patch(
+            "app.application.employee_runtime.scheduler.get_employee_scheduler_status",
+            return_value={},
+        ),
+        patch(
+            "app.application.local_duty_graph_health._duty_employee_area_map",
+            return_value={},
+        ),
+        patch(
+            "app.application.local_duty_graph_health.load_duty_roster_document",
+            return_value={},
+        ),
+    ):
+        yield None
+
 
 # ---------------------------------------------------------------------------
 # _staffing_areas_from_doc
@@ -619,28 +648,7 @@ class TestBuildLocalEmployeeStatus:
 class TestBuildLocalDutyGraphHealth:
     def test_scheduler_defaults_when_keys_missing(self):
         """When scheduler dict is empty, defaults should be applied."""
-        with (
-            patch(
-                "app.application.local_duty_graph_health.all_planned_duty_employee_ids",
-                return_value=frozenset(),
-            ),
-            patch(
-                "app.application.local_duty_graph_health._local_registered_employee_pack_ids",
-                return_value=set(),
-            ),
-            patch(
-                "app.application.employee_runtime.scheduler.get_employee_scheduler_status",
-                return_value={},
-            ),
-            patch(
-                "app.application.local_duty_graph_health._duty_employee_area_map",
-                return_value={},
-            ),
-            patch(
-                "app.application.local_duty_graph_health.load_duty_roster_document",
-                return_value={},
-            ),
-        ):
+        with _shared_scope_case_0():
             result = build_local_duty_graph_health()
         assert result["success"] is True
         assert result["source"] == "local"
@@ -686,28 +694,7 @@ class TestBuildLocalDutyGraphHealth:
     def test_env_flags_default(self, monkeypatch):
         monkeypatch.delenv("MODSTORE_DAILY_ORCHESTRATOR_ENABLED", raising=False)
         monkeypatch.delenv("MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED", raising=False)
-        with (
-            patch(
-                "app.application.local_duty_graph_health.all_planned_duty_employee_ids",
-                return_value=frozenset(),
-            ),
-            patch(
-                "app.application.local_duty_graph_health._local_registered_employee_pack_ids",
-                return_value=set(),
-            ),
-            patch(
-                "app.application.employee_runtime.scheduler.get_employee_scheduler_status",
-                return_value={},
-            ),
-            patch(
-                "app.application.local_duty_graph_health._duty_employee_area_map",
-                return_value={},
-            ),
-            patch(
-                "app.application.local_duty_graph_health.load_duty_roster_document",
-                return_value={},
-            ),
-        ):
+        with _shared_scope_case_0():
             result = build_local_duty_graph_health()
         assert result["env_flags"]["MODSTORE_DAILY_ORCHESTRATOR_ENABLED"] == "1"
         assert result["env_flags"]["MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED"] == "1"
@@ -715,28 +702,7 @@ class TestBuildLocalDutyGraphHealth:
     def test_env_flags_custom(self, monkeypatch):
         monkeypatch.setenv("MODSTORE_DAILY_ORCHESTRATOR_ENABLED", "0")
         monkeypatch.setenv("MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED", "false")
-        with (
-            patch(
-                "app.application.local_duty_graph_health.all_planned_duty_employee_ids",
-                return_value=frozenset(),
-            ),
-            patch(
-                "app.application.local_duty_graph_health._local_registered_employee_pack_ids",
-                return_value=set(),
-            ),
-            patch(
-                "app.application.employee_runtime.scheduler.get_employee_scheduler_status",
-                return_value={},
-            ),
-            patch(
-                "app.application.local_duty_graph_health._duty_employee_area_map",
-                return_value={},
-            ),
-            patch(
-                "app.application.local_duty_graph_health.load_duty_roster_document",
-                return_value={},
-            ),
-        ):
+        with _shared_scope_case_0():
             result = build_local_duty_graph_health()
         assert result["env_flags"]["MODSTORE_DAILY_ORCHESTRATOR_ENABLED"] == "0"
         assert result["env_flags"]["MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED"] == "false"
@@ -773,28 +739,7 @@ class TestBuildLocalDutyGraphHealth:
         assert staffing["area_map_size"] == 1
 
     def test_change_requests_always_zero(self):
-        with (
-            patch(
-                "app.application.local_duty_graph_health.all_planned_duty_employee_ids",
-                return_value=frozenset(),
-            ),
-            patch(
-                "app.application.local_duty_graph_health._local_registered_employee_pack_ids",
-                return_value=set(),
-            ),
-            patch(
-                "app.application.employee_runtime.scheduler.get_employee_scheduler_status",
-                return_value={},
-            ),
-            patch(
-                "app.application.local_duty_graph_health._duty_employee_area_map",
-                return_value={},
-            ),
-            patch(
-                "app.application.local_duty_graph_health.load_duty_roster_document",
-                return_value={},
-            ),
-        ):
+        with _shared_scope_case_0():
             result = build_local_duty_graph_health()
         assert result["change_requests"] == {"pending": 0, "failed": 0}
         assert result["incident_unknown_24h"] == 0

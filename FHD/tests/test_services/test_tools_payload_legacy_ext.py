@@ -9,6 +9,20 @@ import pytest
 from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
 
 
+def _shared_setup_case_0(case_value_1, case_value_2):
+    result = _unwrap(
+        dispatch_legacy_tool_payload(
+            case_value_1,
+            case_value_2,
+            {},
+            json_response_fn=_json_fn,
+            hdr_getter=_hdr_getter,
+            parse_order_text_fn=_parse_order_text,
+        )
+    )
+    return result
+
+
 def _assert_shared_view_action_0(self, _shared_literal_0, _shared_literal_1, _shared_literal_2):
     result = _unwrap(
         dispatch_legacy_tool_payload(
@@ -90,16 +104,7 @@ class TestChatTool:
 
 class TestAiEcosystemTool:
     def test_list_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "ai_ecosystem",
-                "list",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
+        result = _shared_setup_case_0(case_value_1="ai_ecosystem", case_value_2="list")
         assert result["_response"]["success"] is True
         assert "data" in result["_response"]
 
@@ -112,16 +117,7 @@ class TestAiEcosystemTool:
 
 class TestMaterialsListTool:
     def test_other_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "materials_list",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
+        result = _shared_setup_case_0(case_value_1="materials_list", case_value_2="other")
         assert result["_response"]["success"] is True
         assert "redirect" in result["_response"]
 
@@ -137,16 +133,7 @@ class TestShipmentRecordsTool:
             "app.bootstrap.get_shipment_app_service",
             return_value=mock_svc,
         ):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "shipment_records",
-                    "view",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
+            result = _shared_setup_case_0(case_value_1="shipment_records", case_value_2="view")
         assert result["_response"]["success"] is True
 
 
@@ -357,16 +344,7 @@ class TestCustomersToolExtended:
         return _assert_shared_view_action_0(self, True, "customers", "view")
 
     def test_add_action_missing_unit_name(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "customers",
-                "add",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
+        result = _shared_setup_case_0(case_value_1="customers", case_value_2="add")
         # Should fail because no unit_name
         assert result["_response"]["success"] is False or result["_status"] == 400
 

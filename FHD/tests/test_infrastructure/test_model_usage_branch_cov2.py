@@ -23,6 +23,22 @@ import pytest
 
 from app.infrastructure.billing import model_usage as mu
 
+
+def _shared_setup_case_0(case_value_1, case_value_2, case_value_3):
+    entry = {
+        "usage_id": case_value_1,
+        "usage_key": case_value_2,
+        "entry_type": "model_call",
+        "user_id": "u1",
+        "provider": "p",
+        "model": "m",
+        "cost_units": case_value_3,
+        "billing_status": "",
+        "billing_source": "",
+    }
+    return entry
+
+
 # ---------------------------------------------------------------------------
 # Autouse fixture — isolate ledger path and env vars
 # ---------------------------------------------------------------------------
@@ -1101,17 +1117,9 @@ class TestListModelUsageEntries:
 class TestRecordUsageEntryBackends:
     def test_audit_backend_with_cost(self, monkeypatch):
         monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-        entry = {
-            "usage_id": "test-audit",
-            "usage_key": "test-audit",
-            "entry_type": "model_call",
-            "user_id": "u1",
-            "provider": "p",
-            "model": "m",
-            "cost_units": 10,
-            "billing_status": "",
-            "billing_source": "",
-        }
+        entry = _shared_setup_case_0(
+            case_value_1="test-audit", case_value_2="test-audit", case_value_3=10
+        )
         result = mu._record_usage_entry(entry)
         assert result["wallet_debit"]["status"] == "audit_only"
         assert result["wallet_debit"]["cost_units"] == 10
@@ -1121,17 +1129,9 @@ class TestRecordUsageEntryBackends:
 
     def test_audit_backend_zero_cost(self, monkeypatch):
         monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-        entry = {
-            "usage_id": "test-audit-0",
-            "usage_key": "test-audit-0",
-            "entry_type": "model_call",
-            "user_id": "u1",
-            "provider": "p",
-            "model": "m",
-            "cost_units": 0,
-            "billing_status": "",
-            "billing_source": "",
-        }
+        entry = _shared_setup_case_0(
+            case_value_1="test-audit-0", case_value_2="test-audit-0", case_value_3=0
+        )
         result = mu._record_usage_entry(entry)
         assert result["wallet_debit"]["status"] == "audit_only"
         assert result["wallet_debit"]["cost_units"] == 0
@@ -1145,17 +1145,9 @@ class TestRecordUsageEntryBackends:
                 ({"hold": {"hold_no": "H1"}}, None),
                 ({"balance": "90.00"}, None),
             ]
-            entry = {
-                "usage_id": "test-market",
-                "usage_key": "test-market",
-                "entry_type": "model_call",
-                "user_id": "u1",
-                "provider": "p",
-                "model": "m",
-                "cost_units": 10,
-                "billing_status": "",
-                "billing_source": "",
-            }
+            entry = _shared_setup_case_0(
+                case_value_1="test-market", case_value_2="test-market", case_value_3=10
+            )
             result = mu._record_usage_entry(entry)
         assert result["billing_status"] == "debited"
         assert result["billing_source"] == "market_wallet"
@@ -1166,50 +1158,26 @@ class TestRecordUsageEntryBackends:
         monkeypatch.delenv("XCAGI_MARKET_AUTH_TOKEN", raising=False)
         monkeypatch.delenv("MODSTORE_AUTH_TOKEN", raising=False)
         with patch("builtins.__import__", side_effect=ImportError("no")):
-            entry = {
-                "usage_id": "test-auth-miss",
-                "usage_key": "test-auth-miss",
-                "entry_type": "model_call",
-                "user_id": "u1",
-                "provider": "p",
-                "model": "m",
-                "cost_units": 10,
-                "billing_status": "",
-                "billing_source": "",
-            }
+            entry = _shared_setup_case_0(
+                case_value_1="test-auth-miss", case_value_2="test-auth-miss", case_value_3=10
+            )
             result = mu._record_usage_entry(entry)
         assert result["billing_status"] == "market_debit_failed"
 
     def test_local_backend_debited(self):
         mu.set_model_wallet_balance("u1", 100)
-        entry = {
-            "usage_id": "test-local",
-            "usage_key": "test-local",
-            "entry_type": "model_call",
-            "user_id": "u1",
-            "provider": "p",
-            "model": "m",
-            "cost_units": 30,
-            "billing_status": "",
-            "billing_source": "",
-        }
+        entry = _shared_setup_case_0(
+            case_value_1="test-local", case_value_2="test-local", case_value_3=30
+        )
         result = mu._record_usage_entry(entry)
         assert result["billing_status"] == "debited"
         assert result["billing_source"] == "local_model_wallet"
 
     def test_local_backend_insufficient(self, monkeypatch):
         monkeypatch.setenv("MODEL_USAGE_WALLET_REQUIRED", "1")
-        entry = {
-            "usage_id": "test-local-insuf",
-            "usage_key": "test-local-insuf",
-            "entry_type": "model_call",
-            "user_id": "u1",
-            "provider": "p",
-            "model": "m",
-            "cost_units": 100,
-            "billing_status": "",
-            "billing_source": "",
-        }
+        entry = _shared_setup_case_0(
+            case_value_1="test-local-insuf", case_value_2="test-local-insuf", case_value_3=100
+        )
         result = mu._record_usage_entry(entry)
         assert result["billing_status"] == "insufficient_balance"
 

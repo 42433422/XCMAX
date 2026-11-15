@@ -16,6 +16,28 @@ this file focuses on uncovered branches and exception paths.
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager as _shared_scope_contextmanager
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(case_value_1, case_value_2, case_value_3):
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "XCAGI_ROUTING_POLICY_ENABLED": case_value_1,
+                "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0",
+            },
+        ),
+        patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+        patch(
+            "app.neuro_bus.routing.policy_router.predict_with_confidence",
+            return_value=(case_value_2, case_value_3),
+        ),
+        patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
+    ):
+        yield log_mock
+
 
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
@@ -1052,18 +1074,7 @@ class TestDecideProcessorWithPolicy:
         assert result is None
 
     def test_trace_id_from_argument(self):
-        with (
-            patch.dict(
-                os.environ,
-                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
-            ),
-            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
-            patch(
-                "app.neuro_bus.routing.policy_router.predict_with_confidence",
-                return_value=(1, 0.9),
-            ),
-            patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
-        ):
+        with _shared_scope_case_0(case_value_1="1", case_value_2=1, case_value_3=0.9) as log_mock:
             result = decide_processor_with_policy("hello", trace_id="tid-1")
         assert result is not None
         log_mock.assert_called_once()
@@ -1072,18 +1083,7 @@ class TestDecideProcessorWithPolicy:
     def test_trace_id_from_event(self):
         event = MagicMock()
         event.metadata.trace_id = "evt-tid"
-        with (
-            patch.dict(
-                os.environ,
-                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
-            ),
-            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
-            patch(
-                "app.neuro_bus.routing.policy_router.predict_with_confidence",
-                return_value=(2, 0.9),
-            ),
-            patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
-        ):
+        with _shared_scope_case_0(case_value_1="1", case_value_2=2, case_value_3=0.9) as log_mock:
             result = decide_processor_with_policy("hello", event=event)
         assert result is not None
         assert log_mock.call_args.kwargs["trace_id"] == "evt-tid"
@@ -1110,21 +1110,9 @@ class TestDecideProcessorWithPolicy:
 
     def test_shadow_mode_returns_none_but_logs(self):
         """影子模式：返回 None 但记录 NN 决策。"""
-        with (
-            patch.dict(
-                os.environ,
-                {
-                    "XCAGI_ROUTING_POLICY_ENABLED": "shadow",
-                    "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0",
-                },
-            ),
-            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
-            patch(
-                "app.neuro_bus.routing.policy_router.predict_with_confidence",
-                return_value=(0, 0.85),
-            ),
-            patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
-        ):
+        with _shared_scope_case_0(
+            case_value_1="shadow", case_value_2=0, case_value_3=0.85
+        ) as log_mock:
             result = decide_processor_with_policy("hello", trace_id="shadow-1")
         assert result is None
         log_mock.assert_called_once()
@@ -1183,18 +1171,7 @@ class TestDecideProcessorWithPolicy:
 
     def test_confidence_passed_to_routing_decision(self):
         """confidence 来自 predict_with_confidence，不再硬编码 0.72。"""
-        with (
-            patch.dict(
-                os.environ,
-                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
-            ),
-            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
-            patch(
-                "app.neuro_bus.routing.policy_router.predict_with_confidence",
-                return_value=(0, 0.42),
-            ),
-            patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
-        ):
+        with _shared_scope_case_0(case_value_1="1", case_value_2=0, case_value_3=0.42) as log_mock:
             result = decide_processor_with_policy("hello")
         assert result is not None
         assert result.confidence == 0.42

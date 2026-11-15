@@ -33,6 +33,23 @@ from app.domain.app_pure.admin_deploy_push import (
 )
 
 
+def _shared_setup_execute_0(monkeypatch, case_value_1, case_value_2, case_value_3, case_value_4):
+    monkeypatch.setattr(adp, "_JOBS", {})
+
+    opts = {
+        "include_backend": case_value_1,
+        "include_frontend": case_value_2,
+        "skip_pack": case_value_3,
+        "channel": "stable",
+    }
+    job = DeployJob(
+        job_id=case_value_4,
+        options=opts,
+        steps=_build_steps(opts),
+    )
+    return opts, job
+
+
 def _consume_scheduled_coroutine(coro):
     coro.close()
     return Mock()
@@ -465,18 +482,12 @@ class TestExecuteDeployJobDeep:
     async def test_execute_with_frontend_steps(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that frontend_build and frontend_push steps are executed."""
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
-        monkeypatch.setattr(adp, "_JOBS", {})
-
-        opts = {
-            "include_backend": False,
-            "include_frontend": True,
-            "skip_pack": False,
-            "channel": "stable",
-        }
-        job = DeployJob(
-            job_id="exec_fe",
-            options=opts,
-            steps=_build_steps(opts),
+        opts, job = _shared_setup_execute_0(
+            monkeypatch,
+            case_value_1=False,
+            case_value_2=True,
+            case_value_3=False,
+            case_value_4="exec_fe",
         )
 
         executed_steps: list[str] = []
@@ -509,18 +520,12 @@ class TestExecuteDeployJobDeep:
     async def test_execute_verify_step_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test verify step when hub_sha matches local_sha."""
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
-        monkeypatch.setattr(adp, "_JOBS", {})
-
-        opts = {
-            "include_backend": False,
-            "include_frontend": False,
-            "skip_pack": True,
-            "channel": "stable",
-        }
-        job = DeployJob(
-            job_id="exec_verify",
-            options=opts,
-            steps=_build_steps(opts),
+        opts, job = _shared_setup_execute_0(
+            monkeypatch,
+            case_value_1=False,
+            case_value_2=False,
+            case_value_3=True,
+            case_value_4="exec_verify",
         )
 
         with (
@@ -543,18 +548,12 @@ class TestExecuteDeployJobDeep:
     @pytest.mark.parametrize("local_sha", ["", "local"])
     async def test_execute_verify_step_unknown_local_sha(self, monkeypatch, local_sha) -> None:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
-        monkeypatch.setattr(adp, "_JOBS", {})
-
-        opts = {
-            "include_backend": False,
-            "include_frontend": False,
-            "skip_pack": True,
-            "channel": "stable",
-        }
-        job = DeployJob(
-            job_id="exec_empty",
-            options=opts,
-            steps=_build_steps(opts),
+        opts, job = _shared_setup_execute_0(
+            monkeypatch,
+            case_value_1=False,
+            case_value_2=False,
+            case_value_3=True,
+            case_value_4="exec_empty",
         )
 
         with (
@@ -622,18 +621,12 @@ class TestExecuteDeployJobDeep:
     ) -> None:
         """Test that _ACTIVE_JOB is cleared in finally block."""
         monkeypatch.setattr(adp, "_ACTIVE_JOB", "test_job_id")
-        monkeypatch.setattr(adp, "_JOBS", {})
-
-        opts = {
-            "include_backend": False,
-            "include_frontend": False,
-            "skip_pack": True,
-            "channel": "stable",
-        }
-        job = DeployJob(
-            job_id="test_job_id",
-            options=opts,
-            steps=_build_steps(opts),
+        opts, job = _shared_setup_execute_0(
+            monkeypatch,
+            case_value_1=False,
+            case_value_2=False,
+            case_value_3=True,
+            case_value_4="test_job_id",
         )
 
         with (
@@ -655,18 +648,12 @@ class TestExecuteDeployJobDeep:
     ) -> None:
         """Test that _ACTIVE_JOB is cleared even on error."""
         monkeypatch.setattr(adp, "_ACTIVE_JOB", "test_job_err")
-        monkeypatch.setattr(adp, "_JOBS", {})
-
-        opts = {
-            "include_backend": False,
-            "include_frontend": False,
-            "skip_pack": True,
-            "channel": "stable",
-        }
-        job = DeployJob(
-            job_id="test_job_err",
-            options=opts,
-            steps=_build_steps(opts),
+        opts, job = _shared_setup_execute_0(
+            monkeypatch,
+            case_value_1=False,
+            case_value_2=False,
+            case_value_3=True,
+            case_value_4="test_job_err",
         )
 
         with (
@@ -686,18 +673,12 @@ class TestExecuteDeployJobDeep:
     ) -> None:
         """Test that running steps are marked as error when job fails."""
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
-        monkeypatch.setattr(adp, "_JOBS", {})
-
-        opts = {
-            "include_backend": True,
-            "include_frontend": True,
-            "skip_pack": False,
-            "channel": "stable",
-        }
-        job = DeployJob(
-            job_id="exec_running_err",
-            options=opts,
-            steps=_build_steps(opts),
+        opts, job = _shared_setup_execute_0(
+            monkeypatch,
+            case_value_1=True,
+            case_value_2=True,
+            case_value_3=False,
+            case_value_4="exec_running_err",
         )
 
         call_count = {"n": 0}

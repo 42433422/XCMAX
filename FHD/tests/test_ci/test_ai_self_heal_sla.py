@@ -22,6 +22,35 @@ from unittest.mock import MagicMock
 
 import pytest
 
+
+def _shared_setup_case_0(case_value_1, case_value_2):
+    client = _make_real_client()
+    mock_http = MagicMock()
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "workflow_runs": [
+            {
+                "name": case_value_1,
+                "status": "completed",
+                "conclusion": "success",
+                "created_at": "2026-07-20T09:00:00Z",
+            },
+            {
+                "name": "AI Review",
+                "status": "completed",
+                "conclusion": case_value_2,
+                "created_at": "2026-07-20T10:00:00Z",
+            },
+        ]
+    }
+    mock_http.get.return_value = resp
+    client.client = mock_http
+
+    passed, reason = client.get_workflow_run_conclusion("abc123", "AI Review")
+    return client, mock_http, resp, passed, reason
+
+
 # 把 FHD/scripts/ci 加入 sys.path 以便直接 import ai_self_heal_sla 模块
 FHD_ROOT = Path(__file__).resolve().parents[2]
 CI_SCRIPTS = FHD_ROOT / "scripts" / "ci"
@@ -683,30 +712,9 @@ class TestGetWorkflowRunConclusion:
         assert "failure" in reason
 
     def test_workflow_success(self) -> None:
-        client = _make_real_client()
-        mock_http = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.json.return_value = {
-            "workflow_runs": [
-                {
-                    "name": "Other Workflow",
-                    "status": "completed",
-                    "conclusion": "success",
-                    "created_at": "2026-07-20T09:00:00Z",
-                },
-                {
-                    "name": "AI Review",
-                    "status": "completed",
-                    "conclusion": "success",
-                    "created_at": "2026-07-20T10:00:00Z",
-                },
-            ]
-        }
-        mock_http.get.return_value = resp
-        client.client = mock_http
-
-        passed, reason = client.get_workflow_run_conclusion("abc123", "AI Review")
+        client, mock_http, resp, passed, reason = _shared_setup_case_0(
+            case_value_1="Other Workflow", case_value_2="success"
+        )
         assert passed is True
         assert reason == "ok"
 
@@ -723,31 +731,10 @@ class TestGetWorkflowRunConclusion:
         assert "workflow_runs_api_error_500" in reason
 
     def test_picks_latest_run_by_created_at(self) -> None:
-        client = _make_real_client()
-        mock_http = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 200
         # 新 run failure，旧 run success，应取新的 failure
-        resp.json.return_value = {
-            "workflow_runs": [
-                {
-                    "name": "AI Review",
-                    "status": "completed",
-                    "conclusion": "success",
-                    "created_at": "2026-07-20T09:00:00Z",
-                },
-                {
-                    "name": "AI Review",
-                    "status": "completed",
-                    "conclusion": "failure",
-                    "created_at": "2026-07-20T10:00:00Z",
-                },
-            ]
-        }
-        mock_http.get.return_value = resp
-        client.client = mock_http
-
-        passed, reason = client.get_workflow_run_conclusion("abc123", "AI Review")
+        client, mock_http, resp, passed, reason = _shared_setup_case_0(
+            case_value_1="AI Review", case_value_2="failure"
+        )
         assert passed is False
         assert "failure" in reason
 

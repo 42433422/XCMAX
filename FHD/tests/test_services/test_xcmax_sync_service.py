@@ -22,6 +22,19 @@ from app.domain.shared_services.xcmax_sync_service import (
 )
 
 
+@contextlib.contextmanager
+def _shared_scope_push_0(opener, mock_db):
+    with (
+        patch(
+            "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
+            return_value=(opener, MagicMock()),
+        ),
+        patch("app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
+        patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+    ):
+        yield None
+
+
 def _mock_get_db(mock_db):
     """Create a contextmanager mock for get_db generator."""
 
@@ -223,16 +236,7 @@ class TestPushOutbox:
         mock_resp.__exit__ = MagicMock(return_value=False)
 
         opener = _mock_http_opener(mock_resp)
-        with (
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
-                return_value=(opener, MagicMock()),
-            ),
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""
-            ),
-            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
-        ):
+        with _shared_scope_push_0(opener, mock_db):
             result = push_outbox(remote_host="127.0.0.1", remote_port=8080)
 
         assert result["sent"] == 1
@@ -249,16 +253,7 @@ class TestPushOutbox:
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)
         opener = _mock_http_opener(mock_resp)
-        with (
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
-                return_value=(opener, MagicMock()),
-            ),
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""
-            ),
-            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
-        ):
+        with _shared_scope_push_0(opener, mock_db):
             push_outbox(remote_host="127.0.0.1", remote_port=8080)
 
         req = opener.open.call_args.args[0]
@@ -280,16 +275,7 @@ class TestPushOutbox:
         opener = _mock_http_opener(
             side_effect=urllib.error.HTTPError("url", 500, "Internal", {}, None)
         )
-        with (
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
-                return_value=(opener, MagicMock()),
-            ),
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""
-            ),
-            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
-        ):
+        with _shared_scope_push_0(opener, mock_db):
             result = push_outbox()
 
         assert result["failed"] == 1
@@ -313,16 +299,7 @@ class TestPushOutbox:
         opener = _mock_http_opener(
             side_effect=urllib.error.HTTPError("url", 404, "Not Found", {}, None)
         )
-        with (
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
-                return_value=(opener, MagicMock()),
-            ),
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""
-            ),
-            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
-        ):
+        with _shared_scope_push_0(opener, mock_db):
             result = push_outbox()
 
         assert result["failed"] == 1
@@ -341,16 +318,7 @@ class TestPushOutbox:
             },
         ]
         opener = _mock_http_opener(side_effect=ConnectionError("refused"))
-        with (
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
-                return_value=(opener, MagicMock()),
-            ),
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""
-            ),
-            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
-        ):
+        with _shared_scope_push_0(opener, mock_db):
             result = push_outbox()
 
         assert result["failed"] == 1
@@ -380,16 +348,7 @@ class TestPushOutbox:
         mock_resp.__exit__ = MagicMock(return_value=False)
 
         opener = _mock_http_opener(mock_resp)
-        with (
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
-                return_value=(opener, MagicMock()),
-            ),
-            patch(
-                "app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""
-            ),
-            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
-        ):
+        with _shared_scope_push_0(opener, mock_db):
             result = push_outbox()
 
         assert result["sent"] == 2

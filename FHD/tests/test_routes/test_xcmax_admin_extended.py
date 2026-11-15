@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -31,6 +32,21 @@ from app.fastapi_routes.xcmax_admin import (
     _require_market_admin_session,
     router,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(case_value_1, case_value_2):
+    with (
+        patch(
+            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+            return_value="sid123",
+        ),
+        patch(
+            "app.application.session_account_meta.load_session_account_meta",
+            return_value={"account_kind": case_value_1, "market_is_admin": case_value_2},
+        ),
+    ):
+        yield None
 
 
 @pytest.fixture
@@ -67,16 +83,7 @@ class TestRequireMarketAdminSession:
     def test_non_admin_returns_403(self):
         """When session is not admin, should return 403."""
         req = MagicMock(spec=Request)
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "user", "market_is_admin": False},
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="user", case_value_2=False):
             result = _require_market_admin_session(req)
             assert result is not None
             assert result.status_code == 403
@@ -84,32 +91,14 @@ class TestRequireMarketAdminSession:
     def test_admin_returns_none(self):
         """When session is admin, should return None (no gate)."""
         req = MagicMock(spec=Request)
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="admin", case_value_2=True):
             result = _require_market_admin_session(req)
             assert result is None
 
     def test_admin_kind_but_not_market_admin_returns_403(self):
         """When account_kind is admin but market_is_admin is False, should return 403."""
         req = MagicMock(spec=Request)
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": False},
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="admin", case_value_2=False):
             result = _require_market_admin_session(req)
             assert result is not None
             assert result.status_code == 403
@@ -938,31 +927,13 @@ class TestImpersonateRoutes:
 
     def test_impersonate_no_user_id(self, client: TestClient):
         """Should return 400 when market_user_id is missing."""
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="admin", case_value_2=True):
             response = client.post("/api/xcmax/admin/impersonate", json={})
             assert response.status_code == 400
 
     def test_impersonate_invalid_user_id(self, client: TestClient):
         """Should return 400 when market_user_id is not a number."""
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="admin", case_value_2=True):
             response = client.post(
                 "/api/xcmax/admin/impersonate",
                 json={"market_user_id": "not_a_number"},

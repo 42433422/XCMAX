@@ -8,6 +8,7 @@ Each test is labelled with the missing branch(es) it exercises.
 Missing branch [src, dst] = at line src, the branch going to line dst was not taken.
 """
 
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,6 +17,26 @@ from app.infrastructure.persistence.shipment_record_query_impl import (
     SQLAlchemyShipmentRecordQuery,
     _record_to_dict,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(mock_db, inspector_m):
+    with (
+        patch(
+            "app.infrastructure.persistence.shipment_record_query_impl.get_db",
+            return_value=_make_db_ctx(mock_db),
+        ),
+        patch(
+            "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
+            return_value=inspector_m,
+        ),
+        patch(
+            "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
+            return_value=None,  # falsy → branch [59,62]
+        ),
+    ):
+        yield None
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -184,80 +205,28 @@ class TestQueryShipmentsMissingBranches:
     def test_resolve_returns_none_continues_with_get_db(self, svc):
         """Branch [59,62]: resolved is None → original unit_name kept → enters get_db."""
         mock_db, inspector_m, _ = self._base_db_mock()
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                return_value=_make_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-                return_value=inspector_m,
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
-                return_value=None,  # falsy → branch [59,62]
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, inspector_m):
             result = svc.query_shipments(unit_name="some_unit")
         assert result["success"] is True
 
     def test_with_start_date_filter(self, svc):
         """Branch [78,79]: start_date is provided."""
         mock_db, inspector_m, mock_q = self._base_db_mock()
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                return_value=_make_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-                return_value=inspector_m,
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, inspector_m):
             result = svc.query_shipments(start_date="2026-01-01")
         assert result["success"] is True
 
     def test_with_end_date_filter(self, svc):
         """Branch [82,83]: end_date is provided."""
         mock_db, inspector_m, mock_q = self._base_db_mock()
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                return_value=_make_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-                return_value=inspector_m,
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, inspector_m):
             result = svc.query_shipments(end_date="2026-12-31")
         assert result["success"] is True
 
     def test_with_both_dates(self, svc):
         """Branches [78,79] + [82,83]: both dates provided simultaneously."""
         mock_db, inspector_m, _ = self._base_db_mock()
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                return_value=_make_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-                return_value=inspector_m,
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, inspector_m):
             result = svc.query_shipments(start_date="2026-01-01", end_date="2026-06-30")
         assert result["success"] is True
 

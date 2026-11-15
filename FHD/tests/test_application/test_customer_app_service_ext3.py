@@ -37,6 +37,19 @@ from app.db.models.shipment import ShipmentRecord
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
+
+def _shared_setup_case_0(case_value_1, case_value_2):
+    svc = CustomerApplicationService()
+    mock_session = MagicMock()
+    mock_query = MagicMock()
+    mock_query.filter.return_value = mock_query
+    unit = Mock()
+    unit.id = 1
+    unit.unit_name = case_value_1
+    unit.contact_person = case_value_2
+    return svc, mock_session, mock_query, unit
+
+
 # ---------------------------------------------------------------------------
 # get_customers_session — additional
 # ---------------------------------------------------------------------------
@@ -236,14 +249,9 @@ class TestGetByIdAdditional:
         assert result["data"]["updated_at"] is None
 
     def test_with_valid_values(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        unit = Mock()
-        unit.id = 1
-        unit.unit_name = "TestCo"
-        unit.contact_person = "Zhang"
+        svc, mock_session, mock_query, unit = _shared_setup_case_0(
+            case_value_1="TestCo", case_value_2="Zhang"
+        )
         unit.version = 2
         unit.contact_phone = "138"
         unit.address = "Addr"
@@ -430,14 +438,9 @@ class TestUpdateAdditional:
         assert unit.address == "NewAddr"
 
     def test_update_partial_fields(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        unit = Mock()
-        unit.id = 1
-        unit.unit_name = "KeepName"
-        unit.contact_person = "Old"
+        svc, mock_session, mock_query, unit = _shared_setup_case_0(
+            case_value_1="KeepName", case_value_2="Old"
+        )
         unit.contact_phone = "111"
         unit.address = "OldAddr"
         unit.created_at = datetime(2026, 1, 1)
@@ -455,14 +458,9 @@ class TestUpdateAdditional:
 
     def test_update_no_name_change(self):
         """Test update without changing customer_name (no conflict check)."""
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        unit = Mock()
-        unit.id = 1
-        unit.unit_name = "KeepName"
-        unit.contact_person = "Old"
+        svc, mock_session, mock_query, unit = _shared_setup_case_0(
+            case_value_1="KeepName", case_value_2="Old"
+        )
         unit.contact_phone = "111"
         unit.address = "OldAddr"
         unit.created_at = datetime(2026, 1, 1)
@@ -1058,14 +1056,9 @@ class TestExportToExcelAdditional:
 
 class TestGetPurchaseUnitByNameAdditional:
     def test_found_with_all_fields(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        unit = Mock()
-        unit.id = 1
-        unit.unit_name = "TestCo"
-        unit.contact_person = "Zhang"
+        svc, mock_session, mock_query, unit = _shared_setup_case_0(
+            case_value_1="TestCo", case_value_2="Zhang"
+        )
         unit.contact_phone = "138"
         unit.address = "Addr"
         unit.discount_rate = 0.9
@@ -1136,14 +1129,9 @@ class TestMatchPurchaseUnitAdditional:
         assert result is None
 
     def test_exact_match(self):
-        svc = CustomerApplicationService()
-        mock_session = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        unit = Mock()
-        unit.id = 1
-        unit.unit_name = "TestCo"
-        unit.contact_person = "Zhang"
+        svc, mock_session, mock_query, unit = _shared_setup_case_0(
+            case_value_1="TestCo", case_value_2="Zhang"
+        )
         unit.contact_phone = "138"
         unit.address = "Addr"
         mock_query.first.return_value = unit

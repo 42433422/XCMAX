@@ -19,6 +19,7 @@ from app.application.agent_orchestrator.runtime_dependencies import (
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.infrastructure.observability.genai_spans import tool_call_span
+from app.infrastructure.observability.metrics import observe_tool_call
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -308,6 +309,11 @@ class StepExecution:
             execution_status = "failed"
         step.status = tool_call.status = "completed" if success else "failed"
         tool_call.metadata["execution_status"] = execution_status
+        observe_tool_call(
+            tool=step.tool_id,
+            status="success" if success else execution_status,
+            duration_ms=step.duration_ms,
+        )
         if not success:
             step.error = str(
                 step.output.get("message") or step.output.get("error") or "tool failed"

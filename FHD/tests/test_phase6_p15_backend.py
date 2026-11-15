@@ -3,6 +3,89 @@
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager as _shared_scope_contextmanager
+
+
+@_shared_scope_contextmanager
+def _shared_scope_iter_catalog_packages_market_0():
+    with (
+        patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True),
+        patch(
+            "app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
+        ) as mock_get,
+        patch(
+            "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+            return_value=True,
+        ),
+    ):
+        yield mock_fetch, mock_get
+
+
+@_shared_scope_contextmanager
+def _shared_scope_iter_catalog_packages_1(case_value_1_value, case_value_2_value):
+    with (
+        patch(
+            "app.infrastructure.mods.catalog_client._use_market_catalog",
+            return_value=case_value_2_value,
+        ),
+        patch(
+            case_value_1_value,
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+            return_value=True,
+        ),
+    ):
+        yield mock_fetch
+
+
+def _shared_setup_identify_fields_0(case_value_1, case_value_2):
+    blocks = [
+        {
+            "text": case_value_1,
+            "left": 10,
+            "top": 20,
+            "width": 100,
+            "height": 30,
+            "conf": case_value_2,
+        }
+    ]
+    fields = ltg._identify_fields(blocks)
+    return blocks, fields
+
+
+def _shared_setup_pair_fields_1(case_value_1):
+    blocks = [
+        {
+            "text": case_value_1,
+            "center": (50, 50),
+            "y_center": 50,
+            "left": 10,
+            "top": 20,
+            "width": 80,
+            "height": 30,
+            "conf": 0.9,
+        }
+    ]
+    return blocks
+
+
+def _shared_setup_catalog_download_to_2(mock_resp):
+    mock_stream_ctx = MagicMock()
+    mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_client.stream = MagicMock(return_value=mock_stream_ctx)
+    return mock_stream_ctx, mock_client
+
 
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
@@ -1805,49 +1888,23 @@ class TestLTGIdentifyFields:
     """Cover ``_identify_fields`` helper."""
 
     def test_identify_fields_with_colon(self) -> None:
-        blocks = [
-            {
-                "text": "品名：运动鞋",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = ltg._identify_fields(blocks)
+        blocks, fields = _shared_setup_identify_fields_0(
+            case_value_1="品名：运动鞋", case_value_2=0.9
+        )
         assert len(fields) == 1
         assert fields[0]["label"] == "品名"
         assert fields[0]["value"] == "运动鞋"
         assert fields[0]["type"] == "fixed_label"
 
     def test_identify_fields_with_chinese_colon(self) -> None:
-        blocks = [
-            {
-                "text": "颜色:红色",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.8,
-            }
-        ]
-        fields = ltg._identify_fields(blocks)
+        blocks, fields = _shared_setup_identify_fields_0(case_value_1="颜色:红色", case_value_2=0.8)
         assert len(fields) == 1
         assert fields[0]["label"] == "颜色"
 
     def test_identify_fields_no_colon_with_known_label(self) -> None:
-        blocks = [
-            {
-                "text": "产品编号 6808AA",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.85,
-            }
-        ]
-        fields = ltg._identify_fields(blocks)
+        blocks, fields = _shared_setup_identify_fields_0(
+            case_value_1="产品编号 6808AA", case_value_2=0.85
+        )
         assert len(fields) == 1
         assert fields[0]["label"] == "产品编号"
         assert fields[0]["value"] == "6808AA"
@@ -1857,17 +1914,9 @@ class TestLTGIdentifyFields:
         assert fields == []
 
     def test_identify_fields_no_match(self) -> None:
-        blocks = [
-            {
-                "text": "随便一段文字",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.7,
-            }
-        ]
-        fields = ltg._identify_fields(blocks)
+        blocks, fields = _shared_setup_identify_fields_0(
+            case_value_1="随便一段文字", case_value_2=0.7
+        )
         assert fields == []
 
     def test_identify_fields_multiple_blocks(self) -> None:
@@ -1932,18 +1981,7 @@ class TestLTGPairFieldsByGrid:
         assert result == []
 
     def test_pair_fields_single_block_no_pair(self) -> None:
-        blocks = [
-            {
-                "text": "品名",
-                "center": (50, 50),
-                "y_center": 50,
-                "left": 10,
-                "top": 20,
-                "width": 80,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
+        blocks = _shared_setup_pair_fields_1(case_value_1="品名")
         result = ltg._pair_fields_by_grid(blocks, [0, 100], [0, 100])
         assert len(result) == 1
         assert result[0]["label"] == "品名"
@@ -1978,36 +2016,14 @@ class TestLTGPairFieldsByGrid:
         assert result[0]["value"] == "运动鞋"
 
     def test_pair_fields_with_merged_cells(self) -> None:
-        blocks = [
-            {
-                "text": "品名",
-                "center": (50, 50),
-                "y_center": 50,
-                "left": 10,
-                "top": 20,
-                "width": 80,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
+        blocks = _shared_setup_pair_fields_1(case_value_1="品名")
         merged = [{"row": 0, "start_col": 0, "end_col": 1}]
         result = ltg._pair_fields_by_grid(blocks, [0, 100], [0, 100, 200], merged)
         assert len(result) == 1
         assert result[0]["is_merged"] is True
 
     def test_pair_fields_none_merged_defaults_empty(self) -> None:
-        blocks = [
-            {
-                "text": "test",
-                "center": (50, 50),
-                "y_center": 50,
-                "left": 10,
-                "top": 20,
-                "width": 80,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
+        blocks = _shared_setup_pair_fields_1(case_value_1="test")
         result = ltg._pair_fields_by_grid(blocks, [0, 100], [0, 100])
         assert len(result) == 1
         assert result[0]["is_merged"] is False
@@ -3861,14 +3877,7 @@ class TestCCCatalogDownloadTo:
 
         mock_resp.aiter_bytes = _aiter_bytes
 
-        mock_stream_ctx = MagicMock()
-        mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-        mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
-
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
+        mock_stream_ctx, mock_client = _shared_setup_catalog_download_to_2(mock_resp)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
             await cc.catalog_download_to("/packages/p1/1.0.0/download", dest)
@@ -3887,14 +3896,7 @@ class TestCCCatalogDownloadTo:
 
         mock_resp.aiter_bytes = _aiter_bytes
 
-        mock_stream_ctx = MagicMock()
-        mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-        mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
-
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
+        mock_stream_ctx, mock_client = _shared_setup_catalog_download_to_2(mock_resp)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
             await cc.catalog_download_to(
@@ -3914,14 +3916,7 @@ class TestCCCatalogDownloadTo:
         mock_resp.status_code = 404
         mock_resp.aread = AsyncMock(return_value=b"not found")
 
-        mock_stream_ctx = MagicMock()
-        mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-        mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
-
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
+        mock_stream_ctx, mock_client = _shared_setup_catalog_download_to_2(mock_resp)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
             with pytest.raises(HTTPException) as exc_info:
@@ -3953,14 +3948,7 @@ class TestCCCatalogDownloadTo:
 
         mock_resp.aiter_bytes = _aiter_bytes
 
-        mock_stream_ctx = MagicMock()
-        mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-        mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
-
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
+        mock_stream_ctx, mock_client = _shared_setup_catalog_download_to_2(mock_resp)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
             await cc.catalog_download_to("/packages/p1/1.0.0/download", dest)
@@ -3972,17 +3960,10 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_market_success(self) -> None:
-        with (
-            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True),
-            patch(
-                "app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
-                new_callable=AsyncMock,
-            ) as mock_fetch,
-            patch(
-                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
-                return_value=True,
-            ),
-        ):
+        with _shared_scope_iter_catalog_packages_1(
+            case_value_1_value="app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
+            case_value_2_value=True,
+        ) as mock_fetch:
             mock_fetch.return_value = [{"id": "p1"}, {"id": "p2"}]
             rows = []
             async for row in cc.iter_catalog_packages():
@@ -3991,20 +3972,7 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_market_empty_falls_back(self) -> None:
-        with (
-            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True),
-            patch(
-                "app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
-                new_callable=AsyncMock,
-            ) as mock_fetch,
-            patch(
-                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
-            ) as mock_get,
-            patch(
-                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
-                return_value=True,
-            ),
-        ):
+        with _shared_scope_iter_catalog_packages_market_0() as (mock_fetch, mock_get):
             mock_fetch.return_value = []
             mock_get.return_value = {"packages": [{"id": "p1"}]}
             rows = []
@@ -4014,20 +3982,7 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_market_http_error_falls_back(self) -> None:
-        with (
-            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True),
-            patch(
-                "app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
-                new_callable=AsyncMock,
-            ) as mock_fetch,
-            patch(
-                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
-            ) as mock_get,
-            patch(
-                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
-                return_value=True,
-            ),
-        ):
+        with _shared_scope_iter_catalog_packages_market_0() as (mock_fetch, mock_get):
             mock_fetch.side_effect = HTTPException(status_code=502, detail="err")
             mock_get.return_value = {"packages": [{"id": "p1"}]}
             rows = []
@@ -4037,20 +3992,7 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_market_recoverable_error_falls_back(self) -> None:
-        with (
-            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True),
-            patch(
-                "app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
-                new_callable=AsyncMock,
-            ) as mock_fetch,
-            patch(
-                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
-            ) as mock_get,
-            patch(
-                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
-                return_value=True,
-            ),
-        ):
+        with _shared_scope_iter_catalog_packages_market_0() as (mock_fetch, mock_get):
             mock_fetch.side_effect = RuntimeError("err")
             mock_get.return_value = {"packages": [{"id": "p1"}]}
             rows = []
@@ -4060,16 +4002,10 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_disabled_market_uses_index(self) -> None:
-        with (
-            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=False),
-            patch(
-                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
-            ) as mock_get,
-            patch(
-                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
-                return_value=True,
-            ),
-        ):
+        with _shared_scope_iter_catalog_packages_1(
+            case_value_1_value="app.infrastructure.mods.catalog_client.catalog_get_json",
+            case_value_2_value=False,
+        ) as mock_get:
             mock_get.return_value = {"packages": [{"id": "p1"}, {"id": "p2"}]}
             rows = []
             async for row in cc.iter_catalog_packages():
@@ -4078,16 +4014,10 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_packages_not_list_raises(self) -> None:
-        with (
-            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=False),
-            patch(
-                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
-            ) as mock_get,
-            patch(
-                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
-                return_value=True,
-            ),
-        ):
+        with _shared_scope_iter_catalog_packages_1(
+            case_value_1_value="app.infrastructure.mods.catalog_client.catalog_get_json",
+            case_value_2_value=False,
+        ) as mock_get:
             mock_get.return_value = {"packages": "not a list"}
             with pytest.raises(HTTPException) as exc_info:
                 async for _ in cc.iter_catalog_packages():
@@ -4096,16 +4026,10 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_filters_non_dict(self) -> None:
-        with (
-            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=False),
-            patch(
-                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
-            ) as mock_get,
-            patch(
-                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
-                return_value=True,
-            ),
-        ):
+        with _shared_scope_iter_catalog_packages_1(
+            case_value_1_value="app.infrastructure.mods.catalog_client.catalog_get_json",
+            case_value_2_value=False,
+        ) as mock_get:
             mock_get.return_value = {"packages": [{"id": "p1"}, "not_dict", 42]}
             rows = []
             async for row in cc.iter_catalog_packages():
