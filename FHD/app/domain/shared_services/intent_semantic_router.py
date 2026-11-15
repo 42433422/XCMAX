@@ -15,8 +15,11 @@ import os
 import sys
 import threading
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,12 @@ class SemanticIntent:
     intent_id: str
     tool_key: str
     score: float
+
+
+@dataclass(frozen=True)
+class _RouteSpec:
+    name: str
+    utterances: list[str]
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -116,29 +125,25 @@ _CORPUS_RELATIVE_PATH = "resources/config/intent_semantic_utterances.yaml"
 def _load_corpus() -> dict[str, list[str]]:
     """读取构建期生成的语料；缺失不影响规则，只降低召回。"""
     try:
-        from pathlib import Path
-
-        import yaml
-
         root = Path(__file__).resolve().parents[3]
-        payload = yaml.safe_load(
-            (root / _CORPUS_RELATIVE_PATH).read_text(encoding="utf-8")
-        ) or {}
+        payload = yaml.safe_load((root / _CORPUS_RELATIVE_PATH).read_text(encoding="utf-8")) or {}
+        if not isinstance(payload, dict) or not isinstance(payload.get("utterances", {}), dict):
+            return {}
         corpus: dict[str, list[str]] = {}
         for tool_key, items in (payload.get("utterances") or {}).items():
+            if not isinstance(items, list):
+                continue
             texts = [str(item).strip() for item in items or [] if str(item).strip()]
             if texts:
                 corpus[str(tool_key)] = texts
         return corpus
-    except Exception as exc:  # noqa: BLE001 - 语料缺失必须降级
+    except (OSError, ValueError, yaml.YAMLError) as exc:
         logger.warning("intent semantic corpus unavailable: %s", exc)
         return {}
 
 
-def _build_routes() -> tuple[list[Any], dict[str, str]]:
+def _build_routes() -> tuple[list[_RouteSpec], dict[str, str]]:
     """从意图配置关键词与构建期语料构建路由；同名 tool_key 合并。"""
-    from semantic_router import Route
-
     from resources.config.intent_config import get_intent_config
 
     config = get_intent_config()
@@ -157,29 +162,33 @@ def _build_routes() -> tuple[list[Any], dict[str, str]]:
                 bucket["utterances"].append(text)
 
     for tool_key, texts in _load_corpus().items():
-        bucket = buckets.get(tool_key)
-        if bucket is None:
+        corpus_bucket = buckets.get(tool_key)
+        if corpus_bucket is None:
             continue
         for text in texts:
-            if text not in bucket["utterances"]:
-                bucket["utterances"].append(text)
+            if text not in corpus_bucket["utterances"]:
+                corpus_bucket["utterances"].append(text)
 
-    routes: list[Any] = []
+    routes: list[_RouteSpec] = []
     intent_by_tool: dict[str, str] = {}
     for tool_key, bucket in buckets.items():
         utterances = bucket["utterances"]
         if len(utterances) < 2:
             continue
-        routes.append(Route(name=tool_key, utterances=utterances))
+        routes.append(_RouteSpec(name=tool_key, utterances=utterances))
         intent_by_tool[tool_key] = str(bucket["intent_id"])
     return routes, intent_by_tool
 
 
 def _build_router() -> tuple[Any, dict[str, str]]:
-    from semantic_router.encoders import FastEmbedEncoder
-    from semantic_router.routers import IndexedRouter
+    # The optional backend is loaded only at this plugin boundary; callers and
+    # corpus construction consume our typed specs without requiring the extra.
+    backend = import_module("semantic_router")
+    Route, IndexedRouter = backend.Route, backend.IndexedRouter
+    FastEmbedEncoder = import_module("semantic_router.encoders").FastEmbedEncoder
 
-    routes, intent_by_tool = _build_routes()
+    route_specs, intent_by_tool = _build_routes()
+    routes = [Route(name=spec.name, utterances=spec.utterances) for spec in route_specs]
     if not routes:
         raise RuntimeError("intent config produced no semantic routes")
 

@@ -20,9 +20,7 @@ def _patch_semantic(monkeypatch: pytest.MonkeyPatch, tool_key: str, score: float
     monkeypatch.setattr(
         semantic,
         "route_intent",
-        lambda text: semantic.SemanticIntent(
-            intent_id=tool_key, tool_key=tool_key, score=score
-        ),
+        lambda text: semantic.SemanticIntent(intent_id=tool_key, tool_key=tool_key, score=score),
     )
     monkeypatch.setenv("FHD_INTENT_SEMANTIC_OVERRIDE_THRESHOLD", "0.74")
 
