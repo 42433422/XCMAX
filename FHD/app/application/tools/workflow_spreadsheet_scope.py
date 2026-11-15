@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory, mkdtemp
 from typing import Any
@@ -71,6 +73,17 @@ def _staging_root() -> Path:
     return root
 
 
+def _fresh_upload_cutoff():
+    """同名文件只接受最近上传的那份，默认 24 小时内（可用环境变量调整）。"""
+    try:
+        hours = float(os.environ.get("XCAGI_ELT_UPLOAD_FRESH_HOURS", "") or 24)
+    except ValueError:
+        hours = 24.0
+    if not 0 < hours <= 720:
+        hours = 24.0
+    return utc_now_naive() - timedelta(hours=hours)
+
+
 def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
     """把用户可见的文件名换成当前账号自己的上传存储路径。
 
@@ -97,8 +110,10 @@ def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
                     EltUpload.file_name == Path(value).name,
                     EltUpload.storage_path != "",
                     EltUpload.expires_at > utc_now_naive(),
+                    # 只认刚上传的文件：历史同名文件不能被静默当成本次输入。
+                    EltUpload.created_at > _fresh_upload_cutoff(),
                 )
-                .order_by(EltUpload.id.desc())
+                .order_by(EltUpload.created_at.desc())
                 .first()
             )
             if by_name is not None:

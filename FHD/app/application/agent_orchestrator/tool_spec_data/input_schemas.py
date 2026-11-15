@@ -789,16 +789,28 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         },
     ),
     ("elt_import", "preview"): _object_schema(
-        ["file_path"],
+        [],
         {
-            "file_path": {"type": "string"},
+            "file_path": {"type": "string", "description": "单个文件路径或文件名"},
+            "file_paths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 20,
+                "description": "整批文件（最多 20 个），与 file_path 二选一",
+            },
             "valid_rows_only": {"type": "boolean"},
         },
     ),
     ("elt_import", "execute"): _object_schema(
-        ["run_id"],
+        [],
         {
-            "run_id": {"type": "string"},
+            "run_id": {"type": "string", "description": "单个预演编号"},
+            "run_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 20,
+                "description": "整批预演编号（最多 20 个），与 run_id 二选一",
+            },
             "valid_rows_only": {"type": "boolean"},
         },
     ),

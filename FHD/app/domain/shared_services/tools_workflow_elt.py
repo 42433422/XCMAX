@@ -630,6 +630,15 @@ def _registered_router_elt_import(
         }
     payload = dict(params or {})
     if action == "preview":
+        paths = payload.get("file_paths")
+        if isinstance(paths, list) and paths:
+            return _preview_batch([str(item) for item in paths if str(item).strip()], payload, runtime_context)
+        if not str(payload.get("file_path") or "").strip():
+            return {
+                "success": False,
+                "error_code": "elt_file_path_required",
+                "message": "请提供 file_path（单个文件）或 file_paths（整批文件）后再预演。",
+            }
         try:
             return _preview(payload, runtime_context)
         except PermissionError as err:
@@ -639,5 +648,71 @@ def _registered_router_elt_import(
                 "message": str(err),
             }
     if action == "execute":
+        run_ids = payload.get("run_ids")
+        if isinstance(run_ids, list) and run_ids:
+            return _execute_batch(
+                [str(item) for item in run_ids if str(item).strip()], payload, runtime_context
+            )
         return _execute(payload, runtime_context)
     return {"success": False, "message": f"未知的 ELT 导入操作：{action}"}
+
+
+_MAX_BATCH_IMPORTS = 20
+
+
+def _single_params(payload: dict) -> dict:
+    return {key: value for key, value in payload.items() if key not in {"file_paths", "run_ids"}}
+
+
+def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> dict:
+    """整批预演：每个文件独立出结果，单个失败不影响其余。"""
+    targets = paths[:_MAX_BATCH_IMPORTS]
+    base = _single_params(payload)
+    items: list[dict] = []
+    for path in targets:
+        try:
+            out = _preview({**base, "file_path": path}, runtime_context)
+        except PermissionError as err:
+            out = {"success": False, "error_code": "spreadsheet_access_denied", "message": str(err)}
+        items.append({"file_path": path, **out})
+    ready = [item for item in items if item.get("success")]
+    needs_decision = [item for item in items if item.get("requires_user_decision")]
+    truncated = len(paths) > len(targets)
+    message = (
+        f"批量预演：{len(items)} 个文件，预演完成 {len(ready)}，"
+        f"需人工确认 {len(needs_decision)}，未完成 {len(items) - len(ready)}"
+    )
+    if truncated:
+        message += f"（一次最多 {_MAX_BATCH_IMPORTS} 个，其余请分批）"
+    return {
+        "success": bool(ready),
+        "batch": True,
+        "file_count": len(items),
+        "ready_count": len(ready),
+        "needs_decision_count": len(needs_decision),
+        "truncated": truncated,
+        "message": message,
+        "results": items,
+    }
+
+
+def _execute_batch(run_ids: list[str], payload: dict, runtime_context: dict) -> dict:
+    """整批执行：按预演 run 逐个写入，单个失败不影响其余。"""
+    targets = run_ids[:_MAX_BATCH_IMPORTS]
+    base = _single_params(payload)
+    items: list[dict] = []
+    for run_id in targets:
+        out = _execute({**base, "run_id": run_id}, runtime_context)
+        items.append({"run_id": run_id, **out})
+    done = [item for item in items if item.get("success")]
+    message = f"批量导入：{len(items)} 个预演，完成 {len(done)}，失败 {len(items) - len(done)}"
+    if len(run_ids) > len(targets):
+        message += f"（一次最多 {_MAX_BATCH_IMPORTS} 个，其余请分批）"
+    return {
+        "success": bool(done),
+        "batch": True,
+        "run_count": len(items),
+        "done_count": len(done),
+        "message": message,
+        "results": items,
+    }
