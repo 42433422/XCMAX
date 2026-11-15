@@ -443,4 +443,26 @@ describe('PersyKnowledgeView', () => {
     expect(wrapper.get('button[aria-label="重建索引"]').attributes('disabled')).toBeUndefined()
   })
 
+  it('refetches knowledge when reactivated from keep-alive', async () => {
+    const { ref } = await import('vue')
+    const Host = defineComponent({
+      components: { PersyKnowledgeView },
+      setup() {
+        const visible = ref(true)
+        return { visible }
+      },
+      template: '<KeepAlive><PersyKnowledgeView v-if="visible" /></KeepAlive>',
+    })
+    const wrapper = mount(Host, { global: { plugins: [createPinia()] } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    const initial = mocks.status.mock.calls.length
+    expect(initial).toBeGreaterThan(0)
+    ;(wrapper.vm as unknown as { visible: boolean }).visible = false
+    await flushPromises()
+    ;(wrapper.vm as unknown as { visible: boolean }).visible = true
+    await flushPromises()
+    expect(mocks.status.mock.calls.length).toBeGreaterThan(initial)
+  })
+
 })

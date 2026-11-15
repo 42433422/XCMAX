@@ -360,7 +360,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onActivated, onMounted, watch } from 'vue'
 import PersyKnowledgeGraph from '@/components/persy/PersyKnowledgeGraph.vue'
 import PersyImportDrawer from '@/components/persy/PersyImportDrawer.vue'
 import PersyMemoryList from '@/components/persy/PersyMemoryList.vue'
@@ -474,6 +474,17 @@ watch(viewMode, (mode) => {
 })
 
 onMounted(() => {
+  void refreshAll()
+})
+
+// 页面被 keep-alive 缓存：从对话清空知识库/模板后切回来时必须重新取数，
+// 否则会继续展示清空前的内容。
+let _activatedBefore = false
+onActivated(() => {
+  if (!_activatedBefore) {
+    _activatedBefore = true
+    return
+  }
   void refreshAll()
 })
 </script>
