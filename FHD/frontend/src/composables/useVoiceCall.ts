@@ -55,7 +55,8 @@ const FAILURE_NOTICE = /请求超时|尚未收到完成回执|连接中断|未�
 const SPOKEN_RETRY_HINT = '网络有点慢，我没收到回复，请再说一次。'
 /** 思考超过这个时长才补一句口头确认，回复快的时候不打扰。 */
 const ACK_DELAY_MS = 1_200
-const ACK_LINE = '嗯，我看看。'
+/** 等待模型时的口头垫场词：随机挑一句，避免每次都是同一句显得机械。 */
+const ACK_LINES = ['嗯，我看看。', '嗯，我想一想。', '我找一下。', '稍等，我确认一下。', '嗯，让我看看。']
 const MAX_UTTERANCE_MS = 30_000
 const MIN_UTTERANCE_MS = 700
 /** 连续有声帧数达到该值才认为真的开口，避免环境噪声单帧触发一轮对话。 */
@@ -66,6 +67,10 @@ const MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;code
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+function randomAckLine(): string {
+  return ACK_LINES[Math.floor(Math.random() * ACK_LINES.length)] ?? ACK_LINES[0]
 }
 
 /** ASR 偶发把语种标签当正文输出（<chinese> 等），由 voiceTranscript 统一清洗。 */
@@ -972,7 +977,7 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手', re
     // 模型思考常常要好几秒，纯静音会让人以为断线：超过 1.2s 还没回复就先垫一句口头确认。
     let ack: Promise<unknown> | null = null
     const ackTimer = speakerOn.value
-      ? window.setTimeout(() => { ack = speakText(ACK_LINE) }, ACK_DELAY_MS)
+      ? window.setTimeout(() => { ack = speakText(randomAckLine()) }, ACK_DELAY_MS)
       : null
     try {
       // 模型/网络偶发失败：同一句自动重发一次，仍失败再播报“再说一次”。
