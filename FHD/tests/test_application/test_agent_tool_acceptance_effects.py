@@ -74,6 +74,7 @@ def business(tmp_path, monkeypatch, trusted_actor):
         role="tenant-a",
         permissions=[
             "business_db.read",
+            "customer.view",
             "business_db.write",
             "tool.excel_analysis.read",
             "tool.excel_analysis.export",
@@ -83,7 +84,7 @@ def business(tmp_path, monkeypatch, trusted_actor):
         user_id=422,
         tenant_id=422,
         role="tenant-b",
-        permissions=["business_db.read", "business_db.write", "tool.ocr.request"],
+        permissions=["business_db.read", "customer.view", "business_db.write", "tool.ocr.request"],
     )
 
     @contextmanager
@@ -935,3 +936,25 @@ def test_real_effects_match_database_file_and_failure_status(
         workspace_root=str(tmp_path),
     )
     assert missing["success"] is False
+
+
+@pytest.mark.parametrize("entity", ["customers", "products", "materials", "shipment_records"])
+def test_generic_read_grant_cannot_bypass_entity_read_permission(
+    business, local_tools, trusted_actor, entity
+):
+    restricted = trusted_actor(
+        user_id=423,
+        tenant_id=421,
+        role="generic-read-only",
+        permissions=["business_db.read"],
+    )
+    result = _execute(
+        AgentStep(
+            node_id="restricted", tool_id="business_db", action="read", params={"entity": entity}
+        ),
+        restricted,
+        task_id="entity-permission-" + entity,
+    )
+    assert result["success"] is False
+    assert result["error_code"] == "tool_permission_denied"
+    assert result["reason"] == "permission_denied"

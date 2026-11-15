@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-_USER_FACING_CODES = frozenset({"unresolved_param_reference"})
+_USER_FACING_CODES = frozenset({"unresolved_param_reference", "tool_permission_denied"})
 _INVENTORY_GUIDANCE = {
     "inventory_insufficient_stock": "库存不足或无库存记录，请前往「库存管理 → 入库」为该产品办理入库后重试。",
     "inventory_warehouse_missing": "当前企业没有可用仓库，请先在「库存管理」点击「初始化默认仓库」，再为产品入库后重试。",

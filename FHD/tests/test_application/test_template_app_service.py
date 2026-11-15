@@ -8,7 +8,9 @@ Covers:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.application.starter_template_catalog import STARTER_TEMPLATES
 from app.application.template_app_service import TemplateApplicationService
@@ -86,3 +88,29 @@ class TestCrudDelegation:
         out = svc.delete_template(3)
         ts.delete_template.assert_called_once_with(3)
         assert out["success"] is True
+
+
+@pytest.mark.parametrize("tenant", [None, 42])
+def test_preview_persistence_requires_and_stamps_tenant(tenant):
+    from contextlib import nullcontext
+
+    from app.application.template_app_service import persist_workflow_preview_template
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    database = MagicMock()
+    database.execute.return_value.lastrowid = 17
+    with (
+        patch("app.db.session.get_db", return_value=nullcontext(database)),
+        patch("app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column"),
+        tenant_scope(tenant),
+    ):
+        result = persist_workflow_preview_template({"tenant_id": 999})
+    if tenant is None:
+        assert result == {"success": False, "message": "缺少租户上下文，无法创建模板"}
+        database.execute.assert_not_called()
+        database.commit.assert_not_called()
+    else:
+        assert result == {"success": True, "template_id": 17}
+        assert database.execute.call_args.args[1]["tenant_id"] == 42
+        assert "tenant_id" in str(database.execute.call_args.args[0])
+        database.commit.assert_called_once_with()

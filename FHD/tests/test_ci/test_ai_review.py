@@ -21,6 +21,20 @@ import pytest
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
+
+def _assert_shared_eval_detected_0(self, _shared_literal_0, _shared_literal_1, _shared_literal_2):
+    hunks = [
+        review.DiffHunk(
+            file_path=_shared_literal_0,
+            start_line=1,
+            lines=[(1, "+", _shared_literal_2)],
+            raw_header="@@ -1,1 +1,1 @@",
+        )
+    ]
+    findings = review.match_high_risk_rules(hunks)
+    assert any(f.rule == _shared_literal_1 for f in findings)
+
+
 # 把 FHD/scripts/ci 加入 sys.path 以便直接 import ai_review 模块
 FHD_ROOT = Path(__file__).resolve().parents[2]
 CI_SCRIPTS = FHD_ROOT / "scripts" / "ci"
@@ -125,28 +139,10 @@ class TestMatchRules:
         assert findings[0].line == 10
 
     def test_eval_detected(self) -> None:
-        hunks = [
-            review.DiffHunk(
-                file_path="evil.py",
-                start_line=1,
-                lines=[(1, "+", "result = eval(user_input)")],
-                raw_header="@@ -1,1 +1,1 @@",
-            )
-        ]
-        findings = review.match_high_risk_rules(hunks)
-        assert any(f.rule == "eval" for f in findings)
+        return _assert_shared_eval_detected_0(self, "evil.py", "eval", "result = eval(user_input)")
 
     def test_exec_detected(self) -> None:
-        hunks = [
-            review.DiffHunk(
-                file_path="evil.py",
-                start_line=1,
-                lines=[(1, "+", "exec(code)")],
-                raw_header="@@ -1,1 +1,1 @@",
-            )
-        ]
-        findings = review.match_high_risk_rules(hunks)
-        assert any(f.rule == "exec" for f in findings)
+        return _assert_shared_eval_detected_0(self, "evil.py", "exec", "exec(code)")
 
     def test_ai_review_tooling_high_rules_are_skipped(self) -> None:
         hunks = [
@@ -172,40 +168,17 @@ class TestMatchRules:
         assert not any(f.severity in {"high", "medium"} for f in findings)
 
     def test_os_system_detected(self) -> None:
-        hunks = [
-            review.DiffHunk(
-                file_path="evil.py",
-                start_line=1,
-                lines=[(1, "+", "os.system('rm -rf /')")],
-                raw_header="@@ -1,1 +1,1 @@",
-            )
-        ]
-        findings = review.match_high_risk_rules(hunks)
-        assert any(f.rule == "os-system" for f in findings)
+        return _assert_shared_eval_detected_0(self, "evil.py", "os-system", "os.system('rm -rf /')")
 
     def test_pickle_loads_detected(self) -> None:
-        hunks = [
-            review.DiffHunk(
-                file_path="evil.py",
-                start_line=1,
-                lines=[(1, "+", "obj = pickle.loads(data)")],
-                raw_header="@@ -1,1 +1,1 @@",
-            )
-        ]
-        findings = review.match_high_risk_rules(hunks)
-        assert any(f.rule == "pickle-loads" for f in findings)
+        return _assert_shared_eval_detected_0(
+            self, "evil.py", "pickle-loads", "obj = pickle.loads(data)"
+        )
 
     def test_hardcoded_aws_secret_detected(self) -> None:
-        hunks = [
-            review.DiffHunk(
-                file_path="config.py",
-                start_line=1,
-                lines=[(1, "+", "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'")],
-                raw_header="@@ -1,1 +1,1 @@",
-            )
-        ]
-        findings = review.match_high_risk_rules(hunks)
-        assert any(f.rule == "hardcoded-aws-secret" for f in findings)
+        return _assert_shared_eval_detected_0(
+            self, "config.py", "hardcoded-aws-secret", "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'"
+        )
 
     def test_hardcoded_github_token_detected(self) -> None:
         hunks = [
@@ -247,16 +220,9 @@ class TestMatchRules:
         assert all(f.rule != "yaml-load-no-loader" for f in findings)
 
     def test_requests_verify_false_detected(self) -> None:
-        hunks = [
-            review.DiffHunk(
-                file_path="client.py",
-                start_line=1,
-                lines=[(1, "+", "requests.get(url, verify=False)")],
-                raw_header="@@ -1,1 +1,1 @@",
-            )
-        ]
-        findings = review.match_high_risk_rules(hunks)
-        assert any(f.rule == "requests-verify-false" for f in findings)
+        return _assert_shared_eval_detected_0(
+            self, "client.py", "requests-verify-false", "requests.get(url, verify=False)"
+        )
 
     def test_pragma_no_cover_detected_as_low(self) -> None:
         hunks = [

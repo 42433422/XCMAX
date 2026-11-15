@@ -86,6 +86,20 @@ describe('useChatRequest', () => {
     expect(body.user_id).toBe('web_normal_session-1')
   })
 
+  it('marks auto approval mode in the planner context', async () => {
+    const { useApprovalMode } = await import('./useApprovalMode')
+    const mode = useApprovalMode()
+    mode.setEnabled(true)
+    mode.setMode('auto')
+    try {
+      const { body } = request.buildPlannerChatRequestPayload('清理知识库 全部')
+      expect((body.context as Record<string, unknown>).chat_approval_mode).toBe('auto')
+    } finally {
+      mode.setEnabled(false)
+      mode.setMode('manual')
+    }
+  })
+
   it('sends a model retry and a confirmed delete as separate decisions', () => {
     const retry = request.buildPlannerChatRequestPayload('清理全部客户和产品', {
       retryOf: 'turn-a',

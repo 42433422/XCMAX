@@ -53,6 +53,9 @@ jobs:
               sys.executable, "-m", "pip", "install", "-e", ".[server-api]",
               pin, "pytest-asyncio", "psutil",
           ])
+      - name: Verify isolated E2E service supervision on native POSIX runners
+        if: matrix.os != 'windows-2022'
+        run: python -m pytest --noconftest -o addopts= tests/test_ci/test_isolated_e2e_credentials.py -q -rP
       - run: python -m pytest --noconftest -o addopts= tests/test_application/test_tool_process.py -q -rP
         env:
           SECRET_KEY: isolated-process-contract-not-production

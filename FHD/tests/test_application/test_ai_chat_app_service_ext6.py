@@ -19,6 +19,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
+def _assert_shared_tension_prefer_before_0(self, _shared_literal_0, _shared_literal_1):
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    col, err = AIChatApplicationService._resolve_unit_price_column(
+        ["调价前单价", "调价后单价"], "", _shared_literal_0, None
+    )
+    assert col == _shared_literal_1
+    assert err is None
+
+
 # ---------------------------------------------------------------------------
 # _skip_pro_excel_deterministic_import — env-var branches
 # ---------------------------------------------------------------------------
@@ -529,28 +540,10 @@ class TestResolveUnitPriceColumn:
         assert err is None
 
     def test_tension_prefer_before(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        col, err = AIChatApplicationService._resolve_unit_price_column(
-            ["调价前单价", "调价后单价"],
-            "",
-            "导入调价前",
-            None,
-        )
-        assert col == "调价前单价"
-        assert err is None
+        return _assert_shared_tension_prefer_before_0(self, "导入调价前", "调价前单价")
 
     def test_tension_prefer_after(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        col, err = AIChatApplicationService._resolve_unit_price_column(
-            ["调价前单价", "调价后单价"],
-            "",
-            "导入调价后",
-            None,
-        )
-        assert col == "调价后单价"
-        assert err is None
+        return _assert_shared_tension_prefer_before_0(self, "导入调价后", "调价后单价")
 
     def test_tension_both_preferred_ambiguous(self):
         from app.application.ai_chat_app_service import AIChatApplicationService
@@ -565,16 +558,7 @@ class TestResolveUnitPriceColumn:
         assert err == "ambiguous_price_columns"
 
     def test_tension_default_to_before(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        col, err = AIChatApplicationService._resolve_unit_price_column(
-            ["调价前单价", "调价后单价"],
-            "",
-            "导入数据",
-            None,
-        )
-        assert col == "调价前单价"
-        assert err is None
+        return _assert_shared_tension_prefer_before_0(self, "导入数据", "调价前单价")
 
     def test_no_tension_keep_current(self):
         from app.application.ai_chat_app_service import AIChatApplicationService

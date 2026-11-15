@@ -60,8 +60,8 @@ def test_forward_upgrade_preserves_every_legacy_field_and_accepts_distinct_slice
 ):
     engine, original = _legacy_database(_db_url, already_sliced=already_sliced)
     config = _alembic_config()
-    command.upgrade(config, "head")
-    command.upgrade(config, "head")
+    command.upgrade(config, _HEAD)
+    command.upgrade(config, _HEAD)
     with engine.begin() as connection:
         assert (
             connection.exec_driver_sql("SELECT " + _FIELDS + " FROM etl_run_rows ORDER BY id").all()
@@ -96,7 +96,7 @@ def test_forward_upgrade_preserves_every_legacy_field_and_accepts_distinct_slice
 def test_zero_slice_downgrade_reupgrade_preserves_legacy_history(_db_url):
     engine, original = _legacy_database(_db_url)
     config = _alembic_config()
-    command.upgrade(config, "head")
+    command.upgrade(config, _HEAD)
     command.downgrade(config, _OLD)
     with engine.connect() as connection:
         assert "source_slice" not in {
@@ -106,7 +106,7 @@ def test_zero_slice_downgrade_reupgrade_preserves_legacy_history(_db_url):
             connection.exec_driver_sql("SELECT " + _FIELDS + " FROM etl_run_rows ORDER BY id").all()
             == original
         )
-    command.upgrade(config, "head")
+    command.upgrade(config, _HEAD)
     with engine.connect() as connection:
         assert (
             connection.exec_driver_sql("SELECT " + _FIELDS + " FROM etl_run_rows ORDER BY id").all()
@@ -118,7 +118,7 @@ def test_zero_slice_downgrade_reupgrade_preserves_legacy_history(_db_url):
 def test_downgrade_refuses_losing_real_slices_before_any_ddl(_db_url):
     engine, original = _legacy_database(_db_url)
     config = _alembic_config()
-    command.upgrade(config, "head")
+    command.upgrade(config, _HEAD)
     with engine.begin() as connection:
         connection.exec_driver_sql("UPDATE etl_run_rows SET source_slice=1 WHERE id=2")
     with pytest.raises(RuntimeError, match="without losing provenance"):
@@ -140,5 +140,6 @@ def test_downgrade_refuses_losing_real_slices_before_any_ddl(_db_url):
 
 def test_new_revision_extends_current_main_without_another_head():
     scripts = ScriptDirectory.from_config(_alembic_config())
-    assert scripts.get_heads() == [_HEAD]
+    assert scripts.get_heads() == ["2026_11_15_delivery_slices_merge"]
+    assert _HEAD in scripts.get_revision(scripts.get_current_head()).down_revision
     assert scripts.get_revision(_HEAD).down_revision == _OLD

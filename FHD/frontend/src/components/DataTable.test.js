@@ -25,6 +25,13 @@ describe('Business data table', () => {
     expect(view.find('.loading-state').exists()).toBe(false)
   })
 
+  it('can omit the loading row without claiming the data is empty', async () => {
+    const view = open({ loading: true, showLoadingRow: false })
+    expect(view.find('tbody .empty-state').exists()).toBe(false)
+    await view.setProps({ loading: false })
+    expect(view.find('tbody .empty-state').exists()).toBe(true)
+  })
+
   it('renders nested fields with explicit missing defaults while retaining zero business values', () => {
     const view = open({ columns: [
       { key: 'customer.name', label: '客户' }, { key: 'amount', label: '金额' },

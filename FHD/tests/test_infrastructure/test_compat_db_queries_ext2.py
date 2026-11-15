@@ -43,6 +43,23 @@ from app.infrastructure.persistence.compat_db.queries import (
     _units_select_data_unified,
 )
 
+
+def _assert_shared_only_purchase_units_table_0(self, _shared_literal_0, _shared_literal_1):
+    mock_eng = MagicMock()
+    mock_insp = MagicMock()
+    mock_insp.get_table_names.return_value = [_shared_literal_0]
+    with (
+        patch(
+            "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
+            return_value=mock_eng,
+        ),
+        patch("app.infrastructure.persistence.compat_db.queries.inspect", return_value=mock_insp),
+    ):
+        result = _customers_schema_hint_if_empty()
+    assert result is not None
+    assert "customers" in result or _shared_literal_1 in result
+
+
 # ---------------------------------------------------------------------------
 # _load_purchase_units_rows_pg — uncovered branches
 # ---------------------------------------------------------------------------
@@ -1171,25 +1188,7 @@ class TestCustomersSchemaHintIfEmptyAdditional:
 
     def test_only_purchase_units_table(self):
         """When only purchase_units table exists (no customers, no products), should return hint."""
-        mock_eng = MagicMock()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["purchase_units"]
-
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-        ):
-            result = _customers_schema_hint_if_empty()
-        # has_c=False, has_pu=True, has_p=False
-        # not has_p and not has_c = True → returns hint
-        assert result is not None
-        assert "customers" in result or "products" in result
+        return _assert_shared_only_purchase_units_table_0(self, "purchase_units", "products")
 
     def test_customers_and_products_tables(self):
         """When customers and products tables exist (no purchase_units), should return hint about missing purchase_units."""
@@ -1234,43 +1233,11 @@ class TestCustomersSchemaHintIfEmptyAdditional:
 
     def test_only_products_table(self):
         """When only products table exists, should return hint about missing customers/purchase_units."""
-        mock_eng = MagicMock()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-        ):
-            result = _customers_schema_hint_if_empty()
-        assert result is not None
-        assert "customers" in result or "purchase_units" in result
+        return _assert_shared_only_purchase_units_table_0(self, "products", "purchase_units")
 
     def test_no_tables_returns_hint(self):
         """When no relevant tables exist, should return hint."""
-        mock_eng = MagicMock()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["other_table"]
-
-        with (
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=mock_eng,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.inspect",
-                return_value=mock_insp,
-            ),
-        ):
-            result = _customers_schema_hint_if_empty()
-        assert result is not None
-        assert "customers" in result or "purchase_units" in result
+        return _assert_shared_only_purchase_units_table_0(self, "other_table", "purchase_units")
 
 
 # ---------------------------------------------------------------------------

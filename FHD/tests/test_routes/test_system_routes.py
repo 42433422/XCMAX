@@ -16,6 +16,27 @@ from app.fastapi_routes.tools_execute import router as tools_execute_router
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
+def _assert_shared_error_0(self, client, _shared_literal_0, _shared_literal_1):
+    with patch(_shared_literal_0, side_effect=RuntimeError("fail")):
+        r = client.get(_shared_literal_1)
+        assert r.status_code == 500
+
+
+def _assert_shared_healthy_1(self, client, _shared_literal_0, _shared_literal_1):
+    mock_opt = MagicMock()
+    mock_opt.get_health_check.return_value = {
+        "status": _shared_literal_0,
+        "timestamp": 0,
+        "checks": {},
+    }
+    with patch(
+        "app.utils.performance.performance_initializer.get_performance_optimizer",
+        return_value=mock_opt,
+    ):
+        r = client.get("/api/performance/health")
+        assert r.status_code == _shared_literal_1
+
+
 @pytest.fixture
 def client(trusted_actor, local_tools, monkeypatch, tmp_path) -> TestClient:
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
@@ -65,12 +86,12 @@ class TestSystemInfoGet:
             assert r.json()["success"] is True
 
     def test_error(self, client: TestClient):
-        with patch(
+        return _assert_shared_error_0(
+            self,
+            client,
             "app.application.facades.session_facade.get_system_service",
-            side_effect=RuntimeError("fail"),
-        ):
-            r = client.get("/api/system/info")
-            assert r.status_code == 500
+            "/api/system/info",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -89,12 +110,12 @@ class TestSystemPrinter:
             assert r.json()["success"] is True
 
     def test_get_error(self, client: TestClient):
-        with patch(
+        return _assert_shared_error_0(
+            self,
+            client,
             "app.application.facades.session_facade.get_system_service",
-            side_effect=RuntimeError("fail"),
-        ):
-            r = client.get("/api/system/printer")
-            assert r.status_code == 500
+            "/api/system/printer",
+        )
 
     def test_post_empty_body(self, client: TestClient):
         r = client.post("/api/system/printer", json={})
@@ -140,12 +161,12 @@ class TestSystemStartup:
             assert r.json()["success"] is True
 
     def test_get_error(self, client: TestClient):
-        with patch(
+        return _assert_shared_error_0(
+            self,
+            client,
             "app.application.facades.session_facade.get_system_service",
-            side_effect=RuntimeError("fail"),
-        ):
-            r = client.get("/api/system/startup")
-            assert r.status_code == 500
+            "/api/system/startup",
+        )
 
     def test_post_success(self, client: TestClient, local_tools):
         mock_svc = MagicMock()
@@ -192,12 +213,12 @@ class TestDatabaseBackups:
             assert r.json()["success"] is True
 
     def test_list_error(self, client: TestClient):
-        with patch(
+        return _assert_shared_error_0(
+            self,
+            client,
             "app.application.facades.session_facade.get_database_service",
-            side_effect=RuntimeError("fail"),
-        ):
-            r = client.get("/api/database/backups")
-            assert r.status_code == 500
+            "/api/database/backups",
+        )
 
     def test_backup_success(self, client: TestClient):
         mock_svc = MagicMock()
@@ -266,56 +287,23 @@ class TestPerformanceStatus:
             assert r.json()["success"] is True
 
     def test_error(self, client: TestClient):
-        with patch(
+        return _assert_shared_error_0(
+            self,
+            client,
             "app.utils.performance.performance_initializer.get_performance_optimizer",
-            side_effect=RuntimeError("fail"),
-        ):
-            r = client.get("/api/performance/status")
-            assert r.status_code == 500
+            "/api/performance/status",
+        )
 
 
 class TestPerformanceHealth:
     def test_healthy(self, client: TestClient):
-        mock_opt = MagicMock()
-        mock_opt.get_health_check.return_value = {
-            "status": "healthy",
-            "timestamp": 0,
-            "checks": {},
-        }
-        with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer",
-            return_value=mock_opt,
-        ):
-            r = client.get("/api/performance/health")
-            assert r.status_code == 200
+        return _assert_shared_healthy_1(self, client, "healthy", 200)
 
     def test_degraded(self, client: TestClient):
-        mock_opt = MagicMock()
-        mock_opt.get_health_check.return_value = {
-            "status": "degraded",
-            "timestamp": 0,
-            "checks": {},
-        }
-        with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer",
-            return_value=mock_opt,
-        ):
-            r = client.get("/api/performance/health")
-            assert r.status_code == 503
+        return _assert_shared_healthy_1(self, client, "degraded", 503)
 
     def test_unhealthy(self, client: TestClient):
-        mock_opt = MagicMock()
-        mock_opt.get_health_check.return_value = {
-            "status": "unhealthy",
-            "timestamp": 0,
-            "checks": {},
-        }
-        with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer",
-            return_value=mock_opt,
-        ):
-            r = client.get("/api/performance/health")
-            assert r.status_code == 500
+        return _assert_shared_healthy_1(self, client, "unhealthy", 500)
 
     def test_with_issues(self, client: TestClient):
         mock_opt = MagicMock()
@@ -333,12 +321,12 @@ class TestPerformanceHealth:
             assert r.json()["issues"] == ["slow"]
 
     def test_error(self, client: TestClient):
-        with patch(
+        return _assert_shared_error_0(
+            self,
+            client,
             "app.utils.performance.performance_initializer.get_performance_optimizer",
-            side_effect=RuntimeError("fail"),
-        ):
-            r = client.get("/api/performance/health")
-            assert r.status_code == 500
+            "/api/performance/health",
+        )
 
 
 class TestPerformanceMetricsSummary:
