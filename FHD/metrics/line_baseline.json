@@ -1,5 +1,5 @@
 {
-  "lines": 2436400,
+  "lines": 2436422,
   "updated": "2026-11-16",
-  "note": "合并 origin/main（182 个提交：MCP 外部工具接入、只读并行调度、补偿执行、长期记忆本地向量库、模型规划重试等）带来约 3.1 万行净增；本分支同时新增本机文件只读授权与索引、拟人 Persy 账号级画像迁移、审批/角色页面重排。用户明确要求合并 main 并构建 Windows/macOS 安装包，由本次任务负责人复核。"
+  "note": "新增 alembic merge 迁移 2026_11_16_merge_persona_delivery（13 行，收口 delivery 与 persona 两条迁移头，单 head 校验必需）；无新增文档；净增 +22 行。批准：维持 CI single-head 绿。"
 }
