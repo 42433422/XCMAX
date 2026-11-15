@@ -49,18 +49,26 @@ export function assembleTemplatePreview() {
   onMounted(() => {
     active = true
     window.addEventListener('xcagi:templates-updated', templatesUpdated)
-    void list.refreshTemplates()
+    refreshOnEnter()
   })
 
   let active = false
-  let dirty = false
+  /** KeepAlive 首次挂载时 onMounted 与 onActivated 会同时触发，只让后者跳过第一次。 */
+  let activatedOnce = false
+  function refreshOnEnter() {
+    void list.refreshTemplates()
+  }
   function templatesUpdated() {
-    if (active) void list.refreshTemplates()
-    else dirty = true
+    if (active) refreshOnEnter()
   }
   onActivated(() => {
     active = true
-    if (dirty) { dirty = false; void list.refreshTemplates() }
+    if (!activatedOnce) {
+      activatedOnce = true
+      return
+    }
+    // 每次回到页面都以服务端真实状态为准，避免删除/导入后仍显示旧列表。
+    refreshOnEnter()
   })
   onDeactivated(() => { active = false })
 

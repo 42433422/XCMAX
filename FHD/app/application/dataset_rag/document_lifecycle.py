@@ -111,6 +111,10 @@ class DocumentLifecycle:
                 raise ValueError("document produced no chunks")
             base_metadata.update(extract_metadata)
             base_metadata["tenant_id"] = tenant_key
+            # 同一来源的重复导入必须可识别：文档级内容哈希是唯一去重键，
+            # 否则每次导入都会因版本自增而新增一条文档记录。
+            document_content_hash = hashlib.sha256(extracted_text.encode("utf-8")).hexdigest()
+            base_metadata["document_content_hash"] = document_content_hash
             if idempotency_key:
                 fingerprint = hashlib.sha256(
                     json.dumps(
@@ -134,6 +138,31 @@ class DocumentLifecycle:
                 state = self._repository.datasets.setdefault(
                     dataset_key, _DatasetState(dataset_key)
                 )
+                # 仅对真实文件来源做内容幂等；显式版本与纯内联文本仍按版本序列处理。
+                if (
+                    file_path.strip()
+                    and not document_id.strip()
+                    and (version is None or str(version).strip() == "")
+                ):
+                    duplicate = next(
+                        (
+                            doc
+                            for doc in state.documents.values()
+                            if doc.tenant_id == tenant_key
+                            and doc.source == source_label
+                            and str((doc.metadata or {}).get("document_content_hash") or "")
+                            == document_content_hash
+                        ),
+                        None,
+                    )
+                    if duplicate is not None:
+                        return {
+                            "success": True,
+                            "dataset_id": dataset_key,
+                            "document": duplicate.to_dict(),
+                            "chunk_count": duplicate.chunk_count,
+                            "duplicate": True,
+                        }
                 document_version = _resolve_document_version(
                     state, source=source_label, tenant_id=tenant_key, requested=version
                 )
