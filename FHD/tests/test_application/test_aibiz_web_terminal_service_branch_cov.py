@@ -23,6 +23,90 @@ import pytest
 from fastapi.responses import JSONResponse, Response
 
 
+async def _assert_shared_software_terminal_workflow_label_0(self, _case_value_0, _case_value_1):
+    from app.application.aibiz_web_terminal_service import build_terminal_payload
+
+    request = MagicMock()
+    mock_surface = {"pages": [{"id": "home"}]}
+    with (
+        patch(
+            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+            new_callable=AsyncMock,
+            return_value="Bearer token",
+        ),
+        patch(
+            "app.application.aibiz_web_terminal_service._resolve_surface_audit",
+            new_callable=AsyncMock,
+            return_value=(mock_surface, "note"),
+        ),
+        patch(
+            "app.fastapi_routes.market_account._market_base_url", return_value="https://example.com"
+        ),
+    ):
+        result = await build_terminal_payload(request, terminal=_case_value_1)
+    assert result["success"] is True
+    assert result["data"]["workflow_label"] == _case_value_0
+
+
+async def _assert_shared_digest_creds_duplicate_with_env_skipped_1(
+    self,
+    monkeypatch,
+    _case_value_0,
+    _case_value_1,
+    _case_value_2,
+    _case_value_3,
+    _case_value_4,
+    _case_value_5,
+):
+    from app.application.aibiz_web_terminal_service import _resolve_market_authorization
+
+    monkeypatch.setenv("XCAGI_AIBIZ_MARKET_USER", _case_value_0)
+    monkeypatch.setenv("XCAGI_AIBIZ_MARKET_PASSWORD", _case_value_1)
+    monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_USER", _case_value_2)
+    monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_PASSWORD", _case_value_3)
+    request = MagicMock()
+    with (
+        patch("app.fastapi_routes.market_account.session_id_from_request", return_value=""),
+        patch("app.application.surface_audit_demo_account.demo_username", return_value=""),
+        patch("app.application.surface_audit_demo_account.demo_password", return_value=""),
+        patch(
+            "app.fastapi_routes.market_account.login_market_with_password",
+            new_callable=AsyncMock,
+            return_value={"success": True, "token": _case_value_5},
+        ) as mock_login,
+    ):
+        result = await _resolve_market_authorization(request)
+    assert mock_login.call_count == 1
+    assert result == _case_value_4
+
+
+async def _assert_shared_no_auth_with_pages_includes_android_audit_2(
+    self, _case_value_0, _case_value_1, _case_value_2, _case_value_3
+):
+    from app.application.aibiz_web_terminal_service import build_terminal_payload
+
+    request = MagicMock()
+    mock_surface = {"pages": [{"id": "home"}], "android_audit": {"devices": _case_value_0}}
+    with (
+        patch(
+            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+            new_callable=AsyncMock,
+            return_value=_case_value_2,
+        ),
+        patch(
+            "app.application.aibiz_web_terminal_service._resolve_surface_audit",
+            new_callable=AsyncMock,
+            return_value=(mock_surface, _case_value_3),
+        ),
+        patch(
+            "app.fastapi_routes.market_account._market_base_url", return_value="https://example.com"
+        ),
+    ):
+        result = await build_terminal_payload(request, terminal="app")
+    assert result["success"] is True
+    assert result["data"]["android_audit"] == {"devices": _case_value_1}
+
+
 def _assert_shared_software_terminal_no_preview_falls_to_else_0(
     self,
     _shared_literal_0,
@@ -1019,38 +1103,16 @@ class TestResolveMarketAuthorizationBranchCov:
 
     @pytest.mark.asyncio
     async def test_digest_creds_duplicate_with_env_skipped(self, monkeypatch):
-        from app.application.aibiz_web_terminal_service import _resolve_market_authorization
-
-        # Same creds for env and digest → digest should be skipped (not in creds)
-        monkeypatch.setenv("XCAGI_AIBIZ_MARKET_USER", "sameuser")
-        monkeypatch.setenv("XCAGI_AIBIZ_MARKET_PASSWORD", "samepass")
-        monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_USER", "sameuser")
-        monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_PASSWORD", "samepass")
-
-        request = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.market_account.session_id_from_request",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_username",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_password",
-                return_value="",
-            ),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_password",
-                new_callable=AsyncMock,
-                return_value={"success": True, "token": "env_token"},
-            ) as mock_login,
-        ):
-            result = await _resolve_market_authorization(request)
-        # Should only call login once (digest is duplicate)
-        assert mock_login.call_count == 1
-        assert result == "env_token"
+        return await _assert_shared_digest_creds_duplicate_with_env_skipped_1(
+            self,
+            monkeypatch,
+            "sameuser",
+            "samepass",
+            "sameuser",
+            "samepass",
+            "env_token",
+            "env_token",
+        )
 
     @pytest.mark.asyncio
     async def test_demo_creds_duplicate_with_env_skipped(self, monkeypatch):
@@ -1116,37 +1178,16 @@ class TestResolveMarketAuthorizationBranchCov:
 
     @pytest.mark.asyncio
     async def test_multiple_creds_first_succeeds(self, monkeypatch):
-        from app.application.aibiz_web_terminal_service import _resolve_market_authorization
-
-        monkeypatch.setenv("XCAGI_AIBIZ_MARKET_USER", "envuser")
-        monkeypatch.setenv("XCAGI_AIBIZ_MARKET_PASSWORD", "envpass")
-        monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_USER", "digest_user")
-        monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_PASSWORD", "digest_pass")
-
-        request = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.market_account.session_id_from_request",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_username",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_password",
-                return_value="",
-            ),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_password",
-                new_callable=AsyncMock,
-                return_value={"success": True, "token": "first_token"},
-            ) as mock_login,
-        ):
-            result = await _resolve_market_authorization(request)
-        # First cred succeeds, should not try second
-        assert mock_login.call_count == 1
-        assert result == "first_token"
+        return await _assert_shared_digest_creds_duplicate_with_env_skipped_1(
+            self,
+            monkeypatch,
+            "envuser",
+            "envpass",
+            "digest_user",
+            "digest_pass",
+            "first_token",
+            "first_token",
+        )
 
     @pytest.mark.asyncio
     async def test_multiple_creds_first_fails_second_succeeds(self, monkeypatch):
@@ -1439,140 +1480,33 @@ class TestBuildTerminalPayloadBranchCov:
 
     @pytest.mark.asyncio
     async def test_software_terminal_workflow_label(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
-
-        request = MagicMock()
-        mock_surface = {"pages": [{"id": "home"}]}
-        with (
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-                new_callable=AsyncMock,
-                return_value="Bearer token",
-            ),
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-                new_callable=AsyncMock,
-                return_value=(mock_surface, "note"),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://example.com",
-            ),
-        ):
-            result = await build_terminal_payload(request, terminal="software")
-        assert result["success"] is True
-        assert result["data"]["workflow_label"] == "P-S 软件截图+分析"
+        return await _assert_shared_software_terminal_workflow_label_0(
+            self, "P-S 软件截图+分析", "software"
+        )
 
     @pytest.mark.asyncio
     async def test_app_terminal_workflow_label(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
-
-        request = MagicMock()
-        mock_surface = {"pages": [{"id": "home"}]}
-        with (
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-                new_callable=AsyncMock,
-                return_value="Bearer token",
-            ),
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-                new_callable=AsyncMock,
-                return_value=(mock_surface, "note"),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://example.com",
-            ),
-        ):
-            result = await build_terminal_payload(request, terminal="app")
-        assert result["success"] is True
-        assert result["data"]["workflow_label"] == "P-App 移动截图+分析"
+        return await _assert_shared_software_terminal_workflow_label_0(
+            self, "P-App 移动截图+分析", "app"
+        )
 
     @pytest.mark.asyncio
     async def test_unknown_terminal_defaults_to_web_workflow(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
-
-        request = MagicMock()
-        mock_surface = {"pages": [{"id": "home"}]}
-        with (
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-                new_callable=AsyncMock,
-                return_value="Bearer token",
-            ),
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-                new_callable=AsyncMock,
-                return_value=(mock_surface, "note"),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://example.com",
-            ),
-        ):
-            result = await build_terminal_payload(request, terminal="unknown")
-        assert result["success"] is True
-        # Unknown terminal defaults to P-W/SW
-        assert result["data"]["workflow_label"] == "P-W 网站截图+分析"
+        return await _assert_shared_software_terminal_workflow_label_0(
+            self, "P-W 网站截图+分析", "unknown"
+        )
 
     @pytest.mark.asyncio
     async def test_no_auth_with_pages_includes_android_audit(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
-
-        request = MagicMock()
-        mock_surface = {
-            "pages": [{"id": "home"}],
-            "android_audit": {"devices": 1},
-        }
-        with (
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-                new_callable=AsyncMock,
-                return_value="",
-            ),
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-                new_callable=AsyncMock,
-                return_value=(mock_surface, "local"),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://example.com",
-            ),
-        ):
-            result = await build_terminal_payload(request, terminal="app")
-        assert result["success"] is True
-        assert result["data"]["android_audit"] == {"devices": 1}
+        return await _assert_shared_no_auth_with_pages_includes_android_audit_2(
+            self, 1, 1, "", "local"
+        )
 
     @pytest.mark.asyncio
     async def test_with_auth_includes_android_audit(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
-
-        request = MagicMock()
-        mock_surface = {
-            "pages": [{"id": "home"}],
-            "android_audit": {"devices": 2},
-        }
-        with (
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-                new_callable=AsyncMock,
-                return_value="Bearer token",
-            ),
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-                new_callable=AsyncMock,
-                return_value=(mock_surface, "remote"),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://example.com",
-            ),
-        ):
-            result = await build_terminal_payload(request, terminal="app")
-        assert result["success"] is True
-        assert result["data"]["android_audit"] == {"devices": 2}
+        return await _assert_shared_no_auth_with_pages_includes_android_audit_2(
+            self, 2, 2, "Bearer token", "remote"
+        )
 
     @pytest.mark.asyncio
     async def test_no_auth_no_pages_returns_401_with_data(self):

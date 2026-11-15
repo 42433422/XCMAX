@@ -44,6 +44,9 @@ from app.fastapi_routes.xcagi_compat_chat_models import (
     XcagiCompatChatBatchBody as XcagiCompatChatBatchBody,
 )
 from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody as XcagiCompatChatBody
+from app.fastapi_routes.xcagi_compat_chat_models import (
+    _model_upstream_http_exc as _model_upstream_http_exc,
+)
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode  # noqa: F401
 from app.infrastructure.modstore_transport import MarketModelError
@@ -154,41 +157,6 @@ def _market_connection_label() -> str:
         return urlsplit(raw).hostname or "修茈市场"
     except ValueError:
         return "修茈市场"
-
-
-def _model_upstream_http_exc(status_code: int) -> HTTPException | None:
-    """把模型/端点上游状态码映射为可操作的本地错误，而不是一律 502。"""
-    if not isinstance(status_code, int) or isinstance(status_code, bool):
-        return None
-    mapping = {
-        400: (
-            400,
-            "模型服务未接受请求：模型不存在、端点不匹配或参数不受支持；请核对模型配置。",
-        ),
-        401: (
-            401,
-            "模型服务鉴权失败：API Key 无效或已过期，请更新模型凭据后重试。",
-        ),
-        403: (
-            403,
-            "模型服务拒绝访问：当前账号无权使用该模型或端点，请检查模型授权。",
-        ),
-        404: (
-            404,
-            "模型或模型服务端点不存在：请核对模型名称、Base URL 与供应商配置。",
-        ),
-        408: (504, "模型服务响应超时，请检查连接后重试。"),
-        409: (409, "本轮模型配置已变化，请重新发送本次请求。"),
-        429: (429, "模型服务请求受限，请稍后重试并检查可用额度。"),
-        503: (503, "模型服务暂不可用，请查看模型状态后重试。"),
-        504: (504, "模型服务响应超时，请检查连接后重试。"),
-    }
-    if status_code in mapping:
-        code, message = mapping[status_code]
-        return HTTPException(status_code=code, detail=message)
-    if status_code >= 500:
-        return HTTPException(status_code=502, detail="模型服务请求失败，请稍后重试。")
-    return None
 
 
 def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:

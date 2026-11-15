@@ -151,6 +151,21 @@ def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
+def _load_model_json(raw: str) -> Any:
+    """严格 JSON 优先；失败时用 json-repair 容忍模型常见截断/尾逗号。"""
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        try:
+            from json_repair import loads as repair_loads
+        except ImportError:
+            return None
+        try:
+            return repair_loads(raw)
+        except (ValueError, TypeError):
+            return None
+
+
 def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[WorkflowNode]] | None:
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
@@ -162,7 +177,7 @@ def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[Wo
     if not raw:
         return None
     raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    parsed = json.loads(raw)
+    parsed = _load_model_json(raw)
     if not isinstance(parsed, dict):
         return None
     mode = str(parsed.get("mode") or "workflow").strip().lower()
@@ -228,6 +243,47 @@ def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[Wo
             )
         )
     return parsed, nodes
+
+
+def build_plan_from_payload(
+    *,
+    plan_id: str,
+    message: str,
+    parsed: dict[str, Any],
+    nodes: list[WorkflowNode],
+    context: dict[str, Any] | None,
+) -> PlanGraph:
+    """把已解析的模型 JSON 收敛为 ``PlanGraph``；生成与修复共用同一收敛规则。"""
+    user_memory_rag_summary = ""
+    memory_v2_summary = ""
+    if isinstance(context, dict):
+        user_memory_rag = context.get("user_memory_rag")
+        if isinstance(user_memory_rag, dict):
+            user_memory_rag_summary = str(user_memory_rag.get("summary") or "").strip()
+        memory_v2 = context.get("memory_v2")
+        if isinstance(memory_v2, dict):
+            memory_v2_summary = str(memory_v2.get("summary") or "").strip()
+    return PlanGraph(
+        plan_id=plan_id,
+        intent=str(
+            parsed.get("intent")
+            or ("conversation_reply" if parsed.get("mode") == "reply" else "dynamic_workflow")
+        ),
+        todo_steps=[str(x) for x in parsed.get("todo_steps") or []],
+        nodes=nodes,
+        risk_level=normalize_workflow_risk(str(parsed.get("risk_level") or "low")),
+        metadata={
+            "planner": "llm",
+            "response_mode": "reply" if parsed.get("mode") == "reply" else "workflow",
+            **(
+                {"reply": parsed["reply"]}
+                if parsed.get("mode") == "reply"
+                else {"message": message}
+            ),
+            "user_memory_rag_summary": user_memory_rag_summary,
+            "memory_v2_summary": memory_v2_summary,
+        },
+    )
 
 
 class LlmPlanGeneration:
@@ -331,43 +387,12 @@ class LlmPlanGeneration:
             if decoded is None:
                 return None
             parsed, nodes = decoded
-            user_memory_rag_summary = ""
-            memory_v2_summary = ""
-            try:
-                if isinstance(context, dict):
-                    user_memory_rag = context.get("user_memory_rag")
-                    if isinstance(user_memory_rag, dict):
-                        user_memory_rag_summary = str(user_memory_rag.get("summary") or "").strip()
-                    memory_v2 = context.get("memory_v2")
-                    if isinstance(memory_v2, dict):
-                        memory_v2_summary = str(memory_v2.get("summary") or "").strip()
-            except (ImportError, RuntimeError):
-                user_memory_rag_summary = ""
-                memory_v2_summary = ""
-            return PlanGraph(
+            return build_plan_from_payload(
                 plan_id=plan_id,
-                intent=str(
-                    parsed.get("intent")
-                    or (
-                        "conversation_reply"
-                        if parsed.get("mode") == "reply"
-                        else "dynamic_workflow"
-                    )
-                ),
-                todo_steps=[str(x) for x in parsed.get("todo_steps") or []],
+                message=message,
+                parsed=parsed,
                 nodes=nodes,
-                risk_level=normalize_workflow_risk(str(parsed.get("risk_level") or "low")),
-                metadata={
-                    "planner": "llm",
-                    "response_mode": "reply" if parsed.get("mode") == "reply" else "workflow",
-                    **(
-                        {"reply": parsed["reply"]}
-                        if parsed.get("mode") == "reply"
-                        else {"message": message}
-                    ),
-                    "user_memory_rag_summary": user_memory_rag_summary,
-                    "memory_v2_summary": memory_v2_summary,
-                },
+                context=context,
             )
         except (ValueError, TypeError) as err:
             from app.infrastructure.modstore_transport import MarketModelError

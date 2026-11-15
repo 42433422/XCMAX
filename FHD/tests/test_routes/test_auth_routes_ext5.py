@@ -18,6 +18,26 @@ import pytest
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 
+async def _assert_shared_local_create_user_failure_with_unique_0(self, _case_value_0):
+    from app.fastapi_routes.domains.auth.auth_routes import auth_register
+
+    request = MagicMock()
+    with (
+        patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+        patch(
+            "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
+            return_value=True,
+        ),
+        patch("app.application.get_user_app_service") as mock_get,
+    ):
+        mock_service = MagicMock()
+        mock_service.create_user.return_value = {"success": False, "message": _case_value_0}
+        mock_get.return_value = mock_service
+        result = await auth_register(request, {"username": "u", "password": "pass123"})
+    assert isinstance(result, JSONResponse)
+    assert result.status_code == 400
+
+
 def _assert_shared_custom_cookie_name_0(self, monkeypatch, _shared_literal_0, _shared_literal_1):
     from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
@@ -1472,49 +1492,13 @@ class TestAuthRegisterAdditional:
 
     @pytest.mark.asyncio
     async def test_local_create_user_failure_with_unique(self):
-        from app.fastapi_routes.domains.auth.auth_routes import auth_register
-
-        request = MagicMock()
-        with (
-            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
-            patch(
-                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
-                return_value=True,
-            ),
-            patch("app.application.get_user_app_service") as mock_get,
-        ):
-            mock_service = MagicMock()
-            mock_service.create_user.return_value = {
-                "success": False,
-                "message": "UNIQUE constraint failed",
-            }
-            mock_get.return_value = mock_service
-            result = await auth_register(request, {"username": "u", "password": "pass123"})
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 400
+        return await _assert_shared_local_create_user_failure_with_unique_0(
+            self, "UNIQUE constraint failed"
+        )
 
     @pytest.mark.asyncio
     async def test_local_create_user_failure_with_already_exists(self):
-        from app.fastapi_routes.domains.auth.auth_routes import auth_register
-
-        request = MagicMock()
-        with (
-            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
-            patch(
-                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
-                return_value=True,
-            ),
-            patch("app.application.get_user_app_service") as mock_get,
-        ):
-            mock_service = MagicMock()
-            mock_service.create_user.return_value = {
-                "success": False,
-                "message": "用户名已存在",
-            }
-            mock_get.return_value = mock_service
-            result = await auth_register(request, {"username": "u", "password": "pass123"})
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 400
+        return await _assert_shared_local_create_user_failure_with_unique_0(self, "用户名已存在")
 
 
 # ---------------------------------------------------------------------------
