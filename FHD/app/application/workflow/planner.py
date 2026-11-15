@@ -76,6 +76,11 @@ class LLMWorkflowPlanner:
         rejected = rejected_sql_plan(message, plan_id)
         if rejected is not None:
             return rejected
+        from app.application.workflow.local_database_backup_plan import local_database_backup_plan
+
+        backup = local_database_backup_plan(message, plan_id)
+        if backup is not None:
+            return backup
         profile = resolve_tool_execution_profile(context)
         registry_for_plan = _filter_tool_registry_for_profile(tool_registry, profile)
         context.pop("available_employees", None)
