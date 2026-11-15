@@ -1912,8 +1912,12 @@
         "preview": {
           "risk": "medium",
           "idempotent": false,
-          "required_params": [
-            "file_path"
+          "required_params": [],
+          "required_any": [
+            [
+              "file_path",
+              "file_paths"
+            ]
           ],
           "availability": "shared",
           "timeout_seconds": 180
@@ -1921,8 +1925,12 @@
         "execute": {
           "risk": "high",
           "idempotent": false,
-          "required_params": [
-            "run_id"
+          "required_params": [],
+          "required_any": [
+            [
+              "run_id",
+              "run_ids"
+            ]
           ],
           "availability": "shared",
           "action_class": "bulk_import",

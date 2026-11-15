@@ -28,6 +28,17 @@ def test_preview_batch_reports_each_file(monkeypatch):
     assert out["ready_count"] == 1
     assert out["results"][1]["success"] is False
     assert "需人工确认 0" in out["message"]
+    assert out["run_ids"] == []
+
+
+def test_preview_batch_collects_run_ids(monkeypatch):
+    monkeypatch.setattr(
+        tools_workflow_elt,
+        "_preview",
+        lambda params, _context: {"success": True, "data": {"run_id": f"r-{params['file_path']}"}},
+    )
+    out = tools_workflow_elt._preview_batch(["a.xlsx", "b.xlsx"], {}, {})
+    assert out["run_ids"] == ["r-a.xlsx", "r-b.xlsx"]
 
 
 def test_preview_batch_caps_at_twenty(monkeypatch):

@@ -677,6 +677,11 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
         items.append({"file_path": path, **out})
     ready = [item for item in items if item.get("success")]
     needs_decision = [item for item in items if item.get("requires_user_decision")]
+    run_ids = [
+        str((item.get("data") or {}).get("run_id") or "")
+        for item in ready
+    ]
+    run_ids = [run_id for run_id in run_ids if run_id]
     truncated = len(paths) > len(targets)
     message = (
         f"批量预演：{len(items)} 个文件，预演完成 {len(ready)}，"
@@ -692,6 +697,7 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
         "needs_decision_count": len(needs_decision),
         "truncated": truncated,
         "message": message,
+        "run_ids": run_ids,
         "results": items,
     }
 
