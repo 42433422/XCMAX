@@ -101,7 +101,54 @@ def test_preview_reports_pending_mappings():
         )
     assert result["data"]["mapping_pending"] == ["unit_price"]
     assert result["data"]["executable"] is False
-    assert "字段映射待确认" in result["message"]
+    assert result["data"]["executable_with_suggestions"] is True
+    assert result["resume_params"] == {"accept_suggested": True}
+    assert "AI 建议" in result["message"]
+
+
+def test_preview_accept_suggested_unblocks_low_confidence_mappings():
+    service = MagicMock()
+    service.create_preview.return_value = {"id": "run-1"}
+    run = _run(
+        draft={
+            "field_mappings": [
+                {"source": "单价", "target": "unit_price", "confidence": 0.6},
+                {"source": "产品名称", "target": "product_name", "confidence": 0.98},
+            ]
+        }
+    )
+    with (
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._bound_actor",
+            return_value=MagicMock(id=7),
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._owned_upload",
+            return_value={"id": "upload-1", "storage_path": "/tmp/x.xlsx", "suffix": ".xlsx"},
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._resolve_template",
+            return_value=("products", {}),
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt.get_db",
+            return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
+        ),
+        patch("app.domain.shared_services.tools_workflow_elt._wait", return_value=run),
+        patch("app.application.elt.service.get_elt_service", return_value=service),
+    ):
+        result = _registered_router_elt_import(
+            "preview",
+            {"file_path": "宗南.xlsx", "accept_suggested": True},
+            _context(),
+            "normal",
+            "导入",
+        )
+    assert result["data"]["executable"] is True
+    assert result["requires_user_decision"] is False
 
 
 def test_preview_ignores_auto_confirmed_mappings():

@@ -144,3 +144,161 @@ def test_resolve_template_ranks_multiple_candidates(monkeypatch):
     assert target_type == "customers"
     assert template["id"] == "t2"
     assert template["match_confidence"] == 0.75
+
+
+def test_propose_import_template_filters_unknown_target(monkeypatch):
+    monkeypatch.setattr(
+        template_ai,
+        "_complete",
+        lambda *a, **k: _result(
+            {
+                "target_type": "not_a_target",
+                "confidence": 0.9,
+                "field_mappings": [{"source": "客户名称", "target": "customer_name"}],
+            }
+        ),
+    )
+    assert (
+        template_ai.propose_import_template(
+            file_name="a.xlsx",
+            headers=["客户名称"],
+            targets=[{"type": "customers", "label": "客户", "fields": []}],
+        )
+        is None
+    )
+
+
+def test_propose_import_template_returns_mappings_and_index(monkeypatch):
+    monkeypatch.setattr(
+        template_ai,
+        "_complete",
+        lambda *a, **k: _result(
+            {
+                "target_type": "customers",
+                "template_index": 0,
+                "name": "客户资料",
+                "confidence": 0.88,
+                "field_mappings": [
+                    {"source": "客户名称", "target": "customer_name", "confidence": 0.95}
+                ],
+            }
+        ),
+    )
+    proposal = template_ai.propose_import_template(
+        file_name="a.xlsx",
+        headers=["客户名称"],
+        samples={"客户名称": ["甲公司"]},
+        candidates=[{"name": "客户资料", "target_type": "customers"}],
+        targets=[{"type": "customers", "label": "客户", "fields": []}],
+    )
+    assert proposal is not None
+    assert proposal["template_index"] == 0
+    assert proposal["name"] == "客户资料"
+    assert proposal["field_mappings"][0]["target"] == "customer_name"
+
+
+def _features(headers=("客户名称", "电话")):
+    return {"headers": list(headers), "samples": {}, "sheet": "Sheet1", "file_name": "客户表.xlsx"}
+
+
+class _EltService:
+    def __init__(self):
+        self.calls: list[dict[str, Any]] = []
+
+    def create_template(self, db, **kwargs):
+        self.calls.append(kwargs)
+        return {
+            "id": "tpl-ai",
+            "name": kwargs["name"],
+            "target_type": kwargs["target_type"],
+            "current_version": 1,
+            "version": {"source_features": kwargs.get("source_features") or {}},
+        }
+
+
+class _DB:
+    def __enter__(self):
+        return object()
+
+    def __exit__(self, *args):
+        return False
+
+
+def test_create_ai_template_drops_invalid_mappings(monkeypatch):
+    from app.domain.shared_services import tools_workflow_elt
+
+    service = _EltService()
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: service)
+    monkeypatch.setattr(tools_workflow_elt, "get_db", lambda: _DB())
+    created = tools_workflow_elt._create_ai_import_template(
+        1,
+        _features(),
+        {
+            "target_type": "customers",
+            "name": "客户资料",
+            "confidence": 0.88,
+            "reason": "客户表",
+            "field_mappings": [
+                {"source": "客户名称", "target": "customer_name", "confidence": 0.95},
+                {"source": "不存在的列", "target": "contact_person", "confidence": 0.9},
+                {"source": "电话", "target": "未知字段", "confidence": 0.9},
+                {"source": "电话", "target": "contact_phone", "confidence": 0.8},
+            ],
+        },
+        [],
+    )
+    assert created["ai_generated"] is True
+    draft = service.calls[0]["draft"]
+    assert [item["target"] for item in draft["field_mappings"]] == [
+        "customer_name",
+        "contact_phone",
+    ]
+    assert service.calls[0]["name"] == "客户资料"
+
+
+def test_create_ai_template_requires_required_field(monkeypatch):
+    from app.domain.shared_services import tools_workflow_elt
+
+    service = _EltService()
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: service)
+    monkeypatch.setattr(tools_workflow_elt, "get_db", lambda: _DB())
+    created = tools_workflow_elt._create_ai_import_template(
+        1,
+        _features(),
+        {
+            "target_type": "customers",
+            "name": "客户资料",
+            "confidence": 0.88,
+            "field_mappings": [{"source": "电话", "target": "contact_phone", "confidence": 0.9}],
+        },
+        [],
+    )
+    assert created == {}
+    assert service.calls == []
+
+
+def test_create_ai_template_reuses_same_header_signature(monkeypatch):
+    from app.domain.shared_services import tools_workflow_elt
+
+    service = _EltService()
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: service)
+    monkeypatch.setattr(tools_workflow_elt, "get_db", lambda: _DB())
+    existing = {
+        "id": "tpl-old",
+        "name": "客户资料",
+        "target_type": "customers",
+        "version": {"source_features": {"headers": ["电话", "客户名称"]}},
+    }
+    created = tools_workflow_elt._create_ai_import_template(
+        1,
+        _features(),
+        {
+            "target_type": "customers",
+            "confidence": 0.88,
+            "field_mappings": [{"source": "客户名称", "target": "customer_name"}],
+        },
+        [existing],
+    )
+    assert created["id"] == "tpl-old"
+    assert created["matched_by"] == "signature"
+    assert service.calls == []

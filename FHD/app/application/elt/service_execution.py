@@ -91,6 +91,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         confirmed: bool,
         valid_rows_only: bool,
         preview_revision: str | None = None,
+        accept_suggested: bool = False,
     ) -> dict[str, Any]:
         run = self._owned_run(db, run_id, owner_user_id)
         if not confirmed:
@@ -120,7 +121,8 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             pending_mappings = _unconfirmed_mappings(
                 load_json(run.draft_json, {}).get("field_mappings")
             )
-            if pending_mappings:
+            # 用户一次性接受 AI 建议映射时不逐字段确认；错误行仍按原规则拦截。
+            if pending_mappings and not accept_suggested:
                 names = "、".join(
                     str(item.get("target") or item.get("source") or "字段")
                     for item in pending_mappings[:8]

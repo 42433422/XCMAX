@@ -32,6 +32,29 @@ _RANK_SCHEMA: dict[str, Any] = {
     },
     "required": ["index", "confidence"],
 }
+_PROPOSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "target_type": {"type": "string"},
+        "template_index": {"type": "integer"},
+        "name": {"type": "string"},
+        "confidence": {"type": "number"},
+        "reason": {"type": "string"},
+        "field_mappings": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string"},
+                    "target": {"type": "string"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["source", "target"],
+            },
+        },
+    },
+    "required": ["target_type", "confidence"],
+}
 
 _NAME_LIMIT = 24
 # 机器生成的占位名：文件名-区段N、Sheet1-模板、Excel、模板1 等。
@@ -46,9 +69,15 @@ def is_meaningless_name(name: str) -> bool:
     return bool(_MEANINGLESS_RE.match(str(name or "").strip()))
 
 
-def _ask(messages: list[dict[str, str]], *, schema: dict[str, Any], lane: str) -> LlmAssistResult:
+def _ask(
+    messages: list[dict[str, str]],
+    *,
+    schema: dict[str, Any],
+    lane: str,
+    max_tokens: int = 400,
+) -> LlmAssistResult:
     try:
-        return _complete(messages, schema=schema, max_tokens=400, lane=lane)
+        return _complete(messages, schema=schema, max_tokens=max_tokens, lane=lane)
     except RECOVERABLE_ERRORS:
         return LlmAssistResult()
 
@@ -145,6 +174,109 @@ def rank_templates(
     }
 
 
+def propose_import_template(
+    *,
+    file_name: str,
+    sheet_title: str = "",
+    headers: Iterable[Any] = (),
+    samples: dict[str, Iterable[Any]] | None = None,
+    candidates: list[dict[str, Any]] | None = None,
+    targets: list[dict[str, Any]] | None = None,
+    minimum_confidence: float = 0.6,
+) -> dict[str, Any] | None:
+    """一次调用识别导入目标、挑选/生成字段映射并给出模板名。
+
+    返回值只是提案：目标类型、命中的候选序号（没有则 -1）、模板名、置信度、
+    依据和字段映射。调用方必须自行校验列是否存在、必填是否覆盖。
+    """
+    head = [str(item).strip() for item in headers if str(item).strip()][:40]
+    if not head or not targets:
+        return None
+    samples = samples or {}
+    sample_lines = []
+    for header in head:
+        values = [
+            str(value)[:40]
+            for value in list(samples.get(header) or [])[:3]
+            if value not in (None, "")
+        ]
+        if values:
+            sample_lines.append(f"{header}：{' / '.join(values)}")
+    target_lines = []
+    for item in targets:
+        fields = "、".join(
+            f"{field.get('label')}({field.get('key')})" for field in item.get("fields") or []
+        )
+        target_lines.append(f"- {item.get('type')}（{item.get('label')}）字段：{fields}")
+    candidate_lines = []
+    for index, item in enumerate(candidates or []):
+        candidate_lines.append(
+            f"{index}. {item.get('name') or ''}｜目标 {item.get('target_type') or ''}"
+            f"｜表头 {', '.join(list((item.get('source_features') or {}).get('headers') or [])[:12])}"
+        )
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你在识别企业 Excel/CSV 的业务目标并生成导入字段映射。只输出 JSON。"
+                "表头是列名，样例行只用于判断列的含义。"
+                "target_type 只能从给定目标里选；字段映射的 source 必须是给定表头之一，"
+                "target 必须是该目标的字段 key。"
+                "已有候选模板能匹配时给出 template_index，否则给 -1 并自行生成映射。"
+                "流水/台账（采购、应收、对账、考勤原始记录）不要强行映射成客户或产品主数据。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"文件名：{file_name}\n工作表：{sheet_title}\n"
+                f"表头：{' | '.join(head)}\n样例：\n" + "\n".join(sample_lines)
+                + "\n可选目标：\n" + "\n".join(target_lines)
+                + "\n已有候选模板：\n" + ("\n".join(candidate_lines) or "（无）")
+            ),
+        },
+    ]
+    result = _ask(messages, schema=_PROPOSE_SCHEMA, lane="template_propose", max_tokens=900)
+    if not result.used_llm or result.degraded or not isinstance(result.data, dict):
+        return None
+    data = result.data
+    target = str(data.get("target_type") or "").strip()
+    if target not in {str(item.get("type") or "") for item in targets}:
+        return None
+    try:
+        confidence = float(data.get("confidence") or 0)
+        index = int(data.get("template_index") if data.get("template_index") is not None else -1)
+    except (TypeError, ValueError):
+        return None
+    if confidence < minimum_confidence:
+        return None
+    if index >= len(candidates or []):
+        index = -1
+    mappings = []
+    for item in list(data.get("field_mappings") or []):
+        if not isinstance(item, dict):
+            continue
+        source = str(item.get("source") or "").strip()
+        field = str(item.get("target") or "").strip()
+        if not source or not field:
+            continue
+        try:
+            item_confidence = float(item.get("confidence") or confidence)
+        except (TypeError, ValueError):
+            item_confidence = confidence
+        mappings.append(
+            {"source": source, "target": field, "confidence": round(item_confidence, 4)}
+        )
+    return {
+        "target_type": target,
+        "template_index": index,
+        "name": _clean_name(str(data.get("name") or "")),
+        "confidence": round(confidence, 4),
+        "reason": str(data.get("reason") or "")[:200],
+        "field_mappings": mappings,
+    }
+
+
 def rename_meaningless_templates(service: Any, *, limit: int = 3) -> list[dict[str, str]]:
     """把模板库里机器占位名换成业务名；每次最多处理 ``limit`` 个，失败静默跳过。"""
     try:
@@ -190,6 +322,7 @@ def _stored_labels(item: dict[str, Any]) -> list[str]:
 
 __all__ = [
     "is_meaningless_name",
+    "propose_import_template",
     "rank_templates",
     "rename_meaningless_templates",
     "suggest_template_name",

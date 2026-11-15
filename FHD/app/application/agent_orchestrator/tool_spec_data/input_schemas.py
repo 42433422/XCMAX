@@ -799,6 +799,10 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
                 "description": "整批文件（最多 20 个），与 file_path 二选一",
             },
             "valid_rows_only": {"type": "boolean"},
+            "accept_suggested": {
+                "type": "boolean",
+                "description": "用户接受 AI 建议映射时传 true，映射置信度不再阻断预演",
+            },
         },
     ),
     ("elt_import", "execute"): _object_schema(
@@ -812,6 +816,10 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
                 "description": "整批预演编号（最多 20 个），与 run_id 二选一",
             },
             "valid_rows_only": {"type": "boolean"},
+            "accept_suggested": {
+                "type": "boolean",
+                "description": "用户明确接受 AI 建议映射时传 true，可免去逐字段确认",
+            },
         },
     ),
     ("excel_import", "execute_import"): _object_schema(

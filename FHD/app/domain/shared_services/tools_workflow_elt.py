@@ -6,7 +6,9 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import os
 import time
 from pathlib import Path
@@ -431,41 +433,68 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
 def _resolve_template(upload: dict[str, str], owner_id: int) -> tuple[str, dict]:
     """识别目标类型，并在模板可确定时自动套用。
 
-    唯一候选直接套用；多个候选交给模型按语义排序，置信度不足时不自动选，
-    回退到 ELT 的默认草稿 + 自动映射建议，避免用错映射写进错误字段。
+    先让模型识别目标、挑模板或直接生成映射；模型不可用或不确定时回退规则。
+    只有「缺失必填字段」这类数据事实才会挡住套用，不再因为类型没被规则认出而拒绝。
     """
+    from app.application import template_ai
+
+    features = _upload_features(upload, owner_id)
+    rules = _rule_target(upload, owner_id)
+    # 送货单依赖 ELT 的多工作表关联预演，保持原有规则路径，不让模型改判。
+    if str(rules.get("target_type") or "") == "shipment_records":
+        return _rule_template(rules, owner_id, upload)
+    candidates = _list_import_templates(owner_id)
+    proposal = template_ai.propose_import_template(
+        file_name=Path(str(upload.get("storage_path") or "")).name,
+        sheet_title=features.get("sheet") or "",
+        headers=features.get("headers") or [],
+        samples=features.get("samples") or {},
+        candidates=candidates,
+        targets=_target_catalog(),
+    )
+    if proposal:
+        index = int(proposal.get("template_index") or -1)
+        if 0 <= index < len(candidates):
+            matched = candidates[index]
+            return str(matched.get("target_type") or "auto"), {
+                **matched,
+                "match_confidence": proposal["confidence"],
+                "match_reason": proposal["reason"],
+                "matched_by": "ai",
+            }
+        created = _create_ai_import_template(owner_id, features, proposal, candidates)
+        if created:
+            return str(created.get("target_type") or "auto"), created
+    return _rule_template(rules, owner_id, upload)
+
+
+def _rule_target(upload: dict[str, str], owner_id: int) -> dict[str, Any]:
     from app.application.elt.target_detection import detect_elt_target
 
-    target_type = "auto"
     try:
-        detection = detect_elt_target(
+        return detect_elt_target(
             upload.get("storage_path") or "",
             suffix=upload.get("suffix") or "",
             owner_user_id=owner_id,
         )
-        detected = str(detection.get("target_type") or "").strip()
-        if detected:
-            target_type = detected
     except RECOVERABLE_ERRORS:
-        return "auto", {}
+        return {}
+
+
+def _rule_template(
+    rules: dict[str, Any], owner_id: int, upload: dict[str, str]
+) -> tuple[str, dict]:
+    """规则兜底：唯一候选直接套用，多候选用模型排序（不可用则人工确认）。"""
+    target_type = str(rules.get("target_type") or "auto").strip() or "auto"
     if target_type in {"auto", "abnormal"}:
         return target_type, {}
-    from app.application.elt.service import get_elt_service
-
-    try:
-        with get_db() as db:
-            candidates = [
-                item
-                for item in get_elt_service().list_templates(db, owner_user_id=owner_id)
-                if str(item.get("target_type") or "") == target_type
-            ]
-    except RECOVERABLE_ERRORS:
-        return target_type, {}
+    candidates = [
+        item for item in _list_import_templates(owner_id) if item.get("target_type") == target_type
+    ]
     if not candidates:
         return target_type, {}
     if len(candidates) == 1:
         return target_type, candidates[0]
-    # 多个候选时每次都用模型按文件名语义排序；模型不可用或置信度不足则回退到人工确认。
     from app.application.template_ai import rank_templates
 
     requirement = f"{Path(str(upload.get('storage_path') or '')).stem}（导入目标：{target_type}）"
@@ -475,7 +504,235 @@ def _resolve_template(upload: dict[str, str], owner_id: int) -> tuple[str, dict]
     template = dict(picked["template"])
     template["match_confidence"] = picked["confidence"]
     template["match_reason"] = picked["reason"]
+    template["matched_by"] = "ai_rank"
     return target_type, template
+
+
+def _list_import_templates(owner_id: int) -> list[dict[str, Any]]:
+    from app.application.elt.service import get_elt_service
+
+    try:
+        with get_db() as db:
+            return get_elt_service().list_templates(db, owner_user_id=owner_id)
+    except RECOVERABLE_ERRORS:
+        return []
+
+
+_IMPORT_TARGET_TYPES = (
+    "customers",
+    "customer_products",
+    "products",
+    "purchase_orders",
+    "shipment_records",
+    "attendance",
+)
+
+
+def _target_catalog() -> list[dict[str, Any]]:
+    """给模型的导入目标清单；兼容/导出类目标不参与自动识别。"""
+    from app.application.elt.targets import get_adapter
+
+    catalog: list[dict[str, Any]] = []
+    for target_type in _IMPORT_TARGET_TYPES:
+        try:
+            capability = get_adapter(target_type).capability()
+        except RECOVERABLE_ERRORS:
+            continue
+        catalog.append(
+            {
+                "type": capability["type"],
+                "label": capability["label"],
+                "fields": capability["fields"],
+            }
+        )
+    return catalog
+
+
+def _upload_features(upload: dict[str, str], owner_id: int) -> dict[str, Any]:
+    """读取上传文件前若干行，取出表头与样例行（不解析整份数据）。"""
+    sheet, rows = _read_head_rows(
+        str(upload.get("storage_path") or ""),
+        str(upload.get("suffix") or ""),
+        owner_id,
+    )
+    found = _header_positions(rows)
+    if found is None:
+        return {"headers": [], "samples": {}, "sheet": sheet}
+    header_index, columns = found
+    first = rows[header_index]
+    headers: list[str] = []
+    picked: list[int] = []
+    for column in columns:
+        header = str(first[column]).strip()[:80]
+        if not header or header in headers:
+            continue
+        headers.append(header)
+        picked.append(column)
+        if len(headers) >= 40:
+            break
+    samples: dict[str, list[str]] = {header: [] for header in headers}
+    for row in rows[header_index + 1 : header_index + 8]:
+        for header, column in zip(headers, picked):
+            if column < len(row) and str(row[column]).strip():
+                if len(samples[header]) < 3:
+                    samples[header].append(str(row[column]).strip()[:60])
+    return {
+        "headers": headers,
+        "samples": samples,
+        "sheet": sheet,
+        "file_name": Path(str(upload.get("storage_path") or "")).name,
+    }
+
+
+def _header_positions(rows: list[list[str]]) -> tuple[int, list[int]] | None:
+    """找到最像表头的一行：至少两个非空单元格且以文字为主。"""
+    for index, row in enumerate(rows[:12]):
+        filled = [column for column, cell in enumerate(row) if str(cell).strip()]
+        if len(filled) < 2:
+            continue
+        text_like = sum(
+            1
+            for column in filled
+            if not str(row[column]).strip().replace(".", "", 1).replace(",", "", 1).isdigit()
+        )
+        if text_like * 2 >= len(filled):
+            return index, filled[:40]
+    return None
+
+
+def _read_head_rows(path: str, suffix: str, owner_id: int) -> tuple[str, list[list[str]]]:
+    from app.application.shipment_excel_elt_security import open_elt_input_file
+
+    source = Path(path)
+    ext = str(suffix or source.suffix).lower()
+    try:
+        if ext == ".csv":
+            rows: list[list[str]] = []
+            with (
+                open_elt_input_file(source, owner_user_id=owner_id) as stream,
+                io.TextIOWrapper(stream, encoding="utf-8-sig", errors="replace", newline="")
+                as handle,
+            ):
+                for index, row in enumerate(csv.reader(handle)):
+                    rows.append([str(cell).strip() for cell in row][:60])
+                    if index >= 14:
+                        break
+            return "CSV", rows
+        if ext in {".xlsx", ".xlsm"}:
+            from openpyxl import load_workbook
+
+            with open_elt_input_file(source, owner_user_id=owner_id) as stream:
+                workbook = load_workbook(stream, read_only=True, data_only=True, keep_links=False)
+                best_sheet, best_rows = "", []
+                try:
+                    for worksheet in workbook.worksheets[:8]:
+                        rows = []
+                        for index, values in enumerate(worksheet.iter_rows(values_only=True)):
+                            rows.append(
+                                ["" if value is None else str(value).strip() for value in values][:60]
+                            )
+                            if index >= 14:
+                                break
+                        if sum(1 for row in rows for cell in row if cell) > sum(
+                            1 for row in best_rows for cell in row if cell
+                        ):
+                            best_sheet, best_rows = worksheet.title, rows
+                finally:
+                    workbook.close()
+                return best_sheet, best_rows
+    except RECOVERABLE_ERRORS:
+        return "", []
+    return "", []
+
+
+def _create_ai_import_template(
+    owner_id: int,
+    features: dict[str, Any],
+    proposal: dict[str, Any],
+    candidates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """把模型提议落成导入模板；映射必须覆盖必填字段，否则不建（交给预演自己补映射）。"""
+    from app.application import template_ai
+    from app.application.elt.service import get_elt_service
+    from app.application.elt.targets import get_adapter
+
+    target_type = str(proposal.get("target_type") or "")
+    try:
+        adapter = get_adapter(target_type)
+    except RECOVERABLE_ERRORS:
+        return {}
+    signature = sorted(str(header) for header in features.get("headers") or [])
+    # 同一目标 + 同一表头签名视为同一模板，避免每次预演都新建一份。
+    for item in candidates:
+        stored = ((item.get("version") or {}).get("source_features") or {}).get("headers") or []
+        if item.get("target_type") == target_type and sorted(str(h) for h in stored) == signature:
+            return {
+                **item,
+                "matched_by": "signature",
+                "match_confidence": proposal.get("confidence"),
+                "match_reason": proposal.get("reason") or "",
+            }
+    allowed = {field.key for field in adapter.fields}
+    headers = set(signature)
+    mappings: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in proposal.get("field_mappings") or []:
+        source = str(item.get("source") or "")
+        field = str(item.get("target") or "")
+        if source not in headers or field not in allowed or field in seen:
+            continue
+        seen.add(field)
+        mappings.append(
+            {
+                "source": source,
+                "target": field,
+                "confidence": item.get("confidence") or proposal.get("confidence") or 0,
+                "suggested_by": "llm",
+            }
+        )
+    required = {field.key for field in adapter.fields if field.required}
+    if not mappings or not required.issubset(seen):
+        return {}
+    name = str(proposal.get("name") or "") or template_ai.suggest_template_name(
+        file_name=str(features.get("file_name") or "导入模板"),
+        sheet_title=str(features.get("sheet") or ""),
+        target_type=target_type,
+        headers=features.get("headers") or [],
+    )
+    if not name:
+        return {}
+    draft = {
+        "field_mappings": mappings,
+        "validation_rules": [],
+        "match_keys": list(adapter.default_match_keys),
+        "allowed_update_fields": [],
+        "action_rules": {"duplicate": "skip"},
+    }
+    try:
+        with get_db() as db:
+            created = get_elt_service().create_template(
+                db,
+                owner_user_id=owner_id,
+                name=name,
+                target_type=target_type,
+                draft=draft,
+                source_features={
+                    "headers": features.get("headers") or [],
+                    "sheet": features.get("sheet") or "",
+                    "ai_generated": True,
+                    "ai_confidence": proposal.get("confidence"),
+                    "ai_reason": proposal.get("reason") or "",
+                },
+            )
+    except RECOVERABLE_ERRORS:
+        return {}
+    return {
+        **created,
+        "ai_generated": True,
+        "match_confidence": proposal.get("confidence"),
+        "match_reason": proposal.get("reason") or "",
+        "matched_by": "ai_created",
+    }
 
 
 def _preview(params: dict, runtime_context: dict) -> dict:
@@ -492,15 +749,18 @@ def _preview(params: dict, runtime_context: dict) -> dict:
     service = get_elt_service()
     actor = _bound_actor(runtime_context)
     target_type, template = _resolve_template(upload, actor.id)
+    # 模型识别出的非送货单目标显式传入，避免 ELT 再按旧规则改判；送货单保留关联预演。
+    resolved_target = "auto"
+    if template and target_type not in {"auto", "abnormal", "shipment_records"}:
+        resolved_target = target_type
     try:
         with get_db() as db:
             created = service.create_preview(
                 db,
                 owner_user_id=actor.id,
                 upload_id=upload["id"],
-                # 仍让 ELT 内部完成自动识别：多工作表送货单会同时生成关联预演，
-                # 显式传目标类型会跳过该逻辑；模板按同一识别结果自动套用。
-                target_type="auto",
+                # 送货单仍交给 ELT 自动识别，多工作表会同时生成关联预演。
+                target_type=resolved_target,
                 template_id=str(template.get("id") or "") or None,
             )
     except EltError as exc:
@@ -518,6 +778,8 @@ def _preview(params: dict, runtime_context: dict) -> dict:
         summary["target_type"] = target_type
     summary["template_id"] = str(template.get("id") or "")
     summary["template_name"] = str(template.get("name") or "")
+    summary["template_source"] = str(template.get("matched_by") or "")
+    summary["template_confidence"] = template.get("match_confidence")
     pending_mappings = [
         str(item.get("target") or item.get("source") or "字段")
         for item in _pending_mappings(data)
@@ -528,11 +790,18 @@ def _preview(params: dict, runtime_context: dict) -> dict:
     summary["error_row_details"] = error_details
     # 用户已明确只写入正确行时，错误行不再阻断，执行节点会带 valid_rows_only=true。
     accept_valid_rows = params.get("valid_rows_only") is True
+    # 用户明确接受 AI 建议映射后，置信度不足的映射不再阻断（执行阶段需传同一个参数）。
+    accept_suggested = params.get("accept_suggested") is True
     blocked_by_errors = bool(error_rows) and not accept_valid_rows
     # 有错误行或映射待确认时，ELT 会阻断整批执行；提前告知调用方，避免执行阶段才失败。
-    summary["executable"] = not blocked_by_errors and not pending_mappings
+    summary["executable"] = not blocked_by_errors and (not pending_mappings or accept_suggested)
+    # 只剩映射置信度不足时，用户可以一次性接受 AI 建议直接执行。
+    summary["executable_with_suggestions"] = not blocked_by_errors
     ok = data.get("status") == "preview_ready"
-    template_note = f"，已套用导入模板「{summary['template_name']}」" if summary["template_name"] else ""
+    template_note = ""
+    if summary["template_name"]:
+        ai_note = "（AI 识别）" if summary["template_source"] in {"ai", "ai_created", "ai_rank"} else ""
+        template_note = f"，已套用导入模板{ai_note}「{summary['template_name']}」"
     if not ok:
         message = f"预演未完成：{data.get('error') or data.get('stage')}"
     else:
@@ -554,14 +823,20 @@ def _preview(params: dict, runtime_context: dict) -> dict:
                 f"{int(summary.get('new_rows') or 0) + int(summary.get('update_rows') or 0)} 行"
                 "需用户明确确认（确认后预演与执行都传 valid_rows_only=true），否则请先修正源文件。"
             )
-        if pending_mappings:
+        if pending_mappings and not accept_suggested:
             blockers.append(
-                f"{len(pending_mappings)} 个字段映射待确认（{'、'.join(pending_mappings[:8])}），确认后才能入库。"
+                f"{len(pending_mappings)} 个字段映射为 AI 建议（{'、'.join(pending_mappings[:8])}），"
+                "用户确认后可一次性接受并入库（执行时传 accept_suggested=true）。"
             )
         if blockers:
             message += "".join(blockers)
     # 预演发现阻断项时，契约要求编排在此暂停询问用户，而不是继续执行后失败。
     requires_decision = ok and not summary["executable"]
+    resume_params: dict[str, Any] = {}
+    if requires_decision and accept_valid_rows is False and error_rows:
+        resume_params["valid_rows_only"] = True
+    if requires_decision and pending_mappings and not blocked_by_errors:
+        resume_params["accept_suggested"] = True
     return {
         "success": ok,
         "preview": True,
@@ -569,8 +844,8 @@ def _preview(params: dict, runtime_context: dict) -> dict:
         "message": message,
         "requires_user_decision": requires_decision,
         "question": message if requires_decision else "",
-        # 用户确认后重新执行预演时，按「仅写入正确行」补充参数，避免再次阻断。
-        "resume_params": {"valid_rows_only": True} if requires_decision else {},
+        # 用户确认后重新执行预演/执行时带上解除阻断的参数，避免再次停在同一个问题。
+        "resume_params": resume_params,
         "data": summary,
     }
 
@@ -600,6 +875,7 @@ def _execute(params: dict, runtime_context: dict) -> dict:
                 confirmed=True,
                 valid_rows_only=bool(params.get("valid_rows_only") is True),
                 preview_revision=revision or None,
+                accept_suggested=bool(params.get("accept_suggested") is True),
             )
     except EltError as exc:
         return {"success": False, "error_code": exc.code, "message": exc.message}
