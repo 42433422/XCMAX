@@ -8,17 +8,17 @@ import pytest
 from app.application.elt import auto_ingest_service as ais
 from app.application.elt.auto_ingest_service import AutoIngestService
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.test_application.test_elt_auto_ingest_service import (
+from tests.test_application.test_etl_auto_ingest_service import (
     _candidate_plan,
     _shipment_xlsx,
 )
-from tests.test_application.test_elt_auto_ingest_service import (
+from tests.test_application.test_etl_auto_ingest_service import (
     allow_tmp_ingest_paths as allow_tmp_ingest_paths,
 )
-from tests.test_application.test_elt_auto_ingest_service import (
+from tests.test_application.test_etl_auto_ingest_service import (
     ledger_root as ledger_root,
 )
-from tests.test_application.test_elt_auto_ingest_service import (
+from tests.test_application.test_etl_auto_ingest_service import (
     rag_service as rag_service,
 )
 

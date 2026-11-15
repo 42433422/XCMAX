@@ -268,7 +268,17 @@
             "unit_name"
           ],
           "availability": "shared",
-          "action_class": "business_db.write"
+          "action_class": "business_db.write",
+          "compensate": {
+            "tool_id": "customers",
+            "action": "delete",
+            "params_from_output": {
+              "id": [
+                "id",
+                "data.id"
+              ]
+            }
+          }
         },
         "update": {
           "risk": "medium",
@@ -375,7 +385,19 @@
             "name_or_model"
           ],
           "availability": "shared",
-          "action_class": "business_db.write"
+          "action_class": "business_db.write",
+          "compensate": {
+            "tool_id": "products",
+            "action": "delete",
+            "params_from_output": {
+              "id": [
+                "id",
+                "data.id",
+                "raw.data.id",
+                "raw.id"
+              ]
+            }
+          }
         },
         "update": {
           "risk": "medium",
@@ -444,7 +466,17 @@
           "required_params": [
             "name"
           ],
-          "availability": "shared"
+          "availability": "shared",
+          "compensate": {
+            "tool_id": "materials",
+            "action": "delete",
+            "params_from_output": {
+              "id": [
+                "id",
+                "data.id"
+              ]
+            }
+          }
         },
         "update": {
           "risk": "medium",

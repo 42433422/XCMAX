@@ -35,6 +35,93 @@ def _json_scalar(value):
     raise TypeError(f"unsupported tool result value:{type(value).__name__}")
 
 
+# 明显敏感的环境键片段：子进程不应继承调用方凭据。
+_SENSITIVE_ENV_MARKERS = (
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "API_KEY",
+    "PRIVATE_KEY",
+    "COOKIE",
+)
+# 子进程自身配置前缀，始终透传。
+_ENV_KEEP_PREFIXES = ("XCAGI_",)
+
+
+def _scrubbed_env(environ: dict[str, str] | None = None) -> dict[str, str]:
+    """清洗继承环境：删除敏感键，保留系统必需变量与 XCAGI_* 配置。"""
+    source = os.environ if environ is None else environ
+    return {
+        key: value
+        for key, value in source.items()
+        if key.upper().startswith(_ENV_KEEP_PREFIXES)
+        or not any(marker in key.upper() for marker in _SENSITIVE_ENV_MARKERS)
+    }
+
+
+def _sandbox_enabled() -> bool:
+    return str(os.environ.get("XCAGI_TOOL_SANDBOX") or "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def _env_scrub_enabled() -> bool:
+    """环境清洗默认关闭：部分工具需要调用模型凭据，贸然删除会导致业务失败。"""
+    return str(os.environ.get("XCAGI_TOOL_SANDBOX_SCRUB_ENV") or "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _limit_from_env(name: str, default: int) -> int:
+    """读取正整数限制值；缺失或非法时回退默认值。"""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 0
+    if value <= 0:
+        logging.getLogger(__name__).warning("invalid %s, fallback to %s", name, default)
+        return default
+    return value
+
+
+def _apply_resource_limits() -> None:
+    """在子进程内施加 POSIX 资源硬限制；设置失败只告警，不阻断执行。"""
+    if not _sandbox_enabled():
+        return
+    log = logging.getLogger(__name__)
+    try:
+        import resource
+    except ImportError:
+        # 非 POSIX 平台（如 Windows）没有 resource 模块，由父进程 deadline 兜底。
+        log.warning("tool worker resource limits unavailable on this platform")
+        return
+    targets = (
+        ("RLIMIT_CPU", _limit_from_env("XCAGI_TOOL_CPU_SECONDS", 60)),
+        ("RLIMIT_AS", _limit_from_env("XCAGI_TOOL_MEMORY_MB", 2048) * 1024 * 1024),
+        ("RLIMIT_NOFILE", _limit_from_env("XCAGI_TOOL_MAX_FILES", 256)),
+    )
+    for name, value in targets:
+        limit_type = getattr(resource, name, None)
+        if limit_type is None:
+            continue
+        try:
+            _, hard = resource.getrlimit(limit_type)
+            # 硬限制不可通过非特权方式提高，软限制不得超过现有硬限制。
+            target = value if hard == resource.RLIM_INFINITY else min(value, hard)
+            resource.setrlimit(limit_type, (target, hard))
+        except (OSError, ValueError) as exc:
+            log.warning("tool worker %s limit not applied: %s", name, type(exc).__name__)
+
+
 def _worker(
     executor_type,
     payload,
@@ -54,6 +141,23 @@ def _worker(
         restore_worker_llm_client,
         scoped_route_metadata,
     )
+
+    # 真正执行工具前先收敛子进程能力：环境清洗 + POSIX 资源硬限制。
+    # 失败只告警，调度语义仍由父进程 deadline 与进程回收保证。
+    if _env_scrub_enabled():
+        scrubbed_env = _scrubbed_env()
+        try:
+            os.environ.clear()
+            os.environ.update(scrubbed_env)
+        except (OSError, ValueError) as exc:
+            logging.getLogger(__name__).warning(
+                "tool worker env scrub skipped: %s", type(exc).__name__
+            )
+    # 资源硬限制只属于 spawn 出的工具子进程。在原进程内调用
+    # _worker（测试或误入父进程）时若施加 RLIMIT_CPU，累计 CPU
+    # 已超过工具预算就会立即 SIGXCPU 杀死调用方。
+    if multiprocessing.parent_process() is not None:
+        _apply_resource_limits()
 
     if os.name != "nt":
         os.setsid()

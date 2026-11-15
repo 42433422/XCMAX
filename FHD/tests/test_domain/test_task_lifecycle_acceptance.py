@@ -27,6 +27,35 @@ from app.db.models.workflow import WorkflowRun, WorkflowRunStatus
 from app.errors import WorkflowError
 
 
+def _shared_setup_workflow_0(case_value_1):
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    service = WorkflowDefinitionAppService(session_factory=factory)
+    created = service.create_definition(
+        tenant_id=1,
+        name=case_value_1,
+        nodes=[
+            {
+                "node_id": "n1",
+                "tool_id": "products",
+                "action": "query",
+                "params": {},
+                "risk": "low",
+                "idempotent": True,
+                "description": "查询",
+                "depends_on": [],
+            }
+        ],
+    )
+    run = service.start_run(created["id"])
+    return engine, factory, service, created, run
+
+
 def _run(name: str) -> AgentRun:
     run = AgentRun(user_id="owner", message=name, status="queued")
     run.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
@@ -136,31 +165,7 @@ def test_employee_success_and_unknown_are_not_rewritten(monkeypatch) -> None:
 
 
 def test_workflow_cancel_uses_the_shared_machine() -> None:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    service = WorkflowDefinitionAppService(session_factory=factory)
-    created = service.create_definition(
-        tenant_id=1,
-        name="cancel-gate",
-        nodes=[
-            {
-                "node_id": "n1",
-                "tool_id": "products",
-                "action": "query",
-                "params": {},
-                "risk": "low",
-                "idempotent": True,
-                "description": "查询",
-                "depends_on": [],
-            }
-        ],
-    )
-    run = service.start_run(created["id"])
+    engine, factory, service, created, run = _shared_setup_workflow_0(case_value_1="cancel-gate")
     with factory() as db:
         row = db.get(WorkflowRun, run["id"])
         row.status = "timed_out"
@@ -328,31 +333,7 @@ def test_employee_retry_approval_and_rejection(monkeypatch) -> None:
 
 
 def test_workflow_retry_approval_and_history() -> None:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    service = WorkflowDefinitionAppService(session_factory=factory)
-    created = service.create_definition(
-        tenant_id=1,
-        name="lifecycle",
-        nodes=[
-            {
-                "node_id": "n1",
-                "tool_id": "products",
-                "action": "query",
-                "params": {},
-                "risk": "low",
-                "idempotent": True,
-                "description": "查询",
-                "depends_on": [],
-            }
-        ],
-    )
-    run = service.start_run(created["id"])
+    engine, factory, service, created, run = _shared_setup_workflow_0(case_value_1="lifecycle")
     service._move_run(run["id"], "running", code="dispatch")
     scheduled = service.fail_run(run["id"], error_code="timeout", attempts=1)
     assert scheduled["status"] == "pending" and scheduled["id"] == run["id"]

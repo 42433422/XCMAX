@@ -22,6 +22,7 @@ export const useIndustryStore = defineStore('industry', () => {
   const currentConfig = ref<unknown>(null)
   const loading = ref(false)
   const settled = ref(false)
+  let pendingReads = 0
   const error = ref<string | null>(null)
   // Phase 2 会通过 templatePreviewApi.getTermRules 填充；Phase 1 先留空。
   const termRules = ref<Record<string, unknown>>({})
@@ -69,7 +70,8 @@ export const useIndustryStore = defineStore('industry', () => {
   }
 
   async function loadIndustries(options?: { timeoutMs?: number; quiet?: boolean }) {
-    loading.value = true
+    loading.value = ++pendingReads > 0
+    settled.value = false
     error.value = null
 
     try {
@@ -84,8 +86,8 @@ export const useIndustryStore = defineStore('industry', () => {
       console.error('Failed to load industries:', err)
       industries.value = []
     } finally {
-      loading.value = false
-      settled.value = true
+      loading.value = --pendingReads > 0
+      settled.value = !loading.value
     }
   }
 
@@ -102,7 +104,8 @@ export const useIndustryStore = defineStore('industry', () => {
   }
 
   async function loadCurrentIndustry(options?: { timeoutMs?: number; quiet?: boolean }) {
-    loading.value = true
+    loading.value = ++pendingReads > 0
+    settled.value = false
     error.value = null
     try {
       const response = await systemApi.getCurrentIndustry(options)
@@ -117,8 +120,8 @@ export const useIndustryStore = defineStore('industry', () => {
       const fallback = fallbackIndustry()
       if (fallback) applyCurrentIndustry(fallback)
     } finally {
-      loading.value = false
-      settled.value = true
+      loading.value = --pendingReads > 0
+      settled.value = !loading.value
     }
   }
 
@@ -131,7 +134,8 @@ export const useIndustryStore = defineStore('industry', () => {
     const epoch = productReadAccountEpoch.value
     const version = ++readVersion
     const currentRequest = () => epoch === productReadAccountEpoch.value && version === readVersion
-    loading.value = true
+    loading.value = ++pendingReads > 0
+    settled.value = false
     error.value = null
     if (verifiedEpoch !== epoch) {
       applyCurrentIndustry(null)
@@ -158,10 +162,8 @@ export const useIndustryStore = defineStore('industry', () => {
       if (currentRequest()) error.value = err instanceof Error ? err.message : '从服务器加载行业失败'
       throw err
     } finally {
-      if (currentRequest()) {
-        loading.value = false
-        settled.value = true
-      }
+      loading.value = --pendingReads > 0
+      settled.value = !loading.value
     }
   }
 

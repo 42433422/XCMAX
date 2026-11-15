@@ -4,19 +4,14 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from app.utils.scalars import coerce_int as _as_int
+
 
 def _as_float(value: Any) -> float:
     try:
         return float(value or 0.0)
     except (TypeError, ValueError):
         return 0.0
-
-
-def _as_int(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
 
 
 def build_employee_live_summary(

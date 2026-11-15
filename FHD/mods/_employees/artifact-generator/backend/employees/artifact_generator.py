@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 from typing import Any
 
+from app.mod_sdk.employee_failure import _failed
+
 
 def _safe(path: str) -> bool:
     value = PurePosixPath(path)
@@ -53,18 +55,6 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             "acceptance": [str(value)[:300] for value in acceptance[:100]],
         },
     )
-
-
-def _failed(message: str, code: str) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "status": "failed",
-        "summary": message,
-        "error_code": code,
-        "evidence": [],
-        "read_only": True,
-        "side_effects": [],
-    }
 
 
 def _receipt(

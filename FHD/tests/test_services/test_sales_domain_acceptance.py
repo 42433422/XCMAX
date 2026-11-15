@@ -997,6 +997,16 @@ class TestPurchaseUnitToCoreCustomerAbsorption:
         """歧义：同租户两个同名采购单位「客户B」→ fail-closed，零吸收、零订单。"""
         factory = _e2e_db
         _patch_sessionlocal(monkeypatch, factory)
+        # Model the supported pre-constraint database, not a newly bootstrapped
+        # schema. Published migrations never impose name uniqueness on legacy
+        # rows; those rows must remain ambiguous and must never be merged away.
+        from alembic.migration import MigrationContext
+        from alembic.operations import Operations
+
+        with factory.kw["bind"].begin() as connection:
+            operations = Operations(MigrationContext.configure(connection))
+            with operations.batch_alter_table("purchase_units") as batch:
+                batch.drop_constraint("uq_purchase_units_tenant_name", type_="unique")
         _seed_product_warehouse_only(factory, 1, "WH-T1")
         with tenant_scope(1):
             db = factory()
@@ -1010,6 +1020,7 @@ class TestPurchaseUnitToCoreCustomerAbsorption:
             result = SalesAppService().execute_closed_loop(payload)
         assert result["success"] is False, result
         assert result["failed_step"] == "resolve_customer"
+        assert _count_table(factory, PurchaseUnit, 1) == 2
         assert _count_table(factory, Customer, 1) == 0
         assert _count_business_rows(factory, 1) == {
             "orders": 0,

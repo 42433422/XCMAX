@@ -9,7 +9,7 @@ from app.fastapi_routes.domains.excel.excel_extract_shipment import (
 )
 
 
-def test_elt_failure_boundary_drops_internal_exception_text() -> None:
+def test_etl_failure_boundary_drops_internal_exception_text() -> None:
     result = _safe_failed_elt_result(
         {
             "success": False,

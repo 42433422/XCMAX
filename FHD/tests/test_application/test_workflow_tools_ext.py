@@ -10,6 +10,27 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+
+def _assert_shared_products_action_missing_file_0(self, monkeypatch, _shared_literal_0):
+    from app.application.tools.workflow import _handle_import_excel_to_database
+
+    with patch(
+        "app.application.tools.workflow.configured_db_write_token", return_value="test-token"
+    ):
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path",
+            return_value=Path("/nonexistent/file.xlsx"),
+        ):
+            result = json.loads(
+                _handle_import_excel_to_database(
+                    {"action": _shared_literal_0, "file_path": "/nonexistent/file.xlsx"},
+                    "/tmp",
+                    "test-token",
+                )
+            )
+    assert result["success"] is False
+
+
 # ========================= _read_excel_dataframe =========================
 
 
@@ -235,64 +256,13 @@ class TestHandleImportExcelToDatabase:
         assert result["success"] is False
 
     def test_products_action_missing_file(self, monkeypatch):
-        from app.application.tools.workflow import _handle_import_excel_to_database
-
-        with patch(
-            "app.application.tools.workflow.configured_db_write_token",
-            return_value="test-token",
-        ):
-            with patch(
-                "app.application.tools.workflow.resolve_safe_excel_path",
-                return_value=Path("/nonexistent/file.xlsx"),
-            ):
-                result = json.loads(
-                    _handle_import_excel_to_database(
-                        {"action": "products", "file_path": "/nonexistent/file.xlsx"},
-                        "/tmp",
-                        "test-token",
-                    )
-                )
-        assert result["success"] is False
+        return _assert_shared_products_action_missing_file_0(self, monkeypatch, "products")
 
     def test_customers_action_missing_file(self, monkeypatch):
-        from app.application.tools.workflow import _handle_import_excel_to_database
-
-        with patch(
-            "app.application.tools.workflow.configured_db_write_token",
-            return_value="test-token",
-        ):
-            with patch(
-                "app.application.tools.workflow.resolve_safe_excel_path",
-                return_value=Path("/nonexistent/file.xlsx"),
-            ):
-                result = json.loads(
-                    _handle_import_excel_to_database(
-                        {"action": "customers", "file_path": "/nonexistent/file.xlsx"},
-                        "/tmp",
-                        "test-token",
-                    )
-                )
-        assert result["success"] is False
+        return _assert_shared_products_action_missing_file_0(self, monkeypatch, "customers")
 
     def test_orders_action_missing_file(self, monkeypatch):
-        from app.application.tools.workflow import _handle_import_excel_to_database
-
-        with patch(
-            "app.application.tools.workflow.configured_db_write_token",
-            return_value="test-token",
-        ):
-            with patch(
-                "app.application.tools.workflow.resolve_safe_excel_path",
-                return_value=Path("/nonexistent/file.xlsx"),
-            ):
-                result = json.loads(
-                    _handle_import_excel_to_database(
-                        {"action": "orders", "file_path": "/nonexistent/file.xlsx"},
-                        "/tmp",
-                        "test-token",
-                    )
-                )
-        assert result["success"] is False
+        return _assert_shared_products_action_missing_file_0(self, monkeypatch, "orders")
 
 
 # ========================= _infer_product_field_mapping - extended ========

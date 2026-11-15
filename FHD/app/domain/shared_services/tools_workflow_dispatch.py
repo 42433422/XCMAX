@@ -79,6 +79,16 @@ class _WorkflowRouterMap(dict):
     def keys(self):
         return [key for key in super().keys() if key not in self._hidden_keys]
 
+    def get(self, key, default=None):
+        """外部 MCP 工具按 ``mcp__<server>`` 前缀动态路由，无需静态注册。"""
+        if str(key).startswith("mcp__"):
+            from app.application.tools.mcp.registry import call_mcp_tool
+
+            return lambda action, params, runtime_context, profile, user_message: call_mcp_tool(
+                str(key), action, params
+            )
+        return super().get(key, default)
+
 
 _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMap(
     {

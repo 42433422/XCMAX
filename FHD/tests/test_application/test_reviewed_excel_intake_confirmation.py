@@ -23,8 +23,8 @@ from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.path_io import path_utils
-from tests.test_application.test_elt_auto_ingest_service import rag_service as rag_service
-from tests.test_application.test_elt_preview_task_boundaries import ObservedExecutor
+from tests.test_application.test_etl_auto_ingest_service import rag_service as rag_service
+from tests.test_application.test_etl_preview_task_boundaries import ObservedExecutor
 from tests.test_application.test_reviewed_excel_template import (
     account_session_client as account_session_client,
 )

@@ -9,6 +9,24 @@ Substitutions for modules whose literal path does not exist:
 """
 
 import os
+from contextlib import contextmanager as _shared_scope_contextmanager
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(engine, insp):
+    with (
+        patch(
+            "app.shell.mod_business_scope.business_data_exposed",
+            return_value=True,
+        ),
+        patch(
+            "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
+            return_value=engine,
+        ),
+        patch("app.infrastructure.persistence.compat_db.queries.inspect", return_value=insp),
+    ):
+        yield None
+
 
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
@@ -758,17 +776,7 @@ class TestCompatDbQueriesUncoveredBranches:
         engine = MagicMock()
         insp = MagicMock()
         insp.get_table_names.return_value = ["other"]
-        with (
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=engine,
-            ),
-            patch("app.infrastructure.persistence.compat_db.queries.inspect", return_value=insp),
-        ):
+        with _shared_scope_case_0(engine, insp):
             result = compat_queries._load_purchase_units_rows_pg()
         assert result == []
 
@@ -818,17 +826,7 @@ class TestCompatDbQueriesUncoveredBranches:
         insp.get_table_names.return_value = ["purchase_units"]
         insp.get_columns.return_value = [{"name": "unit_name"}]
 
-        with (
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=engine,
-            ),
-            patch("app.infrastructure.persistence.compat_db.queries.inspect", return_value=insp),
-        ):
+        with _shared_scope_case_0(engine, insp):
             result = compat_queries._load_purchase_units_rows_pg()
         assert result == []
 
@@ -836,17 +834,7 @@ class TestCompatDbQueriesUncoveredBranches:
         engine = MagicMock()
         insp = MagicMock()
         insp.get_table_names.return_value = ["other"]
-        with (
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=engine,
-            ),
-            patch("app.infrastructure.persistence.compat_db.queries.inspect", return_value=insp),
-        ):
+        with _shared_scope_case_0(engine, insp):
             result = compat_queries._distinct_units_from_products_db_pg()
         assert result == []
 
@@ -855,17 +843,7 @@ class TestCompatDbQueriesUncoveredBranches:
         insp = MagicMock()
         insp.get_table_names.return_value = ["products"]
         insp.get_columns.return_value = [{"name": "id"}]
-        with (
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=True,
-            ),
-            patch(
-                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                return_value=engine,
-            ),
-            patch("app.infrastructure.persistence.compat_db.queries.inspect", return_value=insp),
-        ):
+        with _shared_scope_case_0(engine, insp):
             result = compat_queries._distinct_units_from_products_db_pg()
         assert result == []
 

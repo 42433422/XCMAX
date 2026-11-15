@@ -9,6 +9,34 @@ import pytest
 from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
 
 
+def _shared_setup_case_0(case_value_1, case_value_2):
+    result = _unwrap(
+        dispatch_legacy_tool_payload(
+            case_value_1,
+            case_value_2,
+            {},
+            json_response_fn=_json_fn,
+            hdr_getter=_hdr_getter,
+            parse_order_text_fn=_parse_order_text,
+        )
+    )
+    return result
+
+
+def _assert_shared_view_action_0(self, _shared_literal_0, _shared_literal_1, _shared_literal_2):
+    result = _unwrap(
+        dispatch_legacy_tool_payload(
+            _shared_literal_1,
+            _shared_literal_2,
+            {},
+            json_response_fn=_json_fn,
+            hdr_getter=_hdr_getter,
+            parse_order_text_fn=_parse_order_text,
+        )
+    )
+    assert result["_response"]["success"] is _shared_literal_0
+
+
 def _json_fn(data, status=200):
     return {"_response": data, "_status": status}
 
@@ -47,17 +75,7 @@ class TestProductsTool:
         assert "涂料" in result["_response"]["redirect"]
 
     def test_view_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "products",
-                "view",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "products", "view")
 
     def test_exec_action_with_view_sub(self):
         result = _unwrap(
@@ -78,17 +96,7 @@ class TestProductsTool:
 
 class TestChatTool:
     def test_chat_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "chat",
-                "open",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "chat", "open")
 
 
 # ========================= ai_ecosystem tool ==============================
@@ -96,31 +104,12 @@ class TestChatTool:
 
 class TestAiEcosystemTool:
     def test_list_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "ai_ecosystem",
-                "list",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
+        result = _shared_setup_case_0(case_value_1="ai_ecosystem", case_value_2="list")
         assert result["_response"]["success"] is True
         assert "data" in result["_response"]
 
     def test_other_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "ai_ecosystem",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "ai_ecosystem", "other")
 
 
 # ========================= materials_list tool ===========================
@@ -128,16 +117,7 @@ class TestAiEcosystemTool:
 
 class TestMaterialsListTool:
     def test_other_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "materials_list",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
+        result = _shared_setup_case_0(case_value_1="materials_list", case_value_2="other")
         assert result["_response"]["success"] is True
         assert "redirect" in result["_response"]
 
@@ -153,16 +133,7 @@ class TestShipmentRecordsTool:
             "app.bootstrap.get_shipment_app_service",
             return_value=mock_svc,
         ):
-            result = _unwrap(
-                dispatch_legacy_tool_payload(
-                    "shipment_records",
-                    "view",
-                    {},
-                    json_response_fn=_json_fn,
-                    hdr_getter=_hdr_getter,
-                    parse_order_text_fn=_parse_order_text,
-                )
-            )
+            result = _shared_setup_case_0(case_value_1="shipment_records", case_value_2="view")
         assert result["_response"]["success"] is True
 
 
@@ -171,17 +142,7 @@ class TestShipmentRecordsTool:
 
 class TestShipmentGenerateTool:
     def test_view_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "shipment_generate",
-                "view",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "shipment_generate", "view")
 
     def test_generate_action_with_mock(self):
         mock_svc = Mock()
@@ -208,30 +169,10 @@ class TestShipmentGenerateTool:
 
 class TestOrdersTool:
     def test_query_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "orders",
-                "query",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "orders", "query")
 
     def test_view_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "orders",
-                "view",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "orders", "view")
 
 
 # ========================= print tool ====================================
@@ -252,17 +193,7 @@ class TestPrintTool:
         assert result["_response"]["success"] is True
 
     def test_other_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "print",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "print", "other")
 
 
 # ========================= printer_list tool =============================
@@ -270,17 +201,7 @@ class TestPrintTool:
 
 class TestPrinterListTool:
     def test_other_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "printer_list",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "printer_list", "other")
 
 
 # ========================= materials tool ================================
@@ -288,17 +209,7 @@ class TestPrinterListTool:
 
 class TestMaterialsTool:
     def test_other_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "materials",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "materials", "other")
 
 
 # ========================= ocr tool ======================================
@@ -306,30 +217,10 @@ class TestMaterialsTool:
 
 class TestOcrTool:
     def test_scan_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "ocr",
-                "scan",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "ocr", "scan")
 
     def test_other_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "ocr",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "ocr", "other")
 
 
 # ========================= excel_decompose tool ==========================
@@ -337,17 +228,7 @@ class TestOcrTool:
 
 class TestExcelDecomposeTool:
     def test_decompose_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "excel_decompose",
-                "decompose",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "excel_decompose", "decompose")
 
 
 # ========================= excel_analyzer tool ===========================
@@ -355,17 +236,7 @@ class TestExcelDecomposeTool:
 
 class TestExcelAnalyzerTool:
     def test_analyze_no_file_path(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "excel_analyzer",
-                "analyze",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is False
+        return _assert_shared_view_action_0(self, False, "excel_analyzer", "analyze")
 
 
 # ========================= template_extract tool =========================
@@ -373,30 +244,10 @@ class TestExcelAnalyzerTool:
 
 class TestTemplateExtractTool:
     def test_view_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "template_extract",
-                "view",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "template_extract", "view")
 
     def test_no_file_path(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "template_extract",
-                "extract",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is False
+        return _assert_shared_view_action_0(self, False, "template_extract", "extract")
 
 
 # ========================= excel_toolkit tool ============================
@@ -404,17 +255,7 @@ class TestTemplateExtractTool:
 
 class TestExcelToolkitTool:
     def test_no_file_path(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "excel_toolkit",
-                "toolkit",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is False
+        return _assert_shared_view_action_0(self, False, "excel_toolkit", "toolkit")
 
 
 # ========================= shipment_template tool ========================
@@ -422,17 +263,7 @@ class TestExcelToolkitTool:
 
 class TestShipmentTemplateTool:
     def test_template_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "shipment_template",
-                "template",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "shipment_template", "template")
 
 
 # ========================= template_preview tool =========================
@@ -440,17 +271,7 @@ class TestShipmentTemplateTool:
 
 class TestTemplatePreviewTool:
     def test_preview_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "template_preview",
-                "preview",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "template_preview", "preview")
 
 
 # ========================= settings tool =================================
@@ -458,17 +279,7 @@ class TestTemplatePreviewTool:
 
 class TestSettingsTool:
     def test_view_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "settings",
-                "view",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "settings", "view")
 
 
 # ========================= tools_table tool ==============================
@@ -476,17 +287,7 @@ class TestSettingsTool:
 
 class TestToolsTableTool:
     def test_list_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "tools_table",
-                "list",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "tools_table", "list")
 
 
 # ========================= other_tools tool ==============================
@@ -494,17 +295,7 @@ class TestToolsTableTool:
 
 class TestOtherToolsTool:
     def test_list_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "other_tools",
-                "list",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "other_tools", "list")
 
 
 # ========================= database tool =================================
@@ -512,17 +303,7 @@ class TestOtherToolsTool:
 
 class TestDatabaseTool:
     def test_view_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "database",
-                "view",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "database", "view")
 
 
 # ========================= system tool ===================================
@@ -530,17 +311,7 @@ class TestDatabaseTool:
 
 class TestSystemTool:
     def test_view_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "system",
-                "view",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "system", "view")
 
 
 # ========================= upload_file tool ==============================
@@ -548,17 +319,7 @@ class TestSystemTool:
 
 class TestUploadFileTool:
     def test_upload_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "upload_file",
-                "upload",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "upload_file", "upload")
 
 
 # ========================= customers - extended ==========================
@@ -580,29 +341,10 @@ class TestCustomersToolExtended:
         assert "公司A" in result["_response"].get("redirect", "")
 
     def test_view_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "customers",
-                "view",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, True, "customers", "view")
 
     def test_add_action_missing_unit_name(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "customers",
-                "add",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
+        result = _shared_setup_case_0(case_value_1="customers", case_value_2="add")
         # Should fail because no unit_name
         assert result["_response"]["success"] is False or result["_status"] == 400
 
@@ -612,15 +354,4 @@ class TestCustomersToolExtended:
 
 class TestUnknownTool:
     def test_unknown_tool_id(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "completely_unknown_tool",
-                "any",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        # Unknown tools return 400
-        assert result["_response"]["success"] is False
+        return _assert_shared_view_action_0(self, False, "completely_unknown_tool", "any")

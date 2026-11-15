@@ -14,6 +14,20 @@ from app.fastapi_app.openapi_enrichment import (
 )
 
 
+def _shared_setup_case_0(case_value_1, case_value_2, case_value_3):
+    schema: dict[str, Any] = {
+        "paths": {
+            case_value_1: {
+                case_value_2: {
+                    "summary": case_value_3,
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        }
+    }
+    return schema
+
+
 class TestEnrichOpenapiSchema:
     """Tests for enrich_openapi_schema."""
 
@@ -52,30 +66,14 @@ class TestEnrichOpenapiSchema:
         assert result["paths"]["/api/test"]["get"]["tags"] == ["custom"]
 
     def test_metrics_path_gets_monitoring_tag(self) -> None:
-        schema: dict[str, Any] = {
-            "paths": {
-                "/metrics": {
-                    "get": {
-                        "summary": "",
-                        "responses": {"200": {"description": "OK"}},
-                    }
-                }
-            }
-        }
+        schema = _shared_setup_case_0(case_value_1="/metrics", case_value_2="get", case_value_3="")
         result = enrich_openapi_schema(schema)
         assert result["paths"]["/metrics"]["get"]["tags"] == ["monitoring"]
 
     def test_neurobus_path_gets_neurobus_tag(self) -> None:
-        schema: dict[str, Any] = {
-            "paths": {
-                "/api/neurobus/events": {
-                    "post": {
-                        "summary": "",
-                        "responses": {"200": {"description": "OK"}},
-                    }
-                }
-            }
-        }
+        schema = _shared_setup_case_0(
+            case_value_1="/api/neurobus/events", case_value_2="post", case_value_3=""
+        )
         result = enrich_openapi_schema(schema)
         assert result["paths"]["/api/neurobus/events"]["post"]["tags"] == ["neurobus"]
 
@@ -93,30 +91,16 @@ class TestEnrichOpenapiSchema:
         assert result["paths"]["/api/test"]["get"]["summary"] == "GET /api/test"
 
     def test_preserves_existing_summary(self) -> None:
-        schema: dict[str, Any] = {
-            "paths": {
-                "/api/test": {
-                    "get": {
-                        "summary": "My endpoint",
-                        "responses": {"200": {"description": "OK"}},
-                    }
-                }
-            }
-        }
+        schema = _shared_setup_case_0(
+            case_value_1="/api/test", case_value_2="get", case_value_3="My endpoint"
+        )
         result = enrich_openapi_schema(schema)
         assert result["paths"]["/api/test"]["get"]["summary"] == "My endpoint"
 
     def test_adds_description_from_summary(self) -> None:
-        schema: dict[str, Any] = {
-            "paths": {
-                "/api/test": {
-                    "get": {
-                        "summary": "My endpoint",
-                        "responses": {"200": {"description": "OK"}},
-                    }
-                }
-            }
-        }
+        schema = _shared_setup_case_0(
+            case_value_1="/api/test", case_value_2="get", case_value_3="My endpoint"
+        )
         result = enrich_openapi_schema(schema)
         assert result["paths"]["/api/test"]["get"]["description"] == "My endpoint"
 

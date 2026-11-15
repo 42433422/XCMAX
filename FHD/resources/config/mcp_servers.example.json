@@ -1,0 +1,32 @@
+{
+  "servers": {
+    "example-filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/tmp/xcagi-mcp"
+      ],
+      "env": {},
+      "timeout_seconds": 20,
+      "read_only_tools": []
+    },
+    "example-remote": {
+      "transport": "http",
+      "url": "https://example.com/mcp",
+      "headers": {
+        "X-Client": "xcagi"
+      },
+      "auth": {
+        "type": "client_credentials",
+        "token_url": "https://example.com/oauth/token",
+        "client_id": "REPLACE_ME",
+        "client_secret": "REPLACE_ME",
+        "scope": "mcp.read"
+      },
+      "timeout_seconds": 20,
+      "read_only_tools": []
+    }
+  }
+}

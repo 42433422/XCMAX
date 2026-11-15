@@ -10,6 +10,7 @@ from typing import Any
 from app.application.excel_vector_app_service import HashEmbedder
 from app.domain.excel.ports import VectorStorePort
 from app.infrastructure.persistence.user_memory_vector_store import get_user_memory_vector_store
+from app.utils.deployment import env_float as _env_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -241,7 +242,9 @@ class UserMemoryRagApplicationService:
         self._vector_store = vector_store or get_user_memory_vector_store()
         self._embedder = embedder or HashEmbedder()
 
-    def query(self, user_id: str, query_text: str, top_k: int = 5) -> dict[str, Any]:
+    def query(
+        self, user_id: str, query_text: str, top_k: int = 5, min_score: float | None = None
+    ) -> dict[str, Any]:
         if not user_id:
             return {"success": False, "message": "缺少 user_id"}
         query_text = str(query_text or "").strip()
@@ -279,20 +282,37 @@ class UserMemoryRagApplicationService:
             safe_content, safe_metadata = _memory_safe(hit.get("content"), hit.get("metadata"))
             safe_hits.append({**hit, "content": safe_content, "metadata": safe_metadata})
         hits = safe_hits[: max(1, min(20, int(top_k)))]
+        floor = (
+            _env_float("XCAGI_MEMORY_RAG_MIN_SCORE", 0.0) if min_score is None else float(min_score)
+        )
+        if floor > 0:
+            hits = [hit for hit in hits if float(hit.get("score") or 0.0) >= floor]
         return {
             "success": True,
             "user_id": user_id,
             "query": query_text,
             "top_k": top_k,
+            "min_score": floor,
             "hits": hits,
         }
 
     def format_for_prompt(
-        self, user_id: str, query_text: str, hits: list[dict[str, Any]], max_hits: int = 6
+        self,
+        user_id: str,
+        query_text: str,
+        hits: list[dict[str, Any]],
+        max_hits: int = 6,
+        max_chars: int | None = None,
     ) -> str:
+        budget = (
+            int(_env_float("XCAGI_MEMORY_RAG_PROMPT_CHARS", 1800))
+            if max_chars is None
+            else int(max_chars)
+        )
         if not hits:
-            return "【UserMemoryRAG】未召回用户记忆片段。"
-
+            message = "【UserMemoryRAG】未召回用户记忆片段。"
+            return message if len(message) <= budget else ""
+        footer = "优先参考以上片段的意图/习惯（不要编造片段中不存在的信息）。"
         lines: list[str] = ["【UserMemoryRAG】召回到以下用户记忆片段（用于辅助决策）:"]
         for idx, hit in enumerate(hits[:max_hits], start=1):
             score = float(hit.get("score") or 0.0)
@@ -315,12 +335,17 @@ class UserMemoryRagApplicationService:
             if len(preview) > 240:
                 preview = preview[:240] + "…"
 
-            lines.append(
+            line = (
                 f"{idx}. source={source}; intent={intent}; feedback={user_feedback or '-'}; corrected_intent={corrected_intent or '-'}; "
                 f"last_used={last_used or '-'}; slots({slot_str or '-'}) ; score={score:.4f}\n"
                 f"   content={preview}"
             )
-        lines.append("优先参考以上片段的意图/习惯（不要编造片段中不存在的信息）。")
+            if len("\n".join([*lines, line, footer])) > budget:
+                break
+            lines.append(line)
+        if len("\n".join([*lines, footer])) > budget:
+            return ""
+        lines.append(footer)
         return "\n".join(lines)
 
 

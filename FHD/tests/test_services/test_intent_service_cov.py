@@ -10,6 +10,29 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
+def _shared_setup_case_0(case_value_1, case_value_2):
+    matches = [
+        {
+            "id": case_value_1,
+            "tool_key": case_value_2,
+            "block_if_negated": False,
+            "keywords": [],
+        }
+    ]
+    return matches
+
+
+def _assert_shared_negation_intent_via_cancel_keyword_0(self, _shared_literal_0, _shared_literal_1):
+    from app.domain.neuro.reflex_arc import ReflexType
+    from app.domain.shared_services.intent_service import is_negation_intent
+
+    rr = _make_reflex(ReflexType.GREETING, triggered=False)
+    with patch("app.domain.shared_services.intent_service._reflex_arc") as arc:
+        arc.process.return_value = rr
+        assert is_negation_intent(_shared_literal_1) is _shared_literal_0
+
+
 # ---------------------------------------------------------------------------
 # Module-level patch helpers
 # ---------------------------------------------------------------------------
@@ -329,38 +352,21 @@ class TestRecognizeIntentsImpl:
         assert result["tool_key"] is None
 
     def test_shipment_generate_hint_added(self):
-        matches = [
-            {
-                "id": "shipment_generate",
-                "tool_key": "shipment_generate",
-                "block_if_negated": False,
-                "keywords": [],
-            }
-        ]
+        matches = _shared_setup_case_0(
+            case_value_1="shipment_generate", case_value_2="shipment_generate"
+        )
         result = self._run("生成发货单", matches=matches)
         assert "shipment_generate" in result["intent_hints"]
 
     def test_shipment_template_hint_added(self):
-        matches = [
-            {
-                "id": "shipment_template",
-                "tool_key": "shipment_template",
-                "block_if_negated": False,
-                "keywords": [],
-            }
-        ]
+        matches = _shared_setup_case_0(
+            case_value_1="shipment_template", case_value_2="shipment_template"
+        )
         result = self._run("发货单模板", matches=matches)
         assert "template_query" in result["intent_hints"]
 
     def test_upload_file_in_all_matched_tools_adds_hint(self):
-        matches = [
-            {
-                "id": "upload_file",
-                "tool_key": "upload_file",
-                "block_if_negated": False,
-                "keywords": [],
-            }
-        ]
+        matches = _shared_setup_case_0(case_value_1="upload_file", case_value_2="upload_file")
         result = self._run("上传文件", matches=matches)
         assert "upload_file" in result["intent_hints"]
 
@@ -906,41 +912,17 @@ class TestIsNegationIntentBranches:
 
     def test_negation_intent_via_cancel_keyword(self):
         """算了/取消/不用了 keyword path (line 197)."""
-        from app.domain.neuro.reflex_arc import ReflexType
-        from app.domain.shared_services.intent_service import is_negation_intent
-
-        rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        with patch("app.domain.shared_services.intent_service._reflex_arc") as arc:
-            arc.process.return_value = rr
-            assert is_negation_intent("算了吧") is True
+        return _assert_shared_negation_intent_via_cancel_keyword_0(self, True, "算了吧")
 
     def test_negation_intent_via_cancel_keyword_quxi(self):
-        from app.domain.neuro.reflex_arc import ReflexType
-        from app.domain.shared_services.intent_service import is_negation_intent
-
-        rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        with patch("app.domain.shared_services.intent_service._reflex_arc") as arc:
-            arc.process.return_value = rr
-            assert is_negation_intent("取消操作") is True
+        return _assert_shared_negation_intent_via_cancel_keyword_0(self, True, "取消操作")
 
     def test_negation_intent_falls_through_to_is_negation(self):
         """No DENIAL, no cancel keyword, but 不要 in msg -> True via is_negation."""
-        from app.domain.neuro.reflex_arc import ReflexType
-        from app.domain.shared_services.intent_service import is_negation_intent
-
-        rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        with patch("app.domain.shared_services.intent_service._reflex_arc") as arc:
-            arc.process.return_value = rr
-            assert is_negation_intent("不要开单") is True
+        return _assert_shared_negation_intent_via_cancel_keyword_0(self, True, "不要开单")
 
     def test_negation_intent_false_plain_message(self):
-        from app.domain.neuro.reflex_arc import ReflexType
-        from app.domain.shared_services.intent_service import is_negation_intent
-
-        rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        with patch("app.domain.shared_services.intent_service._reflex_arc") as arc:
-            arc.process.return_value = rr
-            assert is_negation_intent("查一下产品") is False
+        return _assert_shared_negation_intent_via_cancel_keyword_0(self, False, "查一下产品")
 
 
 # ---------------------------------------------------------------------------
@@ -1186,14 +1168,9 @@ class TestRecognizeIntentsImplExtra:
         from app.domain.shared_services.intent_service import recognize_intents
 
         rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        matches = [
-            {
-                "id": "shipment_generate",
-                "tool_key": "shipment_generate",
-                "block_if_negated": False,
-                "keywords": [],
-            }
-        ]
+        matches = _shared_setup_case_0(
+            case_value_1="shipment_generate", case_value_2="shipment_generate"
+        )
         engine = _make_engine(matches, [])
         cache = _make_cache(None)
         with (
@@ -1216,14 +1193,7 @@ class TestRecognizeIntentsImplExtra:
         from app.domain.shared_services.intent_service import recognize_intents
 
         rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        matches = [
-            {
-                "id": "upload_file",
-                "tool_key": "upload_file",
-                "block_if_negated": False,
-                "keywords": [],
-            }
-        ]
+        matches = _shared_setup_case_0(case_value_1="upload_file", case_value_2="upload_file")
         engine = _make_engine(matches, [])
         cache = _make_cache(None)
         with (
@@ -1241,14 +1211,9 @@ class TestRecognizeIntentsImplExtra:
         from app.domain.shared_services.intent_service import recognize_intents
 
         rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        matches = [
-            {
-                "id": "shipment_template",
-                "tool_key": "shipment_template",
-                "block_if_negated": False,
-                "keywords": [],
-            }
-        ]
+        matches = _shared_setup_case_0(
+            case_value_1="shipment_template", case_value_2="shipment_template"
+        )
         engine = _make_engine(matches, ["template_query"])  # hint engine returns template_query
         cache = _make_cache(None)
         with (
@@ -1286,14 +1251,9 @@ class TestRecognizeIntentsImplExtra:
         from app.domain.shared_services.intent_service import recognize_intents
 
         rr = _make_reflex(ReflexType.GREETING, triggered=False)
-        matches = [
-            {
-                "id": "shipment_generate",
-                "tool_key": "shipment_generate",
-                "block_if_negated": False,
-                "keywords": [],
-            }
-        ]
+        matches = _shared_setup_case_0(
+            case_value_1="shipment_generate", case_value_2="shipment_generate"
+        )
         engine = _make_engine(matches, [])
         cache = _make_cache(None)
         with (

@@ -88,6 +88,25 @@ from app.infrastructure.documents.price_list_export import (
     build_price_list_docx_bytes,
 )
 
+
+def _assert_shared_货号_recognized_as_model_0(
+    self,
+    _shared_literal_0,
+    _shared_literal_1,
+    _shared_literal_2,
+    _shared_literal_3,
+    _shared_literal_4,
+):
+    cells = [
+        MagicMock(text=_shared_literal_2),
+        MagicMock(text=_shared_literal_3),
+        MagicMock(text="规格"),
+        MagicMock(text=_shared_literal_4),
+    ]
+    with_serial, col_map = _parse_header_serial_and_column_map(cells)
+    assert col_map.get(_shared_literal_1) == _shared_literal_0
+
+
 # ---------------------------------------------------------------------------
 # Helpers — lightweight fakes that exercise real OOXML branches
 # ---------------------------------------------------------------------------
@@ -521,64 +540,22 @@ class TestParseHeaderSerialAndColumnMapBranches:
         assert "model" in col_map
 
     def test_货号_recognized_as_model(self):
-        cells = [
-            MagicMock(text="货号"),
-            MagicMock(text="名称"),
-            MagicMock(text="规格"),
-            MagicMock(text="单价"),
-        ]
-        with_serial, col_map = _parse_header_serial_and_column_map(cells)
-        assert col_map.get("model") == 0
+        return _assert_shared_货号_recognized_as_model_0(self, 0, "model", "货号", "名称", "单价")
 
     def test_编码_recognized_as_model(self):
-        cells = [
-            MagicMock(text="编码"),
-            MagicMock(text="名称"),
-            MagicMock(text="规格"),
-            MagicMock(text="单价"),
-        ]
-        with_serial, col_map = _parse_header_serial_and_column_map(cells)
-        assert col_map.get("model") == 0
+        return _assert_shared_货号_recognized_as_model_0(self, 0, "model", "编码", "名称", "单价")
 
     def test_品名_recognized_as_name(self):
-        cells = [
-            MagicMock(text="型号"),
-            MagicMock(text="品名"),
-            MagicMock(text="规格"),
-            MagicMock(text="单价"),
-        ]
-        with_serial, col_map = _parse_header_serial_and_column_map(cells)
-        assert col_map.get("name") == 1
+        return _assert_shared_货号_recognized_as_model_0(self, 1, "name", "型号", "品名", "单价")
 
     def test_售价_recognized_as_price(self):
-        cells = [
-            MagicMock(text="型号"),
-            MagicMock(text="名称"),
-            MagicMock(text="规格"),
-            MagicMock(text="售价"),
-        ]
-        with_serial, col_map = _parse_header_serial_and_column_map(cells)
-        assert col_map.get("price") == 3
+        return _assert_shared_货号_recognized_as_model_0(self, 3, "price", "型号", "名称", "售价")
 
     def test_定价_recognized_as_price(self):
-        cells = [
-            MagicMock(text="型号"),
-            MagicMock(text="名称"),
-            MagicMock(text="规格"),
-            MagicMock(text="定价"),
-        ]
-        with_serial, col_map = _parse_header_serial_and_column_map(cells)
-        assert col_map.get("price") == 3
+        return _assert_shared_货号_recognized_as_model_0(self, 3, "price", "型号", "名称", "定价")
 
     def test_价格_without_产品_or_名称_recognized_as_price(self):
-        cells = [
-            MagicMock(text="型号"),
-            MagicMock(text="名称"),
-            MagicMock(text="规格"),
-            MagicMock(text="价格"),
-        ]
-        with_serial, col_map = _parse_header_serial_and_column_map(cells)
-        assert col_map.get("price") == 3
+        return _assert_shared_货号_recognized_as_model_0(self, 3, "price", "型号", "名称", "价格")
 
     def test_价格_with_产品_not_recognized_as_price(self):
         cells = [
@@ -618,24 +595,14 @@ class TestParseHeaderSerialAndColumnMapBranches:
         assert col_map["model"] == 1
 
     def test_compact_产品编码_recognized_as_model(self):
-        cells = [
-            MagicMock(text="产品编码"),
-            MagicMock(text="名称"),
-            MagicMock(text="规格"),
-            MagicMock(text="单价"),
-        ]
-        with_serial, col_map = _parse_header_serial_and_column_map(cells)
-        assert col_map.get("model") == 0
+        return _assert_shared_货号_recognized_as_model_0(
+            self, 0, "model", "产品编码", "名称", "单价"
+        )
 
     def test_compact_产品名称_recognized_as_name(self):
-        cells = [
-            MagicMock(text="型号"),
-            MagicMock(text="产品名称"),
-            MagicMock(text="规格"),
-            MagicMock(text="单价"),
-        ]
-        with_serial, col_map = _parse_header_serial_and_column_map(cells)
-        assert col_map.get("name") == 1
+        return _assert_shared_货号_recognized_as_model_0(
+            self, 1, "name", "型号", "产品名称", "单价"
+        )
 
 
 # ---------------------------------------------------------------------------

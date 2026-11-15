@@ -24,6 +24,31 @@ from __future__ import annotations
 
 import os
 
+
+def _assert_shared_o8_signoff_backend_info_0(
+    self, monkeypatch, _shared_literal_0, _shared_literal_1, _shared_literal_2
+):
+    from app.domain.shared_services.operations_line_bridge import compute_operations_health
+
+    monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
+    monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
+    monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
+    mock_signoff = MagicMock(return_value={"backend": _shared_literal_1, "note": _shared_literal_2})
+    mock_module = MagicMock()
+    mock_module.signoff_backend_info = mock_signoff
+    with (
+        patch(
+            "app.domain.shared_services.operations_line_bridge._scan_pipelines",
+            return_value=(0, 0, 0, {}),
+        ),
+        patch.dict(
+            "sys.modules", {"app.domain.shared_services.user_cs_delivery_signoff": mock_module}
+        ),
+    ):
+        result = compute_operations_health()
+    assert result["steps"]["O8"]["status"] == _shared_literal_0
+
+
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
 import json
@@ -2626,52 +2651,14 @@ class TestComputeOperationsHealth:
         assert result["steps"]["O4"]["status"] == "partial"
 
     def test_o8_signoff_backend_info(self, monkeypatch):
-        from app.domain.shared_services.operations_line_bridge import compute_operations_health
-
-        monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
-        monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
-        monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
-
-        mock_signoff = MagicMock(return_value={"backend": "postgres", "note": "PG签收存储"})
-        mock_module = MagicMock()
-        mock_module.signoff_backend_info = mock_signoff
-
-        with (
-            patch(
-                "app.domain.shared_services.operations_line_bridge._scan_pipelines",
-                return_value=(0, 0, 0, {}),
-            ),
-            patch.dict(
-                "sys.modules",
-                {"app.domain.shared_services.user_cs_delivery_signoff": mock_module},
-            ),
-        ):
-            result = compute_operations_health()
-        assert result["steps"]["O8"]["status"] == "done"
+        return _assert_shared_o8_signoff_backend_info_0(
+            self, monkeypatch, "done", "postgres", "PG签收存储"
+        )
 
     def test_o8_signoff_sqlite_backend(self, monkeypatch):
-        from app.domain.shared_services.operations_line_bridge import compute_operations_health
-
-        monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
-        monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
-        monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
-
-        mock_signoff = MagicMock(return_value={"backend": "sqlite", "note": "本地签收"})
-        mock_module = MagicMock()
-        mock_module.signoff_backend_info = mock_signoff
-
-        with (
-            patch(
-                "app.domain.shared_services.operations_line_bridge._scan_pipelines",
-                return_value=(0, 0, 0, {}),
-            ),
-            patch.dict(
-                "sys.modules",
-                {"app.domain.shared_services.user_cs_delivery_signoff": mock_module},
-            ),
-        ):
-            result = compute_operations_health()
-        assert result["steps"]["O8"]["status"] == "partial"
+        return _assert_shared_o8_signoff_backend_info_0(
+            self, monkeypatch, "partial", "sqlite", "本地签收"
+        )
 
     def test_o10_reconciliation_status(self, monkeypatch):
         from app.domain.shared_services.operations_line_bridge import compute_operations_health

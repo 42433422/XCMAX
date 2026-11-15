@@ -7,6 +7,22 @@ import json
 from vibe_coding.cli import build_parser, main
 
 
+def _shared_setup_cli_0(tmp_path, capsys):
+    main(
+        [
+            "--store-dir",
+            str(tmp_path),
+            "--mock",
+            "code",
+            "make demo",
+            "--mode",
+            "direct",
+        ]
+    )
+    capsys.readouterr()
+    return None
+
+
 def test_parser_has_all_subcommands():
     parser = build_parser()
     sub = next(
@@ -36,18 +52,7 @@ def test_cli_code_with_mock(tmp_path, capsys):
 
 
 def test_cli_run_after_code(tmp_path, capsys):
-    main(
-        [
-            "--store-dir",
-            str(tmp_path),
-            "--mock",
-            "code",
-            "make demo",
-            "--mode",
-            "direct",
-        ]
-    )
-    capsys.readouterr()
+    _shared_setup_cli_0(tmp_path, capsys)
     rc = main(
         [
             "--store-dir",
@@ -66,18 +71,7 @@ def test_cli_run_after_code(tmp_path, capsys):
 
 
 def test_cli_list_after_code(tmp_path, capsys):
-    main(
-        [
-            "--store-dir",
-            str(tmp_path),
-            "--mock",
-            "code",
-            "make demo",
-            "--mode",
-            "direct",
-        ]
-    )
-    capsys.readouterr()
+    _shared_setup_cli_0(tmp_path, capsys)
     rc = main(["--store-dir", str(tmp_path), "--mock", "list"])
     assert rc == 0
     out = capsys.readouterr().out
@@ -86,18 +80,7 @@ def test_cli_list_after_code(tmp_path, capsys):
 
 
 def test_cli_run_invalid_json_returns_2(tmp_path, capsys):
-    main(
-        [
-            "--store-dir",
-            str(tmp_path),
-            "--mock",
-            "code",
-            "make demo",
-            "--mode",
-            "direct",
-        ]
-    )
-    capsys.readouterr()
+    _shared_setup_cli_0(tmp_path, capsys)
     rc = main(
         [
             "--store-dir",
@@ -112,18 +95,7 @@ def test_cli_run_invalid_json_returns_2(tmp_path, capsys):
 
 
 def test_cli_report_after_code(tmp_path, capsys):
-    main(
-        [
-            "--store-dir",
-            str(tmp_path),
-            "--mock",
-            "code",
-            "make demo",
-            "--mode",
-            "direct",
-        ]
-    )
-    capsys.readouterr()
+    _shared_setup_cli_0(tmp_path, capsys)
     rc = main(["--store-dir", str(tmp_path), "--mock", "report"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from collections.abc import Callable
 from typing import Any, cast
 
 import httpx
 
+from app.infrastructure.observability.metrics import observe_plan_generation
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -201,11 +203,39 @@ class LLMWorkflowPlanner:
         # synthesize an executable replacement when the model output is missing.
         from app.infrastructure.modstore_transport import MarketModelError
 
+        started = time.perf_counter()
         try:
             planned = self._plan_with_llm(plan_id, user_id, message, registry_for_plan, context)
         except MarketModelError as exc:
             context["planning_failure_reason"] = str(exc)
             planned = None
+            observe_plan_generation(
+                outcome="failure", duration_ms=(time.perf_counter() - started) * 1000
+            )
+        else:
+            observe_plan_generation(
+                outcome="success", duration_ms=(time.perf_counter() - started) * 1000
+            )
+        repair_trace: dict[str, Any] = {}
+        if planned is not None:
+            from app.application.workflow.plan_repair import repair_plan
+            from app.infrastructure.llm.model_admission import model_rate_limit_scope
+
+            with model_rate_limit_scope(context):
+                planned, repair_trace = repair_plan(
+                    planned=planned,
+                    plan_id=plan_id,
+                    message=message,
+                    context=context,
+                    tool_registry=registry_for_plan,
+                    validate=validate_candidate,
+                    complete=self.complete_messages,
+                )
+            if planned is None:
+                errors = repair_trace.get("errors") or []
+                if errors:
+                    context["planning_failure_reason"] = str(errors[-1].get("message") or "")
+                logger.warning("计划修复未成功，本轮不执行: %s", repair_trace.get("errors"))
         # 统一 Agent Runtime 接缝：把 pre-plan 记忆召回落上计划元数据，
         # 供编排器转成 run.memory_references（主链路可观测闭合）。
         recall_meta = {
@@ -213,6 +243,11 @@ class LLMWorkflowPlanner:
             for key in ("user_memory_rag", "memory_v2")
             if isinstance(context.get(key), dict)
         }
+        if planned is not None and repair_trace:
+            try:
+                planned.metadata["plan_repair"] = repair_trace
+            except (AttributeError, TypeError):
+                logger.debug("plan metadata 不支持 plan_repair 附加", exc_info=True)
         if recall_meta and planned is not None:
             try:
                 planned.metadata["memory_recall"] = recall_meta
@@ -247,6 +282,7 @@ class LLMWorkflowPlanner:
         context: dict[str, Any] | None = None,
         temperature: float = 0.1,
         max_tokens: int = 1200,
+        **extra: Any,
     ) -> dict[str, Any] | None:
         """Send a bounded model task through this planner's configured provider."""
         completion = (
@@ -259,6 +295,7 @@ class LLMWorkflowPlanner:
             http_client_factory=self._http_client_factory or _get_planner_http_client,
             temperature=temperature,
             max_tokens=max_tokens,
+            **extra,
         )
 
     def _plan_with_llm(

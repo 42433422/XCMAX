@@ -13,6 +13,39 @@ from app.infrastructure.repositories.product_repository_impl import (
 )
 
 
+def _setup_shared_0(mock_to_domain, mock_get_db):
+    mock_to_domain.return_value = MagicMock()
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.filter.return_value = mock_query
+    mock_query.order_by.return_value = mock_query
+    mock_query.limit.return_value = mock_query
+    mock_query.offset.return_value = mock_query
+    mock_query.count.return_value = 0
+    mock_query.all.return_value = []
+    mock_db.query.return_value = mock_query
+    mock_get_db.return_value = _mock_db_ctx(mock_db)
+    return (mock_db, mock_query)
+
+
+def _assert_shared_with_keyword_single_segment_0(
+    self, mock_to_domain, mock_get_db, repo, _shared_literal_0
+):
+    mock_to_domain.return_value = MagicMock()
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.filter.return_value = mock_query
+    mock_query.order_by.return_value = mock_query
+    mock_query.limit.return_value = mock_query
+    mock_query.offset.return_value = mock_query
+    mock_query.count.return_value = 0
+    mock_query.all.return_value = []
+    mock_db.query.return_value = mock_query
+    mock_get_db.return_value = _mock_db_ctx(mock_db)
+    result = repo.find_all(page=1, per_page=20, keyword=_shared_literal_0)
+    assert isinstance(result, tuple)
+
+
 @pytest.fixture
 def repo():
     return SQLAlchemyProductRepository()
@@ -279,17 +312,7 @@ class TestFindAllRepo:
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
     def test_with_unit_name_filter(self, mock_to_domain, mock_get_db, repo):
-        mock_to_domain.return_value = MagicMock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+        mock_db, mock_query = _setup_shared_0(mock_to_domain, mock_get_db)
 
         result = repo.find_all(page=1, per_page=20, unit_name="箱")
         assert isinstance(result, tuple)
@@ -297,17 +320,7 @@ class TestFindAllRepo:
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
     def test_with_model_number_filter(self, mock_to_domain, mock_get_db, repo):
-        mock_to_domain.return_value = MagicMock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+        mock_db, mock_query = _setup_shared_0(mock_to_domain, mock_get_db)
 
         result = repo.find_all(page=1, per_page=20, model_number="ABC-123")
         assert isinstance(result, tuple)
@@ -315,17 +328,7 @@ class TestFindAllRepo:
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
     def test_with_model_number_empty_string(self, mock_to_domain, mock_get_db, repo):
-        mock_to_domain.return_value = MagicMock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+        mock_db, mock_query = _setup_shared_0(mock_to_domain, mock_get_db)
 
         result = repo.find_all(page=1, per_page=20, model_number="  ")
         assert isinstance(result, tuple)
@@ -333,56 +336,23 @@ class TestFindAllRepo:
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
     def test_with_keyword_single_segment(self, mock_to_domain, mock_get_db, repo):
-        mock_to_domain.return_value = MagicMock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        result = repo.find_all(page=1, per_page=20, keyword="测试")
-        assert isinstance(result, tuple)
+        return _assert_shared_with_keyword_single_segment_0(
+            self, mock_to_domain, mock_get_db, repo, "测试"
+        )
 
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
     def test_with_keyword_multi_segment(self, mock_to_domain, mock_get_db, repo):
-        mock_to_domain.return_value = MagicMock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        result = repo.find_all(page=1, per_page=20, keyword="测试 9803")
-        assert isinstance(result, tuple)
+        return _assert_shared_with_keyword_single_segment_0(
+            self, mock_to_domain, mock_get_db, repo, "测试 9803"
+        )
 
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
     def test_with_keyword_empty_after_strip(self, mock_to_domain, mock_get_db, repo):
-        mock_to_domain.return_value = MagicMock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        result = repo.find_all(page=1, per_page=20, keyword="  ")
-        assert isinstance(result, tuple)
+        return _assert_shared_with_keyword_single_segment_0(
+            self, mock_to_domain, mock_get_db, repo, "  "
+        )
 
 
 class TestFindAllDict:

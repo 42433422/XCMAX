@@ -1,4 +1,4 @@
-"""CPU inference tasks (OCR / intent) — Tier C inference queue."""
+"""CPU inference tasks (OCR) — Tier C inference queue."""
 
 from __future__ import annotations
 
@@ -26,11 +26,3 @@ def run_paddle_ocr_task(self, image_path: str):
     except RECOVERABLE_ERRORS as exc:
         logger.exception("inference OCR failed")
         raise self.retry(exc=exc, countdown=5)
-
-
-@celery_app.task(bind=True, max_retries=1, queue="inference")
-def run_intent_recognition_task(self, text: str, **kwargs):
-    from app.domain.conversation.unified_intent_recognizer import get_unified_intent_recognizer
-
-    recognizer = get_unified_intent_recognizer()
-    return recognizer.recognize(text)

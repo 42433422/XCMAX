@@ -46,6 +46,45 @@ from scripts.autonomy.types import (
     Signal,
 )
 
+
+def _shared_setup_rollback_0(tmp_path, adapter_for_test, case_value_1, case_value_2):
+    rollback_tarball = tmp_path / ".deploy-last.tar.gz"
+    rollback_tarball.write_bytes(b"fake tarball")
+    truth = RuntimeTruthSnapshot(
+        ts=int(time.time() * 1000),
+        deploy_root=str(tmp_path),
+        manifest_path=str(tmp_path / "fhd-manifest.json"),
+        compose_status="absent",
+        health_ok=True,
+        service_running=True,
+        pending_rollback_marker=case_value_1,
+        disk_usage_percent=50.0,
+        config_fingerprint_changed=False,
+        last_backup_ts=int(time.time() * 1000),
+        app_version="10.0.0",
+        build_sha="abc123",
+        restart_count=0,
+        manifest_exists=True,
+        manifest_frozen=False,
+    )
+
+    action = Action(
+        type=ActionType.ROLLBACK_TO_LAST_TARBALL,
+        params={"reason": "test"},
+        idempotency_key=case_value_2,
+        max_attempts=1,
+        risk=RiskLevel.HIGH,
+    )
+    plan = Plan(
+        diagnosis=Diagnosis(root_cause="test", confidence=0.8, detail="test", evidence=[]),
+        actions=[action],
+    )
+    state = WatcherState()
+
+    audits = execute_plan(adapter_for_test, plan, truth, None, state, dry_run=False)
+    return rollback_tarball, truth, action, plan, state, audits
+
+
 # --------------------------------------------------------------------------- #
 # 工具函数
 # --------------------------------------------------------------------------- #
@@ -840,40 +879,9 @@ class TestCrossTierGateIntegration:
         monkeypatch.delenv("XCAGI_CROSS_TIER_GATE", raising=False)
 
         # 构造 truth：有 .deploy-last.tar.gz（ImpactPredictor 放行）+ pending marker
-        rollback_tarball = tmp_path / ".deploy-last.tar.gz"
-        rollback_tarball.write_bytes(b"fake tarball")
-        truth = RuntimeTruthSnapshot(
-            ts=int(time.time() * 1000),
-            deploy_root=str(tmp_path),
-            manifest_path=str(tmp_path / "fhd-manifest.json"),
-            compose_status="absent",
-            health_ok=True,
-            service_running=True,
-            pending_rollback_marker=True,
-            disk_usage_percent=50.0,
-            config_fingerprint_changed=False,
-            last_backup_ts=int(time.time() * 1000),
-            app_version="10.0.0",
-            build_sha="abc123",
-            restart_count=0,
-            manifest_exists=True,
-            manifest_frozen=False,
+        rollback_tarball, truth, action, plan, state, audits = _shared_setup_rollback_0(
+            tmp_path, adapter_for_test, case_value_1=True, case_value_2="test:rollback:gate"
         )
-
-        action = Action(
-            type=ActionType.ROLLBACK_TO_LAST_TARBALL,
-            params={"reason": "test"},
-            idempotency_key="test:rollback:gate",
-            max_attempts=1,
-            risk=RiskLevel.HIGH,
-        )
-        plan = Plan(
-            diagnosis=Diagnosis(root_cause="test", confidence=0.8, detail="test", evidence=[]),
-            actions=[action],
-        )
-        state = WatcherState()
-
-        audits = execute_plan(adapter_for_test, plan, truth, None, state, dry_run=False)
 
         assert len(audits) == 1
         audit_action = audits[0].action
@@ -895,40 +903,9 @@ class TestCrossTierGateIntegration:
         """pending_rollback_marker=False → CrossTierGate 放行（execute_action 会被调用）。"""
         monkeypatch.delenv("XCAGI_CROSS_TIER_GATE", raising=False)
 
-        rollback_tarball = tmp_path / ".deploy-last.tar.gz"
-        rollback_tarball.write_bytes(b"fake tarball")
-        truth = RuntimeTruthSnapshot(
-            ts=int(time.time() * 1000),
-            deploy_root=str(tmp_path),
-            manifest_path=str(tmp_path / "fhd-manifest.json"),
-            compose_status="absent",
-            health_ok=True,
-            service_running=True,
-            pending_rollback_marker=False,
-            disk_usage_percent=50.0,
-            config_fingerprint_changed=False,
-            last_backup_ts=int(time.time() * 1000),
-            app_version="10.0.0",
-            build_sha="abc123",
-            restart_count=0,
-            manifest_exists=True,
-            manifest_frozen=False,
+        rollback_tarball, truth, action, plan, state, audits = _shared_setup_rollback_0(
+            tmp_path, adapter_for_test, case_value_1=False, case_value_2="test:rollback:gate2"
         )
-
-        action = Action(
-            type=ActionType.ROLLBACK_TO_LAST_TARBALL,
-            params={"reason": "test"},
-            idempotency_key="test:rollback:gate2",
-            max_attempts=1,
-            risk=RiskLevel.HIGH,
-        )
-        plan = Plan(
-            diagnosis=Diagnosis(root_cause="test", confidence=0.8, detail="test", evidence=[]),
-            actions=[action],
-        )
-        state = WatcherState()
-
-        audits = execute_plan(adapter_for_test, plan, truth, None, state, dry_run=False)
 
         assert len(audits) == 1
         # 应执行（ImpactPredictor + CrossTierGate 都放行；adapter.execute_action 真实调用会失败但不影响断言）
@@ -949,40 +926,10 @@ class TestCrossTierGateIntegration:
         """env XCAGI_CROSS_TIER_GATE=0 → 门禁关闭，ImpactPredictor 仍拦截 pending marker。"""
         monkeypatch.setenv("XCAGI_CROSS_TIER_GATE", "0")
 
-        rollback_tarball = tmp_path / ".deploy-last.tar.gz"
-        rollback_tarball.write_bytes(b"fake tarball")
-        truth = RuntimeTruthSnapshot(
-            ts=int(time.time() * 1000),
-            deploy_root=str(tmp_path),
-            manifest_path=str(tmp_path / "fhd-manifest.json"),
-            compose_status="absent",
-            health_ok=True,
-            service_running=True,
-            pending_rollback_marker=True,  # 会触发 ImpactPredictor 拦截
-            disk_usage_percent=50.0,
-            config_fingerprint_changed=False,
-            last_backup_ts=int(time.time() * 1000),
-            app_version="10.0.0",
-            build_sha="abc123",
-            restart_count=0,
-            manifest_exists=True,
-            manifest_frozen=False,
+        # 会触发 ImpactPredictor 拦截
+        rollback_tarball, truth, action, plan, state, audits = _shared_setup_rollback_0(
+            tmp_path, adapter_for_test, case_value_1=True, case_value_2="test:rollback:gate3"
         )
-
-        action = Action(
-            type=ActionType.ROLLBACK_TO_LAST_TARBALL,
-            params={"reason": "test"},
-            idempotency_key="test:rollback:gate3",
-            max_attempts=1,
-            risk=RiskLevel.HIGH,
-        )
-        plan = Plan(
-            diagnosis=Diagnosis(root_cause="test", confidence=0.8, detail="test", evidence=[]),
-            actions=[action],
-        )
-        state = WatcherState()
-
-        audits = execute_plan(adapter_for_test, plan, truth, None, state, dry_run=False)
 
         assert len(audits) == 1
         audit_action = audits[0].action

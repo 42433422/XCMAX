@@ -22,6 +22,49 @@ from app.infrastructure.persistence.shipment_record_query_impl import (
     _record_to_dict,
 )
 
+
+def _setup_shared_0():
+    mock_db = MagicMock()
+    mock_inspector = MagicMock()
+    mock_inspector.get_table_names.return_value = ["shipment_records"]
+    mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
+    mock_q = MagicMock()
+    mock_db.query.return_value = mock_q
+    mock_q.filter.return_value = mock_q
+    mock_q.count.return_value = 0
+    mock_q.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
+    return (mock_db, mock_inspector, mock_q)
+
+
+def _assert_shared_with_unit_name_exact_match_0(self, query, _shared_literal_0):
+    mock_db = MagicMock()
+    mock_inspector = MagicMock()
+    mock_inspector.get_table_names.return_value = ["shipment_records"]
+    mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
+    mock_q = MagicMock()
+    mock_db.query.return_value = mock_q
+    mock_q.filter.return_value = mock_q
+    mock_q.order_by.return_value.limit.return_value.all.return_value = [_make_record()]
+    mock_resolved = MagicMock()
+    mock_resolved.unit_name = "测试客户"
+    with (
+        patch(
+            "app.infrastructure.persistence.shipment_record_query_impl.get_db",
+            return_value=_mock_db_ctx(mock_db),
+        ),
+        patch(
+            "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
+            return_value=mock_inspector,
+        ),
+        patch(
+            "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
+            return_value=mock_resolved,
+        ),
+    ):
+        result = query.get_shipment_records(unit_name=_shared_literal_0)
+    assert len(result) == 1
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -158,15 +201,7 @@ class TestRecordToDict:
 class TestQueryShipmentsAdditional:
     def test_resolve_purchase_unit_returns_none(self, query):
         """When resolve_purchase_unit returns None, query_unit stays as original."""
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-        mock_q = MagicMock()
-        mock_db.query.return_value = mock_q
-        mock_q.filter.return_value = mock_q
-        mock_q.count.return_value = 0
-        mock_q.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
+        mock_db, mock_inspector, mock_q = _setup_shared_0()
 
         with (
             patch(
@@ -189,15 +224,7 @@ class TestQueryShipmentsAdditional:
         mock_q.filter.assert_called()
 
     def test_with_start_date(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-        mock_q = MagicMock()
-        mock_db.query.return_value = mock_q
-        mock_q.filter.return_value = mock_q
-        mock_q.count.return_value = 0
-        mock_q.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
+        mock_db, mock_inspector, mock_q = _setup_shared_0()
 
         with (
             patch(
@@ -219,15 +246,7 @@ class TestQueryShipmentsAdditional:
         assert mock_q.filter.call_count >= 1
 
     def test_with_end_date(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-        mock_q = MagicMock()
-        mock_db.query.return_value = mock_q
-        mock_q.filter.return_value = mock_q
-        mock_q.count.return_value = 0
-        mock_q.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
+        mock_db, mock_inspector, mock_q = _setup_shared_0()
 
         with (
             patch(
@@ -249,15 +268,7 @@ class TestQueryShipmentsAdditional:
         assert mock_q.filter.call_count >= 1
 
     def test_with_both_dates(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-        mock_q = MagicMock()
-        mock_db.query.return_value = mock_q
-        mock_q.filter.return_value = mock_q
-        mock_q.count.return_value = 0
-        mock_q.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
+        mock_db, mock_inspector, mock_q = _setup_shared_0()
 
         with (
             patch(
@@ -607,70 +618,11 @@ class TestGetShipmentRecords:
         assert len(result) == 1
 
     def test_with_unit_name_exact_match(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-        mock_q = MagicMock()
-        mock_db.query.return_value = mock_q
-        mock_q.filter.return_value = mock_q
-        mock_q.order_by.return_value.limit.return_value.all.return_value = [_make_record()]
-
-        mock_resolved = MagicMock()
-        mock_resolved.unit_name = "测试客户"
-
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-                return_value=mock_inspector,
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
-                return_value=mock_resolved,
-            ),
-        ):
-            result = query.get_shipment_records(unit_name="测试")
-
-        assert len(result) == 1
+        return _assert_shared_with_unit_name_exact_match_0(self, query, "测试")
 
     def test_unit_name_no_exact_match_strip_fallback(self, query):
         """When exact match returns empty, tries strip exact fallback."""
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-
-        # First query (exact) returns empty, second (strip exact) returns results
-        mock_q = MagicMock()
-        mock_db.query.return_value = mock_q
-        mock_q.filter.return_value = mock_q
-        mock_q.order_by.return_value.limit.return_value.all.return_value = [_make_record()]
-
-        mock_resolved = MagicMock()
-        mock_resolved.unit_name = "测试客户"
-
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-                return_value=mock_inspector,
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
-                return_value=mock_resolved,
-            ),
-        ):
-            result = query.get_shipment_records(unit_name="测试")
-
-        # The exact match returns results (mock returns same for all queries)
-        assert len(result) == 1
+        return _assert_shared_with_unit_name_exact_match_0(self, query, "测试")
 
     def test_unit_name_no_exact_no_strip_fuzzy_fallback(self, query):
         """When exact and strip exact return empty, tries fuzzy fallback.
@@ -896,36 +848,7 @@ class TestGetShipmentRecords:
         assert result == []
 
     def test_unit_name_with_whitespace_stripped(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-
-        mock_q = MagicMock()
-        mock_db.query.return_value = mock_q
-        mock_q.filter.return_value = mock_q
-        mock_q.order_by.return_value.limit.return_value.all.return_value = [_make_record()]
-
-        mock_resolved = MagicMock()
-        mock_resolved.unit_name = "测试客户"
-
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-                return_value=mock_inspector,
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
-                return_value=mock_resolved,
-            ),
-        ):
-            result = query.get_shipment_records(unit_name="  测试  ")
-
-        assert len(result) == 1
+        return _assert_shared_with_unit_name_exact_match_0(self, query, "  测试  ")
 
     def test_fuzzy_norm_with_resolve_error(self, query):
         """When fuzzy norm() calls resolve_purchase_unit and it raises,

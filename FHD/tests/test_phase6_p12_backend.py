@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import contextmanager as _shared_scope_contextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -57,6 +58,25 @@ from app.fastapi_routes.service_bridge import (
 )
 from app.services import distilled_intent_service as dis_svc
 from app.services import modstore_library_sync as mls
+
+
+@_shared_scope_contextmanager
+def _shared_scope_forward_0(_config_get, mock_db, mock_req, mock_client):
+    with (
+        patch(
+            "app.fastapi_routes.service_bridge._get_or_create_instance_id",
+            return_value="inst-1",
+        ),
+        patch(
+            "app.fastapi_routes.service_bridge._get_config_value",
+            side_effect=_config_get,
+        ),
+        patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)),
+        patch("app.db.models.service_request.ServiceRequest", return_value=mock_req),
+        patch("httpx.AsyncClient", return_value=mock_client),
+    ):
+        yield None
+
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -525,19 +545,7 @@ class TestOutboxSendRoute:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with (
-            patch(
-                "app.fastapi_routes.service_bridge._get_or_create_instance_id",
-                return_value="inst-1",
-            ),
-            patch(
-                "app.fastapi_routes.service_bridge._get_config_value",
-                side_effect=_config_get,
-            ),
-            patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)),
-            patch("app.db.models.service_request.ServiceRequest", return_value=mock_req),
-            patch("httpx.AsyncClient", return_value=mock_client),
-        ):
+        with _shared_scope_forward_0(_config_get, mock_db, mock_req, mock_client):
             result = await sb.send_outbox(body)
         assert result["success"] is True
         assert result["remote_id"] == 99
@@ -561,19 +569,7 @@ class TestOutboxSendRoute:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with (
-            patch(
-                "app.fastapi_routes.service_bridge._get_or_create_instance_id",
-                return_value="inst-1",
-            ),
-            patch(
-                "app.fastapi_routes.service_bridge._get_config_value",
-                side_effect=_config_get,
-            ),
-            patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)),
-            patch("app.db.models.service_request.ServiceRequest", return_value=mock_req),
-            patch("httpx.AsyncClient", return_value=mock_client),
-        ):
+        with _shared_scope_forward_0(_config_get, mock_db, mock_req, mock_client):
             result = await sb.send_outbox(body)
         assert result["success"] is False
         assert "无法连接" in result["error"]
@@ -595,19 +591,7 @@ class TestOutboxSendRoute:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with (
-            patch(
-                "app.fastapi_routes.service_bridge._get_or_create_instance_id",
-                return_value="inst-1",
-            ),
-            patch(
-                "app.fastapi_routes.service_bridge._get_config_value",
-                side_effect=_config_get,
-            ),
-            patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)),
-            patch("app.db.models.service_request.ServiceRequest", return_value=mock_req),
-            patch("httpx.AsyncClient", return_value=mock_client),
-        ):
+        with _shared_scope_forward_0(_config_get, mock_db, mock_req, mock_client):
             with pytest.raises(HTTPException) as exc_info:
                 await sb.send_outbox(body)
         assert exc_info.value.status_code == 502

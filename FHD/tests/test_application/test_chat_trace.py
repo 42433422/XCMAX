@@ -9,6 +9,18 @@ from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRe
 from app.infrastructure.billing import model_usage
 
 
+def _shared_setup_attach_chat_trace_run_0(payload, case_value_1):
+    result = attach_chat_trace_run(
+        payload,
+        message=case_value_1,
+        runtime_context={"workspace": "demo"},
+        user_id="u1",
+        source="desktop",
+        channel="compat_chat",
+    )
+    return result
+
+
 @pytest.fixture(autouse=True)
 def _isolated_agent_usage_ledger(tmp_path, monkeypatch):
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "model_usage_ledger.json"))
@@ -24,14 +36,7 @@ def test_attach_chat_trace_run_persists_completed_run() -> None:
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
         return_value=repo,
     ):
-        result = attach_chat_trace_run(
-            payload,
-            message="查库存",
-            runtime_context={"workspace": "demo"},
-            user_id="u1",
-            source="desktop",
-            channel="compat_chat",
-        )
+        result = _shared_setup_attach_chat_trace_run_0(payload, case_value_1="查库存")
 
     run_id = result["run_id"]
     assert result["data"]["run_id"] == run_id
@@ -99,14 +104,7 @@ def test_attach_chat_trace_run_records_llm_calls(tmp_path, monkeypatch) -> None:
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
         return_value=repo,
     ):
-        result = attach_chat_trace_run(
-            payload,
-            message="普通问答",
-            runtime_context={"workspace": "demo"},
-            user_id="u1",
-            source="desktop",
-            channel="compat_chat",
-        )
+        result = _shared_setup_attach_chat_trace_run_0(payload, case_value_1="普通问答")
 
     run = repo.get(result["run_id"])
     assert run is not None
@@ -166,14 +164,7 @@ def test_attach_chat_trace_run_debits_local_model_wallet(tmp_path, monkeypatch) 
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
         return_value=repo,
     ):
-        result = attach_chat_trace_run(
-            payload,
-            message="普通问答",
-            runtime_context={"workspace": "demo"},
-            user_id="u1",
-            source="desktop",
-            channel="compat_chat",
-        )
+        result = _shared_setup_attach_chat_trace_run_0(payload, case_value_1="普通问答")
 
     run = repo.get(result["run_id"])
     assert run is not None
@@ -206,14 +197,7 @@ def test_attach_chat_trace_run_fails_when_model_wallet_insufficient(tmp_path, mo
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
         return_value=repo,
     ):
-        result = attach_chat_trace_run(
-            payload,
-            message="普通问答",
-            runtime_context={"workspace": "demo"},
-            user_id="u1",
-            source="desktop",
-            channel="compat_chat",
-        )
+        result = _shared_setup_attach_chat_trace_run_0(payload, case_value_1="普通问答")
 
     run = repo.get(result["run_id"])
     assert run is not None
@@ -257,14 +241,7 @@ def test_attach_chat_trace_run_records_rag_retrieval() -> None:
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
         return_value=repo,
     ):
-        result = attach_chat_trace_run(
-            payload,
-            message="合同付款条款是什么",
-            runtime_context={"workspace": "demo"},
-            user_id="u1",
-            source="desktop",
-            channel="compat_chat",
-        )
+        result = _shared_setup_attach_chat_trace_run_0(payload, case_value_1="合同付款条款是什么")
 
     run = repo.get(result["run_id"])
     assert run is not None
@@ -309,14 +286,7 @@ def test_attach_chat_trace_run_records_user_memory_reference() -> None:
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
         return_value=repo,
     ):
-        result = attach_chat_trace_run(
-            payload,
-            message="按上次客户偏好查询",
-            runtime_context={"workspace": "demo"},
-            user_id="u1",
-            source="desktop",
-            channel="compat_chat",
-        )
+        result = _shared_setup_attach_chat_trace_run_0(payload, case_value_1="按上次客户偏好查询")
 
     run = repo.get(result["run_id"])
     assert run is not None
@@ -553,14 +523,7 @@ def test_attach_chat_trace_run_records_generated_office_artifact() -> None:
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
         return_value=repo,
     ):
-        result = attach_chat_trace_run(
-            payload,
-            message="生成合同",
-            runtime_context={"workspace": "demo"},
-            user_id="u1",
-            source="desktop",
-            channel="compat_chat",
-        )
+        result = _shared_setup_attach_chat_trace_run_0(payload, case_value_1="生成合同")
 
     run = repo.get(result["run_id"])
     assert run is not None

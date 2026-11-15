@@ -43,6 +43,19 @@ from app.application.agent_orchestrator.repair_advisor import (
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 
+
+def _assert_shared_json_with_code_fence_0(self, _shared_literal_0, _shared_literal_1):
+    run = _make_run()
+    step = _make_step()
+    with patch(
+        "app.application.agent_orchestrator.repair_advisor._run_async",
+        return_value={"choices": [{"message": {"content": _shared_literal_1}}]},
+    ):
+        result = request_llm_repair(run, step, {})
+    assert result["success"] is True
+    assert result["params_patch"] == {"q": _shared_literal_0}
+
+
 # ---------------------------------------------------------------------------
 # helpers for building test fixtures
 # ---------------------------------------------------------------------------
@@ -349,51 +362,19 @@ class TestRequestLlmRepair:
         assert result["params_patch"] == {"alt": 3}
 
     def test_json_with_code_fence(self) -> None:
-        run = _make_run()
-        step = _make_step()
-        with patch(
-            "app.application.agent_orchestrator.repair_advisor._run_async",
-            return_value={
-                "choices": [
-                    {"message": {"content": '```json\n{"params_patch": {"q": "fenced"}}\n```'}}
-                ]
-            },
-        ):
-            result = request_llm_repair(run, step, {})
-        assert result["success"] is True
-        assert result["params_patch"] == {"q": "fenced"}
+        return _assert_shared_json_with_code_fence_0(
+            self, "fenced", '```json\n{"params_patch": {"q": "fenced"}}\n```'
+        )
 
     def test_json_with_plain_code_fence(self) -> None:
-        run = _make_run()
-        step = _make_step()
-        with patch(
-            "app.application.agent_orchestrator.repair_advisor._run_async",
-            return_value={
-                "choices": [{"message": {"content": '```\n{"params_patch": {"q": "plain"}}\n```'}}]
-            },
-        ):
-            result = request_llm_repair(run, step, {})
-        assert result["success"] is True
-        assert result["params_patch"] == {"q": "plain"}
+        return _assert_shared_json_with_code_fence_0(
+            self, "plain", '```\n{"params_patch": {"q": "plain"}}\n```'
+        )
 
     def test_json_embedded_in_text(self) -> None:
-        run = _make_run()
-        step = _make_step()
-        with patch(
-            "app.application.agent_orchestrator.repair_advisor._run_async",
-            return_value={
-                "choices": [
-                    {
-                        "message": {
-                            "content": 'Here is the patch: {"params_patch": {"q": "embedded"}} done'
-                        }
-                    }
-                ]
-            },
-        ):
-            result = request_llm_repair(run, step, {})
-        assert result["success"] is True
-        assert result["params_patch"] == {"q": "embedded"}
+        return _assert_shared_json_with_code_fence_0(
+            self, "embedded", 'Here is the patch: {"params_patch": {"q": "embedded"}} done'
+        )
 
     def test_json_array_not_dict_returns_failure(self) -> None:
         run = _make_run()

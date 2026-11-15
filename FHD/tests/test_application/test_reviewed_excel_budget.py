@@ -728,7 +728,7 @@ def test_schema_rejection_names_each_failing_field():
     assert "S9" not in problem
 
 
-def test_elt_timeout_retains_the_running_worker_for_budget_accounting(monkeypatch):
+def test_etl_timeout_retains_the_running_worker_for_budget_accounting(monkeypatch):
     from threading import Event
 
     from app.application.elt.llm_assist import EltAssistTimeout, _bounded_structured_completion

@@ -188,27 +188,47 @@ def prepare_chat_evidence(
                 get_user_memory_rag_app_service,
             )
             from app.domain.shared_services.user_memory_service import get_user_memory_service
+            from app.infrastructure.memory.mem0_backend import (
+                format_recalled_memories,
+                get_long_term_memory,
+            )
 
-            rag = get_user_memory_rag_app_service()
-            hits = rag.query(user_id=memory_user_id, query_text=message, top_k=3).get("hits") or []
-            # Read the prior session-scoped index during migration. New turns are
-            # written to the stable owner namespace by persist_recallable_chat_turn.
-            if scoped_user != memory_user_id:
-                old_hits = (
-                    rag.query(user_id=scoped_user, query_text=message, top_k=3).get("hits") or []
-                )
-                merged = {
-                    str(hit.get("chunk_id") or f"stable:{index}"): hit
-                    for index, hit in enumerate(hits)
-                    if isinstance(hit, dict)
-                }
-                for index, hit in enumerate(old_hits):
-                    if isinstance(hit, dict):
-                        merged.setdefault(str(hit.get("chunk_id") or f"legacy:{index}"), hit)
-                hits = sorted(
-                    merged.values(), key=lambda hit: float(hit.get("score") or 0), reverse=True
-                )[:3]
             summaries = []
+            long_term = get_long_term_memory()
+            long_term_hits = (
+                long_term.recall(user_id=memory_user_id, query=message, limit=3)
+                if long_term.enabled
+                else []
+            )
+            long_term_summary = format_recalled_memories(long_term_hits)
+            if long_term_summary:
+                summaries.append(long_term_summary)
+            rag = get_user_memory_rag_app_service()
+            hits: list[dict[str, Any]] = []
+            if not long_term_hits:
+                hits = (
+                    rag.query(user_id=memory_user_id, query_text=message, top_k=3).get("hits") or []
+                )
+                # Read the prior session-scoped index during migration. New turns are
+                # written to the stable owner namespace by persist_recallable_chat_turn.
+                if scoped_user != memory_user_id:
+                    old_hits = (
+                        rag.query(user_id=scoped_user, query_text=message, top_k=3).get("hits")
+                        or []
+                    )
+                    merged = {
+                        str(hit.get("chunk_id") or f"stable:{index}"): hit
+                        for index, hit in enumerate(hits)
+                        if isinstance(hit, dict)
+                    }
+                    for index, hit in enumerate(old_hits):
+                        if isinstance(hit, dict):
+                            merged.setdefault(str(hit.get("chunk_id") or f"legacy:{index}"), hit)
+                    hits = sorted(
+                        merged.values(),
+                        key=lambda hit: float(hit.get("score") or 0),
+                        reverse=True,
+                    )[:3]
             if hits:
                 summaries.append(
                     rag.format_for_prompt(
@@ -279,8 +299,7 @@ def prepare_chat_evidence(
                 if not knowledge_query:
                     prior = str(result.get("chat_memory_evidence") or "")
                     statements = [
-                        str(item.get("statement") or "")[:500]
-                        for item in recalled_memories
+                        str(item.get("statement") or "")[:500] for item in recalled_memories
                     ]
                     result["chat_memory_evidence"] = (
                         prior + "\n" + "\n".join(statement for statement in statements if statement)

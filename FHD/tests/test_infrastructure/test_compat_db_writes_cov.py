@@ -17,6 +17,20 @@ import pytest
 from fastapi import HTTPException
 
 
+def _shared_setup_customer_pg_update_0(prev_row):
+    conn = MagicMock()
+    prev_res = MagicMock()
+    prev_res.mappings.return_value.first.return_value = prev_row
+    clash_res = MagicMock()
+    clash_res.first.return_value = None
+    conn.execute.side_effect = [prev_res, clash_res, MagicMock()]
+
+    eng = MagicMock()
+    eng.connect.return_value = _ctx_conn(conn)
+    insp = MagicMock()
+    return conn, prev_res, clash_res, eng, insp
+
+
 def _make_excel_imports_stub(norm_model_return: str = "STUB-MODEL"):
     """Return a fake app.domain.app_pure.excel_imports module with _norm_model."""
     mod = types.ModuleType("app.domain.app_pure.excel_imports")
@@ -402,16 +416,7 @@ def test_customer_pg_update_with_updated_at_col():
     prev_row = MagicMock()
     prev_row.__getitem__ = lambda s, k: "SameName" if k == "unit_name" else 1
 
-    conn = MagicMock()
-    prev_res = MagicMock()
-    prev_res.mappings.return_value.first.return_value = prev_row
-    clash_res = MagicMock()
-    clash_res.first.return_value = None
-    conn.execute.side_effect = [prev_res, clash_res, MagicMock()]
-
-    eng = MagicMock()
-    eng.connect.return_value = _ctx_conn(conn)
-    insp = MagicMock()
+    conn, prev_res, clash_res, eng, insp = _shared_setup_customer_pg_update_0(prev_row)
     insp.get_columns.return_value = [
         {"name": "id"},
         {"name": "unit_name"},
@@ -448,16 +453,7 @@ def test_customer_pg_update_without_updated_at_col():
     prev_row = MagicMock()
     prev_row.__getitem__ = lambda s, k: "SameName" if k == "unit_name" else 1
 
-    conn = MagicMock()
-    prev_res = MagicMock()
-    prev_res.mappings.return_value.first.return_value = prev_row
-    clash_res = MagicMock()
-    clash_res.first.return_value = None
-    conn.execute.side_effect = [prev_res, clash_res, MagicMock()]
-
-    eng = MagicMock()
-    eng.connect.return_value = _ctx_conn(conn)
-    insp = MagicMock()
+    conn, prev_res, clash_res, eng, insp = _shared_setup_customer_pg_update_0(prev_row)
     insp.get_columns.return_value = [
         {"name": "id"},
         {"name": "unit_name"},
@@ -493,16 +489,7 @@ def test_customer_pg_update_name_changed_triggers_unit_replace():
     prev_row = MagicMock()
     prev_row.__getitem__ = lambda s, k: "OldName" if k == "unit_name" else 1
 
-    conn = MagicMock()
-    prev_res = MagicMock()
-    prev_res.mappings.return_value.first.return_value = prev_row
-    clash_res = MagicMock()
-    clash_res.first.return_value = None
-    conn.execute.side_effect = [prev_res, clash_res, MagicMock()]
-
-    eng = MagicMock()
-    eng.connect.return_value = _ctx_conn(conn)
-    insp = MagicMock()
+    conn, prev_res, clash_res, eng, insp = _shared_setup_customer_pg_update_0(prev_row)
     insp.get_columns.return_value = [{"name": "id"}, {"name": "unit_name"}]
 
     with (
@@ -533,16 +520,7 @@ def test_customer_pg_update_name_same_no_unit_replace():
     prev_row = MagicMock()
     prev_row.__getitem__ = lambda s, k: "SameName" if k == "unit_name" else 1
 
-    conn = MagicMock()
-    prev_res = MagicMock()
-    prev_res.mappings.return_value.first.return_value = prev_row
-    clash_res = MagicMock()
-    clash_res.first.return_value = None
-    conn.execute.side_effect = [prev_res, clash_res, MagicMock()]
-
-    eng = MagicMock()
-    eng.connect.return_value = _ctx_conn(conn)
-    insp = MagicMock()
+    conn, prev_res, clash_res, eng, insp = _shared_setup_customer_pg_update_0(prev_row)
     insp.get_columns.return_value = [{"name": "id"}, {"name": "unit_name"}]
 
     with (

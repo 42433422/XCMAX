@@ -65,7 +65,9 @@ def rollup(rows: list[dict], required_scopes: tuple[str, ...] = ()) -> dict:
     for scope in required_scopes:
         scopes.setdefault(scope, "NOT RUN")
     platforms = {
-        str(item.get("platform") or ""): scopes[str(item.get("scope_id") or item.get("platform") or "")]
+        str(item.get("platform") or ""): scopes[
+            str(item.get("scope_id") or item.get("platform") or "")
+        ]
         for item in judged
     }
     required = required_scopes or tuple(scopes)
@@ -125,8 +127,9 @@ def installer_rows(root: Path, source_sha: str) -> list[dict]:
                 "platform": platform,
                 "scope_id": f"{platform}-installer",
                 "kind": "installer",
-                "status": "PASS",
-                "source_sha": source_sha,
+                "status": "NOT RUN",
+                "expected_source_sha": source_sha,
+                "reason": "installer_identity_and_source_not_verified",
                 "artifact_sha256": digest,
                 "satisfies": platform,
                 "path": str(matches[0]),

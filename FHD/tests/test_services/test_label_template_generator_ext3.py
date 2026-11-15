@@ -39,6 +39,65 @@ from app.services.skills.label_template_generator.label_template_generator impor
     get_label_template_generator_skill,
 )
 
+
+def _shared_setup_case_0(case_value_1, case_value_2):
+    blocks = [
+        {
+            "text": "品名",
+            "y_center": 50,
+            "center": (25, 50),
+            "left": 10,
+            "top": 40,
+            "width": 40,
+            "height": 20,
+            "conf": 0.9,
+        },
+        {
+            "text": case_value_1,
+            "y_center": 50,
+            "center": (75, 50),
+            "left": 60,
+            "top": 40,
+            "width": 40,
+            "height": 20,
+            "conf": case_value_2,
+        },
+    ]
+    result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100])
+    return blocks, result
+
+
+def _shared_setup_case_1(case_value_1, case_value_2):
+    blocks = [
+        {
+            "text": case_value_1,
+            "y_center": 50,
+            "center": (25, 50),
+            "left": 10,
+            "top": 40,
+            "width": case_value_2,
+            "height": 20,
+            "conf": 0.9,
+        },
+    ]
+    return blocks
+
+
+def _assert_shared_code_contains_draw_barcode_method_0(
+    self, tmp_path, _shared_literal_0, _shared_literal_1, _shared_literal_2, _shared_literal_3
+):
+    from PIL import Image
+
+    img = Image.new("RGB", (400, 300), (255, 255, 255))
+    img_path = str(tmp_path / _shared_literal_3)
+    img.save(img_path)
+    fields = [{"label": "品名", "value": "鞋", "field_key": "product_name", "type": "fixed_label"}]
+    colors = {"background": "#ffffff", "border": "#000000", "text": "#000000"}
+    code = _generate_code_with_fields(img_path, _shared_literal_0, 400, 300, colors, fields)
+    assert _shared_literal_1 in code
+    assert _shared_literal_2 in code
+
+
 # ---------------------------------------------------------------------------
 # _classify_field — known labels mapping
 # ---------------------------------------------------------------------------
@@ -225,18 +284,7 @@ class TestPairFieldsByGridDeep:
 
     def test_none_merged_horizontal_defaults_to_empty(self):
         """None merged_horizontal should default to empty list."""
-        blocks = [
-            {
-                "text": "品名",
-                "y_center": 50,
-                "center": (25, 50),
-                "left": 10,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.9,
-            },
-        ]
+        blocks = _shared_setup_case_1(case_value_1="品名", case_value_2=40)
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 100], None)
         assert len(result) == 1
         assert result[0]["is_merged"] is False
@@ -304,18 +352,7 @@ class TestPairFieldsByGridDeep:
 
     def test_merged_cell_with_default_end_col(self):
         """Merged cell with missing end_col should default to start_col."""
-        blocks = [
-            {
-                "text": "标签",
-                "y_center": 50,
-                "center": (25, 50),
-                "left": 10,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.9,
-            },
-        ]
+        blocks = _shared_setup_case_1(case_value_1="标签", case_value_2=40)
         # merged_info without end_col - should default to start_col
         merged = [{"row": 0, "start_col": 0, "end_col": 0}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 100], merged)
@@ -451,18 +488,7 @@ class TestPairFieldsByGridDeep:
 
     def test_block_at_merged_start_col_processed(self):
         """Block exactly at merged start_col should be processed as merged."""
-        blocks = [
-            {
-                "text": "合并标签",
-                "y_center": 50,
-                "center": (25, 50),
-                "left": 10,
-                "top": 40,
-                "width": 80,
-                "height": 20,
-                "conf": 0.9,
-            },
-        ]
+        blocks = _shared_setup_case_1(case_value_1="合并标签", case_value_2=80)
         merged = [{"row": 0, "start_col": 0, "end_col": 1}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100], merged)
         assert len(result) == 1
@@ -502,57 +528,13 @@ class TestPairFieldsByGridDeep:
 
     def test_confidence_averaged_for_paired_blocks(self):
         """Confidence should be averaged for paired label+value blocks."""
-        blocks = [
-            {
-                "text": "品名",
-                "y_center": 50,
-                "center": (25, 50),
-                "left": 10,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.9,
-            },
-            {
-                "text": "鞋",
-                "y_center": 50,
-                "center": (75, 50),
-                "left": 60,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.7,
-            },
-        ]
-        result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100])
+        blocks, result = _shared_setup_case_0(case_value_1="鞋", case_value_2=0.7)
         assert len(result) == 1
         assert result[0]["confidence"] == pytest.approx(0.8)
 
     def test_full_text_combines_label_and_value(self):
         """full_text should combine label and value with ': ' separator."""
-        blocks = [
-            {
-                "text": "品名",
-                "y_center": 50,
-                "center": (25, 50),
-                "left": 10,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.9,
-            },
-            {
-                "text": "运动鞋",
-                "y_center": 50,
-                "center": (75, 50),
-                "left": 60,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.85,
-            },
-        ]
-        result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100])
+        blocks, result = _shared_setup_case_0(case_value_1="运动鞋", case_value_2=0.85)
         assert len(result) == 1
         assert result[0]["full_text"] == "品名: 运动鞋"
 
@@ -988,35 +970,15 @@ class TestGenerateCodeWithFieldsDeep:
 
     def test_code_contains_draw_barcode_method(self, tmp_path):
         """Generated code should contain _draw_barcode method."""
-        from PIL import Image
-
-        img = Image.new("RGB", (400, 300), (255, 255, 255))
-        img_path = str(tmp_path / "barcode.png")
-        img.save(img_path)
-
-        fields = [
-            {"label": "品名", "value": "鞋", "field_key": "product_name", "type": "fixed_label"},
-        ]
-        colors = {"background": "#ffffff", "border": "#000000", "text": "#000000"}
-        code = _generate_code_with_fields(img_path, "BarcodeGen", 400, 300, colors, fields)
-        assert "_draw_barcode" in code
-        assert "auto_barcode" in code
+        return _assert_shared_code_contains_draw_barcode_method_0(
+            self, tmp_path, "BarcodeGen", "_draw_barcode", "auto_barcode", "barcode.png"
+        )
 
     def test_code_contains_get_font_method(self, tmp_path):
         """Generated code should contain _get_font method."""
-        from PIL import Image
-
-        img = Image.new("RGB", (400, 300), (255, 255, 255))
-        img_path = str(tmp_path / "font.png")
-        img.save(img_path)
-
-        fields = [
-            {"label": "品名", "value": "鞋", "field_key": "product_name", "type": "fixed_label"},
-        ]
-        colors = {"background": "#ffffff", "border": "#000000", "text": "#000000"}
-        code = _generate_code_with_fields(img_path, "FontGen", 400, 300, colors, fields)
-        assert "_get_font" in code
-        assert "ImageFont" in code
+        return _assert_shared_code_contains_draw_barcode_method_0(
+            self, tmp_path, "FontGen", "_get_font", "ImageFont", "font.png"
+        )
 
     def test_code_contains_logger_setup(self, tmp_path):
         """Generated code should contain logger setup."""
@@ -1034,19 +996,9 @@ class TestGenerateCodeWithFieldsDeep:
 
     def test_code_contains_example_usage(self, tmp_path):
         """Generated code should contain example_usage function."""
-        from PIL import Image
-
-        img = Image.new("RGB", (400, 300), (255, 255, 255))
-        img_path = str(tmp_path / "example.png")
-        img.save(img_path)
-
-        fields = [
-            {"label": "品名", "value": "鞋", "field_key": "product_name", "type": "fixed_label"},
-        ]
-        colors = {"background": "#ffffff", "border": "#000000", "text": "#000000"}
-        code = _generate_code_with_fields(img_path, "ExGen", 400, 300, colors, fields)
-        assert "example_usage" in code
-        assert 'if __name__ == "__main__"' in code
+        return _assert_shared_code_contains_draw_barcode_method_0(
+            self, tmp_path, "ExGen", "example_usage", 'if __name__ == "__main__"', "example.png"
+        )
 
 
 # ---------------------------------------------------------------------------

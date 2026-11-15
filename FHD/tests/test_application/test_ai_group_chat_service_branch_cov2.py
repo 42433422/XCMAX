@@ -40,30 +40,60 @@ from app.application.ai_group_chat_service import (
     SUPER_DISCUSSION_MAX_ROUNDS,
     AiGroupChatService,
 )
+from tests.pure_builders import department_catalog as fake_departments
+from tests.pure_builders import enterprise_department_catalog as fake_enterprise_departments
+
+
+def _setup_shared_0(tmp_path):
+    svc = make_service(tmp_path)
+    work_order = {
+        "id": "msg1",
+        "user_id": 1,
+        "group_id": "g1",
+        "kind": "work_order",
+        "work_order_id": "wo1",
+        "status": "assigned",
+        "body": "派单",
+        "sender_name": "工作流调度",
+        "sender_id": "ai-group-dispatcher",
+        "role": "ai",
+        "sender_avatar": "",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "payload": {"task": "做任务"},
+    }
+    return (svc, work_order)
+
+
+def _assert_shared_delete_message_wrong_user_0(
+    self,
+    tmp_path,
+    _shared_literal_0,
+    _shared_literal_1,
+    _shared_literal_2,
+    _shared_literal_3,
+    _shared_literal_4,
+    _shared_literal_5,
+):
+    svc = make_service(tmp_path)
+    msg = {
+        "id": "msg1",
+        "user_id": _shared_literal_0,
+        "group_id": _shared_literal_1,
+        "role": _shared_literal_2,
+        "sender_id": _shared_literal_3,
+        "sender_name": _shared_literal_4,
+        "sender_avatar": "",
+        "body": "消息",
+        "created_at": "2026-01-01T00:00:00+00:00",
+    }
+    svc._append_messages([msg])
+    with pytest.raises(ValueError, match=_shared_literal_5):
+        svc.delete_message(user_id=1, group_id="g1", message_id="msg1")
+
 
 # ---------------------------------------------------------------------------
 # helpers（与第一批保持一致）
 # ---------------------------------------------------------------------------
-
-
-def fake_departments() -> dict[str, dict[str, str]]:
-    return {
-        "ops_acquisition": {"label": "O-A 获客部"},
-        "ops_partner": {"label": "O-B 伙伴部"},
-        "prod_web": {"label": "P-W 网站部"},
-        "prod_mod": {"label": "P-M Mod 部"},
-        "prod_software": {"label": "P-S 软件部"},
-        "shared_retention": {"label": "S-R 归档部"},
-    }
-
-
-def fake_enterprise_departments() -> dict[str, dict[str, str]]:
-    return {
-        "tools": {"label": "工具层"},
-        "execution": {"label": "执行层"},
-        "service": {"label": "服务层"},
-        "management": {"label": "管理层"},
-    }
 
 
 def make_completion(seen: list[dict] | None = None, content: str = "收到"):
@@ -1187,43 +1217,13 @@ class TestAppendWorkAcceptanceIfReadyEdge:
         assert result is None
 
     def test_append_acceptance_no_initial_reports(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        work_order = {
-            "id": "msg1",
-            "user_id": 1,
-            "group_id": "g1",
-            "kind": "work_order",
-            "work_order_id": "wo1",
-            "status": "assigned",
-            "body": "派单",
-            "sender_name": "工作流调度",
-            "sender_id": "ai-group-dispatcher",
-            "role": "ai",
-            "sender_avatar": "",
-            "created_at": "2026-01-01T00:00:00+00:00",
-            "payload": {"task": "做任务"},
-        }
+        svc, work_order = _setup_shared_0(tmp_path)
         svc._append_messages([work_order])
         result = svc._append_work_acceptance_if_ready(user_id=1, group_id="g1", work_order_id="wo1")
         assert result is None
 
     def test_append_acceptance_initial_reports_no_final(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        work_order = {
-            "id": "msg1",
-            "user_id": 1,
-            "group_id": "g1",
-            "kind": "work_order",
-            "work_order_id": "wo1",
-            "status": "assigned",
-            "body": "派单",
-            "sender_name": "工作流调度",
-            "sender_id": "ai-group-dispatcher",
-            "role": "ai",
-            "sender_avatar": "",
-            "created_at": "2026-01-01T00:00:00+00:00",
-            "payload": {"task": "做任务"},
-        }
+        svc, work_order = _setup_shared_0(tmp_path)
         report = {
             "id": "msg2",
             "user_id": 1,
@@ -1244,22 +1244,7 @@ class TestAppendWorkAcceptanceIfReadyEdge:
         assert result is None
 
     def test_append_acceptance_final_reports_not_terminal(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        work_order = {
-            "id": "msg1",
-            "user_id": 1,
-            "group_id": "g1",
-            "kind": "work_order",
-            "work_order_id": "wo1",
-            "status": "assigned",
-            "body": "派单",
-            "sender_name": "工作流调度",
-            "sender_id": "ai-group-dispatcher",
-            "role": "ai",
-            "sender_avatar": "",
-            "created_at": "2026-01-01T00:00:00+00:00",
-            "payload": {"task": "做任务"},
-        }
+        svc, work_order = _setup_shared_0(tmp_path)
         report = {
             "id": "msg2",
             "user_id": 1,
@@ -1352,22 +1337,7 @@ class TestAppendWorkAcceptanceIfReadyEdge:
         assert result["status"] == "completed"
 
     def test_append_acceptance_some_failed(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        work_order = {
-            "id": "msg1",
-            "user_id": 1,
-            "group_id": "g1",
-            "kind": "work_order",
-            "work_order_id": "wo1",
-            "status": "assigned",
-            "body": "派单",
-            "sender_name": "工作流调度",
-            "sender_id": "ai-group-dispatcher",
-            "role": "ai",
-            "sender_avatar": "",
-            "created_at": "2026-01-01T00:00:00+00:00",
-            "payload": {"task": "做任务"},
-        }
+        svc, work_order = _setup_shared_0(tmp_path)
         report1 = {
             "id": "msg2",
             "user_id": 1,
@@ -1554,72 +1524,24 @@ class TestDeleteMessageEdge:
             svc.delete_message(user_id=1, group_id="g1", message_id="nonexistent")
 
     def test_delete_message_wrong_user(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        msg = {
-            "id": "msg1",
-            "user_id": 2,  # 不同用户
-            "group_id": "g1",
-            "role": "user",
-            "sender_id": "user",
-            "sender_name": "我",
-            "sender_avatar": "",
-            "body": "消息",
-            "created_at": "2026-01-01T00:00:00+00:00",
-        }
-        svc._append_messages([msg])
-        with pytest.raises(ValueError, match="消息不存在"):
-            svc.delete_message(user_id=1, group_id="g1", message_id="msg1")
+        return _assert_shared_delete_message_wrong_user_0(
+            self, tmp_path, 2, "g1", "user", "user", "我", "消息不存在"
+        )
 
     def test_delete_message_wrong_group(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        msg = {
-            "id": "msg1",
-            "user_id": 1,
-            "group_id": "g2",  # 不同群
-            "role": "user",
-            "sender_id": "user",
-            "sender_name": "我",
-            "sender_avatar": "",
-            "body": "消息",
-            "created_at": "2026-01-01T00:00:00+00:00",
-        }
-        svc._append_messages([msg])
-        with pytest.raises(ValueError, match="消息不存在"):
-            svc.delete_message(user_id=1, group_id="g1", message_id="msg1")
+        return _assert_shared_delete_message_wrong_user_0(
+            self, tmp_path, 1, "g2", "user", "user", "我", "消息不存在"
+        )
 
     def test_delete_message_ai_message_not_allowed(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        msg = {
-            "id": "msg1",
-            "user_id": 1,
-            "group_id": "g1",
-            "role": "ai",  # AI 消息
-            "sender_id": "e1",
-            "sender_name": "小销",
-            "sender_avatar": "",
-            "body": "消息",
-            "created_at": "2026-01-01T00:00:00+00:00",
-        }
-        svc._append_messages([msg])
-        with pytest.raises(ValueError, match="只能删除自己发送的消息"):
-            svc.delete_message(user_id=1, group_id="g1", message_id="msg1")
+        return _assert_shared_delete_message_wrong_user_0(
+            self, tmp_path, 1, "g1", "ai", "e1", "小销", "只能删除自己发送的消息"
+        )
 
     def test_delete_message_wrong_sender_not_allowed(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        msg = {
-            "id": "msg1",
-            "user_id": 1,
-            "group_id": "g1",
-            "role": "user",
-            "sender_id": "other",  # 非 user
-            "sender_name": "我",
-            "sender_avatar": "",
-            "body": "消息",
-            "created_at": "2026-01-01T00:00:00+00:00",
-        }
-        svc._append_messages([msg])
-        with pytest.raises(ValueError, match="只能删除自己发送的消息"):
-            svc.delete_message(user_id=1, group_id="g1", message_id="msg1")
+        return _assert_shared_delete_message_wrong_user_0(
+            self, tmp_path, 1, "g1", "user", "other", "我", "只能删除自己发送的消息"
+        )
 
     def test_delete_message_success(self, tmp_path: Path):
         svc = make_service(tmp_path)

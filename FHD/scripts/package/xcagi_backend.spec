@@ -229,6 +229,19 @@ for module in ["ctranslate2", "av"]:
     except Exception:
         pass
 
+# 长期记忆：mem0 通过 importlib 字符串加载 LLM/embedder/向量库实现，静态分析
+# 看不到；qdrant-client 本地模式需要随包携带其运行时模块，否则冻结包启动后
+# 长期记忆会静默降级为旧链路。
+for module in ["mem0", "qdrant_client"]:
+    try:
+        hiddenimports.extend(collect_submodules(module))
+    except Exception:
+        pass
+    try:
+        datas.extend(collect_data_files(module, include_py_files=False))
+    except Exception:
+        pass
+
 # Official office employees are dynamically loaded from the bundled MOD pack.
 # Explicitly collect their runtimes so a frozen app has the same Word, Excel,
 # CSV, PDF and presentation capabilities as the checked source tree. pypdf and

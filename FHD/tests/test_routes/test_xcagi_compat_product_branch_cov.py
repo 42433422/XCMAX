@@ -9,6 +9,7 @@ _products_price_list_word_response.
 
 from __future__ import annotations
 
+from contextlib import contextmanager as _shared_scope_contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -17,6 +18,23 @@ import pytest
 from fastapi import HTTPException
 
 from app.legacy.routes.product import compat_routes as xp
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0():
+    with (
+        patch(
+            "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
+            return_value=False,
+        ),
+        patch("app.legacy.routes.product.compat_routes._products_write_raise"),
+        patch(
+            "app.legacy.routes.product.compat_routes._business_mod_json_block",
+            return_value=None,
+        ),
+    ):
+        yield None
+
 
 # ---------------------------------------------------------------------------
 # _agent_node_output
@@ -364,79 +382,29 @@ class TestProductsCompatPreflight:
 
     def test_batch_delete_valid_ids(self):
         payload = {"ids": [1, 2, 3]}
-        with (
-            patch(
-                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0():
             assert xp._products_compat_preflight(self._req(), "batch_delete", payload) is None
 
     def test_batch_delete_product_ids_fallback(self):
         payload = {"product_ids": [4, 5]}
-        with (
-            patch(
-                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0():
             assert xp._products_compat_preflight(self._req(), "batch_delete", payload) is None
             assert payload["ids"] == [4, 5]
 
     def test_batch_delete_not_list_raises(self):
-        with (
-            patch(
-                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0():
             with pytest.raises(HTTPException) as exc_info:
                 xp._products_compat_preflight(self._req(), "batch_delete", {"ids": "bad"})
             assert exc_info.value.status_code == 400
 
     def test_batch_delete_empty_raises(self):
-        with (
-            patch(
-                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0():
             with pytest.raises(HTTPException) as exc_info:
                 xp._products_compat_preflight(self._req(), "batch_delete", {"ids": []})
             assert exc_info.value.status_code == 400
 
     def test_create_action_no_id_check(self):
-        with (
-            patch(
-                "app.legacy.routes.product.compat_routes._products_compat_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0():
             assert xp._products_compat_preflight(self._req(), "create", {}) is None
 
 

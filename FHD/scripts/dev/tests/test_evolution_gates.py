@@ -8,6 +8,23 @@ import subprocess
 import sys
 from pathlib import Path
 
+
+def _shared_setup_check_budget_0(tmp_path, case_value_1, case_value_2):
+    budget_file = tmp_path / "budget.json"
+    budget_file.write_text(
+        json.dumps(
+            {
+                "tokens_used": case_value_1,
+                "tokens_limit": 100000,
+                "time_used_minutes": case_value_2,
+                "time_limit_minutes": 30,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return budget_file
+
+
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -51,53 +68,20 @@ def test_check_footprint_fails_on_workflow_file(tmp_path):
 
 
 def test_check_budget_passes_under_limit(tmp_path):
-    budget_file = tmp_path / "budget.json"
-    budget_file.write_text(
-        json.dumps(
-            {
-                "tokens_used": 45000,
-                "tokens_limit": 100000,
-                "time_used_minutes": 15,
-                "time_limit_minutes": 30,
-            }
-        ),
-        encoding="utf-8",
-    )
+    budget_file = _shared_setup_check_budget_0(tmp_path, case_value_1=45000, case_value_2=15)
     result = _run_script("check_budget.py", "--budget-file", str(budget_file))
     assert result.returncode == 0
 
 
 def test_check_budget_fails_on_token_overrun(tmp_path):
-    budget_file = tmp_path / "budget.json"
-    budget_file.write_text(
-        json.dumps(
-            {
-                "tokens_used": 150000,
-                "tokens_limit": 100000,
-                "time_used_minutes": 15,
-                "time_limit_minutes": 30,
-            }
-        ),
-        encoding="utf-8",
-    )
+    budget_file = _shared_setup_check_budget_0(tmp_path, case_value_1=150000, case_value_2=15)
     result = _run_script("check_budget.py", "--budget-file", str(budget_file))
     assert result.returncode == 1
     assert "tokens" in result.stderr.lower()
 
 
 def test_check_budget_fails_on_time_overrun(tmp_path):
-    budget_file = tmp_path / "budget.json"
-    budget_file.write_text(
-        json.dumps(
-            {
-                "tokens_used": 50000,
-                "tokens_limit": 100000,
-                "time_used_minutes": 45,
-                "time_limit_minutes": 30,
-            }
-        ),
-        encoding="utf-8",
-    )
+    budget_file = _shared_setup_check_budget_0(tmp_path, case_value_1=50000, case_value_2=45)
     result = _run_script("check_budget.py", "--budget-file", str(budget_file))
     assert result.returncode == 1
     assert "time" in result.stderr.lower()

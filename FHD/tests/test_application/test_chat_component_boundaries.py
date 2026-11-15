@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
+from starlette.responses import JSONResponse
 
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
@@ -108,11 +109,14 @@ def test_confirmation_cannot_resume_another_sessions_pending_plan():
     assert pending["owner"]["runtime_context"]["session_id"] == "original"
 
 
-def test_injected_validation_rejects_before_dispatch_or_billing():
+@pytest.mark.parametrize("missing_spec", [False, True])
+def test_injected_validation_rejects_before_dispatch_or_billing(missing_spec):
     repository = InMemoryAgentRunRepository()
     executor = Mock()
     dependencies = RuntimeDependencies(
-        action_spec=lambda tool, action: ToolActionSpecV2(tool_id=tool, action=action),
+        action_spec=lambda tool, action: (
+            None if missing_spec else ToolActionSpecV2(tool_id=tool, action=action)
+        ),
         validate=lambda tool, action, params: ToolValidationResult(
             ok=False, tool_id=tool, action=action, error_code="invalid_input", message="blocked"
         ),
@@ -136,6 +140,9 @@ def test_injected_validation_rejects_before_dispatch_or_billing():
     execute.execute_step(run, step, runtime_context={}, node_outputs={})
 
     executor.execute.assert_not_called()
+    executor.execute_with_deadline.assert_not_called()
+    assert run.tool_calls[0].permission == ""
+    assert "authorization_permission" not in run.tool_calls[0].metadata
     usage.record_tool_usage_entry.assert_not_called()
     assert step.status == "failed" and step.output["error_code"] == "invalid_input"
 
@@ -503,7 +510,8 @@ def test_history_persists_summary_only_tool_business_result() -> None:
     assert metadata["ui"]["businessResult"]["summary"] == "已删除"
 
 
-def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn():
+@pytest.mark.parametrize("as_response", [False, True])
+def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn(as_response):
     from contextlib import contextmanager
 
     callbacks = Mock(spec=SessionCallbacks)
@@ -515,15 +523,16 @@ def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn():
     def fake_get_db():
         yield db
 
+    payload = {
+        "success": True,
+        "data": {"workflow_execution": {"success": True, "message": "清理完成"}},
+    }
     with (
         patch("app.db.session.get_db", fake_get_db),
         patch(
             "app.application.approval_workspace_app_service."
             "_approve_ai_workflow_request_without_node",
-            return_value={
-                "success": True,
-                "data": {"workflow_execution": {"success": True, "message": "清理完成"}},
-            },
+            return_value=JSONResponse(payload) if as_response else payload,
         ) as approve,
     ):
         reply = session._auto_approve_waiting_request(

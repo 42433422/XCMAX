@@ -71,6 +71,25 @@ from app.services.skills.label_template_generator.label_template_generator impor
 )
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
+
+def _shared_setup_case_0(tmp_path, case_value_1, case_value_2):
+    import sys
+
+    import numpy as np
+
+    # A 30x20 pixel image with H=30 (rows), W=20 (cols)
+    H, W = case_value_1, case_value_2
+    img = Image.new("RGB", (W, H), "white")
+    img_path = str(tmp_path / "img.png")
+    img.save(img_path)
+
+    from app.services.skills.label_template_generator.label_template_generator import (
+        extract_text_with_ocr,
+    )
+
+    return sys, np, H, W, img, img_path, extract_text_with_ocr
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -999,18 +1018,8 @@ class TestExtractTextWithOcr:
         This exercises lines 200-285 (cell construction) and 290-291 (merged_cells_info).
         The binary array has full black rows/cols so line-detection branches fire.
         """
-        import sys
-
-        import numpy as np
-
-        # A 30x20 pixel image with H=30 (rows), W=20 (cols)
-        H, W = 30, 20
-        img = Image.new("RGB", (W, H), "white")
-        img_path = str(tmp_path / "img.png")
-        img.save(img_path)
-
-        from app.services.skills.label_template_generator.label_template_generator import (
-            extract_text_with_ocr,
+        sys, np, H, W, img, img_path, extract_text_with_ocr = _shared_setup_case_0(
+            tmp_path, case_value_1=30, case_value_2=20
         )
 
         # Paint rows at y=0 and y=15 and cols at x=0 and x=10 as black grid lines
@@ -1068,17 +1077,8 @@ class TestExtractTextWithOcr:
     def test_ocr_success_with_adjacent_black_lines_merge(self, tmp_path):
         """Lines very close together (distance < 5px) exercise merge_very_close_lines
         'else' branch (lines 163-165: merged[-1] = (merged[-1] + line) // 2)."""
-        import sys
-
-        import numpy as np
-
-        H, W = 50, 50
-        img = Image.new("RGB", (W, H), "white")
-        img_path = str(tmp_path / "img.png")
-        img.save(img_path)
-
-        from app.services.skills.label_template_generator.label_template_generator import (
-            extract_text_with_ocr,
+        sys, np, H, W, img, img_path, extract_text_with_ocr = _shared_setup_case_0(
+            tmp_path, case_value_1=50, case_value_2=50
         )
 
         # Two adjacent rows at y=10 and y=12 (distance=2 < threshold=5) → merge
@@ -1111,17 +1111,8 @@ class TestExtractTextWithOcr:
         """Exercises the 'else' branch in the pixel loop (row[x]==0 after black run):
         when current_length > max_continuous_length in the else branch (line 101-102).
         """
-        import sys
-
-        import numpy as np
-
-        H, W = 10, 20
-        img = Image.new("RGB", (W, H), "white")
-        img_path = str(tmp_path / "img.png")
-        img.save(img_path)
-
-        from app.services.skills.label_template_generator.label_template_generator import (
-            extract_text_with_ocr,
+        sys, np, H, W, img, img_path, extract_text_with_ocr = _shared_setup_case_0(
+            tmp_path, case_value_1=10, case_value_2=20
         )
 
         # Create a binary where row 0 has: black pixels 0..11, then white 12..19
@@ -1154,17 +1145,8 @@ class TestExtractTextWithOcr:
     def test_cell_border_detection_partial_black(self, tmp_path):
         """Exercises the border detection branch inside cell construction (lines 222-236):
         0 < border_black_count < h*0.5 → should_merge_right=True."""
-        import sys
-
-        import numpy as np
-
-        H, W = 60, 60
-        img = Image.new("RGB", (W, H), "white")
-        img_path = str(tmp_path / "img.png")
-        img.save(img_path)
-
-        from app.services.skills.label_template_generator.label_template_generator import (
-            extract_text_with_ocr,
+        sys, np, H, W, img, img_path, extract_text_with_ocr = _shared_setup_case_0(
+            tmp_path, case_value_1=60, case_value_2=60
         )
 
         # Full horizontal lines at y=0 and y=30 and y=59

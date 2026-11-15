@@ -14,9 +14,25 @@ mobile_auth_oidc_exchange (auth fail, success).
 from __future__ import annotations
 
 import importlib
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(case_value_1, case_value_2):
+    with (
+        patch(
+            case_value_1,
+            side_effect=RuntimeError(case_value_2),
+        ),
+        patch(
+            "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
+            (RuntimeError,),
+        ),
+    ):
+        yield None
 
 
 @pytest.fixture(autouse=True)
@@ -417,16 +433,7 @@ class TestMobileSyncStatusWithUser:
 
     @pytest.mark.asyncio
     async def test_error(self, ext_mod):
-        with (
-            patch(
-                "app.db.xcmax_sync.SyncDb",
-                side_effect=RuntimeError("db fail"),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-                (RuntimeError,),
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="app.db.xcmax_sync.SyncDb", case_value_2="db fail"):
             result = await ext_mod.mobile_sync_status(user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)
 
@@ -484,16 +491,7 @@ class TestMobileSyncPullWithUser:
 
     @pytest.mark.asyncio
     async def test_error(self, ext_mod):
-        with (
-            patch(
-                "app.db.xcmax_sync.SyncDb",
-                side_effect=RuntimeError("db fail"),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-                (RuntimeError,),
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="app.db.xcmax_sync.SyncDb", case_value_2="db fail"):
             body = ext_mod.SyncPullBody(since_cursor=0)
             result = await ext_mod.mobile_sync_pull(body=body, user=_mock_user())
         assert result.status_code == 500
@@ -549,16 +547,7 @@ class TestMobileSyncPushWithUser:
         body = ext_mod.SyncPushBody(
             items=[ext_mod.SyncPushItem(entity_type="customer", entity_id="1")]
         )
-        with (
-            patch(
-                "app.db.xcmax_sync.SyncDb",
-                side_effect=RuntimeError("db fail"),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-                (RuntimeError,),
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="app.db.xcmax_sync.SyncDb", case_value_2="db fail"):
             result = await ext_mod.mobile_sync_push(body=body, user=_mock_user())
         assert result.status_code == 500
 
@@ -593,16 +582,7 @@ class TestMobileSyncAckWithUser:
 
     @pytest.mark.asyncio
     async def test_error(self, ext_mod):
-        with (
-            patch(
-                "app.db.xcmax_sync.SyncDb",
-                side_effect=RuntimeError("db fail"),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-                (RuntimeError,),
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="app.db.xcmax_sync.SyncDb", case_value_2="db fail"):
             body = ext_mod.SyncAckBody(cursor=10)
             result = await ext_mod.mobile_sync_ack(body=body, user=_mock_user())
         assert result.status_code == 500
@@ -637,15 +617,8 @@ class TestMobileSyncConflictsWithUser:
 
     @pytest.mark.asyncio
     async def test_error(self, ext_mod):
-        with (
-            patch(
-                "app.db.xcmax_sync._get_conn",
-                side_effect=RuntimeError("conn fail"),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-                (RuntimeError,),
-            ),
+        with _shared_scope_case_0(
+            case_value_1="app.db.xcmax_sync._get_conn", case_value_2="conn fail"
         ):
             result = await ext_mod.mobile_sync_conflicts(user=_mock_user())
         assert hasattr(result, "body") or isinstance(result, dict)

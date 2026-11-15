@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 from typing import Any
 
+from app.mod_sdk.employee_failure import _failed
+
 
 def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     pack = payload.get("pack")
@@ -51,18 +53,6 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
         "valid": approved,
         "issues": issues,
         "evidence": ["pack.manifest", "pack.files", "employee module path consistency"],
-        "read_only": True,
-        "side_effects": [],
-    }
-
-
-def _failed(message: str, code: str) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "status": "failed",
-        "summary": message,
-        "error_code": code,
-        "evidence": [],
         "read_only": True,
         "side_effects": [],
     }

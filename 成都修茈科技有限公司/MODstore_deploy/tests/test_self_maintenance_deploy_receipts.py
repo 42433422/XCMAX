@@ -21,6 +21,20 @@ from modstore_server.self_maintenance_deploy_receipts import (
 )
 from modstore_server.self_maintenance_loop_api import _deployment_receipt_token_valid
 
+
+def _shared_setup_case_0(case_value_1, case_value_2):
+    existing = {
+        "event": "post_deploy_verified",
+        "ok": True,
+        "identity_verified": True,
+        "run_id": case_value_1,
+        "merge_sha": MERGE_SHA,
+        "environment": "production",
+        "workflow_run_id": case_value_2,
+    }
+    return existing
+
+
 MERGE_SHA = "a" * 40
 ARTIFACT_SHA = "b" * 64
 
@@ -428,15 +442,7 @@ def test_ambiguous_pending_ancestry_fails_closed() -> None:
 
 
 def test_exact_completed_callback_is_idempotent() -> None:
-    existing = {
-        "event": "post_deploy_verified",
-        "ok": True,
-        "identity_verified": True,
-        "run_id": "run-existing",
-        "merge_sha": MERGE_SHA,
-        "environment": "production",
-        "workflow_run_id": "777",
-    }
+    existing = _shared_setup_case_0(case_value_1="run-existing", case_value_2="777")
     events: list[dict] = []
 
     result = record_completed_deployment_receipt(
@@ -465,15 +471,7 @@ def test_exact_completed_callback_is_idempotent() -> None:
 
 
 def test_successful_redeploy_for_same_run_is_idempotent() -> None:
-    existing = {
-        "event": "post_deploy_verified",
-        "ok": True,
-        "identity_verified": True,
-        "run_id": "run-existing",
-        "merge_sha": MERGE_SHA,
-        "environment": "production",
-        "workflow_run_id": "777",
-    }
+    existing = _shared_setup_case_0(case_value_1="run-existing", case_value_2="777")
     events: list[dict] = []
 
     result = record_completed_deployment_receipt(
@@ -505,15 +503,7 @@ def test_successful_redeploy_for_same_run_is_idempotent() -> None:
 
 
 def test_successful_redeploy_for_same_run_rechecks_runtime_identity() -> None:
-    existing = {
-        "event": "post_deploy_verified",
-        "ok": True,
-        "identity_verified": True,
-        "run_id": "run-existing",
-        "merge_sha": MERGE_SHA,
-        "environment": "production",
-        "workflow_run_id": "777",
-    }
+    existing = _shared_setup_case_0(case_value_1="run-existing", case_value_2="777")
 
     with pytest.raises(DeploymentReceiptError, match="health_sha_mismatch"):
         record_completed_deployment_receipt(
@@ -532,15 +522,7 @@ def test_successful_redeploy_for_same_run_rechecks_runtime_identity() -> None:
 
 
 def test_retry_repairs_missing_terminal_merge_row_after_verified_receipt() -> None:
-    existing = {
-        "event": "post_deploy_verified",
-        "ok": True,
-        "identity_verified": True,
-        "run_id": "run-partial",
-        "merge_sha": MERGE_SHA,
-        "environment": "production",
-        "workflow_run_id": "778",
-    }
+    existing = _shared_setup_case_0(case_value_1="run-partial", case_value_2="778")
     events: list[dict] = []
 
     result = record_completed_deployment_receipt(

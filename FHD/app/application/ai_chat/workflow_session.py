@@ -9,6 +9,8 @@ import time
 import uuid
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from starlette.responses import JSONResponse
+
 from app.application.ai_chat.excel_import_policy import _enrich_confirmation_inner
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -620,7 +622,9 @@ class WorkflowSession:
         try:
             actor = int(str(raw_actor).strip())
         except (TypeError, ValueError):
-            logger.warning("auto approve actor unavailable user=%r ctx_actor=%r", user_id, raw_actor)
+            logger.warning(
+                "auto approve actor unavailable user=%r ctx_actor=%r", user_id, raw_actor
+            )
             return None
         from app.application.approval_workspace_app_service import (
             _approve_ai_workflow_request_without_node,
@@ -645,7 +649,7 @@ class WorkflowSession:
                     if request_row is None:
                         logger.warning("auto approve request row missing request=%s", current_id)
                         return None
-                    result = _approve_ai_workflow_request_without_node(
+                    approval_result = _approve_ai_workflow_request_without_node(
                         db,
                         req=request_row,
                         actor=actor,
@@ -655,16 +659,17 @@ class WorkflowSession:
             except RECOVERABLE_ERRORS:
                 logger.warning("auto approve AI workflow request failed", exc_info=True)
                 return None
-            if hasattr(result, "body"):
+            if isinstance(approval_result, JSONResponse):
                 try:
-                    result = json.loads(bytes(result.body).decode("utf-8"))
+                    approval_result = json.loads(bytes(approval_result.body).decode("utf-8"))
                 except (TypeError, ValueError):
                     return None
-            if not isinstance(result, dict):
+            if not isinstance(approval_result, dict):
                 return None
-            data = result.get("data") if isinstance(result.get("data"), dict) else {}
-            execution = data.get("workflow_execution") if isinstance(data, dict) else None
-            execution = execution if isinstance(execution, dict) else {}
+            result = approval_result
+            data = result.get("data")
+            execution_data = data.get("workflow_execution") if isinstance(data, dict) else None
+            execution = execution_data if isinstance(execution_data, dict) else {}
             message = str(result.get("message") or execution.get("message") or "").strip()
             if message:
                 messages.append(message)

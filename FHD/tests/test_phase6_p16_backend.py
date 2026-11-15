@@ -24,6 +24,19 @@ from __future__ import annotations
 
 import os
 
+
+def _setup_shared_0():
+    from app.infrastructure.repositories.customer_repository_impl import (
+        SQLAlchemyCustomerRepository,
+    )
+
+    repo = SQLAlchemyCustomerRepository()
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.filter.return_value = mock_query
+    return (SQLAlchemyCustomerRepository, repo, mock_db, mock_query)
+
+
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
 import json
@@ -1166,14 +1179,7 @@ class TestCustomerRepositoryFind:
     """Cover ``find_customer_by_id`` and ``find_customer_by_name``."""
 
     def test_find_customer_by_id_not_found(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         mock_query.first.return_value = None
         mock_db.query.return_value = mock_query
 
@@ -1185,14 +1191,7 @@ class TestCustomerRepositoryFind:
         assert result is None
 
     def test_find_customer_by_id_found(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         model = SimpleNamespace(
             id=1,
             unit_name="Acme",
@@ -1223,14 +1222,7 @@ class TestCustomerRepositoryFind:
         mock_to_domain.assert_called_once_with(model)
 
     def test_find_customer_by_name_not_found(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         mock_query.first.return_value = None
         mock_db.query.return_value = mock_query
 
@@ -1242,14 +1234,7 @@ class TestCustomerRepositoryFind:
         assert result is None
 
     def test_find_customer_by_name_found(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         model = SimpleNamespace(
             id=2,
             unit_name="Beta",
@@ -1284,14 +1269,7 @@ class TestCustomerRepositoryFindAll:
     """Cover ``find_all_customers``."""
 
     def test_find_all_customers_empty(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
@@ -1303,14 +1281,7 @@ class TestCustomerRepositoryFindAll:
         assert result == []
 
     def test_find_all_customers_returns_list(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         models = [
             SimpleNamespace(
                 id=1,
@@ -1357,14 +1328,7 @@ class TestCustomerRepositoryDelete:
     """Cover ``delete_customer``."""
 
     def test_delete_customer_not_found(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         mock_query.first.return_value = None
         mock_db.query.return_value = mock_query
 
@@ -1376,14 +1340,7 @@ class TestCustomerRepositoryDelete:
         assert result is False
 
     def test_delete_customer_success(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         mock_query.first.return_value = SimpleNamespace(id=1)
         mock_db.query.return_value = mock_query
 
@@ -1484,14 +1441,7 @@ class TestPurchaseUnitRepository:
         assert existing.contact_person == "John"
 
     def test_find_purchase_unit_by_id_not_found(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         mock_query.first.return_value = None
         mock_db.query.return_value = mock_query
 
@@ -1503,14 +1453,7 @@ class TestPurchaseUnitRepository:
         assert result is None
 
     def test_find_purchase_unit_by_id_found(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         model = SimpleNamespace(
             id=1,
             unit_name="X",
@@ -1534,14 +1477,7 @@ class TestPurchaseUnitRepository:
         assert result.unit_name == "X"
 
     def test_find_purchase_unit_by_name_not_found(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         mock_query.first.return_value = None
         mock_db.query.return_value = mock_query
 
@@ -1553,14 +1489,7 @@ class TestPurchaseUnitRepository:
         assert result is None
 
     def test_find_all_purchase_units_empty(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
@@ -1572,14 +1501,7 @@ class TestPurchaseUnitRepository:
         assert result == []
 
     def test_delete_purchase_unit_not_found(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         mock_query.first.return_value = None
         mock_db.query.return_value = mock_query
 
@@ -1591,14 +1513,7 @@ class TestPurchaseUnitRepository:
         assert result is False
 
     def test_delete_purchase_unit_success(self, monkeypatch):
-        from app.infrastructure.repositories.customer_repository_impl import (
-            SQLAlchemyCustomerRepository,
-        )
-
-        repo = SQLAlchemyCustomerRepository()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
+        SQLAlchemyCustomerRepository, repo, mock_db, mock_query = _setup_shared_0()
         mock_query.first.return_value = SimpleNamespace(id=1)
         mock_db.query.return_value = mock_query
 

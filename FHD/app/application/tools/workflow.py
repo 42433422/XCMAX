@@ -116,6 +116,12 @@ def invalidate_workflow_tool_registry() -> None:
     _WORKFLOW_REG_VER += 1
     _workflow_tool_registry_cache = None
     try:
+        from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_cache
+
+        invalidate_tool_specs_cache()
+    except RECOVERABLE_ERRORS:
+        pass
+    try:
         adapters.invalidate_employee_tools()
     except RECOVERABLE_ERRORS:
         logger.debug("employee tool cache invalidate skipped", exc_info=True)

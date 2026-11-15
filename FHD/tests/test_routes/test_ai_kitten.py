@@ -29,6 +29,20 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes import ai_kitten as kitten_module
 
+
+def _shared_setup_financial_report_0():
+    fake_fin_plugin = MagicMock()
+    fake_fin_plugin.run.return_value = MagicMock(
+        key="financial", title="财务报告", level="info", summary="摘要", details={}
+    )
+    fake_inv_plugin = MagicMock()
+    fake_inv_plugin.run.return_value = MagicMock(
+        key="inventory", title="库存估值", level="info", summary="摘要", details={}
+    )
+    fake_save_svc = MagicMock()
+    return fake_fin_plugin, fake_inv_plugin, fake_save_svc
+
+
 # 延迟导入的源模块路径
 _FACADE = "app.application.facades.kitten_facade"
 
@@ -490,15 +504,7 @@ def test_saved_delete_recoverable_error(
 
 
 def test_financial_report_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    fake_fin_plugin = MagicMock()
-    fake_fin_plugin.run.return_value = MagicMock(
-        key="financial", title="财务报告", level="info", summary="摘要", details={}
-    )
-    fake_inv_plugin = MagicMock()
-    fake_inv_plugin.run.return_value = MagicMock(
-        key="inventory", title="库存估值", level="info", summary="摘要", details={}
-    )
-    fake_save_svc = MagicMock()
+    fake_fin_plugin, fake_inv_plugin, fake_save_svc = _shared_setup_financial_report_0()
     fake_save_svc.save_analysis.return_value = {"success": True, "id": "r1", "filename": "f1.xlsx"}
 
     monkeypatch.setattr(f"{_FACADE}.FinancialReportPlugin", lambda: fake_fin_plugin)
@@ -520,15 +526,7 @@ def test_financial_report_attaches_agent_run(
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
     repo = InMemoryAgentRunRepository()
-    fake_fin_plugin = MagicMock()
-    fake_fin_plugin.run.return_value = MagicMock(
-        key="financial", title="财务报告", level="info", summary="摘要", details={}
-    )
-    fake_inv_plugin = MagicMock()
-    fake_inv_plugin.run.return_value = MagicMock(
-        key="inventory", title="库存估值", level="info", summary="摘要", details={}
-    )
-    fake_save_svc = MagicMock()
+    fake_fin_plugin, fake_inv_plugin, fake_save_svc = _shared_setup_financial_report_0()
     fake_save_svc.save_analysis.return_value = {
         "success": True,
         "id": "r-trace",
@@ -561,15 +559,7 @@ def test_financial_report_attaches_agent_run(
 def test_financial_report_save_fails_still_returns_data(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake_fin_plugin = MagicMock()
-    fake_fin_plugin.run.return_value = MagicMock(
-        key="financial", title="财务报告", level="info", summary="摘要", details={}
-    )
-    fake_inv_plugin = MagicMock()
-    fake_inv_plugin.run.return_value = MagicMock(
-        key="inventory", title="库存估值", level="info", summary="摘要", details={}
-    )
-    fake_save_svc = MagicMock()
+    fake_fin_plugin, fake_inv_plugin, fake_save_svc = _shared_setup_financial_report_0()
     fake_save_svc.save_analysis.return_value = {"success": False}
 
     monkeypatch.setattr(f"{_FACADE}.FinancialReportPlugin", lambda: fake_fin_plugin)
@@ -584,15 +574,7 @@ def test_financial_report_save_fails_still_returns_data(
 
 
 def test_financial_report_empty_body(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    fake_fin_plugin = MagicMock()
-    fake_fin_plugin.run.return_value = MagicMock(
-        key="financial", title="财务报告", level="info", summary="摘要", details={}
-    )
-    fake_inv_plugin = MagicMock()
-    fake_inv_plugin.run.return_value = MagicMock(
-        key="inventory", title="库存估值", level="info", summary="摘要", details={}
-    )
-    fake_save_svc = MagicMock()
+    fake_fin_plugin, fake_inv_plugin, fake_save_svc = _shared_setup_financial_report_0()
     fake_save_svc.save_analysis.return_value = {"success": True, "id": "r2", "filename": "f2.xlsx"}
 
     monkeypatch.setattr(f"{_FACADE}.FinancialReportPlugin", lambda: fake_fin_plugin)

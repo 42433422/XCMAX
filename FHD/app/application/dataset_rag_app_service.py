@@ -355,9 +355,7 @@ class DatasetRagApplicationService:
             document_id = str((document or {}).get("document_id") or "").strip()
             if not document_id:
                 continue
-            result = self.delete_document(
-                dataset_id, document_id, access_context=access_context
-            )
+            result = self.delete_document(dataset_id, document_id, access_context=access_context)
             if not result.get("success"):
                 return result
             deleted_documents += 1

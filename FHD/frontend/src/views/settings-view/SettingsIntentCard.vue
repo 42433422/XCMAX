@@ -14,10 +14,11 @@
     </summary>
 
     <div class="settings-card__body">
-      <div v-if="industryStore.settled && !currentIndustryConfig" class="intent-showcase-state muted">
+      <div v-if="!industryStore.loading && industryStore.error" role="alert">{{ industryStore.error }}</div>
+      <div v-else-if="!industryStore.loading && industryStore.settled && !currentIndustryConfig" class="intent-showcase-state muted">
         当前账号没有可用的行业配置
       </div>
-      <div v-else class="intent-showcase-grid">
+      <div v-else-if="currentIndustryConfig" class="intent-showcase-grid">
         <article
           v-for="entry in intentPackageEntries"
           :key="entry.key"

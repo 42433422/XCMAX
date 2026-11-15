@@ -19,6 +19,7 @@ from app.application.agent_orchestrator.clarification import (
     is_plan_confirmation,
     pause_for_clarification,
 )
+from app.application.agent_orchestrator.compensation import plan_parallel_enabled
 from app.application.agent_orchestrator.param_references import refuse_unresolved_step
 from app.application.agent_orchestrator.repair_advisor import (
     is_llm_repair_enabled,
@@ -55,6 +56,8 @@ from app.application.workflow.workflow_types import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
 _INTERNAL_RUN_ERROR = "agent_run_internal_error"
 
 
@@ -1394,7 +1397,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     "blocked": [step.node_id for step in run.steps if step.status == "skipped"],
                 },
                 max_retries=0,
-                parallel=False,
+                parallel=plan_parallel_enabled(),
             )
         except (ValueError, RuntimeError) as exc:
             run.status, run.error = "blocked", f"计划图校验或执行失败：{exc}"
@@ -1422,6 +1425,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             run.error = run.error or (
                 failed.error if failed else graph_result.message or "workflow graph failed"
             )
+            from app.application.agent_orchestrator.compensation import apply_failure_compensations
+
+            apply_failure_compensations(self, run, plan=plan, runtime_context=runtime_context)
             budget_event = next(
                 (event for event in reversed(run.events) if event.event_type == "budget.exceeded"),
                 None,

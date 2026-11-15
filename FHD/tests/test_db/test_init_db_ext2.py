@@ -15,6 +15,19 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+
+def _setup_shared_0(tmp_path):
+    from app.db.init_db import build_mod_database_seed_plan
+
+    mock_meta = Mock()
+    mock_meta.id = "test_mod"
+    mock_meta.mod_path = str(tmp_path / "test_mod")
+
+    mod_dir = tmp_path / "test_mod"
+    mod_dir.mkdir()
+    return (build_mod_database_seed_plan, mock_meta, mod_dir)
+
+
 # Use MagicMock for all mocks to support context manager protocol
 Mock = MagicMock
 
@@ -898,14 +911,7 @@ class TestResolveAuthBootstrapEngineEdgeCases:
 
 class TestBuildModDatabaseSeedPlanEdgeCases:
     def test_mod_with_seed_files(self, tmp_path):
-        from app.db.init_db import build_mod_database_seed_plan
-
-        mock_meta = Mock()
-        mock_meta.id = "test_mod"
-        mock_meta.mod_path = str(tmp_path / "test_mod")
-
-        mod_dir = tmp_path / "test_mod"
-        mod_dir.mkdir()
+        build_mod_database_seed_plan, mock_meta, mod_dir = _setup_shared_0(tmp_path)
         # Create a seed file
         seed_file = mod_dir / "seed.sql"
         seed_file.write_text("-- seed sql")
@@ -936,14 +942,7 @@ class TestBuildModDatabaseSeedPlanEdgeCases:
         assert len(seeds) >= 2
 
     def test_mod_with_invalid_manifest(self, tmp_path):
-        from app.db.init_db import build_mod_database_seed_plan
-
-        mock_meta = Mock()
-        mock_meta.id = "test_mod"
-        mock_meta.mod_path = str(tmp_path / "test_mod")
-
-        mod_dir = tmp_path / "test_mod"
-        mod_dir.mkdir()
+        build_mod_database_seed_plan, mock_meta, mod_dir = _setup_shared_0(tmp_path)
         (mod_dir / "manifest.json").write_text("not valid json{{")
 
         with (
@@ -978,14 +977,7 @@ class TestBuildModDatabaseSeedPlanEdgeCases:
         assert len(result["mods"]) == 0
 
     def test_mod_with_database_seed_files_as_non_list(self, tmp_path):
-        from app.db.init_db import build_mod_database_seed_plan
-
-        mock_meta = Mock()
-        mock_meta.id = "test_mod"
-        mock_meta.mod_path = str(tmp_path / "test_mod")
-
-        mod_dir = tmp_path / "test_mod"
-        mod_dir.mkdir()
+        build_mod_database_seed_plan, mock_meta, mod_dir = _setup_shared_0(tmp_path)
         manifest = {
             "id": "test_mod",
             "database": {
@@ -1007,14 +999,7 @@ class TestBuildModDatabaseSeedPlanEdgeCases:
         assert len(result["mods"]) == 1
 
     def test_top_level_database_seed_files(self, tmp_path):
-        from app.db.init_db import build_mod_database_seed_plan
-
-        mock_meta = Mock()
-        mock_meta.id = "test_mod"
-        mock_meta.mod_path = str(tmp_path / "test_mod")
-
-        mod_dir = tmp_path / "test_mod"
-        mod_dir.mkdir()
+        build_mod_database_seed_plan, mock_meta, mod_dir = _setup_shared_0(tmp_path)
         manifest = {
             "id": "test_mod",
             "database_seed_files": ["data.db"],

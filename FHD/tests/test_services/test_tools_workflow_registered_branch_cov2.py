@@ -57,6 +57,18 @@ from app.domain.shared_services.tools_workflow_registered import (
     execute_registered_workflow_tool,
 )
 
+
+def _assert_shared_write_customers_unsupported_op_0(self, _shared_literal_0, _shared_literal_1):
+    result = _registered_router_business_db(
+        "write",
+        {"entity": _shared_literal_0, "operation": _shared_literal_1, "payload": {}},
+        {},
+        "admin",
+        "",
+    )
+    assert result["success"] is False
+
+
 # ===========================================================================
 # _registered_router_business_event
 # ===========================================================================
@@ -861,14 +873,7 @@ class TestBusinessDbRouter:
         assert result["data"]["contact_phone"] == "13900000000"
 
     def test_write_customers_unsupported_op(self):
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "customers", "operation": "delete", "payload": {}},
-            {},
-            "admin",
-            "",
-        )
-        assert result["success"] is False
+        return _assert_shared_write_customers_unsupported_op_0(self, "customers", "delete")
 
     def test_write_products_create(self):
         with patch("app.services.get_products_service") as mock_get:
@@ -887,14 +892,7 @@ class TestBusinessDbRouter:
         assert result["success"] is True
 
     def test_write_products_unsupported_op(self):
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "products", "operation": "delete", "payload": {}},
-            {},
-            "admin",
-            "",
-        )
-        assert result["success"] is False
+        return _assert_shared_write_customers_unsupported_op_0(self, "products", "delete")
 
     def test_write_materials_create(self):
         with patch("app.application.get_material_application_service") as mock_get:
@@ -909,14 +907,7 @@ class TestBusinessDbRouter:
         assert result["success"] is True
 
     def test_write_materials_unsupported_op(self):
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "materials", "operation": "fly", "payload": {}},
-            {},
-            "admin",
-            "",
-        )
-        assert result["success"] is False
+        return _assert_shared_write_customers_unsupported_op_0(self, "materials", "fly")
 
     def test_write_shipment_records_update(self):
         with (
@@ -945,14 +936,7 @@ class TestBusinessDbRouter:
         assert result["success"] is True
 
     def test_write_shipment_records_unsupported_op(self):
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "shipment_records", "operation": "create", "payload": {}},
-            {},
-            "admin",
-            "",
-        )
-        assert result["success"] is False
+        return _assert_shared_write_customers_unsupported_op_0(self, "shipment_records", "create")
 
 
 # ===========================================================================

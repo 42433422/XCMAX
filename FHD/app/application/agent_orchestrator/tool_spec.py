@@ -58,6 +58,15 @@ class ToolActionSpecV2:
     owner_mod_id: str = ""
 
     @property
+    def receipt_permission(self) -> str:
+        """Keep action-level audit identity without changing the real RBAC gate."""
+        if self.tool_id == "document_template" or (
+            self.tool_id == "materials" and self.permission == "material.edit"
+        ):
+            return f"tool.{self.tool_id}.{self.action}"
+        return self.permission
+
+    @property
     def test_fixtures(self) -> list[dict[str, Any]]:
         """Compat alias for contract_samples (historical name)."""
         return self.contract_samples
@@ -125,12 +134,8 @@ def _special_permission(tool_id: str, action: str) -> str:
     # 权限码从未写入角色授权，非管理员会在工具校验处被误判为「权限不足」。
     if tool_id == "shipment_records":
         return "shipment.edit"
-    if tool_id == "shipment_orders":
-        if action in {"generate", "generate_batch"}:
-            return "shipment.create"
-        if action in {"clear_shipment", "clear_all", "delete", "set_sequence", "reset_sequence"}:
-            return "shipment.edit"
-        return "shipment.view"
+    if tool_id == "shipment_orders" and action in {"generate", "generate_batch"}:
+        return "shipment.create"
     if tool_id == "materials" and action in {"list", "query"}:
         return "material.view"
     if tool_id == "materials" and action in {"create", "update", "delete", "batch_delete", "clear"}:
@@ -256,7 +261,18 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
         )
 
 
+_TOOL_SPECS_CACHE: dict[tuple[str, str], ToolActionSpecV2] | None = None
+
+
+def invalidate_tool_specs_cache() -> None:
+    global _TOOL_SPECS_CACHE
+    _TOOL_SPECS_CACHE = None
+
+
 def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
+    global _TOOL_SPECS_CACHE
+    if _TOOL_SPECS_CACHE is not None:
+        return _TOOL_SPECS_CACHE
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
@@ -362,6 +378,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             ],
         )
         specs[(spec.tool_id, spec.action)] = spec
+    _TOOL_SPECS_CACHE = specs
     return specs
 
 

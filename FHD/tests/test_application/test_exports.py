@@ -6,6 +6,7 @@ docx generation error, file write error, success (0/4 branches).
 
 from __future__ import annotations
 
+from contextlib import contextmanager as _shared_scope_contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +14,25 @@ import pytest
 
 from app.application import shipment_excel_elt_security as elt_security
 from app.application.tools import exports
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(mock_svc):
+    with (
+        patch(
+            "app.application.get_product_app_service",
+            return_value=mock_svc,
+        ),
+        patch(
+            "app.infrastructure.documents.price_list_export.resolve_price_list_docx_template",
+            return_value=(MagicMock(), None),
+        ),
+        patch(
+            "app.infrastructure.documents.price_list_export.build_price_list_docx_bytes",
+            return_value=b"doc-bytes",
+        ),
+    ):
+        yield None
 
 
 @pytest.fixture(autouse=True)
@@ -90,20 +110,7 @@ class TestHandlePriceListExport:
     def test_success_with_keyword_search(self, tmp_path):
         mock_svc = MagicMock()
         mock_svc.search_products.return_value = {"data": [{"name": "P"}]}
-        with (
-            patch(
-                "app.application.get_product_app_service",
-                return_value=mock_svc,
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export.resolve_price_list_docx_template",
-                return_value=(MagicMock(), None),
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export.build_price_list_docx_bytes",
-                return_value=b"doc-bytes",
-            ),
-        ):
+        with _shared_scope_case_0(mock_svc):
             result = exports.handle_price_list_export(
                 {"customer_name": "Acme", "keyword": "widget"},
                 workspace_root=str(tmp_path),
@@ -116,20 +123,7 @@ class TestHandlePriceListExport:
     def test_success_without_keyword(self, tmp_path):
         mock_svc = MagicMock()
         mock_svc.get_products.return_value = {"data": [{"name": "P1"}, {"name": "P2"}]}
-        with (
-            patch(
-                "app.application.get_product_app_service",
-                return_value=mock_svc,
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export.resolve_price_list_docx_template",
-                return_value=(MagicMock(), None),
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export.build_price_list_docx_bytes",
-                return_value=b"doc-bytes",
-            ),
-        ):
+        with _shared_scope_case_0(mock_svc):
             result = exports.handle_price_list_export(
                 {"customer_name": "Acme"},
                 workspace_root=str(tmp_path),
@@ -141,37 +135,14 @@ class TestHandlePriceListExport:
     def test_success_without_workspace_root_uses_tempdir(self):
         mock_svc = MagicMock()
         mock_svc.get_all_products.return_value = []
-        with (
-            patch(
-                "app.application.get_product_app_service",
-                return_value=mock_svc,
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export.resolve_price_list_docx_template",
-                return_value=(MagicMock(), None),
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export.build_price_list_docx_bytes",
-                return_value=b"doc-bytes",
-            ),
-        ):
+        with _shared_scope_case_0(mock_svc):
             result = exports.handle_price_list_export({"customer_name": "Acme"})
         assert result["success"] is True
 
     def test_customer_name_cannot_escape_export_directory(self, tmp_path):
         mock_svc = MagicMock()
         mock_svc.get_all_products.return_value = []
-        with (
-            patch("app.application.get_product_app_service", return_value=mock_svc),
-            patch(
-                "app.infrastructure.documents.price_list_export.resolve_price_list_docx_template",
-                return_value=(MagicMock(), None),
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export.build_price_list_docx_bytes",
-                return_value=b"doc-bytes",
-            ),
-        ):
+        with _shared_scope_case_0(mock_svc):
             result = exports.handle_price_list_export(
                 {"customer_name": "../../outside"}, workspace_root=str(tmp_path)
             )
@@ -215,20 +186,7 @@ class TestHandlePriceListExport:
     def test_products_not_list_coerced_to_empty(self, tmp_path):
         mock_svc = MagicMock()
         mock_svc.get_all_products.return_value = None  # not a list
-        with (
-            patch(
-                "app.application.get_product_app_service",
-                return_value=mock_svc,
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export.resolve_price_list_docx_template",
-                return_value=(MagicMock(), None),
-            ),
-            patch(
-                "app.infrastructure.documents.price_list_export.build_price_list_docx_bytes",
-                return_value=b"doc-bytes",
-            ),
-        ):
+        with _shared_scope_case_0(mock_svc):
             result = exports.handle_price_list_export(
                 {"customer_name": "Acme"},
                 workspace_root=str(tmp_path),

@@ -124,6 +124,7 @@ class PlannerCompletion(Protocol):
         http_client_factory: Callable[[], httpx.Client] | None = None,
         temperature: float = 0.1,
         max_tokens: int = 1200,
+        **kwargs: Any,
     ) -> dict[str, Any] | None: ...
 
 
@@ -263,6 +264,21 @@ def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
+def _load_model_json(raw: str) -> Any:
+    """严格 JSON 优先；失败时用 json-repair 容忍模型常见截断/尾逗号。"""
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        try:
+            from json_repair import loads as repair_loads
+        except ImportError:
+            return None
+        try:
+            return repair_loads(raw)
+        except (ValueError, TypeError):
+            return None
+
+
 def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[WorkflowNode]] | None:
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
@@ -274,7 +290,7 @@ def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[Wo
     if not raw:
         return None
     raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    parsed = json.loads(_sanitize_model_json(raw))
+    parsed = _load_model_json(_sanitize_model_json(raw))
     if not isinstance(parsed, dict):
         return None
     mode = str(parsed.get("mode") or "workflow").strip().lower()
@@ -340,6 +356,47 @@ def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[Wo
             )
         )
     return parsed, nodes
+
+
+def build_plan_from_payload(
+    *,
+    plan_id: str,
+    message: str,
+    parsed: dict[str, Any],
+    nodes: list[WorkflowNode],
+    context: dict[str, Any] | None,
+) -> PlanGraph:
+    """把已解析的模型 JSON 收敛为 ``PlanGraph``；生成与修复共用同一收敛规则。"""
+    user_memory_rag_summary = ""
+    memory_v2_summary = ""
+    if isinstance(context, dict):
+        user_memory_rag = context.get("user_memory_rag")
+        if isinstance(user_memory_rag, dict):
+            user_memory_rag_summary = str(user_memory_rag.get("summary") or "").strip()
+        memory_v2 = context.get("memory_v2")
+        if isinstance(memory_v2, dict):
+            memory_v2_summary = str(memory_v2.get("summary") or "").strip()
+    return PlanGraph(
+        plan_id=plan_id,
+        intent=str(
+            parsed.get("intent")
+            or ("conversation_reply" if parsed.get("mode") == "reply" else "dynamic_workflow")
+        ),
+        todo_steps=[str(x) for x in parsed.get("todo_steps") or []],
+        nodes=nodes,
+        risk_level=normalize_workflow_risk(str(parsed.get("risk_level") or "low")),
+        metadata={
+            "planner": "llm",
+            "response_mode": "reply" if parsed.get("mode") == "reply" else "workflow",
+            **(
+                {"reply": parsed["reply"]}
+                if parsed.get("mode") == "reply"
+                else {"message": message}
+            ),
+            "user_memory_rag_summary": user_memory_rag_summary,
+            "memory_v2_summary": memory_v2_summary,
+        },
+    )
 
 
 class LlmPlanGeneration:
@@ -524,58 +581,76 @@ class LlmPlanGeneration:
                 },
                 {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
             ]
+            from app.application.workflow.tool_calling import (
+                build_function_tools,
+                plan_from_tool_calls,
+                tool_calls_enabled,
+                unsupported_tool_parameter,
+            )
+
+            native_tools: list[dict[str, Any]] = []
+            native_lookup: dict[str, tuple[str, str]] = {}
+            if tool_calls_enabled():
+                native_tools, native_lookup = build_function_tools(tool_registry)
+            extra: dict[str, Any] = (
+                {"tools": native_tools, "tool_choice": "auto"} if native_tools else {}
+            )
+            from app.application.workflow.retry_policy import call_with_retry, planner_retry_policy
+
+            policy = planner_retry_policy()
             response_data = self._stream_reply(messages, context)
             if response_data is None:
-                response_data = self.completion(
-                    ai_service=self.conversation,
-                    context=context,
-                    messages=messages,
-                    http_client_factory=self.http_client,
-                )
+                try:
+                    response_data = call_with_retry(
+                        lambda: self.completion(
+                            ai_service=self.conversation,
+                            context=context,
+                            messages=messages,
+                            http_client_factory=self.http_client,
+                            **extra,
+                        ),
+                        policy=policy,
+                    )
+                except TypeError as exc:
+                    if not extra or not unsupported_tool_parameter(exc):
+                        raise
+                    # 兼容不接受额外参数的旧 completion 实现（含测试替身）。
+                    response_data = call_with_retry(
+                        lambda: self.completion(
+                            ai_service=self.conversation,
+                            context=context,
+                            messages=messages,
+                            http_client_factory=self.http_client,
+                        ),
+                        policy=policy,
+                    )
             if response_data is None:
                 return None
+            native_plan = plan_from_tool_calls(
+                response_data,
+                plan_id=plan_id,
+                message=message,
+                context=context,
+                lookup=native_lookup,
+            )
+            if native_plan is not None:
+                return native_plan
             decoded = _decode_completion(response_data)
             if decoded is None:
                 return None
             parsed, nodes = decoded
-            user_memory_rag_summary = ""
-            memory_v2_summary = ""
-            try:
-                if isinstance(context, dict):
-                    user_memory_rag = context.get("user_memory_rag")
-                    if isinstance(user_memory_rag, dict):
-                        user_memory_rag_summary = str(user_memory_rag.get("summary") or "").strip()
-                    memory_v2 = context.get("memory_v2")
-                    if isinstance(memory_v2, dict):
-                        memory_v2_summary = str(memory_v2.get("summary") or "").strip()
-            except (ImportError, RuntimeError):
-                user_memory_rag_summary = ""
-                memory_v2_summary = ""
-            return PlanGraph(
+            return build_plan_from_payload(
                 plan_id=plan_id,
-                intent=str(
-                    parsed.get("intent")
-                    or (
-                        "conversation_reply"
-                        if parsed.get("mode") == "reply"
-                        else "dynamic_workflow"
-                    )
-                ),
-                todo_steps=[str(x) for x in parsed.get("todo_steps") or []],
+                message=message,
+                parsed=parsed,
                 nodes=nodes,
-                risk_level=normalize_workflow_risk(str(parsed.get("risk_level") or "low")),
-                metadata={
-                    "planner": "llm",
-                    "response_mode": "reply" if parsed.get("mode") == "reply" else "workflow",
-                    **(
-                        {"reply": parsed["reply"]}
-                        if parsed.get("mode") == "reply"
-                        else {"message": message}
-                    ),
-                    "user_memory_rag_summary": user_memory_rag_summary,
-                    "memory_v2_summary": memory_v2_summary,
-                },
+                context=context,
             )
+        except (OSError, httpx.TransportError) as err:
+            # Exhausted retries must retain the existing fail-closed plan result,
+            # not escape into chat or invoke the retired fallback dispatcher.
+            logger.warning("模型传输重试已耗尽，拒绝计划：%s", type(err).__name__)
+            return None
         except (ValueError, TypeError) as err:
             from app.infrastructure.modstore_transport import MarketModelError
 

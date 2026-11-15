@@ -6,10 +6,12 @@ import asyncio
 import json
 import re
 import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
 
+from app.infrastructure.observability.metrics import observe_chat_ttft
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
@@ -90,10 +92,15 @@ async def _xcagi_planner_stream_bytes_async(
 
     thread = threading.Thread(target=_feed_queue, daemon=True, name="xcagi-stream-async-bridge")
     thread.start()
+    started = time.perf_counter()
+    first_chunk = True
     while True:
         item = await async_q.get()
         if item is _SENTINEL:
             break
+        if first_chunk and item:
+            observe_chat_ttft((time.perf_counter() - started) * 1000)
+            first_chunk = False
         yield item
 
 

@@ -12,6 +12,20 @@ import pytest
 
 from app.services.tools_execution.order_parser import _parse_order_text
 
+
+def _assert_shared_with_api_key_successful_ai_response_0(
+    self, _shared_literal_0, _shared_literal_1, _shared_literal_2
+):
+    payload = {"choices": [{"message": {"content": _shared_literal_2}}]}
+    with patch.dict(os.environ, {"DEEPSEEK_API_KEY": _shared_literal_0}, clear=False):
+        with patch(
+            "app.infrastructure.llm.invoke.chat_completion_openai_format",
+            new=AsyncMock(return_value=payload),
+        ):
+            r = _parse_order_text(_shared_literal_1)
+    assert "success" in r
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -243,43 +257,21 @@ class TestAIFallbackPath:
 
     def test_with_api_key_successful_ai_response(self):
         """Mock LLM invoke boundary to simulate a successful AI extraction."""
-        payload = {
-            "choices": [
-                {
-                    "message": {
-                        "content": '{"unit_name":"客户L","model_number":"AI-001","tin_spec":"15","quantity_tins":"4"}'
-                    }
-                }
-            ]
-        }
-
-        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-test"}, clear=False):
-            with patch(
-                "app.infrastructure.llm.invoke.chat_completion_openai_format",
-                new=AsyncMock(return_value=payload),
-            ):
-                r = _parse_order_text("随机测试文本 无法解析")
-        assert "success" in r
+        return _assert_shared_with_api_key_successful_ai_response_0(
+            self,
+            "sk-test",
+            "随机测试文本 无法解析",
+            '{"unit_name":"客户L","model_number":"AI-001","tin_spec":"15","quantity_tins":"4"}',
+        )
 
     def test_with_api_key_missing_fields_returns_prompt(self):
         """AI returns partial data → missing_prompt triggers False response."""
-        payload = {
-            "choices": [
-                {
-                    "message": {
-                        "content": '{"unit_name":"客户M","model_number":"","tin_spec":"","quantity_tins":""}'
-                    }
-                }
-            ]
-        }
-
-        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-test"}, clear=False):
-            with patch(
-                "app.infrastructure.llm.invoke.chat_completion_openai_format",
-                new=AsyncMock(return_value=payload),
-            ):
-                r = _parse_order_text("文本无法解析 x y z")
-        assert "success" in r
+        return _assert_shared_with_api_key_successful_ai_response_0(
+            self,
+            "sk-test",
+            "文本无法解析 x y z",
+            '{"unit_name":"客户M","model_number":"","tin_spec":"","quantity_tins":""}',
+        )
 
     def test_api_key_llm_none_falls_through(self):
         """LLM 返回 None → skip AI, fall through to final branches."""
@@ -759,28 +751,12 @@ class TestAIFullSuccessReturn:
 
     def test_ai_markdown_stripped(self):
         """Content with ```json fence → extracted correctly."""
-        payload = {
-            "choices": [
-                {
-                    "message": {
-                        "content": (
-                            "```json\n"
-                            '{"unit_name":"总公司B","model_number":"AI-888",'
-                            '"tin_spec":"10","quantity_tins":"2"}\n'
-                            "```"
-                        )
-                    }
-                }
-            ]
-        }
-
-        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-md"}, clear=False):
-            with patch(
-                "app.infrastructure.llm.invoke.chat_completion_openai_format",
-                new=AsyncMock(return_value=payload),
-            ):
-                r = _parse_order_text("另一个无法解析的文本 abc")
-        assert "success" in r
+        return _assert_shared_with_api_key_successful_ai_response_0(
+            self,
+            "sk-md",
+            "另一个无法解析的文本 abc",
+            '```json\n{"unit_name":"总公司B","model_number":"AI-888","tin_spec":"10","quantity_tins":"2"}\n```',
+        )
 
 
 # ===========================================================================

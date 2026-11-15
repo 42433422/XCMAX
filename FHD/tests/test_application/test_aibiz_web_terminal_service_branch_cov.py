@@ -22,6 +22,112 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.responses import JSONResponse, Response
 
+
+async def _assert_shared_software_terminal_workflow_label_0(self, _case_value_0, _case_value_1):
+    from app.application.aibiz_web_terminal_service import build_terminal_payload
+
+    request = MagicMock()
+    mock_surface = {"pages": [{"id": "home"}]}
+    with (
+        patch(
+            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+            new_callable=AsyncMock,
+            return_value="Bearer token",
+        ),
+        patch(
+            "app.application.aibiz_web_terminal_service._resolve_surface_audit",
+            new_callable=AsyncMock,
+            return_value=(mock_surface, "note"),
+        ),
+        patch(
+            "app.fastapi_routes.market_account._market_base_url", return_value="https://example.com"
+        ),
+    ):
+        result = await build_terminal_payload(request, terminal=_case_value_1)
+    assert result["success"] is True
+    assert result["data"]["workflow_label"] == _case_value_0
+
+
+async def _assert_shared_digest_creds_duplicate_with_env_skipped_1(
+    self,
+    monkeypatch,
+    _case_value_0,
+    _case_value_1,
+    _case_value_2,
+    _case_value_3,
+    _case_value_4,
+    _case_value_5,
+):
+    from app.application.aibiz_web_terminal_service import _resolve_market_authorization
+
+    monkeypatch.setenv("XCAGI_AIBIZ_MARKET_USER", _case_value_0)
+    monkeypatch.setenv("XCAGI_AIBIZ_MARKET_PASSWORD", _case_value_1)
+    monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_USER", _case_value_2)
+    monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_PASSWORD", _case_value_3)
+    request = MagicMock()
+    with (
+        patch("app.fastapi_routes.market_account.session_id_from_request", return_value=""),
+        patch("app.application.surface_audit_demo_account.demo_username", return_value=""),
+        patch("app.application.surface_audit_demo_account.demo_password", return_value=""),
+        patch(
+            "app.fastapi_routes.market_account.login_market_with_password",
+            new_callable=AsyncMock,
+            return_value={"success": True, "token": _case_value_5},
+        ) as mock_login,
+    ):
+        result = await _resolve_market_authorization(request)
+    assert mock_login.call_count == 1
+    assert result == _case_value_4
+
+
+async def _assert_shared_no_auth_with_pages_includes_android_audit_2(
+    self, _case_value_0, _case_value_1, _case_value_2, _case_value_3
+):
+    from app.application.aibiz_web_terminal_service import build_terminal_payload
+
+    request = MagicMock()
+    mock_surface = {"pages": [{"id": "home"}], "android_audit": {"devices": _case_value_0}}
+    with (
+        patch(
+            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+            new_callable=AsyncMock,
+            return_value=_case_value_2,
+        ),
+        patch(
+            "app.application.aibiz_web_terminal_service._resolve_surface_audit",
+            new_callable=AsyncMock,
+            return_value=(mock_surface, _case_value_3),
+        ),
+        patch(
+            "app.fastapi_routes.market_account._market_base_url", return_value="https://example.com"
+        ),
+    ):
+        result = await build_terminal_payload(request, terminal="app")
+    assert result["success"] is True
+    assert result["data"]["android_audit"] == {"devices": _case_value_1}
+
+
+def _assert_shared_software_terminal_no_preview_falls_to_else_0(
+    self,
+    _shared_literal_0,
+    _shared_literal_1,
+    _shared_literal_2,
+    _shared_literal_3,
+    _shared_literal_4,
+    _shared_literal_5,
+):
+    from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
+
+    surface = {
+        "pages": [
+            {"id": _shared_literal_2, "name": _shared_literal_3},
+            {"id": _shared_literal_4, "name": _shared_literal_5},
+        ]
+    }
+    result = _strip_b64_attach_image_urls(surface, terminal=_shared_literal_1)
+    assert result["preview_index"] == _shared_literal_0
+
+
 # ---------------------------------------------------------------------------
 # _crop_png_top — branch coverage
 # ---------------------------------------------------------------------------
@@ -266,135 +372,63 @@ class TestStripB64AttachImageUrlsBranchCov:
 
     def test_software_terminal_no_preview_falls_to_else(self):
         """Software terminal with no preview pages falls to else branch."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "home_hub", "name": "首页"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="software")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "software", "other", "Other", "home_hub", "首页"
+        )
 
     def test_software_terminal_admin_page_in_else_continues(self):
         """Software terminal: admin_ pages continue (skip) in else branch."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "admin_x", "name": "管理"},
-                {"id": "home_hub", "name": "首页"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="software")
-        # admin_x is skipped, home_hub is found as hero
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "software", "admin_x", "管理", "home_hub", "首页"
+        )
 
     def test_software_terminal_chat_name_hero(self):
         """Software terminal: name '智能对话' triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "x", "name": "智能对话"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="software")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "software", "other", "Other", "x", "智能对话"
+        )
 
     def test_software_terminal_home_name_hero(self):
         """Software terminal: name '首页' triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "x", "name": "首页"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="software")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "software", "other", "Other", "x", "首页"
+        )
 
     def test_web_terminal_admin_hero(self):
         """Web terminal: admin_ prefix triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "admin_panel", "name": "Admin"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "web", "other", "Other", "admin_panel", "Admin"
+        )
 
     def test_web_terminal_home_hub_hero(self):
         """Web terminal: home_hub id triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "home_hub", "name": "Hub"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "web", "other", "Other", "home_hub", "Hub"
+        )
 
     def test_web_terminal_guanwang_name_hero(self):
         """Web terminal: name containing '官网' triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "x", "name": "官网首页"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "web", "other", "Other", "x", "官网首页"
+        )
 
     def test_web_terminal_home_lower_name_hero(self):
         """Web terminal: name.lower() == 'home' triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "x", "name": "Home"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "web", "other", "Other", "x", "Home"
+        )
 
     def test_web_terminal_index_lower_name_hero(self):
         """Web terminal: name.lower() == 'index' triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "x", "name": "Index"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "web", "other", "Other", "x", "Index"
+        )
 
     def test_app_terminal_no_preferred_match_keeps_default_hero(self):
         """App terminal: no preferred id match keeps hero_i=0."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other1", "name": "Other1"},
-                {"id": "other2", "name": "Other2"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="app")
-        # No preferred id matched, hero_i stays 0
-        assert result["preview_index"] == 0
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 0, "app", "other1", "Other1", "other2", "Other2"
+        )
 
     def test_pages_with_non_dict_page_in_loop(self):
         """Non-dict page entries are preserved in output."""
@@ -1069,38 +1103,16 @@ class TestResolveMarketAuthorizationBranchCov:
 
     @pytest.mark.asyncio
     async def test_digest_creds_duplicate_with_env_skipped(self, monkeypatch):
-        from app.application.aibiz_web_terminal_service import _resolve_market_authorization
-
-        # Same creds for env and digest → digest should be skipped (not in creds)
-        monkeypatch.setenv("XCAGI_AIBIZ_MARKET_USER", "sameuser")
-        monkeypatch.setenv("XCAGI_AIBIZ_MARKET_PASSWORD", "samepass")
-        monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_USER", "sameuser")
-        monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_PASSWORD", "samepass")
-
-        request = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.market_account.session_id_from_request",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_username",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_password",
-                return_value="",
-            ),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_password",
-                new_callable=AsyncMock,
-                return_value={"success": True, "token": "env_token"},
-            ) as mock_login,
-        ):
-            result = await _resolve_market_authorization(request)
-        # Should only call login once (digest is duplicate)
-        assert mock_login.call_count == 1
-        assert result == "env_token"
+        return await _assert_shared_digest_creds_duplicate_with_env_skipped_1(
+            self,
+            monkeypatch,
+            "sameuser",
+            "samepass",
+            "sameuser",
+            "samepass",
+            "env_token",
+            "env_token",
+        )
 
     @pytest.mark.asyncio
     async def test_demo_creds_duplicate_with_env_skipped(self, monkeypatch):
@@ -1166,37 +1178,16 @@ class TestResolveMarketAuthorizationBranchCov:
 
     @pytest.mark.asyncio
     async def test_multiple_creds_first_succeeds(self, monkeypatch):
-        from app.application.aibiz_web_terminal_service import _resolve_market_authorization
-
-        monkeypatch.setenv("XCAGI_AIBIZ_MARKET_USER", "envuser")
-        monkeypatch.setenv("XCAGI_AIBIZ_MARKET_PASSWORD", "envpass")
-        monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_USER", "digest_user")
-        monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_PASSWORD", "digest_pass")
-
-        request = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.market_account.session_id_from_request",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_username",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_password",
-                return_value="",
-            ),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_password",
-                new_callable=AsyncMock,
-                return_value={"success": True, "token": "first_token"},
-            ) as mock_login,
-        ):
-            result = await _resolve_market_authorization(request)
-        # First cred succeeds, should not try second
-        assert mock_login.call_count == 1
-        assert result == "first_token"
+        return await _assert_shared_digest_creds_duplicate_with_env_skipped_1(
+            self,
+            monkeypatch,
+            "envuser",
+            "envpass",
+            "digest_user",
+            "digest_pass",
+            "first_token",
+            "first_token",
+        )
 
     @pytest.mark.asyncio
     async def test_multiple_creds_first_fails_second_succeeds(self, monkeypatch):
@@ -1489,140 +1480,33 @@ class TestBuildTerminalPayloadBranchCov:
 
     @pytest.mark.asyncio
     async def test_software_terminal_workflow_label(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
-
-        request = MagicMock()
-        mock_surface = {"pages": [{"id": "home"}]}
-        with (
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-                new_callable=AsyncMock,
-                return_value="Bearer token",
-            ),
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-                new_callable=AsyncMock,
-                return_value=(mock_surface, "note"),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://example.com",
-            ),
-        ):
-            result = await build_terminal_payload(request, terminal="software")
-        assert result["success"] is True
-        assert result["data"]["workflow_label"] == "P-S 软件截图+分析"
+        return await _assert_shared_software_terminal_workflow_label_0(
+            self, "P-S 软件截图+分析", "software"
+        )
 
     @pytest.mark.asyncio
     async def test_app_terminal_workflow_label(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
-
-        request = MagicMock()
-        mock_surface = {"pages": [{"id": "home"}]}
-        with (
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-                new_callable=AsyncMock,
-                return_value="Bearer token",
-            ),
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-                new_callable=AsyncMock,
-                return_value=(mock_surface, "note"),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://example.com",
-            ),
-        ):
-            result = await build_terminal_payload(request, terminal="app")
-        assert result["success"] is True
-        assert result["data"]["workflow_label"] == "P-App 移动截图+分析"
+        return await _assert_shared_software_terminal_workflow_label_0(
+            self, "P-App 移动截图+分析", "app"
+        )
 
     @pytest.mark.asyncio
     async def test_unknown_terminal_defaults_to_web_workflow(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
-
-        request = MagicMock()
-        mock_surface = {"pages": [{"id": "home"}]}
-        with (
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-                new_callable=AsyncMock,
-                return_value="Bearer token",
-            ),
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-                new_callable=AsyncMock,
-                return_value=(mock_surface, "note"),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://example.com",
-            ),
-        ):
-            result = await build_terminal_payload(request, terminal="unknown")
-        assert result["success"] is True
-        # Unknown terminal defaults to P-W/SW
-        assert result["data"]["workflow_label"] == "P-W 网站截图+分析"
+        return await _assert_shared_software_terminal_workflow_label_0(
+            self, "P-W 网站截图+分析", "unknown"
+        )
 
     @pytest.mark.asyncio
     async def test_no_auth_with_pages_includes_android_audit(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
-
-        request = MagicMock()
-        mock_surface = {
-            "pages": [{"id": "home"}],
-            "android_audit": {"devices": 1},
-        }
-        with (
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-                new_callable=AsyncMock,
-                return_value="",
-            ),
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-                new_callable=AsyncMock,
-                return_value=(mock_surface, "local"),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://example.com",
-            ),
-        ):
-            result = await build_terminal_payload(request, terminal="app")
-        assert result["success"] is True
-        assert result["data"]["android_audit"] == {"devices": 1}
+        return await _assert_shared_no_auth_with_pages_includes_android_audit_2(
+            self, 1, 1, "", "local"
+        )
 
     @pytest.mark.asyncio
     async def test_with_auth_includes_android_audit(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
-
-        request = MagicMock()
-        mock_surface = {
-            "pages": [{"id": "home"}],
-            "android_audit": {"devices": 2},
-        }
-        with (
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-                new_callable=AsyncMock,
-                return_value="Bearer token",
-            ),
-            patch(
-                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-                new_callable=AsyncMock,
-                return_value=(mock_surface, "remote"),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://example.com",
-            ),
-        ):
-            result = await build_terminal_payload(request, terminal="app")
-        assert result["success"] is True
-        assert result["data"]["android_audit"] == {"devices": 2}
+        return await _assert_shared_no_auth_with_pages_includes_android_audit_2(
+            self, 2, 2, "Bearer token", "remote"
+        )
 
     @pytest.mark.asyncio
     async def test_no_auth_no_pages_returns_401_with_data(self):

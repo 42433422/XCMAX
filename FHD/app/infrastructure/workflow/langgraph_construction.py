@@ -79,9 +79,15 @@ class LangGraphConstructionMixin:
             raise ValueError(f"工作流计划无效：{error}")
         # LangGraph's parallel edge triggers do not express an AND-join when a
         # child also sits behind a conditional route. Use the explicit ready
-        # scheduler whenever routing or multiple prerequisites are present.
+        # scheduler whenever routing, multiple prerequisites, or any
+        # non-verified reader is present, so independent writers still pause
+        # for their own approval instead of starting together.
         serial_scheduler = not parallel or any(
-            node.branches or node.next or len(node.depends_on) > 1 for node in plan.nodes
+            node.branches
+            or node.next
+            or len(node.depends_on) > 1
+            or not _ReadersWriterGate.is_reader(node)
+            for node in plan.nodes
         )
         if serial_scheduler and "__xcagi_schedule__" in {node.node_id for node in plan.nodes}:
             raise ValueError("计划节点占用了 LangGraph 调度保留标识")
@@ -97,7 +103,7 @@ class LangGraphConstructionMixin:
                     [n.node_id for n in plan.nodes],
                     gate,
                     effective,
-                    block_unselected=parallel,
+                    block_unselected=parallel and not serial_scheduler,
                 ),
             )
         if serial_scheduler:

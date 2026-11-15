@@ -39,7 +39,7 @@ def test_quote_requires_customer_even_when_details_are_complete():
     assert not validate_tool_call("sales", "quote", params).ok
 
 
-def test_elt_batch_arrays_truncate_instead_of_rejecting_the_plan():
+def test_etl_batch_arrays_truncate_instead_of_rejecting_the_plan():
     params = {"file_paths": [f"f{i}.xlsx" for i in range(60)]}
     validation = validate_tool_call("elt_import", "preview", params)
     assert validation.ok, validation.message
@@ -800,12 +800,8 @@ def test_business_db_read_materials_accepts_material_view(trusted_actor, monkeyp
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     actor = trusted_actor(permissions=["material.view"])
 
-    allowed = actor_tool_denial(
-        "business_db", "read", actor.context, {"entity": "materials"}
-    )
-    denied = actor_tool_denial(
-        "business_db", "read", actor.context, {"entity": "customers"}
-    )
+    allowed = actor_tool_denial("business_db", "read", actor.context, {"entity": "materials"})
+    denied = actor_tool_denial("business_db", "read", actor.context, {"entity": "customers"})
 
     assert allowed is None
     assert denied is not None and denied["error_code"] == "tool_permission_denied"

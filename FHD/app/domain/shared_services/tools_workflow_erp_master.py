@@ -172,7 +172,7 @@ def _registered_router_products(
     if action == "clear":
         listed = svc.get_products(page=1, per_page=100000) or {}
         rows = listed.get("data") if isinstance(listed, dict) else None
-        ids: list[int] = []
+        ids = []
         for row in rows if isinstance(rows, list) else []:
             if not isinstance(row, dict):
                 continue
@@ -254,7 +254,7 @@ def _registered_router_materials(
     if action == "clear":
         listed = svc.get_all_materials(page=1, per_page=100000) or {}
         rows = listed.get("data") if isinstance(listed, dict) else None
-        ids: list[int] = []
+        ids = []
         for row in rows if isinstance(rows, list) else []:
             if not isinstance(row, dict):
                 continue
@@ -270,7 +270,11 @@ def _registered_router_materials(
             result = svc.batch_delete_materials(ids)
         except RECOVERABLE_ERRORS as err:
             logger.error("清空原材料时 service 执行异常：%s", err)
-            return {"success": True, "message": f"已清空 {len(ids)} 条记录", "deleted_count": len(ids)}
+            return {
+                "success": True,
+                "message": f"已清空 {len(ids)} 条记录",
+                "deleted_count": len(ids),
+            }
         if isinstance(result, dict):
             result.setdefault("success", True)
             result.setdefault("deleted_count", len(ids))

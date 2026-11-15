@@ -114,7 +114,7 @@ Synthetic tests on this candidate, where they exist, are regression only:
 | B33–B42 | `tests/test_etl_validation_value_fidelity.py` passed. | BLOCKED |
 | B43–B49 | Preview confirmation and preview-boundary tests passed on synthetic rows. | BLOCKED |
 | B50–B56 | No customer execution. Snapshot and replay tests passed on synthetic runs only. | BLOCKED |
-| B57 | `tests/test_application/test_elt_import_audit.py` passed. | BLOCKED |
+| B57 | `tests/test_application/test_etl_import_audit.py` passed. | BLOCKED |
 | B58, B60, B62 | Already on `main` via #3087. Buyer-meta tests passed. | BLOCKED |
 | B59, B61, B63, B64 | No customer execution and no new case result. | BLOCKED |
 | B65–B71 | Shipment layout-fill and export regression tests passed on synthetic notes. | BLOCKED |

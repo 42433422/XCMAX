@@ -3,6 +3,8 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.dataset_rag_app_service import DatasetAccessContext
 from app.application.persy_memory_app_service import (
@@ -327,3 +329,17 @@ def test_completed_chat_turn_is_sent_to_vector_and_structured_memory(trusted_act
         source="smart-chat",
         scope="tenant",
     )
+
+
+@pytest.mark.parametrize("memories", [None, {}, "invalid", [None, 7]])
+def test_invalid_memory_listing_never_deletes_or_returns_records(memories):
+    service = _service()
+    with (
+        patch.object(
+            service, "list_memories", return_value={"success": True, "memories": memories}
+        ),
+        patch.object(service, "mutate") as mutate,
+    ):
+        assert service.clear_memories(access_context=_access())["deleted_memories"] == 0
+        assert service.query(access_context=_access(), query="missing")["memories"] == []
+        mutate.assert_not_called()

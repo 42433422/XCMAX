@@ -7,6 +7,7 @@ Focus on exception paths, empty inputs, and branch conditions.
 
 from __future__ import annotations
 
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,6 +19,26 @@ from app.application.ops_closure_status import (
     _next_actions,
     build_ops_closure_status,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0():
+    with (
+        patch(
+            "app.application.ops_closure_status.all_planned_duty_employee_ids",
+            return_value=[],
+        ),
+        patch(
+            "app.application.ops_closure_status._installed_employee_pack_ids",
+            return_value=set(),
+        ),
+        patch(
+            "app.application.ops_closure_status._duty_employee_area_map",
+            return_value={},
+        ),
+    ):
+        yield None
+
 
 # ---------------------------------------------------------------------------
 # _installed_employee_pack_ids
@@ -366,20 +387,7 @@ class TestBuildOpsClosureStatus:
         assert any(b["code"] == "LOCAL_EMPLOYEE_PACK_MISSING" for b in result["blockers"])
 
     def test_pending_change_requests_creates_blocker(self):
-        with (
-            patch(
-                "app.application.ops_closure_status.all_planned_duty_employee_ids",
-                return_value=[],
-            ),
-            patch(
-                "app.application.ops_closure_status._installed_employee_pack_ids",
-                return_value=set(),
-            ),
-            patch(
-                "app.application.ops_closure_status._duty_employee_area_map",
-                return_value={},
-            ),
-        ):
+        with _shared_scope_case_0():
             result = build_ops_closure_status({"change_requests": {"pending": 5}})
         assert result["deliverable"] is False
         assert any(b["code"] == "PENDING_CHANGE_REQUESTS" for b in result["blockers"])
@@ -432,38 +440,12 @@ class TestBuildOpsClosureStatus:
         assert result["staffing"]["registered_count"] == 1
 
     def test_staffing_not_dict_handled(self):
-        with (
-            patch(
-                "app.application.ops_closure_status.all_planned_duty_employee_ids",
-                return_value=[],
-            ),
-            patch(
-                "app.application.ops_closure_status._installed_employee_pack_ids",
-                return_value=set(),
-            ),
-            patch(
-                "app.application.ops_closure_status._duty_employee_area_map",
-                return_value={},
-            ),
-        ):
+        with _shared_scope_case_0():
             result = build_ops_closure_status({"staffing": "not-a-dict"})
         assert result["staffing"]["planned_count"] == 0
 
     def test_change_requests_not_dict_handled(self):
-        with (
-            patch(
-                "app.application.ops_closure_status.all_planned_duty_employee_ids",
-                return_value=[],
-            ),
-            patch(
-                "app.application.ops_closure_status._installed_employee_pack_ids",
-                return_value=set(),
-            ),
-            patch(
-                "app.application.ops_closure_status._duty_employee_area_map",
-                return_value={},
-            ),
-        ):
+        with _shared_scope_case_0():
             result = build_ops_closure_status({"change_requests": "not-a-dict"})
         assert result["deliverable"] is True
 
@@ -490,20 +472,7 @@ class TestBuildOpsClosureStatus:
 
     def test_missing_remote_truncated_to_50(self):
         many_missing = [f"emp-{i}" for i in range(60)]
-        with (
-            patch(
-                "app.application.ops_closure_status.all_planned_duty_employee_ids",
-                return_value=[],
-            ),
-            patch(
-                "app.application.ops_closure_status._installed_employee_pack_ids",
-                return_value=set(),
-            ),
-            patch(
-                "app.application.ops_closure_status._duty_employee_area_map",
-                return_value={},
-            ),
-        ):
+        with _shared_scope_case_0():
             result = build_ops_closure_status({"staffing": {"missing_employees": many_missing}})
         blocker = next(b for b in result["blockers"] if b["code"] == "REMOTE_STAFFING_GAP")
         assert len(blocker["employee_ids"]) == 50

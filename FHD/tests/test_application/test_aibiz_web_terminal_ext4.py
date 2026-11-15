@@ -10,10 +10,51 @@ _local_surface_page, _local_lane_pages, _load_local_lane_surface.
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager as _shared_scope_contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(case_value_1, case_value_2, case_value_3):
+    with (
+        patch(
+            "app.fastapi_routes.market_account.session_id_from_request",
+            return_value="",
+        ),
+        patch(
+            "app.application.surface_audit_demo_account.demo_username",
+            return_value=case_value_1,
+        ),
+        patch(
+            "app.application.surface_audit_demo_account.demo_password",
+            return_value=case_value_2,
+        ),
+        patch(
+            "app.fastapi_routes.market_account.login_market_with_password",
+            new_callable=AsyncMock,
+            return_value={"success": True, "token": case_value_3},
+        ),
+    ):
+        yield None
+
+
+def _assert_shared_software_terminal_home_hub_hero_0(
+    self, _shared_literal_0, _shared_literal_1, _shared_literal_2
+):
+    from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
+
+    surface = {
+        "pages": [
+            {"id": "other", "name": "Other"},
+            {"id": _shared_literal_1, "name": _shared_literal_2},
+        ]
+    }
+    result = _strip_b64_attach_image_urls(surface, terminal=_shared_literal_0)
+    assert result["preview_index"] == 1
+
 
 # ---------------------------------------------------------------------------
 # _resolve_market_authorization — credential chain
@@ -51,25 +92,7 @@ class TestResolveMarketAuthorization:
         monkeypatch.delenv("MODSTORE_DIGEST_ADMIN_PASSWORD", raising=False)
 
         request = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.market_account.session_id_from_request",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_username",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_password",
-                return_value="",
-            ),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_password",
-                new_callable=AsyncMock,
-                return_value={"success": True, "token": "env_token"},
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="", case_value_2="", case_value_3="env_token"):
             result = await _resolve_market_authorization(request)
         assert result == "env_token"
 
@@ -110,25 +133,7 @@ class TestResolveMarketAuthorization:
         monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_PASSWORD", "digest_pass")
 
         request = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.market_account.session_id_from_request",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_username",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_password",
-                return_value="",
-            ),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_password",
-                new_callable=AsyncMock,
-                return_value={"success": True, "token": "digest_token"},
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="", case_value_2="", case_value_3="digest_token"):
             result = await _resolve_market_authorization(request)
         assert result == "digest_token"
 
@@ -142,24 +147,8 @@ class TestResolveMarketAuthorization:
         monkeypatch.delenv("MODSTORE_DIGEST_ADMIN_PASSWORD", raising=False)
 
         request = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.market_account.session_id_from_request",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_username",
-                return_value="demo_user",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_password",
-                return_value="demo_pass",
-            ),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_password",
-                new_callable=AsyncMock,
-                return_value={"success": True, "token": "demo_token"},
-            ),
+        with _shared_scope_case_0(
+            case_value_1="demo_user", case_value_2="demo_pass", case_value_3="demo_token"
         ):
             result = await _resolve_market_authorization(request)
         assert result == "demo_token"
@@ -1095,88 +1084,27 @@ class TestStripB64AttachImageUrlsAdditional:
         assert result["preview_index"] == 1
 
     def test_software_terminal_home_hub_hero(self):
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "home_hub", "name": "首页"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="software")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_home_hub_hero_0(
+            self, "software", "home_hub", "首页"
+        )
 
     def test_web_terminal_mod_admin_hero(self):
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "mod_something", "name": "MOD"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_home_hub_hero_0(self, "web", "mod_something", "MOD")
 
     def test_web_terminal_home_hero(self):
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "home", "name": "官网首页"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_home_hub_hero_0(self, "web", "home", "官网首页")
 
     def test_app_terminal_approval_hero(self):
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "approval", "name": "审批"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="app")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_home_hub_hero_0(self, "app", "approval", "审批")
 
     def test_app_terminal_erp_overview_hero(self):
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "erp_overview", "name": "ERP"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="app")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_home_hub_hero_0(self, "app", "erp_overview", "ERP")
 
     def test_app_terminal_chat_hero(self):
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "chat", "name": "聊天"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="app")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_home_hub_hero_0(self, "app", "chat", "聊天")
 
     def test_app_terminal_workbench_hero(self):
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "workbench", "name": "工作台"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="app")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_home_hub_hero_0(self, "app", "workbench", "工作台")
 
     def test_pages_with_non_dict_entries(self):
         from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls

@@ -8,10 +8,52 @@ called as coroutines with mocked dependencies.
 from __future__ import annotations
 
 import importlib
+from contextlib import contextmanager as _shared_scope_contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+
+@_shared_scope_contextmanager
+def _shared_scope_uid_zero_0(case_value_1, case_value_2):
+    with (
+        patch(
+            case_value_1,
+            return_value=({}, None),
+        ),
+        patch(case_value_2, return_value=0),
+    ):
+        yield None
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_1(case_value_1, case_value_2, case_value_3):
+    with (
+        patch(
+            case_value_1,
+            return_value=({}, None),
+        ),
+        patch(case_value_2, return_value=5),
+        patch(case_value_3) as svc_cls,
+    ):
+        yield svc_cls
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_2(self, mod):
+    with (
+        patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=self._mgr([mod])),
+        patch(
+            "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
+            return_value=[],
+        ),
+        patch(
+            "app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item",
+            return_value=None,
+        ),
+    ):
+        yield None
 
 
 @pytest.fixture(autouse=True)
@@ -265,19 +307,7 @@ class TestMobileModItems:
             "name": "Mod1",
             "workflow_employees": [{"id": "e1", "label": "Alice"}],
         }
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=self._mgr([mod])
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
-                return_value=[],
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_2(self, mod):
             result = m._mobile_mod_items()
         assert any(i["id"] == "m1" for i in result)
 
@@ -298,38 +328,14 @@ class TestMobileModItems:
             logo="",
             icon="",
         )
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=self._mgr([mod])
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
-                return_value=[],
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_2(self, mod):
             result = m._mobile_mod_items()
         assert any(i["id"] == "m2" for i in result)
 
     def test_mid_empty_skips_item(self, m):
         """branch [402,item not appended]: mid empty → skip."""
         mod = {"id": "", "name": "NoId"}
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager", return_value=self._mgr([mod])
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._enrich_workflow_employees",
-                return_value=[],
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_2(self, mod):
             result = m._mobile_mod_items()
         assert result == []
 
@@ -909,14 +915,9 @@ class TestMobileAdminCodexSuperEmployeeMessages:
     @pytest.mark.asyncio
     async def test_uid_zero(self, m):
         """branch [1175,1176]: uid <= 0 → 401."""
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0
-            ),
+        with _shared_scope_uid_zero_0(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_request_user_id",
         ):
             result = await m.mobile_admin_codex_super_employee_messages(
                 request=MagicMock(), limit=80, user=_user()
@@ -927,16 +928,11 @@ class TestMobileAdminCodexSuperEmployeeMessages:
     async def test_recoverable_error(self, m):
         """branch [1183,1184]: RECOVERABLE_ERRORS → 500."""
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions.CodexSuperEmployeeService") as svc_cls,
-        ):
+        with _shared_scope_case_1(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_request_user_id",
+            case_value_3="app.fastapi_routes.mobile_api_extensions.CodexSuperEmployeeService",
+        ) as svc_cls:
             svc_cls.return_value.list_messages.side_effect = err_class("fail")
             result = await m.mobile_admin_codex_super_employee_messages(
                 request=MagicMock(), limit=80, user=_user()
@@ -974,14 +970,9 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
     @pytest.mark.asyncio
     async def test_uid_zero(self, m):
         """branch [1202,1203]: uid <= 0 → 401."""
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0
-            ),
+        with _shared_scope_uid_zero_0(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_request_user_id",
         ):
             result = await m.mobile_admin_codex_super_employee_invoke(
                 request=MagicMock(), body=self._body(), user=_user()
@@ -991,16 +982,11 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
     @pytest.mark.asyncio
     async def test_value_error(self, m):
         """branch [1219,1220]: ValueError from invoke → 400."""
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions.CodexSuperEmployeeService") as svc_cls,
-        ):
+        with _shared_scope_case_1(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_request_user_id",
+            case_value_3="app.fastapi_routes.mobile_api_extensions.CodexSuperEmployeeService",
+        ) as svc_cls:
             svc_cls.return_value.invoke.side_effect = ValueError("bad input")
             result = await m.mobile_admin_codex_super_employee_invoke(
                 request=MagicMock(), body=self._body(), user=_user()
@@ -1011,16 +997,11 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
     async def test_recoverable_error(self, m):
         """branch [1224,1225]: RECOVERABLE_ERRORS → 500."""
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions.CodexSuperEmployeeService") as svc_cls,
-        ):
+        with _shared_scope_case_1(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_request_user_id",
+            case_value_3="app.fastapi_routes.mobile_api_extensions.CodexSuperEmployeeService",
+        ) as svc_cls:
             svc_cls.return_value.invoke.side_effect = err_class("fail")
             result = await m.mobile_admin_codex_super_employee_invoke(
                 request=MagicMock(), body=self._body(), user=_user()
@@ -1051,14 +1032,9 @@ class TestMobileAdminClaudeSuperEmployeeMessages:
     @pytest.mark.asyncio
     async def test_uid_zero(self, m):
         """branch [1243,1244]: uid <= 0 → 401."""
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0
-            ),
+        with _shared_scope_uid_zero_0(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_request_user_id",
         ):
             result = await m.mobile_admin_claude_super_employee_messages(
                 request=MagicMock(), limit=80, user=_user()
@@ -1069,16 +1045,11 @@ class TestMobileAdminClaudeSuperEmployeeMessages:
     async def test_recoverable_error(self, m):
         """branch [1251,1252]: RECOVERABLE_ERRORS → 500."""
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions.ClaudeSuperEmployeeService") as svc_cls,
-        ):
+        with _shared_scope_case_1(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_request_user_id",
+            case_value_3="app.fastapi_routes.mobile_api_extensions.ClaudeSuperEmployeeService",
+        ) as svc_cls:
             svc_cls.return_value.list_messages.side_effect = err_class("fail")
             result = await m.mobile_admin_claude_super_employee_messages(
                 request=MagicMock(), limit=80, user=_user()
@@ -1116,14 +1087,9 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
     @pytest.mark.asyncio
     async def test_uid_zero(self, m):
         """branch [1270,1271]: uid <= 0 → 401."""
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=0
-            ),
+        with _shared_scope_uid_zero_0(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_request_user_id",
         ):
             result = await m.mobile_admin_claude_super_employee_invoke(
                 request=MagicMock(), body=self._body(), user=_user()
@@ -1133,16 +1099,11 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
     @pytest.mark.asyncio
     async def test_value_error(self, m):
         """branch [1287,1288]: ValueError → 400."""
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions.ClaudeSuperEmployeeService") as svc_cls,
-        ):
+        with _shared_scope_case_1(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_request_user_id",
+            case_value_3="app.fastapi_routes.mobile_api_extensions.ClaudeSuperEmployeeService",
+        ) as svc_cls:
             svc_cls.return_value.invoke.side_effect = ValueError("bad")
             result = await m.mobile_admin_claude_super_employee_invoke(
                 request=MagicMock(), body=self._body(), user=_user()
@@ -1153,16 +1114,11 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
     async def test_recoverable_error(self, m):
         """branch [1292,1293]: RECOVERABLE_ERRORS → 500."""
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
-                return_value=({}, None),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions.ClaudeSuperEmployeeService") as svc_cls,
-        ):
+        with _shared_scope_case_1(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_request_user_id",
+            case_value_3="app.fastapi_routes.mobile_api_extensions.ClaudeSuperEmployeeService",
+        ) as svc_cls:
             svc_cls.return_value.invoke.side_effect = err_class("fail")
             result = await m.mobile_admin_claude_super_employee_invoke(
                 request=MagicMock(), body=self._body(), user=_user()
@@ -1199,12 +1155,9 @@ class TestMobileAiGroupsList:
     @pytest.mark.asyncio
     async def test_uid_zero(self, m):
         """branch [1314,1315]: uid <= 0 → 401."""
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
-                return_value=({}, None),
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
+        with _shared_scope_uid_zero_0(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_group_uid",
         ):
             result = await m.mobile_ai_groups_list(request=MagicMock(), user=_user())
         assert result.status_code == 401
@@ -1213,14 +1166,11 @@ class TestMobileAiGroupsList:
     async def test_recoverable_error(self, m):
         """branch [1321,1322]: RECOVERABLE_ERRORS → 500."""
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
-                return_value=({}, None),
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=5),
-            patch("app.fastapi_routes.mobile_api_extensions.AiGroupChatService") as svc_cls,
-        ):
+        with _shared_scope_case_1(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_group_uid",
+            case_value_3="app.fastapi_routes.mobile_api_extensions.AiGroupChatService",
+        ) as svc_cls:
             svc_cls.return_value.list_groups.side_effect = err_class("fail")
             result = await m.mobile_ai_groups_list(request=MagicMock(), user=_user())
         assert result.status_code == 500
@@ -1244,12 +1194,9 @@ class TestMobileAiGroupsCreate:
     @pytest.mark.asyncio
     async def test_uid_zero(self, m):
         """branch [1337,1338]: uid <= 0 → 401."""
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
-                return_value=({}, None),
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
+        with _shared_scope_uid_zero_0(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_group_uid",
         ):
             result = await m.mobile_ai_groups_create(
                 request=MagicMock(), body=SimpleNamespace(name="g1"), user=_user()
@@ -1259,14 +1206,11 @@ class TestMobileAiGroupsCreate:
     @pytest.mark.asyncio
     async def test_value_error(self, m):
         """branch [1344,1345]: ValueError → 400."""
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
-                return_value=({}, None),
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=5),
-            patch("app.fastapi_routes.mobile_api_extensions.AiGroupChatService") as svc_cls,
-        ):
+        with _shared_scope_case_1(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_group_uid",
+            case_value_3="app.fastapi_routes.mobile_api_extensions.AiGroupChatService",
+        ) as svc_cls:
             svc_cls.return_value.create_group.side_effect = ValueError("dup")
             result = await m.mobile_ai_groups_create(
                 request=MagicMock(), body=SimpleNamespace(name="g1"), user=_user()
@@ -1292,12 +1236,9 @@ class TestMobileAiGroupMessages:
     @pytest.mark.asyncio
     async def test_uid_zero(self, m):
         """branch [1367,1368]: uid <= 0 → 401."""
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
-                return_value=({}, None),
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
+        with _shared_scope_uid_zero_0(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_group_uid",
         ):
             result = await m.mobile_ai_group_messages(
                 request=MagicMock(), group_id="g1", limit=100, user=_user()
@@ -1325,12 +1266,9 @@ class TestMobileAiGroupPost:
     async def test_uid_zero(self, m):
         """branch [1390,1391]: uid <= 0 → 401."""
         body = SimpleNamespace(message="hi", sender_name=None, mentions=[])
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
-                return_value=({}, None),
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
+        with _shared_scope_uid_zero_0(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_group_uid",
         ):
             result = await m.mobile_ai_group_post(
                 request=MagicMock(), group_id="g1", body=body, user=_user()
@@ -1362,12 +1300,9 @@ class TestMobileAiGroupAddMember:
         body = SimpleNamespace(
             employee_id="e1", mod_id="m1", name="Alice", avatar=None, summary=None
         )
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
-                return_value=({}, None),
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
+        with _shared_scope_uid_zero_0(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_group_uid",
         ):
             result = await m.mobile_ai_group_add_member(
                 request=MagicMock(), group_id="g1", body=body, user=_user()
@@ -1393,12 +1328,9 @@ class TestMobileAiGroupRemoveMember:
     @pytest.mark.asyncio
     async def test_uid_zero(self, m):
         """branch [1460,1461]: uid <= 0 → 401."""
-        with (
-            patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
-                return_value=({}, None),
-            ),
-            patch("app.fastapi_routes.mobile_api_extensions._mobile_group_uid", return_value=0),
+        with _shared_scope_uid_zero_0(
+            case_value_1="app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            case_value_2="app.fastapi_routes.mobile_api_extensions._mobile_group_uid",
         ):
             result = await m.mobile_ai_group_remove_member(
                 request=MagicMock(), group_id="g1", employee_id="e1", user=_user()

@@ -9,7 +9,7 @@ from app.application.elt.customer_excel_gate import CHECK_IDS, release_status
 pytestmark = pytest.mark.release_gate
 
 
-def test_elt_release_gate_stays_blocked_without_customer_original(monkeypatch):
+def test_etl_release_gate_stays_blocked_without_customer_original(monkeypatch):
     monkeypatch.delenv("XCAGI_ELT_CUSTOMER_EXCEL", raising=False)
     monkeypatch.delenv("XCAGI_ELT_MANUAL_BASELINE", raising=False)
     report = release_status()

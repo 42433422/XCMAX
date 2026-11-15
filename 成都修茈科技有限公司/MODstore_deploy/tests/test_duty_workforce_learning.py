@@ -12,6 +12,25 @@ from modstore_server.llm_crypto import decrypt_secret
 from modstore_server.self_evolution_knowledge import knowledge_inventory
 
 
+def _shared_setup_case_0(tmp_path):
+    audit = tmp_path / "burnin.jsonl"
+    gaps = tmp_path / "gaps.jsonl"
+    _write_audit(
+        audit,
+        [
+            _row(
+                employee_id="host-checker",
+                run_id="run-01",
+                accepted=False,
+                manifest="a" * 64,
+                contract="b" * 64,
+                reasons=["programmatic_verification_failed"],
+            )
+        ],
+    )
+    return audit, gaps
+
+
 @pytest.fixture(autouse=True)
 def _artifact_encryption_key(monkeypatch):
     monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
@@ -57,21 +76,7 @@ def _write_audit(path: Path, rows: list[dict]) -> None:
 
 def test_single_failure_is_gap_candidate_not_reusable_knowledge(monkeypatch, tmp_path):
     monkeypatch.setenv("XCMAX_SELF_EVOLUTION_KB_ROOT", str(tmp_path / "kb"))
-    audit = tmp_path / "burnin.jsonl"
-    gaps = tmp_path / "gaps.jsonl"
-    _write_audit(
-        audit,
-        [
-            _row(
-                employee_id="host-checker",
-                run_id="run-01",
-                accepted=False,
-                manifest="a" * 64,
-                contract="b" * 64,
-                reasons=["programmatic_verification_failed"],
-            )
-        ],
-    )
+    audit, gaps = _shared_setup_case_0(tmp_path)
 
     result = run_duty_workforce_learning(audit_path=audit, gap_path=gaps)
 
@@ -286,21 +291,7 @@ def test_legacy_gap_ledger_is_migrated_before_learning(tmp_path):
 
 def test_gap_write_fails_closed_without_encryption_key(monkeypatch, tmp_path):
     monkeypatch.delenv("MODSTORE_LLM_MASTER_KEY", raising=False)
-    audit = tmp_path / "burnin.jsonl"
-    gaps = tmp_path / "gaps.jsonl"
-    _write_audit(
-        audit,
-        [
-            _row(
-                employee_id="host-checker",
-                run_id="run-01",
-                accepted=False,
-                manifest="a" * 64,
-                contract="b" * 64,
-                reasons=["programmatic_verification_failed"],
-            )
-        ],
-    )
+    audit, gaps = _shared_setup_case_0(tmp_path)
 
     with pytest.raises(RuntimeError, match="MASTER_KEY"):
         run_duty_workforce_learning(audit_path=audit, gap_path=gaps)
@@ -309,21 +300,7 @@ def test_gap_write_fails_closed_without_encryption_key(monkeypatch, tmp_path):
 
 
 def test_gap_read_fails_closed_without_encryption_key(monkeypatch, tmp_path):
-    audit = tmp_path / "burnin.jsonl"
-    gaps = tmp_path / "gaps.jsonl"
-    _write_audit(
-        audit,
-        [
-            _row(
-                employee_id="host-checker",
-                run_id="run-01",
-                accepted=False,
-                manifest="a" * 64,
-                contract="b" * 64,
-                reasons=["programmatic_verification_failed"],
-            )
-        ],
-    )
+    audit, gaps = _shared_setup_case_0(tmp_path)
     run_duty_workforce_learning(audit_path=audit, gap_path=gaps)
     monkeypatch.delenv("MODSTORE_LLM_MASTER_KEY", raising=False)
 

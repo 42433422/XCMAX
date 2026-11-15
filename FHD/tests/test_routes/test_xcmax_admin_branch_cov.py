@@ -28,6 +28,7 @@ import os
 import sqlite3
 import tempfile
 from contextlib import ExitStack
+from contextlib import contextmanager as _shared_scope_contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -37,6 +38,43 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.testclient import TestClient
 
 import app.fastapi_routes.xcmax_admin as admin_routes
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(svc_result, case_value_1):
+    with (
+        patch(
+            "app.application.modstore_local_client.prefer_local_modstore",
+            return_value=True,
+        ),
+        patch(
+            case_value_1,
+            new=AsyncMock(return_value=svc_result),
+        ),
+        patch(
+            "app.fastapi_routes.market_account._authorization_from_request",
+            return_value="tok",
+        ),
+    ):
+        yield None
+
+
+async def _assert_shared_yuangon_path_with_put_method_falls_through_to_proxy_0(
+    self, _shared_literal_0, _shared_literal_1
+):
+    req = _mock_request()
+    with (
+        _admin_session_ok(),
+        patch("app.application.modstore_local_client.prefer_local_modstore", return_value=True),
+        patch("app.fastapi_routes.market_account._authorization_from_request", return_value="tok"),
+        patch(
+            "app.fastapi_routes.market_account._proxy_json",
+            new=AsyncMock(return_value={"ok": True}),
+        ),
+        patch("app.fastapi_routes.market_account._error_message", return_value="e"),
+    ):
+        result = await admin_routes._market_admin_proxy(req, _shared_literal_0, _shared_literal_1)
+    assert result == {"ok": True}
 
 
 @pytest.fixture
@@ -114,52 +152,16 @@ class TestMarketAdminProxyYuangonFallThrough:
     @pytest.mark.asyncio
     async def test_yuangon_path_with_put_method_falls_through_to_proxy(self):
         """Lines 105->119: prefer_local=True, path is yuangon, but method=PUT → falls through."""
-        req = _mock_request()
-        with (
-            _admin_session_ok(),
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request",
-                return_value="tok",
-            ),
-            patch(
-                "app.fastapi_routes.market_account._proxy_json",
-                new=AsyncMock(return_value={"ok": True}),
-            ),
-            patch("app.fastapi_routes.market_account._error_message", return_value="e"),
-        ):
-            result = await admin_routes._market_admin_proxy(
-                req, "PUT", "/api/admin/yuangon-onboard/status"
-            )
-        assert result == {"ok": True}
+        return await _assert_shared_yuangon_path_with_put_method_falls_through_to_proxy_0(
+            self, "PUT", "/api/admin/yuangon-onboard/status"
+        )
 
     @pytest.mark.asyncio
     async def test_yuangon_path_with_delete_method_falls_through(self):
         """Lines 111->119: prefer_local=True, path is yuangon/run, but method=DELETE → falls through."""
-        req = _mock_request()
-        with (
-            _admin_session_ok(),
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request",
-                return_value="tok",
-            ),
-            patch(
-                "app.fastapi_routes.market_account._proxy_json",
-                new=AsyncMock(return_value={"ok": True}),
-            ),
-            patch("app.fastapi_routes.market_account._error_message", return_value="e"),
-        ):
-            result = await admin_routes._market_admin_proxy(
-                req, "DELETE", "/api/admin/yuangon-onboard/run"
-            )
-        assert result == {"ok": True}
+        return await _assert_shared_yuangon_path_with_put_method_falls_through_to_proxy_0(
+            self, "DELETE", "/api/admin/yuangon-onboard/run"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -258,19 +260,9 @@ class TestSelfMaintenanceLocalOrProxyBranches:
         """Lines 247->246: limit=abc raises ValueError → pass → uses default 80."""
         req = _mock_request()
         svc_result = {"status": "ok"}
-        with (
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.application.self_maintenance_app_service.get_runtime_status_local",
-                new=AsyncMock(return_value=svc_result),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request",
-                return_value="tok",
-            ),
+        with _shared_scope_case_0(
+            svc_result,
+            case_value_1="app.application.self_maintenance_app_service.get_runtime_status_local",
         ):
             result = await admin_routes._self_maintenance_local_or_proxy(
                 req, "GET", "/api/ops/self-maintenance/status?limit=abc"
@@ -374,19 +366,9 @@ class TestSelfMaintenanceLocalOrProxyBranches:
         """Line 256: governance-review POST path."""
         req = _mock_request()
         gov_result = {"reviewed": True}
-        with (
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.application.self_maintenance_app_service.governance_review_local",
-                new=AsyncMock(return_value=gov_result),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request",
-                return_value="tok",
-            ),
+        with _shared_scope_case_0(
+            gov_result,
+            case_value_1="app.application.self_maintenance_app_service.governance_review_local",
         ):
             result = await admin_routes._self_maintenance_local_or_proxy(
                 req,
@@ -401,19 +383,8 @@ class TestSelfMaintenanceLocalOrProxyBranches:
         """Line 262: self-maintenance path but unknown sub-path → _call_local returns None."""
         req = _mock_request()
         proxied = {"proxied": True}
-        with (
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=True,
-            ),
-            patch(
-                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-                new=AsyncMock(return_value=proxied),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request",
-                return_value="tok",
-            ),
+        with _shared_scope_case_0(
+            proxied, case_value_1="app.fastapi_routes.xcmax_admin._market_admin_proxy"
         ):
             result = await admin_routes._self_maintenance_local_or_proxy(
                 req, "GET", "/api/ops/self-maintenance/unknown"

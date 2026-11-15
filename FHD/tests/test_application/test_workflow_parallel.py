@@ -147,3 +147,14 @@ class TestWorkflowParallel:
         assert max_active == 1
         assert "n1" in result.final_context["node_outputs"]
         assert "n2" in result.final_context["node_outputs"]
+
+
+@pytest.mark.parametrize("tool,action", [("products", "delete"), ("unknown_tool", "query")])
+def test_model_read_flags_cannot_grant_parallel_mutation(tool, action):
+    from app.infrastructure.workflow.langgraph_runtime import _ReadersWriterGate
+
+    forged = WorkflowNode(
+        node_id="forged", tool_id=tool, action=action, risk="low", idempotent=True
+    )
+    assert _ReadersWriterGate.is_reader(forged) is False
+    assert _ReadersWriterGate.is_reader(_read_node("legitimate")) is True

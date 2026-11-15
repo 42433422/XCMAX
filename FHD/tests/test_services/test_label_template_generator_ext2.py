@@ -39,6 +39,47 @@ from app.services.skills.label_template_generator.label_template_generator impor
     get_label_template_generator_skill,
 )
 
+
+def _shared_setup_case_0(case_value_1, case_value_2, case_value_3):
+    blocks = [
+        # First block at col 0 (start of merged)
+        {
+            "text": case_value_1,
+            "y_center": 50,
+            "center": (25, 50),
+            "left": 10,
+            "top": 40,
+            "width": 40,
+            "height": 20,
+            "conf": 0.9,
+        },
+        # Second block at col 1 (inside merged, not start)
+        {
+            "text": case_value_2,
+            "y_center": 50,
+            "center": (75, 50),
+            "left": 60,
+            "top": 40,
+            "width": 40,
+            "height": 20,
+            "conf": case_value_3,
+        },
+    ]
+    return blocks
+
+
+def _assert_shared_no_colon_production_date_fixed_label_0(
+    self, _shared_literal_0, _shared_literal_1
+):
+    blocks = [
+        {"text": _shared_literal_1, "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
+    ]
+    fields = _identify_fields(blocks)
+    assert len(fields) == 1
+    assert fields[0]["type"] == "fixed_label"
+    assert fields[0]["field_key"] == _shared_literal_0
+
+
 # ---------------------------------------------------------------------------
 # analyze_image — additional edge cases
 # ---------------------------------------------------------------------------
@@ -321,91 +362,39 @@ class TestIdentifyFieldsAdditional:
 
     def test_no_colon_production_date_fixed_label(self):
         """生产日期 should be fixed_label."""
-        blocks = [
-            {
-                "text": "生产日期 2026-01-01",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "production_date"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "production_date", "生产日期 2026-01-01"
+        )
 
     def test_no_colon_shelf_life_fixed_label(self):
         """保质期 should be fixed_label."""
-        blocks = [
-            {
-                "text": "保质期 12个月",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "shelf_life"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "shelf_life", "保质期 12个月"
+        )
 
     def test_no_colon_inspector_fixed_label(self):
         """检验员 should be fixed_label."""
-        blocks = [
-            {"text": "检验员 张三", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "inspector"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "inspector", "检验员 张三"
+        )
 
     def test_no_colon_product_spec_fixed_label(self):
         """产品规格 should be fixed_label."""
-        blocks = [
-            {"text": "产品规格 A4", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "product_spec"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "product_spec", "产品规格 A4"
+        )
 
     def test_no_colon_product_number_fixed_label(self):
         """产品编号 should be fixed_label."""
-        blocks = [
-            {
-                "text": "产品编号 ABC123",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "product_number"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "product_number", "产品编号 ABC123"
+        )
 
     def test_no_colon_product_name_fixed_label(self):
         """产品名称 should be fixed_label."""
-        blocks = [
-            {
-                "text": "产品名称 PE漆",
-                "left": 10,
-                "top": 20,
-                "width": 100,
-                "height": 30,
-                "conf": 0.9,
-            }
-        ]
-        fields = _identify_fields(blocks)
-        assert len(fields) == 1
-        assert fields[0]["type"] == "fixed_label"
-        assert fields[0]["field_key"] == "product_name"
+        return _assert_shared_no_colon_production_date_fixed_label_0(
+            self, "product_name", "产品名称 PE漆"
+        )
 
     def test_block_missing_text_key_skipped(self):
         """Block without 'text' key should be skipped (KeyError caught)."""
@@ -436,30 +425,9 @@ class TestPairFieldsByGridAdditional:
 
     def test_block_in_merged_not_start_col_skipped_via_else(self):
         """Block in merged cell but not at start_col should hit the else branch (skip)."""
-        blocks = [
-            # First block at col 0 (start of merged)
-            {
-                "text": "长标签内容",
-                "y_center": 50,
-                "center": (25, 50),
-                "left": 10,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.9,
-            },
-            # Second block at col 1 (inside merged, not start)
-            {
-                "text": "extra",
-                "y_center": 50,
-                "center": (75, 50),
-                "left": 60,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.8,
-            },
-        ]
+        blocks = _shared_setup_case_0(
+            case_value_1="长标签内容", case_value_2="extra", case_value_3=0.8
+        )
         merged = [{"row": 0, "start_col": 0, "end_col": 1}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100], merged)
         # First block should be a merged field, second should be skipped
@@ -469,28 +437,9 @@ class TestPairFieldsByGridAdditional:
 
     def test_next_block_in_merged_current_unpaired(self):
         """When next block is in merged cell, current block should have empty value."""
-        blocks = [
-            {
-                "text": "品名",
-                "y_center": 50,
-                "center": (25, 50),
-                "left": 10,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.9,
-            },
-            {
-                "text": "merged_val",
-                "y_center": 50,
-                "center": (75, 50),
-                "left": 60,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.8,
-            },
-        ]
+        blocks = _shared_setup_case_0(
+            case_value_1="品名", case_value_2="merged_val", case_value_3=0.8
+        )
         merged = [{"row": 0, "start_col": 1, "end_col": 2}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 33, 66, 100], merged)
         assert len(result) >= 1
@@ -518,28 +467,7 @@ class TestPairFieldsByGridAdditional:
 
     def test_two_adjacent_blocks_paired(self):
         """Two adjacent blocks in same row should be paired."""
-        blocks = [
-            {
-                "text": "品名",
-                "y_center": 50,
-                "center": (25, 50),
-                "left": 10,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.9,
-            },
-            {
-                "text": "运动鞋",
-                "y_center": 50,
-                "center": (75, 50),
-                "left": 60,
-                "top": 40,
-                "width": 40,
-                "height": 20,
-                "conf": 0.85,
-            },
-        ]
+        blocks = _shared_setup_case_0(case_value_1="品名", case_value_2="运动鞋", case_value_3=0.85)
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100], [])
         assert len(result) == 1
         assert result[0]["label"] == "品名"

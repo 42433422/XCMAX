@@ -30,6 +30,25 @@ from app.infrastructure.web_search.service import (
     kitten_web_search,
 )
 
+
+async def _assert_shared_max_results_clamped_to_min_1_0(self, _shared_literal_0, _shared_literal_1):
+    mock_hits = [WebSearchHit(title="T", url="https://x.com", snippet="S")]
+    with (
+        patch.dict(
+            os.environ, {"WEB_SEARCH_PROVIDER": "tavily", "TAVILY_API_KEY": "key"}, clear=False
+        ),
+        patch(
+            "app.infrastructure.web_search.service._tavily_search",
+            new_callable=AsyncMock,
+            return_value=mock_hits,
+        ) as mock_search,
+    ):
+        result = await kitten_web_search("test", max_results=_shared_literal_1)
+    assert result["success"] is True
+    call_args = mock_search.call_args[0]
+    assert call_args[2] == _shared_literal_0
+
+
 # ---------------------------------------------------------------------------
 # _rate_allow — additional branches
 # ---------------------------------------------------------------------------
@@ -445,49 +464,11 @@ class TestKittenWebSearchExtra:
 
     @pytest.mark.asyncio
     async def test_max_results_clamped_to_min_1(self) -> None:
-        mock_hits = [WebSearchHit(title="T", url="https://x.com", snippet="S")]
-        with (
-            patch.dict(
-                os.environ,
-                {
-                    "WEB_SEARCH_PROVIDER": "tavily",
-                    "TAVILY_API_KEY": "key",
-                },
-                clear=False,
-            ),
-            patch(
-                "app.infrastructure.web_search.service._tavily_search",
-                new_callable=AsyncMock,
-                return_value=mock_hits,
-            ) as mock_search,
-        ):
-            result = await kitten_web_search("test", max_results=0)
-        assert result["success"] is True
-        call_args = mock_search.call_args[0]
-        assert call_args[2] == 1  # clamped to min 1
+        return await _assert_shared_max_results_clamped_to_min_1_0(self, 1, 0)
 
     @pytest.mark.asyncio
     async def test_max_results_clamped_to_max_10(self) -> None:
-        mock_hits = [WebSearchHit(title="T", url="https://x.com", snippet="S")]
-        with (
-            patch.dict(
-                os.environ,
-                {
-                    "WEB_SEARCH_PROVIDER": "tavily",
-                    "TAVILY_API_KEY": "key",
-                },
-                clear=False,
-            ),
-            patch(
-                "app.infrastructure.web_search.service._tavily_search",
-                new_callable=AsyncMock,
-                return_value=mock_hits,
-            ) as mock_search,
-        ):
-            result = await kitten_web_search("test", max_results=100)
-        assert result["success"] is True
-        call_args = mock_search.call_args[0]
-        assert call_args[2] == 10  # clamped to max 10
+        return await _assert_shared_max_results_clamped_to_min_1_0(self, 10, 100)
 
     @pytest.mark.asyncio
     async def test_provider_case_insensitive(self) -> None:

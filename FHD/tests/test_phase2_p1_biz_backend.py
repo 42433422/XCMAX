@@ -15,7 +15,6 @@ from fastapi.responses import JSONResponse
 from app.ai_engines.deepseek.intent_service import INTENT_DESCRIPTIONS, _IntentRecognitionCache
 from app.application import aibiz_web_terminal_service as aibiz_mod
 from app.application.rbac_app_service import RbacAppService, get_rbac_app_service
-from app.domain.conversation.unified_intent_recognizer import _env_flag
 from app.domain.shared_services.deepseek_intent_service import _make_intent_cache_key, cn_to_number
 from app.infrastructure.documents.price_list_export import (
     _detect_header_row_count,
@@ -261,13 +260,8 @@ def test_is_rag_enabled_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# unified_intent / deepseek / ai_engines
+# deepseek / ai_engines
 # ---------------------------------------------------------------------------
-
-
-def test_env_flag_truthy(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("XCAGI_TEST_FLAG", "yes")
-    assert _env_flag("XCAGI_TEST_FLAG") is True
 
 
 def test_deepseek_cn_to_number() -> None:

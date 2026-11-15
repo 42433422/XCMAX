@@ -210,7 +210,7 @@ def test_ast_fingerprint_normalizes_only_empty_new_type_parameters():
 _REVIEWED_FILE_SINKS = {
     "FHD/app/application/agent_orchestrator/artifact_files.py": (73, 96, 97, 105, 107, 129),
     "FHD/app/application/employee_runtime/workspace_io.py": (57, 91),
-    "FHD/app/application/tools/workflow_spreadsheet_scope.py": (107,),
+    "FHD/app/application/tools/workflow_spreadsheet_scope.py": (146,),
     "FHD/app/application/shipment_excel_etl_security.py": (459,),
 }
 
@@ -277,3 +277,12 @@ def test_stable_fingerprint_does_not_depend_on_ast_dump(monkeypatch):
 
     monkeypatch.setattr(ast, "dump", lambda *a, **k: "different interpreter formatting")
     assert _SCRIPT_NS["_fingerprint"](ast.parse(_SOURCE)) == _SCRIPT_NS["_REVIEWED_MODULE"]
+
+
+def test_moved_workflow_sink_does_not_suppress_the_old_location():
+    assert (
+        keep_result(
+            _finding(uri="FHD/app/application/tools/workflow_spreadsheet_scope.py", line=107)
+        )
+        is True
+    )

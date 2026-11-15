@@ -11,7 +11,7 @@
       "allowed": ["同一来源行保存为 slice 0 和 slice 1", "备注不入库"],
       "forbidden_effects": ["第二条产品因为来源行重复而整次预演失败", "备注变成客户"],
       "oracle": "第 2 行 slice 0 是左客户/L-1，slice 1 是右客户/R-1；排除清单只有第 3 行 note",
-      "tests": ["tests/test_application/test_elt_preview_task_boundaries.py::test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out"],
+      "tests": ["tests/test_application/test_etl_preview_task_boundaries.py::test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out"],
       "boundary": {
         "real": ["sqlite", "xlsx", "ELT preview", "ELT execute"],
         "doubles": [],
@@ -34,7 +34,7 @@
       "allowed": ["一个客户", "两行产品按型号、名称和价格落库"],
       "forbidden_effects": ["表头、空行或合计变成业务记录", "少一行产品"],
       "oracle": "断言中的客户名和两行产品元组",
-      "tests": ["tests/test_application/test_elt_preview_task_boundaries.py::test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate"],
+      "tests": ["tests/test_application/test_etl_preview_task_boundaries.py::test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate"],
       "boundary": {
         "real": ["sqlite", "ELT preview", "ELT execute"],
         "doubles": [],
@@ -51,13 +51,13 @@
       "requirement_id": "R02",
       "scenario_id": "R02-empty-preview",
       "rule": "只有表头、没有有效记录的原件可以预演，但不得确认入库。必须留下空预演诊断。",
-      "source": "FHD/tests/test_application/test_elt_preview_task_boundaries.py 的空预演。样例是合成 CSV，不是客户原件。",
+      "source": "FHD/tests/test_application/test_etl_preview_task_boundaries.py 的空预演。样例是合成 CSV，不是客户原件。",
       "preconditions": ["租户内已上传只有表头的 CSV", "预演完成且总行数为 0"],
       "inputs": ["客户名称,电话\\n"],
       "allowed": ["状态仍是 preview_ready", "诊断码 ELT_PREVIEW_EMPTY 和 ELT_NO_DATA_ROWS", "确认执行被拒绝"],
       "forbidden_effects": ["零行预演仍能确认入库"],
       "oracle": "预演快照里的 total_rows 和 empty_preview 诊断，而不是再解析一遍文件",
-      "tests": ["tests/test_application/test_elt_preview_task_boundaries.py::test_empty_preview_is_not_confirmable"],
+      "tests": ["tests/test_application/test_etl_preview_task_boundaries.py::test_empty_preview_is_not_confirmable"],
       "boundary": {
         "real": ["sqlite", "ELT preview worker", "ELT execute"],
         "doubles": [],
@@ -74,13 +74,13 @@
       "requirement_id": "R03",
       "scenario_id": "R03-confirm-binding",
       "rule": "用户确认必须绑定身份、租户、预演版本和数据范围。过期预演不得写入，重复提交不得产生重复副作用。",
-      "source": "FHD/tests/test_application/test_elt_preview_confirmation.py 用 SQLite 预演。错的预演版本不能写入；正确版本确认后才执行。",
+      "source": "FHD/tests/test_application/test_etl_preview_confirmation.py 用 SQLite 预演。错的预演版本不能写入；正确版本确认后才执行。",
       "preconditions": ["存在一份已版本化的预演"],
       "inputs": ["确认人、租户、预演版本、数据范围"],
       "allowed": ["写入内容与确认内容一致", "同键重复提交读回原结果"],
       "forbidden_effects": ["过期预演写入", "重复副作用"],
       "oracle": "确认单上的版本和范围，对照落库行",
-      "tests": ["tests/test_application/test_elt_preview_confirmation.py::test_missing_or_wrong_approval_does_not_write_or_claim_run[None]"],
+      "tests": ["tests/test_application/test_etl_preview_confirmation.py::test_missing_or_wrong_approval_does_not_write_or_claim_run"],
       "boundary": {
         "real": ["sqlite", "ELT execute", "preview revision"],
         "doubles": [],
@@ -103,7 +103,7 @@
       "allowed": ["读回第一次的客户名", "错误码 ELT_PREVIEW_REQUIRED"],
       "forbidden_effects": ["第二次确认再插入一批业务行"],
       "oracle": "第一次确认后的客户名清单",
-      "tests": ["tests/test_application/test_elt_preview_confirmation.py::test_repeat_confirm_does_not_write_the_customers_again"],
+      "tests": ["tests/test_application/test_etl_preview_confirmation.py::test_repeat_confirm_does_not_write_the_customers_again"],
       "boundary": {
         "real": ["sqlite", "ELT execute"],
         "doubles": [],
@@ -357,12 +357,12 @@
       "forbidden_effects": ["恢复、审批或导出写到另一租户", "工具读到另一租户的客户"],
       "oracle": "知识库文档互不替换；审批状态；导出合计；回滚后的客户名；交接错误码 handoff_cross_tenant；两个租户的客户名清单",
       "tests": [
-        "tests/test_application/test_elt_knowledge_isolation.py::test_identical_content_in_two_tenants_never_replaces_first",
+        "tests/test_application/test_etl_knowledge_isolation.py::test_identical_content_in_two_tenants_never_replaces_first",
         "tests/test_application/test_approval_workspace.py::test_other_tenant_cannot_change_a_persisted_approval",
         "tests/test_application/test_employee_handoff_e25.py::test_cross_tenant_handoff_is_blocked",
         "tests/test_application/test_agent_tool_acceptance_effects.py::test_cross_tenant_rows_tools_and_concurrent_codes_stay_isolated",
         "tests/test_application/test_shipment_records_agent_routes.py::test_shipment_record_mutation_routes_execute_through_agent_orchestrator",
-        "tests/test_application/test_elt_preview_task_boundaries.py::test_rollback_repairs_current_tenant_and_leaves_the_other_tenant"
+        "tests/test_application/test_etl_preview_task_boundaries.py::test_rollback_repairs_current_tenant_and_leaves_the_other_tenant"
       ],
       "boundary": {
         "real": ["sqlite", "knowledge document store", "xlsx", "ELT rollback", "approval request"],
@@ -386,7 +386,7 @@
       "allowed": ["两条产品入库", "备注角色为 note"],
       "forbidden_effects": ["有效记录没有来源行或切片号", "备注入库"],
       "oracle": "slice 0/1 的客户、型号、表号，以及排除清单 (3, note)",
-      "tests": ["tests/test_application/test_elt_preview_task_boundaries.py::test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out"],
+      "tests": ["tests/test_application/test_etl_preview_task_boundaries.py::test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out"],
       "boundary": {
         "real": ["sqlite", "xlsx", "ELT preview", "ELT execute"],
         "doubles": [],
@@ -595,7 +595,7 @@
       "allowed": ["本租户客户和产品被撤销", "租户 2 的客户名不变"],
       "forbidden_effects": ["回滚删掉租户 2 的客户"],
       "oracle": "租户 1 的客户和产品为 0，租户 2 的 unit_name 仍是租户二原客户",
-      "tests": ["tests/test_application/test_elt_preview_task_boundaries.py::test_rollback_repairs_current_tenant_and_leaves_the_other_tenant"],
+      "tests": ["tests/test_application/test_etl_preview_task_boundaries.py::test_rollback_repairs_current_tenant_and_leaves_the_other_tenant"],
       "boundary": {
         "real": ["sqlite", "ELT execute", "ELT rollback"],
         "doubles": [],

@@ -11,6 +11,7 @@ LLM 成功、错误降级）、混合识别（规则优先/打招呼/DeepSeek �
 
 from __future__ import annotations
 
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -25,6 +26,21 @@ from app.domain.shared_services.deepseek_intent_service import (
     get_hybrid_intent_with_deepseek,
     reset_deepseek_intent_services,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(rule):
+    with (
+        patch(
+            "app.domain.shared_services.intent_service.recognize_intents",
+            return_value=dict(rule),
+        ),
+        patch(
+            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+            return_value=None,
+        ),
+    ):
+        yield None
 
 
 class TestDeepSeekIntentRecognizer:
@@ -351,16 +367,7 @@ class TestHybridRecognize:
         # deepseek_recognizer 不应被调用
         h.deepseek_recognizer = MagicMock()
         h.deepseek_recognizer.recognize = AsyncMock(side_effect=AssertionError("不应调用"))
-        with (
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value=dict(rule),
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(rule):
             out = await h.recognize("查产品")
         assert out["intent_source"] == "rule"
         assert out["final_intent"] == "products"
@@ -368,16 +375,7 @@ class TestHybridRecognize:
     async def test_unk_without_deepseek_returns_rule(self):
         h = HybridIntentWithDeepSeek(use_deepseek=False)
         rule = {"primary_intent": "unk"}
-        with (
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value=dict(rule),
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(rule):
             out = await h.recognize("不明确的消息")
         assert out["intent_source"] == "rule"
 
@@ -423,16 +421,7 @@ class TestHybridRecognize:
         h.deepseek_recognizer.recognize = AsyncMock(
             return_value={"intent": "products", "confidence": 0.2, "slots": {"keyword": "x"}}
         )
-        with (
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value=dict(rule),
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(rule):
             out = await h.recognize("随便说点什么")
         # 不采纳但仍透出 LLM 观测字段
         assert out["intent_source"] == "deepseek_low_confidence"
@@ -446,16 +435,7 @@ class TestHybridRecognize:
         rule = {"primary_intent": "unk"}
         h.deepseek_recognizer = MagicMock()
         h.deepseek_recognizer.recognize = AsyncMock(side_effect=RuntimeError("boom"))
-        with (
-            patch(
-                "app.domain.shared_services.intent_service.recognize_intents",
-                return_value=dict(rule),
-            ),
-            patch(
-                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-                return_value=None,
-            ),
-        ):
+        with _shared_scope_case_0(rule):
             out = await h.recognize("触发异常")
         assert out["intent_source"] == "rule"
 

@@ -11,6 +11,25 @@ from fastapi.testclient import TestClient
 from app.legacy.routes.product.compat_routes import router
 
 
+def _assert_shared_update_pg_failure_0(
+    self, client_compat, local_tools, _shared_literal_0, _shared_literal_1
+):
+    with (
+        patch(
+            "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
+            return_value=False,
+        ),
+        patch("app.legacy.routes.product.compat_routes._products_write_raise"),
+        patch(
+            "app.legacy.routes.product.compat_routes._business_mod_json_block", return_value=None
+        ),
+        patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=1),
+        patch(_shared_literal_0, side_effect=RuntimeError("db error")),
+    ):
+        r = client_compat.post(_shared_literal_1, json={"id": 1})
+        assert r.status_code == 500, r.text
+
+
 @pytest.fixture
 def app_compat():
     _app = FastAPI()
@@ -357,27 +376,13 @@ class TestProductsUpdate:
             assert r.json()["success"] is False
 
     def test_update_pg_failure(self, client_compat, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes._product_parse_id",
-                return_value=1,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes.products_pg_update_row",
-                side_effect=RuntimeError("db error"),
-            ),
-        ):
-            r = client_compat.post("/products/update", json={"id": 1})
-            assert r.status_code == 500, r.text
+        return _assert_shared_update_pg_failure_0(
+            self,
+            client_compat,
+            local_tools,
+            "app.legacy.routes.product.compat_routes.products_pg_update_row",
+            "/products/update",
+        )
 
 
 # ========================= POST /products/add ============================
@@ -539,27 +544,13 @@ class TestProductsDelete:
             assert r.json()["success"] is True
 
     def test_delete_pg_failure(self, client_compat, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes._product_parse_id",
-                return_value=1,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes.products_pg_delete_row",
-                side_effect=RuntimeError("db error"),
-            ),
-        ):
-            r = client_compat.post("/products/delete", json={"id": 1})
-            assert r.status_code == 500, r.text
+        return _assert_shared_update_pg_failure_0(
+            self,
+            client_compat,
+            local_tools,
+            "app.legacy.routes.product.compat_routes.products_pg_delete_row",
+            "/products/delete",
+        )
 
 
 # ========================= POST /products/batch-delete ===================

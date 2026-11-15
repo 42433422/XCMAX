@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import Request
 
 from app.application.workflow.workflow_types import normalize_workflow_risk
+from app.domain.task_lifecycle.results import agent_node_output as agent_node_output
 from app.middleware.request_id import ensure_request_id
 
 
@@ -18,27 +19,6 @@ def print_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
         or payload.get("userId")
         or "print-route"
     ).strip()
-
-
-def agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", False) and not output.get("message"):
-        output["message"] = getattr(run, "error", False)
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    return output
 
 
 def print_agent_status_code(result: dict[str, Any], *, failure_status: int = 400) -> int:

@@ -57,6 +57,35 @@ from app.infrastructure.workflow.langgraph_assert import (
 )
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
 
+
+def _assert_shared_high_risk_writer_exclusive_no_overlap_0(
+    self, monkeypatch, _shared_literal_0, _shared_literal_1, _shared_literal_2, _shared_literal_3
+):
+    plan = PlanGraph(
+        plan_id=_shared_literal_0,
+        intent=_shared_literal_1,
+        nodes=[
+            WorkflowNode(
+                node_id="w1",
+                tool_id="s",
+                action="write",
+                params={},
+                risk=_shared_literal_2,
+                idempotent=False,
+            ),
+            WorkflowNode(
+                node_id="w2",
+                tool_id="s",
+                action="write",
+                params={},
+                risk=_shared_literal_3,
+                idempotent=False,
+            ),
+        ],
+    )
+    _assert_gate_serializes(monkeypatch, plan, parallel=True)
+
+
 _FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 _FIXTURE_PATH = _FIXTURE_DIR / "langgraph_runtime_contract.json"
 
@@ -958,6 +987,26 @@ class TestRetry:
 # ===========================================================================
 
 
+def _install_verified_reader_specs(monkeypatch) -> None:
+    from app.application.agent_orchestrator import tool_spec as tool_spec_module
+    from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2, get_tool_action_spec
+
+    real = get_tool_action_spec
+
+    def wrapped(tool_id, action):
+        if str(tool_id) in {"t1", "t2", "t3"} and str(action) == "query":
+            return ToolActionSpecV2(
+                tool_id=str(tool_id),
+                action="query",
+                risk="low",
+                idempotent=True,
+                read_only=True,
+            )
+        return real(tool_id, action)
+
+    monkeypatch.setattr(tool_spec_module, "get_tool_action_spec", wrapped)
+
+
 def _parallel_read_plan() -> PlanGraph:
     return PlanGraph(
         plan_id="p_par",
@@ -977,33 +1026,17 @@ def _parallel_read_plan() -> PlanGraph:
 
 
 def _assert_gate_serializes(monkeypatch, plan, *, parallel):
-    """Event 驱动的独占证明：首个节点 dispatch 被故意阻塞时，第二个独立节点到达
-    writer-acquire 尝试（第 2 次 gate 获取）却尚未进入 dispatch；释放后全部完成。
+    """Event 驱动的独占证明：首个节点 dispatch 被故意阻塞时，其他独立节点尚未进入
+    dispatch；释放后全部完成。
 
     不用 time.sleep / 时长比较；Event 的 wait timeout 仅用于防止死锁时挂死测试。
     """
-    from app.infrastructure.workflow.langgraph_runtime import _ReadersWriterGate
-
     first_inside = threading.Event()
-    second_acquiring = threading.Event()
     release_first = threading.Event()
     calls: list[str] = []
     first_done = [False]
     call_lock = threading.Lock()
     results: list = []
-
-    original_acquire = _ReadersWriterGate._acquire_writer
-    acquire_count = [0]
-
-    def patched_acquire(self):
-        acquire_count[0] += 1
-        if acquire_count[0] == 2:
-            # 每次独占节点恰好获取一次 gate；第二次获取必然来自另一个独立节点，
-            # 而此时首个节点仍持有独占锁（被 dispatch 阻塞），故它只能在 acquire 等待。
-            second_acquiring.set()
-        return original_acquire(self)
-
-    monkeypatch.setattr(_ReadersWriterGate, "_acquire_writer", patched_acquire)
 
     def dispatch(tool_id, action, params):
         with call_lock:
@@ -1022,7 +1055,9 @@ def _assert_gate_serializes(monkeypatch, plan, *, parallel):
     )
     worker.start()
     assert first_inside.wait(timeout=_DEADLOCK), "首个节点未进入 dispatch"
-    assert second_acquiring.wait(timeout=_DEADLOCK), "第二个节点未到达 writer-acquire 尝试"
+    # Serial ready-scheduling starts the next writer only after the previous
+    # node finishes, so the second acquire may never run concurrently. The
+    # exclusivity contract is that no other node enters dispatch meanwhile.
     with call_lock:
         entered = list(calls)
     assert len(entered) == 1, entered  # 独占：第二个节点尚未进入 dispatch
@@ -1037,7 +1072,8 @@ def _assert_gate_serializes(monkeypatch, plan, *, parallel):
 
 
 class TestConcurrency:
-    def test_low_risk_idempotent_readers_run_concurrently(self):
+    def test_low_risk_idempotent_readers_run_concurrently(self, monkeypatch):
+        _install_verified_reader_specs(monkeypatch)
         barrier = threading.Barrier(3, timeout=5)
         seen: list[int] = []
 
@@ -1050,61 +1086,27 @@ class TestConcurrency:
         assert result.success is True
         assert len(set(seen)) == 3  # 三个只读节点确已并发
 
-    def test_parallel_batch_metadata_recorded(self):
+    def test_self_declared_readers_without_official_spec_are_serialized(self):
+        result = _make_runtime().run(_parallel_read_plan())
+        assert result.success is True
+        assert result.final_context.get("parallel_batches") is None
+
+    def test_parallel_batch_metadata_recorded(self, monkeypatch):
+        _install_verified_reader_specs(monkeypatch)
         result = _make_runtime().run(_parallel_read_plan())
         assert result.final_context["parallel_batches"] == [
             {"node_ids": ["p1", "p2", "p3"], "mode": "parallel_read"}
         ]
 
     def test_high_risk_writer_exclusive_no_overlap(self, monkeypatch):
-        plan = PlanGraph(
-            plan_id="p_w",
-            intent="writer",
-            nodes=[
-                WorkflowNode(
-                    node_id="w1",
-                    tool_id="s",
-                    action="write",
-                    params={},
-                    risk="high",
-                    idempotent=False,
-                ),
-                WorkflowNode(
-                    node_id="w2",
-                    tool_id="s",
-                    action="write",
-                    params={},
-                    risk="high",
-                    idempotent=False,
-                ),
-            ],
+        return _assert_shared_high_risk_writer_exclusive_no_overlap_0(
+            self, monkeypatch, "p_w", "writer", "high", "high"
         )
-        _assert_gate_serializes(monkeypatch, plan, parallel=True)
 
     def test_non_idempotent_writer_exclusive_no_overlap(self, monkeypatch):
-        plan = PlanGraph(
-            plan_id="p_ni",
-            intent="nonidem",
-            nodes=[
-                WorkflowNode(
-                    node_id="w1",
-                    tool_id="s",
-                    action="write",
-                    params={},
-                    risk="low",
-                    idempotent=False,
-                ),
-                WorkflowNode(
-                    node_id="w2",
-                    tool_id="s",
-                    action="write",
-                    params={},
-                    risk="low",
-                    idempotent=False,
-                ),
-            ],
+        return _assert_shared_high_risk_writer_exclusive_no_overlap_0(
+            self, monkeypatch, "p_ni", "nonidem", "low", "low"
         )
-        _assert_gate_serializes(monkeypatch, plan, parallel=True)
 
     def test_parallel_false_serializes_all_nodes(self, monkeypatch):
         plan = _parallel_read_plan()

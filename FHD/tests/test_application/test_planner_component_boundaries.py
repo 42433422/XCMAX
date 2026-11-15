@@ -314,9 +314,7 @@ def test_auto_approval_mode_skips_plan_confirmation_and_starts_run():
         "chat_approval_mode": "auto",
     }
     callbacks._build_workflow_thinking_steps.return_value = "checked plan"
-    callbacks._capture_agent_run_interaction.return_value = {
-        "data": {"action": "workflow_done"}
-    }
+    callbacks._capture_agent_run_interaction.return_value = {"data": {"action": "workflow_done"}}
     planner = Mock()
     planner.plan.return_value = plan
     risk_gate = Mock()
@@ -363,4 +361,3 @@ def test_import_request_exposes_elt_tool_and_hides_direct_import():
     assert any("elt_import.preview" in rule for rule in select_rules_for_prompt("导入"))
     assert any("elt_import.execute" in rule for rule in select_rules_for_prompt("导入"))
     assert "elt_import" not in select_tools_for_prompt(registry, "查询客户")
-

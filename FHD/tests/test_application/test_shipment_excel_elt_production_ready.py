@@ -346,7 +346,7 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
     assert not failed, f"production gates failed: {failed}; detail={gates}"
 
 
-def test_elt_path_resolver_rejects_traversal_and_symlink_escape(tmp_path, monkeypatch):
+def test_etl_path_resolver_rejects_traversal_and_symlink_escape(tmp_path, monkeypatch):
     """Resolved paths must stay under the configured root, including through links."""
     from app.application import shipment_excel_elt_security as security
 
@@ -373,7 +373,7 @@ def test_elt_path_resolver_rejects_traversal_and_symlink_escape(tmp_path, monkey
             security.resolve_elt_path(raw)
 
 
-def test_elt_input_opens_only_regular_files_beneath_the_trusted_root(tmp_path, monkeypatch):
+def test_etl_input_opens_only_regular_files_beneath_the_trusted_root(tmp_path, monkeypatch):
     from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
@@ -392,7 +392,7 @@ def test_elt_input_opens_only_regular_files_beneath_the_trusted_root(tmp_path, m
             pytest.fail("an outside file must not be opened")
 
 
-def test_elt_input_accepts_non_bmp_filename(tmp_path, monkeypatch):
+def test_etl_input_accepts_non_bmp_filename(tmp_path, monkeypatch):
     from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
@@ -406,7 +406,7 @@ def test_elt_input_accepts_non_bmp_filename(tmp_path, monkeypatch):
         assert stream.read() == b"trusted workbook"
 
 
-def test_elt_input_rejects_embedded_nul_component():
+def test_etl_input_rejects_embedded_nul_component():
     from app.application import shipment_excel_elt_security as security
 
     with pytest.raises(security.ShipmentEltPathError, match="invalid component"):
@@ -414,7 +414,7 @@ def test_elt_input_rejects_embedded_nul_component():
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows UTF-16 component limit")
-def test_elt_input_windows_path_component_checks_utf16_length():
+def test_etl_input_windows_path_component_checks_utf16_length():
     from app.application import shipment_excel_elt_security as security
 
     assert security._validated_path_component("😀" * 127) == "😀" * 127
@@ -422,7 +422,7 @@ def test_elt_input_windows_path_component_checks_utf16_length():
         security._validated_path_component("😀" * 128)
 
 
-def test_elt_input_rejects_fifo_without_waiting(tmp_path):
+def test_etl_input_rejects_fifo_without_waiting(tmp_path):
     if not hasattr(os, "mkfifo"):
         pytest.skip("FIFO input is unavailable on this platform")
 
@@ -454,7 +454,7 @@ except security.ShipmentEltPathError:
     assert result.returncode == 0, result.stderr or result.stdout
 
 
-def test_elt_input_rejects_a_leaf_symlink_swapped_after_resolution(tmp_path, monkeypatch):
+def test_etl_input_rejects_a_leaf_symlink_swapped_after_resolution(tmp_path, monkeypatch):
     from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
@@ -497,7 +497,7 @@ def test_prepare_elt_output_path_rejects_existing_leaf_symlink(tmp_path, monkeyp
     assert outside.read_text(encoding="utf-8") == "private"
 
 
-def test_elt_output_resolver_rejects_symlink_escape_without_writing(tmp_path, monkeypatch):
+def test_etl_output_resolver_rejects_symlink_escape_without_writing(tmp_path, monkeypatch):
     """An existing output alias cannot redirect a workbook write outside the root."""
     from app.application import shipment_excel_elt_security as security
 
@@ -515,7 +515,7 @@ def test_elt_output_resolver_rejects_symlink_escape_without_writing(tmp_path, mo
     assert outside.read_bytes() == b"preserve this file"
 
 
-def test_elt_output_writer_rejects_leaf_symlink_replaced_after_validation(tmp_path, monkeypatch):
+def test_etl_output_writer_rejects_leaf_symlink_replaced_after_validation(tmp_path, monkeypatch):
     """The atomic publish check rejects a symlink inserted after validation."""
 
     from app.application import shipment_excel_elt_security as security
@@ -557,7 +557,7 @@ def test_elt_output_writer_rejects_leaf_symlink_replaced_after_validation(tmp_pa
     assert outside.read_bytes() == b"preserve this file"
 
 
-def test_elt_output_writer_rejects_parent_symlink_replaced_after_validation(tmp_path, monkeypatch):
+def test_etl_output_writer_rejects_parent_symlink_replaced_after_validation(tmp_path, monkeypatch):
     """Directory-descriptor traversal must reject a swapped parent link."""
     from app.application import shipment_excel_elt_security as security
 
@@ -588,7 +588,7 @@ def test_elt_output_writer_rejects_parent_symlink_replaced_after_validation(tmp_
     assert not (outside / destination.name).exists()
 
 
-def test_elt_output_writer_atomically_overwrites_and_creates_parent(tmp_path, monkeypatch):
+def test_etl_output_writer_atomically_overwrites_and_creates_parent(tmp_path, monkeypatch):
     from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
@@ -606,7 +606,7 @@ def test_elt_output_writer_atomically_overwrites_and_creates_parent(tmp_path, mo
     assert sorted(path.name for path in destination.parent.iterdir()) == ["result.xlsx"]
 
 
-def test_elt_output_writer_preserves_existing_file_and_cleans_temp_on_failure(
+def test_etl_output_writer_preserves_existing_file_and_cleans_temp_on_failure(
     tmp_path, monkeypatch
 ):
     from app.application import shipment_excel_elt_security as security
@@ -627,7 +627,7 @@ def test_elt_output_writer_preserves_existing_file_and_cleans_temp_on_failure(
     assert sorted(path.name for path in allowed.iterdir()) == ["result.xlsx"]
 
 
-def test_elt_output_writer_fails_closed_without_secure_platform_handles(tmp_path, monkeypatch):
+def test_etl_output_writer_fails_closed_without_secure_platform_handles(tmp_path, monkeypatch):
     from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
@@ -652,7 +652,7 @@ def test_windows_output_component_rejects_device_names_and_streams(name):
         security._validated_path_component(name)
 
 
-def test_elt_path_resolver_does_not_trust_cwd_or_global_temp(tmp_path, monkeypatch):
+def test_etl_path_resolver_does_not_trust_cwd_or_global_temp(tmp_path, monkeypatch):
     from app.application import shipment_excel_elt_security as security
 
     app_data = tmp_path / "app-data"
@@ -673,7 +673,7 @@ def test_elt_path_resolver_does_not_trust_cwd_or_global_temp(tmp_path, monkeypat
     assert Path.cwd().parent.resolve() not in security._trusted_base_roots()
 
 
-def test_elt_trusts_only_managed_output_and_reviewed_template_subdirectories(tmp_path, monkeypatch):
+def test_etl_trusts_only_managed_output_and_reviewed_template_subdirectories(tmp_path, monkeypatch):
     from app.application import shipment_excel_elt_security as security
 
     app_data = tmp_path / "app-data"
