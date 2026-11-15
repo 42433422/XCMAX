@@ -141,7 +141,7 @@ class EltRunRow(TenantScopedMixin, Base):
             "source_sheet",
             "source_row",
             "source_slice",
-            name="uq_etl_run_source_slice",
+            name="uq_elt_run_source_slice",
         ),
         Index("ix_elt_run_rows_owner", "tenant_id", "owner_user_id"),
         Index("ix_elt_run_rows_run_action", "run_id", "final_action"),

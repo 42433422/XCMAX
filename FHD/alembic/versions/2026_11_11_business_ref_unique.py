@@ -5,7 +5,8 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "2026_11_11_business_ref_unique"
-down_revision = "2026_11_11_agent_permissions"
+# 接在切片迁移之后，与它串成单链，避免与改名迁移形成并行 head。
+down_revision = "2026_11_11_etl_source_slice"
 branch_labels = None
 depends_on = None
 

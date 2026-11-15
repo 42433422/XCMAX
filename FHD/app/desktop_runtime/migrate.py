@@ -373,14 +373,14 @@ def repair_unknown_stamped_revision(
 
 
 def run_alembic_upgrade(
-    data_dir: str | os.PathLike[str] | None = None, version: str = "head"
+    data_dir: str | os.PathLike[str] | None = None, version: str = "heads"
 ) -> None:
     configure_desktop_environment(data_dir)
     # 迁移会改写 schema 契约，必须与并发启动的其它进程互斥（见 migration_lock）。
     with migration_lock(data_dir):
         if _should_bootstrap_sqlite(data_dir):
             bootstrap_sqlite_schema(data_dir)
-            _run_alembic_cli("stamp", "head")
+            _run_alembic_cli("stamp", "heads")
             return
         repair = repair_unknown_stamped_revision(data_dir)
         if repair and repair.get("action") == "newer_than_package":
@@ -391,7 +391,25 @@ def run_alembic_upgrade(
                 repair.get("to"),
             )
             return
+        heads = _known_alembic_heads()
+        if len(heads) > 1:
+            logger.warning(
+                "alembic has %d heads (%s); upgrading all of them instead of a single head",
+                len(heads),
+                ", ".join(sorted(heads)),
+            )
         _run_alembic_cli("upgrade", version)
+
+
+def _known_alembic_heads() -> list[str]:
+    """当前包迁移链的 head 列表；多 head 时由 upgrade 一次性合并推进。"""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    ini = _resolve_alembic_ini()
+    if not ini.is_file():
+        raise FileNotFoundError(f"alembic.ini not found: {ini}")
+    return list(ScriptDirectory.from_config(Config(str(ini))).get_heads())
 
 
 def _current_head_revision() -> str | None:

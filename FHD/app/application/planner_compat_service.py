@@ -344,6 +344,18 @@ def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]
         except RECOVERABLE_ERRORS:
             logger.warning("compat chat memory capture failed", exc_info=True)
 
+    if payload.get("success") and context.get("memory_capture_enabled") is not False:
+        try:
+            from app.application.user_memory.turn_capture import capture_turn
+
+            capture_turn(
+                user_message=body.message,
+                assistant_reply=str(payload.get("response") or payload.get("message") or ""),
+                owner_id=str(owner),
+            )
+        except RECOVERABLE_ERRORS:
+            logger.warning("compat chat recall_facts capture failed", exc_info=True)
+
 
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:
     body = _prepare_compat_chat_body(request, body)
