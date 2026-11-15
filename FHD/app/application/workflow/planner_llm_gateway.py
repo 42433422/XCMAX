@@ -44,6 +44,7 @@ def request_planner_completion(
     http_client_factory: Any = None,  # call-site compat; unused
     temperature: float = 0.1,
     max_tokens: int = 1200,
+    **extra: Any,
 ) -> dict[str, Any] | None:
     """Use the same request-scoped provider and model as nested Agent tools."""
     from app.application.employee_runtime.agent_runner import _run_async
@@ -61,6 +62,7 @@ def request_planner_completion(
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    **extra,
                 )
             )
     except RECOVERABLE_ERRORS as exc:
