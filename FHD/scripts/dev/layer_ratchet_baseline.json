@@ -132,6 +132,8 @@
     "domain/shared_services/user_memory_service.py": "debt19 transitional migration; inject via ports in follow-up",
     "domain/shared_services/xcmax_sync_service.py": "debt19 transitional migration; inject via ports in follow-up",
     "domain/app_pure/chat_business_safety_core.py": "debt19 transitional migration; inject via ports in follow-up",
-    "domain/app_pure/chat_business_safety_output.py": "debt19 transitional migration; inject via ports in follow-up"
+    "domain/app_pure/chat_business_safety_output.py": "debt19 transitional migration; inject via ports in follow-up",
+    "shared_services/tools_workflow_elt.py": "导入阶段逐文件 SSE 进度依赖进程内流生命周期；端口注入列入后续分层收口",
+    "shared_services/kitten_ai_document/template_fill.py": "模板填充仍在运行时获取 application 服务与租户上下文；端口注入列入后续分层收口"
   }
 }
