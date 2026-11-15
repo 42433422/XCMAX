@@ -71,7 +71,7 @@
 
 | 日期 | 记录 | 结论 |
 |------|------|------|
-| 2026-11-15 | [audit/xcmax-18-domain-evidence-audit-2026-11-15.md](audit/xcmax-18-domain-evidence-audit-2026-11-15.md) | 18 域全部 UNRATED，正式分 null；E2 为主，E3/E4 未采集 |
+| 2026-11-15 | [audit/xcmax-18-domain-evidence-audit-2026-11-15.md](audit/xcmax-18-domain-evidence-audit-2026-11-15.md) | 18 域全部 UNRATED，正式分 null；E2 为主，E3/E4 未采集（rev.2） |
 
 ## 机器注册表（ssot.yaml）
 
