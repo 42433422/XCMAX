@@ -23,7 +23,12 @@ import os
 
 def _setup_shared_0():
     agent = EmployeeAgent("emp-1")
-    pack = {"pack_id": "emp-1", "version": "1.0.0", "manifest": {}, "pack_dir": "/tmp/emp-1"}
+    pack = {
+        "pack_id": "emp-1",
+        "version": "1.0.0",
+        "manifest": {},
+        "pack_dir": "/tmp/emp-1",
+    }
     gate = {"ok": True, "risk_level": "low", "reason": "low"}
     return (agent, pack, gate)
 

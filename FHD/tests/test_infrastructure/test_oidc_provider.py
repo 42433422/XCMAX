@@ -28,9 +28,11 @@ def _setup_shared_0(monkeypatch):
         "token_endpoint": "https://idp.example.com/token",
         "userinfo_endpoint": "https://idp.example.com/userinfo",
     }
+
     token_resp = MagicMock()
     token_resp.json.return_value = {"access_token": "atk"}
     token_resp.raise_for_status = MagicMock()
+
     userinfo_resp = MagicMock()
     return (token_resp, userinfo_resp)
 

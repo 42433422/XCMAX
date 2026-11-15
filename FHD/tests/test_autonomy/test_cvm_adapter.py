@@ -44,6 +44,7 @@ from scripts.autonomy.types import (
 def _setup_shared_0(adapter_for_test):
     adapter_for_test.github_token = "fake-token"
     adapter_for_test.github_repo = "owner/repo"
+    # 写入一条 audit：restart_service:health_down 成功
     from scripts.autonomy.types import AuditEntry, Diagnosis
 
     prev_action = Action(

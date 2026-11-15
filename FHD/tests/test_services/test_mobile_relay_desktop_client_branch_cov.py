@@ -64,11 +64,16 @@ def _setup_shared_0(tmp_path, monkeypatch):
     cfg_file = tmp_path / "relay.json"
     cfg_file.write_text(
         json.dumps(
-            {"relay_id": "r1", "desktop_token": "tok", "relay_base_url": "https://x.example.com"}
+            {
+                "relay_id": "r1",
+                "desktop_token": "tok",
+                "relay_base_url": "https://x.example.com",
+            }
         ),
         encoding="utf-8",
     )
     monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
+
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.raise_for_status.return_value = None

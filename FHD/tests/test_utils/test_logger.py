@@ -21,7 +21,13 @@ from app.utils.logging.logger import (
 def _setup_shared_0():
     formatter = StructuredLogFormatter()
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0, msg="msg", args=None, exc_info=None
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="msg",
+        args=None,
+        exc_info=None,
     )
     return (formatter, record)
 

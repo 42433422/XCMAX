@@ -30,6 +30,7 @@ def _setup_shared_0():
     svc.reader = None
     svc.tesseract_available = False
     svc._paddle_enabled = False
+
     import builtins
 
     real_import = builtins.__import__

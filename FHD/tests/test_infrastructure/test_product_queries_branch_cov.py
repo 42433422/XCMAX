@@ -33,6 +33,7 @@ def _setup_shared_0():
         {"name": "model_number"},
         {"name": "name"},
     ]
+    # First connect for metadata (succeeds), second for count (fails), third for data
     mock_conn_meta = _make_mock_conn()
     mock_conn_count = _make_mock_conn()
     return (mock_eng, mock_insp, mock_conn_meta, mock_conn_count)

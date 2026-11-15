@@ -22,6 +22,7 @@ def _setup_shared_0(tmp_path):
     mock_meta = Mock()
     mock_meta.id = "test_mod"
     mock_meta.mod_path = str(tmp_path / "test_mod")
+
     mod_dir = tmp_path / "test_mod"
     mod_dir.mkdir()
     return (build_mod_database_seed_plan, mock_meta, mod_dir)

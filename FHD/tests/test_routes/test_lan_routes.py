@@ -21,6 +21,7 @@ from app.fastapi_routes.lan_routes import (
 def _setup_shared_0():
     app = _make_app()
     client = TestClient(app, raise_server_exceptions=False)
+
     mock_cfg = MagicMock()
     mock_cfg.enabled = True
     mock_cfg.is_secret_ready.return_value = True

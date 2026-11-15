@@ -20,7 +20,9 @@ import pytest
 
 
 def _setup_shared_0():
-    from app.application.agent_orchestrator.context_window_manager import ContextWindowManager
+    from app.application.agent_orchestrator.context_window_manager import (
+        ContextWindowManager,
+    )
 
     m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
     provider = MagicMock()

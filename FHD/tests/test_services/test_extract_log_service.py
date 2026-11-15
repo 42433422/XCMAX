@@ -12,6 +12,7 @@ import pytest
 def _setup_shared_0(mock_get_db):
     mock_db = MagicMock()
     mock_get_db.return_value.__enter__.return_value = mock_db
+
     mock_row = MagicMock()
     mock_row.id = 1
     mock_row.file_name = "test.xlsx"

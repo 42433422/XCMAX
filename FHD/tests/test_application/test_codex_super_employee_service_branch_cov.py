@@ -41,8 +41,16 @@ from tests.pure_builders import error_runner as _error_runner
 def _setup_shared_0(tmp_path):
     svc = _make_svc(tmp_path)
     devices = [
-        {"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
-        {"id": "dev2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+        {
+            "id": "dev1",
+            "status": "online",
+            "tools": [{"toolName": "codex", "status": "installed"}],
+        },
+        {
+            "id": "dev2",
+            "status": "online",
+            "tools": [{"toolName": "codex", "status": "installed"}],
+        },
     ]
     return (svc, devices)
 

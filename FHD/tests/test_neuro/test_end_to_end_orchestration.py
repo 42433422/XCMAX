@@ -25,7 +25,9 @@ from app.neuro_bus.events.events_base import NeuroEvent
 
 
 def _setup_shared_0():
-    from app.neuro_bus.domains.inventory_domain_handlers import handle_auto_inbound_requested
+    from app.neuro_bus.domains.inventory_domain_handlers import (
+        handle_auto_inbound_requested,
+    )
 
     event = _make_event(
         "inventory.auto_inbound_requested",

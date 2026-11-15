@@ -28,6 +28,7 @@ def _setup_shared_0():
     track_ctx.__enter__ = MagicMock(return_value=None)
     track_ctx.__exit__ = MagicMock(return_value=False)
     monitor.track.return_value = track_ctx
+
     fake_module = MagicMock()
     fake_module.get_performance_optimizer.return_value = MagicMock(
         redis_cache=None,

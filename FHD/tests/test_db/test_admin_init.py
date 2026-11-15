@@ -10,8 +10,13 @@ import pytest
 
 def _setup_shared_0():
     mock_session = MagicMock()
+    # First call: SELECT finds no existing user
+    # Second call: INSERT
     mock_session.execute = MagicMock(
-        side_effect=[MagicMock(fetchone=MagicMock(return_value=None)), None]
+        side_effect=[
+            MagicMock(fetchone=MagicMock(return_value=None)),  # no existing user
+            None,  # INSERT
+        ]
     )
     mock_session.commit = MagicMock()
     mock_session.__enter__ = MagicMock(return_value=mock_session)
