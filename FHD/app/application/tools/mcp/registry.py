@@ -12,7 +12,12 @@ import threading
 import time
 from typing import Any
 
-from app.infrastructure.mcp.client import McpToolInfo, call_tool, list_tools
+from app.infrastructure.mcp.client import (
+    RESOURCE_ACTIONS,
+    McpToolInfo,
+    call_tool,
+    list_tools,
+)
 from app.infrastructure.mcp.config import McpServerConfig, load_server_configs, mcp_enabled
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
@@ -50,6 +55,38 @@ def _is_read_only(info: McpToolInfo) -> bool:
         return True
     name = info.name.lower()
     return any(name == prefix or name.startswith(f"{prefix}_") for prefix in _READ_ONLY_ACTIONS)
+
+
+_RESOURCE_ACTION_SPECS: dict[str, dict[str, Any]] = {
+    "mcp_list_resources": {
+        "risk": "low",
+        "idempotent": True,
+        "required_params": [],
+        "availability": "shared",
+        "description": "列出该 MCP 服务器提供的资源",
+    },
+    "mcp_read_resource": {
+        "risk": "low",
+        "idempotent": True,
+        "required_params": ["uri"],
+        "availability": "shared",
+        "description": "读取该 MCP 服务器指定 uri 的资源",
+    },
+    "mcp_list_prompts": {
+        "risk": "low",
+        "idempotent": True,
+        "required_params": [],
+        "availability": "shared",
+        "description": "列出该 MCP 服务器提供的提示词模板",
+    },
+    "mcp_get_prompt": {
+        "risk": "low",
+        "idempotent": True,
+        "required_params": ["name"],
+        "availability": "shared",
+        "description": "获取该 MCP 服务器指定提示词模板",
+    },
+}
 
 
 def _action_spec(info: McpToolInfo) -> dict[str, Any]:
@@ -100,6 +137,8 @@ def _discover() -> tuple[dict[str, Any], dict[str, McpServerConfig]]:
             continue
         tool_id = tool_id_for(config.name)
         actions = {info.name: _action_spec(info) for info in infos}
+        for name in RESOURCE_ACTIONS:
+            actions.setdefault(name, dict(_RESOURCE_ACTION_SPECS[name]))
         tools[tool_id] = {
             "description": f"外部 MCP 服务器 {config.name}（{len(actions)} 个工具）",
             "availability": "shared",

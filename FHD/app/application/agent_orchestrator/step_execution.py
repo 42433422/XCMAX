@@ -17,6 +17,7 @@ from app.application.agent_orchestrator.runtime_dependencies import (
 )
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+from app.infrastructure.observability.genai_spans import tool_call_span
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -217,12 +218,18 @@ class StepExecution:
                     execute_with_tool_deadline,
                 )
 
-                output = execute_with_tool_deadline(
-                    self.executor,
-                    step,
-                    runtime_context=ctx,
-                    timeout_seconds=float(getattr(spec, "timeout_seconds", 0) or 0),
-                )
+                with tool_call_span(
+                    tool_id=step.tool_id,
+                    action=step.action,
+                    node_id=step.node_id,
+                    run_id=run.run_id,
+                ):
+                    output = execute_with_tool_deadline(
+                        self.executor,
+                        step,
+                        runtime_context=ctx,
+                        timeout_seconds=float(getattr(spec, "timeout_seconds", 0) or 0),
+                    )
             except RECOVERABLE_ERRORS:
                 logger.exception("agent tool execution failed")
                 output = {

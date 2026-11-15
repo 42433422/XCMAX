@@ -202,6 +202,92 @@ async def test_list_all_tools_follows_pagination() -> None:
     assert session.cursors[1] is not None
 
 
+def test_resource_actions_are_registered(monkeypatch) -> None:
+    from app.infrastructure.mcp.config import McpServerConfig
+
+    monkeypatch.setattr(
+        mcp_registry,
+        "load_server_configs",
+        lambda *a, **k: [McpServerConfig(name="demo", command="x")],
+    )
+    monkeypatch.setattr(
+        mcp_registry,
+        "list_tools",
+        lambda config: [
+            McpToolInfo(name="search", description="", input_schema={}, read_only=True)
+        ],
+    )
+    monkeypatch.setattr(
+        "app.domain.autonomy.autonomy_guard.get_autonomy_guard",
+        lambda: type("G", (), {"register_actions": lambda *a, **k: None})(),
+    )
+    merged = mcp_registry.merge_mcp_tools({})
+    actions = merged["mcp__demo"]["actions"]
+    assert actions["mcp_list_resources"]["risk"] == "low"
+    assert actions["mcp_read_resource"]["required_params"] == ["uri"]
+    assert actions["mcp_get_prompt"]["required_params"] == ["name"]
+
+
+def test_oauth_header_is_cached(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from app.infrastructure.mcp import client as mcp_client
+    from app.infrastructure.mcp.config import McpServerConfig
+
+    calls: list[dict] = []
+
+    def fake_post(url, data=None, timeout=None):
+        calls.append({"url": url, "data": data})
+        return SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"access_token": "tok", "expires_in": 3600},
+        )
+
+    monkeypatch.setattr("httpx.post", fake_post)
+    mcp_client._TOKEN_CACHE.clear()
+    config = McpServerConfig(
+        name="remote",
+        transport="http",
+        url="https://example.com/mcp",
+        auth={
+            "token_url": "https://example.com/token",
+            "client_id": "cid",
+            "client_secret": "secret",
+        },
+    )
+
+    first = mcp_client._oauth_header(config)
+    second = mcp_client._oauth_header(config)
+
+    assert first == {"Authorization": "Bearer tok"}
+    assert second == first
+    assert len(calls) == 1
+    assert calls[0]["data"]["grant_type"] == "client_credentials"
+
+
+def test_synthetic_resource_action_dispatches_to_session(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from app.infrastructure.mcp import client as mcp_client
+    from app.infrastructure.mcp.config import McpServerConfig
+
+    class Session:
+        async def read_resource(self, uri):
+            return SimpleNamespace(contents=[SimpleNamespace(text=f"content:{uri}")])
+
+    async def fake_with_session(config, action):
+        return await action(Session())
+
+    monkeypatch.setattr(mcp_client, "_with_session", fake_with_session)
+    result = mcp_client.call_tool(
+        McpServerConfig(name="demo", command="x"), "mcp_read_resource", {"uri": "file://a"}
+    )
+
+    assert result["success"] is True
+    assert result["content"] == "content:file://a"
+    assert result["tool"] == "mcp_read_resource"
+
+
 def test_reader_gate_caps_concurrency(monkeypatch) -> None:
     from app.infrastructure.workflow.langgraph_runtime import _ReadersWriterGate
 

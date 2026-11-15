@@ -1364,6 +1364,20 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             run.error = run.error or (
                 failed.error if failed else graph_result.message or "workflow graph failed"
             )
+            try:
+                from app.application.agent_orchestrator.compensation import run_compensations
+                from app.application.facades.tools_facade import (
+                    execute_registered_workflow_tool,
+                )
+
+                run_compensations(
+                    run,
+                    plan=plan,
+                    execute=execute_registered_workflow_tool,
+                    runtime_context=runtime_context,
+                )
+            except RECOVERABLE_ERRORS:
+                logger.warning("失败补偿执行异常", exc_info=True)
             budget_event = next(
                 (event for event in reversed(run.events) if event.event_type == "budget.exceeded"),
                 None,

@@ -46,6 +46,7 @@ class McpServerConfig:
     env: dict[str, str] = field(default_factory=dict)
     url: str = ""
     headers: dict[str, str] = field(default_factory=dict)
+    auth: dict[str, str] = field(default_factory=dict)
     timeout_seconds: float = _DEFAULT_TIMEOUT
 
 
@@ -90,6 +91,11 @@ def _server_config(name: str, raw: object) -> McpServerConfig | None:
     headers = (
         {str(k): str(v) for k, v in raw_headers.items()} if isinstance(raw_headers, dict) else {}
     )
+    raw_auth = raw.get("auth") or {}
+    auth = {str(k): str(v) for k, v in raw_auth.items()} if isinstance(raw_auth, dict) else {}
+    if auth and not (auth.get("token_url") and auth.get("client_id")):
+        logger.warning("MCP 服务器 %s 的 auth 配置缺少 token_url/client_id", name)
+        auth = {}
     try:
         timeout = float(raw.get("timeout_seconds") or _DEFAULT_TIMEOUT)
     except (TypeError, ValueError):
@@ -102,6 +108,7 @@ def _server_config(name: str, raw: object) -> McpServerConfig | None:
         env=env,
         url=url,
         headers=headers,
+        auth=auth,
         timeout_seconds=max(1.0, min(120.0, timeout)),
     )
 
