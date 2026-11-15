@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.mod_sdk.employee_failure import _failed
+
 
 def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     change = dict(payload or {}).get("content_change")
@@ -51,18 +53,6 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             "input.content_change.locales",
             "input.content_change.validations",
         ],
-        "read_only": True,
-        "side_effects": [],
-    }
-
-
-def _failed(message: str, code: str) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "status": "failed",
-        "summary": message,
-        "error_code": code,
-        "evidence": [],
         "read_only": True,
         "side_effects": [],
     }

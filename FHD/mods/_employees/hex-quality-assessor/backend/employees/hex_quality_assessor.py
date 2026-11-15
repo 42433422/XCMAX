@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.mod_sdk.employee_failure import _failed
+
 _DIMENSIONS = ("purpose", "input", "action", "evidence", "safety", "operability")
 
 
@@ -39,18 +41,6 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "issues": issues,
         "ready_for_next_gate": not issues,
         "evidence": ["input.assessment.scores", "input.assessment.evidence"],
-        "read_only": True,
-        "side_effects": [],
-    }
-
-
-def _failed(message: str, code: str) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "status": "failed",
-        "summary": message,
-        "error_code": code,
-        "evidence": [],
         "read_only": True,
         "side_effects": [],
     }
