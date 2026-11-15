@@ -150,4 +150,6 @@ def row_context(run: EltRun, upload: EltUpload, source_row: int) -> dict[str, An
         "relative_path": upload.relative_path or upload.file_name,
         "upload_path": upload.storage_path,
         "source_row": source_row,
+        # 同文件附表预演：产品/客户可能已被同一文件的主运行建立，执行时应复用。
+        "linked_companion": '"linked_from_shipment_preview"' in str(run.summary_json or ""),
     }

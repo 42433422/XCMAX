@@ -207,20 +207,114 @@ def _llm_classification(lines: list[str]) -> dict[str, Any] | None:
     }
 
 
-def _escalate(detected: dict[str, Any], lines: list[str]) -> dict[str, Any]:
-    """Return the deterministic result unless the model gives a confident answer."""
+def _escalate(
+    detected: dict[str, Any],
+    lines: list[str],
+    row_sets: list[list[list[Any]]] | None = None,
+) -> dict[str, Any]:
+    """Return the most specific trustworthy target; AI schema inference is last."""
     target = str(detected.get("target_type") or "")
     confidence = float(detected.get("confidence") or 0)
     if target != "abnormal" and confidence >= _LLM_ESCALATION_THRESHOLD:
         return detected
-    if str(detected.get("reason") or "") in _NO_LLM_ESCALATION_REASONS:
-        return detected
-    classified = _llm_classification(lines)
-    if classified is None:
-        return detected
-    if detected.get("sheet_name"):
-        classified["sheet_name"] = detected["sheet_name"]
-    return classified
+    classified = (
+        None
+        if str(detected.get("reason") or "") in _NO_LLM_ESCALATION_REASONS
+        else _llm_classification(lines)
+    )
+    if classified is not None and classified.get("target_type") not in {"knowledge", "abnormal"}:
+        if detected.get("sheet_name"):
+            classified["sheet_name"] = detected["sheet_name"]
+        return classified
+    dynamic = _infer_dynamic_schema(row_sets or [])
+    if dynamic is not None:
+        result = {
+            "target_type": "dynamic_table",
+            "document_type": "ai_inferred_table",
+            "confidence": float(dynamic.get("confidence") or 0.6),
+            "reason": f"ai_schema:{dynamic.get('table_name') or ''}",
+            "confirmed": True,
+            "dynamic_schema": {
+                "table_name": dynamic.get("table_name") or "",
+                "columns": dynamic.get("columns") or [],
+                "dedupe_keys": dynamic.get("dedupe_keys") or [],
+                "headers": dynamic.get("headers") or [],
+            },
+        }
+        if detected.get("sheet_name"):
+            result["sheet_name"] = detected["sheet_name"]
+        return result
+    if classified is not None:
+        if detected.get("sheet_name"):
+            classified["sheet_name"] = detected["sheet_name"]
+        return classified
+    return detected
+
+
+def _infer_dynamic_schema(
+    row_sets: list[list[list[Any]]],
+) -> dict[str, Any] | None:
+    """AI-first schema inference for files that match no fixed business target.
+
+    Structure detection stays deterministic (which rows are the header, where the
+    data starts); the model only names the table and each column's meaning and
+    type. Nothing is written here — the caller decides the target.
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST") and not os.environ.get(
+        "FHD_ELT_LLM_CLASSIFY_TESTS"
+    ):
+        return None
+    try:
+        from app.application.elt.llm_assist import advise_table_schema, elt_llm_enabled
+        from app.application.elt.parser_structure import detect_table_layout
+
+        if not elt_llm_enabled():
+            return None
+        best: tuple[int, Any, list[list[Any]]] | None = None
+        for rows in row_sets:
+            layout = detect_table_layout(rows[:60])
+            if layout is None:
+                continue
+            headers = [str(header) for header in layout.headers if str(header).strip()]
+            if len(headers) < 2:
+                continue
+            data_rows = [
+                list(row)
+                for row in rows[layout.header_end + 1 : layout.header_end + 6]
+                if any(value not in (None, "") for value in row)
+            ]
+            score = len(headers) * 10 + len(data_rows)
+            if best is None or score > best[0]:
+                best = (score, layout, data_rows)
+        if best is None:
+            return None
+        _score, layout, data_rows = best
+        samples: dict[str, list[str]] = {}
+        for index, header in enumerate(layout.headers):
+            values: list[str] = []
+            for row in data_rows:
+                if index < len(row) and row[index] not in (None, ""):
+                    text = str(row[index])[:160]
+                    if text not in values:
+                        values.append(text)
+                    if len(values) >= 3:
+                        break
+            samples[str(header)] = values
+        result = advise_table_schema(headers=[str(h) for h in layout.headers], samples=samples)
+    except RECOVERABLE_ERRORS:
+        return None
+    if not result.used_llm or result.degraded:
+        return None
+    data = result.data if isinstance(result.data, dict) else {}
+    if not data.get("is_table") or not data.get("columns"):
+        return None
+    return {
+        "table_name": data.get("table_name") or "",
+        "columns": data.get("columns") or [],
+        "dedupe_keys": data.get("dedupe_keys") or [],
+        "headers": [str(header) for header in layout.headers],
+        "confidence": data.get("confidence") or 0.0,
+    }
 
 
 def detect_elt_target(
@@ -237,15 +331,17 @@ def detect_elt_target(
         }
     if ext == ".csv":
         lines: list[str] = []
+        rows: list[list[Any]] = []
         with (
             open_elt_input_file(source, owner_user_id=owner_user_id) as stream,
             io.TextIOWrapper(stream, encoding="utf-8-sig", errors="replace", newline="") as handle,
         ):
             for index, row in enumerate(csv.reader(handle)):
+                rows.append(list(row))
                 lines.append(_joined(row))
                 if index >= 30:
                     break
-        return _escalate(_classify(lines, suffix=ext), lines)
+        return _escalate(_classify(lines, suffix=ext), lines, [rows])
     if ext in {".xlsx", ".xlsm"}:
         from openpyxl import load_workbook
 
@@ -253,13 +349,18 @@ def detect_elt_target(
             workbook = load_workbook(stream, read_only=True, data_only=True, keep_links=False)
             candidates: list[dict[str, Any]] = []
             workbook_lines: list[str] = []
+            row_sets: list[list[list[Any]]] = []
             try:
                 for worksheet in workbook.worksheets[:30]:
                     sheet_lines = [worksheet.title]
+                    sheet_rows: list[list[Any]] = []
                     for index, sheet_row in enumerate(worksheet.iter_rows(values_only=True)):
                         sheet_lines.append(_joined(sheet_row))
+                        if index < 60:
+                            sheet_rows.append(list(sheet_row))
                         if index >= 79:
                             break
+                    row_sets.append(sheet_rows)
                     workbook_lines.extend(sheet_lines)
                     candidate = _classify(sheet_lines, suffix=ext)
                     if float(candidate.get("confidence") or 0) > 0:
@@ -270,7 +371,7 @@ def detect_elt_target(
         # 先按工作表独立判定：多工作表文件里真正的业务页往往不是第一页，
         # 合并成一个文本块会被备注/合同文字带偏。
         best = _pick(candidates) if candidates else _classify(workbook_lines, suffix=ext)
-        return _escalate(best, workbook_lines)
+        return _escalate(best, workbook_lines, row_sets)
     filename = source.name
     if _DELIVERY_RE.search(filename):
         return {

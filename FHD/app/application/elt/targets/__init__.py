@@ -19,6 +19,7 @@ from app.application.elt.targets.customers_products import (
     CustomerProductsAdapter,
     ProductAdapter,
 )
+from app.application.elt.targets.dynamic import DynamicTableAdapter
 from app.application.elt.targets.knowledge import KnowledgeAdapter
 from app.application.elt.targets.helpers import assert_safe_webhook_url as _assert_safe_webhook_url
 from app.application.elt.targets.orders import PurchaseOrderAdapter, ShipmentAdapter
@@ -28,6 +29,7 @@ _ADAPTERS: dict[str, TargetAdapter] = {
     for adapter in (
         KnowledgeAdapter(),
         AbnormalAdapter(),
+        DynamicTableAdapter(),
         CustomerProductsAdapter(),
         CustomerAdapter(),
         ProductAdapter(),

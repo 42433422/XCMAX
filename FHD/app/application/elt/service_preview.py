@@ -73,6 +73,7 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
         compatibility_preset_id: str | None = None,
         target_config_id: str | None = None,
         source_dataset: ParsedDataset | None = None,
+        dynamic_schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         upload = self._owned_upload(db, upload_id, owner_user_id)
         target_detection: dict[str, Any] | None = None
@@ -102,6 +103,24 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
             "target_config_id": target_config_id,
             "ocr_confirmed": False,
         }
+        # 模型推断出的通用表结构随预演草稿保存，执行时据此复用同一张动态表。
+        inferred_schema = (
+            target_detection.get("dynamic_schema")
+            if isinstance(target_detection, dict)
+            else None
+        )
+        if isinstance(inferred_schema, dict) and inferred_schema:
+            draft["dynamic_schema"] = inferred_schema
+        elif isinstance(dynamic_schema, dict) and dynamic_schema:
+            draft["dynamic_schema"] = dynamic_schema
+        elif target_type == "dynamic_table" and source_dataset is not None:
+            # 没有模型推断时至少按表头建表，保证数据有确定落点而不是报错。
+            draft["dynamic_schema"] = {
+                "table_name": "",
+                "columns": [],
+                "dedupe_keys": [],
+                "headers": list(source_dataset.headers),
+            }
         requested_preset_id = str(compatibility_preset_id or "").strip()
         if template_id:
             template = self._owned_template(db, template_id, owner_user_id)

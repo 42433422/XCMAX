@@ -827,6 +827,135 @@ def advise_target_classification(document_text: str) -> LlmAssistResult:
     return result
 
 
+_DYNAMIC_TABLE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["is_table", "table_name", "confidence", "columns"],
+    "properties": {
+        "is_table": {"type": "boolean"},
+        "table_name": {"type": "string"},
+        "confidence": {"type": "number"},
+        "columns": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["source", "type", "role"],
+                "properties": {
+                    "source": {"type": "string"},
+                    "name": {"type": "string"},
+                    "type": {
+                        "type": "string",
+                        "enum": ["string", "number", "integer", "date", "boolean"],
+                    },
+                    "role": {
+                        "type": "string",
+                        "enum": ["key", "dimension", "measure", "text", "ignore"],
+                    },
+                },
+            },
+        },
+        "dedupe_keys": {"type": "array", "items": {"type": "string"}},
+        "reason": {"type": "string"},
+    },
+}
+
+_COLUMN_TYPES = frozenset({"string", "number", "integer", "date", "boolean"})
+_COLUMN_ROLES = frozenset({"key", "dimension", "measure", "text", "ignore"})
+
+
+def advise_table_schema(
+    *, headers: list[str], samples: dict[str, list[str]]
+) -> LlmAssistResult:
+    """Infer a schema for a table that matches no fixed business target.
+
+    The model may only describe the supplied columns; it never invents headers
+    and never gets write authority. A non-tabular answer returns ``is_table``
+    false so the caller finishes normally instead of forcing a wrong table.
+    """
+    bounded_headers = [str(item)[:160] for item in headers[:80] if str(item).strip()]
+    if not bounded_headers:
+        return LlmAssistResult()
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你为一个没有固定业务表的表格推断结构。只返回 JSON。"
+                "columns 的 source 必须来自给定表头，不得编造列名。"
+                "type 依据样例值判断：string/number/integer/date/boolean。"
+                "role 取值：key（唯一标识）、dimension（分类或日期）、measure（数量金额等度量）、"
+                "text（描述备注）、ignore（空列或噪声列）。"
+                "dedupe_keys 从表头里选能唯一确定一条业务记录的列；选不出就给空数组。"
+                "如果内容不是真正的表格（纯文字、图表、只有一个标题），is_table 给 false。"
+                "table_name 用简短中文名概括这张表，不超过 40 字。"
+                "confidence 是 0 到 1 的小数。不要输出 markdown 或额外文字。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "task": "infer_dynamic_table_schema",
+                    "headers": bounded_headers,
+                    "samples": {
+                        str(key)[:160]: [str(value)[:160] for value in values[:3]]
+                        for key, values in list(samples.items())[:80]
+                        if str(key) in bounded_headers
+                    },
+                },
+                ensure_ascii=False,
+            ),
+        },
+    ]
+    result = _complete(
+        messages,
+        schema=_DYNAMIC_TABLE_SCHEMA,
+        max_tokens=1500,
+        lane="database",
+        max_repairs=0,
+        timeout_seconds=elt_llm_timeout_seconds(),
+    )
+    if not result.used_llm or result.degraded:
+        return result
+    data = result.data if isinstance(result.data, dict) else {}
+    allowed = set(bounded_headers)
+    columns: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in list(data.get("columns") or [])[:80]:
+        if not isinstance(item, dict):
+            continue
+        source = str(item.get("source") or "").strip()
+        if source not in allowed or source in seen:
+            continue
+        seen.add(source)
+        column_type = str(item.get("type") or "string")
+        role = str(item.get("role") or "text")
+        columns.append(
+            {
+                "source": source,
+                "name": str(item.get("name") or source)[:160],
+                "type": column_type if column_type in _COLUMN_TYPES else "string",
+                "role": role if role in _COLUMN_ROLES else "text",
+            }
+        )
+    try:
+        confidence = float(data.get("confidence") or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    dedupe_keys = [
+        key for key in (str(item) for item in data.get("dedupe_keys") or []) if key in seen
+    ]
+    result.data = {
+        "is_table": bool(data.get("is_table")) and bool(columns),
+        "table_name": str(data.get("table_name") or "")[:40],
+        "confidence": max(0.0, min(1.0, confidence)),
+        "columns": columns,
+        "dedupe_keys": dedupe_keys,
+        "reason": str(data.get("reason") or "")[:200],
+    }
+    return result
+
+
 def advise_business_import(sheet_text: str) -> LlmAssistResult:
     """Import archived sheet rows on the database line, one bounded unit at a time.
 
@@ -1016,6 +1145,7 @@ __all__ = [
     "advise_field_mappings",
     "advise_knowledge_import",
     "advise_row_decisions",
+    "advise_table_schema",
     "advise_target_classification",
     "advise_workbook_regions",
     "clear_elt_llm_circuit",

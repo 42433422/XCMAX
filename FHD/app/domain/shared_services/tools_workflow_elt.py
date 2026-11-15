@@ -1074,6 +1074,8 @@ def _execute_linked_companion(service, actor, data: dict) -> dict[str, Any]:
                 run_id=run_id,
                 owner_user_id=actor.id,
                 confirmed=True,
+                # 附表通常夹杂非客户/产品行，只写校验通过的行，避免整批被阻断。
+                valid_rows_only=True,
                 preview_revision=revision or None,
                 accept_suggested=True,
             )
@@ -1092,9 +1094,10 @@ def _companion_note(companion: dict) -> str:
         return "；客户及产品未能写入，请到数据对接中心重试"
     executed = int(companion.get("executed_rows") or 0)
     skipped = int(companion.get("skip_rows") or 0)
+    errors = int(companion.get("error_rows") or 0)
     note = f"；客户及产品写入 {executed} 行"
-    if skipped:
-        note += f"（重复跳过 {skipped} 行）"
+    if skipped or errors:
+        note += f"（重复跳过 {skipped} 行，非客户/产品 {errors} 行已忽略）"
     return note
 
 

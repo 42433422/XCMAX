@@ -383,7 +383,13 @@ class DraftServiceMixin:
                     ):
                         continue
                     issues.append(item)
-                action = "error" if issues else decision.action
+                action = (
+                    "error"
+                    if any(
+                        str(item.get("severity") or "error") == "error" for item in issues
+                    )
+                    else decision.action
+                )
                 row.normalized_json = dump_json(normalized)
                 row.validation_json = dump_json(issues)
                 row.suggested_action = decision.action

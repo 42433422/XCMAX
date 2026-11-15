@@ -2483,6 +2483,7 @@ def reviewed_excel_intake_preview(
                 confirmed_business_table,
                 dataset_from_business_rows,
                 dataset_from_document_text,
+                dynamic_table_candidate,
                 read_delivery_note_business,
             )
             from app.application.elt.llm_assist import (
@@ -2522,6 +2523,7 @@ def reviewed_excel_intake_preview(
                         advise_business_import(original_text) if elt_llm_enabled() else None
                     )
                     ai_table = None
+                    dynamic_schema: dict[str, Any] | None = None
                     if (
                         business_llm is not None
                         and business_llm.used_llm
@@ -2543,13 +2545,23 @@ def reviewed_excel_intake_preview(
                         confirmed = confirmed_business_table(path) or confirmed_business_table(
                             archived
                         )
-                        if confirmed is None:
+                        dynamic = (
+                            None
+                            if confirmed is not None
+                            else dynamic_table_candidate(path) or dynamic_table_candidate(archived)
+                        )
+                        if confirmed is not None:
+                            chosen_table, target_type = confirmed
+                            detection_reason = "candidate_headers"
+                        elif dynamic is not None:
+                            # 没有固定业务表时由模型推断结构，写入通用表而不是报错。
+                            chosen_table, dynamic_schema = dynamic
+                            target_type = "dynamic_table"
+                            detection_reason = "ai_table_schema"
+                        else:
                             chosen_table = dataset_from_document_text(original_text, name.strip())
                             target_type = "knowledge"
                             detection_reason = "archived_document"
-                        else:
-                            chosen_table, target_type = confirmed
-                            detection_reason = "candidate_headers"
                     from app.application.elt.auto_ingest_service import row_coverage
 
                     detection = {
@@ -2597,6 +2609,7 @@ def reviewed_excel_intake_preview(
                 upload_id=upload["upload_id"],
                 target_type=target_type,
                 source_dataset=chosen_table,
+                dynamic_schema=dynamic_schema,
             )
             plan = {
                 "run_id": business["id"],

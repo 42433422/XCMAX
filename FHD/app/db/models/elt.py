@@ -177,6 +177,57 @@ class EltRunRow(TenantScopedMixin, Base):
     )
 
 
+class EltDynamicTable(TimestampMixin, TenantScopedMixin, Base):
+    """AI 推断表结构的通用落库表；同一所有者下按表头指纹复用，不新增业务表。
+
+    列语义由模型在预演阶段推断后保存在 ``columns_json``，行数据以 JSON 保存在
+    ``elt_dynamic_rows``。这样任何不能归入固定业务目标的文件都有确定落点。
+    """
+
+    __tablename__ = "elt_dynamic_tables"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "owner_user_id",
+            "fingerprint",
+            name="uq_elt_dynamic_table_owner_fingerprint",
+        ),
+        Index("ix_elt_dynamic_table_owner", "tenant_id", "owner_user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    headers_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    columns_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    source_file: Mapped[Optional[str]] = mapped_column(String(255))
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class EltDynamicRow(TenantScopedMixin, Base):
+    __tablename__ = "elt_dynamic_rows"
+    __table_args__ = (
+        UniqueConstraint("table_id", "row_hash", name="uq_elt_dynamic_row_hash"),
+        Index("ix_elt_dynamic_row_run", "run_id"),
+        Index("ix_elt_dynamic_row_owner", "tenant_id", "owner_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    table_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("elt_dynamic_tables.id"), nullable=False, index=True
+    )
+    owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    run_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_sheet: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    source_row: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    row_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now_naive
+    )
+
+
 class EltTargetConfig(TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "elt_target_configs"
     __table_args__ = (

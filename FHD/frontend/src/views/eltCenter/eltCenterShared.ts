@@ -3,6 +3,7 @@ export function targetLabel(type: string) {
   return ({ auto: '智能识别（推荐）', template_review: '模板审阅', template_classification: '文件分类',
     customers: '客户', customer: '客户', products: '产品', customer_products: '客户及产品',
     shipment_records: '发货记录', purchase_orders: '采购订单', attendance: '考勤', knowledge: '知识库',
+    dynamic_table: 'AI 通用表',
     export_xlsx: 'Excel 导出', export_csv: 'CSV 导出', webhook: '外部系统' } as Record<string, string>)[type] || '其他业务目标'
 }
 

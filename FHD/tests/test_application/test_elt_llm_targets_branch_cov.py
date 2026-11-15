@@ -2950,3 +2950,25 @@ def test_timed_out_provider_keeps_account_lock_until_worker_exits(monkeypatch):
         finish.set()
     assert lock.acquire(timeout=2)
     lock.release()
+
+
+def test_customer_products_linked_companion_reuses_product(session):
+    """同文件附表执行时产品已由主运行建立：复用产品，不再整批失败。"""
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
+
+    adapter = CustomerProductsAdapter()
+    product = _make_cp_product(session, "已建漆", "LM1", unit="客户B")
+    match_ref = json.dumps({"customer_id": None, "product_id": product.id})
+
+    result = adapter.execute_row(
+        session,
+        {"customer_name": "客户B", "name": "已建漆", "model_number": "LM1"},
+        action="new",
+        match_ref=match_ref,
+        allowed_update_fields=set(),
+        context={"linked_companion": True},
+    )
+
+    assert result["after"]["_etl"]["customer_created"] is True
+    assert result["after"]["_etl"]["product_created"] is False
+    assert json.loads(result["match_ref"])["product_id"] == product.id
