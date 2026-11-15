@@ -199,6 +199,19 @@ it('offers only reopen on a closed ticket', async () => {
   wrapper.unmount()
 })
 
+it('renders an AI progress chain as stage chips instead of a bare sentence', async () => {
+  vi.mocked(apiFetch).mockResolvedValueOnce(response([{
+    id: 41, ticket_no: 'CIa1561151d2444aca9c060c7bdbdad4b6876f01f94713523b', summary: '导入后重复行', ready: false,
+    state: 'processing', latest_result: { progress: '排查处理中；修复处理中；验证处理中' },
+  }]))
+  const { wrapper } = await setup()
+  expect(wrapper.findAll('.repair-steps li').map((li) => li.text())).toEqual(['排查处理中', '修复处理中', '验证处理中'])
+  expect(wrapper.get('.repair-steps li:last-child').attributes('data-current')).toBe('true')
+  expect(wrapper.get('.repair-ticket').text().length).toBeLessThanOrEqual(18)
+  expect(wrapper.get('.repair-ticket').attributes('title')).toBe('CIa1561151d2444aca9c060c7bdbdad4b6876f01f94713523b')
+  wrapper.unmount()
+})
+
 it('keeps long original reports inside per-ticket expandable descriptions', async () => {
   const original = '很长的问题原文'.repeat(80)
   vi.mocked(apiFetch).mockResolvedValueOnce(response([{ ...repair, summary: original }]))
