@@ -502,6 +502,13 @@ def _validate_schema_payload(
             # has completed and the reference has been resolved.
             continue
         expected_type = str(prop.get("type") or "").strip()
+        if expected_type == "array" and isinstance(value, str) and value.strip():
+            # 模型常把一组 id 写成逗号/分号分隔的字符串；这里拆成数组，
+            # 否则会被类型校验拦成「字段 xxx 类型错误，应为 array」。
+            payload[key] = [
+                part.strip() for part in re.split(r"[,;，；\s]+", value) if part.strip()
+            ]
+            value = payload[key]
         if (
             expected_type == "string"
             and key == "reference_id"
