@@ -171,3 +171,13 @@ class TestModelNumber:
     def test_contains_case_insensitive(self):
         assert ModelNumber("Hello-World").contains("world") is True
         assert ModelNumber("Hello").contains("zzz") is False
+
+
+@pytest.mark.parametrize(
+    "name", ["Money", "Quantity", "OrderNumber", "ContactInfo", "Price", "ModelNumber"]
+)
+def test_legacy_exports_use_canonical_shipment_value_objects(name):
+    from app.domain.shipment import value_objects as canonical
+    from app.legacy.domain import value_objects_compat as compatibility
+
+    assert getattr(compatibility, name) is getattr(canonical, name)

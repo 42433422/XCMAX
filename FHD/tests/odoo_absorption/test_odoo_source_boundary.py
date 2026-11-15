@@ -20,6 +20,19 @@ import pytest
 from app.utils.operational_errors import BOUNDARY_ERRORS
 from tests.fixtures.backend_ci_isolation import retry_throttled_fetch
 
+
+def _assert_shared_mutation_online_traversal_not_fetched_0(_case_value_0, _case_value_1):
+    fetched: list[str] = []
+    man = {
+        "files": [
+            {"path": _case_value_0, "sha256": "0" * 64, "bytes": 5, "domain": "x", "purpose": "bad"}
+        ]
+    }
+    errors = vs.verify_online(man, fetch=lambda p: fetched.append(p) or b"x")
+    assert any(_case_value_1 in e for e in errors)
+    assert fetched == []
+
+
 # Load the verifier module (stdlib-only) from its sibling directory via
 # importlib.util (no sys.path mutation; the module is not importable by name).
 _VERIFY_DIR = Path(__file__).resolve().parents[2] / "XCAGI" / "kb" / "absorption" / "odoo18"
@@ -303,57 +316,21 @@ def test_mutation_online_hash_and_byte_mismatch():
 
 
 def test_mutation_online_traversal_not_fetched():
-    fetched: list[str] = []
-    man = {
-        "files": [
-            {
-                "path": "../escape.py",
-                "sha256": "0" * 64,
-                "bytes": 5,
-                "domain": "x",
-                "purpose": "bad",
-            }
-        ]
-    }
-    errors = vs.verify_online(man, fetch=lambda p: fetched.append(p) or b"x")
-    assert any("path invalid before fetch" in e for e in errors)
-    assert fetched == []  # traversal path must never reach the fetcher
+    return _assert_shared_mutation_online_traversal_not_fetched_0(
+        "../escape.py", "path invalid before fetch"
+    )
 
 
 def test_mutation_online_backslash_not_fetched():
-    fetched: list[str] = []
-    man = {
-        "files": [
-            {
-                "path": "a\\\\..\\\\b",
-                "sha256": "0" * 64,
-                "bytes": 5,
-                "domain": "x",
-                "purpose": "bad",
-            }
-        ]
-    }
-    errors = vs.verify_online(man, fetch=lambda p: fetched.append(p) or b"x")
-    assert any("path invalid before fetch" in e for e in errors)
-    assert fetched == []
+    return _assert_shared_mutation_online_traversal_not_fetched_0(
+        "a\\\\..\\\\b", "path invalid before fetch"
+    )
 
 
 def test_mutation_online_enterprise_source_not_fetched():
-    fetched: list[str] = []
-    man = {
-        "files": [
-            {
-                "path": "addons/enterprise/account/models/account_move.py",
-                "sha256": "0" * 64,
-                "bytes": 5,
-                "domain": "x",
-                "purpose": "bad",
-            }
-        ]
-    }
-    errors = vs.verify_online(man, fetch=lambda p: fetched.append(p) or b"x")
-    assert any("enterprise path prohibited" in e for e in errors)
-    assert fetched == []  # enterprise source must never be fetched or written
+    return _assert_shared_mutation_online_traversal_not_fetched_0(
+        "addons/enterprise/account/models/account_move.py", "enterprise path prohibited"
+    )
 
 
 # --- mutation: offline error prevents network -------------------------------

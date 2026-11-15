@@ -18,6 +18,44 @@ import pytest
 from app.domain.shared_services.shipment_number_mode_service import ShipmentNumberModeService
 
 
+def _assert_shared_missing_model_in_product_returns_400_0(
+    self,
+    svc,
+    _case_value_0,
+    _case_value_1,
+    _case_value_2,
+    _case_value_3,
+    _case_value_4,
+    _case_value_5,
+):
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.all.return_value = [
+        (_case_value_1, _case_value_2)
+    ]
+    with (
+        patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
+        patch(
+            "app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)
+        ),
+    ):
+        result, status = svc.execute(
+            order_text="",
+            custom_order_number="",
+            direct_unit_name="七彩乐园",
+            direct_products=[
+                {
+                    "model_number": _case_value_3,
+                    "product_name": "产品A",
+                    "tin_spec": _case_value_4,
+                    "quantity_tins": _case_value_5,
+                }
+            ],
+            parse_order_text=lambda x: {"success": False},
+        )
+    assert status == 400
+    assert _case_value_0 in result["message"]
+
+
 def _mock_get_db(mock_db):
     """Create a contextmanager mock for get_db generator."""
 
@@ -504,124 +542,24 @@ class TestExecute:
         assert status == 200
 
     def test_missing_model_in_product_returns_400(self, svc):
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.all.return_value = [
-            ("9803", "产品A"),
-        ]
-        with (
-            patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch(
-                "app.domain.shared_services.shipment_number_mode_service.get_db",
-                _mock_get_db(mock_db),
-            ),
-        ):
-            result, status = svc.execute(
-                order_text="",
-                custom_order_number="",
-                direct_unit_name="七彩乐园",
-                direct_products=[
-                    {
-                        "model_number": "",
-                        "product_name": "产品A",
-                        "tin_spec": "28",
-                        "quantity_tins": 5,
-                    }
-                ],
-                parse_order_text=lambda x: {"success": False},
-            )
-        assert status == 400
-        assert "型号缺失" in result["message"]
+        return _assert_shared_missing_model_in_product_returns_400_0(
+            self, svc, "型号缺失", "9803", "产品A", "", "28", 5
+        )
 
     def test_missing_spec_in_product_returns_400(self, svc):
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.all.return_value = [
-            ("9803", "产品A"),
-        ]
-        with (
-            patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch(
-                "app.domain.shared_services.shipment_number_mode_service.get_db",
-                _mock_get_db(mock_db),
-            ),
-        ):
-            result, status = svc.execute(
-                order_text="",
-                custom_order_number="",
-                direct_unit_name="七彩乐园",
-                direct_products=[
-                    {
-                        "model_number": "9803",
-                        "product_name": "产品A",
-                        "tin_spec": "",
-                        "quantity_tins": 5,
-                    }
-                ],
-                parse_order_text=lambda x: {"success": False},
-            )
-        assert status == 400
-        assert "规格缺失" in result["message"]
+        return _assert_shared_missing_model_in_product_returns_400_0(
+            self, svc, "规格缺失", "9803", "产品A", "9803", "", 5
+        )
 
     def test_zero_quantity_returns_400(self, svc):
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.all.return_value = [
-            ("9803", "产品A"),
-        ]
-        with (
-            patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch(
-                "app.domain.shared_services.shipment_number_mode_service.get_db",
-                _mock_get_db(mock_db),
-            ),
-        ):
-            # 源码已修复：用 `"quantity_tins" in product` 判断键是否存在（而非 `or` 短路），
-            # 且 `float(quantity)` 包裹在 try/except 内回退 0.0；当 quantity_tins=0 时
-            # quantity_value==0.0，命中 `quantity_value <= 0` 分支，按严格策略返回 400。
-            result, status = svc.execute(
-                order_text="",
-                custom_order_number="",
-                direct_unit_name="七彩乐园",
-                direct_products=[
-                    {
-                        "model_number": "9803",
-                        "product_name": "产品A",
-                        "tin_spec": "28",
-                        "quantity_tins": 0,
-                    }
-                ],
-                parse_order_text=lambda x: {"success": False},
-            )
-        assert status == 400
-        assert "数量缺失或无效" in result["message"]
+        return _assert_shared_missing_model_in_product_returns_400_0(
+            self, svc, "数量缺失或无效", "9803", "产品A", "9803", "28", 0
+        )
 
     def test_model_not_in_db_returns_400(self, svc):
-        mock_db = MagicMock()
-        # No matching model in DB
-        mock_db.query.return_value.filter.return_value.all.return_value = [
-            ("OTHER", "其他产品"),
-        ]
-        with (
-            patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch(
-                "app.domain.shared_services.shipment_number_mode_service.get_db",
-                _mock_get_db(mock_db),
-            ),
-        ):
-            result, status = svc.execute(
-                order_text="",
-                custom_order_number="",
-                direct_unit_name="七彩乐园",
-                direct_products=[
-                    {
-                        "model_number": "9803",
-                        "product_name": "产品A",
-                        "tin_spec": "28",
-                        "quantity_tins": 5,
-                    }
-                ],
-                parse_order_text=lambda x: {"success": False},
-            )
-        assert status == 400
-        assert "型号不存在" in result["message"]
+        return _assert_shared_missing_model_in_product_returns_400_0(
+            self, svc, "型号不存在", "OTHER", "其他产品", "9803", "28", 5
+        )
 
     def test_generation_failure_returns_400(self, svc):
         mock_app_svc = MagicMock()

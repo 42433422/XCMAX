@@ -14,6 +14,23 @@ from app.application.employee_runtime.agent_runner import (
     run_agent_handler,
 )
 
+
+def _assert_shared_max_iterations_from_actions_cfg_0(
+    self, _case_value_0, _case_value_1, _case_value_2, _case_value_3
+):
+    captured: dict[str, Any] = {}
+
+    def fake_loop(**kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {"ok": True}
+
+    with patch(AGENT_LOOP_PATH, side_effect=fake_loop):
+        run_agent_handler(
+            actions_cfg={_case_value_2: _case_value_3}, reasoning={}, task="t", employee_id="emp-1"
+        )
+    assert captured[_case_value_1] == _case_value_0
+
+
 AGENT_LOOP_PATH = "app.application.employee_runtime.agent_loop.run_employee_agent_loop"
 
 
@@ -215,21 +232,9 @@ class TestRunAgentHandler:
         assert captured["max_iterations"] == 7
 
     def test_max_iterations_from_actions_cfg(self):
-        captured: dict[str, Any] = {}
-
-        def fake_loop(**kwargs: Any) -> dict[str, Any]:
-            captured.update(kwargs)
-            return {"ok": True}
-
-        with patch(AGENT_LOOP_PATH, side_effect=fake_loop):
-            run_agent_handler(
-                actions_cfg={"max_iterations": 12},
-                reasoning={},
-                task="t",
-                employee_id="emp-1",
-            )
-
-        assert captured["max_iterations"] == 12
+        return _assert_shared_max_iterations_from_actions_cfg_0(
+            self, 12, "max_iterations", "max_iterations", 12
+        )
 
     def test_max_iterations_invalid_falls_back_to_default_6(self):
         captured: dict[str, Any] = {}
@@ -250,21 +255,9 @@ class TestRunAgentHandler:
         assert captured["max_iterations"] == 6
 
     def test_max_iterations_zero_falls_back_to_default_6(self):
-        captured: dict[str, Any] = {}
-
-        def fake_loop(**kwargs: Any) -> dict[str, Any]:
-            captured.update(kwargs)
-            return {"ok": True}
-
-        with patch(AGENT_LOOP_PATH, side_effect=fake_loop):
-            run_agent_handler(
-                actions_cfg={"max_iterations": 0},
-                reasoning={},
-                task="t",
-                employee_id="emp-1",
-            )
-
-        assert captured["max_iterations"] == 6
+        return _assert_shared_max_iterations_from_actions_cfg_0(
+            self, 6, "max_iterations", "max_iterations", 0
+        )
 
     def test_wall_time_limit_sec_invalid_falls_back_to_300(self):
         captured: dict[str, Any] = {}
@@ -320,22 +313,9 @@ class TestRunAgentHandler:
         assert captured["repeat_limit"] == 3
 
     def test_repeat_limit_below_two_bumped_to_two(self):
-        captured: dict[str, Any] = {}
-
-        def fake_loop(**kwargs: Any) -> dict[str, Any]:
-            captured.update(kwargs)
-            return {"ok": True}
-
-        with patch(AGENT_LOOP_PATH, side_effect=fake_loop):
-            run_agent_handler(
-                actions_cfg={"repeat_limit": 1},
-                reasoning={},
-                task="t",
-                employee_id="emp-1",
-            )
-
-        # max(2, 1) → 2
-        assert captured["repeat_limit"] == 2
+        return _assert_shared_max_iterations_from_actions_cfg_0(
+            self, 2, "repeat_limit", "repeat_limit", 1
+        )
 
     def test_actions_cfg_none_uses_all_defaults(self):
         captured: dict[str, Any] = {}
