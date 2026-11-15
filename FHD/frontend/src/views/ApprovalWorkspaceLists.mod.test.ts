@@ -58,6 +58,21 @@ describe('actual approval Mod complete lists', () => {
     },
   )
 
+  it('shows localized AI operation titles and Chinese status labels', async () => {
+    get.mockResolvedValue({ success: true, pagination: { page: 1, page_size: 50, total: 2 }, data: [
+      { id: 1, request_no: 'r1', title: '智能对话写操作：elt_import.preview', status: 'cancelled', business_type: 'workflow_tool', created_at: '', business_data: { tool_id: 'elt_import', action: 'preview' } },
+      { id: 2, request_no: 'r2', title: `${'超长自定义标题'.repeat(10)}`, status: 'withdrawn', business_type: 'expense', created_at: '' },
+    ] })
+    const wrapper = await openWorkspace()
+    expect(wrapper.text()).toContain('数据导入 · 预演')
+    expect(wrapper.text()).not.toContain('智能对话写操作')
+    expect(wrapper.text()).toContain('已取消')
+    expect(wrapper.text()).not.toContain('cancelled')
+    expect(wrapper.text()).toContain('已撤回')
+    expect(wrapper.text()).toContain('超长自定义标题')
+    wrapper.unmount()
+  })
+
   it('keeps a list failure distinct from an empty list and retries the same scope', async () => {
     const wrapper = await openWorkspace()
     get.mockResolvedValueOnce({ success: false, message: '暂时无法读取审批', data: [] })

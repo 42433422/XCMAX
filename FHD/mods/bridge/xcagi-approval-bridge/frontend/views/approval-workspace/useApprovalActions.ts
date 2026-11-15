@@ -2,7 +2,7 @@ import { ref, computed, type Ref } from 'vue'
 import { approvalApi, type ApprovalRequest } from '@/api/approval'
 import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog'
 import {
-  FINAL_STATUSES, isFinalStatus, getStatusLabel, buildWorkflowExecutionAlert,
+  FINAL_STATUSES, isFinalStatus, getStatusLabel, formatRequestTitle, buildWorkflowExecutionAlert,
 } from './awHelpers'
 
 /**
@@ -85,7 +85,7 @@ export function useApprovalActions(deps: {
       return
     }
     const ok = await appConfirm(
-      `确定删除这条审批记录吗？\n\n${item.title}\n状态：${getStatusLabel(item.status)}\n\n删除后不可恢复。`,
+      `确定删除这条审批记录吗？\n\n${formatRequestTitle(item)}\n状态：${getStatusLabel(item.status)}\n\n删除后不可恢复。`,
       { title: '删除确认', confirmText: '删除', cancelText: '取消' }
     )
     if (!ok) return

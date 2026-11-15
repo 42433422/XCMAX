@@ -79,9 +79,10 @@ export const getBusinessIcon = (type: string) => {
     shipment: 'fa-truck',
     purchase: 'fa-shopping-cart',
     expense: 'fa-money',
-    contract: 'fa-file-text'
+    contract: 'fa-file-text',
+    workflow_tool: 'fa-bolt'
   }
-  return `fa ${icons[type] || 'fa-file'}`
+  return `fa ${icons[type] || 'fa-file-o'}`
 }
 
 export const getBusinessLabel = (type: string) => {
@@ -89,7 +90,8 @@ export const getBusinessLabel = (type: string) => {
     shipment: '出货单',
     purchase: '采购',
     expense: '费用',
-    contract: '合同'
+    contract: '合同',
+    workflow_tool: 'AI 对话操作'
   }
   return labels[type] || type
 }
@@ -100,9 +102,65 @@ export const getStatusLabel = (status: string) => {
     in_progress: '审批中',
     approved: '已通过',
     rejected: '已拒绝',
-    withdrawn: '已撤回'
+    withdrawn: '已撤回',
+    cancelled: '已取消',
+    expired: '已失效',
+    draft: '草稿',
+    completed: '已完成'
   }
   return labels[status] || status
+}
+
+/** AI 自动提交的审批标题形如「智能对话写操作：elt_import.preview」，展示时转成中文业务动作。 */
+const AI_TITLE_PREFIX = '智能对话写操作：'
+const TOOL_LABELS: Record<string, string> = {
+  elt_import: '数据导入',
+  dataset_rag: '知识库',
+  document_template: '模板库',
+  business_db: '业务数据',
+  sales: '销售',
+  customers: '客户',
+  orders: '订单',
+  tickets: '工单',
+  im: '客服会话',
+  workflow: '工作流'
+}
+const ACTION_LABELS: Record<string, string> = {
+  preview: '预演',
+  execute: '执行',
+  query: '查询',
+  search: '检索',
+  clear: '清理',
+  clear_dataset: '清理',
+  create_order: '创建销售订单',
+  quote: '创建销售报价',
+  execute_closed_loop: '销售闭环',
+  ingest: '导入',
+  auto_ingest: '批量导入',
+  withdraw_auto_ingest: '撤回批量导入',
+  withdraw: '撤回',
+  write: '写入',
+  update: '更新',
+  delete: '删除',
+  create: '创建',
+  submit: '提交',
+  upload: '上传',
+  export: '导出',
+  diff_versions: '版本对比'
+}
+
+export function formatRequestTitle(request?: ApprovalRequest | null) {
+  const title = String(request?.title || '').trim()
+  if (!request || !title.startsWith(AI_TITLE_PREFIX)) return title
+  const data = request.business_data || {}
+  const suffix = title.slice(AI_TITLE_PREFIX.length).trim()
+  const [parsedTool, parsedAction] = suffix.split('.')
+  const tool = String(data.tool_id || parsedTool || '')
+  const action = String(data.action || parsedAction || '')
+  const toolLabel = TOOL_LABELS[tool]
+  const actionLabel = ACTION_LABELS[action]
+  if (!toolLabel && !actionLabel) return title
+  return [toolLabel || tool, actionLabel || action].filter(Boolean).join(' · ')
 }
 
 export const getActionIcon = (action: string) => {

@@ -1,8 +1,14 @@
 <template>
   <div class="approval-workspace-view">
     <div class="view-header">
-      <h2>审批工作台</h2>
-      <p class="subtitle">处理待审批事项，跟踪审批进度</p>
+      <div class="view-header__text">
+        <h2>审批工作台</h2>
+        <p class="subtitle">处理待审批事项，跟踪审批进度</p>
+      </div>
+      <button v-if="!fullListType" type="button" class="btn-toolbar" :disabled="loading" @click="reloadAccount">
+        <i class="fa fa-refresh" :class="{ 'fa-spin': loading }"></i>
+        <span>刷新</span>
+      </button>
     </div>
 
     <AwStatsCards v-if="!fullListType" :tm="tm" />
@@ -15,10 +21,10 @@
     </nav>
     <p v-if="fullListLoading" role="status">正在读取审批列表…</p>
     <p v-else-if="fullListError" role="alert">{{ fullListError }} <button type="button" @click="fullListType ? loadFullListPage() : reloadAccount()">重试</button></p>
-    <template v-else>
+    <div v-else class="workspace-columns" :class="{ 'is-single': fullListType }">
       <AwPendingList v-if="fullListType !== 'initiated'" :tm="tm" />
       <AwInitiatedList v-if="fullListType !== 'pending'" :tm="tm" />
-    </template>
+    </div>
     <AwDetailModal :tm="tm" />
   </div>
 </template>
@@ -33,7 +39,7 @@ import AwDetailModal from './approval-workspace/AwDetailModal.vue'
 import { assembleApprovalWorkspace } from './approval-workspace/assemble'
 
 const tm = assembleApprovalWorkspace()
-const { fullListType, fullListPage, fullListPageCount, fullListLoading, fullListError, closeFullList, loadFullListPage, reloadAccount } = tm
+const { fullListType, fullListPage, fullListPageCount, fullListLoading, fullListError, closeFullList, loadFullListPage, reloadAccount, loading } = tm
 </script>
 
 <style scoped src="./approval-workspace/approval-workspace.css"></style>

@@ -8,7 +8,7 @@ const props = defineProps<{ tm: ApprovalWorkspaceCtx }>()
 
 const {
   showDetails, closeDetails, selectedRequest, canApprove, approve, reject,
-  getBusinessLabel, getStatusLabel, getActionIcon, formatTime, getWorkflowExecutionStatusLabel,
+  getBusinessLabel, getStatusLabel, getActionIcon, formatRequestTitle, formatTime, getWorkflowExecutionStatusLabel,
 } = props.tm
 const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
 </script>
@@ -31,7 +31,7 @@ const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
             </div>
             <div class="detail-item">
               <label>审批标题：</label>
-              <span>{{ salesPreview?.operation ?? selectedRequest.title }}</span>
+              <span>{{ salesPreview?.operation ?? formatRequestTitle(selectedRequest) }}</span>
             </div>
             <div class="detail-item">
               <label>业务类型：</label>
@@ -44,8 +44,9 @@ const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
               </span>
             </div>
             <div v-if="!salesPreview" class="detail-item full-width">
-              <label>申请描述：</label>
-              <p>{{ selectedRequest.description }}</p>
+              <label>{{ selectedRequest.business_type === 'workflow_tool' ? '申请参数：' : '申请描述：' }}</label>
+              <pre v-if="selectedRequest.business_type === 'workflow_tool'" class="request-payload">{{ selectedRequest.description || '无' }}</pre>
+              <p v-else>{{ selectedRequest.description }}</p>
             </div>
           </div>
         </div>
@@ -82,7 +83,7 @@ const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
                   <span class="time">{{ formatTime(record.created_at) }}</span>
                 </div>
                 <div class="timeline-body">
-                  <div class="approver">审批人：{{ record.approver_name || record.approver_id || '系统' }}</div>
+                  <div class="approver">审批人：{{ record.approver_name || (record.approver_id ? `用户 ${record.approver_id}` : '系统') }}</div>
                   <div class="opinion">{{ record.opinion }}</div>
                 </div>
               </div>
