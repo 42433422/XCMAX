@@ -14,6 +14,27 @@ from app.domain.shared_services.conversation.api import (
 from app.domain.shared_services.conversation.context import ConversationContext
 
 
+def _setup_shared_0():
+    from app.application.agent_orchestrator.context_window_manager import (
+        ContextCompressionResult,
+        reset_context_window_manager,
+    )
+
+    reset_context_window_manager()
+    svc = _ConcreteApi()
+    mock_provider = MagicMock()
+    mock_provider.provider_id = "openai_compatible"
+    mock_provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto-account")
+    mock_provider.chat_completion = AsyncMock(
+        return_value={
+            "choices": [{"message": {"content": "hi"}}],
+            "model": "xcauto-account",
+            "usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+        }
+    )
+    return (ContextCompressionResult, reset_context_window_manager, svc, mock_provider)
+
+
 # ---------------------------------------------------------------------------
 # Helper: concrete subclass since ApiMixin is abstract-ish
 # ---------------------------------------------------------------------------
@@ -458,24 +479,8 @@ class TestContextWindowManagerIntegration:
     @pytest.mark.asyncio
     async def test_call_llm_api_trace_contains_compression_fields(self):
         """``_xcagi_trace`` 含压缩元数据字段。"""
-        from app.application.agent_orchestrator.context_window_manager import (
-            ContextCompressionResult,
-            reset_context_window_manager,
-        )
-
-        reset_context_window_manager()
-        svc = _ConcreteApi()
-        mock_provider = MagicMock()
-        mock_provider.provider_id = "openai_compatible"
-        mock_provider._adapter = SimpleNamespace(
-            provider_name="xcauto", model_name="xcauto-account"
-        )
-        mock_provider.chat_completion = AsyncMock(
-            return_value={
-                "choices": [{"message": {"content": "hi"}}],
-                "model": "xcauto-account",
-                "usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
-            }
+        ContextCompressionResult, reset_context_window_manager, svc, mock_provider = (
+            _setup_shared_0()
         )
         # 构造一个真实的 compression result（noop）
         compression = ContextCompressionResult(
@@ -555,24 +560,8 @@ class TestContextWindowManagerIntegration:
     @pytest.mark.asyncio
     async def test_call_llm_api_compression_saves_tokens_notifies_neuro(self):
         """压缩节省 token 时额外通知 NeuroBus。"""
-        from app.application.agent_orchestrator.context_window_manager import (
-            ContextCompressionResult,
-            reset_context_window_manager,
-        )
-
-        reset_context_window_manager()
-        svc = _ConcreteApi()
-        mock_provider = MagicMock()
-        mock_provider.provider_id = "openai_compatible"
-        mock_provider._adapter = SimpleNamespace(
-            provider_name="xcauto", model_name="xcauto-account"
-        )
-        mock_provider.chat_completion = AsyncMock(
-            return_value={
-                "choices": [{"message": {"content": "hi"}}],
-                "model": "xcauto-account",
-                "usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
-            }
+        ContextCompressionResult, reset_context_window_manager, svc, mock_provider = (
+            _setup_shared_0()
         )
         compression = ContextCompressionResult(
             messages=[{"role": "user", "content": "hi"}],

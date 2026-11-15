@@ -114,6 +114,7 @@ class PlannerCompletion(Protocol):
         http_client_factory: Callable[[], httpx.Client] | None = None,
         temperature: float = 0.1,
         max_tokens: int = 1200,
+        **kwargs: Any,
     ) -> dict[str, Any] | None: ...
 
 
@@ -375,14 +376,58 @@ class LlmPlanGeneration:
                 },
                 {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
             ]
-            response_data = self.completion(
-                ai_service=self.conversation,
-                context=context,
-                messages=messages,
-                http_client_factory=self.http_client,
+            from app.application.workflow.tool_calling import (
+                build_function_tools,
+                plan_from_tool_calls,
+                tool_calls_enabled,
+                unsupported_tool_parameter,
             )
+
+            native_tools: list[dict[str, Any]] = []
+            native_lookup: dict[str, tuple[str, str]] = {}
+            if tool_calls_enabled():
+                native_tools, native_lookup = build_function_tools(tool_registry)
+            extra: dict[str, Any] = (
+                {"tools": native_tools, "tool_choice": "auto"} if native_tools else {}
+            )
+            from app.application.workflow.retry_policy import call_with_retry, planner_retry_policy
+
+            policy = planner_retry_policy()
+            try:
+                response_data = call_with_retry(
+                    lambda: self.completion(
+                        ai_service=self.conversation,
+                        context=context,
+                        messages=messages,
+                        http_client_factory=self.http_client,
+                        **extra,
+                    ),
+                    policy=policy,
+                )
+            except TypeError as exc:
+                if not extra or not unsupported_tool_parameter(exc):
+                    raise
+                # 兼容不接受额外参数的旧 completion 实现（含测试替身）。
+                response_data = call_with_retry(
+                    lambda: self.completion(
+                        ai_service=self.conversation,
+                        context=context,
+                        messages=messages,
+                        http_client_factory=self.http_client,
+                    ),
+                    policy=policy,
+                )
             if response_data is None:
                 return None
+            native_plan = plan_from_tool_calls(
+                response_data,
+                plan_id=plan_id,
+                message=message,
+                context=context,
+                lookup=native_lookup,
+            )
+            if native_plan is not None:
+                return native_plan
             decoded = _decode_completion(response_data)
             if decoded is None:
                 return None
@@ -394,6 +439,11 @@ class LlmPlanGeneration:
                 nodes=nodes,
                 context=context,
             )
+        except (OSError, httpx.TransportError) as err:
+            # Exhausted retries must retain the existing fail-closed plan result,
+            # not escape into chat or invoke the retired fallback dispatcher.
+            logger.warning("模型传输重试已耗尽，拒绝计划：%s", type(err).__name__)
+            return None
         except (ValueError, TypeError) as err:
             from app.infrastructure.modstore_transport import MarketModelError
 
