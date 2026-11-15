@@ -1,13 +1,28 @@
 """失败后的补偿执行（saga 的最小实现）。
 
 补偿动作只能来自受信的风险注册表（``action_spec.compensate``），不接受模型在
-计划里自带的补偿声明，避免失败后执行未经审批的写操作。只有显式开启
-``plan.metadata["compensation"]`` 的运行才会触发；默认行为不变。
+计划里自带的补偿声明，避免失败后执行未经审批的写操作。默认开启，可用
+``XCAGI_COMPENSATION=0`` 全局停用，或在计划元数据里显式写
+``{"compensation": false}`` 跳过。
+
+声明形如::
+
+    "compensate": {
+        "tool_id": "customers",
+        "action": "delete",
+        "params": {"force": false},
+        "params_from": {"local_key": "compensation_param"},
+        "params_from_output": {"id": ["id", "data.id"]},
+    }
+
+``params_from`` 从步骤入参取值；``params_from_output`` 从步骤输出取值，支持
+点路径与候选列表（按顺序取第一个命中的非空值）。
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -19,10 +34,20 @@ logger = logging.getLogger(__name__)
 
 ExecuteFn = Callable[[str, str, dict[str, Any]], dict[str, Any]]
 
+_MISSING = object()
+
 
 def compensation_enabled(plan: PlanGraph | None) -> bool:
+    """服务端开关优先；计划元数据只能显式关闭。"""
+    if plan is None:
+        return False
+    raw = str(os.environ.get("XCAGI_COMPENSATION") or "").strip().lower()
+    if raw in {"0", "false", "no", "off"}:
+        return False
     metadata = getattr(plan, "metadata", None)
-    return isinstance(metadata, dict) and metadata.get("compensation") is True
+    if isinstance(metadata, dict) and metadata.get("compensation") is False:
+        return False
+    return True
 
 
 def _spec_for(tool_id: str, action: str) -> dict[str, Any] | None:
@@ -36,13 +61,41 @@ def _spec_for(tool_id: str, action: str) -> dict[str, Any] | None:
     return compensate if isinstance(compensate, dict) else None
 
 
-def _compensation_params(compensate: dict[str, Any], step_params: dict[str, Any]) -> dict[str, Any]:
+def _lookup_path(source: Any, path: str) -> Any:
+    current = source
+    for part in str(path).split("."):
+        if not isinstance(current, dict) or part not in current:
+            return _MISSING
+        current = current[part]
+    return current
+
+
+def _resolve_output_value(output: Any, spec: Any) -> Any:
+    paths = spec if isinstance(spec, (list, tuple)) else [spec]
+    for path in paths:
+        value = _lookup_path(output, str(path))
+        if value is not _MISSING and value not in (None, ""):
+            return value
+    return _MISSING
+
+
+def _compensation_params(
+    compensate: dict[str, Any],
+    step_params: dict[str, Any],
+    step_output: Any,
+) -> dict[str, Any]:
     params = dict(compensate.get("params") or {})
     mapping = compensate.get("params_from")
     if isinstance(mapping, dict):
         for source, target in mapping.items():
             if source in step_params:
                 params[str(target)] = step_params[source]
+    output_mapping = compensate.get("params_from_output")
+    if isinstance(output_mapping, dict):
+        for target, source in output_mapping.items():
+            value = _resolve_output_value(step_output, source)
+            if value is not _MISSING:
+                params[str(target)] = value
     return params
 
 
@@ -54,7 +107,7 @@ def run_compensations(
     runtime_context: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """按逆序补偿已完成的非幂等步骤；失败只记录，不改变原始失败结论。"""
-    if not compensation_enabled(plan) or plan is None:
+    if not compensation_enabled(plan):
         return []
     done = list(run.metadata.get("compensated_node_ids") or [])
     executed: list[dict[str, Any]] = []
@@ -70,7 +123,7 @@ def run_compensations(
         action = str(compensate.get("action") or "")
         if not action:
             continue
-        params = _compensation_params(compensate, dict(step.params or {}))
+        params = _compensation_params(compensate, dict(step.params or {}), step.output)
         params.setdefault("_runtime_context", dict(runtime_context or {}))
         record: dict[str, Any] = {
             "node_id": step.node_id,
