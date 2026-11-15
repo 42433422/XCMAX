@@ -13,16 +13,7 @@ import pytest
 
 import app.infrastructure.mods.mod_manager as mm
 from app.infrastructure.mods.mod_manager import ModManager, _default_mods_root
-
-
-def _make_mod(root: Path, mod_id: str, extra: dict | None = None) -> Path:
-    mod_dir = root / mod_id
-    mod_dir.mkdir(parents=True, exist_ok=True)
-    data = {"id": mod_id, "name": mod_id.title(), "version": "1.0.0"}
-    if extra:
-        data.update(extra)
-    (mod_dir / "manifest.json").write_text(json.dumps(data), encoding="utf-8")
-    return mod_dir
+from tests.pure_builders import mod_directory as _make_mod
 
 
 @pytest.fixture

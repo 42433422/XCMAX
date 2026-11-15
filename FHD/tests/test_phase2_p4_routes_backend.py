@@ -12,26 +12,7 @@ import pytest
 
 from app.contexts.context_notifier import get_context_notifier
 from app.infrastructure.persistence.extract_log_store_impl import SQLAlchemyExtractLogStore
-
-
-def _fake_extract_row(**kwargs):
-    defaults = {
-        "id": 1,
-        "file_name": "demo.xlsx",
-        "file_path": "/tmp/demo.xlsx",
-        "data_type": "product",
-        "total_rows": 10,
-        "valid_rows": 8,
-        "imported_rows": 7,
-        "skipped_rows": 1,
-        "failed_rows": 0,
-        "status": "done",
-        "error_message": None,
-        "field_mapping": json.dumps({"a": "b"}),
-        "created_at": datetime(2026, 1, 1, 12, 0, 0),
-    }
-    defaults.update(kwargs)
-    return SimpleNamespace(**defaults)
+from tests.pure_builders import extract_row as _fake_extract_row
 
 
 @contextmanager

@@ -40,6 +40,8 @@ from app.application.ai_group_chat_service import (
     SUPER_DISCUSSION_MAX_ROUNDS,
     AiGroupChatService,
 )
+from tests.pure_builders import department_catalog as fake_departments
+from tests.pure_builders import enterprise_department_catalog as fake_enterprise_departments
 
 
 def _assert_shared_delete_message_wrong_user_0(
@@ -72,26 +74,6 @@ def _assert_shared_delete_message_wrong_user_0(
 # ---------------------------------------------------------------------------
 # helpers（与第一批保持一致）
 # ---------------------------------------------------------------------------
-
-
-def fake_departments() -> dict[str, dict[str, str]]:
-    return {
-        "ops_acquisition": {"label": "O-A 获客部"},
-        "ops_partner": {"label": "O-B 伙伴部"},
-        "prod_web": {"label": "P-W 网站部"},
-        "prod_mod": {"label": "P-M Mod 部"},
-        "prod_software": {"label": "P-S 软件部"},
-        "shared_retention": {"label": "S-R 归档部"},
-    }
-
-
-def fake_enterprise_departments() -> dict[str, dict[str, str]]:
-    return {
-        "tools": {"label": "工具层"},
-        "execution": {"label": "执行层"},
-        "service": {"label": "服务层"},
-        "management": {"label": "管理层"},
-    }
 
 
 def make_completion(seen: list[dict] | None = None, content: str = "收到"):

@@ -6,6 +6,7 @@ from app.domain.shared_services.conversation.context import ConversationContext
 from app.infrastructure.llm.client import resolve_chat_model
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.performance.cache_manager import get_ai_response_cache
+from app.utils.scalars import coerce_int as _coerce_int
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +33,6 @@ def _make_ai_response_cache_key(message: str, context_hash: str = "") -> str:
     return hashlib.sha256(
         f"ai_response:v1:{context_hash}:{message.strip().lower()}".encode()
     ).hexdigest()
-
-
-def _coerce_int(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
 
 
 def _build_llm_trace(
