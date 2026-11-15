@@ -628,7 +628,7 @@ def test_execute_registers_source_in_template_library():
             "execute", {"run_id": "run-1"}, _context(), "normal", "导入"
         )
     assert result["data"]["template"]["names"] == ["宗南家私-发货单版式"]
-    assert "已从原件切出 1 个模板并登记到模板库（宗南家私-发货单版式）" in result["message"]
+    assert "已登记模板到模板库（宗南家私-发货单版式）" in result["message"]
 
 
 def test_template_receipt_registers_segmented_region(tmp_path):
@@ -882,7 +882,9 @@ def test_execute_writes_linked_customer_products_companion():
         result = _registered_router_elt_import(
             "execute", {"run_id": "run-1"}, _context(), "normal", "导入"
         )
-    assert service.execute.call_count == 2
+    # 主预演已是 completed（自动审批时预演即入库），只需执行附带的客户及产品预演。
+    assert service.execute.call_count == 1
+    assert service.execute.call_args.kwargs["run_id"] == "companion-1"
     assert result["data"]["customer_products"]["executed_rows"] == 12
     assert "客户及产品写入 12 行" in result["message"]
 

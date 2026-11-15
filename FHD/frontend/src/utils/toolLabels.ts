@@ -4,6 +4,7 @@
  * 与 AgentRunTrace 共用，避免两套渲染各写一份映射后逐渐漂移。
  */
 const TOOL_LABELS: Array<[RegExp, string]> = [
+  [/elt|导入/i, '数据对接'],
   [/business[_-]?db|database|sql/i, '业务数据库'],
   [/browser|web/i, '浏览器'],
   [/search/i, '搜索'],

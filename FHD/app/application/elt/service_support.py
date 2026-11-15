@@ -26,7 +26,9 @@ READ_ONLY_MODE = 0o400
 # template. It shares owner-scoped ETL persistence so document resolution can
 # enforce tenant + owner isolation, but it must not be selectable for import.
 ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION = "ELT_SHIPMENT_DOCUMENT_TEMPLATE"
-EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="fhd-etl")
+# 预演与执行共用这个池。批量导入时文件多，2 个线程会让执行排在预演后面，
+# 表现为「状态 executing 但进度一直是 0」。4 个线程足够并发且不放大锁竞争。
+EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="fhd-etl")
 SUBMITTED: set[str] = set()
 SUBMITTED_LOCK = threading.Lock()
 SENSITIVE_WEBHOOK_HEADER_PARTS = (

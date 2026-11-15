@@ -112,6 +112,38 @@ def _publish_note(text: str) -> None:
     publish_stream_note(text)
 
 
+def _publish_file_stage(
+    *,
+    node_id: str,
+    action: str,
+    phase: str,
+    success: bool | None = None,
+    output: str = "",
+    error: str = "",
+) -> None:
+    """把「正在处理哪个文件 / 哪个文件已完成」推进执行链。
+
+    只发结构化 tool_call 事件，前端按 node_id 原地增改；发布失败不影响导入。
+    """
+    record: dict[str, Any] = {
+        "node_id": node_id,
+        "tool_id": "elt_import",
+        "action": action,
+        "phase": phase,
+    }
+    if phase == "finished":
+        record["success"] = bool(success)
+        record["output_preview"] = str(output or "")[:200]
+        if error:
+            record["error"] = str(error)[:200]
+    try:
+        from app.infrastructure.chat_stream_lifetime import publish_stream_tool_record
+
+        publish_stream_tool_record(record)
+    except Exception:  # noqa: BLE001 - 观测通道不得改变导入结果
+        pass
+
+
 def _upload_label(path: str, runtime_context: dict[str, Any]) -> str:
     """批次进度里用的可读文件名；查不到时退回路径名。"""
     try:
@@ -165,22 +197,25 @@ def _wait_timeout(params: dict[str, Any], runtime_context: dict[str, Any], cap: 
     return max(0.0, min(limit, cap, remaining))
 
 
-def _batch_result_note(action: str, label: str, out: dict[str, Any]) -> None:
+def _batch_result_text(action: str, label: str, out: dict[str, Any]) -> str:
+    """单个文件的收口说明；预演/执行共用，供进度提示与执行链复用。"""
     data = out.get("data") if isinstance(out.get("data"), dict) else {}
-    if out.get("success"):
-        if action == "预演":
-            _publish_note(
-                f"「{label}」预演完成：共 {data.get('total_rows', 0)} 行，"
-                f"新增 {data.get('new_rows', 0)}、更新 {data.get('update_rows', 0)}、"
-                f"跳过 {data.get('skip_rows', 0)}、错误 {data.get('error_rows', 0)}"
-            )
-        else:
-            note = f"「{label}」导入完成：写入 {data.get('executed_rows', 0)} 行"
-            if data.get("skip_rows"):
-                note += f"，重复跳过 {data.get('skip_rows')} 行"
-            _publish_note(note)
-    else:
-        _publish_note(f"「{label}」{action}失败：{out.get('message') or '未知原因'}")
+    if not out.get("success"):
+        return f"「{label}」{action}失败：{out.get('message') or '未知原因'}"
+    if action == "预演":
+        return (
+            f"「{label}」预演完成：共 {data.get('total_rows', 0)} 行，"
+            f"新增 {data.get('new_rows', 0)}、更新 {data.get('update_rows', 0)}、"
+            f"跳过 {data.get('skip_rows', 0)}、错误 {data.get('error_rows', 0)}"
+        )
+    text = f"「{label}」导入完成：写入 {data.get('executed_rows', 0)} 行"
+    if data.get("skip_rows"):
+        text += f"，重复跳过 {data.get('skip_rows')} 行"
+    return text
+
+
+def _batch_result_note(action: str, label: str, out: dict[str, Any]) -> None:
+    _publish_note(_batch_result_text(action, label, out))
 
 
 def _wait(service, run_id: str, owner_id: int, *, pending: set[str], timeout: float) -> dict:
@@ -1198,35 +1233,33 @@ def _execute(params: dict, runtime_context: dict) -> dict:
         with get_db() as db:
             # 执行必须绑定本次预演内容的修订号，否则 ELT 会拒绝（防止预演后被改动）。
             current = service.get_run(db, run_id=run_id, owner_user_id=actor.id)
-            if str(current.get("status") or "") == "completed":
-                # 自动审批档下预演会顺手入库；计划里的 execute 步骤再执行一次不能报失败。
-                # 预演已入库时同样要补做知识库与模板库登记，否则会出现「导入成功但模板库空白」。
-                done = _summary(current)
-                executed = int(done.get("executed_rows") or 0)
-                knowledge, template, notes = _finalize_import(current, actor.id)
-                done["knowledge"] = knowledge
-                done["template"] = template
-                return {
-                    "success": True,
-                    "error_code": None,
-                    "message": (
-                        f"该文件已在预演阶段自动入库（写入 {executed} 行），无需重复执行"
-                        if executed
-                        else "该文件已在预演阶段处理完成（未写入业务行），无需重复执行"
-                    )
-                    + notes,
-                    "data": done,
-                }
+            status = str(current.get("status") or "")
+            if status in PREVIEW_PENDING:
+                # 计划可能把执行排到预演还没跑完的时候：先等预演结束，再按结果执行，
+                # 不能直接报「请先完成预演再执行」把整条导入判失败。
+                _wait(
+                    service,
+                    run_id,
+                    actor.id,
+                    pending=PREVIEW_PENDING,
+                    timeout=_wait_timeout(params, runtime_context, PREVIEW_TIMEOUT_SECONDS),
+                )
+                with get_db() as wait_db:
+                    current = service.get_run(wait_db, run_id=run_id, owner_user_id=actor.id)
+                status = str(current.get("status") or "")
             revision = str(current.get("preview_revision") or "")
-            service.execute(
-                db,
-                run_id=run_id,
-                owner_user_id=actor.id,
-                confirmed=True,
-                valid_rows_only=bool(params.get("valid_rows_only") is True),
-                preview_revision=revision or None,
-                accept_suggested=bool(params.get("accept_suggested") is True),
-            )
+            # 自动审批档下预演可能已经触发入库（executing/completed）：
+            # 计划里的执行步骤只需等待或收口，重复调用 execute 会报「请先完成预演再执行」。
+            if status not in ("executing", "completed"):
+                service.execute(
+                    db,
+                    run_id=run_id,
+                    owner_user_id=actor.id,
+                    confirmed=True,
+                    valid_rows_only=bool(params.get("valid_rows_only") is True),
+                    preview_revision=revision or None,
+                    accept_suggested=bool(params.get("accept_suggested") is True),
+                )
     except EltError as exc:
         return {"success": False, "error_code": exc.code, "message": exc.message}
     data = _wait(
@@ -1343,7 +1376,20 @@ def _registered_router_elt_import(
                 "message": "请提供 file_path（单个文件）或 file_paths（整批文件）后再预演。",
             }
         try:
-            return _preview(payload, runtime_context)
+            label = _upload_label(str(payload.get("file_path") or ""), runtime_context)
+            node_id = "elt-preview-1"
+            stage_action = f"预演 1/1：{label}"
+            _publish_file_stage(node_id=node_id, action=stage_action, phase="started")
+            out = _preview(payload, runtime_context)
+            _publish_file_stage(
+                node_id=node_id,
+                action=stage_action,
+                phase="finished",
+                success=bool(out.get("success")),
+                output=_batch_result_text("预演", label, out),
+                error="" if out.get("success") else str(out.get("message") or ""),
+            )
+            return out
         except PermissionError as err:
             return {
                 "success": False,
@@ -1355,7 +1401,20 @@ def _registered_router_elt_import(
         if len(ids) > 1:
             return _execute_batch(ids, payload, runtime_context)
         if ids:
-            return _execute({**payload, "run_id": ids[0]}, runtime_context)
+            label = _run_label(ids[0], runtime_context)
+            node_id = "elt-execute-1"
+            stage_action = f"导入 1/1：{label}"
+            _publish_file_stage(node_id=node_id, action=stage_action, phase="started")
+            out = _execute({**payload, "run_id": ids[0]}, runtime_context)
+            _publish_file_stage(
+                node_id=node_id,
+                action=stage_action,
+                phase="finished",
+                success=bool(out.get("success")),
+                output=_batch_result_text("导入", label, out),
+                error="" if out.get("success") else str(out.get("message") or ""),
+            )
+            return out
         return _execute(payload, runtime_context)
     return {"success": False, "message": f"未知的 ELT 导入操作：{action}"}
 
@@ -1463,12 +1522,23 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
             _publish_note(f"本轮时间不足，剩余 {deferred} 个文件将在下一轮继续导入")
             break
         label = _upload_label(path, runtime_context)
+        node_id = f"elt-preview-{index}"
+        action = f"预演 {index}/{total}：{label}"
+        _publish_file_stage(node_id=node_id, action=action, phase="started")
         _batch_progress_note("预演", index, total, label)
         try:
             out = _preview({**base, "file_path": path}, runtime_context)
         except PermissionError as err:
             out = {"success": False, "error_code": "spreadsheet_access_denied", "message": str(err)}
         _batch_result_note("预演", label, out)
+        _publish_file_stage(
+            node_id=node_id,
+            action=action,
+            phase="finished",
+            success=bool(out.get("success")),
+            output=_batch_result_text("预演", label, out),
+            error="" if out.get("success") else str(out.get("message") or ""),
+        )
         processed += 1
         items.append({"file_path": path, "file_name": label, **out})
     ready = [item for item in items if item.get("success")]
@@ -1545,9 +1615,20 @@ def _execute_batch(run_ids: list[str], payload: dict, runtime_context: dict) -> 
             _publish_note(f"本轮时间不足，剩余 {deferred} 个文件将在下一轮继续导入")
             break
         label = _run_label(run_id, runtime_context)
+        node_id = f"elt-execute-{index}"
+        action = f"导入 {index}/{total}：{label}"
+        _publish_file_stage(node_id=node_id, action=action, phase="started")
         _batch_progress_note("导入", index, total, label)
         out = _execute({**base, "run_id": run_id}, runtime_context)
         _batch_result_note("导入", label, out)
+        _publish_file_stage(
+            node_id=node_id,
+            action=action,
+            phase="finished",
+            success=bool(out.get("success")),
+            output=_batch_result_text("导入", label, out),
+            error="" if out.get("success") else str(out.get("message") or ""),
+        )
         processed += 1
         items.append({"run_id": run_id, "file_name": label, **out})
     done = [item for item in items if item.get("success")]
