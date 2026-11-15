@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.shared_services.mobile_relay_service import _public_base_url as legacy_url
+from app.application.mobile_relay_service import _public_base_url as legacy_url
 from app.domain.shared_services.mobile_relay_utils import _public_base_url
 from app.infrastructure.topology import FHD_API_BASE_URL
 

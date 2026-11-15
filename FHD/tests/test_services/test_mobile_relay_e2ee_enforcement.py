@@ -10,8 +10,8 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+from app.application import mobile_relay_service as relay
 from app.application.desktop_relay import e2ee
-from app.services import mobile_relay_service as relay
 
 
 @pytest.fixture

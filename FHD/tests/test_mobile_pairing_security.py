@@ -140,7 +140,7 @@ def test_renewal_falls_back_to_register_only_when_cloud_lacks_endpoint(
 ):
     import httpx
 
-    from app.services import mobile_relay_desktop_client as client_mod
+    from app.application.desktop_relay import client as client_mod
 
     calls: list[str] = []
     fresh = {"relay_id": "r2", "desktop_token": "t2", "pairing_code": "123456"}

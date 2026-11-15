@@ -2,11 +2,11 @@
 
 from typing import Any
 
-from app.domain.shared_services.mobile_relay_service import MobileRelayService
+from app.application.mobile_relay_service import MobileRelayService
 
 
 def register_desktop_relay(*, host: str, port: int) -> dict[str, Any]:
-    from app.domain.shared_services.mobile_relay_desktop_client import (
+    from app.application.desktop_relay.client import (
         register_desktop_relay as _register,
     )
 
@@ -15,7 +15,7 @@ def register_desktop_relay(*, host: str, port: int) -> dict[str, Any]:
 
 
 def cached_desktop_relay_payload() -> dict[str, Any] | None:
-    from app.domain.shared_services.mobile_relay_desktop_client import (
+    from app.application.desktop_relay.client import (
         cached_desktop_relay_payload as _cached,
     )
 

@@ -10,7 +10,7 @@ from typing import Any, cast
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 
-from app.application.mobile_relay_ports import PairingPorts
+from app.domain.mobile_relay.ports import PairingPorts
 from app.domain.shared_services.mobile_relay_utils import (
     _epoch_from_iso,
     _json_dumps,

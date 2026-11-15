@@ -355,7 +355,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_recoverable_error_returns_none(self, m):
         """branch: RECOVERABLE_ERRORS → None."""
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.application.desktop_relay.client.cached_desktop_relay_payload",
             side_effect=ValueError("boom"),
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -364,7 +364,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_none_returns_none(self, m):
         """branch: relay is None → None."""
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.application.desktop_relay.client.cached_desktop_relay_payload",
             return_value=None,
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -373,7 +373,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_empty_returns_none(self, m):
         """branch: relay is empty dict → None."""
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.application.desktop_relay.client.cached_desktop_relay_payload",
             return_value={},
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -382,7 +382,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_no_relay_id_returns_none(self, m):
         """branch: relay has no relay_id → None."""
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.application.desktop_relay.client.cached_desktop_relay_payload",
             return_value={"relay_base_url": "http://x"},
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -391,7 +391,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_empty_relay_id_returns_none(self, m):
         """branch: relay_id is whitespace → None."""
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.application.desktop_relay.client.cached_desktop_relay_payload",
             return_value={"relay_id": "   "},
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -400,7 +400,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_without_code_returns_none(self, m):
         """A cached relay without a valid code cannot be used to bind."""
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.application.desktop_relay.client.cached_desktop_relay_payload",
             return_value={
                 "relay_id": "pending-r1",
                 "relay_base_url": "http://relay",
@@ -415,7 +415,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_valid_returns_dict(self, m):
         """branch: paired relay has relay_id → return dict."""
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.application.desktop_relay.client.cached_desktop_relay_payload",
             return_value={
                 "relay_id": "r1",
                 "pairing_code": "123456",
@@ -434,7 +434,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_valid_with_empty_fields(self, m):
         """branch: paired relay has relay_id but other fields empty."""
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.application.desktop_relay.client.cached_desktop_relay_payload",
             return_value={
                 "relay_id": "r2",
                 "pairing_code": "654321",

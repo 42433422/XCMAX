@@ -8,7 +8,7 @@ import pytest
 
 
 def test_relay_poll_backoff_is_bounded_and_resets():
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     assert (
         relay._relay_poll_backoff_seconds(
@@ -45,7 +45,7 @@ def test_relay_poll_backoff_is_bounded_and_resets():
 
 
 def test_register_desktop_relay_uses_stable_device_id(monkeypatch, tmp_path):
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
     from app.utils.device_system import device_identity
 
     posted: list[dict] = []
@@ -101,7 +101,7 @@ def test_register_desktop_relay_uses_stable_device_id(monkeypatch, tmp_path):
 
 
 def test_register_desktop_relay_hides_cached_pairing_on_timeout(monkeypatch, tmp_path):
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     config_file = tmp_path / "mobile_relay_desktop.json"
     config_file.write_text(
@@ -140,7 +140,7 @@ def test_register_desktop_relay_hides_cached_pairing_on_timeout(monkeypatch, tmp
 
 
 def test_register_desktop_relay_invalid_base_url_returns_none(monkeypatch, tmp_path):
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     config_file = tmp_path / "mobile_relay_desktop.json"
     config_file.write_text(
@@ -181,7 +181,7 @@ def test_pending_relay_identity_available_after_lan_pairing(monkeypatch):
 
 
 def test_execute_task_waits_for_real_codex_result(monkeypatch):
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     class FakeCodexService:
         def invoke(self, **kwargs):
@@ -221,7 +221,7 @@ def test_execute_task_waits_for_real_codex_result(monkeypatch):
 
 
 def test_execute_task_marks_blocked_terminal_result_as_blocked(monkeypatch):
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     class FakeCodexService:
         def invoke(self, **kwargs):
@@ -262,7 +262,7 @@ def test_execute_task_marks_blocked_terminal_result_as_blocked(monkeypatch):
 
 
 def test_execute_task_routes_explicit_merge_message_to_git_op(monkeypatch):
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     captured = {}
 
@@ -299,7 +299,7 @@ def test_execute_task_routes_explicit_merge_message_to_git_op(monkeypatch):
 
 
 def test_execute_task_does_not_treat_generic_merge_word_as_git_op(monkeypatch):
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     class FakeCodexService:
         def invoke(self, **kwargs):
@@ -337,7 +337,7 @@ def test_execute_task_does_not_treat_generic_merge_word_as_git_op(monkeypatch):
 
 
 def test_execute_task_blocks_progress_body_without_evidence(monkeypatch):
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     class FakeCodexService:
         def invoke(self, **kwargs):
@@ -378,7 +378,7 @@ def test_execute_task_blocks_progress_body_without_evidence(monkeypatch):
 
 
 def test_execute_task_marks_dispatch_unavailable_as_blocked(monkeypatch):
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     class FakeCodexService:
         def invoke(self, **kwargs):
@@ -422,7 +422,7 @@ def _seed_config(path, relay_id: str) -> None:
 
 def test_read_config_migrates_legacy_when_stable_missing(monkeypatch, tmp_path):
     """源码升级后：稳定路径没配置而旧路径(仓库根回落)有 → 一次性迁移，保住既有配对。"""
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     stable = tmp_path / "stable" / "mobile_relay_desktop.json"
     legacy = tmp_path / "legacy" / "mobile_relay_desktop.json"
@@ -443,7 +443,7 @@ def test_read_config_migrates_legacy_when_stable_missing(monkeypatch, tmp_path):
 
 def test_read_config_never_overwrites_existing_stable_config(monkeypatch, tmp_path):
     """稳定路径已有权威绑定时，绝不能被旧路径(可能是 pending 的污染身份)覆盖。"""
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     stable = tmp_path / "stable" / "mobile_relay_desktop.json"
     legacy = tmp_path / "legacy" / "mobile_relay_desktop.json"
@@ -463,7 +463,7 @@ def test_read_config_never_overwrites_existing_stable_config(monkeypatch, tmp_pa
 
 
 def test_unlink_after_migration_does_not_restore_legacy_on_restart(monkeypatch, tmp_path):
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     stable = tmp_path / "stable" / "mobile_relay_desktop.json"
     legacy = tmp_path / "legacy" / "mobile_relay_desktop.json"
@@ -504,7 +504,7 @@ class _CaptureCodexService:
 
 def test_execute_task_workorder_forces_local_cli_and_keeps_code_mode(monkeypatch):
     """群工单：必须本地 CLI 真执行(force_cli_direct)且保持 mode=code(判为开发任务)，不再被当聊天回避执行。"""
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     monkeypatch.setattr(relay, "CodexSuperEmployeeService", _CaptureCodexService)
     relay._execute_task(
@@ -530,7 +530,7 @@ def test_execute_task_workorder_forces_local_cli_and_keeps_code_mode(monkeypatch
 
 def test_execute_task_freechat_strips_mode_but_still_forces_cli(monkeypatch):
     """自由聊天面下发 mode=code 仍剥离(交回分类器,避免'你好'被当任务)，但仍强制本地 CLI(不派 Para)。"""
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     monkeypatch.setattr(relay, "CodexSuperEmployeeService", _CaptureCodexService)
     relay._execute_task(
@@ -551,7 +551,7 @@ def test_gc_removes_stale_keeps_fresh(monkeypatch, tmp_path, root_name):
     """工作区 GC：超期残留清掉、近期(活跃)保留。"""
     import time as _t
 
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     monkeypatch.setattr(relay.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setenv("XCAGI_RELAY_WORKSPACE_GC_MAX_AGE_SEC", "100")
@@ -572,7 +572,7 @@ def test_gc_removes_stale_keeps_fresh(monkeypatch, tmp_path, root_name):
 
 def test_complete_relay_task_writes_elapsed_and_error_code(monkeypatch):
     """回写 /complete 的 result 带 elapsed_seconds；blocked 结果带 error_code/error_message。"""
-    from app.services import mobile_relay_desktop_client as relay
+    from app.application.desktop_relay import client as relay
 
     posted = {}
 

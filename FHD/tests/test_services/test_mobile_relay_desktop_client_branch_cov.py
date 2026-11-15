@@ -1,4 +1,4 @@
-"""Branch-coverage tests for app.domain.shared_services.mobile_relay_desktop_client.
+"""Branch-coverage tests for app.application.desktop_relay.client.
 
 Targets the helper functions and _execute_task branches not covered by
 the existing test_mobile_relay_desktop_client_cov.py suite:
@@ -30,8 +30,8 @@ import pytest
 
 # Pre-import app.application to break circular import between app.services and app.mod_sdk
 import app.application
-import app.domain.shared_services.mobile_relay_desktop_client as _module
-from app.domain.shared_services.mobile_relay_desktop_client import (
+import app.application.desktop_relay.client as _module
+from app.application.desktop_relay.client import (
     _api_url,
     _body_indicates_failed,
     _body_indicates_unfinished,
@@ -91,7 +91,7 @@ def _assert_shared_mode_cleared_when_code_0(self, _shared_literal_0):
         "assistant_message": {"status": "completed", "body": "ok"},
     }
     with patch(
-        "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+        "app.application.desktop_relay.client.CodexSuperEmployeeService",
         return_value=mock_svc,
     ):
         _execute_task(task)
@@ -118,7 +118,7 @@ def _assert_shared_codex_accepted_with_terminal_message_1(
     mock_svc.list_messages.return_value = [terminal_msg]
     with (
         patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ),
         patch.dict(
@@ -797,7 +797,7 @@ class TestExecuteTaskAdditional:
             "assistant_message": {"status": "completed", "body": "done"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.ClaudeSuperEmployeeService",
+            "app.application.desktop_relay.client.ClaudeSuperEmployeeService",
             return_value=mock_svc,
         ):
             result = _execute_task(task)
@@ -815,7 +815,7 @@ class TestExecuteTaskAdditional:
             "assistant_message": {"status": "failed", "body": "执行失败"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.ClaudeSuperEmployeeService",
+            "app.application.desktop_relay.client.ClaudeSuperEmployeeService",
             return_value=mock_svc,
         ):
             result = _execute_task(task)
@@ -828,7 +828,7 @@ class TestExecuteTaskAdditional:
             "cursor.invoke",
             "message",
             "do something",
-            "app.domain.shared_services.mobile_relay_desktop_client.CursorSuperEmployeeService",
+            "app.application.desktop_relay.client.CursorSuperEmployeeService",
         )
 
     def test_cursor_kind_not_accepted(self) -> None:
@@ -841,7 +841,7 @@ class TestExecuteTaskAdditional:
             "dispatch": {"accepted": False, "reason": "busy"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CursorSuperEmployeeService",
+            "app.application.desktop_relay.client.CursorSuperEmployeeService",
             return_value=mock_svc,
         ):
             result = _execute_task(task)
@@ -876,7 +876,7 @@ class TestExecuteTaskAdditional:
 
         with (
             patch(
-                "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+                "app.application.desktop_relay.client.CodexSuperEmployeeService",
                 return_value=mock_svc,
             ),
             patch.dict(
@@ -909,7 +909,7 @@ class TestExecuteTaskAdditional:
 
         with (
             patch(
-                "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+                "app.application.desktop_relay.client.CodexSuperEmployeeService",
                 return_value=mock_svc,
             ),
             patch.dict(
@@ -935,7 +935,7 @@ class TestExecuteTaskAdditional:
             "assistant_message": {"status": "completed", "body": "ok"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             result = _execute_task(task)
@@ -950,7 +950,7 @@ class TestExecuteTaskAdditional:
             "codex.invoke",
             "prompt",
             "do via prompt",
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
         )
 
     def test_message_from_task_field(self) -> None:
@@ -959,7 +959,7 @@ class TestExecuteTaskAdditional:
             "codex.invoke",
             "task",
             "do via task",
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
         )
 
     def test_branch_added_to_context(self) -> None:
@@ -973,7 +973,7 @@ class TestExecuteTaskAdditional:
             "assistant_message": {"status": "completed", "body": "ok"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             _execute_task(task)
@@ -995,7 +995,7 @@ class TestExecuteTaskAdditional:
             "assistant_message": {"status": "completed", "body": "ok"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             _execute_task(task)
@@ -1017,7 +1017,7 @@ class TestExecuteTaskAdditional:
             "assistant_message": {"status": "completed", "body": "ok"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.TraeSuperEmployeeService",
+            "app.application.desktop_relay.client.TraeSuperEmployeeService",
             return_value=mock_svc,
         ):
             _execute_task(task)
@@ -1054,7 +1054,7 @@ class TestExecuteTaskAdditional:
             "assistant_message": {"status": "completed", "body": "ok"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             _execute_task(task)
@@ -1072,7 +1072,7 @@ class TestExecuteTaskAdditional:
             "assistant_message": {"status": "completed", "body": "ok"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             _execute_task(task)
@@ -1094,7 +1094,7 @@ class TestExecuteTaskAdditional:
             "payload": {"branch": "feature/x"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.handle_git_op",
+            "app.application.desktop_relay.client.handle_git_op",
             return_value={"ok": True},
         ) as mock_handle:
             result = _execute_task(task)
@@ -1111,7 +1111,7 @@ class TestExecuteTaskAdditional:
             },
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.handle_git_op",
+            "app.application.desktop_relay.client.handle_git_op",
             return_value={"ok": True, "merged": True},
         ) as mock_handle:
             result = _execute_task(task)
@@ -1128,7 +1128,7 @@ class TestExecuteTaskAdditional:
             "assistant_message": {"status": "completed", "body": "ok"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             result = _execute_task(task)
@@ -1146,7 +1146,7 @@ class TestExecuteTaskAdditional:
             "assistant_message": "not-a-dict",
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             result = _execute_task(task)
@@ -1165,7 +1165,7 @@ class TestExecuteTaskAdditional:
             "assistant_message": {"status": "completed", "body": "执行失败"},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             result = _execute_task(task)
@@ -1183,7 +1183,7 @@ class TestExecuteTaskAdditional:
             "dispatch": {"accepted": False},
         }
         with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.application.desktop_relay.client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             result = _execute_task(task)

@@ -162,7 +162,7 @@ class EmployeeTransport:
 
     @staticmethod
     def mobile_relay_service() -> MobileRelay:
-        from app.domain.shared_services.mobile_relay_service import MobileRelayService
+        from app.application.mobile_relay_service import MobileRelayService
 
         return MobileRelayService()
 

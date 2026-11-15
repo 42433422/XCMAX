@@ -1,53 +1,14 @@
-"""Narrow call contracts for device pairing and the authenticated relay task queue."""
+"""Compatibility re-export — canonical at :mod:`app.domain.mobile_relay.ports`."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from contextlib import AbstractContextManager
-from dataclasses import dataclass
-from typing import Any, Protocol
-
-from sqlalchemy.orm import Session
-
-Payload = dict[str, Any]
-Database = Callable[[], AbstractContextManager[Session]]
-Schema = Callable[[Session], None]
-Projection = Callable[[Payload], Payload]
-
-
-class DesktopAuthentication(Protocol):
-    def __call__(self, db: Session, *, relay_id: str, desktop_token: str) -> Payload | None: ...
-
-
-class DesktopOwnership(Protocol):
-    def __call__(self, *, user_id: int, relay_id: str) -> bool: ...
-
-
-class TaskReader(Protocol):
-    def __call__(self, *, user_id: int, task_id: str) -> Payload | None: ...
-
-
-class DesktopPublicKey(Protocol):
-    def __call__(self, *, user_id: int, relay_id: str) -> str: ...
-
-
-@dataclass(frozen=True)
-class PairingPorts:
-    database: Database
-    ensure_tables: Schema
-    fresh_pairing_code: Callable[[Session], str]
-    desktop_for_token: DesktopAuthentication
-    public_desktop: Projection
-    public_base_url: str = ""
-
-
-@dataclass(frozen=True)
-class TaskPorts:
-    database: Database
-    ensure_tables: Schema
-    desktop_belongs_to_user: DesktopOwnership
-    desktop_public_key: DesktopPublicKey
-    desktop_for_token: DesktopAuthentication
-    public_desktop: Projection
-    notify_task_creator: Callable[[Payload], None]
-    get_task: TaskReader
+from app.domain.mobile_relay.ports import Database as Database
+from app.domain.mobile_relay.ports import DesktopAuthentication as DesktopAuthentication
+from app.domain.mobile_relay.ports import DesktopOwnership as DesktopOwnership
+from app.domain.mobile_relay.ports import DesktopPublicKey as DesktopPublicKey
+from app.domain.mobile_relay.ports import PairingPorts as PairingPorts
+from app.domain.mobile_relay.ports import Payload as Payload
+from app.domain.mobile_relay.ports import Projection as Projection
+from app.domain.mobile_relay.ports import Schema as Schema
+from app.domain.mobile_relay.ports import TaskPorts as TaskPorts
+from app.domain.mobile_relay.ports import TaskReader as TaskReader

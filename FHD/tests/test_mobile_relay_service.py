@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from app.domain.shared_services import mobile_relay_service as relay
+from app.application import mobile_relay_service as relay
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 

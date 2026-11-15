@@ -284,7 +284,7 @@ async def lifespan(app: FastAPI):
         except RECOVERABLE_ERRORS as e:
             logger.warning("⚠️ 员工本地调度器关闭失败: %s", e)
         try:
-            from app.domain.shared_services.mobile_relay_desktop_client import (
+            from app.application.desktop_relay.client import (
                 stop_desktop_relay_poller,
             )
 
@@ -537,7 +537,7 @@ async def _init_mobile_relay_desktop_async(app: FastAPI):
         logger.info("被动应用节点：跳过移动端云中继轮询")
         return
     try:
-        from app.domain.shared_services.mobile_relay_desktop_client import (
+        from app.application.desktop_relay.client import (
             _migrate_legacy_config_once,
             start_desktop_relay_poller,
         )

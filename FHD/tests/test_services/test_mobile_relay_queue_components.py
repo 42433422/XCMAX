@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from app.services import mobile_relay_service as relay
+from app.application import mobile_relay_service as relay
 
 
 @pytest.fixture
@@ -194,7 +194,7 @@ def test_pairing_and_queue_work_without_importing_the_service_facade(tmp_path):
         from sqlalchemy.orm import sessionmaker
 
         forbidden = {
-            'app.domain.shared_services.mobile_relay_service',
+            'app.application.mobile_relay_service',
             'app.application.facades.mobile_relay_facade',
         }
         class NoFacade(importlib.abc.MetaPathFinder):

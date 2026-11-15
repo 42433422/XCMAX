@@ -19,7 +19,7 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 
 @pytest.fixture
 def relay(monkeypatch, tmp_path):
-    from app.services import mobile_relay_desktop_client as module
+    from app.application.desktop_relay import client as module
 
     monkeypatch.setattr(module, "_CONFIG_FILE", tmp_path / "binding.json")
     monkeypatch.setattr(module, "_LEGACY_CONFIG_FILE", tmp_path / "legacy.json")
@@ -715,7 +715,7 @@ import sys
 
 class DenyRoot(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.startswith('app.domain.shared_services.mobile_relay_desktop_client'):
+        if fullname.startswith('app.application.desktop_relay.client'):
             raise AssertionError('component imported its composition root')
 
 sys.meta_path.insert(0, DenyRoot())
@@ -769,9 +769,9 @@ def test_desktop_components_round_trip_through_local_asgi_and_sqlite(relay, monk
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
+    from app.application import mobile_relay_service as cloud
     from app.application.desktop_relay import e2ee
     from app.fastapi_routes import mobile_api_extensions as routes
-    from app.services import mobile_relay_service as cloud
 
     engine = create_engine(f"sqlite:///{tmp_path / 'relay-components.db'}")
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
