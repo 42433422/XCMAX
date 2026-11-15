@@ -639,4 +639,6 @@ def test_tool_specs_register_elt_import():
     assert preview.permission == "elt.execute"
     assert preview.timeout_seconds == 180
     assert execute.risk == "high"
-    assert execute.required_params == ["run_id"]
+    # 批量执行接受 run_id 或 run_ids（required_any 由 clarification 覆盖），因此不再固定必填 run_id。
+    assert execute.required_params == []
+    assert preview.required_params == []

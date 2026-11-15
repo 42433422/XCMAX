@@ -425,3 +425,32 @@ def test_corrupt_and_empty_workbooks_still_fail():
     buffer = BytesIO()
     Workbook().save(buffer)
     assert inspect_workbook(buffer.getvalue())["sha256"]
+
+
+def test_material_ledger_is_not_forced_into_customer_master(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    materials = tmp_path / "material-ledger.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "25材料"
+    sheet.append(["日期", "厂名", "品名", "数量", "规格", "单价", "金额", "客户"])
+    sheet.append(["2026-01-02", "甲厂", "树脂A", 2, "25", 42, 2100, "某客户"])
+    book.save(materials)
+    book.close()
+
+    result = detect_elt_target(materials)
+    assert result["target_type"] == "abnormal"
+    assert result["reason"] == "purchase_ledger_not_master_data"
+
+
+def test_bare_customer_column_without_name_header_is_not_a_customer_table(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    sheet_path = tmp_path / "order-lines.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["单号", "客户", "金额"])
+    sheet.append(["A-1", "甲", 100])
+    book.save(sheet_path)
+    book.close()
+
+    assert detect_elt_target(sheet_path)["target_type"] == "abnormal"

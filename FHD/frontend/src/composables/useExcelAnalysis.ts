@@ -63,6 +63,8 @@ interface UseExcelAnalysisOptions {
   onAnalyzeDone?: (payload: { fileName: string; success: boolean; message?: string }) => void
   /** 整批 Excel：交给输入框做成可移除的附件芯片，不再往聊天里插提示。 */
   onStageArtifacts?: (files: File[]) => Promise<number> | void
+  /** 当前后端不支持的文件（如旧版 .xls）：在输入框提示已跳过，不要静默消失。 */
+  onUnsupportedFiles?: (names: string[]) => void
 }
 
 async function extractSingleSheetDetail(file: File, sheetName: string): Promise<ExcelSheetDetail | null> {
@@ -362,8 +364,12 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
       // 文件夹/多选场景：Excel 存成后端工件供按需取数，并在输入框逐个展示芯片，不插入聊天提示。
       const usable = files.filter((f) => !isTemporaryDocument(f.name))
       const excelFiles = usable.filter((f) => /\.(xlsx|xlsm)$/i.test(f.name))
-      const otherFiles = usable.filter((f) => !/\.(xlsx|xlsm)$/i.test(f.name))
+      const legacyFiles = usable.filter((f) => /\.xls$/i.test(f.name))
+      const otherFiles = usable.filter((f) => !/\.(xlsx|xlsm|xls)$/i.test(f.name))
       input.value = ''
+      if (legacyFiles.length) {
+        options.onUnsupportedFiles?.(legacyFiles.map((f) => f.name))
+      }
       if (excelFiles.length && options.onStageArtifacts) {
         await options.onStageArtifacts(excelFiles)
       }

@@ -28,6 +28,8 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   const multimodalStaging = ref<MultimodalAttachmentRow[]>([])
   /** 已上传成后端工件的文件（如整批 Excel）：在输入框以芯片展示，发送时随 artifact_ids 提交。 */
   const artifactStaging = ref<Array<{ filename: string; artifact_id: string }>>([])
+  /** 后端暂不支持、已被跳过的文件（如 .xls）：在输入框明确提示，避免静默丢失。 */
+  const unsupportedStaging = ref<string[]>([])
   const multimodalPendingCount = computed(
     () => multimodalStaging.value.length + artifactStaging.value.length,
   )
@@ -43,6 +45,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     linkedExcelAllSheets.value = false
     multimodalStaging.value = []
     artifactStaging.value = []
+    unsupportedStaging.value = []
   }
   watch(scopeKey, syncScope, { flush: 'sync' })
   if (getCurrentScope()) onScopeDispose(() => { revision += 1 })
@@ -113,6 +116,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     syncScope()
     // 工件已随 artifact_ids 提交，本轮芯片一并收起；发送失败时仍可从后端工件重新提问。
     artifactStaging.value = []
+    unsupportedStaging.value = []
     const rows = multimodalStaging.value
     if (!rows.length) return
     contextPayload.multimodal_attachments = rows.map((r) => ({ ...r }))
@@ -141,6 +145,19 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   function removeMultimodalFile(row: MultimodalAttachmentRow) {
     const index = multimodalStaging.value.indexOf(row)
     if (index >= 0) multimodalStaging.value.splice(index, 1)
+  }
+
+  function noteUnsupportedFiles(names: string[]) {
+    const merged = [...unsupportedStaging.value]
+    for (const name of names) {
+      const value = String(name || '').trim()
+      if (value && !merged.includes(value)) merged.push(value)
+    }
+    unsupportedStaging.value = merged.slice(-20)
+  }
+
+  function dismissUnsupportedFile(name: string) {
+    unsupportedStaging.value = unsupportedStaging.value.filter((item) => item !== name)
   }
 
   async function stageMultimodalFiles(list: File[]) {
@@ -238,10 +255,13 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     linkedExcelAllSheets,
     multimodalStaging,
     artifactStaging,
+    unsupportedStaging,
     multimodalPendingCount,
     stageArtifactFiles,
     removeArtifactFile,
     removeMultimodalFile,
+    noteUnsupportedFiles,
+    dismissUnsupportedFile,
     excelSheetOptions,
     resolveExcelAnalysisContextForRequest,
     injectExcelContextPayload,

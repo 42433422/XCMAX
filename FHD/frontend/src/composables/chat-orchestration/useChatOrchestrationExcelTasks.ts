@@ -25,6 +25,7 @@ export interface ChatOrchestrationExcelTasksDeps {
   linkedExcelSheet: ExcelCtxApi['linkedExcelSheet']
   onMultimodalFileChange: ExcelCtxApi['onMultimodalFileChange']
   stageArtifactFiles: ExcelCtxApi['stageArtifactFiles']
+  noteUnsupportedFiles: ExcelCtxApi['noteUnsupportedFiles']
   taskList: TaskListApi['taskList']
   createTaskId: TaskListApi['createTaskId']
   upsertTask: TaskListApi['upsertTask']
@@ -43,6 +44,7 @@ export function useChatOrchestrationExcelTasks(deps: ChatOrchestrationExcelTasks
     linkedExcelSheet,
     onMultimodalFileChange,
     stageArtifactFiles,
+    noteUnsupportedFiles,
     taskList,
     createTaskId,
     upsertTask,
@@ -57,6 +59,7 @@ export function useChatOrchestrationExcelTasks(deps: ChatOrchestrationExcelTasks
       {
         captureIsCurrent: () => deps.captureLocalScope().isCurrent,
         onStageArtifacts: (files) => stageArtifactFiles(files),
+        onUnsupportedFiles: (names) => noteUnsupportedFiles(names),
         onAnalyzed: ({ fileName, summary, result }) => {
           const isCurrent = deps.captureLocalScope().isCurrent
           const persistedPath = resolveExcelFilePathFromAnalysis(result)

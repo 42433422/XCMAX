@@ -155,6 +155,19 @@ describe('useExcelAnalysis - extended', () => {
     expect(addMessage).not.toHaveBeenCalled()
   })
 
+  it('reports legacy .xls files as skipped instead of dropping them silently', async () => {
+    const onUnsupportedFiles = vi.fn()
+    const onStageArtifacts = vi.fn(async () => 1)
+    const api = useExcelAnalysis(makeMessages(), { onStageArtifacts, onUnsupportedFiles })
+    const inputs = [new File(['a'], 'a.xlsx'), new File(['old'], '大桶商标.xls')]
+    const input = { files: inputs, value: '' } as unknown as HTMLInputElement
+    await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
+
+    expect(onUnsupportedFiles).toHaveBeenCalledWith(['大桶商标.xls'])
+    const staged = (onStageArtifacts.mock.calls[0] as unknown as [File[]])[0]
+    expect(staged.map((f) => f.name)).toEqual(['a.xlsx'])
+  })
+
   it('splits a mixed folder into composer chips and multimodal staging', async () => {
     const cb = vi.fn()
     const onStageArtifacts = vi.fn(async () => 1)

@@ -129,7 +129,7 @@
       />
       <ChatModelRecovery :scope-key="messageSessionKey" />
       <div
-        v-if="artifactStaging.length || multimodalStaging.length"
+        v-if="artifactStaging.length || multimodalStaging.length || unsupportedStaging.length"
         class="composer-attachments"
         role="list"
         aria-label="待发送附件"
@@ -170,6 +170,26 @@
             :aria-label="`移除 ${row.filename}`"
             title="移除"
             @click="removeMultimodalFile(row)"
+          >
+            ×
+          </button>
+        </span>
+        <span
+          v-for="name in unsupportedStaging"
+          :key="`unsupported-${name}`"
+          class="composer-attachment composer-attachment--skipped"
+          role="listitem"
+          :title="`${name} 暂不支持导入（仅支持 .xlsx / .xlsm）`"
+        >
+          <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+          <span class="composer-attachment__name">{{ name }}</span>
+          <span class="composer-attachment__note">已跳过</span>
+          <button
+            type="button"
+            class="composer-attachment__remove"
+            :aria-label="`忽略 ${name}`"
+            title="忽略"
+            @click="dismissUnsupportedFile(name)"
           >
             ×
           </button>
@@ -403,8 +423,10 @@ const {
   multimodalPendingCount,
   multimodalStaging,
   artifactStaging,
+  unsupportedStaging,
   removeArtifactFile,
   removeMultimodalFile,
+  dismissUnsupportedFile,
   excelSheetOptions,
   linkedExcelSheet,
   linkedExcelAllSheets,
@@ -926,6 +948,18 @@ function emitSwitchView(view: string) {
 
 .composer-attachment__remove:hover {
   color: #b42318;
+}
+
+.composer-attachment--skipped {
+  border-color: #f7c948;
+  background: #fffaeb;
+  color: #93370d;
+}
+
+.composer-attachment__note {
+  flex: none;
+  color: #93370d;
+  font-size: 11px;
 }
 .input-area--dragover {
   outline: 2px dashed var(--xc-color-primary, #0d47a1);

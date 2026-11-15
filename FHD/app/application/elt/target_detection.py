@@ -16,7 +16,11 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 _DELIVERY_RE = re.compile(r"(送货单|发货单|出货单|delivery)", re.I)
 _PRODUCT_RE = re.compile(r"(产品名称|商品名称|货品名称|品名)")
 _QUANTITY_RE = re.compile(r"(数量|桶数|件数|重量|规格)")
-_CUSTOMER_RE = re.compile(r"(购货单位|购买单位|客户名称|客户)")
+# 客户主数据必须出现明确的名称列；只有「客户」两个字（对账表、材料价目表的列名）
+# 不足以判定为客户表，否则流水表会被当成主数据写出错误客户。
+_CUSTOMER_NAME_HEADER_RE = re.compile(r"(购货单位|购买单位|客户名称|客户全称|客户姓名|单位名称|往来单位)")
+# 采购/材料流水：日期 + 厂名 + 品名 + 单价 这类结构，不是客户或产品主数据。
+_PURCHASE_LEDGER_RE = re.compile(r"(厂名|供货单位|供应商|厂商).{0,20}(品名|材料|规格|单价)")
 _ATTENDANCE_RE = re.compile(r"(考勤|上班时间|下班时间|打卡)")
 _PURCHASE_RE = re.compile(r"(采购订单|供应商|供货商)")
 # 生产配方单：有「原材料编号/配方总量/工艺流程」等字样，但不是产品主数据。
@@ -102,14 +106,22 @@ def _classify(lines: list[str], *, suffix: str) -> dict[str, Any]:
             "reason": "finance_ledger_not_master_data",
             "confirmed": False,
         }
-    if _CUSTOMER_RE.search(compact) and _PRODUCT_RE.search(compact):
+    if _PURCHASE_LEDGER_RE.search(compact):
+        return {
+            "target_type": "abnormal",
+            "document_type": "purchase_ledger",
+            "confidence": 0.35,
+            "reason": "purchase_ledger_not_master_data",
+            "confirmed": False,
+        }
+    if _CUSTOMER_NAME_HEADER_RE.search(compact) and _PRODUCT_RE.search(compact):
         return {
             "target_type": "customer_products",
             "document_type": "linked_customer_products",
             "confidence": 0.82,
             "reason": "customer_and_product_headers",
         }
-    if _CUSTOMER_RE.search(compact):
+    if _CUSTOMER_NAME_HEADER_RE.search(compact):
         return {
             "target_type": "customers",
             "document_type": "customer_table",
@@ -149,7 +161,11 @@ _LLM_ESCALATION_THRESHOLD = 0.7
 _LLM_ACCEPT_CONFIDENCE = 0.75
 # 已经明确「不是主数据」的形态不再升级，避免模型把配方/台账改判成产品。
 _NO_LLM_ESCALATION_REASONS = frozenset(
-    {"recipe_sheet_not_master_data", "finance_ledger_not_master_data"}
+    {
+        "recipe_sheet_not_master_data",
+        "finance_ledger_not_master_data",
+        "purchase_ledger_not_master_data",
+    }
 )
 _KNOWN_TARGETS = frozenset(_TARGET_PRIORITY) | {"knowledge", "abnormal"}
 
