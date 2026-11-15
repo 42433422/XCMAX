@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
-from app.application.attachment_artifacts.parser import (
+from app.application.attachment_artifacts.attachment_parser import (
     TemporaryDocument,
     UnsupportedDocument,
     parse_file,
