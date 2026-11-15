@@ -414,6 +414,11 @@ class LlmPlanGeneration:
                     "memory_v2_summary": memory_v2_summary,
                 },
             )
+        except (OSError, httpx.TransportError) as err:
+            # Exhausted retries must retain the existing fail-closed plan result,
+            # not escape into chat or invoke the retired fallback dispatcher.
+            logger.warning("模型传输重试已耗尽，拒绝计划：%s", type(err).__name__)
+            return None
         except (ValueError, TypeError) as err:
             from app.infrastructure.modstore_transport import MarketModelError
 
