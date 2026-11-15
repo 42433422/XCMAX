@@ -177,7 +177,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     shipment_update_spec = specs[("shipment_records", "update")]
     assert shipment_update_spec.risk == "medium"
-    assert shipment_update_spec.permission == "shipment.edit"
+    assert shipment_update_spec.permission == "tool.shipment_records.update"
 
     shipment_delete_spec = specs[("shipment_records", "delete")]
     assert shipment_delete_spec.risk == "high"
@@ -197,7 +197,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     shipment_order_print_spec = specs[("shipment_orders", "print")]
     assert shipment_order_print_spec.risk == "high"
-    assert shipment_order_print_spec.permission == "shipment.view"
+    assert shipment_order_print_spec.permission == "tool.shipment_orders.print"
     assert shipment_order_print_spec.output_schema["required"] == [
         "success",
         "file_path",
@@ -222,7 +222,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     shipment_order_clear_all_spec = specs[("shipment_orders", "clear_all")]
     assert shipment_order_clear_all_spec.risk == "high"
-    assert shipment_order_clear_all_spec.permission == "shipment.edit"
+    assert shipment_order_clear_all_spec.permission == "tool.shipment_orders.clear_all"
     assert shipment_order_clear_all_spec.test_fixtures[0]["output"]["deleted_count"] == 5
 
     shipment_order_delete_spec = specs[("shipment_orders", "delete")]
@@ -328,7 +328,7 @@ def test_build_tool_specs_v2_exposes_document_generation_contract() -> None:
     document_spec = specs[("generate_office_document", "execute")]
     assert document_spec.risk == "medium"
     assert document_spec.idempotent is False
-    assert document_spec.permission == "tool.reports.export"
+    assert document_spec.permission == "tool.generate_office_document.execute"
     assert document_spec.timeout_seconds == 120
     assert document_spec.input_schema["properties"]["output_format"]["enum"] == ["docx", "xlsx"]
     assert document_spec.output_schema["required"] == [
@@ -779,10 +779,10 @@ def test_materials_permissions_use_business_codes(monkeypatch):
 
 def test_template_permissions_use_elt_codes(monkeypatch):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    assert get_tool_action_spec("template_preview", "list").permission == "elt.read"
-    assert get_tool_action_spec("template_preview", "create").permission == "elt.template.manage"
-    assert get_tool_action_spec("document_template", "delete").permission == "elt.template.manage"
-    assert get_tool_action_spec("document_template", "clear").permission == "elt.template.manage"
+    assert get_tool_action_spec("template_preview", "list").permission == "etl.read"
+    assert get_tool_action_spec("template_preview", "create").permission == "etl.template.manage"
+    assert get_tool_action_spec("document_template", "delete").permission == "etl.template.manage"
+    assert get_tool_action_spec("document_template", "clear").permission == "etl.template.manage"
 
 
 def test_business_clear_permissions_use_edit_codes(monkeypatch):

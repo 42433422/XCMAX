@@ -130,10 +130,6 @@ def _special_permission(tool_id: str, action: str) -> str:
         return "product.view"
     if tool_id == "shipment_records" and action in {"query", "list"}:
         return "shipment.view"
-    # 出货单的读写沿用角色里真实存在的业务权限码；tool.<id>.<action> 系列
-    # 权限码从未写入角色授权，非管理员会在工具校验处被误判为「权限不足」。
-    if tool_id == "shipment_records":
-        return "shipment.edit"
     if tool_id == "shipment_orders" and action in {"generate", "generate_batch"}:
         return "shipment.create"
     if tool_id == "materials" and action in {"list", "query"}:
@@ -162,14 +158,11 @@ def _special_permission(tool_id: str, action: str) -> str:
             return DATASET_RAG_READ_PERMISSION
         return DATASET_RAG_WRITE_PERMISSION
     if tool_id == "template_preview" and action in {"list", "query", "view"}:
-        return "elt.read"
+        return "etl.read"
     if tool_id in {"template_preview", "document_template"}:
-        return "elt.template.manage"
+        return "etl.template.manage"
     if tool_id == "excel_analysis" and action in {"read", "structure", "query", "statistics"}:
         return "tool.excel_analysis.read"
-    # 生成办公文档属于「导出文件」，沿用角色里真实存在的导出权限码。
-    if tool_id == "generate_office_document":
-        return "tool.reports.export"
     fixed = PERMISSION_OVERRIDES.get(tool_id)
     if fixed is not None:
         return fixed
