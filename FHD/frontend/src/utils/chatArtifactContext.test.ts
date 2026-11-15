@@ -3,7 +3,9 @@ import {
   addChatArtifactIds,
   clearChatArtifactIds,
   listChatArtifactIds,
+  removeChatArtifactId,
   uploadChatArtifacts,
+  uploadChatArtifactsDetailed,
 } from './chatArtifactContext'
 
 const { apiFetch } = vi.hoisted(() => ({ apiFetch: vi.fn() }))
@@ -50,5 +52,26 @@ describe('chatArtifactContext', () => {
     await expect(uploadChatArtifacts([new File(['x'], 'a.pdf')])).resolves.toEqual([])
     expect(listChatArtifactIds()).toEqual([])
     await expect(uploadChatArtifacts([])).resolves.toEqual([])
+  })
+
+  it('详细上传返回芯片展示名，缺名时回退到文件名', async () => {
+    apiFetch.mockResolvedValueOnce(jsonResponse({
+      results: [{ status: 'ok', artifact: { id: 'art-1', name: '销售明细.xlsx' } }],
+    }))
+
+    const rows = await uploadChatArtifactsDetailed([
+      new File(['x'], 'a.xlsx'),
+      new File(['y'], 'b.xlsx'),
+    ])
+
+    expect(rows).toEqual([{ id: 'art-1', name: '销售明细.xlsx' }])
+    expect(listChatArtifactIds()).toEqual(['art-1'])
+  })
+
+  it('移除芯片时同步移除待发送工件 id', () => {
+    addChatArtifactIds(['a1', 'a2'])
+    removeChatArtifactId(' a1 ')
+    removeChatArtifactId('')
+    expect(listChatArtifactIds()).toEqual(['a2'])
   })
 })

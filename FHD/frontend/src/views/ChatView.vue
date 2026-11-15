@@ -128,6 +128,53 @@
         @toggle-tts="setTtsEnabled"
       />
       <ChatModelRecovery :scope-key="messageSessionKey" />
+      <div
+        v-if="artifactStaging.length || multimodalStaging.length"
+        class="composer-attachments"
+        role="list"
+        aria-label="待发送附件"
+      >
+        <span
+          v-for="row in artifactStaging"
+          :key="row.artifact_id"
+          class="composer-attachment"
+          role="listitem"
+        >
+          <i class="fa fa-file-excel-o" aria-hidden="true"></i>
+          <span class="composer-attachment__name" :title="row.filename">{{ row.filename }}</span>
+          <button
+            type="button"
+            class="composer-attachment__remove"
+            :aria-label="`移除 ${row.filename}`"
+            title="移除"
+            @click="removeArtifactFile(row.artifact_id)"
+          >
+            ×
+          </button>
+        </span>
+        <span
+          v-for="(row, index) in multimodalStaging"
+          :key="`mm-${index}-${row.filename}`"
+          class="composer-attachment"
+          role="listitem"
+        >
+          <i
+            class="fa"
+            :class="row.kind === 'image' ? 'fa-picture-o' : row.kind === 'pdf' ? 'fa-file-pdf-o' : 'fa-file-text-o'"
+            aria-hidden="true"
+          ></i>
+          <span class="composer-attachment__name" :title="row.filename">{{ row.filename }}</span>
+          <button
+            type="button"
+            class="composer-attachment__remove"
+            :aria-label="`移除 ${row.filename}`"
+            title="移除"
+            @click="removeMultimodalFile(row)"
+          >
+            ×
+          </button>
+        </span>
+      </div>
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
         <button type="button" class="sheet-link-btn" :class="{ active: worksheetTemplateOpen || !!linkedExcelSheet || linkedExcelAllSheets }" @click="worksheetTemplateOpen = !worksheetTemplateOpen">
           {{ worksheetTemplateLabel }}
@@ -354,6 +401,10 @@ const {
   loadingProgressText,
   excelAnalyzeUploading,
   multimodalPendingCount,
+  multimodalStaging,
+  artifactStaging,
+  removeArtifactFile,
+  removeMultimodalFile,
   excelSheetOptions,
   linkedExcelSheet,
   linkedExcelAllSheets,
@@ -832,6 +883,49 @@ function emitSwitchView(view: string) {
 
 .input-area {
   position: relative;
+}
+
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 2px;
+  max-height: 96px;
+  overflow-y: auto;
+}
+
+.composer-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 240px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--app-border-subtle, #d0d5dd);
+  border-radius: 999px;
+  background: var(--app-surface-muted, #f5f7fa);
+  color: var(--app-text, #344054);
+  font-size: var(--app-font-size-caption, 12px);
+  line-height: 1.6;
+}
+
+.composer-attachment__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-attachment__remove {
+  border: none;
+  background: transparent;
+  color: var(--app-text-muted, #667085);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.composer-attachment__remove:hover {
+  color: #b42318;
 }
 .input-area--dragover {
   outline: 2px dashed var(--xc-color-primary, #0d47a1);

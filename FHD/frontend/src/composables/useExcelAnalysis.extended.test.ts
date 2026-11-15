@@ -133,20 +133,10 @@ describe('useExcelAnalysis - extended', () => {
     expect(api.excelAnalyzeUploading.value).toBe(false)
   })
 
-  it('stores folder workbooks as artifacts instead of analyzing only the first ten', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        ok: true,
-        results: [
-          { status: 'ok', artifact: { id: 'artifact-a' } },
-          { status: 'ok', artifact: { id: 'artifact-b' } },
-        ],
-      }),
-    } as unknown as Response)
-
+  it('hands folder workbooks to the composer chips without analyzing or messaging', async () => {
     const onAnalyzeDone = vi.fn()
-    const api = useExcelAnalysis(makeMessages(), { onAnalyzeDone })
+    const onStageArtifacts = vi.fn(async () => 2)
+    const api = useExcelAnalysis(makeMessages(), { onAnalyzeDone, onStageArtifacts })
     const inputs = [
       new File(['a'], 'a.xlsx'),
       new File(['b'], 'b.xlsm'),
@@ -155,31 +145,28 @@ describe('useExcelAnalysis - extended', () => {
     const input = { files: inputs, value: '' } as unknown as HTMLInputElement
     await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
 
-    expect(global.fetch).toHaveBeenCalledTimes(1)
-    expect(String(vi.mocked(global.fetch).mock.calls[0][0])).toContain('/api/attachments')
+    expect(onStageArtifacts).toHaveBeenCalledTimes(1)
+    expect((onStageArtifacts.mock.calls[0] as unknown as [File[]])[0].map((f) => f.name)).toEqual([
+      'a.xlsx',
+      'b.xlsm',
+    ])
+    expect(global.fetch).not.toHaveBeenCalled()
     expect(onAnalyzeDone).not.toHaveBeenCalled()
-    expect(addMessage).toHaveBeenCalledWith(
-      '[附件] 已加入 2 个 Excel，已跳过 1 个临时锁文件，可以直接提问；需要具体数字时我会读取对应文件的工作表与行。',
-      'ai',
-      undefined,
-    )
+    expect(addMessage).not.toHaveBeenCalled()
   })
 
-  it('splits a mixed folder into Excel analysis and multimodal staging', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      text: async () => JSON.stringify({ success: true, fields: [], preview_data: { sheet_name: 'Sheet1' } }),
-    } as unknown as Response)
-
+  it('splits a mixed folder into composer chips and multimodal staging', async () => {
     const cb = vi.fn()
-    const api = useExcelAnalysis(makeMessages())
+    const onStageArtifacts = vi.fn(async () => 1)
+    const api = useExcelAnalysis(makeMessages(), { onStageArtifacts })
     api.setOnMultimodalFileChangeCallback(cb)
     const excel = new File(['a'], 'a.xlsx')
     const image = new File(['png'], 'shot.png', { type: 'image/png' })
     const input = { files: [excel, image], value: '' } as unknown as HTMLInputElement
     await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
 
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(onStageArtifacts).toHaveBeenCalledTimes(1)
     expect(cb).toHaveBeenCalledTimes(1)
     const staged = (cb.mock.calls[0][0] as { target: { files: File[] } }).target.files
     expect(staged.map((f) => f.name)).toEqual(['shot.png'])

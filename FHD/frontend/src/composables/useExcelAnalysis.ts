@@ -6,7 +6,6 @@ import { primeCsrfCookie } from '@/api/core'
 import { apiFetch } from '@/utils/apiBase'
 import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
 import { isTemporaryDocument } from '@/utils/documentIntake'
-import { uploadChatArtifacts } from '@/utils/chatArtifactContext'
 
 export type { ExcelAnalysisResult } from '@/types/excel'
 
@@ -62,6 +61,8 @@ interface UseExcelAnalysisOptions {
   onAnalyzeStart?: (payload: { fileName: string }) => void
   onAnalyzeProgress?: (payload: { fileName: string; step: string; progress?: number }) => void
   onAnalyzeDone?: (payload: { fileName: string; success: boolean; message?: string }) => void
+  /** 整批 Excel：交给输入框做成可移除的附件芯片，不再往聊天里插提示。 */
+  onStageArtifacts?: (files: File[]) => Promise<number> | void
 }
 
 async function extractSingleSheetDetail(file: File, sheetName: string): Promise<ExcelSheetDetail | null> {
@@ -358,21 +359,13 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
         excelAnalyzeUploading.value = false
       }
     } else {
-      // 文件夹/多选场景：Excel 存成后端工件供按需取数，不再在前端逐个解析。
+      // 文件夹/多选场景：Excel 存成后端工件供按需取数，并在输入框逐个展示芯片，不插入聊天提示。
       const usable = files.filter((f) => !isTemporaryDocument(f.name))
-      const skippedTemp = files.length - usable.length
       const excelFiles = usable.filter((f) => /\.(xlsx|xlsm)$/i.test(f.name))
       const otherFiles = usable.filter((f) => !/\.(xlsx|xlsm)$/i.test(f.name))
       input.value = ''
-      if (excelFiles.length) {
-        await uploadChatArtifacts(excelFiles)
-        const tempNote = skippedTemp ? `，已跳过 ${skippedTemp} 个临时锁文件` : ''
-        appendChatLine(
-          `[附件] 已加入 ${excelFiles.length} 个 Excel${tempNote}，可以直接提问；需要具体数字时我会读取对应文件的工作表与行。`,
-          'ai',
-        )
-      } else if (skippedTemp) {
-        appendChatLine(`[附件] 已跳过 ${skippedTemp} 个临时锁文件，没有可用的 Excel。`, 'ai')
+      if (excelFiles.length && options.onStageArtifacts) {
+        await options.onStageArtifacts(excelFiles)
       }
       if (otherFiles.length && onMultimodalFileChangeCallback) {
         await onMultimodalFileChangeCallback({
