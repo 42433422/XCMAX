@@ -250,17 +250,12 @@ class Mem0LongTermMemory:
             return []
         top_k = max(1, min(20, int(limit)))
         try:
-            try:
-                raw = memory.search(
-                    text,
-                    filters={"user_id": str(user_id)},
-                    top_k=top_k,
-                    threshold=self._min_score,
-                )
-            except TypeError:
-                raw = memory.search(
-                    text, user_id=str(user_id), limit=top_k, threshold=self._min_score
-                )
+            raw = memory.search(
+                text,
+                filters={"user_id": str(user_id)},
+                top_k=top_k,
+                threshold=self._min_score,
+            )
         except RECOVERABLE_ERRORS as exc:
             logger.warning("长期记忆检索失败：%s", exc)
             return []
