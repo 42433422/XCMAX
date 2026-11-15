@@ -116,10 +116,22 @@ describe('ChatMessageList', () => {
     expect(wrapper.get('.message-html').text()).not.toContain('&quot;')
   })
 
-  it('hides internal context counters by default', () => {
-    const wrapper = mountList()
+  it('hides internal context counters by default but keeps thinking steps reachable', () => {
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        ...defaultProps,
+        messages: [
+          {
+            role: 'ai' as const,
+            content: '已清空知识库。',
+            time: '17:00',
+            thinkingSteps: '[正在调用工具:dataset_rag.clear_dataset]',
+          },
+        ],
+      },
+    })
     expect(wrapper.find('.context-summary').exists()).toBe(false)
-    expect(wrapper.find('.thinking-panel').exists()).toBe(false)
+    expect(wrapper.get('.thinking-panel').text()).toContain('dataset_rag.clear_dataset')
     expect(wrapper.find('.trace-panel').exists()).toBe(false)
   })
 

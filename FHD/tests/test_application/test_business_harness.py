@@ -97,6 +97,38 @@ def test_approval_result_projection_is_idempotency_keyed_and_readable() -> None:
     assert "审批单：APR-1" in call.kwargs["content"]
 
 
+def test_terminal_projection_exposes_executed_tool_steps_as_thinking() -> None:
+    run = AgentRun(user_id="7", message="清理知识库", status="completed")
+    run.metadata["runtime_context"] = {
+        "conversation_id": "conv-2",
+        "turn_id": "turn-2",
+        "task_id": "task-2",
+    }
+    apply_task_context(run, run.metadata["runtime_context"])
+    step = AgentStep(node_id="clear", tool_id="dataset_rag", action="clear_dataset")
+    step.status = "completed"
+    step.output = {"success": True, "deleted_documents": 3, "deleted_chunks": 9}
+    run.steps = [step]
+    run.final_output = {
+        "node_outputs": {"clear": {"success": True, "message": "已清空知识库"}}
+    }
+    conversation = Mock()
+    conversation.save_message.return_value = 92
+    orchestrator = Mock()
+    orchestrator.get_run.return_value = run
+
+    with (
+        patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator),
+        patch("app.services.get_conversation_service", return_value=conversation),
+    ):
+        project_terminal_run_to_conversation(run.run_id, approval_request_id="APR-2")
+
+    metadata = conversation.save_message.call_args.kwargs["metadata"]
+    assert "[正在调用工具:dataset_rag.clear_dataset]" in metadata
+    assert "thinkingSteps" in metadata
+    assert conversation.save_message.call_args.kwargs["content"].count("删除文档") == 1
+
+
 def test_text_only_order_request_is_not_a_completed_business_result() -> None:
     run = AgentRun(
         user_id="2",

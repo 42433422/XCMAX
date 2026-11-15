@@ -93,7 +93,7 @@
               <div v-if="showDiagnosticMetadata && msg.contextSummary" class="context-summary">
                 {{ msg.contextSummary }}
               </div>
-              <details v-if="showDiagnosticMetadata && msg.thinkingSteps" class="thinking-panel">
+              <details v-if="msg.thinkingSteps" class="thinking-panel">
                 <summary>{{ $t('chat.viewThinkingSteps') }}</summary>
                 <pre>{{ msg.thinkingSteps }}</pre>
               </details>
@@ -293,6 +293,8 @@ function hasReceiptDetails(message: ChatMessage): boolean {
   if (message.role !== 'ai') return false
   if (message.executionProgress?.length) return true
   if (!hasOrchestrationTrace(message) && message.todoSteps?.length) return true
+  // 思考步骤是用户可见的过程信息，不受诊断开关限制。
+  if (!hasOrchestrationTrace(message) && message.thinkingSteps) return true
   if (!props.showDiagnosticMetadata) return false
   return Boolean(
     message.workflowAction
