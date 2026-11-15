@@ -23,6 +23,31 @@ import pytest
 from app.application.finance_app_service import FinanceAppService, _parse_dt
 
 
+def _setup_shared_0():
+    svc = FinanceAppService()
+    db = MagicMock()
+    txn = MagicMock()
+    txn.id = 1
+    txn.amount = Decimal("100")
+    txn.transaction_type = "receipt"
+    txn.to_dict.return_value = {"id": 1}
+    q = _make_query_mock(items=[txn])
+    db.query.return_value = q
+    return (svc, db, txn, q)
+
+
+def _setup_shared_1():
+    svc = FinanceAppService()
+    db = MagicMock()
+    txn = MagicMock()
+    txn.id = 1
+    txn.amount = Decimal("100")
+    txn.transaction_type = "receipt"
+    q = _make_query_mock(items=[txn])
+    db.query.return_value = q
+    return (svc, db, txn, q)
+
+
 def _assert_shared_with_dates_0(self, _shared_literal_0, _shared_literal_1):
     svc = FinanceAppService()
     db = MagicMock()
@@ -489,15 +514,7 @@ class TestUpdateTransaction:
         mock_notify.assert_called_once()
 
     def test_amount_conversion(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        txn = MagicMock()
-        txn.id = 1
-        txn.amount = Decimal("100")
-        txn.transaction_type = "receipt"
-        txn.to_dict.return_value = {"id": 1}
-        q = _make_query_mock(items=[txn])
-        db.query.return_value = q
+        svc, db, txn, q = _setup_shared_0()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
@@ -508,15 +525,7 @@ class TestUpdateTransaction:
         assert txn.amount == Decimal("250.50") or txn.amount == Decimal("250.5")
 
     def test_date_conversion(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        txn = MagicMock()
-        txn.id = 1
-        txn.amount = Decimal("100")
-        txn.transaction_type = "receipt"
-        txn.to_dict.return_value = {"id": 1}
-        q = _make_query_mock(items=[txn])
-        db.query.return_value = q
+        svc, db, txn, q = _setup_shared_0()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
@@ -533,15 +542,7 @@ class TestUpdateTransaction:
         db.commit.assert_called_once()
 
     def test_none_values_skipped(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        txn = MagicMock()
-        txn.id = 1
-        txn.amount = Decimal("100")
-        txn.transaction_type = "receipt"
-        txn.to_dict.return_value = {"id": 1}
-        q = _make_query_mock(items=[txn])
-        db.query.return_value = q
+        svc, db, txn, q = _setup_shared_0()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
@@ -559,15 +560,7 @@ class TestUpdateTransaction:
         db.commit.assert_called_once()
 
     def test_neuro_notify_error_suppressed(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        txn = MagicMock()
-        txn.id = 1
-        txn.amount = Decimal("100")
-        txn.transaction_type = "receipt"
-        txn.to_dict.return_value = {"id": 1}
-        q = _make_query_mock(items=[txn])
-        db.query.return_value = q
+        svc, db, txn, q = _setup_shared_0()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch(
@@ -579,14 +572,7 @@ class TestUpdateTransaction:
         assert result["success"] is True
 
     def test_recoverable_error_returns_failure(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        txn = MagicMock()
-        txn.id = 1
-        txn.amount = Decimal("100")
-        txn.transaction_type = "receipt"
-        q = _make_query_mock(items=[txn])
-        db.query.return_value = q
+        svc, db, txn, q = _setup_shared_1()
         db.commit.side_effect = ValueError("constraint violation")
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
@@ -597,15 +583,7 @@ class TestUpdateTransaction:
         db.rollback.assert_called_once()
 
     def test_non_updatable_keys_ignored(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        txn = MagicMock()
-        txn.id = 1
-        txn.amount = Decimal("100")
-        txn.transaction_type = "receipt"
-        txn.to_dict.return_value = {"id": 1}
-        q = _make_query_mock(items=[txn])
-        db.query.return_value = q
+        svc, db, txn, q = _setup_shared_0()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
@@ -640,14 +618,7 @@ class TestDeleteTransaction:
         assert "不存在" in result["message"]
 
     def test_success(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        txn = MagicMock()
-        txn.id = 1
-        txn.amount = Decimal("100")
-        txn.transaction_type = "receipt"
-        q = _make_query_mock(items=[txn])
-        db.query.return_value = q
+        svc, db, txn, q = _setup_shared_1()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch(
@@ -662,14 +633,7 @@ class TestDeleteTransaction:
         mock_notify.assert_called_once()
 
     def test_neuro_notify_error_suppressed(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        txn = MagicMock()
-        txn.id = 1
-        txn.amount = Decimal("100")
-        txn.transaction_type = "receipt"
-        q = _make_query_mock(items=[txn])
-        db.query.return_value = q
+        svc, db, txn, q = _setup_shared_1()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch(
@@ -681,14 +645,7 @@ class TestDeleteTransaction:
         assert result["success"] is True
 
     def test_recoverable_error_returns_failure(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        txn = MagicMock()
-        txn.id = 1
-        txn.amount = Decimal("100")
-        txn.transaction_type = "receipt"
-        q = _make_query_mock(items=[txn])
-        db.query.return_value = q
+        svc, db, txn, q = _setup_shared_1()
         db.commit.side_effect = ValueError("db error")
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):

@@ -17,6 +17,15 @@ from app.utils.logging.logger import (
     setup_structured_logging,
 )
 
+
+def _setup_shared_0():
+    formatter = StructuredLogFormatter()
+    record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0, msg="msg", args=None, exc_info=None
+    )
+    return (formatter, record)
+
+
 # ---------------------------------------------------------------------------
 # StructuredLogFormatter
 # ---------------------------------------------------------------------------
@@ -47,64 +56,28 @@ class TestStructuredLogFormatter:
         assert data["line"] == 42
 
     def test_format_with_request_id(self):
-        formatter = StructuredLogFormatter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="msg",
-            args=None,
-            exc_info=None,
-        )
+        formatter, record = _setup_shared_0()
         record.request_id = "req-123"
         output = formatter.format(record)
         data = json.loads(output)
         assert data["request_id"] == "req-123"
 
     def test_format_with_user_id(self):
-        formatter = StructuredLogFormatter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="msg",
-            args=None,
-            exc_info=None,
-        )
+        formatter, record = _setup_shared_0()
         record.user_id = "user-456"
         output = formatter.format(record)
         data = json.loads(output)
         assert data["user_id"] == "user-456"
 
     def test_format_with_duration(self):
-        formatter = StructuredLogFormatter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="msg",
-            args=None,
-            exc_info=None,
-        )
+        formatter, record = _setup_shared_0()
         record.duration = 123.45
         output = formatter.format(record)
         data = json.loads(output)
         assert data["duration_ms"] == 123.45
 
     def test_format_with_extra_data(self):
-        formatter = StructuredLogFormatter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="msg",
-            args=None,
-            exc_info=None,
-        )
+        formatter, record = _setup_shared_0()
         record.extra_data = {"key1": "value1", "key2": 42}
         output = formatter.format(record)
         data = json.loads(output)
@@ -128,16 +101,7 @@ class TestStructuredLogFormatter:
         assert data["error_code"] == "E001"
 
     def test_format_with_stack_id(self):
-        formatter = StructuredLogFormatter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg="msg",
-            args=None,
-            exc_info=None,
-        )
+        formatter, record = _setup_shared_0()
         record.stack_id = "stack-789"
         output = formatter.format(record)
         data = json.loads(output)

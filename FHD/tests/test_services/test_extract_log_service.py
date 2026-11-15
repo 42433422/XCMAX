@@ -8,6 +8,24 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+
+def _setup_shared_0(mock_get_db):
+    mock_db = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_db
+    mock_row = MagicMock()
+    mock_row.id = 1
+    mock_row.file_name = "test.xlsx"
+    mock_row.file_path = "/uploads/test.xlsx"
+    mock_row.data_type = "products"
+    mock_row.total_rows = 100
+    mock_row.valid_rows = 95
+    mock_row.imported_rows = 90
+    mock_row.skipped_rows = 3
+    mock_row.failed_rows = 2
+    mock_row.status = "completed"
+    return (mock_db, mock_row)
+
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
@@ -144,20 +162,7 @@ class TestExtractLogService:
         @patch("app.domain.shared_services.extract_log_service.get_db")
         def test_get_log_success(self, mock_get_db, service):
             """测试成功获取日志"""
-            mock_db = MagicMock()
-            mock_get_db.return_value.__enter__.return_value = mock_db
-
-            mock_row = MagicMock()
-            mock_row.id = 1
-            mock_row.file_name = "test.xlsx"
-            mock_row.file_path = "/uploads/test.xlsx"
-            mock_row.data_type = "products"
-            mock_row.total_rows = 100
-            mock_row.valid_rows = 95
-            mock_row.imported_rows = 90
-            mock_row.skipped_rows = 3
-            mock_row.failed_rows = 2
-            mock_row.status = "completed"
+            mock_db, mock_row = _setup_shared_0(mock_get_db)
             mock_row.error_message = None
             mock_row.field_mapping = '{"code": "product_code"}'
             mock_row.created_at = "2024-01-01 10:00:00"
@@ -294,20 +299,7 @@ class TestExtractLogService:
         @patch("app.domain.shared_services.extract_log_service.get_db")
         def test_get_logs_with_status_filter(self, mock_get_db, service):
             """测试带状态过滤"""
-            mock_db = MagicMock()
-            mock_get_db.return_value.__enter__.return_value = mock_db
-
-            mock_row = MagicMock()
-            mock_row.id = 1
-            mock_row.file_name = "test.xlsx"
-            mock_row.file_path = "/uploads/test.xlsx"
-            mock_row.data_type = "products"
-            mock_row.total_rows = 100
-            mock_row.valid_rows = 95
-            mock_row.imported_rows = 90
-            mock_row.skipped_rows = 3
-            mock_row.failed_rows = 2
-            mock_row.status = "completed"
+            mock_db, mock_row = _setup_shared_0(mock_get_db)
             mock_row.created_at = "2024-01-01 10:00:00"
 
             mock_result = MagicMock()
@@ -322,20 +314,7 @@ class TestExtractLogService:
         @patch("app.domain.shared_services.extract_log_service.get_db")
         def test_get_logs_with_multiple_filters(self, mock_get_db, service):
             """测试带多个过滤条件"""
-            mock_db = MagicMock()
-            mock_get_db.return_value.__enter__.return_value = mock_db
-
-            mock_row = MagicMock()
-            mock_row.id = 1
-            mock_row.file_name = "test.xlsx"
-            mock_row.file_path = "/uploads/test.xlsx"
-            mock_row.data_type = "products"
-            mock_row.total_rows = 100
-            mock_row.valid_rows = 95
-            mock_row.imported_rows = 90
-            mock_row.skipped_rows = 3
-            mock_row.failed_rows = 2
-            mock_row.status = "completed"
+            mock_db, mock_row = _setup_shared_0(mock_get_db)
             mock_row.created_at = "2024-01-01 10:00:00"
 
             mock_result = MagicMock()

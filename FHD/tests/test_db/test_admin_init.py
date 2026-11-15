@@ -8,6 +8,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+def _setup_shared_0():
+    mock_session = MagicMock()
+    mock_session.execute = MagicMock(
+        side_effect=[MagicMock(fetchone=MagicMock(return_value=None)), None]
+    )
+    mock_session.commit = MagicMock()
+    mock_session.__enter__ = MagicMock(return_value=mock_session)
+    mock_session.__exit__ = MagicMock(return_value=False)
+    return mock_session
+
+
 class TestInitUserDb:
     def test_init_user_db_returns_true(self):
         mock_session = MagicMock()
@@ -44,18 +55,7 @@ class TestCreateAdminUser:
         assert "已存在" in result["message"]
 
     def test_create_admin_user_creates_new(self):
-        mock_session = MagicMock()
-        # First call: SELECT finds no existing user
-        # Second call: INSERT
-        mock_session.execute = MagicMock(
-            side_effect=[
-                MagicMock(fetchone=MagicMock(return_value=None)),  # no existing user
-                None,  # INSERT
-            ]
-        )
-        mock_session.commit = MagicMock()
-        mock_session.__enter__ = MagicMock(return_value=mock_session)
-        mock_session.__exit__ = MagicMock(return_value=False)
+        mock_session = _setup_shared_0()
 
         with patch("app.db.admin_init.SessionLocal", return_value=mock_session):
             with patch("app.db.admin_init.init_user_db", return_value=True):
@@ -75,16 +75,7 @@ class TestCreateAdminUser:
         mock_session.commit.assert_called_once()
 
     def test_create_admin_user_default_display_name(self):
-        mock_session = MagicMock()
-        mock_session.execute = MagicMock(
-            side_effect=[
-                MagicMock(fetchone=MagicMock(return_value=None)),
-                None,
-            ]
-        )
-        mock_session.commit = MagicMock()
-        mock_session.__enter__ = MagicMock(return_value=mock_session)
-        mock_session.__exit__ = MagicMock(return_value=False)
+        mock_session = _setup_shared_0()
 
         with patch("app.db.admin_init.SessionLocal", return_value=mock_session):
             with patch("app.db.admin_init.init_user_db", return_value=True):
@@ -112,16 +103,7 @@ class TestCreateAdminFromEnv:
         assert result["success"] is False
 
     def test_create_admin_from_env_success(self):
-        mock_session = MagicMock()
-        mock_session.execute = MagicMock(
-            side_effect=[
-                MagicMock(fetchone=MagicMock(return_value=None)),
-                None,
-            ]
-        )
-        mock_session.commit = MagicMock()
-        mock_session.__enter__ = MagicMock(return_value=mock_session)
-        mock_session.__exit__ = MagicMock(return_value=False)
+        mock_session = _setup_shared_0()
 
         with patch.dict(
             os.environ,
@@ -141,16 +123,7 @@ class TestCreateAdminFromEnv:
         assert result["success"] is True
 
     def test_create_admin_from_env_default_display_name(self):
-        mock_session = MagicMock()
-        mock_session.execute = MagicMock(
-            side_effect=[
-                MagicMock(fetchone=MagicMock(return_value=None)),
-                None,
-            ]
-        )
-        mock_session.commit = MagicMock()
-        mock_session.__enter__ = MagicMock(return_value=mock_session)
-        mock_session.__exit__ = MagicMock(return_value=False)
+        mock_session = _setup_shared_0()
 
         env = {"ADMIN_USERNAME": "admin3", "ADMIN_PASSWORD": "pw3"}
         with patch.dict(os.environ, env, clear=False):

@@ -60,6 +60,21 @@ from app.domain.shared_services.mobile_relay_desktop_client import (
 )
 
 
+def _setup_shared_0(tmp_path, monkeypatch):
+    cfg_file = tmp_path / "relay.json"
+    cfg_file.write_text(
+        json.dumps(
+            {"relay_id": "r1", "desktop_token": "tok", "relay_base_url": "https://x.example.com"}
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status.return_value = None
+    return (cfg_file, mock_resp)
+
+
 def _assert_shared_mode_cleared_when_code_0(self, _shared_literal_0):
     task = {
         "kind": "codex.invoke",
@@ -1213,22 +1228,7 @@ class TestPollOnceAdditional:
     def test_successful_poll_with_tasks(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        cfg_file = tmp_path / "relay.json"
-        cfg_file.write_text(
-            json.dumps(
-                {
-                    "relay_id": "r1",
-                    "desktop_token": "tok",
-                    "relay_base_url": "https://x.example.com",
-                }
-            ),
-            encoding="utf-8",
-        )
-        monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status.return_value = None
+        cfg_file, mock_resp = _setup_shared_0(tmp_path, monkeypatch)
         mock_resp.json.return_value = {
             "data": {"tasks": [{"task_id": "t1", "kind": "codex.invoke", "payload": {}}]}
         }
@@ -1250,22 +1250,7 @@ class TestPollOnceAdditional:
     def test_successful_poll_with_non_dict_task_skipped(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        cfg_file = tmp_path / "relay.json"
-        cfg_file.write_text(
-            json.dumps(
-                {
-                    "relay_id": "r1",
-                    "desktop_token": "tok",
-                    "relay_base_url": "https://x.example.com",
-                }
-            ),
-            encoding="utf-8",
-        )
-        monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status.return_value = None
+        cfg_file, mock_resp = _setup_shared_0(tmp_path, monkeypatch)
         mock_resp.json.return_value = {"data": {"tasks": ["not-a-dict", {"task_id": ""}]}}
 
         with (
@@ -1282,22 +1267,7 @@ class TestPollOnceAdditional:
         mock_complete.assert_not_called()
 
     def test_tasks_not_list_returns(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        cfg_file = tmp_path / "relay.json"
-        cfg_file.write_text(
-            json.dumps(
-                {
-                    "relay_id": "r1",
-                    "desktop_token": "tok",
-                    "relay_base_url": "https://x.example.com",
-                }
-            ),
-            encoding="utf-8",
-        )
-        monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status.return_value = None
+        cfg_file, mock_resp = _setup_shared_0(tmp_path, monkeypatch)
         mock_resp.json.return_value = {"data": {"tasks": "not-a-list"}}
 
         with patch("httpx.Client") as mock_client_cls:
@@ -1309,22 +1279,7 @@ class TestPollOnceAdditional:
             _poll_once()  # should not raise
 
     def test_data_not_dict(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        cfg_file = tmp_path / "relay.json"
-        cfg_file.write_text(
-            json.dumps(
-                {
-                    "relay_id": "r1",
-                    "desktop_token": "tok",
-                    "relay_base_url": "https://x.example.com",
-                }
-            ),
-            encoding="utf-8",
-        )
-        monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status.return_value = None
+        cfg_file, mock_resp = _setup_shared_0(tmp_path, monkeypatch)
         mock_resp.json.return_value = {"data": "not-a-dict"}
 
         with patch("httpx.Client") as mock_client_cls:
@@ -1336,22 +1291,7 @@ class TestPollOnceAdditional:
             _poll_once()  # should not raise
 
     def test_body_not_dict(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        cfg_file = tmp_path / "relay.json"
-        cfg_file.write_text(
-            json.dumps(
-                {
-                    "relay_id": "r1",
-                    "desktop_token": "tok",
-                    "relay_base_url": "https://x.example.com",
-                }
-            ),
-            encoding="utf-8",
-        )
-        monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status.return_value = None
+        cfg_file, mock_resp = _setup_shared_0(tmp_path, monkeypatch)
         mock_resp.json.return_value = "not-a-dict"
 
         with patch("httpx.Client") as mock_client_cls:
@@ -1370,22 +1310,7 @@ class TestPollOnceAdditional:
         这是桌面设置页「已连接：xxx 的手机」状态展示的数据来源（见 desktop_runtime.py
         mobile_pairing_status），必须与手机端 server_mode_label 使用同一套绑定语义。
         """
-        cfg_file = tmp_path / "relay.json"
-        cfg_file.write_text(
-            json.dumps(
-                {
-                    "relay_id": "r1",
-                    "desktop_token": "tok",
-                    "relay_base_url": "https://x.example.com",
-                }
-            ),
-            encoding="utf-8",
-        )
-        monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status.return_value = None
+        cfg_file, mock_resp = _setup_shared_0(tmp_path, monkeypatch)
         mock_resp.json.return_value = {
             "data": {
                 "tasks": [],

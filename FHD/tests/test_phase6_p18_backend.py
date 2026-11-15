@@ -23,6 +23,19 @@ from __future__ import annotations
 
 import os
 
+
+def _setup_shared_0():
+    svc = OCRService.__new__(OCRService)
+    svc.use_gpu = False
+    svc.reader = None
+    svc.tesseract_available = False
+    svc._paddle_enabled = False
+    import builtins
+
+    real_import = builtins.__import__
+    return (svc, builtins, real_import)
+
+
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
 import importlib
@@ -699,15 +712,7 @@ class TestOCRServiceInitEasyocr:
     """Cover ``_init_easyocr`` branches."""
 
     def test_easyocr_import_error(self, monkeypatch):
-        svc = OCRService.__new__(OCRService)
-        svc.use_gpu = False
-        svc.reader = None
-        svc.tesseract_available = False
-        svc._paddle_enabled = False
-
-        import builtins
-
-        real_import = builtins.__import__
+        svc, builtins, real_import = _setup_shared_0()
 
         def fake_import(name, *args, **kwargs):
             if name == "easyocr":
@@ -719,15 +724,7 @@ class TestOCRServiceInitEasyocr:
         assert svc.reader is None
 
     def test_easyocr_init_recoverable_error(self, monkeypatch):
-        svc = OCRService.__new__(OCRService)
-        svc.use_gpu = False
-        svc.reader = None
-        svc.tesseract_available = False
-        svc._paddle_enabled = False
-
-        import builtins
-
-        real_import = builtins.__import__
+        svc, builtins, real_import = _setup_shared_0()
 
         class FakeEasyocr:
             class Reader:
@@ -748,15 +745,7 @@ class TestOCRServiceInitTesseract:
     """Cover ``_init_tesseract`` branches."""
 
     def test_tesseract_import_error(self, monkeypatch):
-        svc = OCRService.__new__(OCRService)
-        svc.use_gpu = False
-        svc.reader = None
-        svc.tesseract_available = False
-        svc._paddle_enabled = False
-
-        import builtins
-
-        real_import = builtins.__import__
+        svc, builtins, real_import = _setup_shared_0()
 
         def fake_import(name, *args, **kwargs):
             if name == "pytesseract":
@@ -768,15 +757,7 @@ class TestOCRServiceInitTesseract:
         assert svc.tesseract_available is False
 
     def test_tesseract_init_recoverable_error(self, monkeypatch):
-        svc = OCRService.__new__(OCRService)
-        svc.use_gpu = False
-        svc.reader = None
-        svc.tesseract_available = False
-        svc._paddle_enabled = False
-
-        import builtins
-
-        real_import = builtins.__import__
+        svc, builtins, real_import = _setup_shared_0()
 
         class FakePytesseract:
             @staticmethod

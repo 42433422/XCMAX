@@ -24,6 +24,25 @@ import pytest
 from app.neuro_bus.events.events_base import NeuroEvent
 
 
+def _setup_shared_0():
+    from app.neuro_bus.domains.inventory_domain_handlers import handle_auto_inbound_requested
+
+    event = _make_event(
+        "inventory.auto_inbound_requested",
+        {
+            "ocr_request_id": "ocr-req-001",
+            "supplier_id": 100,
+            "warehouse_id": 1,
+            "items": [{"product_id": 10, "quantity": 5, "unit_price": 100.0}],
+            "total_amount": 500.0,
+            "invoice_no": "INV-2026-001",
+            "applicant_id": 7,
+        },
+        domain="inventory",
+    )
+    return (handle_auto_inbound_requested, event)
+
+
 async def _assert_shared_approved_marks_inbound_as_approved_0(
     self, fake_bus, _shared_literal_0, _shared_literal_1, _shared_literal_2, _shared_literal_3
 ):
@@ -175,23 +194,7 @@ class TestOcrCompletedReceiptArchives:
 class TestInventoryAutoInboundCallsPurchaseService:
     @pytest.mark.asyncio
     async def test_calls_create_purchase_inbound_with_event_payload(self, fake_bus):
-        from app.neuro_bus.domains.inventory_domain_handlers import (
-            handle_auto_inbound_requested,
-        )
-
-        event = _make_event(
-            "inventory.auto_inbound_requested",
-            {
-                "ocr_request_id": "ocr-req-001",
-                "supplier_id": 100,
-                "warehouse_id": 1,
-                "items": [{"product_id": 10, "quantity": 5, "unit_price": 100.0}],
-                "total_amount": 500.0,
-                "invoice_no": "INV-2026-001",
-                "applicant_id": 7,
-            },
-            domain="inventory",
-        )
+        handle_auto_inbound_requested, event = _setup_shared_0()
 
         with patch(
             "app.neuro_bus.domains.inventory_domain_handlers.PurchaseService"
@@ -220,23 +223,7 @@ class TestInventoryAutoInboundCallsPurchaseService:
 class TestInboundSuccessPublishesApprovalRequested:
     @pytest.mark.asyncio
     async def test_publishes_finance_approval_requested_with_inbound_info(self, fake_bus):
-        from app.neuro_bus.domains.inventory_domain_handlers import (
-            handle_auto_inbound_requested,
-        )
-
-        event = _make_event(
-            "inventory.auto_inbound_requested",
-            {
-                "ocr_request_id": "ocr-req-001",
-                "supplier_id": 100,
-                "warehouse_id": 1,
-                "items": [{"product_id": 10, "quantity": 5, "unit_price": 100.0}],
-                "total_amount": 500.0,
-                "invoice_no": "INV-2026-001",
-                "applicant_id": 7,
-            },
-            domain="inventory",
-        )
+        handle_auto_inbound_requested, event = _setup_shared_0()
 
         with patch(
             "app.neuro_bus.domains.inventory_domain_handlers.PurchaseService"
@@ -267,23 +254,7 @@ class TestInboundSuccessPublishesApprovalRequested:
 class TestInboundFailurePublishesFailedEvent:
     @pytest.mark.asyncio
     async def test_failure_publishes_inbound_failed_and_does_not_raise(self, fake_bus):
-        from app.neuro_bus.domains.inventory_domain_handlers import (
-            handle_auto_inbound_requested,
-        )
-
-        event = _make_event(
-            "inventory.auto_inbound_requested",
-            {
-                "ocr_request_id": "ocr-req-001",
-                "supplier_id": 100,
-                "warehouse_id": 1,
-                "items": [{"product_id": 10, "quantity": 5, "unit_price": 100.0}],
-                "total_amount": 500.0,
-                "invoice_no": "INV-2026-001",
-                "applicant_id": 7,
-            },
-            domain="inventory",
-        )
+        handle_auto_inbound_requested, event = _setup_shared_0()
 
         with patch(
             "app.neuro_bus.domains.inventory_domain_handlers.PurchaseService"

@@ -37,6 +37,16 @@ from app.application.super_employee_service import (
 )
 from tests.pure_builders import error_runner as _error_runner
 
+
+def _setup_shared_0(tmp_path):
+    svc = _make_svc(tmp_path)
+    devices = [
+        {"id": "dev1", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+        {"id": "dev2", "status": "online", "tools": [{"toolName": "codex", "status": "installed"}]},
+    ]
+    return (svc, devices)
+
+
 # ─────────────────────────── helpers ────────────────────────────
 
 
@@ -2591,36 +2601,12 @@ class TestSelectParaDevicesBoundary:
     """
 
     def test_target_all(self, tmp_path):
-        svc = _make_svc(tmp_path)
-        devices = [
-            {
-                "id": "dev1",
-                "status": "online",
-                "tools": [{"toolName": "codex", "status": "installed"}],
-            },
-            {
-                "id": "dev2",
-                "status": "online",
-                "tools": [{"toolName": "codex", "status": "installed"}],
-            },
-        ]
+        svc, devices = _setup_shared_0(tmp_path)
         result = svc._select_para_devices(devices, {"target_devices": ["all"]})
         assert len(result) == 2
 
     def test_target_by_id(self, tmp_path):
-        svc = _make_svc(tmp_path)
-        devices = [
-            {
-                "id": "dev1",
-                "status": "online",
-                "tools": [{"toolName": "codex", "status": "installed"}],
-            },
-            {
-                "id": "dev2",
-                "status": "online",
-                "tools": [{"toolName": "codex", "status": "installed"}],
-            },
-        ]
+        svc, devices = _setup_shared_0(tmp_path)
         result = svc._select_para_devices(devices, {"target_devices": ["dev1"]})
         assert all(d["id"] == "dev1" for d in result)
 
@@ -2644,19 +2630,7 @@ class TestSelectParaDevicesBoundary:
         assert all(d.get("name") == "worker1" for d in result)
 
     def test_no_target_selects_all_eligible(self, tmp_path):
-        svc = _make_svc(tmp_path)
-        devices = [
-            {
-                "id": "dev1",
-                "status": "online",
-                "tools": [{"toolName": "codex", "status": "installed"}],
-            },
-            {
-                "id": "dev2",
-                "status": "online",
-                "tools": [{"toolName": "codex", "status": "installed"}],
-            },
-        ]
+        svc, devices = _setup_shared_0(tmp_path)
         result = svc._select_para_devices(devices, {})
         assert len(result) == 2
 

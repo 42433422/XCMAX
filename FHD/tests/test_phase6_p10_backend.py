@@ -39,6 +39,14 @@ from app.neuro_bus.domains.product_domain_handlers import (
     register_product_domain_handlers,
 )
 
+
+def _setup_shared_0():
+    agent = EmployeeAgent("emp-1")
+    pack = {"pack_id": "emp-1", "version": "1.0.0", "manifest": {}, "pack_dir": "/tmp/emp-1"}
+    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    return (agent, pack, gate)
+
+
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -1038,14 +1046,7 @@ def test_run_pack_load_runtime_error_returns_error_result() -> None:
 
 
 def test_run_direct_python_fast_path_success() -> None:
-    agent = EmployeeAgent("emp-1")
-    pack = {
-        "pack_id": "emp-1",
-        "version": "1.0.0",
-        "manifest": {},
-        "pack_dir": "/tmp/emp-1",
-    }
-    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    agent, pack, gate = _setup_shared_0()
     with (
         patch(
             "app.application.employee_runtime.agent.load_employee_pack_from_disk",
@@ -1115,14 +1116,7 @@ def test_run_direct_python_fast_path_success() -> None:
 
 
 def test_run_cognition_failed_returns_cognition_failed_result() -> None:
-    agent = EmployeeAgent("emp-1")
-    pack = {
-        "pack_id": "emp-1",
-        "version": "1.0.0",
-        "manifest": {},
-        "pack_dir": "/tmp/emp-1",
-    }
-    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    agent, pack, gate = _setup_shared_0()
     reasoning_err = {"reasoning": "", "error": "llm timeout", "input": {}}
     with (
         patch(
@@ -1460,14 +1454,7 @@ def test_run_collaboration_context_cognition_error_degrades_to_context() -> None
 
 
 def test_run_full_success_with_agent_handler() -> None:
-    agent = EmployeeAgent("emp-1")
-    pack = {
-        "pack_id": "emp-1",
-        "version": "1.0.0",
-        "manifest": {},
-        "pack_dir": "/tmp/emp-1",
-    }
-    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    agent, pack, gate = _setup_shared_0()
     reasoning = {"reasoning": "thought", "input": {}, "memory": {}}
     actions_result = {
         "outputs": [{"handler": "agent", "ok": True, "output": "agent done"}],
@@ -1545,14 +1532,7 @@ def test_run_full_success_with_agent_handler() -> None:
 
 
 def test_run_handler_fails_publishes_trigger() -> None:
-    agent = EmployeeAgent("emp-1")
-    pack = {
-        "pack_id": "emp-1",
-        "version": "1.0.0",
-        "manifest": {},
-        "pack_dir": "/tmp/emp-1",
-    }
-    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    agent, pack, gate = _setup_shared_0()
     reasoning = {"reasoning": "thought", "input": {}, "memory": {}}
     actions_result = {
         "outputs": [{"handler": "echo", "ok": False, "error": "boom"}],
@@ -1626,14 +1606,7 @@ def test_run_handler_fails_publishes_trigger() -> None:
 
 
 def test_run_handler_fails_trigger_publish_recoverable_error_swallowed() -> None:
-    agent = EmployeeAgent("emp-1")
-    pack = {
-        "pack_id": "emp-1",
-        "version": "1.0.0",
-        "manifest": {},
-        "pack_dir": "/tmp/emp-1",
-    }
-    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    agent, pack, gate = _setup_shared_0()
     reasoning = {"reasoning": "thought", "input": {}, "memory": {}}
     actions_result = {
         "outputs": [{"handler": "echo", "ok": False, "error": "boom"}],
@@ -1704,14 +1677,7 @@ def test_run_handler_fails_trigger_publish_recoverable_error_swallowed() -> None
 
 
 def test_run_upstream_collaboration_injects_payload() -> None:
-    agent = EmployeeAgent("emp-1")
-    pack = {
-        "pack_id": "emp-1",
-        "version": "1.0.0",
-        "manifest": {},
-        "pack_dir": "/tmp/emp-1",
-    }
-    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    agent, pack, gate = _setup_shared_0()
     reasoning = {"reasoning": "thought", "input": {}, "memory": {}}
     actions_result = {"outputs": [], "summary": "executed 0 handlers"}
     upstream = {
@@ -1789,14 +1755,7 @@ def test_run_upstream_collaboration_injects_payload() -> None:
 
 
 def test_run_workspace_root_injected_into_payload() -> None:
-    agent = EmployeeAgent("emp-1")
-    pack = {
-        "pack_id": "emp-1",
-        "version": "1.0.0",
-        "manifest": {},
-        "pack_dir": "/tmp/emp-1",
-    }
-    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    agent, pack, gate = _setup_shared_0()
     reasoning = {"reasoning": "thought", "input": {}, "memory": {}}
     actions_result = {"outputs": [], "summary": "executed 0 handlers"}
     with (

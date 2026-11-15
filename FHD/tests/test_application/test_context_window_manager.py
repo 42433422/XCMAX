@@ -19,6 +19,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+def _setup_shared_0():
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowManager
+
+    m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
+    provider = MagicMock()
+    provider.provider_id = "openai_compatible"
+    provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto")
+    return (ContextWindowManager, m, provider)
+
+
 @pytest.fixture(autouse=True)
 def _isolated_cwm_ledger(tmp_path, monkeypatch):
     """隔离账本 + 重置 CWM 单例，避免污染其他测试。"""
@@ -356,14 +366,7 @@ class TestCompressTruncateFallback:
     @pytest.mark.asyncio
     async def test_compress_summarize_failure_falls_back_to_truncate(self) -> None:
         """摘要 LLM 失败 → 退化为 truncate。"""
-        from app.application.agent_orchestrator.context_window_manager import (
-            ContextWindowManager,
-        )
-
-        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
-        provider = MagicMock()
-        provider.provider_id = "openai_compatible"
-        provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto")
+        ContextWindowManager, m, provider = _setup_shared_0()
         provider.chat_completion = AsyncMock(side_effect=RuntimeError("LLM 超时"))
         msgs = _make_messages(6)
         r = await m.compress(msgs, user_id="u1", provider=provider)
@@ -398,14 +401,7 @@ class TestCompressTruncateFallback:
     @pytest.mark.asyncio
     async def test_compress_empty_result_falls_back_to_truncate(self) -> None:
         """provider 返回空 result → 退化为 truncate。"""
-        from app.application.agent_orchestrator.context_window_manager import (
-            ContextWindowManager,
-        )
-
-        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
-        provider = MagicMock()
-        provider.provider_id = "openai_compatible"
-        provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto")
+        ContextWindowManager, m, provider = _setup_shared_0()
         provider.chat_completion = AsyncMock(return_value=None)
         msgs = _make_messages(6)
         r = await m.compress(msgs, user_id="u1", provider=provider)
@@ -416,14 +412,7 @@ class TestCompressTruncateFallback:
     @pytest.mark.asyncio
     async def test_compress_no_choices_falls_back_to_truncate(self) -> None:
         """provider 返回无 choices → 退化为 truncate。"""
-        from app.application.agent_orchestrator.context_window_manager import (
-            ContextWindowManager,
-        )
-
-        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
-        provider = MagicMock()
-        provider.provider_id = "openai_compatible"
-        provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto")
+        ContextWindowManager, m, provider = _setup_shared_0()
         provider.chat_completion = AsyncMock(return_value={"choices": []})
         msgs = _make_messages(6)
         r = await m.compress(msgs, user_id="u1", provider=provider)
@@ -434,14 +423,7 @@ class TestCompressTruncateFallback:
     @pytest.mark.asyncio
     async def test_compress_empty_content_falls_back_to_truncate(self) -> None:
         """provider 返回空 content → 退化为 truncate。"""
-        from app.application.agent_orchestrator.context_window_manager import (
-            ContextWindowManager,
-        )
-
-        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
-        provider = MagicMock()
-        provider.provider_id = "openai_compatible"
-        provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto")
+        ContextWindowManager, m, provider = _setup_shared_0()
         provider.chat_completion = AsyncMock(
             return_value={"choices": [{"message": {"content": ""}}]}
         )

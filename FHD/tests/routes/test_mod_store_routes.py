@@ -16,6 +16,22 @@ import app.fastapi_routes.private_mod_delivery_routes as private_delivery_routes
 from app.fastapi_routes.mod_store_routes import router
 
 
+def _setup_shared_0():
+    from starlette.requests import Request
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "headers": [(b"content-type", b"application/json")],
+        "query_string": b"",
+        "path": "/",
+    }
+    request = Request(scope)
+    import asyncio
+
+    return (Request, scope, request, asyncio)
+
+
 @pytest.fixture
 def app_with_router() -> FastAPI:
     app = FastAPI()
@@ -1054,17 +1070,7 @@ class TestInstallHostFoundationInternal:
 
 class TestBodyValue:
     def test_json_body(self) -> None:
-        from starlette.requests import Request
-
-        scope = {
-            "type": "http",
-            "method": "POST",
-            "headers": [(b"content-type", b"application/json")],
-            "query_string": b"",
-            "path": "/",
-        }
-        request = Request(scope)
-        import asyncio
+        Request, scope, request, asyncio = _setup_shared_0()
 
         async def make_request():
             # Manually set body
@@ -1075,18 +1081,7 @@ class TestBodyValue:
         assert result == "value"
 
     def test_missing_key_returns_default(self) -> None:
-        from starlette.requests import Request
-
-        scope = {
-            "type": "http",
-            "method": "POST",
-            "headers": [(b"content-type", b"application/json")],
-            "query_string": b"",
-            "path": "/",
-        }
-        request = Request(scope)
-
-        import asyncio
+        Request, scope, request, asyncio = _setup_shared_0()
 
         async def make_request():
             request._body = b'{"other": "val"}'
@@ -1098,18 +1093,7 @@ class TestBodyValue:
 
 class TestRequestPayload:
     def test_json_body(self) -> None:
-        from starlette.requests import Request
-
-        scope = {
-            "type": "http",
-            "method": "POST",
-            "headers": [(b"content-type", b"application/json")],
-            "query_string": b"",
-            "path": "/",
-        }
-        request = Request(scope)
-
-        import asyncio
+        Request, scope, request, asyncio = _setup_shared_0()
 
         async def make_request():
             request._body = b'{"key": "value"}'
@@ -1119,18 +1103,7 @@ class TestRequestPayload:
         assert result["key"] == "value"
 
     def test_invalid_json(self) -> None:
-        from starlette.requests import Request
-
-        scope = {
-            "type": "http",
-            "method": "POST",
-            "headers": [(b"content-type", b"application/json")],
-            "query_string": b"",
-            "path": "/",
-        }
-        request = Request(scope)
-
-        import asyncio
+        Request, scope, request, asyncio = _setup_shared_0()
 
         async def make_request():
             request._body = b"not json"

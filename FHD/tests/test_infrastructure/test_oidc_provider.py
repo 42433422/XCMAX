@@ -18,6 +18,23 @@ import pytest
 
 from app.infrastructure.auth import oidc_provider
 
+
+def _setup_shared_0(monkeypatch):
+    monkeypatch.setenv("XCAGI_OIDC_ISSUER", "https://idp.example.com")
+    monkeypatch.setenv("XCAGI_OIDC_CLIENT_ID", "client")
+    monkeypatch.setenv("XCAGI_OIDC_REDIRECT_URI", "https://app/cb")
+    oidc_provider._discovery_cache.clear()
+    oidc_provider._discovery_cache["https://idp.example.com"] = {
+        "token_endpoint": "https://idp.example.com/token",
+        "userinfo_endpoint": "https://idp.example.com/userinfo",
+    }
+    token_resp = MagicMock()
+    token_resp.json.return_value = {"access_token": "atk"}
+    token_resp.raise_for_status = MagicMock()
+    userinfo_resp = MagicMock()
+    return (token_resp, userinfo_resp)
+
+
 # ---------------------------------------------------------------------------
 # oidc_enabled
 # ---------------------------------------------------------------------------
@@ -442,20 +459,7 @@ class TestExchangeOidcAuthorization:
 
     @pytest.mark.asyncio
     async def test_non_dict_profile_returns_empty(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OIDC_ISSUER", "https://idp.example.com")
-        monkeypatch.setenv("XCAGI_OIDC_CLIENT_ID", "client")
-        monkeypatch.setenv("XCAGI_OIDC_REDIRECT_URI", "https://app/cb")
-        oidc_provider._discovery_cache.clear()
-        oidc_provider._discovery_cache["https://idp.example.com"] = {
-            "token_endpoint": "https://idp.example.com/token",
-            "userinfo_endpoint": "https://idp.example.com/userinfo",
-        }
-
-        token_resp = MagicMock()
-        token_resp.json.return_value = {"access_token": "atk"}
-        token_resp.raise_for_status = MagicMock()
-
-        userinfo_resp = MagicMock()
+        token_resp, userinfo_resp = _setup_shared_0(monkeypatch)
         userinfo_resp.json.return_value = ["not", "a", "dict"]
         userinfo_resp.raise_for_status = MagicMock()
 
@@ -471,20 +475,7 @@ class TestExchangeOidcAuthorization:
 
     @pytest.mark.asyncio
     async def test_empty_code_stripped(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OIDC_ISSUER", "https://idp.example.com")
-        monkeypatch.setenv("XCAGI_OIDC_CLIENT_ID", "client")
-        monkeypatch.setenv("XCAGI_OIDC_REDIRECT_URI", "https://app/cb")
-        oidc_provider._discovery_cache.clear()
-        oidc_provider._discovery_cache["https://idp.example.com"] = {
-            "token_endpoint": "https://idp.example.com/token",
-            "userinfo_endpoint": "https://idp.example.com/userinfo",
-        }
-
-        token_resp = MagicMock()
-        token_resp.json.return_value = {"access_token": "atk"}
-        token_resp.raise_for_status = MagicMock()
-
-        userinfo_resp = MagicMock()
+        token_resp, userinfo_resp = _setup_shared_0(monkeypatch)
         userinfo_resp.json.return_value = {"sub": "u"}
         userinfo_resp.raise_for_status = MagicMock()
 
@@ -508,20 +499,7 @@ class TestExchangeOidcAuthorization:
 class TestExchangeCodeForUserinfo:
     @pytest.mark.asyncio
     async def test_returns_profile_dict(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OIDC_ISSUER", "https://idp.example.com")
-        monkeypatch.setenv("XCAGI_OIDC_CLIENT_ID", "client")
-        monkeypatch.setenv("XCAGI_OIDC_REDIRECT_URI", "https://app/cb")
-        oidc_provider._discovery_cache.clear()
-        oidc_provider._discovery_cache["https://idp.example.com"] = {
-            "token_endpoint": "https://idp.example.com/token",
-            "userinfo_endpoint": "https://idp.example.com/userinfo",
-        }
-
-        token_resp = MagicMock()
-        token_resp.json.return_value = {"access_token": "atk"}
-        token_resp.raise_for_status = MagicMock()
-
-        userinfo_resp = MagicMock()
+        token_resp, userinfo_resp = _setup_shared_0(monkeypatch)
         userinfo_resp.json.return_value = {"sub": "u1", "email": "u@e.com"}
         userinfo_resp.raise_for_status = MagicMock()
 
@@ -537,20 +515,7 @@ class TestExchangeCodeForUserinfo:
 
     @pytest.mark.asyncio
     async def test_non_dict_profile_returns_empty(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OIDC_ISSUER", "https://idp.example.com")
-        monkeypatch.setenv("XCAGI_OIDC_CLIENT_ID", "client")
-        monkeypatch.setenv("XCAGI_OIDC_REDIRECT_URI", "https://app/cb")
-        oidc_provider._discovery_cache.clear()
-        oidc_provider._discovery_cache["https://idp.example.com"] = {
-            "token_endpoint": "https://idp.example.com/token",
-            "userinfo_endpoint": "https://idp.example.com/userinfo",
-        }
-
-        token_resp = MagicMock()
-        token_resp.json.return_value = {"access_token": "atk"}
-        token_resp.raise_for_status = MagicMock()
-
-        userinfo_resp = MagicMock()
+        token_resp, userinfo_resp = _setup_shared_0(monkeypatch)
         userinfo_resp.json.return_value = "not-a-dict"
         userinfo_resp.raise_for_status = MagicMock()
 

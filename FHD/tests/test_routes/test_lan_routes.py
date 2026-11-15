@@ -18,6 +18,18 @@ from app.fastapi_routes.lan_routes import (
 )
 
 
+def _setup_shared_0():
+    app = _make_app()
+    client = TestClient(app, raise_server_exceptions=False)
+    mock_cfg = MagicMock()
+    mock_cfg.enabled = True
+    mock_cfg.is_secret_ready.return_value = True
+    mock_cfg.trusted_proxies = ()
+    mock_cfg.cidr_objects.return_value = [ip_network("192.168.0.0/16")]
+    mock_cfg.admin_host_ips = ()
+    return (app, client, mock_cfg)
+
+
 # ---------------------------------------------------------------------------
 # _ip_in_admin_hosts
 # ---------------------------------------------------------------------------
@@ -219,15 +231,7 @@ class TestActivateRoute:
         assert resp.status_code == 403
 
     def test_activate_bad_key(self):
-        app = _make_app()
-        client = TestClient(app, raise_server_exceptions=False)
-
-        mock_cfg = MagicMock()
-        mock_cfg.enabled = True
-        mock_cfg.is_secret_ready.return_value = True
-        mock_cfg.trusted_proxies = ()
-        mock_cfg.cidr_objects.return_value = [ip_network("192.168.0.0/16")]
-        mock_cfg.admin_host_ips = ()
+        app, client, mock_cfg = _setup_shared_0()
         mock_cfg.admin_bootstrap_key = None
 
         with (
@@ -243,15 +247,7 @@ class TestActivateRoute:
         assert resp.status_code == 401
 
     def test_activate_revoked_key(self):
-        app = _make_app()
-        client = TestClient(app, raise_server_exceptions=False)
-
-        mock_cfg = MagicMock()
-        mock_cfg.enabled = True
-        mock_cfg.is_secret_ready.return_value = True
-        mock_cfg.trusted_proxies = ()
-        mock_cfg.cidr_objects.return_value = [ip_network("192.168.0.0/16")]
-        mock_cfg.admin_host_ips = ()
+        app, client, mock_cfg = _setup_shared_0()
 
         record = MagicMock()
         record.id = 1
@@ -271,15 +267,7 @@ class TestActivateRoute:
         assert resp.status_code == 401
 
     def test_activate_expired_key(self):
-        app = _make_app()
-        client = TestClient(app, raise_server_exceptions=False)
-
-        mock_cfg = MagicMock()
-        mock_cfg.enabled = True
-        mock_cfg.is_secret_ready.return_value = True
-        mock_cfg.trusted_proxies = ()
-        mock_cfg.cidr_objects.return_value = [ip_network("192.168.0.0/16")]
-        mock_cfg.admin_host_ips = ()
+        app, client, mock_cfg = _setup_shared_0()
 
         record = MagicMock()
         record.id = 1
@@ -299,15 +287,7 @@ class TestActivateRoute:
         assert resp.status_code == 401
 
     def test_activate_non_admin_without_allowlist(self):
-        app = _make_app()
-        client = TestClient(app, raise_server_exceptions=False)
-
-        mock_cfg = MagicMock()
-        mock_cfg.enabled = True
-        mock_cfg.is_secret_ready.return_value = True
-        mock_cfg.trusted_proxies = ()
-        mock_cfg.cidr_objects.return_value = [ip_network("192.168.0.0/16")]
-        mock_cfg.admin_host_ips = ()
+        app, client, mock_cfg = _setup_shared_0()
 
         record = MagicMock()
         record.id = 1
@@ -327,15 +307,7 @@ class TestActivateRoute:
         assert resp.status_code == 403
 
     def test_activate_success_with_admin_key(self):
-        app = _make_app()
-        client = TestClient(app, raise_server_exceptions=False)
-
-        mock_cfg = MagicMock()
-        mock_cfg.enabled = True
-        mock_cfg.is_secret_ready.return_value = True
-        mock_cfg.trusted_proxies = ()
-        mock_cfg.cidr_objects.return_value = [ip_network("192.168.0.0/16")]
-        mock_cfg.admin_host_ips = ()
+        app, client, mock_cfg = _setup_shared_0()
         mock_cfg.license_secret = "test-secret"
         mock_cfg.token_ttl_seconds = 3600
         mock_cfg.cookie_name = "lan_token"
@@ -375,15 +347,7 @@ class TestActivateRoute:
         assert data["is_admin"] is True
 
     def test_activate_bootstrap_key(self):
-        app = _make_app()
-        client = TestClient(app, raise_server_exceptions=False)
-
-        mock_cfg = MagicMock()
-        mock_cfg.enabled = True
-        mock_cfg.is_secret_ready.return_value = True
-        mock_cfg.trusted_proxies = ()
-        mock_cfg.cidr_objects.return_value = [ip_network("192.168.0.0/16")]
-        mock_cfg.admin_host_ips = ()
+        app, client, mock_cfg = _setup_shared_0()
         mock_cfg.license_secret = "test-secret"
         mock_cfg.token_ttl_seconds = 3600
         mock_cfg.admin_bootstrap_key = "bootstrap-secret"

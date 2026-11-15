@@ -22,6 +22,22 @@ import pytest
 from app.utils import decorators as dec
 
 
+def _setup_shared_0():
+    monitor = MagicMock()
+    track_ctx = MagicMock()
+    track_ctx.__enter__ = MagicMock(return_value=None)
+    track_ctx.__exit__ = MagicMock(return_value=False)
+    monitor.track.return_value = track_ctx
+    fake_module = MagicMock()
+    fake_module.get_performance_optimizer.return_value = MagicMock(
+        redis_cache=None,
+        performance_monitor=monitor,
+        request_deduplicator=None,
+        async_task_manager=None,
+    )
+    return (monitor, track_ctx, fake_module)
+
+
 @pytest.fixture(autouse=True)
 def _isolate_force_sync_env(monkeypatch):
     """Ensure ``XCAGI_FORCE_SYNC_TASKS`` does not leak from other tests."""
@@ -378,19 +394,7 @@ class TestRateLimitedDeep:
 
 class TestMonitoredDeep:
     def test_default_name_uses_module_and_func(self):
-        monitor = MagicMock()
-        track_ctx = MagicMock()
-        track_ctx.__enter__ = MagicMock(return_value=None)
-        track_ctx.__exit__ = MagicMock(return_value=False)
-        monitor.track.return_value = track_ctx
-
-        fake_module = MagicMock()
-        fake_module.get_performance_optimizer.return_value = MagicMock(
-            redis_cache=None,
-            performance_monitor=monitor,
-            request_deduplicator=None,
-            async_task_manager=None,
-        )
+        monitor, track_ctx, fake_module = _setup_shared_0()
         with patch.dict(
             "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
         ):
@@ -465,19 +469,7 @@ class TestMonitoredDeep:
 
     def test_record_metric_truncates_error(self):
         """Error string is truncated to 200 chars in record_metric."""
-        monitor = MagicMock()
-        track_ctx = MagicMock()
-        track_ctx.__enter__ = MagicMock(return_value=None)
-        track_ctx.__exit__ = MagicMock(return_value=False)
-        monitor.track.return_value = track_ctx
-
-        fake_module = MagicMock()
-        fake_module.get_performance_optimizer.return_value = MagicMock(
-            redis_cache=None,
-            performance_monitor=monitor,
-            request_deduplicator=None,
-            async_task_manager=None,
-        )
+        monitor, track_ctx, fake_module = _setup_shared_0()
         long_error = RuntimeError("x" * 300)
         with patch.dict(
             "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
@@ -745,19 +737,7 @@ class TestCombinedOptimizationDeep:
 
     def test_with_monitor_slow_ms(self):
         """monitor_slow_ms > 0 applies monitored decorator."""
-        monitor = MagicMock()
-        track_ctx = MagicMock()
-        track_ctx.__enter__ = MagicMock(return_value=None)
-        track_ctx.__exit__ = MagicMock(return_value=False)
-        monitor.track.return_value = track_ctx
-
-        fake_module = MagicMock()
-        fake_module.get_performance_optimizer.return_value = MagicMock(
-            redis_cache=None,
-            performance_monitor=monitor,
-            request_deduplicator=None,
-            async_task_manager=None,
-        )
+        monitor, track_ctx, fake_module = _setup_shared_0()
         with patch.dict(
             "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
         ):

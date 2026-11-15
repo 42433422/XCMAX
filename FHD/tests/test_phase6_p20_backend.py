@@ -28,6 +28,21 @@ from __future__ import annotations
 
 import os
 
+
+def _setup_shared_0(monkeypatch):
+    monkeypatch.setenv("MODSTORE_LOCAL_BASE_URL", "http://test:8788")
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    csrf_resp = MagicMock()
+    csrf_resp.is_success = False
+    csrf_resp.json.return_value = {}
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    return (mock_client, csrf_resp, resp)
+
+
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
 import json
@@ -616,16 +631,7 @@ class TestModstoreGet:
 
     @pytest.mark.asyncio
     async def test_get_non_dict_wrapped(self, monkeypatch):
-        monkeypatch.setenv("MODSTORE_LOCAL_BASE_URL", "http://test:8788")
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        csrf_resp = MagicMock()
-        csrf_resp.is_success = False
-        csrf_resp.json.return_value = {}
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.raise_for_status = MagicMock()
+        mock_client, csrf_resp, resp = _setup_shared_0(monkeypatch)
         resp.json.return_value = [1, 2, 3]
         mock_client.get = AsyncMock(side_effect=[csrf_resp, resp])
         with patch(
@@ -637,16 +643,7 @@ class TestModstoreGet:
 
     @pytest.mark.asyncio
     async def test_get_with_query_string(self, monkeypatch):
-        monkeypatch.setenv("MODSTORE_LOCAL_BASE_URL", "http://test:8788")
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        csrf_resp = MagicMock()
-        csrf_resp.is_success = False
-        csrf_resp.json.return_value = {}
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.raise_for_status = MagicMock()
+        mock_client, csrf_resp, resp = _setup_shared_0(monkeypatch)
         resp.json.return_value = {"ok": True}
         mock_client.get = AsyncMock(side_effect=[csrf_resp, resp])
         with patch(
@@ -693,16 +690,7 @@ class TestModstoreGet:
 class TestModstorePost:
     @pytest.mark.asyncio
     async def test_post_success(self, monkeypatch):
-        monkeypatch.setenv("MODSTORE_LOCAL_BASE_URL", "http://test:8788")
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        csrf_resp = MagicMock()
-        csrf_resp.is_success = False
-        csrf_resp.json.return_value = {}
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.raise_for_status = MagicMock()
+        mock_client, csrf_resp, resp = _setup_shared_0(monkeypatch)
         resp.json.return_value = {"created": True}
         mock_client.get = AsyncMock(return_value=csrf_resp)
         mock_client.post = AsyncMock(return_value=resp)
@@ -717,16 +705,7 @@ class TestModstorePost:
 
     @pytest.mark.asyncio
     async def test_post_non_dict_body_becomes_empty(self, monkeypatch):
-        monkeypatch.setenv("MODSTORE_LOCAL_BASE_URL", "http://test:8788")
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        csrf_resp = MagicMock()
-        csrf_resp.is_success = False
-        csrf_resp.json.return_value = {}
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.raise_for_status = MagicMock()
+        mock_client, csrf_resp, resp = _setup_shared_0(monkeypatch)
         resp.json.return_value = {"ok": True}
         mock_client.get = AsyncMock(return_value=csrf_resp)
         mock_client.post = AsyncMock(return_value=resp)
