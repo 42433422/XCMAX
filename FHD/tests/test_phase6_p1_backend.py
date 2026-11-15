@@ -16,6 +16,7 @@ filesystem). Internal logic of the units under test is exercised for real.
 
 from __future__ import annotations
 
+from contextlib import contextmanager as _shared_scope_contextmanager
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -29,6 +30,22 @@ from app.domain.shared_services.conversation_service import (
 from app.infrastructure.persistence.shipment_record_command_impl import (
     SQLAlchemyShipmentRecordCommand,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(mock_db, case_value_1):
+    with (
+        patch(
+            "app.infrastructure.persistence.shipment_record_command_impl.get_db",
+            return_value=_mock_db_ctx(mock_db),
+        ),
+        patch(
+            "app.infrastructure.persistence.shipment_record_command_impl.sa_inspect",
+            return_value=_make_inspector(table_present=case_value_1),
+        ),
+    ):
+        yield None
+
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -87,16 +104,7 @@ class TestShipmentClearAll:
         mock_query.count.return_value = 5
         mock_db.query.return_value = mock_query
 
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.sa_inspect",
-                return_value=_make_inspector(table_present=True),
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, case_value_1=True):
             result = cmd.clear_all()
 
         assert result["success"] is True
@@ -107,16 +115,7 @@ class TestShipmentClearAll:
         cmd = SQLAlchemyShipmentRecordCommand()
         mock_db = MagicMock()
 
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.sa_inspect",
-                return_value=_make_inspector(table_present=False),
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, case_value_1=False):
             result = cmd.clear_all()
 
         assert result["success"] is False
@@ -331,16 +330,7 @@ class TestShipmentUpdateRecord:
         mock_query.filter.return_value.first.return_value = record
         mock_db.query.return_value = mock_query
 
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.sa_inspect",
-                return_value=_make_inspector(table_present=True),
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, case_value_1=True):
             result = cmd.update_record(
                 1,
                 unit_name="乙公司",
@@ -360,16 +350,7 @@ class TestShipmentUpdateRecord:
         mock_query.filter.return_value.first.return_value = None
         mock_db.query.return_value = mock_query
 
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.sa_inspect",
-                return_value=_make_inspector(table_present=True),
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, case_value_1=True):
             result = cmd.update_record(999)
 
         assert result["success"] is False
@@ -379,16 +360,7 @@ class TestShipmentUpdateRecord:
         cmd = SQLAlchemyShipmentRecordCommand()
         mock_db = MagicMock()
 
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.sa_inspect",
-                return_value=_make_inspector(table_present=False),
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, case_value_1=False):
             result = cmd.update_record(1)
 
         assert result["success"] is False
@@ -404,16 +376,7 @@ class TestShipmentUpdateRecord:
         mock_query.filter.return_value.first.return_value = record
         mock_db.query.return_value = mock_query
 
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.sa_inspect",
-                return_value=_make_inspector(table_present=True),
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, case_value_1=True):
             result = cmd.update_record(1)
 
         assert result["success"] is True
@@ -429,16 +392,7 @@ class TestShipmentUpdateRecord:
         mock_query.filter.return_value.first.return_value = record
         mock_db.query.return_value = mock_query
 
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.sa_inspect",
-                return_value=_make_inspector(table_present=True),
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, case_value_1=True):
             result = cmd.update_record(1, date="not-a-date")
 
         assert result["success"] is False
@@ -466,16 +420,7 @@ class TestShipmentDeleteRecord:
         mock_query.filter.return_value.first.return_value = record
         mock_db.query.return_value = mock_query
 
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.sa_inspect",
-                return_value=_make_inspector(table_present=True),
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, case_value_1=True):
             result = cmd.delete_record(1)
 
         assert result["success"] is True
@@ -489,16 +434,7 @@ class TestShipmentDeleteRecord:
         mock_query.filter.return_value.first.return_value = None
         mock_db.query.return_value = mock_query
 
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.sa_inspect",
-                return_value=_make_inspector(table_present=True),
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, case_value_1=True):
             result = cmd.delete_record(999)
 
         assert result["success"] is False
@@ -508,16 +444,7 @@ class TestShipmentDeleteRecord:
         cmd = SQLAlchemyShipmentRecordCommand()
         mock_db = MagicMock()
 
-        with (
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch(
-                "app.infrastructure.persistence.shipment_record_command_impl.sa_inspect",
-                return_value=_make_inspector(table_present=False),
-            ),
-        ):
+        with _shared_scope_case_0(mock_db, case_value_1=False):
             result = cmd.delete_record(1)
 
         assert result["success"] is False

@@ -15,6 +15,19 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+
+def _shared_setup_case_0(tmp_path):
+    dirs = {
+        "root": tmp_path,
+        "data": tmp_path / "data",
+        "mods": tmp_path / "mods",
+        "models": tmp_path / "models",
+        "backups": tmp_path / "backups",
+        "logs": tmp_path / "logs",
+    }
+    return dirs
+
+
 # ---------------------------------------------------------------------------
 # migrate.py
 # ---------------------------------------------------------------------------
@@ -135,14 +148,7 @@ class TestExportConfig:
     def test_export_config(self, tmp_path):
         from app.desktop_runtime.migrate import export_config
 
-        dirs = {
-            "root": tmp_path,
-            "data": tmp_path / "data",
-            "mods": tmp_path / "mods",
-            "models": tmp_path / "models",
-            "backups": tmp_path / "backups",
-            "logs": tmp_path / "logs",
-        }
+        dirs = _shared_setup_case_0(tmp_path)
         with patch("app.desktop_runtime.migrate.ensure_desktop_dirs", return_value=dirs):
             cfg = export_config(tmp_path)
         assert "database" in cfg
@@ -153,14 +159,7 @@ class TestMigrateMain:
     def test_main_no_args(self, tmp_path):
         from app.desktop_runtime.migrate import main
 
-        dirs = {
-            "root": tmp_path,
-            "data": tmp_path / "data",
-            "mods": tmp_path / "mods",
-            "models": tmp_path / "models",
-            "backups": tmp_path / "backups",
-            "logs": tmp_path / "logs",
-        }
+        dirs = _shared_setup_case_0(tmp_path)
         with (
             patch("app.desktop_runtime.migrate.ensure_desktop_dirs", return_value=dirs),
             patch("app.desktop_runtime.migrate.configure_desktop_environment"),
@@ -171,14 +170,7 @@ class TestMigrateMain:
     def test_main_backup(self, tmp_path):
         from app.desktop_runtime.migrate import main
 
-        dirs = {
-            "root": tmp_path,
-            "data": tmp_path / "data",
-            "mods": tmp_path / "mods",
-            "models": tmp_path / "models",
-            "backups": tmp_path / "backups",
-            "logs": tmp_path / "logs",
-        }
+        dirs = _shared_setup_case_0(tmp_path)
         with (
             patch("app.desktop_runtime.migrate.ensure_desktop_dirs", return_value=dirs),
             patch("app.desktop_runtime.migrate.configure_desktop_environment"),
@@ -190,14 +182,7 @@ class TestMigrateMain:
     def test_main_export_config(self, tmp_path, capsys):
         from app.desktop_runtime.migrate import main
 
-        dirs = {
-            "root": tmp_path,
-            "data": tmp_path / "data",
-            "mods": tmp_path / "mods",
-            "models": tmp_path / "models",
-            "backups": tmp_path / "backups",
-            "logs": tmp_path / "logs",
-        }
+        dirs = _shared_setup_case_0(tmp_path)
         with (
             patch("app.desktop_runtime.migrate.ensure_desktop_dirs", return_value=dirs),
             patch("app.desktop_runtime.migrate.configure_desktop_environment"),
@@ -462,14 +447,7 @@ class TestModelsDir:
     def test_returns_path(self, tmp_path):
         from app.desktop_runtime.model_downloader import models_dir
 
-        dirs = {
-            "root": tmp_path,
-            "data": tmp_path / "data",
-            "mods": tmp_path / "mods",
-            "models": tmp_path / "models",
-            "backups": tmp_path / "backups",
-            "logs": tmp_path / "logs",
-        }
+        dirs = _shared_setup_case_0(tmp_path)
         with patch("app.desktop_runtime.model_downloader.ensure_desktop_dirs", return_value=dirs):
             d = models_dir(tmp_path)
         assert d == tmp_path / "models"
@@ -549,14 +527,7 @@ class TestDownloadModel:
         target_file = target_dir / "bert.bin"
         target_file.write_bytes(data)
 
-        dirs = {
-            "root": tmp_path,
-            "data": tmp_path / "data",
-            "mods": tmp_path / "mods",
-            "models": tmp_path / "models",
-            "backups": tmp_path / "backups",
-            "logs": tmp_path / "logs",
-        }
+        dirs = _shared_setup_case_0(tmp_path)
 
         with patch("app.desktop_runtime.model_downloader.ensure_desktop_dirs", return_value=dirs):
             result = download_model(asset, data_dir=tmp_path)
@@ -572,14 +543,7 @@ class TestDownloadModel:
             sha256="deadbeef" * 8,
             size=10,
         )
-        dirs = {
-            "root": tmp_path,
-            "data": tmp_path / "data",
-            "mods": tmp_path / "mods",
-            "models": tmp_path / "models",
-            "backups": tmp_path / "backups",
-            "logs": tmp_path / "logs",
-        }
+        dirs = _shared_setup_case_0(tmp_path)
 
         # Simulate network response with wrong data
         mock_response = MagicMock()
@@ -609,14 +573,7 @@ class TestDownloadModel:
             size=len(data),
         )
 
-        dirs = {
-            "root": tmp_path,
-            "data": tmp_path / "data",
-            "mods": tmp_path / "mods",
-            "models": tmp_path / "models",
-            "backups": tmp_path / "backups",
-            "logs": tmp_path / "logs",
-        }
+        dirs = _shared_setup_case_0(tmp_path)
 
         mock_response = MagicMock()
         mock_response.headers = {"Content-Length": str(len(data))}

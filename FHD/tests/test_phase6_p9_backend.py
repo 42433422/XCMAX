@@ -19,6 +19,7 @@ Coverage scenarios per 铁律3:
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager as _shared_scope_contextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -48,6 +49,51 @@ from app.neuro_bus.domains.shipment_domain_handlers import (
     get_shipment_domain_handlers,
     register_shipment_domain_handlers,
 )
+
+
+@_shared_scope_contextmanager
+def _shared_scope_handle_0(mock_core):
+    with (
+        patch(
+            "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core",
+            return_value=mock_core,
+        ),
+        patch(
+            "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
+        ) as mock_reply,
+    ):
+        yield mock_reply
+
+
+@_shared_scope_contextmanager
+def _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1):
+    with (
+        patch(
+            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
+            return_value=mock_exec,
+        ),
+        patch(
+            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
+            return_value=case_value_1,
+        ),
+    ):
+        yield None
+
+
+@_shared_scope_contextmanager
+def _shared_scope_load_mod_planner_tool_extensions_file_2(mod_dir):
+    with (
+        patch(
+            "app.mod_sdk.planner_tools._read_planner_manifest",
+            return_value={"config": {}},
+        ),
+        patch(
+            "app.mod_sdk.planner_tools._resolve_planner_mod_dir",
+            return_value=mod_dir,
+        ),
+    ):
+        yield None
+
 
 # ---------------------------------------------------------------------------
 # planner_tools — _truthy_env
@@ -547,16 +593,7 @@ def test_load_mod_planner_tool_extensions_file_list(tmp_path: Path) -> None:
     (cfg_dir / "planner_tool_extensions.json").write_text(
         json.dumps([{"function": {"name": "ext1"}}]), encoding="utf-8"
     )
-    with (
-        patch(
-            "app.mod_sdk.planner_tools._read_planner_manifest",
-            return_value={"config": {}},
-        ),
-        patch(
-            "app.mod_sdk.planner_tools._resolve_planner_mod_dir",
-            return_value=mod_dir,
-        ),
-    ):
+    with _shared_scope_load_mod_planner_tool_extensions_file_2(mod_dir):
         out = load_mod_planner_tool_extensions()
     assert out == [{"function": {"name": "ext1"}}]
 
@@ -568,16 +605,7 @@ def test_load_mod_planner_tool_extensions_file_dict_with_tools(tmp_path: Path) -
     (cfg_dir / "planner_tool_extensions.json").write_text(
         json.dumps({"tools": [{"function": {"name": "ext2"}}]}), encoding="utf-8"
     )
-    with (
-        patch(
-            "app.mod_sdk.planner_tools._read_planner_manifest",
-            return_value={"config": {}},
-        ),
-        patch(
-            "app.mod_sdk.planner_tools._resolve_planner_mod_dir",
-            return_value=mod_dir,
-        ),
-    ):
+    with _shared_scope_load_mod_planner_tool_extensions_file_2(mod_dir):
         out = load_mod_planner_tool_extensions()
     assert out == [{"function": {"name": "ext2"}}]
 
@@ -585,16 +613,7 @@ def test_load_mod_planner_tool_extensions_file_dict_with_tools(tmp_path: Path) -
 def test_load_mod_planner_tool_extensions_file_not_exist(tmp_path: Path) -> None:
     mod_dir = tmp_path / PLANNER_FACADE_MOD_ID
     mod_dir.mkdir()
-    with (
-        patch(
-            "app.mod_sdk.planner_tools._read_planner_manifest",
-            return_value={"config": {}},
-        ),
-        patch(
-            "app.mod_sdk.planner_tools._resolve_planner_mod_dir",
-            return_value=mod_dir,
-        ),
-    ):
+    with _shared_scope_load_mod_planner_tool_extensions_file_2(mod_dir):
         assert load_mod_planner_tool_extensions() == []
 
 
@@ -605,16 +624,7 @@ def test_load_mod_planner_tool_extensions_file_recoverable_error(
     cfg_dir = mod_dir / "config"
     cfg_dir.mkdir(parents=True)
     (cfg_dir / "planner_tool_extensions.json").write_text("bad-json", encoding="utf-8")
-    with (
-        patch(
-            "app.mod_sdk.planner_tools._read_planner_manifest",
-            return_value={"config": {}},
-        ),
-        patch(
-            "app.mod_sdk.planner_tools._resolve_planner_mod_dir",
-            return_value=mod_dir,
-        ),
-    ):
+    with _shared_scope_load_mod_planner_tool_extensions_file_2(mod_dir):
         assert load_mod_planner_tool_extensions() == []
 
 
@@ -805,16 +815,7 @@ def test_execute_planner_tool_from_body_no_name_returns_error() -> None:
 def test_execute_planner_tool_from_body_name_from_name_field() -> None:
     raw = '{"success": true}'
     mock_exec = MagicMock(return_value=raw)
-    with (
-        patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            return_value=mock_exec,
-        ),
-        patch(
-            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
-            return_value=False,
-        ),
-    ):
+    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=False):
         out = execute_planner_tool_from_body({"name": "my_tool", "arguments": {}})
     assert out["success"] is True
     assert out["tool_name"] == "my_tool"
@@ -827,16 +828,7 @@ def test_execute_planner_tool_from_body_name_from_name_field() -> None:
 def test_execute_planner_tool_from_body_mod_native_path() -> None:
     raw = '{"success": true, "source": "mod:xcagi-planner-excel-tools"}'
     mock_exec = MagicMock(return_value=raw)
-    with (
-        patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            return_value=mock_exec,
-        ),
-        patch(
-            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
-            return_value=True,
-        ),
-    ):
+    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=True):
         out = execute_planner_tool_from_body(
             {"tool_name": "excel", "args": {}, "db_write_token": 123}
         )
@@ -849,16 +841,7 @@ def test_execute_planner_tool_from_body_mod_native_path() -> None:
 def test_execute_planner_tool_from_body_mod_facade_path() -> None:
     raw = '{"success": true}'  # 无 source 字段
     mock_exec = MagicMock(return_value=raw)
-    with (
-        patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            return_value=mock_exec,
-        ),
-        patch(
-            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
-            return_value=True,
-        ),
-    ):
+    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=True):
         out = execute_planner_tool_from_body({"tool_name": "tool_x"})
     assert out["success"] is True
     assert out["execution_path"] == "mod_facade"
@@ -868,16 +851,7 @@ def test_execute_planner_tool_from_body_mod_facade_path() -> None:
 
 def test_execute_planner_tool_from_body_recoverable_error() -> None:
     mock_exec = MagicMock(side_effect=RuntimeError("exec boom"))
-    with (
-        patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            return_value=mock_exec,
-        ),
-        patch(
-            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
-            return_value=False,
-        ),
-    ):
+    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=False):
         out = execute_planner_tool_from_body({"tool_name": "fail_tool"})
     assert out["success"] is False
     assert out["error"] == "工具执行失败，请稍后重试"
@@ -888,16 +862,7 @@ def test_execute_planner_tool_from_body_recoverable_error() -> None:
 def test_execute_planner_tool_from_body_invalid_json_result() -> None:
     raw = "not-json"
     mock_exec = MagicMock(return_value=raw)
-    with (
-        patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            return_value=mock_exec,
-        ),
-        patch(
-            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
-            return_value=False,
-        ),
-    ):
+    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=False):
         out = execute_planner_tool_from_body({"tool_name": "tool_y"})
     assert out["success"] is False
     assert out["error"] == "工具执行返回了无效结果"
@@ -907,16 +872,7 @@ def test_execute_planner_tool_from_body_invalid_json_result() -> None:
 def test_execute_planner_tool_from_body_propagates_structured_failure() -> None:
     raw = '{"success": false, "error": "employee output is missing"}'
     mock_exec = MagicMock(return_value=raw)
-    with (
-        patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            return_value=mock_exec,
-        ),
-        patch(
-            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
-            return_value=True,
-        ),
-    ):
+    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=True):
         out = execute_planner_tool_from_body({"tool_name": "word-full-read-employee"})
     assert out["success"] is False
     assert out["error"] == "工具执行失败，请检查输入后重试"
@@ -930,16 +886,7 @@ def test_execute_planner_tool_from_body_workspace_root_from_env(
     raw = '{"success": true}'
     mock_exec = MagicMock(return_value=raw)
     monkeypatch.setenv("WORKSPACE_ROOT", "/custom/ws")
-    with (
-        patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            return_value=mock_exec,
-        ),
-        patch(
-            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
-            return_value=False,
-        ),
-    ):
+    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=False):
         execute_planner_tool_from_body({"tool_name": "tool_z"})
     # workspace_root 应来自 env
     assert mock_exec.call_args.args[2] == "/custom/ws"
@@ -954,16 +901,7 @@ def test_execute_planner_tool_from_body_uses_desktop_data_dir_before_cwd(
     mock_exec = MagicMock(return_value=raw)
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
     monkeypatch.setenv("XCAGI_DATA_DIR", "/desktop/user-data")
-    with (
-        patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            return_value=mock_exec,
-        ),
-        patch(
-            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
-            return_value=False,
-        ),
-    ):
+    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=False):
         execute_planner_tool_from_body({"tool_name": "word-generate-employee"})
     assert mock_exec.call_args.args[2] == "/desktop/user-data"
 
@@ -1151,15 +1089,7 @@ async def test_handle_shipment_created_happy_path(
     expected = {"success": True, "shipment_id": "S1"}
     mock_core = MagicMock()
     mock_core.create_shipment.return_value = expected
-    with (
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core",
-            return_value=mock_core,
-        ),
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
-        ) as mock_reply,
-    ):
+    with _shared_scope_handle_0(mock_core) as mock_reply:
         out = await handlers.handle_shipment_created(event)
     assert out == expected
     mock_core.create_shipment.assert_called_once_with(
@@ -1201,15 +1131,7 @@ async def test_handle_shipment_created_recoverable_error_propagates(
     event = _make_event({"shipment_id": "S1", "unit_name": "甲"})
     mock_core = MagicMock()
     mock_core.create_shipment.side_effect = RuntimeError("db down")
-    with (
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core",
-            return_value=mock_core,
-        ),
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
-        ) as mock_reply,
-    ):
+    with _shared_scope_handle_0(mock_core) as mock_reply:
         with pytest.raises(RuntimeError, match="db down"):
             await handlers.handle_shipment_created(event)
     mock_reply.assert_called_once()
@@ -1308,15 +1230,7 @@ async def test_handle_printed_happy_path(
     expected = {"success": True, "printed": True}
     mock_core = MagicMock()
     mock_core.mark_as_printed.return_value = expected
-    with (
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core",
-            return_value=mock_core,
-        ),
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
-        ) as mock_reply,
-    ):
+    with _shared_scope_handle_0(mock_core) as mock_reply:
         out = await handlers.handle_printed(event)
     assert out == expected
     mock_core.mark_as_printed.assert_called_once_with(42, "HP-LaserJet")
@@ -1350,15 +1264,7 @@ async def test_handle_printed_invalid_shipment_id_raises(
 ) -> None:
     event = _make_event({"shipment_id": "not-an-int"})
     mock_core = MagicMock()
-    with (
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core",
-            return_value=mock_core,
-        ),
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
-        ) as mock_reply,
-    ):
+    with _shared_scope_handle_0(mock_core) as mock_reply:
         # int("not-an-int") 抛 ValueError（属于 RECOVERABLE_ERRORS）
         with pytest.raises(ValueError):
             await handlers.handle_printed(event)
@@ -1374,15 +1280,7 @@ async def test_handle_printed_core_raises_recoverable(
     event = _make_event({"shipment_id": "1", "printer_name": "p"})
     mock_core = MagicMock()
     mock_core.mark_as_printed.side_effect = RuntimeError("printer offline")
-    with (
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core",
-            return_value=mock_core,
-        ),
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
-        ) as mock_reply,
-    ):
+    with _shared_scope_handle_0(mock_core) as mock_reply:
         with pytest.raises(RuntimeError, match="printer offline"):
             await handlers.handle_printed(event)
     mock_reply.assert_called_once()
@@ -1402,15 +1300,7 @@ async def test_handle_cancelled_happy_path(
     expected = {"success": True, "cancelled": True}
     mock_core = MagicMock()
     mock_core.cancel_shipment.return_value = expected
-    with (
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core",
-            return_value=mock_core,
-        ),
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
-        ) as mock_reply,
-    ):
+    with _shared_scope_handle_0(mock_core) as mock_reply:
         out = await handlers.handle_cancelled(event)
     assert out == expected
     mock_core.cancel_shipment.assert_called_once_with(5)
@@ -1442,15 +1332,7 @@ async def test_handle_cancelled_invalid_shipment_id_raises(
 ) -> None:
     event = _make_event({"shipment_id": None})
     mock_core = MagicMock()
-    with (
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core",
-            return_value=mock_core,
-        ),
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
-        ) as mock_reply,
-    ):
+    with _shared_scope_handle_0(mock_core) as mock_reply:
         with pytest.raises(ValueError, match="positive integer"):
             await handlers.handle_cancelled(event)
     mock_core.cancel_shipment.assert_not_called()
@@ -1464,15 +1346,7 @@ async def test_handle_cancelled_core_raises_recoverable(
     event = _make_event({"shipment_id": "1"})
     mock_core = MagicMock()
     mock_core.cancel_shipment.side_effect = ValueError("already cancelled")
-    with (
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core",
-            return_value=mock_core,
-        ),
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
-        ) as mock_reply,
-    ):
+    with _shared_scope_handle_0(mock_core) as mock_reply:
         with pytest.raises(ValueError, match="already cancelled"):
             await handlers.handle_cancelled(event)
     mock_reply.assert_called_once()
@@ -1492,15 +1366,7 @@ async def test_handle_deleted_happy_path(
     expected = {"success": True, "deleted": True}
     mock_core = MagicMock()
     mock_core.delete_shipment.return_value = expected
-    with (
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core",
-            return_value=mock_core,
-        ),
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
-        ) as mock_reply,
-    ):
+    with _shared_scope_handle_0(mock_core) as mock_reply:
         out = await handlers.handle_deleted(event)
     assert out == expected
     mock_core.delete_shipment.assert_called_once_with(99)
@@ -1513,15 +1379,7 @@ async def test_handle_deleted_invalid_shipment_id_raises(
 ) -> None:
     event = _make_event({"shipment_id": "abc"})
     mock_core = MagicMock()
-    with (
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core",
-            return_value=mock_core,
-        ),
-        patch(
-            "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
-        ) as mock_reply,
-    ):
+    with _shared_scope_handle_0(mock_core) as mock_reply:
         with pytest.raises(ValueError):
             await handlers.handle_deleted(event)
     mock_core.delete_shipment.assert_not_called()

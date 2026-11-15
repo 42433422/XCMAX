@@ -14,6 +14,23 @@ from modstore_server.employee_autonomy_service import (
 )
 
 
+def _shared_setup_validate_proposal_rejects_0(case_value_1, case_value_2, case_value_3):
+    bad_proposal = {
+        "proposal_id": "x",
+        "department": case_value_1,
+        "employee_pack": {
+            "name": "x",
+            "prompt_template": "x",
+            "skills": [],
+            "tools": [],
+            "acceptance_criteria": [],
+        },
+        "estimated_files": case_value_2,
+        "estimated_tokens": case_value_3,
+    }
+    return bad_proposal
+
+
 def _make_signal(source: str = "intent_benchmark", score: float = 0.08) -> dict:
     return {
         "legacy_usage": {"signal_score": 0.0 if source != "legacy_usage" else score},
@@ -63,55 +80,25 @@ def test_propose_employee_pack_returns_valid_schema():
 
 
 def test_validate_proposal_rejects_too_many_files():
-    bad_proposal = {
-        "proposal_id": "x",
-        "department": "engineering",
-        "employee_pack": {
-            "name": "x",
-            "prompt_template": "x",
-            "skills": [],
-            "tools": [],
-            "acceptance_criteria": [],
-        },
-        "estimated_files": 7,
-        "estimated_tokens": 10000,
-    }
+    bad_proposal = _shared_setup_validate_proposal_rejects_0(
+        case_value_1="engineering", case_value_2=7, case_value_3=10000
+    )
     with pytest.raises(ProposalValidationError, match="estimated_files"):
         validate_proposal(bad_proposal)
 
 
 def test_validate_proposal_rejects_high_token_budget():
-    bad_proposal = {
-        "proposal_id": "x",
-        "department": "engineering",
-        "employee_pack": {
-            "name": "x",
-            "prompt_template": "x",
-            "skills": [],
-            "tools": [],
-            "acceptance_criteria": [],
-        },
-        "estimated_files": 3,
-        "estimated_tokens": 200000,
-    }
+    bad_proposal = _shared_setup_validate_proposal_rejects_0(
+        case_value_1="engineering", case_value_2=3, case_value_3=200000
+    )
     with pytest.raises(ProposalValidationError, match="estimated_tokens"):
         validate_proposal(bad_proposal)
 
 
 def test_validate_proposal_rejects_invalid_department():
-    bad_proposal = {
-        "proposal_id": "x",
-        "department": "marketing",
-        "employee_pack": {
-            "name": "x",
-            "prompt_template": "x",
-            "skills": [],
-            "tools": [],
-            "acceptance_criteria": [],
-        },
-        "estimated_files": 3,
-        "estimated_tokens": 10000,
-    }
+    bad_proposal = _shared_setup_validate_proposal_rejects_0(
+        case_value_1="marketing", case_value_2=3, case_value_3=10000
+    )
     with pytest.raises(ProposalValidationError, match="department"):
         validate_proposal(bad_proposal)
 

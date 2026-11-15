@@ -10,10 +10,35 @@ _local_surface_page, _local_lane_pages, _load_local_lane_surface.
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager as _shared_scope_contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(case_value_1, case_value_2, case_value_3):
+    with (
+        patch(
+            "app.fastapi_routes.market_account.session_id_from_request",
+            return_value="",
+        ),
+        patch(
+            "app.application.surface_audit_demo_account.demo_username",
+            return_value=case_value_1,
+        ),
+        patch(
+            "app.application.surface_audit_demo_account.demo_password",
+            return_value=case_value_2,
+        ),
+        patch(
+            "app.fastapi_routes.market_account.login_market_with_password",
+            new_callable=AsyncMock,
+            return_value={"success": True, "token": case_value_3},
+        ),
+    ):
+        yield None
 
 
 def _assert_shared_software_terminal_home_hub_hero_0(
@@ -67,25 +92,7 @@ class TestResolveMarketAuthorization:
         monkeypatch.delenv("MODSTORE_DIGEST_ADMIN_PASSWORD", raising=False)
 
         request = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.market_account.session_id_from_request",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_username",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_password",
-                return_value="",
-            ),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_password",
-                new_callable=AsyncMock,
-                return_value={"success": True, "token": "env_token"},
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="", case_value_2="", case_value_3="env_token"):
             result = await _resolve_market_authorization(request)
         assert result == "env_token"
 
@@ -126,25 +133,7 @@ class TestResolveMarketAuthorization:
         monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_PASSWORD", "digest_pass")
 
         request = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.market_account.session_id_from_request",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_username",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_password",
-                return_value="",
-            ),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_password",
-                new_callable=AsyncMock,
-                return_value={"success": True, "token": "digest_token"},
-            ),
-        ):
+        with _shared_scope_case_0(case_value_1="", case_value_2="", case_value_3="digest_token"):
             result = await _resolve_market_authorization(request)
         assert result == "digest_token"
 
@@ -158,24 +147,8 @@ class TestResolveMarketAuthorization:
         monkeypatch.delenv("MODSTORE_DIGEST_ADMIN_PASSWORD", raising=False)
 
         request = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.market_account.session_id_from_request",
-                return_value="",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_username",
-                return_value="demo_user",
-            ),
-            patch(
-                "app.application.surface_audit_demo_account.demo_password",
-                return_value="demo_pass",
-            ),
-            patch(
-                "app.fastapi_routes.market_account.login_market_with_password",
-                new_callable=AsyncMock,
-                return_value={"success": True, "token": "demo_token"},
-            ),
+        with _shared_scope_case_0(
+            case_value_1="demo_user", case_value_2="demo_pass", case_value_3="demo_token"
         ):
             result = await _resolve_market_authorization(request)
         assert result == "demo_token"

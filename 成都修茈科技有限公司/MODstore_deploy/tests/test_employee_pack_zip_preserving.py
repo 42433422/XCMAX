@@ -21,8 +21,8 @@ from modstore_server.word_extract_runtime import (
 from modstore_server.workbench_api import _employee_handlers_contract_ok
 
 
-def test_build_zip_for_library_includes_vendor(tmp_path: Path, monkeypatch):
-    brief = "Word 文档全量提取，输出 JSON 和 txt"
+def _shared_setup_case_0(case_value_1):
+    brief = case_value_1
     rule_spec = build_word_extract_rule_spec(brief)
     manifest = {
         "id": "word-full-extract-employee",
@@ -35,6 +35,13 @@ def test_build_zip_for_library_includes_vendor(tmp_path: Path, monkeypatch):
         rule_spec=rule_spec,
         asset_manifest={"assets": []},
         generated_convert_py=None,
+    )
+    return brief, rule_spec, manifest, pack_dir, _
+
+
+def test_build_zip_for_library_includes_vendor(tmp_path: Path, monkeypatch):
+    brief, rule_spec, manifest, pack_dir, _ = _shared_setup_case_0(
+        case_value_1="Word 文档全量提取，输出 JSON 和 txt"
     )
     lib = tmp_path / "library"
     lib.mkdir()
@@ -49,14 +56,18 @@ def test_build_zip_for_library_includes_vendor(tmp_path: Path, monkeypatch):
 
     mf = json.loads((target / "manifest.json").read_text(encoding="utf-8"))
     mf["actions"] = {"handlers": ["direct_python"]}
-    raw = build_employee_pack_zip_for_library("word-full-extract-employee", mf, pack_dir=target)
+    raw = build_employee_pack_zip_for_library(
+        "word-full-extract-employee", mf, pack_dir=target
+    )
     with zipfile.ZipFile(io.BytesIO(raw), "r") as zf:
         names = zf.namelist()
     assert any("backend/vendor" in n and "convert.py" in n for n in names)
     assert any(n.endswith("rule_spec.json") for n in names)
 
 
-def test_build_zip_for_library_rejects_word_without_runtime(tmp_path: Path, monkeypatch):
+def test_build_zip_for_library_rejects_word_without_runtime(
+    tmp_path: Path, monkeypatch
+):
     lib = tmp_path / "library"
     lib.mkdir()
     monkeypatch.setattr(
@@ -85,26 +96,17 @@ def test_handlers_contract_fails_without_rule_spec_but_canvas_direct_python(
         "actions": {"handlers": ["direct_python"]},
         "perception": {"accepted_extensions": [".docx"]},
     }
-    (pack_dir / "manifest.json").write_text(json.dumps(mf, ensure_ascii=False), encoding="utf-8")
+    (pack_dir / "manifest.json").write_text(
+        json.dumps(mf, ensure_ascii=False), encoding="utf-8"
+    )
     ok, msg = _employee_handlers_contract_ok(pack_dir)
     assert not ok
     assert "generate" in msg or "vendor" in msg or "rule_spec" in msg
 
 
 def test_handlers_contract_passes_with_materialized_pack():
-    brief = "Word 全量提取 docx 输出 JSON"
-    rule_spec = build_word_extract_rule_spec(brief)
-    manifest = {
-        "id": "word-full-extract-employee",
-        "name": "Word 全量提取员",
-        "version": "1.0.0",
-        "employee_config_v2": {"actions": {"handlers": ["direct_python"]}},
-    }
-    pack_dir, _ = materialize_asset_employee_pack(
-        manifest=manifest,
-        rule_spec=rule_spec,
-        asset_manifest={"assets": []},
-        generated_convert_py=None,
+    brief, rule_spec, manifest, pack_dir, _ = _shared_setup_case_0(
+        case_value_1="Word 全量提取 docx 输出 JSON"
     )
     assert pack_has_direct_python_runtime(pack_dir)
     ok, msg = _employee_handlers_contract_ok(pack_dir)
@@ -117,19 +119,8 @@ def test_handlers_contract_passes_with_materialized_pack():
 
 
 def test_persist_manifest_does_not_remove_vendor(tmp_path: Path):
-    brief = "Word 全量提取"
-    rule_spec = build_word_extract_rule_spec(brief)
-    manifest = {
-        "id": "word-full-extract-employee",
-        "name": "Word 全量提取员",
-        "version": "1.0.0",
-        "employee_config_v2": {"actions": {"handlers": ["direct_python"]}},
-    }
-    pack_dir, _ = materialize_asset_employee_pack(
-        manifest=manifest,
-        rule_spec=rule_spec,
-        asset_manifest={"assets": []},
-        generated_convert_py=None,
+    brief, rule_spec, manifest, pack_dir, _ = _shared_setup_case_0(
+        case_value_1="Word 全量提取"
     )
     vendor_before = list((pack_dir / "backend").rglob("convert.py"))
     assert vendor_before

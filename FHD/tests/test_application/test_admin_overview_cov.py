@@ -19,6 +19,22 @@ import pytest
 
 from app.application.autonomy import admin_overview as ao
 
+
+def _shared_setup_case_0(case_value_1):
+    prs = [
+        {
+            "number": 1,
+            "title": "PR 1",
+            "url": "u1",
+            "labels": [],
+            "updatedAt": "2026-07-01",
+            "author": None,
+            "headRefName": case_value_1,
+        }
+    ]
+    return prs
+
+
 # ---------------------------------------------------------------------------
 # Path / env-var resolution helpers
 # ---------------------------------------------------------------------------
@@ -811,17 +827,7 @@ class TestListGithubHumanItems:
         assert data["items"][0]["author"] == "string-author"
 
     def test_author_none_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        prs = [
-            {
-                "number": 1,
-                "title": "PR 1",
-                "url": "u1",
-                "labels": [],
-                "updatedAt": "2026-07-01",
-                "author": None,
-                "headRefName": "b1",
-            }
-        ]
+        prs = _shared_setup_case_0(case_value_1="b1")
 
         def _fake_run(args, **kwargs):
             if "pr" in args:
@@ -903,17 +909,7 @@ class TestListGithubHumanItems:
         assert data["count"] == 4
 
     def test_limit_none_defaults_to_30(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        prs = [
-            {
-                "number": 1,
-                "title": "PR 1",
-                "url": "u1",
-                "labels": [],
-                "updatedAt": "2026-07-01",
-                "author": None,
-                "headRefName": "b",
-            }
-        ]
+        prs = _shared_setup_case_0(case_value_1="b")
 
         def _fake_run(args, **kwargs):
             if "pr" in args:
@@ -968,17 +964,7 @@ class TestListGithubHumanItems:
     def test_available_true_when_items_exist_despite_errors(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        prs = [
-            {
-                "number": 1,
-                "title": "PR 1",
-                "url": "u1",
-                "labels": [],
-                "updatedAt": "2026-07-01",
-                "author": None,
-                "headRefName": "b",
-            }
-        ]
+        prs = _shared_setup_case_0(case_value_1="b")
 
         def _fake_run(args, **kwargs):
             if "pr" in args:

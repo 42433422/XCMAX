@@ -6,6 +6,19 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+
+def _shared_setup_rate_limiter_high_rate_0(monkeypatch, case_value_1, case_value_2):
+    monkeypatch.setenv("MODSTORE_RATE_LIMIT", case_value_1)
+    monkeypatch.setenv("MODSTORE_RATE_LIMIT_HIGH", case_value_2)
+    monkeypatch.setenv("MODSTORE_RATE_WINDOW", "60")
+    monkeypatch.delenv("MODSTORE_REDIS_URL", raising=False)
+
+    from modstore_server.api.rate_limiter import RateLimiterMiddleware
+
+    app = FastAPI()
+    return RateLimiterMiddleware, app
+
+
 pytest.importorskip("starlette")
 
 
@@ -55,14 +68,9 @@ def test_rate_limiter_returns_429_when_exceeded(monkeypatch):
 def test_rate_limiter_high_rate_get_polling_override(monkeypatch):
     """工作台轮询端点（GET /api/workbench/sessions/{sid}）必须使用更高上限，
     避免 ~450ms 周期的合法轮询触发 429。"""
-    monkeypatch.setenv("MODSTORE_RATE_LIMIT", "2")
-    monkeypatch.setenv("MODSTORE_RATE_LIMIT_HIGH", "20")
-    monkeypatch.setenv("MODSTORE_RATE_WINDOW", "60")
-    monkeypatch.delenv("MODSTORE_REDIS_URL", raising=False)
-
-    from modstore_server.api.rate_limiter import RateLimiterMiddleware
-
-    app = FastAPI()
+    RateLimiterMiddleware, app = _shared_setup_rate_limiter_high_rate_0(
+        monkeypatch, case_value_1="2", case_value_2="20"
+    )
 
     @app.get("/api/workbench/sessions/{sid}")
     def poll(sid: str):
@@ -76,14 +84,9 @@ def test_rate_limiter_high_rate_get_polling_override(monkeypatch):
 
 def test_rate_limiter_high_rate_override_does_not_apply_to_post(monkeypatch):
     """启动会话（POST /api/workbench/sessions）属于昂贵写入，仍走全局限额。"""
-    monkeypatch.setenv("MODSTORE_RATE_LIMIT", "2")
-    monkeypatch.setenv("MODSTORE_RATE_LIMIT_HIGH", "200")
-    monkeypatch.setenv("MODSTORE_RATE_WINDOW", "60")
-    monkeypatch.delenv("MODSTORE_REDIS_URL", raising=False)
-
-    from modstore_server.api.rate_limiter import RateLimiterMiddleware
-
-    app = FastAPI()
+    RateLimiterMiddleware, app = _shared_setup_rate_limiter_high_rate_0(
+        monkeypatch, case_value_1="2", case_value_2="200"
+    )
 
     @app.post("/api/workbench/sessions")
     def start():
@@ -99,14 +102,9 @@ def test_rate_limiter_high_rate_override_does_not_apply_to_post(monkeypatch):
 
 def test_rate_limiter_high_rate_post_tts_override(monkeypatch):
     """流式 TTS 连续 POST 多句，需高于默认 60/min。"""
-    monkeypatch.setenv("MODSTORE_RATE_LIMIT", "2")
-    monkeypatch.setenv("MODSTORE_RATE_LIMIT_HIGH", "20")
-    monkeypatch.setenv("MODSTORE_RATE_WINDOW", "60")
-    monkeypatch.delenv("MODSTORE_REDIS_URL", raising=False)
-
-    from modstore_server.api.rate_limiter import RateLimiterMiddleware
-
-    app = FastAPI()
+    RateLimiterMiddleware, app = _shared_setup_rate_limiter_high_rate_0(
+        monkeypatch, case_value_1="2", case_value_2="20"
+    )
 
     @app.post("/api/workbench/tts/edge/stream")
     def tts_stream():
@@ -120,14 +118,9 @@ def test_rate_limiter_high_rate_post_tts_override(monkeypatch):
 
 def test_rate_limiter_high_rate_market_catalog_override(monkeypatch):
     """AI 市场目录 GET 使用高频只读限额，避免反代共 IP 时误伤 429。"""
-    monkeypatch.setenv("MODSTORE_RATE_LIMIT", "2")
-    monkeypatch.setenv("MODSTORE_RATE_LIMIT_HIGH", "20")
-    monkeypatch.setenv("MODSTORE_RATE_WINDOW", "60")
-    monkeypatch.delenv("MODSTORE_REDIS_URL", raising=False)
-
-    from modstore_server.api.rate_limiter import RateLimiterMiddleware
-
-    app = FastAPI()
+    RateLimiterMiddleware, app = _shared_setup_rate_limiter_high_rate_0(
+        monkeypatch, case_value_1="2", case_value_2="20"
+    )
 
     @app.get("/api/market/catalog")
     def catalog():
@@ -161,14 +154,9 @@ def test_rate_limiter_uses_x_forwarded_for(monkeypatch):
 
 def test_rate_limiter_high_rate_limit_floor(monkeypatch):
     """``MODSTORE_RATE_LIMIT_HIGH`` 不允许低于全局 limit；命中时退化为全局值。"""
-    monkeypatch.setenv("MODSTORE_RATE_LIMIT", "5")
-    monkeypatch.setenv("MODSTORE_RATE_LIMIT_HIGH", "1")
-    monkeypatch.setenv("MODSTORE_RATE_WINDOW", "60")
-    monkeypatch.delenv("MODSTORE_REDIS_URL", raising=False)
-
-    from modstore_server.api.rate_limiter import RateLimiterMiddleware
-
-    app = FastAPI()
+    RateLimiterMiddleware, app = _shared_setup_rate_limiter_high_rate_0(
+        monkeypatch, case_value_1="5", case_value_2="1"
+    )
 
     @app.get("/api/workbench/sessions/{sid}")
     def poll(sid: str):

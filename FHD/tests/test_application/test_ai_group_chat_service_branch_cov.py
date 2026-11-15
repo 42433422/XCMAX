@@ -58,6 +58,27 @@ from tests.pure_builders import department_catalog as fake_departments
 from tests.pure_builders import enterprise_department_catalog as fake_enterprise_departments
 
 
+def _shared_setup_append_relay_work_report_0(group, case_value_1, case_value_2, case_value_3):
+    task = {
+        "task_id": case_value_1,
+        "relay_id": "relay-1",
+        "kind": "codex.invoke",
+        "status": "completed",
+        "created_by_user_id": 1,
+        "payload": {
+            "message": case_value_2,
+            "context": {
+                "source": "mobile_ai_group",
+                "group_id": group["id"],
+                "employee_id": case_value_3,
+                "work_order_id": "wo1",
+            },
+        },
+        "result": {"ok": True, "summary": "完成了"},
+    }
+    return task
+
+
 def _assert_shared_relay_report_message_filters_by_user_id_0(
     self, tmp_path, _shared_literal_0, _shared_literal_1, _shared_literal_2, _shared_literal_3
 ):
@@ -1855,23 +1876,9 @@ class TestAppendRelayWorkReport:
         svc.add_member(
             user_id=1, group_id=group["id"], member={"employee_id": "e1", "name": "小销"}
         )
-        task = {
-            "task_id": "relay-task-1",
-            "relay_id": "relay-1",
-            "kind": "codex.invoke",
-            "status": "completed",
-            "created_by_user_id": 1,
-            "payload": {
-                "message": "测试",
-                "context": {
-                    "source": "mobile_ai_group",
-                    "group_id": group["id"],
-                    "employee_id": "e1",
-                    "work_order_id": "wo1",
-                },
-            },
-            "result": {"ok": True, "summary": "完成了"},
-        }
+        task = _shared_setup_append_relay_work_report_0(
+            group, case_value_1="relay-task-1", case_value_2="测试", case_value_3="e1"
+        )
         first = svc.append_relay_work_report(task=task)
         assert first is not None
         second = svc.append_relay_work_report(task=task)
@@ -1884,23 +1891,9 @@ class TestAppendRelayWorkReport:
         svc.add_member(
             user_id=1, group_id=group["id"], member={"employee_id": "e1", "name": "小销"}
         )
-        task = {
-            "task_id": "relay-task-new",
-            "relay_id": "relay-1",
-            "kind": "codex.invoke",
-            "status": "completed",
-            "created_by_user_id": 1,
-            "payload": {
-                "message": "新任务",
-                "context": {
-                    "source": "mobile_ai_group",
-                    "group_id": group["id"],
-                    "employee_id": "e1",
-                    "work_order_id": "wo1",
-                },
-            },
-            "result": {"ok": True, "summary": "完成了"},
-        }
+        task = _shared_setup_append_relay_work_report_0(
+            group, case_value_1="relay-task-new", case_value_2="新任务", case_value_3="e1"
+        )
         result = svc.append_relay_work_report(task=task)
         assert result is not None
         assert result["kind"] == "relay_work_report"
@@ -1909,23 +1902,9 @@ class TestAppendRelayWorkReport:
     def test_append_relay_work_report_with_member_not_in_group(self, tmp_path: Path):
         svc = make_service(tmp_path)
         group = svc.create_group(user_id=1, name="test")
-        task = {
-            "task_id": "relay-task-x",
-            "relay_id": "relay-1",
-            "kind": "codex.invoke",
-            "status": "completed",
-            "created_by_user_id": 1,
-            "payload": {
-                "message": "测试",
-                "context": {
-                    "source": "mobile_ai_group",
-                    "group_id": group["id"],
-                    "employee_id": "nonexistent-emp",
-                    "work_order_id": "wo1",
-                },
-            },
-            "result": {"ok": True, "summary": "完成了"},
-        }
+        task = _shared_setup_append_relay_work_report_0(
+            group, case_value_1="relay-task-x", case_value_2="测试", case_value_3="nonexistent-emp"
+        )
         result = svc.append_relay_work_report(task=task)
         assert result is not None
         assert result["sender_id"] == "nonexistent-emp"

@@ -26,6 +26,32 @@ from app.infrastructure.mods.install_resolver import (
 )
 from app.infrastructure.mods.package import ModPackageError, ModSignatureError
 
+
+def _shared_setup_case_0(resolver, rb, mock_rb):
+    ok, msg, data = resolver._install_bundle_zip(
+        "/path/to/bundle.xcmod",
+        "/store",
+        verify_signature=True,
+        activate=True,
+        depth=0,
+        rollback_stack=rb,
+    )
+    mock_rb.assert_called_once_with(rb)
+    return ok, msg, data
+
+
+def _shared_setup_case_1(resolver):
+    ok, msg, data = resolver._install_bundle_zip(
+        "/path/to/bundle.xcmod",
+        "/store",
+        verify_signature=True,
+        activate=True,
+        depth=0,
+        rollback_stack=[],
+    )
+    return ok, msg, data
+
+
 # ---------------------------------------------------------------------------
 # Helper fixtures
 # ---------------------------------------------------------------------------
@@ -477,15 +503,7 @@ class TestInstallBundleZipEdgeCases:
             patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
             patch.object(resolver, "_rollback") as mock_rb,
         ):
-            ok, msg, data = resolver._install_bundle_zip(
-                "/path/to/bundle.xcmod",
-                "/store",
-                verify_signature=True,
-                activate=True,
-                depth=0,
-                rollback_stack=rb,
-            )
-            mock_rb.assert_called_once_with(rb)
+            ok, msg, data = _shared_setup_case_0(resolver, rb, mock_rb)
 
         assert ok is False
         assert "error1" in msg
@@ -508,14 +526,7 @@ class TestInstallBundleZipEdgeCases:
             ),
             patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
         ):
-            ok, msg, data = resolver._install_bundle_zip(
-                "/path/to/bundle.xcmod",
-                "/store",
-                verify_signature=True,
-                activate=True,
-                depth=0,
-                rollback_stack=[],
-            )
+            ok, msg, data = _shared_setup_case_1(resolver)
 
         assert ok is True
 
@@ -536,14 +547,7 @@ class TestInstallBundleZipEdgeCases:
             ),
             patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
         ):
-            ok, msg, data = resolver._install_bundle_zip(
-                "/path/to/bundle.xcmod",
-                "/store",
-                verify_signature=True,
-                activate=True,
-                depth=0,
-                rollback_stack=[],
-            )
+            ok, msg, data = _shared_setup_case_1(resolver)
 
         assert ok is True
 
@@ -566,15 +570,7 @@ class TestInstallBundleZipEdgeCases:
             patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
             patch.object(resolver, "_rollback") as mock_rb,
         ):
-            ok, msg, data = resolver._install_bundle_zip(
-                "/path/to/bundle.xcmod",
-                "/store",
-                verify_signature=True,
-                activate=True,
-                depth=0,
-                rollback_stack=rb,
-            )
-            mock_rb.assert_called_once_with(rb)
+            ok, msg, data = _shared_setup_case_0(resolver, rb, mock_rb)
 
         assert ok is False
         assert "缺少嵌入文件" in msg
@@ -607,15 +603,7 @@ class TestInstallBundleZipEdgeCases:
                 return_value=(False, "inner install failed", None),
             ),
         ):
-            ok, msg, data = resolver._install_bundle_zip(
-                "/path/to/bundle.xcmod",
-                "/store",
-                verify_signature=True,
-                activate=True,
-                depth=0,
-                rollback_stack=rb,
-            )
-            mock_rb.assert_called_once_with(rb)
+            ok, msg, data = _shared_setup_case_0(resolver, rb, mock_rb)
 
         assert ok is False
         assert "安装嵌入失败" in msg
@@ -637,14 +625,7 @@ class TestInstallBundleZipEdgeCases:
             ),
             patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
         ):
-            ok, msg, data = resolver._install_bundle_zip(
-                "/path/to/bundle.xcmod",
-                "/store",
-                verify_signature=True,
-                activate=True,
-                depth=0,
-                rollback_stack=[],
-            )
+            ok, msg, data = _shared_setup_case_1(resolver)
 
         assert ok is True
 
@@ -665,14 +646,7 @@ class TestInstallBundleZipEdgeCases:
             ),
             patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
         ):
-            ok, msg, data = resolver._install_bundle_zip(
-                "/path/to/bundle.xcmod",
-                "/store",
-                verify_signature=True,
-                activate=True,
-                depth=0,
-                rollback_stack=[],
-            )
+            ok, msg, data = _shared_setup_case_1(resolver)
 
         assert ok is True
 
@@ -761,15 +735,7 @@ class TestInstallBundleZipEdgeCases:
             patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
             patch.object(resolver, "_rollback") as mock_rb,
         ):
-            ok, msg, data = resolver._install_bundle_zip(
-                "/path/to/bundle.xcmod",
-                "/store",
-                verify_signature=True,
-                activate=True,
-                depth=0,
-                rollback_stack=rb,
-            )
-            mock_rb.assert_called_once_with(rb)
+            ok, msg, data = _shared_setup_case_0(resolver, rb, mock_rb)
 
         assert ok is False
         assert "签名验证失败" in msg
@@ -786,15 +752,7 @@ class TestInstallBundleZipEdgeCases:
             patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
             patch.object(resolver, "_rollback") as mock_rb,
         ):
-            ok, msg, data = resolver._install_bundle_zip(
-                "/path/to/bundle.xcmod",
-                "/store",
-                verify_signature=True,
-                activate=True,
-                depth=0,
-                rollback_stack=rb,
-            )
-            mock_rb.assert_called_once_with(rb)
+            ok, msg, data = _shared_setup_case_0(resolver, rb, mock_rb)
 
         assert ok is False
         assert "bad package" in msg
@@ -811,15 +769,7 @@ class TestInstallBundleZipEdgeCases:
             patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
             patch.object(resolver, "_rollback") as mock_rb,
         ):
-            ok, msg, data = resolver._install_bundle_zip(
-                "/path/to/bundle.xcmod",
-                "/store",
-                verify_signature=True,
-                activate=True,
-                depth=0,
-                rollback_stack=rb,
-            )
-            mock_rb.assert_called_once_with(rb)
+            ok, msg, data = _shared_setup_case_0(resolver, rb, mock_rb)
 
         assert ok is False
         assert "unexpected error" in msg

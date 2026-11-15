@@ -5,9 +5,27 @@ Covers event-primary enabled/disabled branches, dispatch timeout, run_cmd error 
 
 from __future__ import annotations
 
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+
+@_shared_scope_contextmanager
+def _shared_scope_event_primary_enabled_dispatches_command_0(facade):
+    with (
+        patch(
+            "app.application.facades.shipment_event_primary.is_event_primary_enabled",
+            return_value=True,
+        ),
+        patch(
+            "app.application.facades.shipment_event_primary._neuro_runtime_ready",
+            return_value=True,
+        ),
+        patch.object(facade, "_dispatch_command", new=MagicMock(return_value=object())),
+        patch.object(facade, "_run_cmd", return_value={"success": True}) as mock_run,
+    ):
+        yield mock_run
 
 
 def _make_facade():
@@ -50,18 +68,7 @@ class TestCreateShipment:
 
     def test_event_primary_enabled_dispatches_command(self):
         facade, core = _make_facade()
-        with (
-            patch(
-                "app.application.facades.shipment_event_primary.is_event_primary_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.application.facades.shipment_event_primary._neuro_runtime_ready",
-                return_value=True,
-            ),
-            patch.object(facade, "_dispatch_command", new=MagicMock(return_value=object())),
-            patch.object(facade, "_run_cmd", return_value={"success": True}) as mock_run,
-        ):
+        with _shared_scope_event_primary_enabled_dispatches_command_0(facade) as mock_run:
             result = facade.create_shipment("Acme", [{"name": "P"}], "c", "p")
         assert result == {"success": True}
         mock_run.assert_called_once()
@@ -81,18 +88,7 @@ class TestCancelShipment:
 
     def test_event_primary_enabled_dispatches_command(self):
         facade, core = _make_facade()
-        with (
-            patch(
-                "app.application.facades.shipment_event_primary.is_event_primary_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.application.facades.shipment_event_primary._neuro_runtime_ready",
-                return_value=True,
-            ),
-            patch.object(facade, "_dispatch_command", new=MagicMock(return_value=object())),
-            patch.object(facade, "_run_cmd", return_value={"success": True}) as mock_run,
-        ):
+        with _shared_scope_event_primary_enabled_dispatches_command_0(facade) as mock_run:
             result = facade.cancel_shipment(5)
         assert result == {"success": True}
         mock_run.assert_called_once()
@@ -112,18 +108,7 @@ class TestDeleteShipment:
 
     def test_event_primary_enabled_dispatches_command(self):
         facade, core = _make_facade()
-        with (
-            patch(
-                "app.application.facades.shipment_event_primary.is_event_primary_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.application.facades.shipment_event_primary._neuro_runtime_ready",
-                return_value=True,
-            ),
-            patch.object(facade, "_dispatch_command", new=MagicMock(return_value=object())),
-            patch.object(facade, "_run_cmd", return_value={"success": True}) as mock_run,
-        ):
+        with _shared_scope_event_primary_enabled_dispatches_command_0(facade) as mock_run:
             result = facade.delete_shipment(5)
         assert result == {"success": True}
         mock_run.assert_called_once()
@@ -143,18 +128,7 @@ class TestMarkAsPrinted:
 
     def test_event_primary_enabled_dispatches_command(self):
         facade, core = _make_facade()
-        with (
-            patch(
-                "app.application.facades.shipment_event_primary.is_event_primary_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.application.facades.shipment_event_primary._neuro_runtime_ready",
-                return_value=True,
-            ),
-            patch.object(facade, "_dispatch_command", new=MagicMock(return_value=object())),
-            patch.object(facade, "_run_cmd", return_value={"success": True}) as mock_run,
-        ):
+        with _shared_scope_event_primary_enabled_dispatches_command_0(facade) as mock_run:
             result = facade.mark_as_printed(5, "printer1")
         assert result == {"success": True}
         mock_run.assert_called_once()

@@ -7,10 +7,7 @@ from retort_engine.contracts import validate_contract
 from retort_engine.task_prioritization import build_task_prioritization_report
 
 
-def test_build_task_prioritization_report_uses_queue_and_results(
-    tmp_path: Path,
-) -> None:
-    project = tmp_path / "project"
+def _shared_setup_case_0(project, case_value_1):
     queue = project / ".retort" / "employee_queue.jsonl"
     results = project / ".retort" / "employee_results"
     queue.parent.mkdir(parents=True)
@@ -26,14 +23,20 @@ def test_build_task_prioritization_report_uses_queue_and_results(
                     {"task": {"dimension": "comparative_analysis_depth"}},
                     ensure_ascii=False,
                 ),
-                json.dumps(
-                    {"task": {"dimension": "product_operability"}}, ensure_ascii=False
-                ),
+                json.dumps({"task": {"dimension": case_value_1}}, ensure_ascii=False),
             ]
         )
         + "\n",
         encoding="utf-8",
     )
+    return queue, results
+
+
+def test_build_task_prioritization_report_uses_queue_and_results(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    queue, results = _shared_setup_case_0(project, case_value_1="product_operability")
     (results / "run.json").write_text(
         json.dumps(
             {
@@ -67,29 +70,7 @@ def test_task_prioritization_lets_employee_feedback_raise_priority(
     tmp_path: Path,
 ) -> None:
     project = tmp_path / "project"
-    queue = project / ".retort" / "employee_queue.jsonl"
-    results = project / ".retort" / "employee_results"
-    queue.parent.mkdir(parents=True)
-    results.mkdir(parents=True)
-    queue.write_text(
-        "\n".join(
-            [
-                json.dumps(
-                    {"task": {"dimension": "comparative_analysis_depth"}},
-                    ensure_ascii=False,
-                ),
-                json.dumps(
-                    {"task": {"dimension": "comparative_analysis_depth"}},
-                    ensure_ascii=False,
-                ),
-                json.dumps(
-                    {"task": {"dimension": "feedback_loop_closure"}}, ensure_ascii=False
-                ),
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    queue, results = _shared_setup_case_0(project, case_value_1="feedback_loop_closure")
     (results / "run.json").write_text(
         json.dumps(
             {

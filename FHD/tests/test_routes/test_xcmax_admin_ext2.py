@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -24,6 +25,36 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 import app.fastapi_routes.xcmax_admin as admin_routes
+
+
+@_shared_scope_contextmanager
+def _shared_scope_case_0(case_value_1):
+    with (
+        patch(
+            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+            return_value="sid123",
+        ),
+        patch(
+            "app.application.session_account_meta.load_session_account_meta",
+            return_value={"account_kind": "admin", "market_is_admin": True},
+        ),
+        patch(case_value_1),
+        patch(
+            "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+            new=AsyncMock(return_value="Bearer tok"),
+        ),
+        patch(
+            "app.enterprise.mod_entitlements.refresh_session_entitlements_from_market",
+            new=AsyncMock(return_value=["mod1"]),
+        ),
+        patch("app.enterprise.mod_entitlements.persist_entitlements_to_session_row"),
+        patch(
+            "app.enterprise.mod_entitlements.reload_enterprise_mods_after_login",
+            new=AsyncMock(),
+        ),
+        patch("app.application.session_account_meta.audit_admin_action"),
+    ):
+        yield None
 
 
 async def _assert_shared_admin_list_market_users_0(
@@ -522,30 +553,8 @@ class TestAdminRouteHandlers:
 class TestImpersonateRoutesAdditional:
     @pytest.mark.asyncio
     async def test_impersonate_success(self, client: TestClient):
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch("app.application.session_account_meta.persist_session_account_meta"),
-            patch(
-                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-                new=AsyncMock(return_value="Bearer tok"),
-            ),
-            patch(
-                "app.enterprise.mod_entitlements.refresh_session_entitlements_from_market",
-                new=AsyncMock(return_value=["mod1"]),
-            ),
-            patch("app.enterprise.mod_entitlements.persist_entitlements_to_session_row"),
-            patch(
-                "app.enterprise.mod_entitlements.reload_enterprise_mods_after_login",
-                new=AsyncMock(),
-            ),
-            patch("app.application.session_account_meta.audit_admin_action"),
+        with _shared_scope_case_0(
+            case_value_1="app.application.session_account_meta.persist_session_account_meta"
         ):
             response = client.post(
                 "/api/xcmax/admin/impersonate",
@@ -579,30 +588,8 @@ class TestImpersonateRoutesAdditional:
 
     @pytest.mark.asyncio
     async def test_end_impersonate_success(self, client: TestClient):
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch("app.application.session_account_meta.clear_impersonation"),
-            patch(
-                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-                new=AsyncMock(return_value="Bearer tok"),
-            ),
-            patch(
-                "app.enterprise.mod_entitlements.refresh_session_entitlements_from_market",
-                new=AsyncMock(return_value=["mod1"]),
-            ),
-            patch("app.enterprise.mod_entitlements.persist_entitlements_to_session_row"),
-            patch(
-                "app.enterprise.mod_entitlements.reload_enterprise_mods_after_login",
-                new=AsyncMock(),
-            ),
-            patch("app.application.session_account_meta.audit_admin_action"),
+        with _shared_scope_case_0(
+            case_value_1="app.application.session_account_meta.clear_impersonation"
         ):
             response = client.post("/api/xcmax/admin/impersonate/end")
         assert response.status_code == 200
