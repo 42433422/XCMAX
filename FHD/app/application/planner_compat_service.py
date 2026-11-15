@@ -424,7 +424,37 @@ async def compat_chat_stream_async(
             request_llm_mode(body.mode),
             llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)),
         ):
-            async with aclosing(stream.run(request, body, ai_tier=ai_tier)) as chunks:
+            # 附件证据只进入本轮模型输入，不写回 body，避免污染落库的对话历史。
+            stream_body = body
+            try:
+                from app.application.attachment_artifacts.store import ArtifactStore
+                from app.application.attachment_evidence import (
+                    collect_evidence,
+                    evidence_system_block,
+                )
+
+                raw_ids = (body.context or {}).get("artifact_ids") or []
+                if isinstance(raw_ids, str):
+                    raw_ids = [raw_ids]
+                if isinstance(raw_ids, (list, tuple, set)) and raw_ids:
+                    evidence = await collect_evidence(
+                        body.message,
+                        list(raw_ids),
+                        store=ArtifactStore(),
+                        user_id=str(body.user_id or (body.context or {}).get("user_id") or ""),
+                    )
+                    if evidence["trace"]:
+                        yield _sse_event(
+                            {"type": "trace", "items": evidence["trace"], "turn_id": turn_id}
+                        )
+                    block = evidence_system_block(evidence["evidence"])
+                    if block:
+                        stream_body = body.model_copy(
+                            update={"message": f"{block}\n\n{body.message}"}
+                        )
+            except Exception:  # noqa: BLE001 - 附件证据 fail-open，失败继续原路径
+                logger.warning("attachment evidence collection failed", exc_info=True)
+            async with aclosing(stream.run(request, stream_body, ai_tier=ai_tier)) as chunks:
                 async for chunk in chunks:
                     if not pending and not chunk.startswith((b"data", b"event:")):
                         yield chunk

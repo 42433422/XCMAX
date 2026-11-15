@@ -1,7 +1,10 @@
 import { resolvePlannerChatStreamPath } from '@/utils/plannerChatPaths'
+import type { ChatTraceItem } from '@/composables/chat-orchestration/chatOrchestrationShared'
 
 export type PlannerSseEvent =
   | { type: 'route_metadata'; route_metadata: unknown }
+  /** 正文之前的工具执行轨迹（附件工件取数），由气泡「本轮执行」展示 */
+  | { type: 'trace'; items?: ChatTraceItem[]; turn_id?: string }
   | { type: 'model_activity' }
   | { type: 'token'; text: string; ephemeral?: boolean }
   | { type: 'tool_progress'; label?: string; text?: string; phase?: string; run_id?: string }

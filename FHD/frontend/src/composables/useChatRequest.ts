@@ -6,6 +6,7 @@ import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 import { isWorkflowControlMessage } from '@/utils/chatSseStream'
+import { clearChatArtifactIds, listChatArtifactIds } from '@/utils/chatArtifactContext'
 import { useApprovalMode } from './useApprovalMode'
 export type ChatRequestScope = {
   signal?: AbortSignal
@@ -89,6 +90,12 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
     const hasExcelContext = !plannerOpts?.expectedWorkflowPlanId && injectExcelContextPayload(contextPayload, contextParts)
     if (!plannerOpts?.expectedWorkflowPlanId) consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
+    // 选文件时登记的附件工件：后端按 id 取数，本轮发送后由发送方清空。
+    const artifactIds = listChatArtifactIds()
+    if (artifactIds.length) {
+      contextPayload.artifact_ids = artifactIds
+      contextParts.push(`后端工件 ${artifactIds.length} 个`)
+    }
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
     if (plannerOpts?.fromWriteUnlock) {
@@ -126,7 +133,9 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   ): Promise<ChatPlannerPayload> {
     const { body } = buildPlannerChatRequestPayload(message, plannerOpts, scope)
     const reqOpts = { signal: fetchOptions.signal }
-    return (await chatApi.sendUnifiedChat(body as unknown as ChatRequest, reqOpts)) as unknown as ChatPlannerPayload
+    const payload = (await chatApi.sendUnifiedChat(body as unknown as ChatRequest, reqOpts)) as unknown as ChatPlannerPayload
+    clearChatArtifactIds()
+    return payload
   }
 
   /** 与单条请求相同的 context / user_id，用于 unified_chat/batch */
@@ -157,6 +166,8 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
     const hasExcelContext = injectExcelContextPayload(contextPayload, contextParts)
     consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
+    const artifactIds = listChatArtifactIds()
+    if (artifactIds.length) contextPayload.artifact_ids = artifactIds
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
     const reqOpts = { signal: fetchOptions.signal }
@@ -168,7 +179,9 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       mode: 'basic' as const,
       ...resolveChatDbTokensForPayload(),
     }
-    return (await chatApi.sendUnifiedChatBatch(batchBody as ChatRequest & { messages: string[] }, reqOpts)) as unknown as ChatPlannerPayload
+    const payload = (await chatApi.sendUnifiedChatBatch(batchBody as ChatRequest & { messages: string[] }, reqOpts)) as unknown as ChatPlannerPayload
+    clearChatArtifactIds()
+    return payload
   }
 
   function getChatBatchDebounceMs(): number {

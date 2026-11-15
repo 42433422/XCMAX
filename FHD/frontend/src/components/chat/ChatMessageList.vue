@@ -109,6 +109,7 @@
             class="message-html"
             v-html="messageHtml(msg)"
           ></div>
+          <ChatTurnTrace v-if="msg.role === 'ai' && msg.trace?.length" :items="msg.trace" />
           <ChatTypingIndicator v-if="msg.role === 'ai' && !msg.streamingShell && msg.waitingHint" :label="msg.waitingHint" show-elapsed />
           <div v-if="msg.role === 'ai' && msg.shipmentDownloadUrl" class="message-shipment-actions">
             <a class="btn btn-primary btn-sm" :href="msg.shipmentDownloadUrl" download @click="$emit('shipment-download-click')">
@@ -231,6 +232,7 @@ import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, plainTextFromChatHt
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
+import ChatTurnTrace from '@/components/chat/ChatTurnTrace.vue'
 import AgentRunTrace from '@/components/chat/AgentRunTrace.vue'
 import AgentStepChain from '@/components/chat/AgentStepChain.vue'
 import { buildLiveStep, stepsFromNodeResults, withLiveStep, type AgentStepView } from '@/utils/agentStepChain'

@@ -33,6 +33,7 @@ import { noteModelPath } from '@/components/sidebar/modelPathHealth'
 import { modelOutcomeFromText, readChatExecution } from '@/components/chat/chatFailureRecovery'
 import type { PlannerChatOptions } from '../useChatRequest'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
+import { clearChatArtifactIds } from '@/utils/chatArtifactContext'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -404,6 +405,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       let handlePlannerEventRef: ((event: PlannerSseEvent) => void) | null = null
       const aiChatRound = useAiSdkChatRound({
         onEvent: (event) => plannerEventHandler?.(event),
+        // 附件工件取数轨迹：累积到当前 assistant 消息，气泡「本轮执行」按需展开。
+        onTrace: (items) => {
+          if (replaying || !round.isActive() || !streamMessage || !items.length) return
+          streamMessage.trace = [...(streamMessage.trace || []), ...items]
+        },
         onText: (value) => {
           if (!streamTextFromAi) return
           streamPlain = value
@@ -522,6 +528,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         if (sseError) {
           throw new Error(sseError)
         }
+        // 请求已成功送出并拿到流：本轮工件 id 用毕即清，避免串到下一轮。
+        clearChatArtifactIds()
         if (awaitingAuthorization) {
           if (streamRunId) syncStreamRun({ run_id: streamRunId })
           return

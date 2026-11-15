@@ -2,9 +2,11 @@ import { readUIMessageStream } from 'ai'
 import { ref } from 'vue'
 import type { PlannerSseEvent } from '@/utils/chatSseStream'
 import { createXcagiChatTransport, type XcagiUIMessage } from './xcagiChatTransport'
+import type { ChatTraceItem } from './chatOrchestrationShared'
 
 export interface AiSdkChatRoundOptions {
   onEvent?: (event: PlannerSseEvent, seq: number) => void
+  onTrace?: (items: ChatTraceItem[], seq: number) => void
   onText?: (text: string) => void
 }
 
@@ -37,6 +39,9 @@ export function useAiSdkChatRound(options: AiSdkChatRoundOptions) {
     onEvent: (event, seq) => {
       if (seq) lastSeq = seq
       options.onEvent?.(event, seq)
+    },
+    onTrace: (items, seq) => {
+      options.onTrace?.(items, seq)
     },
     onStreamError: (error) => {
       streamError = error

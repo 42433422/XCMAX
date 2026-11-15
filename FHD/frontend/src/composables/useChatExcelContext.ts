@@ -8,6 +8,7 @@ import {
   type LinkedExcelSheet,
 } from './useChatPersistence'
 import { filesToMultimodalRows, type MultimodalAttachmentRow } from '@/utils/multimodalAttachments'
+import { uploadChatArtifacts } from '@/utils/chatArtifactContext'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 
 export interface UseChatExcelContextDeps {
@@ -115,6 +116,8 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   async function stageMultimodalFiles(list: File[]) {
     if (!list.length) return
     syncScope()
+    // 额外登记后端工件（失败静默）：对话侧可用 artifact_id 取数，不影响现有解析与摘要。
+    void uploadChatArtifacts(list)
     const capturedScope = activeScope, capturedRevision = revision
     const isCurrent = deps.captureIsCurrent?.() || (() => true)
     const res = await filesToMultimodalRows(list, { skipUnsupported: list.length > 1 })

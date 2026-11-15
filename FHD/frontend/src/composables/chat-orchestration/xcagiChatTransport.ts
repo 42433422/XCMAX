@@ -2,6 +2,7 @@ import type { UIMessage, UIMessageChunk } from 'ai'
 import chatApi, { parseChatStreamErrorResponse } from '@/api/chat'
 import type { ChatRequest } from '@/types/chat'
 import { readPlannerSseResponse, type PlannerSseEvent } from '@/utils/chatSseStream'
+import { normalizeChatTraceItems, type ChatTraceItem } from './chatOrchestrationShared'
 
 export interface XcagiChatMetadata {
   turnId?: string
@@ -15,6 +16,8 @@ export type XcagiUIMessage = UIMessage<XcagiChatMetadata>
 export interface XcagiChatTransportOptions {
   /** 原始事件旁路：控制面（401/超时/授权/EOF）仍由调用方判定 */
   onEvent?: (event: PlannerSseEvent, seq: number) => void
+  /** 本轮工具执行轨迹（正文之前的 ``trace`` 事件） */
+  onTrace?: (items: ChatTraceItem[], seq: number) => void
   /** 传送层异常原样交回调用方，避免被框架改写身份 */
   onStreamError?: (error: unknown) => void
 }
@@ -112,6 +115,12 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
     }
     if (event.type === 'route_metadata') {
       controller.enqueue({ type: 'message-metadata', messageMetadata: { route: event.route_metadata } })
+      return
+    }
+    if (event.type === 'trace') {
+      // 轨迹只透出给回调（挂到当前 assistant 消息），不改变正文 parts。
+      const items = normalizeChatTraceItems(event.items)
+      if (items.length) options.onTrace?.(items, seq)
       return
     }
     if (event.type === 'requires_token') {

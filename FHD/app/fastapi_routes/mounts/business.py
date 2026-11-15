@@ -331,6 +331,15 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "attachment_artifacts",
+        lambda: (
+            __import__(
+                "app.application.attachment_artifacts.router", fromlist=["router"]
+            ).router
+        ),
+    )
+    _mount(
+        registry,
         "mobile_api",
         _load_mobile_api_router,
     )

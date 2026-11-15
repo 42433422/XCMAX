@@ -4,6 +4,7 @@
 import { computed, ref } from 'vue'
 import api from '@/api/core'
 import { isOfficeDockingFileSupported, uploadChatOfficeFile } from '@/utils/officeEmployeeReadApi'
+import { uploadChatArtifacts } from '@/utils/chatArtifactContext'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { isTemporaryDocument } from '@/utils/documentIntake'
 import { pickOptionalTemplate } from '@/domain/optionalTemplateSelection'
@@ -73,6 +74,8 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       touchItems()
       return
     }
+    // 额外登记后端工件（失败静默）：不阻塞 ELT 解析流程。
+    void uploadChatArtifacts([file])
     try {
       const upload = await uploadChatOfficeFile(file)
       item.upload = upload
