@@ -146,6 +146,7 @@
       "blocked",
       "executed",
       "failure",
+      "next_node",
       "node_outputs",
       "plan_audit",
       "results",

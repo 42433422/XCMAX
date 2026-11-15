@@ -23,6 +23,7 @@ from __future__ import annotations
 import contextlib
 import importlib
 import logging
+import os
 import threading
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Iterator
@@ -87,8 +88,14 @@ class _ReadersWriterGate:
     every node is treated as a writer so the whole graph is serialized.
     """
 
-    def __init__(self, parallel: bool) -> None:
+    def __init__(self, parallel: bool, max_readers: int | None = None) -> None:
         self._parallel = parallel
+        if max_readers is None:
+            try:
+                max_readers = int(os.environ.get("XCAGI_PLAN_PARALLEL_MAX") or "4")
+            except ValueError:
+                max_readers = 4
+        self._max_readers = max(1, min(32, int(max_readers)))
         self._cond = threading.Condition()
         self._readers = 0
         self._writer = False
@@ -96,7 +103,16 @@ class _ReadersWriterGate:
 
     @staticmethod
     def is_reader(node: WorkflowNode) -> bool:
-        return bool(node.idempotent) and node.risk == "low"
+        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+        spec = get_tool_action_spec(node.tool_id, node.action)
+        return (
+            node.idempotent is True
+            and node.risk == "low"
+            and spec is not None
+            and spec.idempotent is True
+            and spec.risk == "low"
+        )
 
     def _is_exclusive(self, node: WorkflowNode) -> bool:
         if not self._parallel:
@@ -120,15 +136,14 @@ class _ReadersWriterGate:
 
     def _acquire_reader(self) -> None:
         with self._cond:
-            while self._writer or self._writers_waiting:
+            while self._writer or self._writers_waiting or self._readers >= self._max_readers:
                 self._cond.wait()
             self._readers += 1
 
     def _release_reader(self) -> None:
         with self._cond:
             self._readers -= 1
-            if self._readers == 0:
-                self._cond.notify_all()
+            self._cond.notify_all()
 
     def _acquire_writer(self) -> None:
         with self._cond:

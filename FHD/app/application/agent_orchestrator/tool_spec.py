@@ -251,7 +251,18 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
         )
 
 
+_TOOL_SPECS_CACHE: dict[tuple[str, str], ToolActionSpecV2] | None = None
+
+
+def invalidate_tool_specs_cache() -> None:
+    global _TOOL_SPECS_CACHE
+    _TOOL_SPECS_CACHE = None
+
+
 def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
+    global _TOOL_SPECS_CACHE
+    if _TOOL_SPECS_CACHE is not None:
+        return _TOOL_SPECS_CACHE
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
@@ -357,6 +368,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             ],
         )
         specs[(spec.tool_id, spec.action)] = spec
+    _TOOL_SPECS_CACHE = specs
     return specs
 
 

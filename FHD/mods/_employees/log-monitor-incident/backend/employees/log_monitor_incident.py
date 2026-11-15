@@ -6,6 +6,8 @@ import hashlib
 from collections import Counter
 from typing import Any
 
+from app.mod_sdk.employee_failure import _failed
+
 
 def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     events = dict(payload or {}).get("events")
@@ -33,18 +35,6 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "incidents": incidents,
         "issues": issues,
         "evidence": ["input.events"],
-        "read_only": True,
-        "side_effects": [],
-    }
-
-
-def _failed(message: str, code: str) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "status": "failed",
-        "summary": message,
-        "error_code": code,
-        "evidence": [],
         "read_only": True,
         "side_effects": [],
     }

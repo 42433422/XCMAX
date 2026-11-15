@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.mod_sdk.employee_failure import _failed
+
 
 def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     snapshot = dict(payload or {}).get("pr_snapshot")
@@ -43,18 +45,6 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             "input.pr_snapshot.reviews",
             "input.pr_snapshot.mergeable",
         ],
-        "read_only": True,
-        "side_effects": [],
-    }
-
-
-def _failed(message: str, code: str) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "status": "failed",
-        "summary": message,
-        "error_code": code,
-        "evidence": [],
         "read_only": True,
         "side_effects": [],
     }

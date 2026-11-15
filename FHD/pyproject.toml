@@ -56,6 +56,8 @@ server-api = [
     "alembic>=1.13.0",
     "psycopg[binary]>=3.1.18",
     "pgvector>=0.2.5",
+    # 外部工具接入：官方 MCP Python SDK（MIT）
+    "mcp==2.3.0",
     # 长期记忆（mem0 OSS，Apache-2.0；离线本地向量，不依赖 torch）
     "mem0ai==2.2.1",
     # 计划修复：容忍模型 JSON 的尾逗号/截断（MIT，纯 Python）
@@ -268,6 +270,7 @@ module = [
     "google.*",
     "jsonschema.*",
     "keyring.*",
+    "mcp.*",
     "mem0.*",
     "onnxruntime.*",
     "paddleocr.*",
