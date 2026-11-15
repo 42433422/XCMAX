@@ -252,7 +252,7 @@ _FUNASR_STREAM_CONFIG = {
 async def _platform_funasr_transcribe(token: str, wav: bytes) -> str:
     """平台 FunASR WebSocket：MiMo ASR 尚未上线时的可用识别通道。"""
     try:
-        import websockets
+        import websockets  # noqa: F401 - 仅探测语音通道组件是否可用
         from websockets.exceptions import WebSocketException
     except ImportError:
         raise HTTPException(503, "本机缺少语音通道组件") from None

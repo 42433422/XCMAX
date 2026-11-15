@@ -21,8 +21,7 @@ from app.infrastructure.workflow.langgraph_runtime import (
     _summarize_output,
     logger,
 )
-from app.utils.operational_errors import BOUNDARY_ERRORS
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 _DEFERRED_RETRY_CODES = frozenset(
     {
@@ -43,7 +42,7 @@ def _publish_tool_event(record: dict[str, Any]) -> None:
         from app.infrastructure.chat_stream_lifetime import publish_stream_tool_record
 
         publish_stream_tool_record(record)
-    except BOUNDARY_ERRORS:  # noqa: BLE001 - 观测通道不得改变执行结果
+    except BOUNDARY_ERRORS:
         logger.debug("stream tool record publish skipped", exc_info=True)
 
 

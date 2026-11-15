@@ -64,7 +64,7 @@ def _decode(raw: bytes, suffix: str) -> tuple[str, dict[str, Any]]:
             from app.application.document_parsing.router import parse_pdf_bytes_with_docling
 
             docling_text = parse_pdf_bytes_with_docling(raw)
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - Docling 失败要回退 pdfplumber
+        except BOUNDARY_ERRORS:
             docling_text = None
         if docling_text and docling_text.strip():
             coverage["method"] = "docling"

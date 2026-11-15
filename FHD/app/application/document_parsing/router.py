@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ def parse_pdf_bytes_with_docling(raw: bytes) -> str | None:
             handle.write(raw)
             tmp_path = Path(handle.name)
         return parse_with_docling(tmp_path).text
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - 第三方解析失败要回退，不能中断请求
+    except BOUNDARY_ERRORS as exc:
         logger.warning("docling pdf bytes parse failed: %s", exc)
         return None
     finally:

@@ -100,7 +100,7 @@ class AIChatWorkflowResponseMixin:
                 temperature=0.0,
                 max_tokens=400,
             )
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - 模型不可用时退回确定性摘录
+        except BOUNDARY_ERRORS:
             return ""
         choices = (data or {}).get("choices") if isinstance(data, dict) else None
         message = (choices or [{}])[0].get("message") if isinstance(choices, list) else None

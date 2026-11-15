@@ -25,7 +25,7 @@ from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
-_QUEUE: "queue.Queue[tuple[str, int, int, int]]" = queue.Queue()
+_QUEUE: queue.Queue[tuple[str, int, int, int]] = queue.Queue()
 _PENDING: set[tuple[str, int]] = set()
 _LOCK = threading.Lock()
 _WORKER: threading.Thread | None = None

@@ -50,7 +50,6 @@ def parse_customer_product_regions(
             # 无表头流水表（如按年度排列的发货明细）没有表头行，单独按数据块登记为区段。
             filled_row_count = 0
             first_filled_row = 0
-            last_filled_row = 0
             filled_min_col = 0
             filled_max_col = 0
             for row_number, raw_values in enumerate(worksheet.iter_rows(values_only=True), start=1):
@@ -62,7 +61,6 @@ def parse_customer_product_regions(
                 ]
                 if filled:
                     filled_row_count += 1
-                    last_filled_row = row_number
                     if not first_filled_row:
                         first_filled_row = row_number
                     filled_min_col = min(filled_min_col or filled[0], filled[0])

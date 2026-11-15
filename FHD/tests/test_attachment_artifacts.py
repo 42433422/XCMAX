@@ -9,12 +9,12 @@ import openpyxl
 import pytest
 
 from app.application.attachment_artifacts import tools
-from app.application.attachment_artifacts.models import ArtifactRecord
 from app.application.attachment_artifacts.attachment_parser import (
     TemporaryDocument,
     UnsupportedDocument,
     parse_file,
 )
+from app.application.attachment_artifacts.models import ArtifactRecord
 from app.application.attachment_artifacts.store import ArtifactStore
 
 

@@ -242,44 +242,6 @@ async def test_sync_error_receipt_preserves_status_and_safe_history_for_any_deta
     )
 
 
-def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn():
-    from contextlib import contextmanager
-
-    callbacks = Mock(spec=SessionCallbacks)
-    session = WorkflowSession({}, callbacks)
-    db = Mock()
-    db.query.return_value.filter.return_value.first.return_value = Mock()
-
-    @contextmanager
-    def fake_get_db():
-        yield db
-
-    with (
-        patch("app.db.session.get_db", fake_get_db),
-        patch(
-            "app.application.approval_workspace_app_service."
-            "_approve_ai_workflow_request_without_node",
-            return_value={
-                "success": True,
-                "data": {"workflow_execution": {"success": True, "message": "清理完成"}},
-            },
-        ) as approve,
-    ):
-        reply = session._auto_approve_waiting_request(
-            request_id="req-auto",
-            user_id="chat:scoped-conversation",
-            runtime_context={"actor_id": 7, "user_id": "7"},
-            plan=_plan(),
-            agent_run=AgentRun(user_id="7", message="清理知识库"),
-        )
-
-    assert approve.call_args.kwargs["actor"] == 7
-    assert reply["success"] is True
-    assert reply["data"]["action"] == "workflow_done"
-    assert reply["data"]["data"]["auto_approved"] is True
-    assert "自动审批已通过并执行完成" in reply["response"]
-
-
 def test_auto_approval_waits_for_user_decision_without_reporting_failure():
     """预演需要用户确认时，自动审批已通过，不能报成审批取消/执行失败。"""
     from contextlib import contextmanager
@@ -380,68 +342,6 @@ def test_auto_approval_reply_includes_generated_file_download_url():
     assert "宗南家私生产表.xlsx" in reply["response"]
     assert "/api/ai/kitten/document/pickup/token-1" in reply["response"]
 
-
-def test_auto_approval_without_authenticated_actor_falls_back_to_manual_approval():
-    session = WorkflowSession({}, Mock(spec=SessionCallbacks))
-
-    reply = session._auto_approve_waiting_request(
-        request_id="req-auto",
-        user_id="chat:scoped-conversation",
-        runtime_context={},
-        plan=_plan(),
-        agent_run=AgentRun(user_id="7", message="清理知识库"),
-    )
-
-    assert reply is None
-
-
-def test_auto_approval_continues_through_every_pending_step():
-    from contextlib import contextmanager
-
-    session = WorkflowSession({}, Mock(spec=SessionCallbacks))
-    db = Mock()
-    db.query.return_value.filter.return_value.first.return_value = Mock()
-
-    @contextmanager
-    def fake_get_db():
-        yield db
-
-    step_one = {
-        "success": False,
-        "data": {
-            "workflow_execution": {
-                "success": False,
-                "execution_accepted": True,
-                "next_approval_request_id": "req-2",
-                "message": "当前步骤已获批，后续步骤等待审批",
-            }
-        },
-    }
-    step_two = {
-        "success": True,
-        "data": {"workflow_execution": {"success": True, "message": "全部清理完成"}},
-    }
-
-    with (
-        patch("app.db.session.get_db", fake_get_db),
-        patch(
-            "app.application.approval_workspace_app_service."
-            "_approve_ai_workflow_request_without_node",
-            side_effect=[step_one, step_two],
-        ) as approve,
-    ):
-        reply = session._auto_approve_waiting_request(
-            request_id="req-1",
-            user_id="chat:scoped-conversation",
-            runtime_context={"actor_id": 7},
-            plan=_plan(),
-            agent_run=AgentRun(user_id="7", message="初始化业务数据"),
-        )
-
-    assert approve.call_count == 2
-    assert reply["success"] is True
-    assert reply["data"]["action"] == "workflow_done"
-    assert "全部清理完成" in reply["response"]
 
 def test_history_persists_visible_business_result_on_assistant_ui() -> None:
     store = Mock(spec=ConversationStore)

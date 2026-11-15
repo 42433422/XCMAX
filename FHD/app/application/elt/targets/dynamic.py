@@ -18,12 +18,12 @@ from sqlalchemy.exc import OperationalError
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.application.elt.targets.targets_base import (
-from app.utils.operational_errors import BOUNDARY_ERRORS
     PreviewDecision,
     TargetAdapter,
     TargetField,
     json_safe,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # 单事务插入上万行会长时间独占 SQLite 写锁，让并发 worker 的租约校验等到超时。
 # 按批提交把写锁占用压到毫秒级，回滚仍按 run_id 删除，不受分批影响。

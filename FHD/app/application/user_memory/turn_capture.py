@@ -61,7 +61,7 @@ def capture_turn(
             results.append(
                 remember(fact, scope=scope, owner_id=owner, source="chat_turn", importance=0.6, store=store)
             )
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - 记忆写入失败不能影响对话
+        except BOUNDARY_ERRORS:
             continue
     return results
 

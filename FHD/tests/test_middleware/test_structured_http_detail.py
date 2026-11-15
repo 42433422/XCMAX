@@ -6,10 +6,10 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-from fastapi import FastAPI, HTTPException  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
-from app.middleware.error_handler import register_exception_handlers  # noqa: E402
+from app.middleware.error_handler import register_exception_handlers
 
 
 def _client(detail) -> TestClient:

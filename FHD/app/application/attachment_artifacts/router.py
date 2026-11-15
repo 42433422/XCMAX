@@ -51,7 +51,7 @@ def _ingest_identity(request: Request) -> tuple[int, int] | None:
         from app.infrastructure.auth.dependencies import resolve_session_user
 
         user = resolve_session_user(request)
-    except BOUNDARY_ERRORS:  # noqa: BLE001 - 附件接口不因身份解析失败而拒绝服务
+    except BOUNDARY_ERRORS:
         return None
     tenant = getattr(user, "tenant_id", None)
     owner = getattr(user, "id", None)
@@ -81,7 +81,7 @@ def _register_elt_upload(
                 stream=stream,
             )
             return str(saved.get("upload_id") or "")
-    except BOUNDARY_ERRORS:  # noqa: BLE001 - ELT 登记失败不影响附件入库
+    except BOUNDARY_ERRORS:
         return ""
 
 
