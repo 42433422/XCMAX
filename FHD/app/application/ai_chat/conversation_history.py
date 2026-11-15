@@ -371,7 +371,23 @@ def persist_recallable_chat_turn(
     )
     if tagged.get("ai_feature_channel"):
         chunk.metadata["ai_feature_channel"] = tagged["ai_feature_channel"]
+    session_scope = str(context.get("session_id") or context.get("conversation_id") or "")
     service.ingest_chunks(normalized_user_id, [chunk])
+    from app.infrastructure.memory.mem0_backend import get_long_term_memory
+
+    long_term = get_long_term_memory()
+    if long_term.enabled:
+        # mem0 作为跨会话长期记忆镜像写入；未启用时仅保留原有向量库链路。
+        long_term.remember(
+            user_id=normalized_user_id,
+            user_message=message,
+            assistant_message=assistant_text,
+            metadata={
+                "session_id": session_scope,
+                "source": str(source or tagged.get("ai_feature_channel") or "chat"),
+                "ai_feature_channel": str(tagged.get("ai_feature_channel") or ""),
+            },
+        )
     if access_context is not None:
         from app.application.persy_memory_app_service import get_persy_memory_app_service
 

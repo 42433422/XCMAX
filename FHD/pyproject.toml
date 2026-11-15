@@ -51,6 +51,8 @@ server-api = [
     "alembic>=1.13.0",
     "psycopg[binary]>=3.1.18",
     "pgvector>=0.2.5",
+    # 长期记忆（mem0 OSS，Apache-2.0；离线本地向量，不依赖 torch）
+    "mem0ai==2.2.1",
     "pandas>=2.0.0",
     "numpy>=1.24.0",
     "xlrd>=2.0.1",

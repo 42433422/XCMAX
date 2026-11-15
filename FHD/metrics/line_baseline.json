@@ -1,5 +1,5 @@
 {
-  "lines": 2403097,
+  "lines": 2403547,
   "updated": "2026-11-15",
-  "note": "依赖升级集成 PR：把既有的 async_runtime / http_tls 登记到 cross_cutting 白名单，修复 main 上已红的 utils 边界门禁（+2 行）；经用户批准推进合并"
+  "note": "新增 L2 长期记忆 mem0 适配层、会话摘要落盘与 RAG 检索策略，属于新能力实现而非重构；无法在不破坏现有记忆链路的前提下等量净删除"
 }
