@@ -1,5 +1,5 @@
 {
-  "lines": 2403097,
+  "lines": 2403412,
   "updated": "2026-11-15",
-  "note": "依赖升级集成 PR：把既有的 async_runtime / http_tls 登记到 cross_cutting 白名单，修复 main 上已红的 utils 边界门禁（+2 行）；经用户批准推进合并"
+  "note": "新增 L3 计划最小修复闭环（plan_repair）与 json-repair 依赖，属于新能力实现；修复逻辑无法并入既有模块而不导致 planner 膨胀"
 }
