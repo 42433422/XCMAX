@@ -21,6 +21,8 @@ from typing import Any
 
 import yaml
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "BAAI/bge-small-zh-v1.5"
@@ -236,7 +238,7 @@ def get_semantic_router() -> Any | None:
                 _route_count,
                 semantic_threshold(),
             )
-        except Exception as exc:  # noqa: BLE001 - 任何失败都必须降级，不能阻断对话
+        except BOUNDARY_ERRORS as exc:  # Third-party model initialization is a plugin boundary.
             _router_error = f"{type(exc).__name__}: {exc}"
             logger.warning("intent semantic router unavailable: %s", _router_error)
             _router = None
@@ -253,7 +255,7 @@ def route_intent(text: str) -> SemanticIntent | None:
 
     try:
         choice = router(text, limit=1)
-    except Exception as exc:  # noqa: BLE001 - 单次失败不影响本轮规则结果
+    except BOUNDARY_ERRORS as exc:  # Isolate third-party inference, not rule/permission execution.
         logger.warning("intent semantic route failed: %s", exc)
         return None
 
