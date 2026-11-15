@@ -118,3 +118,41 @@ async def test_confirm_reports_progress_before_slow_knowledge_init(monkeypatch):
     assert events[-1]["type"] == "done"
     assert events[-1]["result"]["response"] == "索引重建已开始"
     assert not any(event.get("type") == "error" for event in events)
+
+
+def test_heartbeats_forward_thinking_notes_and_tool_events():
+    """执行线程推来的思考说明与工具事件必须在心跳切片里即时转发。"""
+    from app.fastapi_routes import xcagi_compat_chat_stream as stream
+
+    notes = stream._StreamNoteQueue()
+    tools = stream._ToolRecordQueue()
+
+    def work():
+        notes.push("正在分析需求，生成执行计划…")
+        time.sleep(0.05)
+        tools.push(sequence=1, record={"phase": "started", "node_id": "n1", "tool_id": "excel"})
+        notes.push("已生成 1 步执行计划：excel.read")
+        time.sleep(0.05)
+        return {"ok": True}
+
+    sink: dict = {}
+    events = _payloads(list(stream._heartbeats(work, "处理中", sink, ch._sse_event_line, tools, notes)))
+    kinds = [event["type"] for event in events]
+    assert "thinking" in kinds
+    assert "tool_call" in kinds
+    thinking = [event for event in events if event["type"] == "thinking"]
+    assert thinking[0]["id"] == "think-1"
+    assert thinking[0]["delta"] == "正在分析需求，生成执行计划…"
+    assert [event["delta"] for event in thinking] == [
+        "正在分析需求，生成执行计划…",
+        "已生成 1 步执行计划：excel.read",
+    ]
+    assert sink["value"] == {"ok": True}
+
+
+def test_token_events_chunk_final_text():
+    from app.fastapi_routes import xcagi_compat_chat_stream as stream
+
+    events = _payloads(list(stream._token_events(ch._sse_event_line, "字" * 170)))
+    assert [len(event["text"]) for event in events] == [80, 80, 10]
+    assert "".join(event["text"] for event in events) == "字" * 170

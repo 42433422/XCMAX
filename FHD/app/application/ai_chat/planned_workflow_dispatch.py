@@ -226,11 +226,18 @@ class PlannedWorkflowDispatch:
             }
             entity = str(recent_target.get("entity") or "")
             planner_message = f"{message}；数据库{entity_labels.get(entity, entity)} ID: {int(recent_target['id'])}"
+        from app.application.workflow.workflow_types import PlanGraph
+        from app.infrastructure.chat_stream_lifetime import publish_stream_note
+
+        publish_stream_note("正在分析需求，生成执行计划…")
         plan = self.planner.plan(
             user_id=user_id, message=planner_message, tool_registry=tool_registry, context=context
         )
-        from app.application.workflow.workflow_types import PlanGraph
-
+        if isinstance(plan, PlanGraph):
+            node_labels = [f"{node.tool_id}.{node.action}" for node in plan.nodes]
+            publish_stream_note(
+                f"已生成 {len(node_labels)} 步执行计划：" + "、".join(node_labels)
+            )
         if not isinstance(plan, PlanGraph):
             logger.warning("工作流规划器返回无效计划类型: %s", type(plan).__name__)
             # A business-domain request that failed planning must not fall through
@@ -350,6 +357,11 @@ class PlannedWorkflowDispatch:
 
             if has_approval_requirement:
                 plan.metadata["approval_required_node_ids"] = sorted(approval_ids)
+            publish_stream_note(
+                "自动审批已通过，开始执行计划…"
+                if has_approval_requirement
+                else "计划无需审批，开始执行…"
+            )
 
             agent_run = AgentOrchestrator().start_run_from_plan(
                 user_id=self.callbacks._task_owner_id(user_id, runtime_ctx),
@@ -358,6 +370,7 @@ class PlannedWorkflowDispatch:
                 runtime_context=runtime_ctx,
                 auto_execute=True,
             )
+            publish_stream_note("执行完成，正在整理结果…")
             if agent_run.status != "waiting_user":
                 return self.callbacks._format_agent_run_response(
                     plan, agent_run, thinking_steps=thinking_steps, user_message=str(message or "")

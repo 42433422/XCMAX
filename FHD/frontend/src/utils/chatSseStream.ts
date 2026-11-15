@@ -6,6 +6,8 @@ export type PlannerSseEvent =
   /** 正文之前的工具执行轨迹（附件工件取数），由气泡「本轮执行」展示 */
   | { type: 'trace'; items?: ChatTraceItem[]; turn_id?: string }
   | { type: 'model_activity' }
+  /** 即时思考说明：执行线程在规划/审批/执行节点推来的过程文本 */
+  | { type: 'thinking'; id?: string; delta: string }
   | { type: 'token'; text: string; ephemeral?: boolean }
   | { type: 'tool_progress'; label?: string; text?: string; phase?: string; run_id?: string }
   | {

@@ -36,6 +36,7 @@ class StreamLifetime:
         self._workers = 0
         self._observers = []
         self._tool_observers = []
+        self._note_observers = []
         self._tool_sequence = 0
         self._tool_pending = []
         self._receipt_lock = threading.Lock()
@@ -80,6 +81,23 @@ class StreamLifetime:
     def observe_tools(self, callback):
         with self._lock:
             self._tool_observers.append(callback)
+
+    def observe_notes(self, callback):
+        with self._lock:
+            self._note_observers.append(callback)
+
+    def publish_note(self, text):
+        """推送一条即时思考说明；纯观测通道，失败绝不影响执行结果。"""
+        note = str(text or "").strip()
+        if not note:
+            return
+        with self._lock:
+            callbacks = list(self._note_observers)
+        for callback in callbacks:
+            try:
+                callback(note)
+            except BOUNDARY_ERRORS:  # observer boundary: never alter the run outcome
+                logging.getLogger(__name__).debug("stream note observer failed", exc_info=True)
 
     def publish_tool_record(self, record):
         with self._lock:
@@ -204,6 +222,18 @@ def publish_stream_tool_record(record):
     lifetime = current_lifetime.get()
     if lifetime is not None:
         lifetime.publish_tool_record(record)
+
+
+def watch_stream_notes(callback):
+    lifetime = current_lifetime.get()
+    if lifetime is not None:
+        lifetime.observe_notes(callback)
+
+
+def publish_stream_note(text):
+    lifetime = current_lifetime.get()
+    if lifetime is not None:
+        lifetime.publish_note(text)
 
 
 class StreamWorker:

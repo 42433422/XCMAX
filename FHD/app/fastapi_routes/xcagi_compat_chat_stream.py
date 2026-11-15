@@ -7,6 +7,7 @@ import contextvars
 import importlib
 import os
 import threading
+import time
 from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -177,15 +178,37 @@ class _ToolRecordQueue:
         return items
 
 
+class _StreamNoteQueue:
+    """收集执行线程推来的即时思考说明，由 SSE 生产者实时取出。"""
+
+    def __init__(self) -> None:
+        self._items: list[str] = []
+        self._lock = threading.Lock()
+
+    def push(self, note: str) -> None:
+        text = str(note or "").strip()
+        if not text:
+            return
+        with self._lock:
+            self._items.append(text)
+
+    def drain(self) -> list[str]:
+        with self._lock:
+            items, self._items = self._items, []
+        return items
+
+
 def _heartbeats(
     fn: Callable[[], Any],
     label: str,
     sink: dict[str, Any],
     encode: Callable[[dict[str, Any]], bytes],
     tool_records: _ToolRecordQueue | None = None,
+    notes: _StreamNoteQueue | None = None,
 ) -> Iterator[bytes]:
     """Run blocking local work off the producer and keep the stream observably alive."""
     box: dict = {}
+    note_sequence = 0
 
     def run() -> None:
         from app.utils.operational_errors import BOUNDARY_ERRORS
@@ -201,18 +224,46 @@ def _heartbeats(
         for record in tool_records.drain():
             yield encode({"type": "tool_call", **record})
 
+    def note_lines() -> Iterator[bytes]:
+        nonlocal note_sequence
+        if notes is None:
+            return
+        for note in notes.drain():
+            note_sequence += 1
+            yield encode(
+                {"type": "thinking", "id": f"think-{note_sequence}", "delta": note}
+            )
+
     thread = threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True)
     thread.start()
     interval = _tool_heartbeat_seconds()
+    slice_seconds = 0.2
+    waited = 0.0
     while thread.is_alive():
-        thread.join(interval)
+        # 0.2s 切片：工具起止与思考说明接近实时到达，不必等 8s 心跳。
+        thread.join(slice_seconds)
         yield from tool_lines()
-        if thread.is_alive():
+        yield from note_lines()
+        waited += slice_seconds
+        if thread.is_alive() and waited >= interval:
+            waited = 0.0
             yield _progress(encode, "running", label)
     yield from tool_lines()
+    yield from note_lines()
     if "error" in box:
         raise box["error"]
     sink["value"] = box.get("value")
+
+
+def _token_events(
+    encode: Callable[[dict[str, Any]], bytes], text: str, chunk_size: int = 80
+) -> Iterator[bytes]:
+    """把最终正文分片下发，形成打字机式流式呈现。"""
+    chunks = [text[start : start + chunk_size] for start in range(0, len(text), chunk_size)]
+    for index, chunk in enumerate(chunks):
+        yield encode({"type": "token", "text": chunk})
+        if index + 1 < len(chunks):
+            time.sleep(0.012)
 
 
 def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
@@ -239,7 +290,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             encode,
         )
         payload = sink["value"]
-        yield encode({"type": "token", "text": payload["response"]})
+        yield from _token_events(encode, str(payload["response"] or ""))
         yield encode({"type": "done", "result": payload})
         return
     from app.application import get_ai_chat_app_service
@@ -338,18 +389,25 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         # 工具执行线程会把起止记录推进本队列，心跳时转成 tool_call 事件，
         # 前端据此实时长出「执行链」，不必等整轮结束回填。
         tool_records = _ToolRecordQueue()
+        notes = _StreamNoteQueue()
         try:
-            from app.infrastructure.chat_stream_lifetime import watch_stream_tool_records
+            from app.infrastructure.chat_stream_lifetime import (
+                watch_stream_notes,
+                watch_stream_tool_records,
+            )
 
             watch_stream_tool_records(tool_records.push)
+            watch_stream_notes(notes.push)
         except Exception:  # noqa: BLE001 - 观测通道不可用时不阻断对话
             tool_records = None
+            notes = None
         yield from _heartbeats(
             _chat,
             "正在执行已确认的任务" if control else "正在处理任务",
             sink,
             encode,
             tool_records,
+            notes,
         )
         payload = sink["value"]
     except facade.RECOVERABLE_ERRORS as exc:
@@ -378,5 +436,5 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         )
     response_text = str(payload.get("response") or payload.get("message") or "")
     if response_text:
-        yield sse_event_line({"type": "token", "text": response_text})
+        yield from _token_events(sse_event_line, response_text)
     yield sse_event_line({"type": "done", "result": payload})

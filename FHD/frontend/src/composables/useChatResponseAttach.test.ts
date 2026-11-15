@@ -83,6 +83,16 @@ describe('useChatResponseAttach', () => {
     expect(messages.value[1].thinkingSteps).toContain('步骤1')
   })
 
+  it('attachThinkingStepsToLastAiMessage keeps streamed notes and appends final steps', () => {
+    const { messages, attachThinkingStepsToLastAiMessage } = makeDeps()
+    messages.value[1].thinkingSteps = '正在分析需求'
+    attachThinkingStepsToLastAiMessage({
+      success: true,
+      data: { data: { thinking_steps: '步骤1' } },
+    })
+    expect(messages.value[1].thinkingSteps).toBe('正在分析需求\n步骤1')
+  })
+
   it('attachTodoStepsToLastAiMessage sets todo list', () => {
     const { messages, attachTodoStepsToLastAiMessage } = makeDeps()
     attachTodoStepsToLastAiMessage({

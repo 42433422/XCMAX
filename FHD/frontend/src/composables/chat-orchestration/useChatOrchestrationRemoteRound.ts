@@ -450,10 +450,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           if (!isOwnerCurrent()) { controller.abort(); return }
           const heartbeat = (ev.type === 'token' && ev.ephemeral === true)
             || (ev.type === 'tool_progress' && ev.phase === 'accepted')
-          if ((ev.type === 'token' || ev.type === 'tool_progress' || ev.type === 'model_activity') && !heartbeat) {
+          if ((ev.type === 'token' || ev.type === 'tool_progress' || ev.type === 'model_activity' || ev.type === 'thinking') && !heartbeat) {
             // Legacy tools send a visible call marker, then can execute silently
             // for minutes. Run creation alone is not evidence of model progress.
-            if (ev.type === 'model_activity' || (ev.type === 'token' && ev.text.trim())
+            if (ev.type === 'model_activity' || ev.type === 'thinking' || (ev.type === 'token' && ev.text.trim())
               || (ev.type === 'tool_progress' && ev.phase !== 'started')) {
               window.clearTimeout(stallTimer)
             }
@@ -471,6 +471,13 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             }
             setLoadingProgress(hint || '正在执行任务…', requestScope.sessionId)
             if (streamRunId) syncStreamRun({ run_id: streamRunId })
+          } else if (ev.type === 'thinking') {
+            const delta = String(ev.delta || '').trim()
+            if (round.isActive() && streamMessage && delta) {
+              const prev = String(streamMessage.thinkingSteps || '')
+              streamMessage.thinkingSteps = prev ? `${prev}\n${delta}` : delta
+              delete streamMessage.waitingHint
+            }
           } else if (ev.type === 'tool_call') {
             // 结构化工具事件：按 node_id 原地增改，执行链随执行进度实时长出来。
             if (round.isActive() && streamMessage) {

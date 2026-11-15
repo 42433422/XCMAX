@@ -1227,6 +1227,9 @@ class WorkflowSession:
                     )
                 from app.application.agent_orchestrator import AgentOrchestrator
                 from app.application.workflow.workflow_types import plan_from_dict
+                from app.infrastructure.chat_stream_lifetime import publish_stream_note
+
+                publish_stream_note("审批已通过，开始执行计划…")
 
                 orchestrator = AgentOrchestrator()
                 agent_run_id = str(pending.get("agent_run_id") or "").strip()
@@ -1286,6 +1289,7 @@ class WorkflowSession:
                     )
                     return (True, interaction)
                 self.pending.pop(user_id, None)
+                publish_stream_note("执行完成，正在整理结果…")
                 continued_plan = plan_from_dict(continued.metadata.get("plan")) or pending_plan
                 self.callbacks._persist_plan_state(
                     continued_plan,

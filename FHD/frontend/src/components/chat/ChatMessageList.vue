@@ -93,10 +93,6 @@
               <div v-if="showDiagnosticMetadata && msg.contextSummary" class="context-summary">
                 {{ msg.contextSummary }}
               </div>
-              <details v-if="msg.thinkingSteps" class="thinking-panel">
-                <summary>{{ $t('chat.viewThinkingSteps') }}</summary>
-                <pre>{{ msg.thinkingSteps }}</pre>
-              </details>
             </div>
           </details>
           <div v-else-if="msg.role === 'ai' && receiptSummary(msg)" class="message-receipt message-receipt--plain">
@@ -104,6 +100,15 @@
             <span class="message-receipt__status" :class="`is-${receiptStatus(msg)}`">{{ receiptStatusLabel(msg) }}</span>
             <span class="execution-timeline__current" data-testid="chat-business-result">{{ receiptSummary(msg) }}</span>
           </div>
+          <details
+            v-if="msg.role === 'ai' && msg.thinkingSteps"
+            class="thinking-panel message-thinking"
+            :open="msg.streamingShell"
+            :data-testid="`chat-thinking-${idx}`"
+          >
+            <summary>{{ $t('chat.viewThinkingSteps') }}</summary>
+            <pre>{{ msg.thinkingSteps }}</pre>
+          </details>
           <div
             v-if="msg.role !== 'ai' || !shouldCondenseOrchestrationBody(msg)"
             class="message-html"
