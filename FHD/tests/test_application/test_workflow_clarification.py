@@ -17,22 +17,7 @@ from app.application.workflow.clarification_node import (
 )
 from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
-
-
-def _customers_registry() -> dict:
-    return {
-        "customers": {
-            "actions": {
-                "query": {"risk": "low", "idempotent": True},
-                "delete": {
-                    "risk": "high",
-                    "idempotent": False,
-                    "required_params": ["id"],
-                },
-            }
-        }
-    }
-
+from tests.pure_builders import customers_registry as _customers_registry
 
 _CUSTOMER_CANDIDATES = [
     {"id": "cust_1", "name": "北京智造科技"},

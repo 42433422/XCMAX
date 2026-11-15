@@ -27,6 +27,7 @@ from app.application.super_employee_service import (
     _safe_json_line,
     _utc_now,
 )
+from tests.pure_builders import error_runner as _error_runner
 
 # ─────────────────────────── helpers ────────────────────────────
 
@@ -44,13 +45,6 @@ def _null_runner(cmd, **kw):
 def _stdout_runner(stdout: str):
     def _run(cmd, **kw):
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
-
-    return _run
-
-
-def _error_runner(exc):
-    def _run(cmd, **kw):
-        raise exc
 
     return _run
 

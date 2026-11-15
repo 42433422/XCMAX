@@ -21,6 +21,7 @@ from app.infrastructure.llm.token_estimator import (
     estimate_messages_tokens as _estimate_messages_tokens,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.scalars import coerce_int as _coerce_int
 
 logger = logging.getLogger(__name__)
 
@@ -41,13 +42,6 @@ CONTEXT_WINDOW_MANAGER_VERSION = "1.1.0"
 
 _SUMMARY_SYSTEM_PROMPT = "你是对话历史压缩器。请用 200 字以内总结以下对话历史的关键信息，保留用户意图、关键实体和未完成的事项，不要添加新的信息。"
 _SUMMARY_CONTENT_PREFIX = "对话历史摘要："
-
-
-def _coerce_int(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
 
 
 def estimate_messages_tokens(messages) -> int:

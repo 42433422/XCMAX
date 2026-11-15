@@ -19,18 +19,12 @@ from typing import Any
 import httpx as httpx
 
 from app.utils.path_io.path_utils import get_app_data_dir
+from app.utils.scalars import coerce_int as _coerce_int
 
 DEFAULT_LLM_TOKENS_PER_COST_UNIT = 1000
 _ledger_lock = threading.Lock()
 _usage_locks: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 _storage_location: tuple[str, str] | None = None
-
-
-def _coerce_int(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
 
 
 def llm_tokens_per_cost_unit() -> int:

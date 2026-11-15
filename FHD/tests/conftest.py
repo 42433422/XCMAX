@@ -24,6 +24,8 @@ atexit.register(shutil.rmtree, _PYTEST_RUNTIME_ROOT, True)
 _PYTEST_DATABASE_URL = f"sqlite+pysqlite:///{_PYTEST_RUNTIME_ROOT / 'xcagi-test.sqlite3'}"
 os.environ.setdefault("DATABASE_URL", _PYTEST_DATABASE_URL)
 os.environ.setdefault("VECTOR_DB_URL", _PYTEST_DATABASE_URL)
+# 语义兜底默认关闭：单测不加载真实 embedding 模型；需要时用例内显式开启。
+os.environ.setdefault("FHD_INTENT_SEMANTIC_ENABLED", "0")
 os.environ.setdefault("DATASET_RAG_STORE_PATH", str(_PYTEST_RUNTIME_ROOT / "dataset_rag.json"))
 os.environ.setdefault(
     "DATASET_RAG_VECTOR_INDEX_PATH", str(_PYTEST_RUNTIME_ROOT / "dataset_vectors.sqlite")
