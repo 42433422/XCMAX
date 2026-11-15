@@ -164,9 +164,10 @@ def test_older_turns_are_summarized_to_disk_and_reused(memory_dir: Path) -> None
 
     for index in range(25):
         context = _context("summary", str(index))
-        prepare_chat_turn(f"第{index}条消息", context)
+        message = f"第{index}条消息"
+        prepare_chat_turn(message, context)
         settle_chat_turn(
-            f"第{index}条消息", context, {"success": True, "response": f"第{index}条回复"}, "completed"
+            message, context, {"success": True, "response": f"第{index}条回复"}, "completed"
         )
 
     key = conversation_key(_context("summary", "0"))

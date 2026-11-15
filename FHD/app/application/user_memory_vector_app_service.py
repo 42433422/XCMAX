@@ -10,6 +10,7 @@ from typing import Any
 from app.application.excel_vector_app_service import HashEmbedder
 from app.domain.excel.ports import VectorStorePort
 from app.infrastructure.persistence.user_memory_vector_store import get_user_memory_vector_store
+from app.utils.deployment import env_float as _env_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -204,13 +205,6 @@ class UserMemoryVectorIngestApplicationService:
                 else None,
             ),
         )
-
-
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(str(os.environ.get(name) or "").strip())
-    except ValueError:
-        return default
 
 
 def _memory_vector_limits() -> tuple[int, int]:

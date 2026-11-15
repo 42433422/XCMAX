@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from app.utils.deployment import env_float as _env_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .citation_tracker import CitationTracker
@@ -138,13 +139,6 @@ def get_default_embedder() -> Callable[[str], list[float]] | None:
     except RECOVERABLE_ERRORS as e:
         logger.debug("默认 embedder 不可用: %s", e)
         return None
-
-
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(str(os.environ.get(name) or "").strip())
-    except ValueError:
-        return default
 
 
 def is_rag_enabled() -> bool:

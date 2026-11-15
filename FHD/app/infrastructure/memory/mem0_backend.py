@@ -15,6 +15,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from app.utils.deployment import env_float as _env_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -81,13 +82,6 @@ def _memory_root() -> Path:
 def _backend_choice() -> str:
     raw = str(os.environ.get(_ENV_BACKEND) or "auto").strip().lower()
     return raw if raw in _BACKEND_VALUES else "auto"
-
-
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(str(os.environ.get(name) or "").strip())
-    except ValueError:
-        return default
 
 
 def _expiration_date(days: int = 90) -> str:
