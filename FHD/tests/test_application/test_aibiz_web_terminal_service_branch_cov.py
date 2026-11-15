@@ -22,6 +22,28 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.responses import JSONResponse, Response
 
+
+def _assert_shared_software_terminal_no_preview_falls_to_else_0(
+    self,
+    _shared_literal_0,
+    _shared_literal_1,
+    _shared_literal_2,
+    _shared_literal_3,
+    _shared_literal_4,
+    _shared_literal_5,
+):
+    from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
+
+    surface = {
+        "pages": [
+            {"id": _shared_literal_2, "name": _shared_literal_3},
+            {"id": _shared_literal_4, "name": _shared_literal_5},
+        ]
+    }
+    result = _strip_b64_attach_image_urls(surface, terminal=_shared_literal_1)
+    assert result["preview_index"] == _shared_literal_0
+
+
 # ---------------------------------------------------------------------------
 # _crop_png_top — branch coverage
 # ---------------------------------------------------------------------------
@@ -266,135 +288,63 @@ class TestStripB64AttachImageUrlsBranchCov:
 
     def test_software_terminal_no_preview_falls_to_else(self):
         """Software terminal with no preview pages falls to else branch."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "home_hub", "name": "首页"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="software")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "software", "other", "Other", "home_hub", "首页"
+        )
 
     def test_software_terminal_admin_page_in_else_continues(self):
         """Software terminal: admin_ pages continue (skip) in else branch."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "admin_x", "name": "管理"},
-                {"id": "home_hub", "name": "首页"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="software")
-        # admin_x is skipped, home_hub is found as hero
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "software", "admin_x", "管理", "home_hub", "首页"
+        )
 
     def test_software_terminal_chat_name_hero(self):
         """Software terminal: name '智能对话' triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "x", "name": "智能对话"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="software")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "software", "other", "Other", "x", "智能对话"
+        )
 
     def test_software_terminal_home_name_hero(self):
         """Software terminal: name '首页' triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "x", "name": "首页"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="software")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "software", "other", "Other", "x", "首页"
+        )
 
     def test_web_terminal_admin_hero(self):
         """Web terminal: admin_ prefix triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "admin_panel", "name": "Admin"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "web", "other", "Other", "admin_panel", "Admin"
+        )
 
     def test_web_terminal_home_hub_hero(self):
         """Web terminal: home_hub id triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "home_hub", "name": "Hub"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "web", "other", "Other", "home_hub", "Hub"
+        )
 
     def test_web_terminal_guanwang_name_hero(self):
         """Web terminal: name containing '官网' triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "x", "name": "官网首页"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "web", "other", "Other", "x", "官网首页"
+        )
 
     def test_web_terminal_home_lower_name_hero(self):
         """Web terminal: name.lower() == 'home' triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "x", "name": "Home"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "web", "other", "Other", "x", "Home"
+        )
 
     def test_web_terminal_index_lower_name_hero(self):
         """Web terminal: name.lower() == 'index' triggers hero."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other", "name": "Other"},
-                {"id": "x", "name": "Index"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="web")
-        assert result["preview_index"] == 1
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 1, "web", "other", "Other", "x", "Index"
+        )
 
     def test_app_terminal_no_preferred_match_keeps_default_hero(self):
         """App terminal: no preferred id match keeps hero_i=0."""
-        from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
-
-        surface = {
-            "pages": [
-                {"id": "other1", "name": "Other1"},
-                {"id": "other2", "name": "Other2"},
-            ]
-        }
-        result = _strip_b64_attach_image_urls(surface, terminal="app")
-        # No preferred id matched, hero_i stays 0
-        assert result["preview_index"] == 0
+        return _assert_shared_software_terminal_no_preview_falls_to_else_0(
+            self, 0, "app", "other1", "Other1", "other2", "Other2"
+        )
 
     def test_pages_with_non_dict_page_in_loop(self):
         """Non-dict page entries are preserved in output."""

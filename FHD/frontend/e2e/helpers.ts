@@ -5,9 +5,12 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-export const E2E_USER = process.env.E2E_USER || 'xcagi-enterprise-demo'
-export const E2E_PASSWORD = process.env.E2E_PASSWORD || 'Demo@2026'
+export const E2E_USER = process.env.E2E_USER || ''
+export const E2E_PASSWORD = process.env.E2E_PASSWORD || ''
 export const E2E_ACCOUNT_KIND = process.env.E2E_ACCOUNT_KIND || 'enterprise'
+if (process.env.E2E_FULL_STACK === '1' && (!E2E_USER || !E2E_PASSWORD)) {
+  throw new Error('Full-stack tests require isolated credentials from e2e-full.sh')
+}
 type BrowserCookie = Awaited<ReturnType<APIRequestContext['storageState']>>['cookies'][number]
 
 const loginCookieCache = new Map<string, Promise<BrowserCookie[]>>()
@@ -32,7 +35,7 @@ export function evidenceDir(): string {
 export async function captureEvidence(page: Page, filename: string): Promise<void> {
   const dir = evidenceDir()
   fs.mkdirSync(dir, { recursive: true })
-  await page.screenshot({ path: path.join(dir, filename), fullPage: false })
+  await page.screenshot({ path: path.join(dir, filename), fullPage: false, mask: [page.locator('input[type="password"], #lv-password, input[autocomplete="current-password"]')] })
 }
 
 const E2E_SESSION_PAYLOAD = {

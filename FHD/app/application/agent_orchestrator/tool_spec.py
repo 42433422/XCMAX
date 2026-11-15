@@ -55,6 +55,15 @@ class ToolActionSpecV2:
     owner_mod_id: str = ""
 
     @property
+    def receipt_permission(self) -> str:
+        """Keep action-level audit identity without changing the real RBAC gate."""
+        if self.tool_id == "document_template" or (
+            self.tool_id == "materials" and self.permission == "material.edit"
+        ):
+            return f"tool.{self.tool_id}.{self.action}"
+        return self.permission
+
+    @property
     def test_fixtures(self) -> list[dict[str, Any]]:
         """Compat alias for contract_samples (historical name)."""
         return self.contract_samples
@@ -118,12 +127,25 @@ def _special_permission(tool_id: str, action: str) -> str:
         return "product.view"
     if tool_id == "shipment_records" and action in {"query", "list"}:
         return "shipment.view"
+    if tool_id == "materials" and action in {"list", "query"}:
+        return "material.view"
+    if tool_id == "materials" and action in {"create", "update", "delete", "batch_delete", "clear"}:
+        return "material.edit"
     if tool_id == "shipment_orders" and action in {"generate", "generate_batch"}:
         return "shipment.create"
     if (tool_id, action) == ("customers", "query"):
         return "customer.view"
-    if tool_id == "customers" and action in {"ensure_exists", "delete", "batch_delete"}:
+    if tool_id == "customers" and action in {
+        "ensure_exists",
+        "delete",
+        "batch_delete",
+        "clear",
+    }:
         return "customer.edit"
+    if tool_id == "products" and action == "clear":
+        return "product.edit"
+    if tool_id == "shipment_records" and action == "clear":
+        return "shipment.edit"
     if tool_id in PERMISSION_BARE_PREFIX_TOOLS:
         if (tool_id, action) == ("employee", "context"):
             return "employee.execute"
@@ -132,6 +154,10 @@ def _special_permission(tool_id: str, action: str) -> str:
         if action in DATASET_RAG_READ_ACTIONS:
             return DATASET_RAG_READ_PERMISSION
         return DATASET_RAG_WRITE_PERMISSION
+    if tool_id == "template_preview" and action in {"list", "query", "view"}:
+        return "etl.read"
+    if tool_id in {"template_preview", "document_template"}:
+        return "etl.template.manage"
     if tool_id == "excel_analysis" and action in {"read", "structure", "query", "statistics"}:
         return "tool.excel_analysis.read"
     fixed = PERMISSION_OVERRIDES.get(tool_id)

@@ -83,9 +83,6 @@ jobs:
       - name: Run full-stack login + ERP P0 (mandatory)
         env:
           E2E_FULL_STACK: "1"
-          E2E_USER: xcagi-enterprise-demo
-          E2E_PASSWORD: Demo@2026
-          E2E_ACCOUNT_KIND: enterprise
           E2E_PYTHON: ${{ github.workspace }}/FHD/.venv/bin/python
         run: bash ../scripts/dev/e2e-full.sh
 
@@ -95,8 +92,6 @@ jobs:
         with:
           name: xcagi-full-stack-playwright-evidence
           path: |
-            FHD/frontend/playwright-report/
-            FHD/frontend/test-results/
-            FHD/docs/evidence/e2e/*.png
+            ${{ runner.temp }}/xcagi-e2e-evidence/*.png
           if-no-files-found: warn
           retention-days: 14

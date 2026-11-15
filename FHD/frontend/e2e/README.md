@@ -41,9 +41,9 @@ P0 mock 模式 `npm run test:e2e:p0` 仍维持稳定基线（部分新场景作�
 # 编排脚本（FastAPI :5000 + Vite :5001）
 bash FHD/scripts/dev/e2e-full.sh
 
-# 或手动
+# 或手动：先为隔离本地后端配置独立随机账号密码；不复用官网凭据
 cd FHD/frontend
-E2E_FULL_STACK=1 E2E_USER=xcagi-enterprise-demo E2E_PASSWORD='Demo@2026' E2E_ACCOUNT_KIND=enterprise npm run test:e2e:p0
+E2E_FULL_STACK=1 E2E_USER="${SURFACE_AUDIT_DEMO_USER:?}" E2E_PASSWORD="${SURFACE_AUDIT_DEMO_PASSWORD:?}" E2E_ACCOUNT_KIND=enterprise npm run test:e2e:p0
 ```
 
 ## 本地 mock 模式（无需后端）

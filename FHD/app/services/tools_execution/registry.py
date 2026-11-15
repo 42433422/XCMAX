@@ -128,6 +128,7 @@ REQUIRED_PARAMS_BY_TOOL_ACTION = {
     ("business_db", "read"): ["entity"],
     ("business_db", "write"): ["entity", "operation", "payload"],
     ("dataset_rag", "query"): ["dataset_id", "query"],
+    ("dataset_rag", "clear_dataset"): ["dataset_id"],
     ("ocr", "recognize"): ["file_path"],
     ("ocr", "request"): ["request_id", "image_url"],
     ("ocr", "extract"): ["text"],

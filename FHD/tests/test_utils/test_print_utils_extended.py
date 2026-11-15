@@ -11,6 +11,17 @@ import pytest
 from app.utils.path_io.print_utils import PrinterUtils
 
 
+def _assert_shared_label_printer_zebra_keyword_0(self, _shared_literal_0, _shared_literal_1):
+    pu = PrinterUtils()
+    printers = [{"name": _shared_literal_0, "status": "就绪", "is_default": False}]
+    with (
+        patch.object(pu, "_is_print_backend_available", return_value=True),
+        patch.object(pu, "get_available_printers", return_value=printers),
+    ):
+        result = pu.get_label_printer()
+        assert result == _shared_literal_1
+
+
 def _patch_win32_deps():
     """Context manager that patches win32print, win32api, pythoncom for macOS testing."""
     from unittest.mock import patch as _patch
@@ -660,40 +671,17 @@ class TestPrinterKeywordMatching:
             assert result == "Canon PIXMA"
 
     def test_label_printer_zebra_keyword(self):
-        pu = PrinterUtils()
-        printers = [
-            {"name": "Zebra ZD420", "status": "就绪", "is_default": False},
-        ]
-        with (
-            patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch.object(pu, "get_available_printers", return_value=printers),
-        ):
-            result = pu.get_label_printer()
-            assert result == "Zebra ZD420"
+        return _assert_shared_label_printer_zebra_keyword_0(self, "Zebra ZD420", "Zebra ZD420")
 
     def test_label_printer_thermal_keyword(self):
-        pu = PrinterUtils()
-        printers = [
-            {"name": "Thermal Printer X", "status": "就绪", "is_default": False},
-        ]
-        with (
-            patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch.object(pu, "get_available_printers", return_value=printers),
-        ):
-            result = pu.get_label_printer()
-            assert result == "Thermal Printer X"
+        return _assert_shared_label_printer_zebra_keyword_0(
+            self, "Thermal Printer X", "Thermal Printer X"
+        )
 
     def test_label_printer_barcode_keyword(self):
-        pu = PrinterUtils()
-        printers = [
-            {"name": "Barcode Printer", "status": "就绪", "is_default": False},
-        ]
-        with (
-            patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch.object(pu, "get_available_printers", return_value=printers),
-        ):
-            result = pu.get_label_printer()
-            assert result == "Barcode Printer"
+        return _assert_shared_label_printer_zebra_keyword_0(
+            self, "Barcode Printer", "Barcode Printer"
+        )
 
     def test_document_printer_chinese_keyword(self):
         pu = PrinterUtils()
@@ -708,13 +696,4 @@ class TestPrinterKeywordMatching:
             assert result == "针式打印机"
 
     def test_label_printer_chinese_keyword(self):
-        pu = PrinterUtils()
-        printers = [
-            {"name": "标签打印机", "status": "就绪", "is_default": False},
-        ]
-        with (
-            patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch.object(pu, "get_available_printers", return_value=printers),
-        ):
-            result = pu.get_label_printer()
-            assert result == "标签打印机"
+        return _assert_shared_label_printer_zebra_keyword_0(self, "标签打印机", "标签打印机")

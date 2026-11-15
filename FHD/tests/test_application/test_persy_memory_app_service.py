@@ -3,6 +3,8 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.dataset_rag_app_service import DatasetAccessContext
 from app.application.persy_memory_app_service import (
@@ -127,6 +129,40 @@ def test_confirm_query_reinforces_and_projects_entity_graph() -> None:
     assert any(node["id"] == f"memory:{memory_id}" for node in graph["nodes"])
     assert any(node["metadata"].get("entity_name") == "北辰科技" for node in graph["nodes"])
     assert any(edge["label"] == "主体" for edge in graph["edges"])
+
+
+def test_query_recalls_pending_memories_shown_in_knowledge_base() -> None:
+    service = _service()
+    service.capture_conversation_turn(
+        access_context=_access(),
+        user_message="客户北辰科技的负责人是李明",
+        session_id="chat-1",
+    )
+
+    queried = service.query(access_context=_access(), query="北辰科技负责人", top_k=3)
+
+    assert queried["success"] is True
+    assert queried["chunks"][0]["metadata"]["status"] == "pending"
+
+
+def test_clear_memories_removes_all_visible_records() -> None:
+    service = _service()
+    service.capture_conversation_turn(
+        access_context=_access(),
+        user_message="客户北辰科技的负责人是李明",
+        session_id="chat-1",
+    )
+
+    cleared = service.clear_memories(
+        access_context=DatasetAccessContext(
+            actor_id="7", tenant_id="2", permissions=frozenset({"dataset.write"})
+        )
+    )
+
+    assert cleared["success"] is True
+    assert cleared["deleted_memories"] == 1
+    remaining = service.list_memories(access_context=_access())["memories"]
+    assert [row for row in remaining if row.get("status") in {"pending", "active"}] == []
 
 
 def test_user_memory_is_private_while_tenant_memory_is_shared() -> None:
@@ -293,3 +329,17 @@ def test_completed_chat_turn_is_sent_to_vector_and_structured_memory(trusted_act
         source="smart-chat",
         scope="tenant",
     )
+
+
+@pytest.mark.parametrize("memories", [None, {}, "invalid", [None, 7]])
+def test_invalid_memory_listing_never_deletes_or_returns_records(memories):
+    service = _service()
+    with (
+        patch.object(
+            service, "list_memories", return_value={"success": True, "memories": memories}
+        ),
+        patch.object(service, "mutate") as mutate,
+    ):
+        assert service.clear_memories(access_context=_access())["deleted_memories"] == 0
+        assert service.query(access_context=_access(), query="missing")["memories"] == []
+        mutate.assert_not_called()

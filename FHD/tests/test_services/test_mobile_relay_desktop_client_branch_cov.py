@@ -59,6 +59,75 @@ from app.domain.shared_services.mobile_relay_desktop_client import (
     stop_desktop_relay_poller,
 )
 
+
+def _assert_shared_mode_cleared_when_code_0(self, _shared_literal_0):
+    task = {
+        "kind": "codex.invoke",
+        "payload": {"message": "do something", "context": {"mode": _shared_literal_0}},
+    }
+    mock_svc = MagicMock()
+    mock_svc.invoke.return_value = {
+        "dispatch": {"status": "completed"},
+        "assistant_message": {"status": "completed", "body": "ok"},
+    }
+    with patch(
+        "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+        return_value=mock_svc,
+    ):
+        _execute_task(task)
+    call_kwargs = mock_svc.invoke.call_args[1]
+    assert "mode" not in call_kwargs["context"]
+
+
+def _assert_shared_codex_accepted_with_terminal_message_1(
+    self, _shared_literal_0, _shared_literal_1, _shared_literal_2, _shared_literal_3
+):
+    task = {"kind": "codex.invoke", "payload": {"message": "do something"}}
+    mock_svc = MagicMock()
+    mock_svc.invoke.return_value = {
+        "dispatch": {"accepted": True, "request_id": "req-1", "task_id": "task-1"}
+    }
+    terminal_msg = {
+        "role": "assistant",
+        "kind": "codex_result",
+        "body": _shared_literal_0,
+        "status": _shared_literal_1,
+        "dispatch_request_id": "req-1",
+        "task_id": "task-1",
+    }
+    mock_svc.list_messages.return_value = [terminal_msg]
+    with (
+        patch(
+            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            return_value=mock_svc,
+        ),
+        patch.dict(
+            os.environ,
+            {
+                "XCAGI_RELAY_CODEX_WAIT_TIMEOUT_SEC": "10",
+                "XCAGI_RELAY_CODEX_WAIT_INTERVAL_SEC": "0.01",
+            },
+        ),
+    ):
+        result = _execute_task(task)
+    assert result.get("ok") is _shared_literal_2
+    assert result.get("_relay_status") == _shared_literal_3
+
+
+def _assert_shared_cursor_kind_completed_ok_2(
+    self, _shared_literal_0, _shared_literal_1, _shared_literal_2, _shared_literal_3
+):
+    task = {"kind": _shared_literal_0, "payload": {_shared_literal_1: _shared_literal_2}}
+    mock_svc = MagicMock()
+    mock_svc.invoke.return_value = {
+        "dispatch": {"status": "completed"},
+        "assistant_message": {"status": "completed", "body": "ok"},
+    }
+    with patch(_shared_literal_3, return_value=mock_svc):
+        result = _execute_task(task)
+    assert result.get("ok") is True
+
+
 # ---------------------------------------------------------------------------
 # autouse fixture: isolate global state between tests
 # ---------------------------------------------------------------------------
@@ -734,21 +803,13 @@ class TestExecuteTaskAdditional:
         assert result.get("_relay_status") == "failed"
 
     def test_cursor_kind_completed_ok(self) -> None:
-        task = {
-            "kind": "cursor.invoke",
-            "payload": {"message": "do something"},
-        }
-        mock_svc = MagicMock()
-        mock_svc.invoke.return_value = {
-            "dispatch": {"status": "completed"},
-            "assistant_message": {"status": "completed", "body": "ok"},
-        }
-        with patch(
+        return _assert_shared_cursor_kind_completed_ok_2(
+            self,
+            "cursor.invoke",
+            "message",
+            "do something",
             "app.domain.shared_services.mobile_relay_desktop_client.CursorSuperEmployeeService",
-            return_value=mock_svc,
-        ):
-            result = _execute_task(task)
-        assert result.get("ok") is True
+        )
 
     def test_cursor_kind_not_accepted(self) -> None:
         task = {
@@ -768,84 +829,14 @@ class TestExecuteTaskAdditional:
         assert "busy" in result["error"]
 
     def test_codex_accepted_with_terminal_message(self) -> None:
-        task = {
-            "kind": "codex.invoke",
-            "payload": {"message": "do something"},
-        }
-        mock_svc = MagicMock()
-        mock_svc.invoke.return_value = {
-            "dispatch": {
-                "accepted": True,
-                "request_id": "req-1",
-                "task_id": "task-1",
-            },
-        }
-        terminal_msg = {
-            "role": "assistant",
-            "kind": "codex_result",
-            "body": "all done",
-            "status": "completed",
-            "dispatch_request_id": "req-1",
-            "task_id": "task-1",
-        }
-        mock_svc.list_messages.return_value = [terminal_msg]
-
-        with (
-            patch(
-                "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
-                return_value=mock_svc,
-            ),
-            patch.dict(
-                os.environ,
-                {
-                    "XCAGI_RELAY_CODEX_WAIT_TIMEOUT_SEC": "10",
-                    "XCAGI_RELAY_CODEX_WAIT_INTERVAL_SEC": "0.01",
-                },
-            ),
-        ):
-            result = _execute_task(task)
-        assert result.get("ok") is True
-        assert result.get("_relay_status") == "completed"
+        return _assert_shared_codex_accepted_with_terminal_message_1(
+            self, "all done", "completed", True, "completed"
+        )
 
     def test_codex_accepted_terminal_failed(self) -> None:
-        task = {
-            "kind": "codex.invoke",
-            "payload": {"message": "do something"},
-        }
-        mock_svc = MagicMock()
-        mock_svc.invoke.return_value = {
-            "dispatch": {
-                "accepted": True,
-                "request_id": "req-1",
-                "task_id": "task-1",
-            },
-        }
-        terminal_msg = {
-            "role": "assistant",
-            "kind": "codex_result",
-            "body": "执行失败",
-            "status": "failed",
-            "dispatch_request_id": "req-1",
-            "task_id": "task-1",
-        }
-        mock_svc.list_messages.return_value = [terminal_msg]
-
-        with (
-            patch(
-                "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
-                return_value=mock_svc,
-            ),
-            patch.dict(
-                os.environ,
-                {
-                    "XCAGI_RELAY_CODEX_WAIT_TIMEOUT_SEC": "10",
-                    "XCAGI_RELAY_CODEX_WAIT_INTERVAL_SEC": "0.01",
-                },
-            ),
-        ):
-            result = _execute_task(task)
-        assert result.get("ok") is False
-        assert result.get("_relay_status") == "failed"
+        return _assert_shared_codex_accepted_with_terminal_message_1(
+            self, "执行失败", "failed", False, "failed"
+        )
 
     def test_codex_accepted_no_task_id_in_suffix(self) -> None:
         """When task_id is empty, suffix is omitted in timeout error."""
@@ -934,38 +925,22 @@ class TestExecuteTaskAdditional:
         assert call_kwargs[1]["message"] == "do via body"
 
     def test_message_from_prompt_field(self) -> None:
-        task = {
-            "kind": "codex.invoke",
-            "payload": {"prompt": "do via prompt"},
-        }
-        mock_svc = MagicMock()
-        mock_svc.invoke.return_value = {
-            "dispatch": {"status": "completed"},
-            "assistant_message": {"status": "completed", "body": "ok"},
-        }
-        with patch(
+        return _assert_shared_cursor_kind_completed_ok_2(
+            self,
+            "codex.invoke",
+            "prompt",
+            "do via prompt",
             "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
-            return_value=mock_svc,
-        ):
-            result = _execute_task(task)
-        assert result.get("ok") is True
+        )
 
     def test_message_from_task_field(self) -> None:
-        task = {
-            "kind": "codex.invoke",
-            "payload": {"task": "do via task"},
-        }
-        mock_svc = MagicMock()
-        mock_svc.invoke.return_value = {
-            "dispatch": {"status": "completed"},
-            "assistant_message": {"status": "completed", "body": "ok"},
-        }
-        with patch(
+        return _assert_shared_cursor_kind_completed_ok_2(
+            self,
+            "codex.invoke",
+            "task",
+            "do via task",
             "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
-            return_value=mock_svc,
-        ):
-            result = _execute_task(task)
-        assert result.get("ok") is True
+        )
 
     def test_branch_added_to_context(self) -> None:
         task = {
@@ -1031,109 +1006,19 @@ class TestExecuteTaskAdditional:
         assert call_kwargs["context"]["source"] == "mobile_relay"
 
     def test_mode_cleared_when_code(self) -> None:
-        task = {
-            "kind": "codex.invoke",
-            "payload": {
-                "message": "do something",
-                "context": {"mode": "code"},
-            },
-        }
-        mock_svc = MagicMock()
-        mock_svc.invoke.return_value = {
-            "dispatch": {"status": "completed"},
-            "assistant_message": {"status": "completed", "body": "ok"},
-        }
-        with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
-            return_value=mock_svc,
-        ):
-            _execute_task(task)
-        call_kwargs = mock_svc.invoke.call_args[1]
-        assert "mode" not in call_kwargs["context"]
+        return _assert_shared_mode_cleared_when_code_0(self, "code")
 
     def test_mode_cleared_when_task(self) -> None:
-        task = {
-            "kind": "codex.invoke",
-            "payload": {
-                "message": "do something",
-                "context": {"mode": "task"},
-            },
-        }
-        mock_svc = MagicMock()
-        mock_svc.invoke.return_value = {
-            "dispatch": {"status": "completed"},
-            "assistant_message": {"status": "completed", "body": "ok"},
-        }
-        with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
-            return_value=mock_svc,
-        ):
-            _execute_task(task)
-        call_kwargs = mock_svc.invoke.call_args[1]
-        assert "mode" not in call_kwargs["context"]
+        return _assert_shared_mode_cleared_when_code_0(self, "task")
 
     def test_mode_cleared_when_dispatch(self) -> None:
-        task = {
-            "kind": "codex.invoke",
-            "payload": {
-                "message": "do something",
-                "context": {"mode": "dispatch"},
-            },
-        }
-        mock_svc = MagicMock()
-        mock_svc.invoke.return_value = {
-            "dispatch": {"status": "completed"},
-            "assistant_message": {"status": "completed", "body": "ok"},
-        }
-        with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
-            return_value=mock_svc,
-        ):
-            _execute_task(task)
-        call_kwargs = mock_svc.invoke.call_args[1]
-        assert "mode" not in call_kwargs["context"]
+        return _assert_shared_mode_cleared_when_code_0(self, "dispatch")
 
     def test_mode_cleared_when_dev(self) -> None:
-        task = {
-            "kind": "codex.invoke",
-            "payload": {
-                "message": "do something",
-                "context": {"mode": "dev"},
-            },
-        }
-        mock_svc = MagicMock()
-        mock_svc.invoke.return_value = {
-            "dispatch": {"status": "completed"},
-            "assistant_message": {"status": "completed", "body": "ok"},
-        }
-        with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
-            return_value=mock_svc,
-        ):
-            _execute_task(task)
-        call_kwargs = mock_svc.invoke.call_args[1]
-        assert "mode" not in call_kwargs["context"]
+        return _assert_shared_mode_cleared_when_code_0(self, "dev")
 
     def test_mode_cleared_when_develop(self) -> None:
-        task = {
-            "kind": "codex.invoke",
-            "payload": {
-                "message": "do something",
-                "context": {"mode": "develop"},
-            },
-        }
-        mock_svc = MagicMock()
-        mock_svc.invoke.return_value = {
-            "dispatch": {"status": "completed"},
-            "assistant_message": {"status": "completed", "body": "ok"},
-        }
-        with patch(
-            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
-            return_value=mock_svc,
-        ):
-            _execute_task(task)
-        call_kwargs = mock_svc.invoke.call_args[1]
-        assert "mode" not in call_kwargs["context"]
+        return _assert_shared_mode_cleared_when_code_0(self, "develop")
 
     def test_mode_preserved_when_other_value(self) -> None:
         task = {

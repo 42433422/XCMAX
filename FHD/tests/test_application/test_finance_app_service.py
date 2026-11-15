@@ -22,6 +22,27 @@ import pytest
 
 from app.application.finance_app_service import FinanceAppService, _parse_dt
 
+
+def _assert_shared_with_dates_0(self, _shared_literal_0, _shared_literal_1):
+    svc = FinanceAppService()
+    db = MagicMock()
+    mock_txn = self._make_mock_txn()
+    with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
+        with patch(
+            "app.application.finance_app_service.FinancialTransaction", return_value=mock_txn
+        ):
+            with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
+                result = svc.create_transaction(
+                    {
+                        "transaction_type": "receipt",
+                        "amount": "100",
+                        "transaction_date": _shared_literal_0,
+                        "due_date": _shared_literal_1,
+                    }
+                )
+    assert result["success"] is True
+
+
 # ---------------------------------------------------------------------------
 # Helper to build a mock db context manager
 # ---------------------------------------------------------------------------
@@ -421,52 +442,10 @@ class TestCreateTransaction:
         db.rollback.assert_called_once()
 
     def test_with_dates(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        mock_txn = self._make_mock_txn()
-
-        with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
-            with patch(
-                "app.application.finance_app_service.FinancialTransaction",
-                return_value=mock_txn,
-            ):
-                with patch(
-                    "app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"
-                ):
-                    result = svc.create_transaction(
-                        {
-                            "transaction_type": "receipt",
-                            "amount": "100",
-                            "transaction_date": "2026-01-15T10:00:00",
-                            "due_date": "2026-02-15",
-                        }
-                    )
-
-        assert result["success"] is True
+        return _assert_shared_with_dates_0(self, "2026-01-15T10:00:00", "2026-02-15")
 
     def test_invalid_date_strings_handled(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        mock_txn = self._make_mock_txn()
-
-        with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
-            with patch(
-                "app.application.finance_app_service.FinancialTransaction",
-                return_value=mock_txn,
-            ):
-                with patch(
-                    "app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"
-                ):
-                    result = svc.create_transaction(
-                        {
-                            "transaction_type": "receipt",
-                            "amount": "100",
-                            "transaction_date": "invalid",
-                            "due_date": "also invalid",
-                        }
-                    )
-
-        assert result["success"] is True
+        return _assert_shared_with_dates_0(self, "invalid", "also invalid")
 
 
 # ---------------------------------------------------------------------------

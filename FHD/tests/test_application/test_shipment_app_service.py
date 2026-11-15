@@ -16,6 +16,80 @@ from app.application.shipment_app_service import ShipmentApplicationService
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
 from app.domain.shipment.value_objects import ContactInfo, Money, Quantity
 
+
+def _assert_shared_export_status_filter_printed_0(
+    self, tmp_path, _shared_literal_0, _shared_literal_1
+):
+    rq = DummyRecordQuery(
+        data=[
+            {
+                "id": 1,
+                "status": "printed",
+                "purchase_unit": "",
+                "product_name": "",
+                "model_number": "",
+                "quantity_kg": 0,
+                "quantity_tins": 0,
+                "tin_spec": "",
+                "unit_price": 0,
+                "amount": 0,
+                "created_at": None,
+                "printed_at": None,
+                "printer_name": "",
+            },
+            {
+                "id": 2,
+                "status": _shared_literal_1,
+                "purchase_unit": "",
+                "product_name": "",
+                "model_number": "",
+                "quantity_kg": 0,
+                "quantity_tins": 0,
+                "tin_spec": "",
+                "unit_price": 0,
+                "amount": 0,
+                "created_at": None,
+                "printed_at": None,
+                "printer_name": "",
+            },
+        ]
+    )
+    with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
+        svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
+        result = svc.export_shipment_records(status_filter=_shared_literal_0)
+        assert result["success"] is True
+        assert result["count"] == 1
+
+
+def _assert_shared_export_status_filter_chinese_printed_1(
+    self, tmp_path, _shared_literal_0, _shared_literal_1
+):
+    rq = DummyRecordQuery(
+        data=[
+            {
+                "id": 1,
+                "status": _shared_literal_1,
+                "purchase_unit": "",
+                "product_name": "",
+                "model_number": "",
+                "quantity_kg": 0,
+                "quantity_tins": 0,
+                "tin_spec": "",
+                "unit_price": 0,
+                "amount": 0,
+                "created_at": None,
+                "printed_at": None,
+                "printer_name": "",
+            }
+        ]
+    )
+    with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
+        svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
+        result = svc.export_shipment_records(status_filter=_shared_literal_0)
+        assert result["success"] is True
+        assert result["count"] == 1
+
+
 # ---------------------------------------------------------------------------
 # Dummy implementations for testing (reuse pattern from existing test)
 # ---------------------------------------------------------------------------
@@ -581,86 +655,10 @@ class TestExportShipmentRecords:
             assert result["success"] is True
 
     def test_export_status_filter_printed(self, tmp_path):
-        rq = DummyRecordQuery(
-            data=[
-                {
-                    "id": 1,
-                    "status": "printed",
-                    "purchase_unit": "",
-                    "product_name": "",
-                    "model_number": "",
-                    "quantity_kg": 0,
-                    "quantity_tins": 0,
-                    "tin_spec": "",
-                    "unit_price": 0,
-                    "amount": 0,
-                    "created_at": None,
-                    "printed_at": None,
-                    "printer_name": "",
-                },
-                {
-                    "id": 2,
-                    "status": "pending",
-                    "purchase_unit": "",
-                    "product_name": "",
-                    "model_number": "",
-                    "quantity_kg": 0,
-                    "quantity_tins": 0,
-                    "tin_spec": "",
-                    "unit_price": 0,
-                    "amount": 0,
-                    "created_at": None,
-                    "printed_at": None,
-                    "printer_name": "",
-                },
-            ]
-        )
-        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
-            svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
-            result = svc.export_shipment_records(status_filter="printed")
-            assert result["success"] is True
-            assert result["count"] == 1
+        return _assert_shared_export_status_filter_printed_0(self, tmp_path, "printed", "pending")
 
     def test_export_status_filter_pending(self, tmp_path):
-        rq = DummyRecordQuery(
-            data=[
-                {
-                    "id": 1,
-                    "status": "printed",
-                    "purchase_unit": "",
-                    "product_name": "",
-                    "model_number": "",
-                    "quantity_kg": 0,
-                    "quantity_tins": 0,
-                    "tin_spec": "",
-                    "unit_price": 0,
-                    "amount": 0,
-                    "created_at": None,
-                    "printed_at": None,
-                    "printer_name": "",
-                },
-                {
-                    "id": 2,
-                    "status": "",
-                    "purchase_unit": "",
-                    "product_name": "",
-                    "model_number": "",
-                    "quantity_kg": 0,
-                    "quantity_tins": 0,
-                    "tin_spec": "",
-                    "unit_price": 0,
-                    "amount": 0,
-                    "created_at": None,
-                    "printed_at": None,
-                    "printer_name": "",
-                },
-            ]
-        )
-        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
-            svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
-            result = svc.export_shipment_records(status_filter="pending")
-            assert result["success"] is True
-            assert result["count"] == 1
+        return _assert_shared_export_status_filter_printed_0(self, tmp_path, "pending", "")
 
     def test_export_template_not_found(self, tmp_path):
         rq = DummyRecordQuery(data=[{"id": 1}])
@@ -764,56 +762,12 @@ class TestExportShipmentRecords:
             assert result["count"] == 0
 
     def test_export_status_filter_chinese_printed(self, tmp_path):
-        rq = DummyRecordQuery(
-            data=[
-                {
-                    "id": 1,
-                    "status": "printed",
-                    "purchase_unit": "",
-                    "product_name": "",
-                    "model_number": "",
-                    "quantity_kg": 0,
-                    "quantity_tins": 0,
-                    "tin_spec": "",
-                    "unit_price": 0,
-                    "amount": 0,
-                    "created_at": None,
-                    "printed_at": None,
-                    "printer_name": "",
-                },
-            ]
+        return _assert_shared_export_status_filter_chinese_printed_1(
+            self, tmp_path, "已打印", "printed"
         )
-        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
-            svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
-            result = svc.export_shipment_records(status_filter="已打印")
-            assert result["success"] is True
-            assert result["count"] == 1
 
     def test_export_status_filter_chinese_pending(self, tmp_path):
-        rq = DummyRecordQuery(
-            data=[
-                {
-                    "id": 1,
-                    "status": "",
-                    "purchase_unit": "",
-                    "product_name": "",
-                    "model_number": "",
-                    "quantity_kg": 0,
-                    "quantity_tins": 0,
-                    "tin_spec": "",
-                    "unit_price": 0,
-                    "amount": 0,
-                    "created_at": None,
-                    "printed_at": None,
-                    "printer_name": "",
-                },
-            ]
-        )
-        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
-            svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
-            result = svc.export_shipment_records(status_filter="未打印")
-            assert result["success"] is True
-            assert result["count"] == 1
+        return _assert_shared_export_status_filter_chinese_printed_1(self, tmp_path, "未打印", "")
 
 
 # ---------------------------------------------------------------------------
