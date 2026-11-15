@@ -72,3 +72,43 @@ def test_prompt_format_respects_budget() -> None:
     assert prompt
     assert len(prompt) <= 200
     assert mem0_backend.format_recalled_memories([]) == ""
+
+
+@pytest.mark.skipif(not _HAS_MEM0, reason="mem0 未安装")
+def test_reset_releases_default_vector_lock_for_a_later_backend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """跨测试重置必须关掉默认路径上的 Qdrant 锁，否则后续用例再打开会泄漏 .lock。"""
+    import gc
+    import warnings
+
+    monkeypatch.setenv("FHD_EMBEDDING_MODE", "hash")
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "app-data"))
+    monkeypatch.delenv("XCAGI_LONG_TERM_MEMORY_DIR", raising=False)
+    EmbeddingService.reset_singleton_for_tests()
+    mem0_backend.reset_long_term_memory_for_tests()
+    first = mem0_backend.get_long_term_memory()
+    assert first.enabled is True
+
+    # 模拟合并套件：切到临时目录并重置，再回到默认路径。
+    monkeypatch.setenv("XCAGI_LONG_TERM_MEMORY_DIR", str(tmp_path / "ltm"))
+    EmbeddingService.reset_singleton_for_tests()
+    mem0_backend.reset_long_term_memory_for_tests()
+    other = mem0_backend.get_long_term_memory()
+    assert other.enabled is True
+    other.close()
+    mem0_backend.reset_long_term_memory_for_tests()
+
+    monkeypatch.delenv("XCAGI_LONG_TERM_MEMORY_DIR", raising=False)
+    EmbeddingService.reset_singleton_for_tests()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        later = mem0_backend.get_long_term_memory()
+        gc.collect()
+        assert later.enabled is True
+        assert later._failed is False
+        leaked = [str(item.message) for item in caught if "vectors/.lock" in str(item.message)]
+    later.close()
+    mem0_backend.reset_long_term_memory_for_tests()
+    EmbeddingService.reset_singleton_for_tests()
+    assert leaked == []

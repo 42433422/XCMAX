@@ -563,12 +563,7 @@ class Mem0LongTermMemory:
         self._initialized = False
         if memory is None:
             return
-        try:
-            client = getattr(getattr(memory, "vector_store", None), "client", None)
-            if client is not None:
-                client.close()
-        except RECOVERABLE_ERRORS:
-            logger.debug("长期记忆向量库关闭失败", exc_info=True)
+        _close_memory_stores(memory)
 
     def health(self) -> dict[str, Any]:
         return {
@@ -640,10 +635,30 @@ def get_long_term_memory() -> Mem0LongTermMemory:
     return _service
 
 
+def _close_memory_stores(memory: Any) -> None:
+    """关闭 mem0 持有的本地 Qdrant 句柄；同一 client 只关一次。"""
+    clients: list[Any] = []
+    # 用实例属性 _entity_store，避免触发会新建客户端的 entity_store 属性。
+    for name in ("vector_store", "_telemetry_vector_store", "_entity_store"):
+        client = getattr(getattr(memory, name, None), "client", None)
+        if client is not None and client not in clients:
+            clients.append(client)
+    for client in clients:
+        closer = getattr(client, "close", None)
+        if not callable(closer):
+            continue
+        try:
+            closer()
+        except RECOVERABLE_ERRORS:
+            logger.debug("长期记忆向量库关闭失败", exc_info=True)
+
+
 def reset_long_term_memory_for_tests() -> None:
     global _service
     with _service_lock:
-        _service = None
+        service, _service = _service, None
+    if service is not None:
+        service.close()
 
 
 __all__ = [
