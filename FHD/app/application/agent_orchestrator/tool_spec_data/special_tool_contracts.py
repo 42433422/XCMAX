@@ -976,6 +976,13 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
             _success(dataset_id="platform-docs", document_id="doc_1", deleted_chunks=1),
         )
     ],
+    ("dataset_rag", "clear_dataset"): [
+        _sample(
+            "clear_dataset_documents",
+            {"dataset_id": "persy-knowledge"},
+            _success(dataset_id="persy-knowledge", deleted_documents=2, deleted_chunks=8),
+        )
+    ],
     ("memory_v2", "propose_candidate"): [
         _sample(
             "propose_memory_v2_candidate",

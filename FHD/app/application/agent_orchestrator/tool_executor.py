@@ -39,8 +39,12 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         "shipment_orders",
         "document_template",
         "purchase",
-        "finance",
+        # 表格读取会在任务快照阶段查询上传记录并按租户校验归属，
+        # 后台/持久化运行必须从 runtime_context 恢复租户上下文。
         "excel_analysis",
+        # 导入会按当前租户写入客户/产品/订单，同样需要恢复租户。
+        "import_excel_to_database",
+        "finance",
         "employee",
     }
 )
@@ -157,6 +161,7 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
         BusinessActionLedger,
         canonical_hash,
     )
+    from app.application.agent_orchestrator.business_write_guard import recheck_worker_claim
     from app.application.agent_orchestrator.catalog_product_edit import (
         existing_action,
         repository,
@@ -193,6 +198,7 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
         factory = factory_for(principal, lock_timeout=5)
         with tenant_scope(int(principal.tenant_id)), factory.guard():
             check_invocation_deadline()
+            recheck_worker_claim()
             trusted_original(params, context, writing=True)
             with source_claim_admission(factory, params, context):
                 claim, existing = ledger.claim(step.tool_id, step.action, params, context)

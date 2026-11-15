@@ -134,6 +134,31 @@ def _registered_router_shipment_records(
         return cast("dict[Any, Any]", svc.update_shipment_record(record_id=record_id, **payload))
     if action == "delete":
         return cast("dict[Any, Any]", svc.delete_shipment_record(int(params.get("id") or 0)))
+    if action == "clear":
+        listed = svc.get_shipment_records(None) or {}
+        rows = listed.get("data") if isinstance(listed, dict) else None
+        deleted = 0
+        failed = 0
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            try:
+                record_id = int(row.get("id") or 0)
+            except (TypeError, ValueError):
+                continue
+            if record_id <= 0:
+                continue
+            result = svc.delete_shipment_record(record_id) or {}
+            if isinstance(result, dict) and result.get("success"):
+                deleted += 1
+            else:
+                failed += 1
+        return {
+            "success": True,
+            "message": f"已清空 {deleted} 条出货记录",
+            "deleted_count": deleted,
+            "failed_count": failed,
+        }
     if action == "export":
         return cast(
             "dict[Any, Any]",

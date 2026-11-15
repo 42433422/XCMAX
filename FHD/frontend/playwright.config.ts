@@ -19,8 +19,8 @@ export default defineConfig({
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5001',
     launchOptions: process.env.PLAYWRIGHT_BYPASS_PROXY === '1' ? { args: ['--no-proxy-server'] } : undefined,
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
+    trace: process.env.E2E_FULL_STACK === '1' ? 'off' : 'on-first-retry',
+    screenshot: process.env.E2E_FULL_STACK === '1' ? 'off' : 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 })

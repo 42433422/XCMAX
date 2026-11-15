@@ -13,6 +13,20 @@ from fastapi.testclient import TestClient
 from app.fastapi_routes.domains.static.static_routes import router
 
 
+def _assert_shared_vite_svg_0(self, _shared_literal_0, _shared_literal_1, _shared_literal_2):
+    app, client, tmpdir = self._make_app_with_file(_shared_literal_0, _shared_literal_1)
+    try:
+        with patch(
+            "app.fastapi_routes.domains.static.static_routes.get_base_dir", return_value=tmpdir
+        ):
+            resp = client.get(_shared_literal_2)
+            assert resp.status_code == 200
+    finally:
+        import shutil
+
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 def _create_app() -> FastAPI:
     app = FastAPI()
     app.include_router(router)
@@ -127,18 +141,7 @@ class TestAssetRoutes:
         return app, client, tmpdir
 
     def test_vite_svg(self):
-        app, client, tmpdir = self._make_app_with_file("vite.svg", b"<svg></svg>")
-        try:
-            with patch(
-                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
-                return_value=tmpdir,
-            ):
-                resp = client.get("/vite.svg")
-                assert resp.status_code == 200
-        finally:
-            import shutil
-
-            shutil.rmtree(tmpdir, ignore_errors=True)
+        return _assert_shared_vite_svg_0(self, "vite.svg", b"<svg></svg>", "/vite.svg")
 
     def test_vite_svg_missing(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -206,34 +209,12 @@ class TestAssetRoutes:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_workflow_employee_docs_json(self):
-        app, client, tmpdir = self._make_app_with_file(
-            "workflow-employee-docs.json", b'{"docs": []}'
+        return _assert_shared_vite_svg_0(
+            self, "workflow-employee-docs.json", b'{"docs": []}', "/workflow-employee-docs.json"
         )
-        try:
-            with patch(
-                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
-                return_value=tmpdir,
-            ):
-                resp = client.get("/workflow-employee-docs.json")
-                assert resp.status_code == 200
-        finally:
-            import shutil
-
-            shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_sw_js(self):
-        app, client, tmpdir = self._make_app_with_file("sw.js", b"self.addEventListener();")
-        try:
-            with patch(
-                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
-                return_value=tmpdir,
-            ):
-                resp = client.get("/sw.js")
-                assert resp.status_code == 200
-        finally:
-            import shutil
-
-            shutil.rmtree(tmpdir, ignore_errors=True)
+        return _assert_shared_vite_svg_0(self, "sw.js", b"self.addEventListener();", "/sw.js")
 
     def test_favicon_returns_gif(self):
         app = _create_app()

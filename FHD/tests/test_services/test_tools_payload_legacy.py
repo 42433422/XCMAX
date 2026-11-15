@@ -9,6 +9,18 @@ import pytest
 from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
 
 
+def _assert_shared_view_action_0(self, _shared_literal_0, _shared_literal_1):
+    result = dispatch_legacy_tool_payload(
+        _shared_literal_0,
+        _shared_literal_1,
+        {},
+        json_response_fn=_json_fn,
+        hdr_getter=_hdr_getter,
+        parse_order_text_fn=_parse_order_text,
+    )
+    assert result["_response"]["success"] is True
+
+
 def _json_fn(data, status=200):
     return {"_response": data, "_status": status}
 
@@ -50,15 +62,7 @@ class TestProductsTool:
         assert "products" in result["_response"]["redirect"]
 
     def test_view_action(self):
-        result = dispatch_legacy_tool_payload(
-            "products",
-            "view",
-            {},
-            json_response_fn=_json_fn,
-            hdr_getter=_hdr_getter,
-            parse_order_text_fn=_parse_order_text,
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, "products", "view")
 
     def test_run_action_with_keyword(self):
         result = dispatch_legacy_tool_payload(
@@ -72,15 +76,7 @@ class TestProductsTool:
         assert result["_response"]["success"] is True
 
     def test_no_keyword_no_search(self):
-        result = dispatch_legacy_tool_payload(
-            "products",
-            "other",
-            {},
-            json_response_fn=_json_fn,
-            hdr_getter=_hdr_getter,
-            parse_order_text_fn=_parse_order_text,
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, "products", "other")
 
 
 # ========================= chat tool =====================================
@@ -117,15 +113,7 @@ class TestAiEcosystemTool:
         assert "data" in result["_response"]
 
     def test_query_action(self):
-        result = dispatch_legacy_tool_payload(
-            "ai_ecosystem",
-            "query",
-            {},
-            json_response_fn=_json_fn,
-            hdr_getter=_hdr_getter,
-            parse_order_text_fn=_parse_order_text,
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, "ai_ecosystem", "query")
 
     def test_other_action(self):
         result = dispatch_legacy_tool_payload(
@@ -157,15 +145,7 @@ class TestBusinessDockingTool:
         assert result["_status"] == 400
 
     def test_other_action_redirect(self):
-        result = dispatch_legacy_tool_payload(
-            "business_docking",
-            "open",
-            {},
-            json_response_fn=_json_fn,
-            hdr_getter=_hdr_getter,
-            parse_order_text_fn=_parse_order_text,
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, "business_docking", "open")
 
 
 # ========================= customers tool ================================
@@ -196,15 +176,7 @@ class TestCustomersTool:
         assert result["_response"]["success"] is True
 
     def test_view_action(self):
-        result = dispatch_legacy_tool_payload(
-            "customers",
-            "view",
-            {},
-            json_response_fn=_json_fn,
-            hdr_getter=_hdr_getter,
-            parse_order_text_fn=_parse_order_text,
-        )
-        assert result["_response"]["success"] is True
+        return _assert_shared_view_action_0(self, "customers", "view")
 
     def test_exec_action_with_sub_action(self):
         result = dispatch_legacy_tool_payload(

@@ -30,6 +30,47 @@ import pytest
 from fastapi import BackgroundTasks
 
 
+async def _assert_shared_login_error_body_decode_fails_0(self, ext_mod, _shared_literal_0):
+    err_resp = MagicMock()
+    err_resp.body = _shared_literal_0
+    with (
+        patch("app.security.auth_qr_login.get_auth_qr", return_value={"status": "pending"}),
+        patch("app.application.auth_app_service.get_auth_app_service"),
+        patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+        patch(
+            "app.application.enterprise_login_flow.run_market_first_login",
+            new=AsyncMock(return_value=(None, err_resp)),
+        ),
+        patch(
+            "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
+            (RuntimeError, ValueError, UnicodeDecodeError),
+        ),
+    ):
+        body = ext_mod.AuthQrConfirmBody(qr_id="a" * 8, username="alice", password="pass")
+        mock_request = MagicMock()
+        mock_request.headers = {}
+        result = await ext_mod.mobile_auth_qr_confirm(body=body, request=mock_request)
+    assert result.status_code == 401
+
+
+async def _assert_shared_empty_push_provider_defaults_to_fcm_1(self, ext_mod, _shared_literal_0):
+    body = ext_mod.DeviceRegisterBody(
+        fcm_token="a" * 10, push_token="push_tok", push_provider=_shared_literal_0
+    )
+    mock_db = MagicMock()
+    mock_q = MagicMock()
+    mock_q.filter.return_value.first.return_value = None
+    mock_db.query.return_value = mock_q
+    mock_db.__enter__ = MagicMock(return_value=mock_db)
+    mock_db.__exit__ = MagicMock(return_value=False)
+    with (
+        patch.object(ext_mod, "_ensure_mobile_device_table"),
+        patch("app.db.session.get_db", return_value=mock_db),
+    ):
+        result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
+    assert hasattr(result, "body") or isinstance(result, dict)
+
+
 @pytest.fixture(autouse=True)
 def _fake_market_profiles(monkeypatch):
     monkeypatch.setattr(
@@ -412,22 +453,7 @@ class TestMobileDeviceRegisterAdditional:
     @pytest.mark.asyncio
     async def test_empty_push_provider_defaults_to_fcm(self, ext_mod):
         """When push_provider is empty, provider defaults to 'fcm'."""
-        body = ext_mod.DeviceRegisterBody(
-            fcm_token="a" * 10, push_token="push_tok", push_provider=""
-        )
-        mock_db = MagicMock()
-        mock_q = MagicMock()
-        mock_q.filter.return_value.first.return_value = None
-        mock_db.query.return_value = mock_q
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-
-        with (
-            patch.object(ext_mod, "_ensure_mobile_device_table"),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        return await _assert_shared_empty_push_provider_defaults_to_fcm_1(self, ext_mod, "")
 
     @pytest.mark.asyncio
     async def test_empty_product_sku_defaults_to_personal(self, ext_mod):
@@ -450,22 +476,7 @@ class TestMobileDeviceRegisterAdditional:
     @pytest.mark.asyncio
     async def test_push_provider_uppercase_lowered(self, ext_mod):
         """push_provider is lowercased."""
-        body = ext_mod.DeviceRegisterBody(
-            fcm_token="a" * 10, push_token="push_tok", push_provider="FCM"
-        )
-        mock_db = MagicMock()
-        mock_q = MagicMock()
-        mock_q.filter.return_value.first.return_value = None
-        mock_db.query.return_value = mock_q
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-
-        with (
-            patch.object(ext_mod, "_ensure_mobile_device_table"),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            result = await ext_mod.mobile_device_register(body=body, user=_mock_user())
-        assert hasattr(result, "body") or isinstance(result, dict)
+        return await _assert_shared_empty_push_provider_defaults_to_fcm_1(self, ext_mod, "FCM")
 
     @pytest.mark.asyncio
     async def test_push_token_from_fcm_when_push_empty(self, ext_mod):
@@ -710,58 +721,14 @@ class TestMobileAuthQrConfirmAdditional2:
     @pytest.mark.asyncio
     async def test_login_error_body_decode_fails(self, ext_mod):
         """Test login error where err.body exists but decode fails."""
-        err_resp = MagicMock()
-        err_resp.body = b"\xff\xfe invalid utf-8"
-
-        with (
-            patch(
-                "app.security.auth_qr_login.get_auth_qr",
-                return_value={"status": "pending"},
-            ),
-            patch("app.application.auth_app_service.get_auth_app_service"),
-            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
-            patch(
-                "app.application.enterprise_login_flow.run_market_first_login",
-                new=AsyncMock(return_value=(None, err_resp)),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-                (RuntimeError, ValueError, UnicodeDecodeError),
-            ),
-        ):
-            body = ext_mod.AuthQrConfirmBody(qr_id="a" * 8, username="alice", password="pass")
-            mock_request = MagicMock()
-            mock_request.headers = {}
-            result = await ext_mod.mobile_auth_qr_confirm(body=body, request=mock_request)
-        assert result.status_code == 401
+        return await _assert_shared_login_error_body_decode_fails_0(
+            self, ext_mod, b"\xff\xfe invalid utf-8"
+        )
 
     @pytest.mark.asyncio
     async def test_login_error_body_not_json(self, ext_mod):
         """Test login error where err.body is not valid JSON."""
-        err_resp = MagicMock()
-        err_resp.body = b"not json"
-
-        with (
-            patch(
-                "app.security.auth_qr_login.get_auth_qr",
-                return_value={"status": "pending"},
-            ),
-            patch("app.application.auth_app_service.get_auth_app_service"),
-            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
-            patch(
-                "app.application.enterprise_login_flow.run_market_first_login",
-                new=AsyncMock(return_value=(None, err_resp)),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-                (RuntimeError, ValueError, UnicodeDecodeError),
-            ),
-        ):
-            body = ext_mod.AuthQrConfirmBody(qr_id="a" * 8, username="alice", password="pass")
-            mock_request = MagicMock()
-            mock_request.headers = {}
-            result = await ext_mod.mobile_auth_qr_confirm(body=body, request=mock_request)
-        assert result.status_code == 401
+        return await _assert_shared_login_error_body_decode_fails_0(self, ext_mod, b"not json")
 
     @pytest.mark.asyncio
     async def test_qr_id_with_whitespace_stripped(self, ext_mod):

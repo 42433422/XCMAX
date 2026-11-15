@@ -10,6 +10,30 @@ from app.application.starter_template_catalog import merge_starter_templates
 from app.di.registry import get_service_registry
 
 
+def persist_workflow_preview_template(payload: dict[str, Any]) -> dict[str, Any]:
+    """Persist an analyzed preview with tenancy enforced at the application boundary."""
+    from sqlalchemy import text
+
+    from app.db.session import get_db
+    from app.infrastructure.templates.tenant_scope import templates_tenant_id_for_insert
+    from app.infrastructure.tenant_scope import TenantScopeError
+
+    try:
+        tenant_id = templates_tenant_id_for_insert()
+    except TenantScopeError:
+        return {"success": False, "message": "缺少租户上下文，无法创建模板"}
+    with get_db() as db:
+        result = db.execute(
+            text(
+                "\n                    INSERT INTO templates (\n                        template_key, template_name, template_type,\n                        original_file_path, analyzed_data, editable_config,\n                        zone_config, merged_cells_config, style_config,\n                        business_rules, is_active, tenant_id\n                    ) VALUES (\n                        :template_key, :template_name, :template_type,\n                        :original_file_path, :analyzed_data, :editable_config,\n                        :zone_config, :merged_cells_config, :style_config,\n                        :business_rules, :is_active, :tenant_id\n                    )\n                "
+            ),
+            {**payload, "tenant_id": tenant_id},
+        )
+        template_id = result.lastrowid
+        db.commit()
+    return {"success": True, "template_id": template_id}
+
+
 class TemplateApplicationService:
     """模板应用服务 - 负责模板相关的用例编排"""
 

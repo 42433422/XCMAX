@@ -289,6 +289,7 @@ class InventoryMovementsMixin:
                 transaction = stock_model(
                     ledger_id=ledger.id,
                     transaction_type="out",
+                    document_posting=True,
                     product_id=resolved_product_id,
                     warehouse_id=resolved_warehouse_id,
                     location_id=location_id,

@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Query, Request
 
@@ -74,9 +74,9 @@ def build_xcmax_personnel_router() -> APIRouter:
     @router.get("/employees", response_model=None)
     def list_employees(
         request: Request,
-        page: int = Query(1, ge=1),
-        page_size: int = Query(50, ge=1, le=500),
-        search: str = Query(""),
+        page: Annotated[int, Query(ge=1)] = 1,
+        page_size: Annotated[int, Query(ge=1, le=500)] = 50,
+        search: Annotated[str, Query()] = "",
     ):
         gate = _require_personnel_admin(request)
         if gate is not None:
@@ -130,9 +130,9 @@ def build_xcmax_personnel_router() -> APIRouter:
     @router.get("/departments", response_model=None)
     def list_departments(
         request: Request,
-        page: int = Query(1, ge=1),
-        page_size: int = Query(50, ge=1, le=500),
-        search: str = Query(""),
+        page: Annotated[int, Query(ge=1)] = 1,
+        page_size: Annotated[int, Query(ge=1, le=500)] = 50,
+        search: Annotated[str, Query()] = "",
     ):
         gate = _require_personnel_admin(request)
         if gate is not None:

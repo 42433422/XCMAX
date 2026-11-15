@@ -66,6 +66,7 @@ def test_templates_create_route_executes_document_template_tool_through_agent(
     assert run.tool_calls[0].tool_id == "document_template"
     assert run.tool_calls[0].action == "create"
     assert run.tool_calls[0].permission == "tool.document_template.create"
+    assert run.tool_calls[0].metadata["authorization_permission"] == "etl.template.manage"
     assert run.tool_calls[0].cost_units == 2
     assert {"step.waiting_user", "step.approved", "tool.completed"} <= {
         event.event_type for event in run.events
@@ -120,6 +121,7 @@ def test_templates_update_route_executes_document_template_tool_through_agent(
     assert run.tool_calls[0].tool_id == "document_template"
     assert run.tool_calls[0].action == "update"
     assert run.tool_calls[0].permission == "tool.document_template.update"
+    assert run.tool_calls[0].metadata["authorization_permission"] == "etl.template.manage"
     assert run.tool_calls[0].cost_units == 2
 
 
@@ -173,6 +175,7 @@ def test_templates_delete_route_executes_document_template_tool_through_agent(
     assert run.tool_calls[0].tool_id == "document_template"
     assert run.tool_calls[0].action == "delete"
     assert run.tool_calls[0].permission == "tool.document_template.delete"
+    assert run.tool_calls[0].metadata["authorization_permission"] == "etl.template.manage"
     assert run.tool_calls[0].cost_units == 2
     assert {"step.waiting_user", "step.approved", "tool.completed"} <= {
         event.event_type for event in run.events

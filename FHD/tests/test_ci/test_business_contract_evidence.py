@@ -216,6 +216,52 @@ def test_ci_gate_records_not_applicable_when_backend_is_skipped():
     assert evidence["scenarios"][0]["status"] == "NOT APPLICABLE"
 
 
+def test_a_lookalike_name_is_not_the_required_node(tmp_path: Path):
+    body = ""
+    for node_id in REQUIRED_TESTS.values():
+        module, _, name = node_id.partition("::")
+        body += _case(module[:-3].replace("/", "."), name + "_other")
+        if "[" in name:
+            body += _case(module[:-3].replace("/", "."), name.split("[", 1)[0])
+    evidence = _evidence([_write(tmp_path, body)])
+    assert all(item["status"] == "NOT RUN" for item in evidence["scenarios"])
+    with pytest.raises(ValueError, match="NOT RUN"):
+        ci_gate(tmp_path, source_sha="a" * 40, run_id="9", run_attempt="1", backend="ran")
+
+
+def test_short_sha_is_rejected(tmp_path: Path):
+    _write(tmp_path, _passing_pair())
+    with pytest.raises(ValueError, match="40 lowercase hex"):
+        ci_gate(tmp_path, source_sha="abc", run_id="9", run_attempt="1", backend="ran")
+
+
+def test_broken_xml_is_rejected(tmp_path: Path):
+    shard = tmp_path / "backend-shard-1-1"
+    shard.mkdir(parents=True)
+    (shard / "full.xml").write_text("<testsuite>", encoding="utf-8")
+    with pytest.raises(ET.ParseError):
+        ci_gate(tmp_path, source_sha="a" * 40, run_id="9", run_attempt="1", backend="ran")
+
+
+def test_r08_readback_fails_when_recovery_inserts_again(monkeypatch):
+    import app.application.agent_orchestrator.tool_permission as permissions
+
+    real = permissions.begin_idempotent_replay
+
+    def drop_replay(*args, **kwargs):
+        key, _replay = real(*args, **kwargs)
+        return key, None
+
+    monkeypatch.setattr(permissions, "begin_idempotent_replay", drop_replay)
+    with pytest.raises(AssertionError) as caught:
+        test_e23_kill_after_commit_returns_the_same_row()
+    message = str(caught.value)
+    folded = message.encode("utf-8", "backslashreplace").decode("unicode_escape")
+    assert "客户名称已存在" in message or "客户名称已存在" in folded
+    monkeypatch.undo()
+    test_e23_kill_after_commit_returns_the_same_row()
+
+
 def test_parameterized_required_test_fails_when_one_instance_fails(tmp_path: Path):
     """整体 nodeid 会聚合全部参数实例：任一参数失败，场景不能算通过。"""
     base = REQUIRED_TESTS["R03-confirm-binding"]
@@ -264,49 +310,3 @@ def test_parameterized_required_test_passes_when_every_instance_passes(tmp_path:
     )
     assert r03["status"] == "PASS"
     assert len(r03["attempts"]) == 2
-
-
-def test_a_lookalike_name_is_not_the_required_node(tmp_path: Path):
-    body = ""
-    for node_id in REQUIRED_TESTS.values():
-        module, _, name = node_id.partition("::")
-        body += _case(module[:-3].replace("/", "."), name + "_other")
-        if "[" in name:
-            body += _case(module[:-3].replace("/", "."), name.split("[", 1)[0])
-    evidence = _evidence([_write(tmp_path, body)])
-    assert all(item["status"] == "NOT RUN" for item in evidence["scenarios"])
-    with pytest.raises(ValueError, match="NOT RUN"):
-        ci_gate(tmp_path, source_sha="a" * 40, run_id="9", run_attempt="1", backend="ran")
-
-
-def test_short_sha_is_rejected(tmp_path: Path):
-    _write(tmp_path, _passing_pair())
-    with pytest.raises(ValueError, match="40 lowercase hex"):
-        ci_gate(tmp_path, source_sha="abc", run_id="9", run_attempt="1", backend="ran")
-
-
-def test_broken_xml_is_rejected(tmp_path: Path):
-    shard = tmp_path / "backend-shard-1-1"
-    shard.mkdir(parents=True)
-    (shard / "full.xml").write_text("<testsuite>", encoding="utf-8")
-    with pytest.raises(ET.ParseError):
-        ci_gate(tmp_path, source_sha="a" * 40, run_id="9", run_attempt="1", backend="ran")
-
-
-def test_r08_readback_fails_when_recovery_inserts_again(monkeypatch):
-    import app.application.agent_orchestrator.tool_permission as permissions
-
-    real = permissions.begin_idempotent_replay
-
-    def drop_replay(*args, **kwargs):
-        key, _replay = real(*args, **kwargs)
-        return key, None
-
-    monkeypatch.setattr(permissions, "begin_idempotent_replay", drop_replay)
-    with pytest.raises(AssertionError) as caught:
-        test_e23_kill_after_commit_returns_the_same_row()
-    message = str(caught.value)
-    folded = message.encode("utf-8", "backslashreplace").decode("unicode_escape")
-    assert "客户名称已存在" in message or "客户名称已存在" in folded
-    monkeypatch.undo()
-    test_e23_kill_after_commit_returns_the_same_row()
