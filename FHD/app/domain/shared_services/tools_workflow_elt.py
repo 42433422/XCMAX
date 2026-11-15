@@ -649,12 +649,28 @@ def _registered_router_elt_import(
             }
     if action == "execute":
         run_ids = payload.get("run_ids")
-        if isinstance(run_ids, list) and run_ids:
-            return _execute_batch(
-                [str(item) for item in run_ids if str(item).strip()], payload, runtime_context
-            )
+        ids = (
+            [str(item) for item in run_ids if str(item).strip()]
+            if isinstance(run_ids, list) and run_ids
+            else _split_run_ids(payload.get("run_id"))
+        )
+        if len(ids) > 1:
+            return _execute_batch(ids, payload, runtime_context)
+        if ids:
+            return _execute({**payload, "run_id": ids[0]}, runtime_context)
         return _execute(payload, runtime_context)
     return {"success": False, "message": f"未知的 ELT 导入操作：{action}"}
+
+
+def _split_run_ids(value: object) -> list[str]:
+    """单个 run_id 也可能写成逗号/空白分隔的多个编号，统一按整批处理。"""
+    import re
+
+    if isinstance(value, (list, tuple)):
+        raw = [str(item) for item in value]
+    else:
+        raw = re.split(r"[,;，；\s]+", str(value or ""))
+    return [item.strip() for item in raw if item and item.strip()]
 
 
 _MAX_BATCH_IMPORTS = 20
@@ -698,6 +714,15 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
         "truncated": truncated,
         "message": message,
         "run_ids": run_ids,
+        # 与单文件预演保持同一形状：编排引用 {{preview.data.run_id}} 也能取到值。
+        "data": {
+            "run_id": ",".join(run_ids),
+            "run_ids": run_ids,
+            "file_count": len(items),
+            "ready_count": len(ready),
+            "needs_decision_count": len(needs_decision),
+            "executable": bool(run_ids) and not needs_decision,
+        },
         "results": items,
     }
 

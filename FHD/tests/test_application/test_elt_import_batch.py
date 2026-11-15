@@ -41,6 +41,32 @@ def test_preview_batch_collects_run_ids(monkeypatch):
     assert out["run_ids"] == ["r-a.xlsx", "r-b.xlsx"]
 
 
+def test_batch_preview_exposes_data_for_workflow_references(monkeypatch):
+    from app.application.agent_orchestrator.param_references import resolve_references
+
+    monkeypatch.setattr(
+        tools_workflow_elt,
+        "_preview",
+        lambda params, _context: {"success": True, "data": {"run_id": f"r-{params['file_path']}"}},
+    )
+    out = tools_workflow_elt._preview_batch(["a.xlsx", "b.xlsx"], {}, {})
+    assert out["data"]["run_ids"] == ["r-a.xlsx", "r-b.xlsx"]
+    assert out["data"]["run_id"] == "r-a.xlsx,r-b.xlsx"
+
+    problems: list[str] = []
+    resolved = resolve_references(
+        "{{preview_import.data.run_id}}", {"preview_import": out}, problems
+    )
+    assert problems == []
+    assert resolved == "r-a.xlsx,r-b.xlsx"
+
+
+def test_split_run_ids_accepts_separators():
+    assert tools_workflow_elt._split_run_ids("a, b；c") == ["a", "b", "c"]
+    assert tools_workflow_elt._split_run_ids(["a", " ", "b"]) == ["a", "b"]
+    assert tools_workflow_elt._split_run_ids("") == []
+
+
 def test_preview_batch_caps_at_twenty(monkeypatch):
     monkeypatch.setattr(
         tools_workflow_elt, "_preview", lambda params, _context: {"success": True}
