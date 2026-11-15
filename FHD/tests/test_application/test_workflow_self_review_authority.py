@@ -8,6 +8,15 @@ import pytest
 from app.application.approval_workspace import access
 
 
+def test_workflow_operator_roles_hold_ai_workflow_approval_permission():
+    from app.db.models.permission import DEFAULT_PERMISSIONS, DEFAULT_ROLES
+
+    assert any(row["code"] == "approval.workflow" for row in DEFAULT_PERMISSIONS)
+    for name in ("user", "operator", "admin"):
+        permissions = next(row["permissions"] for row in DEFAULT_ROLES if row["name"] == name)
+        assert "approval.workflow" in permissions
+
+
 @pytest.mark.parametrize("raw", ["[]", "broken-json", '{"approver":99}', None])
 def test_unprivileged_applicant_does_not_gain_review_permission(raw, monkeypatch):
     user = SimpleNamespace(id=7, tenant_id=2, role="user", permissions=[])

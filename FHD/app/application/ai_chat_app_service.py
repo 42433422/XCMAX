@@ -155,6 +155,7 @@ class AIChatApplicationService(
                 "metadata_filter",
                 "chat_db_read_authorized",
                 "chat_knowledge_dataset_ids",
+                "chat_approval_mode",
             ):
                 if key in context and context[key] is not None:
                     runtime_ctx[key] = copy.deepcopy(context[key])

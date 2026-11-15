@@ -17,6 +17,32 @@ from app.domain.shared_services.document_templates.crud import (
 from app.infrastructure.tenant_scope import tenant_scope
 
 
+def _assert_shared_create_with_invalid_category_defaults_excel_0(
+    self, _shared_literal_0, _shared_literal_1, _shared_literal_2
+):
+    mock_db = MagicMock()
+    mock_result = MagicMock()
+    mock_result.lastrowid = 1
+    mock_db.execute.return_value = mock_result
+    mock_db.commit = MagicMock()
+    with (
+        patch("app.db.session.get_db") as mock_get_db,
+        patch("app.db.init_db.init_template_tables"),
+        patch(
+            "app.domain.shared_services.document_templates.crud._validate_required_terms",
+            return_value=(True, []),
+        ),
+    ):
+        mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
+        mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
+        result = create_template_with_payload(
+            {"name": _shared_literal_1, "category": _shared_literal_2}
+        )
+    data = result.get_json()
+    assert data["success"] is True
+    assert data["template"]["category"] == _shared_literal_0
+
+
 @pytest.fixture
 def tenant_ctx():
     """模板 CRUD 写读路径需要租户上下文。"""
@@ -335,62 +361,14 @@ class TestCreateTemplateWithPayload:
         assert data["template"]["template_type"] == "Excel"
 
     def test_create_with_invalid_category_defaults_excel(self):
-        mock_db = MagicMock()
-        mock_result = MagicMock()
-        mock_result.lastrowid = 1
-        mock_db.execute.return_value = mock_result
-        mock_db.commit = MagicMock()
-
-        with (
-            patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.init_db.init_template_tables"),
-            patch(
-                "app.domain.shared_services.document_templates.crud._validate_required_terms",
-                return_value=(True, []),
-            ),
-        ):
-            mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
-            mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
-
-            result = create_template_with_payload(
-                {
-                    "name": "无效分类",
-                    "category": "foobar",
-                }
-            )
-
-        data = result.get_json()
-        assert data["success"] is True
-        assert data["template"]["category"] == "excel"
+        return _assert_shared_create_with_invalid_category_defaults_excel_0(
+            self, "excel", "无效分类", "foobar"
+        )
 
     def test_create_with_word_category(self):
-        mock_db = MagicMock()
-        mock_result = MagicMock()
-        mock_result.lastrowid = 1
-        mock_db.execute.return_value = mock_result
-        mock_db.commit = MagicMock()
-
-        with (
-            patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.init_db.init_template_tables"),
-            patch(
-                "app.domain.shared_services.document_templates.crud._validate_required_terms",
-                return_value=(True, []),
-            ),
-        ):
-            mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
-            mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
-
-            result = create_template_with_payload(
-                {
-                    "name": "Word模板",
-                    "category": "word",
-                }
-            )
-
-        data = result.get_json()
-        assert data["success"] is True
-        assert data["template"]["category"] == "word"
+        return _assert_shared_create_with_invalid_category_defaults_excel_0(
+            self, "word", "Word模板", "word"
+        )
 
     def test_create_with_scope_validation_failure(self):
         """Business scope with missing required terms should fail."""

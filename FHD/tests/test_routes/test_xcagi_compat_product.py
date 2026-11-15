@@ -13,6 +13,18 @@ from fastapi.testclient import TestClient
 from app.legacy.routes.product import compat_routes as xp
 
 
+def _assert_shared_business_data_not_exposed_0(self, client, _shared_literal_0):
+    with (
+        patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
+        patch("app.shell.mod_business_scope.business_data_exposed", return_value=False),
+        patch(
+            "app.shell.mod_business_scope.business_data_hidden_reason", return_value="mod not ready"
+        ),
+    ):
+        r = client.get(_shared_literal_0)
+        assert r.status_code == 503
+
+
 @pytest.fixture
 def client() -> TestClient:
     app = FastAPI()
@@ -530,19 +542,9 @@ class TestProductsBatchDelete:
 
 class TestProductsPriceListExport:
     def test_business_data_not_exposed(self, client: TestClient):
-        with (
-            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=False,
-            ),
-            patch(
-                "app.shell.mod_business_scope.business_data_hidden_reason",
-                return_value="mod not ready",
-            ),
-        ):
-            r = client.get("/products/price-list-export")
-            assert r.status_code == 503
+        return _assert_shared_business_data_not_exposed_0(
+            self, client, "/products/price-list-export"
+        )
 
     def test_template_not_found(self, client: TestClient):
         with (
@@ -560,19 +562,7 @@ class TestProductsPriceListExport:
             assert r.status_code == 404
 
     def test_export_docx_alias(self, client: TestClient):
-        with (
-            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=False,
-            ),
-            patch(
-                "app.shell.mod_business_scope.business_data_hidden_reason",
-                return_value="mod not ready",
-            ),
-        ):
-            r = client.get("/products/export.docx")
-            assert r.status_code == 503
+        return _assert_shared_business_data_not_exposed_0(self, client, "/products/export.docx")
 
 
 # ---------------------------------------------------------------------------
@@ -582,19 +572,9 @@ class TestProductsPriceListExport:
 
 class TestProductsPriceListTemplatePreview:
     def test_business_data_not_exposed(self, client: TestClient):
-        with (
-            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
-            patch(
-                "app.shell.mod_business_scope.business_data_exposed",
-                return_value=False,
-            ),
-            patch(
-                "app.shell.mod_business_scope.business_data_hidden_reason",
-                return_value="mod not ready",
-            ),
-        ):
-            r = client.get("/products/price-list-template-preview")
-            assert r.status_code == 503
+        return _assert_shared_business_data_not_exposed_0(
+            self, client, "/products/price-list-template-preview"
+        )
 
     def test_success(self, client: TestClient):
         with (

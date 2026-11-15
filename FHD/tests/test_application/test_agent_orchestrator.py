@@ -243,6 +243,33 @@ def test_inventory_tool_restores_and_validates_runtime_tenant(tenant_id):
     assert current_tenant_id() == 1
 
 
+def test_agent_tool_executor_restores_tenant_scope_for_excel_read():
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    seen: list[int | None] = []
+
+    def execute(*_args):
+        seen.append(current_tenant_id())
+        return {"success": True, "data": {"row_count": 1}}
+
+    step = AgentStep(
+        node_id="read_excel",
+        tool_id="excel_analysis",
+        action="read",
+        params={"file_path": "upload-id"},
+    )
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", side_effect=execute
+    ):
+        result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": "7"})
+
+    assert result["success"] is True
+    assert seen == [7]
+    assert current_tenant_id() == 1
+
+
 def test_agent_tool_executor_preserves_opaque_dataset_tenant_key():
     from app.application.agent_orchestrator.run_models import AgentStep
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor

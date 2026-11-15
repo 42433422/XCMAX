@@ -7,7 +7,7 @@
  *
  * 环境:
  *   SURFACE_AUDIT_BASE_URL   — FHD Vite 前端（默认 http://127.0.0.1:5001）
- *   SURFACE_AUDIT_MARKETING_BASE_URL — 营销静态站（默认 https://xiu-ci.com）
+ *   SURFACE_AUDIT_MARKETING_BASE_URL — 营销静态站（默认本地 :5176）
  *   XCAGI_MARKET_BASE_URL    — MODstore 市场（工作台 / P-S 页）
  *   SURFACE_AUDIT_SAMPLE_MOD_ID — Mod WebView 样例 id
  */
@@ -42,7 +42,7 @@ const ADMIN_BASE = (
 const MARKETING_BASE = (
   process.env.SURFACE_AUDIT_MARKETING_BASE_URL ||
   process.env.MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL ||
-  'https://xiu-ci.com'
+  'http://127.0.0.1:5176'
 ).replace(/\/$/, '')
 const MARKET_BASE = (process.env.XCAGI_MARKET_BASE_URL || process.env.MODSTORE_BASE_URL || 'http://127.0.0.1:5176').replace(/\/$/, '')
 
@@ -939,7 +939,6 @@ function ensureEnterpriseAuditEnv(laneCfg) {
     process.env.SURFACE_AUDIT_INCLUDE_ENTERPRISE = '1'
     process.env.SURFACE_AUDIT_ACCOUNT_KIND = 'enterprise'
     if (!process.env.SURFACE_AUDIT_USER) process.env.SURFACE_AUDIT_USER = 'xcagi-enterprise-demo'
-    if (!process.env.SURFACE_AUDIT_PASSWORD) process.env.SURFACE_AUDIT_PASSWORD = 'Demo@2026'
   }
 }
 
