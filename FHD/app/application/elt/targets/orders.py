@@ -252,6 +252,23 @@ class ShipmentAdapter(TargetAdapter):
         ).hexdigest()
 
     @staticmethod
+    def _fingerprint_owner_exists(db, shipment_id: Any) -> bool:
+        """指纹指向的运单已不存在时，这条「重复」是陈旧记录，不应再阻断导入。
+
+        清空/删除订单后若不清指纹，同一批文件会被永久判重而无法重新入库。
+        """
+        try:
+            sid = int(shipment_id or 0)
+        except (TypeError, ValueError):
+            return False
+        if sid <= 0:
+            return False
+        record = db.get(ShipmentRecord, sid)
+        return record is not None and int(getattr(record, "tenant_id", 0) or 0) == int(
+            tenant_id_for_write()
+        )
+
+    @staticmethod
     def _belongs_to_current_run(record: ShipmentRecord, run_id: Any) -> bool:
         """Allow distinct delivery lines of one external order in one ETL run."""
 
@@ -308,7 +325,7 @@ class ShipmentAdapter(TargetAdapter):
             )
             .first()
         )
-        if existing_fp:
+        if existing_fp and self._fingerprint_owner_exists(db, existing_fp.shipment_id):
             return PreviewDecision(
                 "skip",
                 match_ref=str(existing_fp.shipment_id or ""),
@@ -328,7 +345,9 @@ class ShipmentAdapter(TargetAdapter):
                 )
                 .first()
             )
-            if legacy_note_match:
+            if legacy_note_match and self._fingerprint_owner_exists(
+                db, legacy_note_match.shipment_id
+            ):
                 return PreviewDecision(
                     "skip",
                     match_ref=str(legacy_note_match.shipment_id or ""),
@@ -352,7 +371,7 @@ class ShipmentAdapter(TargetAdapter):
                 ShipmentEltImportFingerprint.unit_name == str(data.get("purchase_unit") or ""),
             )
         legacy_match = legacy_query.first()
-        if legacy_match:
+        if legacy_match and self._fingerprint_owner_exists(db, legacy_match.shipment_id):
             return PreviewDecision(
                 "skip",
                 match_ref=str(legacy_match.shipment_id or ""),

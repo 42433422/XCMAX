@@ -175,7 +175,10 @@ def _batch_result_note(action: str, label: str, out: dict[str, Any]) -> None:
                 f"跳过 {data.get('skip_rows', 0)}、错误 {data.get('error_rows', 0)}"
             )
         else:
-            _publish_note(f"「{label}」导入完成：写入 {data.get('executed_rows', 0)} 行")
+            note = f"「{label}」导入完成：写入 {data.get('executed_rows', 0)} 行"
+            if data.get("skip_rows"):
+                note += f"，重复跳过 {data.get('skip_rows')} 行"
+            _publish_note(note)
     else:
         _publish_note(f"「{label}」{action}失败：{out.get('message') or '未知原因'}")
 
@@ -191,6 +194,18 @@ def _wait(service, run_id: str, owner_id: int, *, pending: set[str], timeout: fl
         if time.monotonic() >= deadline:
             return data
         time.sleep(POLL_INTERVAL_SECONDS)
+
+
+def _execution_message(summary: dict, knowledge_note: str, template_note: str) -> str:
+    """导入回执必须说清「写了多少 / 跳过多少」，否则全量重复时会误报导入成功。"""
+    executed = int(summary.get("executed_rows") or 0)
+    skipped = int(summary.get("skip_rows") or 0)
+    message = f"ELT 导入完成：写入 {executed} 行，失败 {summary['error_rows']} 行"
+    if skipped:
+        message += f"，重复跳过 {skipped} 行"
+        if executed == 0:
+            message += "（本次全部判定为重复，业务库没有新增数据）"
+    return f"{message}{knowledge_note}{template_note}。"
 
 
 def _summary(data: dict) -> dict[str, Any]:
@@ -991,6 +1006,9 @@ def _execute(params: dict, runtime_context: dict) -> dict:
     )
     summary = _summary(data)
     ok = data.get("status") == "completed"
+    companion = _execute_linked_companion(service, actor, data) if ok else {}
+    if companion:
+        summary["customer_products"] = companion
     knowledge = _knowledge_receipt(data, actor.id) if ok else {}
     summary["knowledge"] = knowledge
     template = _template_receipt(data, actor.id) if ok else {}
@@ -1019,17 +1037,65 @@ def _execute(params: dict, runtime_context: dict) -> dict:
             )
         elif action == "skip" and str(template.get("reason") or "") == "duplicate_name":
             template_note = "；模板库已有同名模板，已跳过"
+    companion_note = _companion_note(companion)
+    message = (
+        _execution_message(summary, knowledge_note, f"{template_note}{companion_note}")
+        if ok
+        else f"ELT 导入未完成：{summary.get('error') or data.get('stage')}"
+    )
     return {
         "success": ok,
         "error_code": None if ok else f"elt_execute_{data.get('status')}",
-        "message": (
-            f"ELT 导入完成：写入 {summary['executed_rows']} 行，"
-            f"失败 {summary['error_rows']} 行{knowledge_note}{template_note}。"
-            if ok
-            else f"ELT 导入未完成：{summary.get('error') or data.get('stage')}"
-        ),
+        "message": message,
         "data": summary,
     }
+
+
+def _execute_linked_companion(service, actor, data: dict) -> dict[str, Any]:
+    """同一文件附表生成的「客户及产品」预演，在主运单执行时一并落库。
+
+    只预演不执行会让客户库/产品库永远没有数据，而用户看到的是「导入完成」。
+    """
+    from app.application.elt.errors import EltError
+
+    details = data.get("details") if isinstance(data.get("details"), dict) else {}
+    link = details.get("linked_customer_products_preview") or {}
+    run_id = str(link.get("run_id") or "")
+    if not run_id or str(link.get("status") or "") != "preview_ready":
+        return {}
+    try:
+        with get_db() as db:
+            current = service.get_run(db, run_id=run_id, owner_user_id=actor.id)
+            if str(current.get("status") or "") != "preview_ready":
+                return {}
+            revision = str(current.get("preview_revision") or "")
+            service.execute(
+                db,
+                run_id=run_id,
+                owner_user_id=actor.id,
+                confirmed=True,
+                preview_revision=revision or None,
+                accept_suggested=True,
+            )
+        waited = _wait(service, run_id, actor.id, pending=EXECUTION_PENDING, timeout=30.0)
+    except EltError:
+        return {"run_id": run_id, "status": "failed"}
+    result = _summary(waited)
+    result["run_id"] = run_id
+    return result
+
+
+def _companion_note(companion: dict) -> str:
+    if not companion:
+        return ""
+    if companion.get("status") != "completed":
+        return "；客户及产品未能写入，请到数据对接中心重试"
+    executed = int(companion.get("executed_rows") or 0)
+    skipped = int(companion.get("skip_rows") or 0)
+    note = f"；客户及产品写入 {executed} 行"
+    if skipped:
+        note += f"（重复跳过 {skipped} 行）"
+    return note
 
 
 def _registered_router_elt_import(
@@ -1228,7 +1294,16 @@ def _execute_batch(run_ids: list[str], payload: dict, runtime_context: dict) -> 
         processed += 1
         items.append({"run_id": run_id, "file_name": label, **out})
     done = [item for item in items if item.get("success")]
-    message = f"批量导入：{len(items)} 个预演，完成 {len(done)}，失败 {len(items) - len(done)}"
+    written = sum(int((item.get("data") or {}).get("executed_rows") or 0) for item in done)
+    skipped = sum(int((item.get("data") or {}).get("skip_rows") or 0) for item in done)
+    message = (
+        f"批量导入：{len(items)} 个预演，完成 {len(done)}，"
+        f"失败 {len(items) - len(done)}，写入 {written} 行"
+    )
+    if skipped:
+        message += f"（重复跳过 {skipped} 行）"
+        if written == 0:
+            message += "；本次没有新增业务记录"
     if len(run_ids) > len(targets):
         message += f"（一次最多 {_MAX_BATCH_IMPORTS} 个，其余请分批）"
     deferred_count = total - processed

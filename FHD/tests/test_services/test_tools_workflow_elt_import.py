@@ -807,6 +807,86 @@ def test_template_receipt_suffixes_name_taken_by_other_file(tmp_path):
     assert receipt["names"] == ["宗南家私-发货单版式-2"]
 
 
+def test_execute_reports_all_duplicate_rows():
+    """全部判定重复时必须明说没有写入，不能只回「导入完成」。"""
+    service = MagicMock()
+    service.get_run.return_value = {"id": "run-1", "preview_revision": "a" * 64}
+    run = _run(
+        status="completed",
+        details={},
+        summary={"new": 0, "update": 0, "skip": 3, "error": 0, "executed": 0},
+    )
+    with (
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._bound_actor",
+            return_value=MagicMock(id=7),
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt.get_db",
+            return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
+        ),
+        patch("app.domain.shared_services.tools_workflow_elt._wait", return_value=run),
+        patch("app.application.elt.service.get_elt_service", return_value=service),
+    ):
+        result = _registered_router_elt_import(
+            "execute", {"run_id": "run-1"}, _context(), "normal", "导入"
+        )
+    assert "重复跳过 3 行" in result["message"]
+    assert "没有新增数据" in result["message"]
+
+
+def test_execute_writes_linked_customer_products_companion():
+    """同一文件附表的客户及产品预演，必须随主运单一起落库。"""
+    service = MagicMock()
+
+    def _get_run(_db, *, run_id, owner_user_id):
+        status = "preview_ready" if run_id == "companion-1" else "completed"
+        return {"id": run_id, "status": status, "preview_revision": "a" * 64}
+
+    service.get_run.side_effect = _get_run
+    primary = _run(
+        status="completed",
+        details={
+            "linked_customer_products_preview": {
+                "run_id": "companion-1",
+                "status": "preview_ready",
+            }
+        },
+        summary={"new": 2, "update": 0, "skip": 0, "error": 0, "executed": 2},
+    )
+    companion = _run(
+        status="completed",
+        summary={"new": 12, "update": 0, "skip": 1, "error": 0, "executed": 12},
+    )
+    with (
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._bound_actor",
+            return_value=MagicMock(id=7),
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt.get_db",
+            return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._wait",
+            side_effect=[primary, companion],
+        ),
+        patch("app.application.elt.service.get_elt_service", return_value=service),
+    ):
+        result = _registered_router_elt_import(
+            "execute", {"run_id": "run-1"}, _context(), "normal", "导入"
+        )
+    assert service.execute.call_count == 2
+    assert result["data"]["customer_products"]["executed_rows"] == 12
+    assert "客户及产品写入 12 行" in result["message"]
+
+
 def test_execute_requires_run_id():
     with patch(
         "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True

@@ -1740,15 +1740,16 @@ def test_shipment_preview_branches(session):
     d3 = a.preview(session, base, allowed_update_fields=set(), context={})
     assert d3.action == "new"
 
-    # existing fingerprint -> skip
+    # existing fingerprint -> skip（指纹必须指向仍然存在的运单）
     from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 
+    owner = _make_shipment_record(session, "OTHER-1", "run-0")
     fp = a._fingerprint(base, {})
     session.add(
         ShipmentEltImportFingerprint(
             tenant_key="tenant:1",
             fingerprint=fp,
-            shipment_id=1,
+            shipment_id=owner.id,
             unit_name="客户A",
             source_kind="general_etl",
         )
@@ -1764,7 +1765,10 @@ def test_shipment_preview_branches(session):
     session.flush()
     session.add(
         ShipmentEltImportFingerprint(
-            tenant_key="tenant:1", fingerprint="legacy-note-fp", shipment_id=2, source_kind=None
+            tenant_key="tenant:1",
+            fingerprint="legacy-note-fp",
+            shipment_id=owner.id,
+            source_kind=None,
         )
     )
     session.flush()
@@ -1785,7 +1789,7 @@ def test_shipment_preview_branches(session):
         ShipmentEltImportFingerprint(
             tenant_key="tenant:1",
             fingerprint="legacy-order",
-            shipment_id=3,
+            shipment_id=owner.id,
             order_number="SO-1",
             source_kind=None,
         )
@@ -1803,7 +1807,7 @@ def test_shipment_preview_branches(session):
         ShipmentEltImportFingerprint(
             tenant_key="tenant:1",
             fingerprint="legacy-file",
-            shipment_id=4,
+            shipment_id=owner.id,
             file_name="a.xlsx",
             unit_name="客户A",
             source_kind=None,

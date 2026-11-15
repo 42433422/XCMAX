@@ -10,7 +10,7 @@ from app.db.models import ShipmentRecord
 from app.db.session import get_db
 from app.domain.shipment.ports import ShipmentRecordCommandPort
 from app.infrastructure.lookups import resolve_purchase_unit
-from app.infrastructure.tenant_scope import apply_tenant_filter
+from app.infrastructure.tenant_scope import apply_tenant_filter, tenant_id_for_write
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -18,6 +18,31 @@ logger = logging.getLogger(__name__)
 
 def _scoped_records(db):
     return apply_tenant_filter(db.query(ShipmentRecord), ShipmentRecord)
+
+
+def _clear_import_fingerprints(db, *, shipment_ids: list[int] | None = None) -> int:
+    """删除订单时同步清理 ETL 导入指纹。
+
+    指纹表是导入去重的唯一依据；只删订单不删指纹会让同一批文件永久判定为
+    「重复」而不再写入业务库。
+    """
+    try:
+        from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
+
+        tenant_key = f"tenant:{tenant_id_for_write()}"
+        query = db.query(ShipmentEltImportFingerprint).filter(
+            ShipmentEltImportFingerprint.tenant_key == tenant_key
+        )
+        if shipment_ids is not None:
+            if not shipment_ids:
+                return 0
+            query = query.filter(
+                ShipmentEltImportFingerprint.shipment_id.in_(shipment_ids)
+            )
+        return int(query.delete(synchronize_session=False) or 0)
+    except RECOVERABLE_ERRORS:
+        logger.debug("导入指纹清理不可用，已跳过", exc_info=True)
+        return 0
 
 
 class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
@@ -32,6 +57,7 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
 
                 count = _scoped_records(db).count()
                 _scoped_records(db).delete()
+                _clear_import_fingerprints(db)
                 db.commit()
 
             return {
@@ -88,19 +114,21 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                             candidate_values.append(v)
 
                     if candidate_values:
-                        count = (
-                            _scoped_records(db)
-                            .filter(ShipmentRecord.purchase_unit.in_(candidate_values))
-                            .count()
-                        )
-                        _scoped_records(db).filter(
+                        doomed = _scoped_records(db).filter(
                             ShipmentRecord.purchase_unit.in_(candidate_values)
-                        ).delete(synchronize_session=False)
+                        )
+                        count = doomed.count()
+                        ids = [row[0] for row in doomed.with_entities(ShipmentRecord.id).all()]
+                        doomed.delete(synchronize_session=False)
+                        _clear_import_fingerprints(db, shipment_ids=ids)
                         db.commit()
                 else:
-                    _scoped_records(db).filter(
+                    doomed = _scoped_records(db).filter(
                         ShipmentRecord.purchase_unit == purchase_unit
-                    ).delete(synchronize_session=False)
+                    )
+                    ids = [row[0] for row in doomed.with_entities(ShipmentRecord.id).all()]
+                    doomed.delete(synchronize_session=False)
+                    _clear_import_fingerprints(db, shipment_ids=ids)
                     db.commit()
 
             return {
@@ -171,6 +199,7 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                     return {"success": False, "message": f"记录 {record_id} 不存在"}
 
                 db.delete(record)
+                _clear_import_fingerprints(db, shipment_ids=[record_id])
                 db.commit()
 
             return {"success": True, "message": "出货记录已删除"}
