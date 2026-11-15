@@ -557,3 +557,68 @@ describe('voice loading and offline warmup', () => {
     await vi.advanceTimersByTimeAsync(1); expect(mocks.offline.ensureOfflineReady).toHaveBeenCalledOnce()
   })
 })
+
+describe('TTS long-reply sentence continuity', () => {
+  const longReply = '第一句已经说完。第二句接着往下。第三句还要继续。第四句才是结尾。'
+
+  it('splits a long reply so every sentence is queued', () => {
+    expect(tts.splitTextForSpeech(longReply)).toEqual([
+      '第一句已经说完。',
+      '第二句接着往下。',
+      '第三句还要继续。',
+      '第四句才是结尾。',
+    ])
+    expect(tts.splitTextForSpeech('只有一句')).toEqual(['只有一句'])
+  })
+
+  it('requests online audio for every sentence and does not stop after the second', async () => {
+    tts.setEngineMode('auto')
+    const onEnd = vi.fn()
+    await tts.speakText(longReply, { onEnd })
+    const sentences = mocks.apiFetch.mock.calls.map((call: [string, { body: string }]) => JSON.parse(call[1].body).text)
+    expect(sentences).toEqual([
+      '第一句已经说完。',
+      '第二句接着往下。',
+      '第三句还要继续。',
+      '第四句才是结尾。',
+    ])
+    expect(audio).toHaveLength(4)
+    expect(onEnd).toHaveBeenCalledOnce()
+  })
+
+  it('falls back to system voice for every remaining sentence', async () => {
+    mocks.apiFetch.mockRejectedValue(new Error('platform unavailable'))
+    const spoken: string[] = []
+    speech.speak.mockImplementation((u: { text: string; onend?: () => void }) => {
+      spoken.push(u.text)
+      u.onend?.()
+    })
+    const onEnd = vi.fn()
+    await tts.speakText(longReply, { onEnd })
+    expect(spoken).toEqual([
+      '第一句已经说完。',
+      '第二句接着往下。',
+      '第三句还要继续。',
+      '第四句才是结尾。',
+    ])
+    expect(onEnd).toHaveBeenCalledOnce()
+  })
+
+  it('stops remaining sentences when the user cancels mid-reply', async () => {
+    tts.setEngineMode('auto')
+    playback = 'pending'
+    const pending = tts.speakText(longReply)
+    await vi.waitFor(() => expect(audio).toHaveLength(1))
+    audio[0].onended?.()
+    await vi.waitFor(() => expect(audio).toHaveLength(2))
+    tts.stopSpeaking()
+    await pending
+    const sentences = mocks.apiFetch.mock.calls.map((call: [string, { body: string }]) => JSON.parse(call[1].body).text)
+    expect(sentences).toEqual([
+      '第一句已经说完。',
+      '第二句接着往下。',
+    ])
+    expect(audio).toHaveLength(2)
+  })
+})
+

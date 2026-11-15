@@ -483,37 +483,52 @@ async function speakWithFallback(text: string, controller: AbortController): Pro
   return speakWithSystemVoice(text, controller)
 }
 
+/** 按句切开长回复，避免系统朗读在第二句附近提前结束。 */
+export function splitTextForSpeech(text: string): string[] {
+  const plain = String(text || '').replace(/\s+/g, ' ').trim()
+  if (!plain) return []
+  const parts = plain.match(/[^。！？!?；;]+[。！？!?；;]*|.+$/g) || [plain]
+  const chunks = parts.map((part) => part.trim()).filter(Boolean)
+  return chunks.length ? chunks : [plain]
+}
+
 /** 朗读完成、失败或主动停止后结束；失败统一提示，取消静默。 */
 export async function speakText(text: string, options?: { onEnd?: () => void; onError?: (e: unknown) => void }): Promise<void> {
-  const plain = String(text || '').trim()
-  if (!plain) { options?.onEnd?.(); return }
+  const chunks = splitTextForSpeech(text)
+  if (!chunks.length) { options?.onEnd?.(); return }
   stopSpeaking()
   const controller = new AbortController()
   speechController = controller
   try {
-    if (getEngineMode() === 'offline') {
-      const { audio, samplingRate } = await waitForSpeech(synthesizeOffline(plain, controller.signal), controller.signal)
-      controller.signal.throwIfAborted()
-      await waitForSpeech(playOfflinePcm(audio, samplingRate, controller.signal), controller.signal)
-    } else {
-      await playOnlineTts(plain, controller)
-    }
-  } catch (e) {
-    const error = controller.signal.aborted ? controller.signal.reason : e
-    const abortedByUser = controller.signal.aborted && error?.name !== 'TimeoutError'
-    const message = String(error?.message || '')
-    const playbackError = error?.name === 'NotAllowedError'
-      || error?.name === 'AbortError'
-      || message.includes('音频播放失败')
-      || message.includes('play rejected')
-    const offlineMode = getEngineMode() === 'offline'
-    const fallbackOk = getEngineMode() !== 'system' || offlineMode || abortedByUser || playbackError ? false : await speakWithFallback(plain, controller)
-    if (!fallbackOk) {
-      if (speechController === controller && (!controller.signal.aborted || error?.name === 'TimeoutError')) {
-        showAppToast(error?.name === 'NotAllowedError'
-          ? '语音播放被浏览器阻止，请点击朗读按钮重试。'
-          : error?.name === 'TimeoutError' ? '语音服务响应超时，请稍后重试。' : '语音播放失败，请稍后重试。')
-        options?.onError?.(error)
+    for (const chunk of chunks) {
+      if (speechController !== controller || controller.signal.aborted) return
+      try {
+        if (getEngineMode() === 'offline') {
+          const { audio, samplingRate } = await waitForSpeech(synthesizeOffline(chunk, controller.signal), controller.signal)
+          controller.signal.throwIfAborted()
+          await waitForSpeech(playOfflinePcm(audio, samplingRate, controller.signal), controller.signal)
+        } else {
+          await playOnlineTts(chunk, controller)
+        }
+      } catch (e) {
+        const error = controller.signal.aborted ? controller.signal.reason : e
+        const abortedByUser = controller.signal.aborted && error?.name !== 'TimeoutError'
+        const message = String(error?.message || '')
+        const playbackError = error?.name === 'NotAllowedError'
+          || error?.name === 'AbortError'
+          || message.includes('音频播放失败')
+          || message.includes('play rejected')
+        const offlineMode = getEngineMode() === 'offline'
+        const fallbackOk = getEngineMode() !== 'system' || offlineMode || abortedByUser || playbackError ? false : await speakWithFallback(chunk, controller)
+        if (!fallbackOk) {
+          if (speechController === controller && (!controller.signal.aborted || error?.name === 'TimeoutError')) {
+            showAppToast(error?.name === 'NotAllowedError'
+              ? '语音播放被浏览器阻止，请点击朗读按钮重试。'
+              : error?.name === 'TimeoutError' ? '语音服务响应超时，请稍后重试。' : '语音播放失败，请稍后重试。')
+            options?.onError?.(error)
+          }
+          return
+        }
       }
     }
   } finally {
