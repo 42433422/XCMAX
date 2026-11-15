@@ -206,6 +206,26 @@ class LLMWorkflowPlanner:
         except MarketModelError as exc:
             context["planning_failure_reason"] = str(exc)
             planned = None
+        repair_trace: dict[str, Any] = {}
+        if planned is not None:
+            from app.application.workflow.plan_repair import repair_plan
+            from app.infrastructure.llm.model_admission import model_rate_limit_scope
+
+            with model_rate_limit_scope(context):
+                planned, repair_trace = repair_plan(
+                    planned=planned,
+                    plan_id=plan_id,
+                    message=message,
+                    context=context,
+                    tool_registry=registry_for_plan,
+                    validate=validate_candidate,
+                    complete=self.complete_messages,
+                )
+            if planned is None:
+                errors = repair_trace.get("errors") or []
+                if errors:
+                    context["planning_failure_reason"] = str(errors[-1].get("message") or "")
+                logger.warning("计划修复未成功，本轮不执行: %s", repair_trace.get("errors"))
         # 统一 Agent Runtime 接缝：把 pre-plan 记忆召回落上计划元数据，
         # 供编排器转成 run.memory_references（主链路可观测闭合）。
         recall_meta = {
@@ -213,6 +233,11 @@ class LLMWorkflowPlanner:
             for key in ("user_memory_rag", "memory_v2")
             if isinstance(context.get(key), dict)
         }
+        if planned is not None and repair_trace:
+            try:
+                planned.metadata["plan_repair"] = repair_trace
+            except (AttributeError, TypeError):
+                logger.debug("plan metadata 不支持 plan_repair 附加", exc_info=True)
         if recall_meta and planned is not None:
             try:
                 planned.metadata["memory_recall"] = recall_meta

@@ -38,6 +38,19 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
+def _assert_shared_list_messages_non_admin_403_0(self, client, _case_value_0):
+    with (
+        patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
+        patch(
+            "app.fastapi_routes.im_routes._is_admin_customer_service_session", return_value=False
+        ),
+    ):
+        mock_db = MagicMock()
+        mock_db_cls.return_value = mock_db
+        resp = client.get(_case_value_0)
+    assert resp.status_code == 403
+
+
 def _assert_shared_invoke_recoverable_error_500_0(
     self, client, _shared_literal_0, _shared_literal_1
 ):
@@ -992,17 +1005,9 @@ class TestClaudeSuperEmployeeRoutes:
         assert resp.json()["messages"][0]["body"] == "hi"
 
     def test_list_messages_non_admin_403(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=False,
-            ),
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            resp = client.get("/api/admin/claude-super-employee/messages")
-        assert resp.status_code == 403
+        return _assert_shared_list_messages_non_admin_403_0(
+            self, client, "/api/admin/claude-super-employee/messages"
+        )
 
     def test_list_messages_recoverable_error_500(self, client: TestClient) -> None:
         return _assert_shared_list_messages_recoverable_error_500_2(
@@ -1125,17 +1130,9 @@ class TestCursorSuperEmployeeRoutes:
         assert resp.status_code == 200
 
     def test_list_messages_non_admin_403(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=False,
-            ),
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            resp = client.get("/api/admin/cursor-super-employee/messages")
-        assert resp.status_code == 403
+        return _assert_shared_list_messages_non_admin_403_0(
+            self, client, "/api/admin/cursor-super-employee/messages"
+        )
 
     def test_invoke_admin(self, client: TestClient) -> None:
         with (
@@ -1247,17 +1244,7 @@ class TestCodexSuperEmployeeAdditional:
 
 class TestAiGroupsRoutes:
     def test_list_groups_non_admin_403(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=False,
-            ),
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            resp = client.get("/api/admin/ai-groups")
-        assert resp.status_code == 403
+        return _assert_shared_list_messages_non_admin_403_0(self, client, "/api/admin/ai-groups")
 
     def test_list_groups_admin_success(self, client: TestClient) -> None:
         with (

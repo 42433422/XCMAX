@@ -28,6 +28,29 @@ from app.application.tenant_workspace_prefs import (
     save_selected_industry,
 )
 
+
+def _assert_shared_tenant_id_returned_when_meta_has_tenant_0(
+    self, _case_value_0, _case_value_1, _case_value_2, _case_value_3
+):
+    request = MagicMock()
+    user = MagicMock(id=_case_value_1)
+
+    def fake_enrich(sid, u):
+        return {"tenant_id": _case_value_2, "local_user_id": _case_value_3}
+
+    with (
+        patch(
+            "app.application.tenant_workspace_prefs.session_id_from_request", return_value="sid-1"
+        ),
+        patch(
+            "app.application.session_account_meta.enrich_session_meta_with_tenant",
+            side_effect=fake_enrich,
+        ),
+    ):
+        result = resolve_workspace_owner_id(request, user=user)
+    assert result == _case_value_0
+
+
 # ---------------------------------------------------------------------------
 # Test fixture: in-memory preference service
 # ---------------------------------------------------------------------------
@@ -134,24 +157,9 @@ class TestResolveWorkspaceOwnerId:
         assert result is None
 
     def test_tenant_id_returned_when_meta_has_tenant(self):
-        request = MagicMock()
-        user = MagicMock(id=5)
-
-        def fake_enrich(sid, u):
-            return {"tenant_id": "42", "local_user_id": "5"}
-
-        with (
-            patch(
-                "app.application.tenant_workspace_prefs.session_id_from_request",
-                return_value="sid-1",
-            ),
-            patch(
-                "app.application.session_account_meta.enrich_session_meta_with_tenant",
-                side_effect=fake_enrich,
-            ),
-        ):
-            result = resolve_workspace_owner_id(request, user=user)
-        assert result == "tenant:42"
+        return _assert_shared_tenant_id_returned_when_meta_has_tenant_0(
+            self, "tenant:42", 5, "42", "5"
+        )
 
     def test_session_user_id_when_no_tenant(self):
         request = MagicMock()
@@ -267,44 +275,14 @@ class TestResolveWorkspaceOwnerId:
         assert result == "session:8"
 
     def test_tenant_id_zero_falls_back_to_session(self):
-        request = MagicMock()
-        user = MagicMock(id=11)
-
-        def fake_enrich(sid, u):
-            return {"tenant_id": "0", "local_user_id": "11"}
-
-        with (
-            patch(
-                "app.application.tenant_workspace_prefs.session_id_from_request",
-                return_value="sid-1",
-            ),
-            patch(
-                "app.application.session_account_meta.enrich_session_meta_with_tenant",
-                side_effect=fake_enrich,
-            ),
-        ):
-            result = resolve_workspace_owner_id(request, user=user)
-        assert result == "session:11"
+        return _assert_shared_tenant_id_returned_when_meta_has_tenant_0(
+            self, "session:11", 11, "0", "11"
+        )
 
     def test_tenant_id_negative_falls_back_to_session(self):
-        request = MagicMock()
-        user = MagicMock(id=22)
-
-        def fake_enrich(sid, u):
-            return {"tenant_id": "-3", "local_user_id": "22"}
-
-        with (
-            patch(
-                "app.application.tenant_workspace_prefs.session_id_from_request",
-                return_value="sid-1",
-            ),
-            patch(
-                "app.application.session_account_meta.enrich_session_meta_with_tenant",
-                side_effect=fake_enrich,
-            ),
-        ):
-            result = resolve_workspace_owner_id(request, user=user)
-        assert result == "session:22"
+        return _assert_shared_tenant_id_returned_when_meta_has_tenant_0(
+            self, "session:22", 22, "-3", "22"
+        )
 
 
 # ---------------------------------------------------------------------------
