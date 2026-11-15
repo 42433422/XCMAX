@@ -1,5 +1,5 @@
 {
-  "lines": 2436422,
+  "lines": 2436445,
   "updated": "2026-11-16",
-  "note": "新增 alembic merge 迁移 2026_11_16_merge_persona_delivery（13 行，收口 delivery 与 persona 两条迁移头，单 head 校验必需）；无新增文档；净增 +22 行。批准：维持 CI single-head 绿。"
+  "note": "CI 收口：18 处 broad except 改为命名边界 BOUNDARY_ERRORS 并补导入（+23 行，涉及 11 个附件/解析/ELT/Memory 文件）；无新增文档。批准：维持 broad-except 闸门为 0。"
 }

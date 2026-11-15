@@ -424,7 +424,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             watch_stream_tool_records(tool_records.push)
             watch_stream_notes(notes.push)
             watch_stream_deltas(deltas.push)
-        except Exception:  # noqa: BLE001 - 观测通道不可用时不阻断对话
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - 观测通道不可用时不阻断对话
             tool_records = None
             notes = None
             deltas = None

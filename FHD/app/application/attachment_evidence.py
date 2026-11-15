@@ -18,6 +18,7 @@ from app.application.attachment_artifacts.models import ArtifactRecord
 from app.application.attachment_artifacts.store import ArtifactStore
 from app.application.attachment_artifacts.tools import TOOL_SPECS, execute_tool
 from app.infrastructure.llm.invoke import chat_completion_openai_format
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ def _artifact_briefs(store: ArtifactStore, artifact_ids: list[str]) -> list[dict
     for artifact_id in artifact_ids:
         try:
             record = store.get(artifact_id)
-        except Exception:  # noqa: BLE001 - 证据采集 fail-open
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - 证据采集 fail-open
             logger.debug("attachment evidence read record failed", exc_info=True)
             continue
         if record is None:
@@ -151,7 +152,7 @@ async def _plan_calls(message: str, briefs: list[dict[str, Any]], limit_calls: i
             timeout=LLM_TIMEOUT_SECONDS,
         )
         return _parse_calls(_message_content(payload), limit_calls)
-    except Exception:  # noqa: BLE001 - 规划失败退回启发式
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - 规划失败退回启发式
         logger.debug("attachment evidence planning skipped", exc_info=True)
         return []
 
@@ -243,7 +244,7 @@ def _memory_block(message: str, user_id: str) -> str:
         text = str(
             build_memory_context(message, scope="global", owner_id=user_id or "default") or ""
         ).strip()
-    except Exception:  # noqa: BLE001 - 记忆召回失败静默跳过
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - 记忆召回失败静默跳过
         logger.debug("attachment evidence memory recall skipped", exc_info=True)
         return ""
     # 统一证据块标题，避免同一段文本出现两种「记忆」小标题。
@@ -288,7 +289,7 @@ async def collect_evidence(
         started = time.perf_counter()
         try:
             output = execute_tool(tool, args, store)
-        except Exception as exc:  # noqa: BLE001 - 单个工具失败不影响其余证据
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - 单个工具失败不影响其余证据
             logger.debug("attachment evidence tool failed", exc_info=True)
             output = {"ok": False, "error": str(exc)}
         elapsed = int((time.perf_counter() - started) * 1000)
@@ -308,7 +309,7 @@ async def collect_evidence(
             if artifact_id in records:
                 try:
                     records[artifact_id] = store.get(artifact_id)
-                except Exception:  # noqa: BLE001 - 证据采集 fail-open
+                except BOUNDARY_ERRORS:  # noqa: BLE001 - 证据采集 fail-open
                     logger.debug("attachment evidence read record failed", exc_info=True)
         if not ok:
             continue

@@ -7,6 +7,7 @@ from typing import Any
 
 from app.application import agent_task_context
 from app.application.agent_orchestrator.public_step_errors import public_step_error
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 _PUBLIC_WORKFLOW_FAILURE = "工作流执行失败，详细信息已记录"
 
@@ -99,7 +100,7 @@ class AIChatWorkflowResponseMixin:
                 temperature=0.0,
                 max_tokens=400,
             )
-        except Exception:  # noqa: BLE001 - 模型不可用时退回确定性摘录
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - 模型不可用时退回确定性摘录
             return ""
         choices = (data or {}).get("choices") if isinstance(data, dict) else None
         message = (choices or [{}])[0].get("message") if isinstance(choices, list) else None

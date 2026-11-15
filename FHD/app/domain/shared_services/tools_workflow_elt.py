@@ -22,6 +22,7 @@ from app.db.models.elt import EltUpload
 from app.db.session import get_db
 from app.infrastructure.auth.agent_mod_scope import _bound_actor
 from app.infrastructure.tenant_scope import tenant_id_for_write
+from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
@@ -140,7 +141,7 @@ def _publish_file_stage(
         from app.infrastructure.chat_stream_lifetime import publish_stream_tool_record
 
         publish_stream_tool_record(record)
-    except Exception:  # noqa: BLE001 - 观测通道不得改变导入结果
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - 观测通道不得改变导入结果
         pass
 
 

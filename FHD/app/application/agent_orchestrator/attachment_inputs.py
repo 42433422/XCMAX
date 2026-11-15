@@ -12,6 +12,7 @@ from app.db.models.elt import EltUpload
 from app.db.session import get_db
 from app.infrastructure.auth.agent_mod_scope import validate_actor_context
 from app.infrastructure.tenant_scope import tenant_scope
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024
 MAX_TEXT = 24_000
@@ -63,7 +64,7 @@ def _decode(raw: bytes, suffix: str) -> tuple[str, dict[str, Any]]:
             from app.application.document_parsing.router import parse_pdf_bytes_with_docling
 
             docling_text = parse_pdf_bytes_with_docling(raw)
-        except Exception:  # noqa: BLE001 - Docling 失败要回退 pdfplumber
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - Docling 失败要回退 pdfplumber
             docling_text = None
         if docling_text and docling_text.strip():
             coverage["method"] = "docling"

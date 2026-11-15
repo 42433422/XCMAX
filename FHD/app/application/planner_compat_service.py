@@ -464,7 +464,7 @@ async def compat_chat_stream_async(
                         stream_body = body.model_copy(
                             update={"message": f"{block}\n\n{body.message}"}
                         )
-            except Exception:  # noqa: BLE001 - 附件证据 fail-open，失败继续原路径
+            except BOUNDARY_ERRORS:  # noqa: BLE001 - 附件证据 fail-open，失败继续原路径
                 logger.warning("attachment evidence collection failed", exc_info=True)
             async with aclosing(stream.run(request, stream_body, ai_tier=ai_tier)) as chunks:
                 async for chunk in chunks:

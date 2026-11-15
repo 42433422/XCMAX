@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from app.application.user_memory.write import remember
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # 只在用户明确表达长期偏好或身份信息时才沉淀，避免把一次性问题写进记忆。
 _MARKERS = ("记住", "以后", "今后", "下次", "默认", "我喜欢", "我们公司", "我们厂", "我们的")
@@ -60,7 +61,7 @@ def capture_turn(
             results.append(
                 remember(fact, scope=scope, owner_id=owner, source="chat_turn", importance=0.6, store=store)
             )
-        except Exception:  # noqa: BLE001 - 记忆写入失败不能影响对话
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - 记忆写入失败不能影响对话
             continue
     return results
 

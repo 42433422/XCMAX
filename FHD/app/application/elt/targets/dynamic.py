@@ -18,6 +18,7 @@ from sqlalchemy.exc import OperationalError
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.application.elt.targets.targets_base import (
+from app.utils.operational_errors import BOUNDARY_ERRORS
     PreviewDecision,
     TargetAdapter,
     TargetField,
@@ -398,7 +399,7 @@ class DynamicTableAdapter(TargetAdapter):
             if callable(callback):
                 callback(inserted_total, max(1, total))
             return {"receipt": receipt, "executed": inserted_total}
-        except Exception:
+        except BOUNDARY_ERRORS:
             db.rollback()
             raise
         finally:
@@ -433,7 +434,7 @@ class DynamicTableAdapter(TargetAdapter):
                 db.delete(row)
             db.commit()
             return deleted
-        except Exception:
+        except BOUNDARY_ERRORS:
             db.rollback()
             raise
         finally:
