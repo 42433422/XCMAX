@@ -304,14 +304,15 @@ class UserMemoryRagApplicationService:
         max_hits: int = 6,
         max_chars: int | None = None,
     ) -> str:
-        if not hits:
-            return "【UserMemoryRAG】未召回用户记忆片段。"
-
         budget = (
             int(_env_float("XCAGI_MEMORY_RAG_PROMPT_CHARS", 1800))
             if max_chars is None
             else int(max_chars)
         )
+        if not hits:
+            message = "【UserMemoryRAG】未召回用户记忆片段。"
+            return message if len(message) <= budget else ""
+        footer = "优先参考以上片段的意图/习惯（不要编造片段中不存在的信息）。"
         lines: list[str] = ["【UserMemoryRAG】召回到以下用户记忆片段（用于辅助决策）:"]
         for idx, hit in enumerate(hits[:max_hits], start=1):
             score = float(hit.get("score") or 0.0)
@@ -339,10 +340,12 @@ class UserMemoryRagApplicationService:
                 f"last_used={last_used or '-'}; slots({slot_str or '-'}) ; score={score:.4f}\n"
                 f"   content={preview}"
             )
-            if sum(len(item) for item in lines) + len(line) > budget:
+            if len("\n".join([*lines, line, footer])) > budget:
                 break
             lines.append(line)
-        lines.append("优先参考以上片段的意图/习惯（不要编造片段中不存在的信息）。")
+        if len("\n".join([*lines, footer])) > budget:
+            return ""
+        lines.append(footer)
         return "\n".join(lines)
 
 

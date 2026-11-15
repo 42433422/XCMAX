@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+from app.application.user_memory_vector_app_service import UserMemoryRagApplicationService
+from app.infrastructure.memory.mem0_backend import format_recalled_memories
 from app.infrastructure.rag.citation_tracker import CitationTracker
 from app.infrastructure.rag.hybrid_retriever import HybridRetriever, RetrievedChunk
 from app.infrastructure.rag.rag_service import RagService
@@ -61,8 +65,6 @@ def test_rag_service_honours_top_k() -> None:
 
 
 def test_user_memory_prompt_respects_budget() -> None:
-    from app.application.user_memory_vector_app_service import UserMemoryRagApplicationService
-
     hits = [
         {
             "content": "记忆内容" * 200,
@@ -73,4 +75,19 @@ def test_user_memory_prompt_respects_budget() -> None:
     ]
     service = UserMemoryRagApplicationService.__new__(UserMemoryRagApplicationService)
     prompt = service.format_for_prompt("u1", "query", hits, max_hits=5, max_chars=300)
-    assert len(prompt) <= 400
+    assert len(prompt) <= 300
+
+
+@pytest.mark.parametrize("budget", [0, 1, 55, 140, 200])
+@pytest.mark.parametrize("has_hits", [False, True])
+def test_prompt_budgets_include_newlines_headers_and_footer(budget, has_hits):
+    hits = [{"content": "alpha" * 40, "score": 0.9}] if has_hits else []
+    service = UserMemoryRagApplicationService.__new__(UserMemoryRagApplicationService)
+    prompts = (
+        format_recalled_memories(hits, max_chars=budget),
+        service.format_for_prompt("u1", "query", hits, max_chars=budget),
+        CitationTracker([_chunk(hit["content"], 0, [1.0, 0.0]) for hit in hits]).format_for_prompt(
+            max_chars=budget
+        ),
+    )
+    assert all(len(prompt) <= budget for prompt in prompts)

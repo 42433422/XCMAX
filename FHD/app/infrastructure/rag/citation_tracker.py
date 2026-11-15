@@ -74,14 +74,12 @@ class CitationTracker:
         if not self._chunks:
             return ""
         lines = ["【参考资料】（请在回答中用 [1][2] 等标注来源）："]
-        used = len(lines[0])
         for i, c in enumerate(self._chunks, start=1):
             src = c.source_url or (f"chunk_{c.chunk_index}" if c.chunk_index else "source")
             page_info = f", 第{c.page}页" if c.page is not None else ""
             excerpt = c.text[:120].replace("\n", " ")
             line = f"  [{i}] {src}{page_info}: {excerpt}"
-            if used + len(line) > max(0, int(max_chars)):
+            if len("\n".join([*lines, line])) > max(0, int(max_chars)):
                 break
             lines.append(line)
-            used += len(line)
         return "\n".join(lines) if len(lines) > 1 else ""

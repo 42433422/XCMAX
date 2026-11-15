@@ -311,9 +311,10 @@ def format_recalled_memories(hits: list[dict[str, Any]], *, max_chars: int | Non
     """把召回片段格式化为提示词片段，带固定字符预算。"""
     if not hits:
         return ""
-    budget = max_chars or int(_env_float(_ENV_MAX_CHARS, _DEFAULT_PROMPT_CHARS))
+    budget = (
+        int(_env_float(_ENV_MAX_CHARS, _DEFAULT_PROMPT_CHARS)) if max_chars is None else max_chars
+    )
     lines = ["【长期记忆】以下为历史会话中可能相关的片段，仅作参考，不要当成本轮已核实的事实："]
-    used = len(lines[0])
     for index, hit in enumerate(hits, start=1):
         if not isinstance(hit, dict):
             continue
@@ -321,10 +322,9 @@ def format_recalled_memories(hits: list[dict[str, Any]], *, max_chars: int | Non
         if not content:
             continue
         line = f"{index}. {content}"
-        if used + len(line) > budget:
+        if len("\n".join([*lines, line])) > budget:
             break
         lines.append(line)
-        used += len(line)
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
