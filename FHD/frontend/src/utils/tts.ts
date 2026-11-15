@@ -483,12 +483,10 @@ async function speakWithFallback(text: string, controller: AbortController): Pro
   return speakWithSystemVoice(text, controller)
 }
 
-/** 按句切开长回复，避免系统朗读在第二句附近提前结束。 */
 export function splitTextForSpeech(text: string): string[] {
   const plain = String(text || '').replace(/\s+/g, ' ').trim()
   if (!plain) return []
-  const parts = plain.match(/[^。！？!?；;]+[。！？!?；;]*|.+$/g) || [plain]
-  const chunks = parts.map((part) => part.trim()).filter(Boolean)
+  const chunks = (plain.match(/[^。！？!?；;]+[。！？!?；;]*|.+$/g) || [plain]).map((part) => part.trim()).filter(Boolean)
   return chunks.length ? chunks : [plain]
 }
 
