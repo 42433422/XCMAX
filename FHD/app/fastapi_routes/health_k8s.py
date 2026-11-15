@@ -64,7 +64,8 @@ def _check_ai_service() -> dict[str, Any]:
         if hasattr(recognizer, "is_ready"):
             ready = bool(recognizer.is_ready())
         else:
-            ready = bool(recognizer.load())
+            loader = getattr(recognizer, "load", None)
+            ready = bool(loader()) if callable(loader) else False
 
         engines: dict[str, Any] = {}
         getter = getattr(recognizer, "get_engine_status", None)
