@@ -178,6 +178,30 @@ def test_plan_parallel_switch(monkeypatch, value, expected) -> None:
     assert _plan_parallel_enabled() is expected
 
 
+@pytest.mark.asyncio
+async def test_list_all_tools_follows_pagination() -> None:
+    pytest.importorskip("mcp")
+    from types import SimpleNamespace
+
+    from app.infrastructure.mcp.client import _list_all_tools
+
+    class Session:
+        def __init__(self) -> None:
+            self.cursors: list[object] = []
+
+        async def list_tools(self, params=None):
+            self.cursors.append(params)
+            if params is None:
+                return SimpleNamespace(tools=[SimpleNamespace(name="first")], nextCursor="page-2")
+            return SimpleNamespace(tools=[SimpleNamespace(name="second")], nextCursor=None)
+
+    session = Session()
+    tools = await _list_all_tools(session)
+    assert [tool.name for tool in tools] == ["first", "second"]
+    assert len(session.cursors) == 2
+    assert session.cursors[1] is not None
+
+
 def test_reader_gate_caps_concurrency(monkeypatch) -> None:
     from app.infrastructure.workflow.langgraph_runtime import _ReadersWriterGate
 

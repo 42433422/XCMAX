@@ -62,13 +62,15 @@ async def _with_session(
         raise McpClientError("MCP 客户端依赖未安装") from exc
 
     if config.transport == "http":
-        from mcp.client.streamable_http import streamable_http_client
+        from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
-        async with streamable_http_client(config.url) as streams:
-            read_stream, write_stream = streams[0], streams[1]
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
-                return await action(session)
+        client = create_mcp_http_client(headers=dict(config.headers) or None)
+        async with client:
+            async with streamable_http_client(config.url, http_client=client) as streams:
+                read_stream, write_stream = streams[0], streams[1]
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    return await action(session)
 
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
@@ -89,13 +91,25 @@ def _read_only(tool: Any) -> bool:
     return hint is True
 
 
+async def _list_all_tools(session: Any, *, max_pages: int = 10) -> list[Any]:
+    from mcp import types
+
+    collected: list[Any] = []
+    cursor: str | None = None
+    for _ in range(max_pages):
+        params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
+        result = await session.list_tools(params=params) if params else await session.list_tools()
+        collected.extend(getattr(result, "tools", None) or [])
+        cursor = getattr(result, "nextCursor", None)
+        if not cursor:
+            break
+    return collected
+
+
 def list_tools(config: McpServerConfig) -> list[McpToolInfo]:
-    """列出一个 MCP 服务器暴露的工具；失败时返回空列表。"""
+    """列出一个 MCP 服务器暴露的工具（含分页）；失败时返回空列表。"""
     try:
-        result = _sync(
-            lambda: _with_session(config, lambda session: session.list_tools()),
-            config.timeout_seconds,
-        )
+        raw_tools = _sync(lambda: _with_session(config, _list_all_tools), config.timeout_seconds)
     except McpClientError as exc:
         logger.warning("MCP 服务器 %s 工具发现失败：%s", config.name, exc)
         return []
@@ -103,7 +117,7 @@ def list_tools(config: McpServerConfig) -> list[McpToolInfo]:
         logger.warning("MCP 服务器 %s 工具发现异常：%s", config.name, exc)
         return []
     tools: list[McpToolInfo] = []
-    for tool in getattr(result, "tools", None) or []:
+    for tool in raw_tools:
         name = str(getattr(tool, "name", "") or "").strip()
         if not name:
             continue
