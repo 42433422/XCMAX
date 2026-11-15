@@ -27,10 +27,6 @@
         {{ csStatusLabel(csCustomerState.cs_status) }}
       </span>
     </header>
-    <div v-if="(csAutomation || csCustomerState)?.cs_status === 'human_pending'" class="im-cs-transfer-banner">
-      <strong>AI 已转人工</strong>
-      <span>{{ (csAutomation || csCustomerState)?.cs_transfer_reason || '该问题需要人工处理' }}</span>
-    </div>
     <button v-if="hasMoreHistory" type="button" class="im-load-more" :disabled="busy" @click="emit('load-older')">加载更早消息</button>
     <div :ref="scrollEl" class="im-messages">
       <template v-for="m in messages" :key="m.id">
@@ -92,7 +88,7 @@ const emit = defineEmits<{
 
 function csStatusLabel(status?: ImConversationSummary['cs_status']): string {
   if (status === 'ai_processing') return 'AI处理中'
-  if (status === 'human_pending') return '待人工'
+  if (status === 'human_pending') return '人工已介入'
   if (status === 'human_active') return '人工处理中'
   return 'AI自动接待'
 }
@@ -135,8 +131,8 @@ function onInput(ev: Event): void {
   font-weight: 600;
 }
 .im-cs-status.is-human_pending {
-  background: #fff3e8;
-  color: #b54708;
+  background: #e8f7ee;
+  color: #14823d;
 }
 .im-cs-status.is-human_active {
   background: #e8f7ee;
@@ -153,16 +149,6 @@ function onInput(ev: Event): void {
 .im-cs-mode-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-.im-cs-transfer-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 18px;
-  background: #fff7e8;
-  border-bottom: 1px solid #ffd8a8;
-  color: #7a4300;
-  font-size: 12px;
 }
 .im-load-more {
   margin: 10px auto 0;

@@ -105,21 +105,24 @@
         </div>
       </section>
 
-      <section v-if="featuredMods.length" class="store-featured" aria-label="精选整合包">
+      <section v-if="featuredPacks.length" class="store-featured" aria-label="员工包">
         <button
-          v-for="(mod, index) in featuredMods"
-          :key="mod.id"
+          v-for="(pack, index) in featuredPacks"
+          :key="pack.tab"
           type="button"
           class="store-feature"
           :class="`store-feature--${index + 1}`"
-          @click="viewDetails(mod)"
+          @click="switchTab(pack.tab)"
         >
-          <span class="store-feature__tag">精选整合包</span>
-          <span class="store-feature__icon">
-            <img :src="avatarFor(mod)" alt="" loading="lazy" @error="hideAvatar" />
+          <span class="store-feature__tag">员工包</span>
+          <span class="store-feature__icon store-feature__icon--glyph">
+            <i :class="['fa', pack.icon]" aria-hidden="true"></i>
           </span>
-          <strong class="store-feature__name">{{ mod.name }}</strong>
-          <span class="store-feature__meta">v{{ mod.version }} · 免费上岗</span>
+          <strong class="store-feature__name">{{ pack.label }}</strong>
+          <span class="store-feature__desc">{{ pack.description }}</span>
+          <span class="store-feature__meta">
+            {{ pack.total }} 个员工<template v-if="pack.installed"> · 已装 {{ pack.installed }}</template>
+          </span>
         </button>
       </section>
     </div>
@@ -263,7 +266,18 @@ import { useModsStore } from '@/stores/mods'
 import Modal from '@/components/Modal.vue'
 import ModDetails from './ModDetails.vue'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
-import { HOST_FOUNDATION_EMPLOYEE_PACK_ID } from '@/constants/genericModPack'
+import {
+  HOST_FOUNDATION_EMPLOYEE_PACK_ID,
+  STORE_COLLECTION_INDUSTRY_MOD,
+  STORE_COLLECTION_OFFICE_AUX,
+  STORE_COLLECTION_OFFICE_EMPLOYEE,
+  STORE_COLLECTION_WORKFLOW_EMPLOYEE,
+  catalogStoreCollection,
+} from '@/constants/genericModPack'
+import {
+  OFFICE_AUX_PACK_1_PKG_IDS,
+  OFFICE_EMPLOYEE_PKG_IDS,
+} from '@/constants/officeEmployeePack'
 import { useModStoreState } from './mod-store/useModStoreState'
 import { useModStoreMeta } from './mod-store/useModStoreMeta'
 import { useModStoreCatalog } from './mod-store/useModStoreCatalog'
@@ -296,6 +310,7 @@ export default {
     const {
       allMods,
       filteredMods,
+      catalogSnapshot,
       searchQuery,
       filterInstalled,
       sortBy,
@@ -359,19 +374,50 @@ export default {
     const installedCount = computed(() => filteredMods.value.filter((mod) => mod.is_installed).length)
 
     const hotKeywords = ['生产日报', 'BOM', '8D', 'SPC', 'OEE', '隐患', 'ISO9001', '供应商']
-    const FEATURED_KEYWORDS = ['生产日报', '8D', 'BOM', '隐患']
-    const featuredMods = computed(() => {
-      const mods = allMods.value || []
-      const picked = []
-      for (const keyword of FEATURED_KEYWORDS) {
-        const found = mods.find((mod) => String(mod.name || '').includes(keyword))
-        if (found && !picked.includes(found)) picked.push(found)
-      }
-      for (const mod of mods) {
-        if (picked.length >= 4) break
-        if (!picked.includes(mod)) picked.push(mod)
-      }
-      return picked.slice(0, 4)
+    // 首页推荐位展示「员工包」，而不是把单个员工当整合包陈列。
+    const FEATURED_PACKS = [
+      {
+        tab: 'office',
+        label: '办公员工包',
+        description: 'Excel / CSV / PDF / PPT / Word 读取与生成',
+        icon: 'fa-file-text-o',
+        collection: STORE_COLLECTION_OFFICE_EMPLOYEE,
+        expected: OFFICE_EMPLOYEE_PKG_IDS.length,
+      },
+      {
+        tab: 'office_aux',
+        label: '办公员工附属包1',
+        description: '量化报告与可视化图表',
+        icon: 'fa-bar-chart',
+        collection: STORE_COLLECTION_OFFICE_AUX,
+        expected: OFFICE_AUX_PACK_1_PKG_IDS.length,
+      },
+      {
+        tab: 'workflow',
+        label: '工作流员工',
+        description: '按业务流程编排的执行员工',
+        icon: 'fa-users',
+        collection: STORE_COLLECTION_WORKFLOW_EMPLOYEE,
+      },
+      {
+        tab: 'industry_mod',
+        label: '行业扩展',
+        description: '按行业安装的员工与能力包',
+        icon: 'fa-industry',
+        collection: STORE_COLLECTION_INDUSTRY_MOD,
+      },
+    ]
+    const featuredPacks = computed(() => {
+      const source = catalogSnapshot.value.length ? catalogSnapshot.value : allMods.value
+      return FEATURED_PACKS.map((pack) => {
+        const members = source.filter((mod) => catalogStoreCollection(mod) === pack.collection)
+        return {
+          ...pack,
+          // 办公包不在市场全量目录里，按包定义给出成员数；其余按目录统计。
+          total: pack.expected || members.length,
+          installed: members.filter((mod) => mod.is_installed).length,
+        }
+      })
     })
 
     function applyQuickSearch(keyword) {
@@ -430,7 +476,7 @@ export default {
       filteredMods,
       installedCount,
       hotKeywords,
-      featuredMods,
+      featuredPacks,
       applyQuickSearch,
       avatarFor,
       hideAvatar,

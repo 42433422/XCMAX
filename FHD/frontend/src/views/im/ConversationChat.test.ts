@@ -51,7 +51,7 @@ describe('ConversationChat enterprise CS controls', () => {
     expect(wrapper.emitted('change-cs-mode')).toEqual([['human']])
   })
 
-  it('shows handoff reason and lets admin restore AI', async () => {
+  it('shows the human has taken over and lets admin restore AI', async () => {
     const wrapper = mount(ConversationChat, {
       props: {
         ...baseProps(),
@@ -70,8 +70,9 @@ describe('ConversationChat enterprise CS controls', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('AI 已转人工')
-    expect(wrapper.text()).toContain('客户主动要求转人工')
+    expect(wrapper.text()).toContain('人工已介入')
+    expect(wrapper.text()).not.toContain('待人工')
+    expect(wrapper.find('.im-cs-transfer-banner').exists()).toBe(false)
     expect(wrapper.text()).toContain('恢复AI')
     await wrapper.find('.im-cs-mode-button').trigger('click')
     expect(wrapper.emitted('change-cs-mode')).toEqual([['ai']])

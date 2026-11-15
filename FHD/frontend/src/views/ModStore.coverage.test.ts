@@ -105,7 +105,20 @@ vi.mock('@/constants/officeEmployeePack', () => ({
   isOfficeAuxPack1Pkg: (...args: unknown[]) => mockIsOfficeAuxPack1Pkg(...(args as [string])),
   isOfficeEmployeePkg: (...args: unknown[]) => mockIsOfficeEmployeePkg(...(args as [string])),
   OFFICE_AUX_PACK_1_COLLECTION: 'office_employee_aux_pack_1',
+  OFFICE_AUX_PACK_1_PKG_IDS: ['json-report-employee', 'chart-bar-employee', 'chart-line-employee', 'chart-pie-employee', 'chart-dashboard-employee'],
   OFFICE_EMPLOYEE_COLLECTION: 'office_employee_pack',
+  OFFICE_EMPLOYEE_PKG_IDS: [
+    'excel-generate-employee',
+    'excel-full-read-employee',
+    'csv-generate-employee',
+    'csv-full-read-employee',
+    'pdf-generate-employee',
+    'pdf-full-read-employee',
+    'ppt-generate-employee',
+    'ppt-full-read-employee',
+    'word-generate-employee',
+    'word-full-read-employee',
+  ],
 }))
 
 vi.mock('@/composables/useTutorialCatalog', () => ({
