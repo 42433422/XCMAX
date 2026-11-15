@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import importlib
+import logging
 import os
 import threading
 import time
@@ -12,6 +13,8 @@ from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.fastapi_routes.xcagi_compat_chat_helpers import XcagiCompatChatBody
@@ -205,10 +208,13 @@ def _heartbeats(
     encode: Callable[[dict[str, Any]], bytes],
     tool_records: _ToolRecordQueue | None = None,
     notes: _StreamNoteQueue | None = None,
+    deltas: _StreamNoteQueue | None = None,
+    streamed: list[str] | None = None,
 ) -> Iterator[bytes]:
     """Run blocking local work off the producer and keep the stream observably alive."""
     box: dict = {}
     note_sequence = 0
+    delivered = streamed if streamed is not None else []
 
     def run() -> None:
         from app.utils.operational_errors import BOUNDARY_ERRORS
@@ -234,33 +240,49 @@ def _heartbeats(
                 {"type": "thinking", "id": f"think-{note_sequence}", "delta": note}
             )
 
+    def delta_lines() -> Iterator[bytes]:
+        if deltas is None:
+            return
+        for text in deltas.drain():
+            delivered.append(text)
+            yield encode({"type": "token", "text": text})
+
     thread = threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True)
     thread.start()
     interval = _tool_heartbeat_seconds()
     slice_seconds = 0.2
     waited = 0.0
     while thread.is_alive():
-        # 0.2s 切片：工具起止与思考说明接近实时到达，不必等 8s 心跳。
+        # 0.2s 切片：工具起止、思考说明与正文增量接近实时到达，不必等 8s 心跳。
         thread.join(slice_seconds)
         yield from tool_lines()
         yield from note_lines()
+        yield from delta_lines()
         waited += slice_seconds
         if thread.is_alive() and waited >= interval:
             waited = 0.0
             yield _progress(encode, "running", label)
     yield from tool_lines()
     yield from note_lines()
+    yield from delta_lines()
     if "error" in box:
         raise box["error"]
     sink["value"] = box.get("value")
 
 
 def _token_events(
-    encode: Callable[[dict[str, Any]], bytes], text: str, chunk_size: int = 80
+    encode: Callable[[dict[str, Any]], bytes],
+    text: str,
+    already: str = "",
+    chunk_size: int = 80,
 ) -> Iterator[bytes]:
-    """把最终正文分片下发，形成打字机式流式呈现。"""
+    """下发最终正文；已经流式送达的前缀不重复发送。"""
+    if already and text.startswith(already):
+        text = text[len(already) :]
     chunks = [text[start : start + chunk_size] for start in range(0, len(text), chunk_size)]
     for index, chunk in enumerate(chunks):
+        if not chunk:
+            continue
         yield encode({"type": "token", "text": chunk})
         if index + 1 < len(chunks):
             time.sleep(0.012)
@@ -390,17 +412,22 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         # 前端据此实时长出「执行链」，不必等整轮结束回填。
         tool_records = _ToolRecordQueue()
         notes = _StreamNoteQueue()
+        deltas = _StreamNoteQueue()
+        streamed: list[str] = []
         try:
             from app.infrastructure.chat_stream_lifetime import (
+                watch_stream_deltas,
                 watch_stream_notes,
                 watch_stream_tool_records,
             )
 
             watch_stream_tool_records(tool_records.push)
             watch_stream_notes(notes.push)
+            watch_stream_deltas(deltas.push)
         except Exception:  # noqa: BLE001 - 观测通道不可用时不阻断对话
             tool_records = None
             notes = None
+            deltas = None
         yield from _heartbeats(
             _chat,
             "正在执行已确认的任务" if control else "正在处理任务",
@@ -408,6 +435,8 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             encode,
             tool_records,
             notes,
+            deltas,
+            streamed,
         )
         payload = sink["value"]
     except facade.RECOVERABLE_ERRORS as exc:
@@ -436,5 +465,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         )
     response_text = str(payload.get("response") or payload.get("message") or "")
     if response_text:
-        yield from _token_events(sse_event_line, response_text)
+        streamed_text = "".join(streamed)
+        if streamed_text and not response_text.startswith(streamed_text):
+            logger.warning(
+                "chat stream tail mismatch full=%s streamed=%s", len(response_text), len(streamed_text)
+            )
+        yield from _token_events(sse_event_line, response_text, streamed_text)
     yield sse_event_line({"type": "done", "result": payload})

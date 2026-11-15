@@ -20,6 +20,7 @@ from app.application.workflow.workflow_types import (
     WorkflowNode,
     normalize_workflow_risk,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _MODEL_SECRET_TEXT = re.compile(
@@ -157,6 +158,66 @@ def _conversational_turn(message: str, context: dict[str, Any]) -> bool:
     return True
 
 
+_JSON_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f"}
+
+
+def _reply_prefix(raw: str) -> str | None:
+    """从尚不完整的 JSON 里取出 reply 字符串已到达的部分。"""
+    mode = re.search(r'"mode"\s*:\s*"([^"]*)"', raw)
+    if mode and mode.group(1).strip() != "reply":
+        return None
+    # 出现 nodes 说明模型走的是工作流分支，正文不是最终回答。
+    if '"nodes"' in raw or '"tool_id"' in raw:
+        return None
+    key = re.search(r'"reply"\s*:\s*"', raw)
+    if not key:
+        return None
+    out: list[str] = []
+    index = key.end()
+    while index < len(raw):
+        char = raw[index]
+        if char == "\\":
+            if index + 1 >= len(raw):
+                break
+            nxt = raw[index + 1]
+            if nxt == "u":
+                if index + 6 > len(raw):
+                    break
+                try:
+                    out.append(chr(int(raw[index + 2 : index + 6], 16)))
+                except ValueError:
+                    pass
+                index += 6
+                continue
+            out.append(_JSON_ESCAPES.get(nxt, nxt))
+            index += 2
+            continue
+        if char == '"':
+            break
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+async def _consume_reply_stream(stream, on_prefix: Callable[[str], None]) -> tuple[str, str]:
+    """消费模型增量，确认是普通回复后把正文前缀实时推给前端。"""
+    chunks: list[str] = []
+    emitted_text = ""
+    try:
+        async for delta in stream:
+            if not delta:
+                continue
+            chunks.append(delta)
+            prefix = _reply_prefix("".join(chunks))
+            if prefix is None or len(prefix) <= len(emitted_text):
+                continue
+            on_prefix(prefix[len(emitted_text) :])
+            emitted_text = prefix
+    except RECOVERABLE_ERRORS:  # 流中断：保留下发内容，交给已发送前缀收尾
+        logger.warning("planner reply stream interrupted", exc_info=True)
+    return "".join(chunks), emitted_text
+
+
 def _memory_digest(context: dict[str, Any]) -> dict[str, str]:
     digest: dict[str, str] = {}
     for key in ("user_memory_rag", "memory_v2"):
@@ -292,6 +353,43 @@ class LlmPlanGeneration:
         self.completion = completion
         self.http_client = http_client
 
+    def _stream_reply(
+        self, messages: list[dict[str, str]], context: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """流式生成闲聊回复；无法流式或判定为工作流时返回 None 走原路径。"""
+        from app.application.workflow.planner_llm_gateway import stream_planner_completion
+        from app.infrastructure.chat_stream_lifetime import current_lifetime
+
+        lifetime = current_lifetime.get()
+        if lifetime is None:
+            return None
+        try:
+            stream = stream_planner_completion(
+                ai_service=self.conversation, context=context, messages=messages
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("planner streaming unavailable", exc_info=True)
+            return None
+        if stream is None:
+            return None
+
+        def emit(delta: str) -> None:
+            lifetime.publish_delta(delta)
+
+        try:
+            from app.application.employee_runtime.agent_runner import _run_async
+
+            text, streamed = _run_async(_consume_reply_stream(stream, emit))
+        except RECOVERABLE_ERRORS:
+            logger.warning("planner streaming failed, falling back", exc_info=True)
+            return None
+        if not text.strip():
+            return None
+        if streamed and not text.rstrip().endswith("}"):
+            # 流被截断：以已下发内容为准，避免前端出现重复正文。
+            text = json.dumps({"mode": "reply", "reply": streamed}, ensure_ascii=False)
+        return {"choices": [{"message": {"content": text}}]}
+
     def _light_reply(
         self, plan_id: str, message: str, context: dict[str, Any]
     ) -> PlanGraph | None:
@@ -314,12 +412,14 @@ class LlmPlanGeneration:
             {"role": "system", "content": _LIGHT_SYSTEM},
             {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
         ]
-        response = self.completion(
-            ai_service=self.conversation,
-            context=context,
-            messages=messages,
-            http_client_factory=self.http_client,
-        )
+        response = self._stream_reply(messages, context)
+        if response is None:
+            response = self.completion(
+                ai_service=self.conversation,
+                context=context,
+                messages=messages,
+                http_client_factory=self.http_client,
+            )
         if response is None:
             return None
         decoded = _decode_completion(response)
@@ -424,12 +524,14 @@ class LlmPlanGeneration:
                 },
                 {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
             ]
-            response_data = self.completion(
-                ai_service=self.conversation,
-                context=context,
-                messages=messages,
-                http_client_factory=self.http_client,
-            )
+            response_data = self._stream_reply(messages, context)
+            if response_data is None:
+                response_data = self.completion(
+                    ai_service=self.conversation,
+                    context=context,
+                    messages=messages,
+                    http_client_factory=self.http_client,
+                )
             if response_data is None:
                 return None
             decoded = _decode_completion(response_data)
