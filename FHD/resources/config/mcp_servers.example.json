@@ -1,0 +1,19 @@
+{
+  "servers": {
+    "example-filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp/xcagi-mcp"],
+      "env": {},
+      "timeout_seconds": 20
+    },
+    "example-remote": {
+      "transport": "http",
+      "url": "https://example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer REPLACE_ME"
+      },
+      "timeout_seconds": 20
+    }
+  }
+}

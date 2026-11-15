@@ -209,7 +209,13 @@ def _validate_required_params(tool_id: str, action: str, params: dict | None) ->
 
 
 def get_workflow_tool_registry() -> dict:
-    """Return workflow tool registry loaded from config/risk_actions.registry.json."""
+    """Return built-in tools plus configured external MCP tools."""
     from resources.config.risk_actions_loader import get_workflow_tools_from_registry
 
-    return get_workflow_tools_from_registry()
+    registry = get_workflow_tools_from_registry()
+    try:
+        from app.application.tools.mcp.registry import merge_mcp_tools
+
+        return merge_mcp_tools(registry)
+    except ImportError:
+        return registry

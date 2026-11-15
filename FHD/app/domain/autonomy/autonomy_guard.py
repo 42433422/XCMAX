@@ -101,6 +101,15 @@ class AutonomyGuard:
     def list_code_write_tools(self) -> frozenset[str]:
         return self._policy.list_code_write_tools()
 
+    def register_actions(
+        self,
+        tool_id: str,
+        *,
+        description: str = "",
+        actions: dict[str, Any] | None = None,
+    ) -> None:
+        self._policy.register_actions(tool_id, description=description, actions=actions)
+
     def get_action_spec(self, tool_id: str, operation: str) -> dict[str, Any] | None:
         return self._policy.get_action_spec(tool_id, operation)
 

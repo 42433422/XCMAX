@@ -45,6 +45,8 @@ SQLAlchemy>=2.0.0
 alembic>=1.13.0
 psycopg[binary]>=3.1.18
 pgvector>=0.2.5
+# 外部工具接入：官方 MCP Python SDK（MIT）
+mcp==2.3.0
 
 pandas>=2.0.0
 numpy>=1.24.0

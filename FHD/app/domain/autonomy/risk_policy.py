@@ -174,6 +174,26 @@ class RiskPolicyCatalog:
     def list_code_write_tools(self) -> frozenset[str]:
         return _CODE_WRITE_TOOL_NAMES
 
+    def register_actions(
+        self,
+        tool_id: str,
+        *,
+        description: str = "",
+        actions: dict[str, Any] | None = None,
+    ) -> None:
+        """登记运行时发现的工具动作（如外部 MCP 工具），只增不改。"""
+        if not actions:
+            return
+        tools = self.registry.setdefault("tools", {})
+        tool = tools.setdefault(
+            str(tool_id),
+            {"description": str(description or ""), "availability": "shared", "actions": {}},
+        )
+        existing = tool.setdefault("actions", {})
+        for name, spec in actions.items():
+            if isinstance(spec, dict):
+                existing.setdefault(str(name), copy.deepcopy(spec))
+
     def get_action_spec(self, tool_id: str, operation: str) -> dict[str, Any] | None:
         tool = (self.registry.get("tools") or {}).get(str(tool_id))
         if not isinstance(tool, dict):

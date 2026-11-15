@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
 from typing import Any, cast
 
 from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
@@ -53,6 +54,14 @@ from app.application.workflow.workflow_types import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _plan_parallel_enabled() -> bool:
+    """只读且幂等的独立节点允许同层并行；写节点仍由读写闸门串行。"""
+    raw = str(os.environ.get("XCAGI_PLAN_PARALLEL") or "").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
 _INTERNAL_RUN_ERROR = "agent_run_internal_error"
 
 
@@ -1327,7 +1336,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     "blocked": [step.node_id for step in run.steps if step.status == "skipped"],
                 },
                 max_retries=0,
-                parallel=False,
+                parallel=_plan_parallel_enabled(),
             )
         except (ValueError, RuntimeError) as exc:
             run.status, run.error = "blocked", f"计划图校验或执行失败：{exc}"
