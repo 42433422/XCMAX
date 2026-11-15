@@ -8,8 +8,7 @@
 2. 单文件 ``@router.`` 装饰器数 > ``routes_per_file_soft_cap``（默认 20）的文件 ——
    路由数**不得增长**，并应聚合到 domain 子模块（绞杀者式收口）。
 
-白名单在 ``scripts/dev/big_files_ratchet_baseline.json`` 的 ``allowlist`` 中维护，
-典型场景：纯数据 schema、生成产物、bootstrap DDL 等天然不可拆的巨型文件。
+白名单在 ``scripts/dev/big_files_ratchet_baseline.json`` 的 ``allowlist`` 中维护，典型场景：纯数据 schema、生成产物、bootstrap DDL 等天然不可拆的巨型文件。
 
 用法::
 
@@ -130,16 +129,27 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     """返回 (errors, progress)。errors 非空即失败。"""
     errors: list[str] = []
     progress: list[str] = []
+    stale_hint = "请运行 python scripts/dev/count_big_files.py --update-baseline 锁定收紧后的基线。"
 
     file_limits = baseline.get("file_line_limits", {})
     current_files = {item["file"]: item["lines"] for item in current["big_files_over_cap"]}
     removed = sorted(set(file_limits) - set(current_files))
     if removed:
-        progress.append(f"app/ 不再超过规模提示阈值的文件：{len(removed)} 个")
+        errors.append(
+            f"基线陈旧：{len(removed)} 个文件已不再超过规模阈值，但仍登记在 file_line_limits。"
+            + stale_hint
+            + "\n"
+            + "\n".join(f"    - {rel}" for rel in removed)
+        )
     for rel, lines in current_files.items():
         previous = file_limits.get(rel)
         if previous is not None and lines > previous:
             errors.append(f"巨型文件继续增长：{rel}（{previous} → {lines} 行）")
+        elif previous is not None and lines < previous - max(10, previous * 2 // 100):
+            errors.append(
+                f"基线陈旧：巨型文件已缩小但基线未收紧：{rel}（{previous} → {lines} 行）。"
+                + stale_hint
+            )
 
     route_limits = baseline.get("router_route_limits", {})
     current_routers = {
@@ -157,9 +167,27 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
                 errors.append(f"巨型 router 继续增长：{rel}（{limit} → {routes} 路由）")
         removed = sorted(set(route_limits) - set(current_routers))
         if removed:
-            progress.append(f"app/ 巨型 router 债务下降：移除 {len(removed)} 个基线项 ✓")
+            errors.append(
+                f"基线陈旧：{len(removed)} 个 router 已不再超过路由阈值，但仍登记在 "
+                "router_route_limits。" + stale_hint + "\n"
+                + "\n".join(f"    - {rel}" for rel in removed)
+            )
+        for rel, routes in current_routers.items():
+            limit = route_limits.get(rel)
+            if limit is not None and routes < limit:
+                errors.append(
+                    f"基线陈旧：巨型 router 路由数已下降但基线未收紧：{rel}（{limit} → {routes}）。"
+                    + stale_hint
+                )
     elif current["big_router_count"] > baseline["big_router_files_over_20_routes"]:
         errors.append("app/ 巨型 router 文件数增加；请生成逐文件 V2 基线。")
+
+    if current["big_files_count"] < baseline.get("big_files_over_800_lines", 0):
+        errors.append(
+            f"基线陈旧：超过规模阈值的文件数已由 "
+            f"{baseline['big_files_over_800_lines']} 降至 {current['big_files_count']}。"
+            + stale_hint
+        )
 
     return errors, progress
 

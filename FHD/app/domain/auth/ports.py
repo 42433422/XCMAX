@@ -10,8 +10,8 @@ from fastapi import BackgroundTasks, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.application.session_account_meta import AccountKind
 from app.db.models.user import User
+from app.domain.identity.account_kind import AccountKind
 
 JsonObject: TypeAlias = dict[str, Any]
 RouteResult: TypeAlias = JsonObject | Response

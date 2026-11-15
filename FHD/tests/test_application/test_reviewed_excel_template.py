@@ -13,6 +13,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.application.reviewed_excel_template import clean_workbook, inspect_workbook
 from app.fastapi_routes import reviewed_excel_template as routes
+from app.fastapi_routes.reviewed_excel import app_gateway as rx_gateway
+from app.fastapi_routes.reviewed_excel import support as rx_support
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from tests.fixtures.etl_template.sources.generate import large_quotation, sample
 from tests.test_application.test_reviewed_excel_boundaries import synthetic_document_answer
@@ -132,7 +134,7 @@ def test_unexpected_candidate_failure_is_correlated_without_source_logging(
     def failed_render(*_):
         raise RuntimeError("synthetic-private-cell-and-provider-credential")
 
-    monkeypatch.setattr(routes, "_build_candidate_previews", failed_render)
+    monkeypatch.setattr(rx_support, "_build_candidate_previews", failed_render)
     response = review_store.client.post(
         "/api/templates/reviewed-excel/preview",
         files={"file": ("synthetic.xlsx", sample())},
@@ -618,7 +620,7 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(crud, "_ensure_template_tables_ready", lambda: None)
     monkeypatch.setattr(template_scope, "ensure_templates_tenant_column", lambda: None)
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
-    monkeypatch.setattr(routes, "get_app_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(rx_gateway, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(archive_routes, "get_app_data_dir", lambda: str(tmp_path))
 
     from app.application import reviewed_excel_review_store
@@ -686,7 +688,7 @@ def review_store(tmp_path, monkeypatch):
         # locked; recovery-specific tests explicitly supply a supported lookup.
         return None
 
-    monkeypatch.setattr(routes, "_lookup_market_call", unsupported_market_lookup)
+    monkeypatch.setattr(rx_support, "_lookup_market_call", unsupported_market_lookup)
 
     def authorize(permission):
         if not actor[permission]:
@@ -698,7 +700,7 @@ def review_store(tmp_path, monkeypatch):
         if (user.tenant_id, user.id) != expected:
             raise HTTPException(status_code=403, detail="身份已改变")
 
-    monkeypatch.setattr(routes, "_recheck", recheck)
+    monkeypatch.setattr(rx_support, "_recheck", recheck)
     monkeypatch.setattr(archive_routes, "_recheck", recheck)
 
     app = FastAPI()
@@ -722,7 +724,7 @@ def review_store(tmp_path, monkeypatch):
                 upload = (kwargs.get("files") or {}).get("file")
                 if upload:
                     with monkeypatch.context() as parsing:
-                        parsing.setattr(routes, "inspect_workbook", inspect_workbook)
+                        parsing.setattr(rx_gateway, "inspect_workbook", inspect_workbook)
                         classified = raw_post(
                             "/api/templates/reviewed-excel/classify",
                             files={"files": upload},
@@ -752,7 +754,7 @@ def review_store(tmp_path, monkeypatch):
                         for region in sheet["regions"]
                     ]
                     with monkeypatch.context() as parsing:
-                        parsing.setattr(routes, "inspect_workbook", inspect_workbook)
+                        parsing.setattr(rx_gateway, "inspect_workbook", inspect_workbook)
                         confirmed = raw_post(
                             f"/api/templates/reviewed-excel/classifications/{item['classification_id']}/confirm",
                             data={"version": item["version"], "labels_json": json.dumps(labels)},
@@ -2282,7 +2284,7 @@ def test_private_intake_requires_model_before_a_business_plan(
     )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "model_required"
-    monkeypatch.setattr(routes, "_authorize_intake", lambda *_, **_kwargs: "synthetic")
+    monkeypatch.setattr(rx_support, "_authorize_intake", lambda *_, **_kwargs: "synthetic")
     response = client.post(
         "/api/templates/reviewed-excel/intake-preview",
         data={
@@ -2567,7 +2569,7 @@ def test_model_routes_require_authenticated_session_even_with_legacy_consent_fie
     review_store.client.cookies.clear()
     review_store.client.cookies.set("xcagi_elt_notice", legacy_receipt)
     send = Mock(side_effect=AssertionError("unauthorized model call"))
-    monkeypatch.setattr(routes, "refine_proposal", send)
+    monkeypatch.setattr(rx_gateway, "refine_proposal", send)
     response = review_store.client.post(
         "/api/templates/reviewed-excel/preview",
         files={"file": ("synthetic.xlsx", sample())},
@@ -2648,7 +2650,7 @@ def test_preview_requires_classification_before_model_dispatch(review_store, mon
     from unittest.mock import Mock
 
     send = Mock(side_effect=AssertionError("raw preview must not dispatch"))
-    monkeypatch.setattr(routes, "refine_proposal", send)
+    monkeypatch.setattr(rx_gateway, "refine_proposal", send)
     data = {
         "expected_actor": "1:7",
         "classification_id": "synthetic",
@@ -2708,7 +2710,7 @@ def test_account_session_calls_classification_candidates_and_feedback_without_ex
         workbook.close()
         source = stream.getvalue()
         monkeypatch.setattr(
-            routes,
+            rx_gateway,
             "plan_semantic_batches",
             lambda review, **_: (
                 [
@@ -2893,7 +2895,7 @@ def test_concurrent_feedback_keeps_first_committed_version(review_store, monkeyp
         proposal["parent_version"] = parent_version
         return proposal
 
-    monkeypatch.setattr(routes, "refine_proposal", fake)
+    monkeypatch.setattr(rx_gateway, "refine_proposal", fake)
     common = {"review_id": preview["review_id"], "parent_version": preview["proposal"]["version"]}
     with ThreadPoolExecutor(max_workers=2) as pool:
         first = pool.submit(
@@ -2992,7 +2994,7 @@ def test_revocation_during_model_or_before_write_never_commits(review_store, mon
     def deny_before_write(_request, _expected):
         raise HTTPException(status_code=403, detail="权限已撤销")
 
-    monkeypatch.setattr(routes, "_recheck", deny_before_write)
+    monkeypatch.setattr(rx_support, "_recheck", deny_before_write)
     save = {
         "review_id": writable["review_id"],
         "proposal_version": writable["proposal"]["version"],
@@ -3516,7 +3518,7 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
         planning_calls.append(1)
         return original_planner(*args, **kwargs)
 
-    monkeypatch.setattr(routes, "plan_semantic_batches", plan_once)
+    monkeypatch.setattr(rx_gateway, "plan_semantic_batches", plan_once)
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
     source = large_quotation(rows=4001)
@@ -5576,7 +5578,7 @@ def test_model_document_to_template_library_roundtrip(review_store, monkeypatch)
                 {"id": item["classification_id"], "draft": json.dumps(changed, ensure_ascii=False)},
             )
 
-    monkeypatch.setattr(routes, "_recheck", change_version)
+    monkeypatch.setattr(rx_support, "_recheck", change_version)
     rejected = client.post("/api/templates/reviewed-excel/save", data=save_data)
     assert rejected.status_code == 409
     with review_store.engine.begin() as conn:
@@ -5585,7 +5587,7 @@ def test_model_document_to_template_library_roundtrip(review_store, monkeypatch)
             text("UPDATE etl_runs SET draft_json=:draft WHERE id=:id"),
             {"id": item["classification_id"], "draft": original_draft},
         )
-    monkeypatch.setattr(routes, "_recheck", recheck)
+    monkeypatch.setattr(rx_support, "_recheck", recheck)
     from fastapi import HTTPException
 
     from app.application.elt.service_support import load_json
@@ -5891,10 +5893,10 @@ def test_reviewed_excel_never_returns_underlying_exception_payload(
     data = {"expected_actor": "1:7"}
     if entry == "model":
         monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-        monkeypatch.setattr(routes, "refine_proposal", fail)
+        monkeypatch.setattr(rx_gateway, "refine_proposal", fail)
         data.update({"model_opt_in": "true", "sample_authorized": "true"})
     else:
-        monkeypatch.setattr(routes, "inspect_workbook", fail)
+        monkeypatch.setattr(rx_gateway, "inspect_workbook", fail)
     if entry == "classify":
         response = review_store.client.post(
             "/api/templates/reviewed-excel/classify",
@@ -6167,7 +6169,7 @@ def test_audit_write_failure_blocks_replay(review_store, monkeypatch):
             raise HTTPException(status_code=409, detail="synthetic write failure")
         return real_cas(db, run, old, state)
 
-    monkeypatch.setattr(routes, "_classification_cas", fail_response)
+    monkeypatch.setattr(rx_gateway, "_classification_cas", fail_response)
     calls = []
 
     def fake(messages, schema, tokens, **_model_kwargs):
@@ -6235,7 +6237,7 @@ def test_completed_invalid_response_is_counted_and_next_request_retries_without_
             sent.append(kwargs.get("repair"))
         return complete(*args, **kwargs)
 
-    monkeypatch.setattr(routes, "_classify_semantic_batch", spy)
+    monkeypatch.setattr(rx_gateway, "_classify_semantic_batch", spy)
     base = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     form = {"version": item["version"], "sample_authorized": "true"}
     assert client.post(base + "/analyze", data=form).status_code == 200
@@ -6590,7 +6592,7 @@ def test_required_model_failure_has_no_success_or_saved_rule_candidates(
         else ReviewedExcelError("模型响应不完整；未自动重试")
     )
     send = Mock(side_effect=fault)
-    monkeypatch.setattr(routes, "refine_proposal", send)
+    monkeypatch.setattr(rx_gateway, "refine_proposal", send)
     body = sample()
     form = candidate_form(client, body)
     response = client.post(
@@ -6701,7 +6703,7 @@ def test_preview_render_failure_records_answered_call_and_allows_regeneration(
     monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
     with monkeypatch.context() as failure:
         failure.setattr(
-            routes,
+            rx_support,
             "_build_candidate_previews",
             Mock(side_effect=RuntimeError("synthetic-private-render-fault")),
         )
@@ -7157,7 +7159,7 @@ def test_unknown_outcome_stays_locked_without_market_recovery(review_store, monk
     async def unsupported(*_args):
         return {"supported": False}
 
-    monkeypatch.setattr(routes, "_lookup_market_call", unsupported)
+    monkeypatch.setattr(rx_support, "_lookup_market_call", unsupported)
     locked = client.post(url + "/analyze", data=data)
     assert locked.status_code == 409 and "明确授权" in locked.text
     assert len(keys) == 1 and audit()[-1]["state"] == "unknown"
@@ -7169,7 +7171,7 @@ def test_market_confirmed_recovery_resends_with_the_same_key(review_store, monke
     async def not_found(*_args):
         return {"supported": True, "state": "not_found"}
 
-    monkeypatch.setattr(routes, "_lookup_market_call", not_found)
+    monkeypatch.setattr(rx_support, "_lookup_market_call", not_found)
     assert client.post(url + "/analyze", data=data).status_code == 503
     records = audit()
     assert len(keys) == 2 and keys[0] == keys[1] == records[-1]["call_id"]
@@ -7228,12 +7230,12 @@ def test_unknown_preview_claim_locks_until_the_user_abandons_it(review_store, mo
         keys.append(current_call_id())
         raise ValueError("合成连接中断")
 
-    monkeypatch.setattr(routes, "refine_proposal", lost)
+    monkeypatch.setattr(rx_gateway, "refine_proposal", lost)
 
     async def unsupported(*_args):
         return {"supported": False}
 
-    monkeypatch.setattr(routes, "_lookup_market_call", unsupported)
+    monkeypatch.setattr(rx_support, "_lookup_market_call", unsupported)
     preview = {
         "expected_actor": "1:7",
         "classification_id": item["classification_id"],

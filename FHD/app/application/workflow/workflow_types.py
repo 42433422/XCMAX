@@ -8,7 +8,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, cast
 
-RiskLevel = Literal["low", "medium", "high"]
+from app.domain.workflow.plan_graph import Branch as Branch
+from app.domain.workflow.plan_graph import PlanGraph as PlanGraph
+from app.domain.workflow.plan_graph import RiskLevel as RiskLevel
+from app.domain.workflow.plan_graph import WorkflowNode as WorkflowNode
 
 MergeSemantics = Literal["set", "append", "merge_dict"]
 
@@ -229,44 +232,6 @@ class ApprovalRequest:
     rejected_at: datetime | None = None
     approver_comment: str = ""
     tenant_id: int | None = None
-
-
-@dataclass
-class Branch:
-    """条件边：按上一节点 output 匹配决定后续节点。
-
-    - ``target``：后续节点 id。
-    - ``condition``：匹配描述，如 ``{"key": "low_stock", "equals": true}`` 或
-      ``{"key": "status", "equals": "ok"}``。
-    """
-
-    target: str
-    condition: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class WorkflowNode:
-    node_id: str
-    tool_id: str
-    action: str
-    params: dict[str, Any] = field(default_factory=dict)
-    risk: RiskLevel = "low"
-    idempotent: bool = False
-    description: str = ""
-    depends_on: list[str] = field(default_factory=list)
-    # ``next`` 为无条件默认后继；``branches`` 为按 output 匹配的条件后继。
-    next: str | None = None
-    branches: list[Branch] = field(default_factory=list)
-
-
-@dataclass
-class PlanGraph:
-    plan_id: str
-    intent: str
-    todo_steps: list[str] = field(default_factory=list)
-    nodes: list[WorkflowNode] = field(default_factory=list)
-    risk_level: RiskLevel = "low"
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

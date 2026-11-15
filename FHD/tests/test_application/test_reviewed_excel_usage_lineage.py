@@ -1,3 +1,6 @@
+from app.fastapi_routes.reviewed_excel import app_gateway as rx_gateway
+from app.fastapi_routes.reviewed_excel import support as rx_support
+
 """Test-only restrictions survive classification and metadata-normalizing derivation."""
 
 import json
@@ -125,7 +128,7 @@ def test_metadata_free_derived_workbook_still_blocked_by_database_lineage(
     # Model a legitimate serializer that drops custom properties. Server source
     # lineage must protect publication even when the derived bytes lack markers.
     monkeypatch.setattr(
-        routes,
+        rx_gateway,
         "derive_document_workbook",
         lambda *a, **kw: without_custom_properties(derive(*a, **kw)),
     )

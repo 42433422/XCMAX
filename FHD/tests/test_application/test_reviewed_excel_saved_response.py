@@ -7,6 +7,8 @@ import pytest
 from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_audit import request_digest
 from app.application.reviewed_excel_saved_response import saved_classification_answer
+from app.fastapi_routes.reviewed_excel import app_gateway as rx_gateway
+from app.fastapi_routes.reviewed_excel import support as rx_support
 
 
 def record():
@@ -136,19 +138,19 @@ def test_recovery_endpoint_revalidates_once_without_model_or_cross_tenant_access
         ),
         file_sha256=sha,
     )
-    monkeypatch.setattr(routes, "tenant_scope", lambda *_: nullcontext())
-    monkeypatch.setattr(routes, "get_db", lambda: nullcontext(object()))
+    monkeypatch.setattr(rx_gateway, "tenant_scope", lambda *_: nullcontext())
+    monkeypatch.setattr(rx_gateway, "get_db", lambda: nullcontext(object()))
 
     def find_run(_db, _id, tenant, owner):
         if (tenant, owner) != (1, 7):
             raise HTTPException(status_code=404)
         return run
 
-    monkeypatch.setattr(routes, "_classification_run", find_run)
-    monkeypatch.setattr(routes, "_source", lambda *_: body)
-    monkeypatch.setattr(routes, "_recheck", lambda *_: None)
+    monkeypatch.setattr(rx_gateway, "_classification_run", find_run)
+    monkeypatch.setattr(rx_gateway, "_source", lambda *_: body)
+    monkeypatch.setattr(rx_support, "_recheck", lambda *_: None)
     monkeypatch.setattr(
-        routes,
+        rx_gateway,
         "_classification_cas",
         lambda _db, _run, old, state: setattr(run, "draft_json", json.dumps(state)),
     )
@@ -183,7 +185,7 @@ def test_model_refusal_blocks_automatic_slicing_even_when_fully_covered(monkeypa
         "input_summaries": [{"source_coverage": {"can_slice": False}}],
     }
     run = SimpleNamespace(draft_json=json.dumps({"versions": [latest]}))
-    monkeypatch.setattr(routes, "_classification_run", lambda *_: run)
-    monkeypatch.setattr(routes, "_source", lambda *_: b"source")
+    monkeypatch.setattr(rx_gateway, "_classification_run", lambda *_: run)
+    monkeypatch.setattr(rx_gateway, "_source", lambda *_: b"source")
     with pytest.raises(ReviewedExcelError, match="不能自动切片"):
         routes._auto_slices(None, "id", "v1", 1, 7)

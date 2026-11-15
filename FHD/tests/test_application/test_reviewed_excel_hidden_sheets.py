@@ -1,3 +1,6 @@
+from app.fastapi_routes.reviewed_excel import app_gateway as rx_gateway
+from app.fastapi_routes.reviewed_excel import support as rx_support
+
 """Hidden source sheets remain archived, but are not standalone template choices."""
 
 import hashlib
@@ -137,8 +140,8 @@ def test_route_ignores_only_hidden_refusal_and_hidden_coverage(monkeypatch):
     run = SimpleNamespace(
         draft_json=json.dumps({"versions": [latest]}), file_sha256=inspect_workbook(body)["sha256"]
     )
-    monkeypatch.setattr(routes, "_classification_run", lambda *_: run)
-    monkeypatch.setattr(routes, "_source", lambda *_: body)
+    monkeypatch.setattr(rx_gateway, "_classification_run", lambda *_: run)
+    monkeypatch.setattr(rx_gateway, "_source", lambda *_: body)
     slices, _, _ = routes._auto_slices(None, "saved", "saved", 1, 7)
     assert [s["fragments"] for s in slices] == [[visible]]
     latest["input_summaries"][0]["reference_index"]["r1"]["ref"]["sheet"] = "Visible"

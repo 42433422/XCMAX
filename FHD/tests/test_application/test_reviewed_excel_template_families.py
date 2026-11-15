@@ -6,6 +6,8 @@ from openpyxl import Workbook
 
 from app.application import reviewed_excel_template_families as families
 from app.application.elt.errors import ReviewedExcelError
+from app.fastapi_routes.reviewed_excel import app_gateway as rx_gateway
+from app.fastapi_routes.reviewed_excel import support as rx_support
 
 
 def source():
@@ -381,20 +383,20 @@ def test_late_candidate_read_is_scoped_and_never_calls_model(monkeypatch):
             "auto_slice_index": 2,
         }
     }
-    monkeypatch.setattr(routes, "_identity", lambda user: (1, 7))
-    monkeypatch.setattr(routes, "get_db", lambda: nullcontext(object()))
+    monkeypatch.setattr(rx_support, "_identity", lambda user: (1, 7))
+    monkeypatch.setattr(rx_gateway, "get_db", lambda: nullcontext(object()))
     monkeypatch.setattr(
-        routes,
+        rx_gateway,
         "_classification_run",
         lambda db, cid, tenant, owner: SimpleNamespace(draft_json=json.dumps(state)),
     )
     monkeypatch.setattr(
-        routes,
+        rx_gateway,
         "_run",
         lambda db, rid, tenant, owner: SimpleNamespace(id=rid, summary_json=json.dumps(summary)),
     )
     monkeypatch.setattr(
-        routes, "_stored_candidate_response", lambda db, rid, tenant, owner: {"review_id": rid}
+        rx_gateway, "_stored_candidate_response", lambda db, rid, tenant, owner: {"review_id": rid}
     )
     assert routes.reviewed_excel_candidate_result("classification", "v1", 2, user={}) == {
         "status": "complete",
@@ -426,19 +428,19 @@ def test_family_result_preserves_concurrent_candidate_claim(monkeypatch):
 
     stored = {"draft": json.dumps({"versions": [{"version": "v1"}]})}
     db = SimpleNamespace(expire_all=lambda: None, rollback=lambda: None)
-    monkeypatch.setattr(routes, "_identity", lambda user: (1, 7))
-    monkeypatch.setattr(routes, "require_model_session", lambda *args: object())
-    monkeypatch.setattr(routes, "get_db", lambda: nullcontext(db))
+    monkeypatch.setattr(rx_support, "_identity", lambda user: (1, 7))
+    monkeypatch.setattr(rx_gateway, "require_model_session", lambda *args: object())
+    monkeypatch.setattr(rx_gateway, "get_db", lambda: nullcontext(db))
     monkeypatch.setattr(
-        routes,
+        rx_gateway,
         "_classification_run",
         lambda *args: SimpleNamespace(draft_json=stored["draft"], file_sha256="sha"),
     )
-    monkeypatch.setattr(routes, "_cached_slice_metadata", lambda *args: [{"fragments": []}])
-    monkeypatch.setattr(routes, "_source", lambda *args: b"synthetic")
-    monkeypatch.setattr(routes, "inspect_workbook", lambda *args: {"cells": []})
-    monkeypatch.setattr(routes, "bind_model_session", lambda *args: nullcontext())
-    monkeypatch.setattr(routes, "_recheck", lambda *args: None)
+    monkeypatch.setattr(rx_support, "_cached_slice_metadata", lambda *args: [{"fragments": []}])
+    monkeypatch.setattr(rx_gateway, "_source", lambda *args: b"synthetic")
+    monkeypatch.setattr(rx_gateway, "inspect_workbook", lambda *args: {"cells": []})
+    monkeypatch.setattr(rx_gateway, "bind_model_session", lambda *args: nullcontext())
+    monkeypatch.setattr(rx_support, "_recheck", lambda *args: None)
 
     def cas(db, run, old, state):
         assert old == stored["draft"]
@@ -456,7 +458,7 @@ def test_family_result_preserves_concurrent_candidate_claim(monkeypatch):
         on_answer()
         return [{"members": [0], "reason": "synthetic"}]
 
-    monkeypatch.setattr(routes, "_classification_cas", cas)
+    monkeypatch.setattr(rx_gateway, "_classification_cas", cas)
     monkeypatch.setattr(families, "suggest_template_families", suggest)
     response = routes.reviewed_excel_template_families("classification", "v1", object(), user={})
     final = json.loads(stored["draft"])

@@ -34,9 +34,12 @@ from app.application.reviewed_excel_template import classify_review_workbook
 from app.db.models.elt import EltRun, EltUpload
 from app.db.models.elt_archive import EltArchiveAsset, EltArchiveQuota, EltArchiveVersion
 from app.db.session import get_db
-from app.fastapi_routes.reviewed_excel_template import (
+from app.fastapi_routes.reviewed_excel.app_gateway import (
     _CLASS_READY,
     _SAVED,
+    _source,
+)
+from app.fastapi_routes.reviewed_excel.support import (
     _archive_admin,
     _body,
     _expected_actor,
@@ -44,7 +47,6 @@ from app.fastapi_routes.reviewed_excel_template import (
     _manage,
     _read,
     _recheck,
-    _source,
 )
 from app.infrastructure.tenant_scope import tenant_scope
 from app.middleware.error_handler import ReviewedExcelRoute

@@ -37,7 +37,10 @@ BASELINE = {
     # package (reviewed_excel/) + top-level reviewed_excel_template.py adapters.
     # Raised 2026-10-31 Asia/Shanghai for #2858: etl_auto_ingest.py
     # (progress API + route split so etl.py stays ≤20 @router).
-    "routes_total": 304,
+    # Raised 2026-11-16 Asia/Shanghai: reviewed Excel route split — the 3,110-line
+    # reviewed_excel_template.py became a facade over reviewed_excel/* submodules
+    # (each ≤ 20 @router and ≤ 800 lines); total route files +9, giant file -1.
+    "routes_total": 310,
     "routes_top_level": 119,
     "legacy_prod_ref_files": 27,
     "application_ports_py": 1,

@@ -1,3 +1,6 @@
+from app.fastapi_routes.reviewed_excel import app_gateway as rx_gateway
+from app.fastapi_routes.reviewed_excel import support as rx_support
+
 """Real prepared XLSX runs bind reviewed intake consent to scope and content."""
 
 import json
@@ -114,7 +117,7 @@ def intake_store(review_store, rag_service, monkeypatch, account_session_client)
             db.commit()
             return result
 
-    monkeypatch.setattr(routes, "_execute", execute)
+    monkeypatch.setattr(rx_support, "_execute", execute)
     monkeypatch.setattr(store.intake, "_launch_worker", launch)
     from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRequest
     from app.db.models.user import User
@@ -247,7 +250,7 @@ def test_exact_prepared_run_ingests_the_selected_candidate(intake_store, monkeyp
         clean_calls["n"] += 1
         return real_clean(*args, **kwargs)
 
-    monkeypatch.setattr(routes, "clean_workbook", counting_clean)
+    monkeypatch.setattr(rx_gateway, "clean_workbook", counting_clean)
     release = Event()
     store.executor.submit(release.wait, 10)
     try:
@@ -440,7 +443,7 @@ def test_write_boundary_rechecks_execute_permission_and_frozen_mod(
         original(request, expected)
         store.actor[field] = value
 
-    monkeypatch.setattr(routes, "_recheck", changed_identity)
+    monkeypatch.setattr(rx_support, "_recheck", changed_identity)
     response = store.client.post(f"{BASE}/save", data=data)
     assert response.status_code == status, response.text
     assert_no_writes(store)
@@ -1436,7 +1439,7 @@ def test_saved_continuation_rechecks_permission_at_write_boundary(
         original(request, expected)
         store.actor[field] = value
 
-    monkeypatch.setattr(routes, "_recheck", changed)
+    monkeypatch.setattr(rx_support, "_recheck", changed)
     result = store.client.post(f"{BASE}/save", data=data)
     assert result.status_code == status, result.text
     assert store.starts == []
@@ -1493,7 +1496,7 @@ def test_saved_continuation_serializes_classification_version(intake_store, monk
             original_recheck(request, expected)
             mutate_classification()
 
-        monkeypatch.setattr(routes, "_recheck", recheck)
+        monkeypatch.setattr(rx_support, "_recheck", recheck)
     else:
         original_validate = store.intake.validate_prepared
         calls = 0

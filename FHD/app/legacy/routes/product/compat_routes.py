@@ -15,6 +15,15 @@ from fastapi import Query as Query
 from fastapi.responses import JSONResponse, Response
 
 from app.application.workflow.workflow_types import normalize_workflow_risk
+from app.di.product_compat_loaders import (
+    create_product_agent,
+    load_business_visibility,
+    load_price_preview,
+    load_product_dispatcher,
+    load_product_lookup,
+    load_product_registry,
+    load_product_service_facade,
+)
 from app.fastapi_routes.xcagi_compat_product_actions import (
     execute_product_action,
     price_list_word_response,
@@ -54,15 +63,6 @@ from .mutation_flow import ProductMutations, mutation_preflight, response_status
 from .mutation_flow import _http_exception_result as _http_exception_result
 from .mutation_flow import _normalize_products_create_payload as _normalize_products_create_payload
 from .mutation_routes import ProductMutationRoutes
-from .port_contracts import (
-    create_product_agent,
-    load_business_visibility,
-    load_price_preview,
-    load_product_dispatcher,
-    load_product_lookup,
-    load_product_registry,
-    load_product_service_facade,
-)
 from .query_flow import ProductQueries
 from .query_routes import ProductQueryRoutes
 

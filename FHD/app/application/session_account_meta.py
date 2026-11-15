@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from app.db.models.user import Session as UserSession
 from app.db.session import get_host_db
+from app.domain.identity.account_kind import VALID_ACCOUNT_KINDS as VALID_ACCOUNT_KINDS
+from app.domain.identity.account_kind import AccountKind as AccountKind
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-AccountKind = Literal["personal", "enterprise", "admin"]
-VALID_ACCOUNT_KINDS: frozenset[str] = frozenset({"personal", "enterprise", "admin"})
 
 
 def normalize_account_kind(raw: Any, *, default: str = "enterprise") -> AccountKind:

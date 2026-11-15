@@ -14,6 +14,9 @@
 基线存于 ``scripts/dev/layer_ratchet_baseline.json``，由 ``--update-baseline`` 写入；
 该模式**只允许把基线调低**（除非 ``--force``），保证棘轮单向收紧。
 
+反向校验同样生效：实测低于基线（或白名单条目已不再反向依赖）视为**基线陈旧**
+并失败，强制在同一变更里收紧基线，避免“修完忘记下调”。
+
 纯 AST 静态分析，不执行业务代码；零第三方依赖。退出码：违规 ``1`` / 正常 ``0`` / 用法错 ``2``。
 
 用法::
@@ -155,6 +158,8 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     progress: list[str] = []
 
+    stale_hint = "请运行 python scripts/dev/check_layer_ratchet.py --update-baseline 锁定收紧后的基线。"
+
     cur_svc = current["services_py_file_count"]
     base_svc = baseline["services_py_file_count"]
     if cur_svc > base_svc:
@@ -163,9 +168,9 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
             "新代码请落 app/domain | app/application | app/infrastructure。"
         )
     elif cur_svc < base_svc:
-        progress.append(
-            f"app/services/ 文件数下降：{base_svc} → {cur_svc}（-{base_svc - cur_svc}）✓ "
-            "运行 --update-baseline 锁定进度。"
+        errors.append(
+            f"基线陈旧：app/services/ 文件数已由 {base_svc} 降至 {cur_svc}（-{base_svc - cur_svc}）。"
+            + stale_hint
         )
 
     cur_routes = set(current["routes_importing_services"])
@@ -178,8 +183,8 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
             + "\n".join(f"    - app/{p}" for p in new_offenders)
         )
     if fixed:
-        progress.append(
-            f"已收口 {len(fixed)} 个路由（不再直连 app.services）✓ 运行 --update-baseline 锁定：\n"
+        errors.append(
+            f"基线陈旧：{len(fixed)} 个路由已不再直连 app.services 但基线未收紧。" + stale_hint + "\n"
             + "\n".join(f"    - app/{p}" for p in fixed)
         )
 
@@ -195,9 +200,21 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
             + "\n".join(f"    - app/{p}" for p in new_domain)
         )
     if fixed_domain:
-        progress.append(
-            f"已收口 {len(fixed_domain)} 个 domain 反向 import ✓ 运行 --update-baseline 锁定：\n"
+        errors.append(
+            f"基线陈旧：{len(fixed_domain)} 个 domain 反向 import 已消除但基线未收紧。"
+            + stale_hint
+            + "\n"
             + "\n".join(f"    - app/{p}" for p in fixed_domain)
+        )
+
+    stale_whitelist = sorted(
+        whitelist - set(current["domain_reverse_imports"])
+    )
+    if stale_whitelist:
+        errors.append(
+            f"白名单陈旧：{len(stale_whitelist)} 条已不再反向依赖，但仍登记在 "
+            "domain_reverse_imports_whitelist。" + stale_hint + "\n"
+            + "\n".join(f"    - app/{p}" for p in stale_whitelist)
         )
 
     return errors, progress
