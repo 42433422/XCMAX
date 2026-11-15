@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from unittest.mock import Mock
 
@@ -262,18 +263,23 @@ def test_planner_records_repair_trace(monkeypatch) -> None:
     fixed.metadata = {"response_mode": "reply", "reply": "ok"}
 
     monkeypatch.setattr(planner, "_plan_with_llm", lambda *args, **kwargs: broken)
-    monkeypatch.setattr(
-        "app.application.workflow.plan_repair.repair_plan",
-        lambda **kwargs: (
-            fixed,
-            {"attempts": 1, "errors": [], "fixed": True, "first_pass_valid": False},
-        ),
-    )
+    from app.infrastructure.llm import model_admission
+
+    previous_identity = model_admission._MODEL_IDENTITY.get()
+
+    def repaired(**kwargs):
+        assert model_admission._MODEL_IDENTITY.get() == "tenant:t:actor:7"
+        return fixed, {"attempts": 1, "errors": [], "fixed": True, "first_pass_valid": False}
+
+    monkeypatch.setattr("app.application.workflow.plan_repair.repair_plan", repaired)
     monkeypatch.setattr(
         "app.application.workflow.planner.validate_plan_graph", lambda plan: None, raising=False
     )
 
-    result = planner.plan("7", "查木门", {}, context={"session_id": "s1"})
+    result = planner.plan(
+        "7", "查木门", {}, context={"session_id": "s1", "local_user_id": "7", "tenant_id": "t"}
+    )
+    assert model_admission._MODEL_IDENTITY.get() == previous_identity
 
     assert result is fixed
     assert result.metadata["plan_repair"]["fixed"] is True
@@ -284,3 +290,96 @@ def test_planner_records_repair_trace(monkeypatch) -> None:
 def test_enforce_scope_never_raises_on_same_plan(risk: str) -> None:
     original = _plan(_node("n1", risk=risk))
     assert enforce_repair_scope(original, _plan(_node("n1", risk=risk)), "") is None
+
+
+@pytest.mark.parametrize(
+    "error, field, value",
+    [
+        ("节点 n1 缺少参数", "idempotent", False),
+        ("节点 n1 缺少参数", "description", "changed"),
+        ("无法定位的图错误", "params", {"keyword": "changed"}),
+        ("节点 n1 参数值包含 节点 n2", "params", {"keyword": "changed"}),
+    ],
+)
+def test_scope_preserves_every_unreported_field(error, field, value):
+    original = _plan(_node("n1"), _node("n2"))
+    candidate = copy.deepcopy(original)
+    setattr(candidate.nodes[1], field, value)
+    assert enforce_repair_scope(original, candidate, error) is not None
+
+
+@pytest.mark.parametrize("node_id", ["n1", "中文节点", "n.1", "n-1"])
+def test_scope_supports_real_node_ids(node_id):
+    original = _plan(_node(node_id))
+    candidate = _plan(_node(node_id, params={"keyword": "门"}))
+    assert enforce_repair_scope(original, candidate, f"节点 {node_id} 缺少参数") is None
+
+
+def test_scope_preserves_clarification_and_plan_risk():
+    original = _plan(_node("n1", tool_id="clarify", action="ask"))
+    assert enforce_repair_scope(original, _plan(_node("n1")), "节点 n1 缺少参数")
+    candidate = copy.deepcopy(original)
+    original.risk_level = "high"
+    assert enforce_repair_scope(original, candidate, "节点 n1 缺少参数")
+
+
+def test_repair_prompt_redacts_authority_and_secrets():
+    from app.application.workflow.plan_repair import build_repair_messages
+
+    plan = _plan(_node("n1", params={"tenant_id": "private", "keyword": "门"}))
+    plan.metadata = {"api_key": "synthetic-secret", "summary": "safe"}
+    messages = build_repair_messages(
+        plan=plan,
+        error="节点 n1 缺少参数",
+        tool_registry={},
+        user_message="查门",
+        error_code="missing_param",
+    )
+    payload = json.loads(messages[1]["content"])
+    assert payload["original_plan"]["nodes"][0]["params"] == {"keyword": "门"}
+    assert "api_key" not in payload["original_plan"]["metadata"]
+    assert "synthetic-secret" not in messages[1]["content"]
+
+
+def test_repair_preserves_provider_failure_reason():
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    def fail(**kwargs):
+        raise MarketModelError({"status": 402})
+
+    fixed, trace = repair_plan(
+        planned=_plan(_node("n1")),
+        plan_id="p1",
+        message="查门",
+        context={},
+        tool_registry={},
+        validate=lambda plan: "节点 n1 缺少参数",
+        complete=fail,
+    )
+    assert fixed is None
+    assert trace["errors"][-1] == {
+        "code": "repair_request_failed",
+        "message": "修茈市场模型余额不足，请在「模型支付」充值后重试。",
+    }
+
+
+@pytest.mark.parametrize("requested, expected", [(999, 3), (0, 0), (-1, 0)])
+def test_explicit_repair_attempts_remain_bounded(requested, expected):
+    calls = []
+
+    def complete(**kwargs):
+        calls.append(kwargs)
+        return _completion({"nodes": [{"node_id": "n1", "tool_id": "products", "action": "query"}]})
+
+    fixed, trace = repair_plan(
+        planned=_plan(_node("n1")),
+        plan_id="p1",
+        message="查门",
+        context={},
+        tool_registry={},
+        validate=lambda plan: "节点 n1 缺少参数",
+        complete=complete,
+        max_attempts=requested,
+    )
+    assert fixed is None
+    assert len(calls) == trace["attempts"] == expected

@@ -17,10 +17,12 @@ import logging
 import os
 import re
 from collections.abc import Callable
+from dataclasses import asdict
 from typing import Any
 
 from app.application.workflow.llm_plan_generation import (
     _decode_completion,
+    _model_context_value,
     _tool_specs,
     build_plan_from_payload,
 )
@@ -80,34 +82,21 @@ def _repair_max_attempts() -> int:
     return max(0, min(_MAX_REPAIR_MAX, value))
 
 
-def _node_signature(node: WorkflowNode) -> tuple[Any, ...]:
-    return (
-        node.tool_id,
-        node.action,
-        json.dumps(node.params or {}, ensure_ascii=False, sort_keys=True, default=str),
-        tuple(str(value) for value in node.depends_on or []),
-        node.next,
-        json.dumps(
-            [
-                {"target": branch.target, "condition": branch.condition}
-                for branch in node.branches or []
-            ],
-            ensure_ascii=False,
-            sort_keys=True,
-            default=str,
-        ),
-        node.risk,
-    )
+def _node_signature(node: WorkflowNode) -> str:
+    return json.dumps(asdict(node), ensure_ascii=False, sort_keys=True, default=str)
 
 
 def _mentioned_nodes(error: str) -> set[str]:
-    found = set(re.findall(r"节点\s*([A-Za-z0-9_.\-]+)", str(error or "")))
-    found.update(re.findall(r"目标节点\s*([A-Za-z0-9_.\-]+)", str(error or "")))
-    return {value for value in found if value}
+    # Only the validator's leading subject identifies the failing node. A nested
+    # error value can mention another node without granting permission to edit it.
+    match = re.match(r"(?:目标)?节点\s+([^\s:：,，]+)", str(error or ""))
+    return {match.group(1)} if match else set()
 
 
 def enforce_repair_scope(original: PlanGraph, candidate: PlanGraph, error: str) -> str | None:
     """拒绝越界修复：节点增删、改动未报错节点、降低风险。"""
+    if _RISK_RANK.get(candidate.risk_level, 0) < _RISK_RANK.get(original.risk_level, 0):
+        return "修复不得降低计划的风险等级"
     before = {node.node_id: node for node in original.nodes or []}
     after = {node.node_id: node for node in candidate.nodes or []}
     removed = sorted(set(before) - set(after))
@@ -121,7 +110,12 @@ def enforce_repair_scope(original: PlanGraph, candidate: PlanGraph, error: str) 
         original_node = before[node_id]
         if _RISK_RANK.get(str(node.risk), 0) < _RISK_RANK.get(str(original_node.risk), 0):
             return f"修复不得降低节点 {node_id} 的风险等级"
-        if mentioned and node_id not in mentioned:
+        if (original_node.tool_id, original_node.action) == ("clarify", "ask") and (
+            node.tool_id,
+            node.action,
+        ) != ("clarify", "ask"):
+            return f"修复不得把节点 {node_id} 的澄清改为直接执行"
+        if node_id not in mentioned:
             if _node_signature(node) != _node_signature(original_node):
                 return f"修复改动了未报错的节点 {node_id}"
     return None
@@ -145,9 +139,9 @@ def build_repair_messages(
     payload = {
         "task": "修复下列计划中导致校验失败的部分，输出完整计划 JSON。",
         "rules": list(_RULES),
-        "error": {"code": error_code, "message": str(error or "")[:400]},
-        "user_message": str(user_message or "")[:2000],
-        "original_plan": plan_to_dict(plan),
+        "error": {"code": error_code, "message": _model_context_value(str(error or "")[:400])},
+        "user_message": _model_context_value(str(user_message or "")[:2000]),
+        "original_plan": _model_context_value(plan_to_dict(plan)),
         "tool_registry": specs,
         "output_schema": {
             "mode": "workflow",
@@ -196,15 +190,19 @@ def repair_plan(
     }
     if planned is None:
         return None, trace
-    # 校验会就地规范 risk/idempotent 并插入澄清节点；先留一份原始快照做最小修改比对。
-    raw_current = copy.deepcopy(planned)
     error = validate(planned)
+    # Compare against the actual deterministic normalization, not untrusted flags.
+    raw_current = copy.deepcopy(planned)
     if not error:
         trace["first_pass_valid"] = True
         trace["fixed"] = True
         return planned, trace
 
-    attempts = _repair_max_attempts() if max_attempts is None else max(0, int(max_attempts))
+    attempts = (
+        _repair_max_attempts()
+        if max_attempts is None
+        else max(0, min(_MAX_REPAIR_MAX, int(max_attempts)))
+    )
     current = planned
     for _ in range(attempts):
         code = classify_plan_error(error)
@@ -227,6 +225,7 @@ def repair_plan(
             )
         except (ValueError, TypeError, RuntimeError) as exc:
             logger.warning("计划修复请求失败: %s", exc)
+            trace["errors"].append({"code": "repair_request_failed", "message": str(exc)[:240]})
             break
         decoded = _decode_completion(response) if isinstance(response, dict) else None
         if decoded is None:
@@ -244,9 +243,9 @@ def repair_plan(
         if scope_error:
             trace["errors"].append({"code": "scope_violation", "message": scope_error})
             break
-        raw_current = copy.deepcopy(candidate)
         trace["attempts"] += 1
         next_error = validate(candidate)
+        raw_current = copy.deepcopy(candidate)
         current = candidate
         if not next_error:
             trace["fixed"] = True

@@ -209,16 +209,18 @@ class LLMWorkflowPlanner:
         repair_trace: dict[str, Any] = {}
         if planned is not None:
             from app.application.workflow.plan_repair import repair_plan
+            from app.infrastructure.llm.model_admission import model_rate_limit_scope
 
-            planned, repair_trace = repair_plan(
-                planned=planned,
-                plan_id=plan_id,
-                message=message,
-                context=context,
-                tool_registry=registry_for_plan,
-                validate=validate_candidate,
-                complete=self.complete_messages,
-            )
+            with model_rate_limit_scope(context):
+                planned, repair_trace = repair_plan(
+                    planned=planned,
+                    plan_id=plan_id,
+                    message=message,
+                    context=context,
+                    tool_registry=registry_for_plan,
+                    validate=validate_candidate,
+                    complete=self.complete_messages,
+                )
             if planned is None:
                 errors = repair_trace.get("errors") or []
                 if errors:
