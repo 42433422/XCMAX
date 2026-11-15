@@ -106,6 +106,75 @@ def test_preview_reports_pending_mappings():
     assert "AI 建议" in result["message"]
 
 
+def test_preview_expands_to_all_recent_uploads_in_auto_chat():
+    captured: list[list[str]] = []
+
+    def fake_batch(paths, _payload, _context):
+        captured.append(list(paths))
+        return {"success": True, "file_count": len(paths)}
+
+    with (
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._bound_actor",
+            return_value=MagicMock(id=7),
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._recent_upload_ids",
+            return_value=["u1", "u2", "u3"],
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._preview_batch",
+            side_effect=fake_batch,
+        ),
+    ):
+        result = _registered_router_elt_import(
+            "preview",
+            {"file_paths": ["温总.xlsx"]},
+            {**_context(), "chat_approval_mode": "auto"},
+            "normal",
+            "导入",
+        )
+    assert result["file_count"] == 3
+    assert captured == [["u1", "u2", "u3"]]
+
+
+def test_preview_keeps_explicit_paths_when_user_names_file():
+    captured: list[list[str]] = []
+
+    def fake_batch(paths, _payload, _context):
+        captured.append(list(paths))
+        return {"success": True, "file_count": len(paths)}
+
+    with (
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._bound_actor",
+            return_value=MagicMock(id=7),
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._recent_upload_ids",
+            return_value=["u1", "u2", "u3"],
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._preview_batch",
+            side_effect=fake_batch,
+        ),
+    ):
+        _registered_router_elt_import(
+            "preview",
+            {"file_paths": ["温总.xlsx"]},
+            {**_context(), "chat_approval_mode": "auto"},
+            "normal",
+            "只导入温总.xlsx",
+        )
+    assert captured == [["温总.xlsx"]]
+
+
 def test_preview_accept_suggested_unblocks_low_confidence_mappings():
     service = MagicMock()
     service.create_preview.return_value = {"id": "run-1"}

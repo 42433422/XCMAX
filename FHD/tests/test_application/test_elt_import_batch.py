@@ -117,14 +117,62 @@ def test_reference_resolution_feeds_array_validation(monkeypatch):
     assert params["run_ids"] == ["r-a.xlsx", "r-b.xlsx"]
 
 
-def test_preview_batch_caps_at_twenty(monkeypatch):
+def test_preview_batch_auto_executes_executable_items(monkeypatch):
+    monkeypatch.setattr(
+        tools_workflow_elt,
+        "_preview",
+        lambda params, _context: {
+            "success": True,
+            "data": {"run_id": f"r-{params['file_path']}", "executable": True},
+        },
+    )
+    executed: list[list[str]] = []
+
+    def fake_execute(run_ids, payload, _context):
+        executed.append(list(run_ids))
+        assert payload["accept_suggested"] is True
+        return {"success": True, "done_count": len(run_ids)}
+
+    monkeypatch.setattr(tools_workflow_elt, "_execute_batch", fake_execute)
+    out = tools_workflow_elt._preview_batch(
+        ["a.xlsx", "b.xlsx"], {}, {"chat_approval_mode": "auto"}
+    )
+    assert executed == [["r-a.xlsx", "r-b.xlsx"]]
+    assert out["data"]["executed_count"] == 2
+    assert "已自动入库 2 个" in out["message"]
+
+
+def test_preview_batch_skips_auto_execute_without_auto_approval(monkeypatch):
+    monkeypatch.setattr(
+        tools_workflow_elt,
+        "_preview",
+        lambda params, _context: {
+            "success": True,
+            "data": {"run_id": f"r-{params['file_path']}", "executable": True},
+        },
+    )
+    monkeypatch.setattr(
+        tools_workflow_elt,
+        "_execute_batch",
+        lambda *args, **kwargs: pytest.fail("不应自动执行"),
+    )
+    out = tools_workflow_elt._preview_batch(["a.xlsx"], {}, {})
+    assert out["data"]["executed_count"] == 0
+
+
+def test_mentions_file_only_when_user_names_it():
+    assert tools_workflow_elt._mentions_file("导入温总.xlsx", ["温总.xlsx"]) is True
+    assert tools_workflow_elt._mentions_file("导入", ["温总.xlsx"]) is False
+
+
+def test_preview_batch_caps_at_fifty(monkeypatch):
     monkeypatch.setattr(
         tools_workflow_elt, "_preview", lambda params, _context: {"success": True}
     )
-    out = tools_workflow_elt._preview_batch([f"f{i}.xlsx" for i in range(25)], {}, {})
-    assert out["file_count"] == 20
+    out = tools_workflow_elt._preview_batch([f"f{i}.xlsx" for i in range(60)], {}, {})
+    assert out["file_count"] == 50
     assert out["truncated"] is True
-    assert "一次最多 20 个" in out["message"]
+    assert "一次最多 50 个" in out["message"]
 
 
 def test_execute_batch_reports_each_run(monkeypatch):

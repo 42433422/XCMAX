@@ -182,3 +182,15 @@ def test_evidence_system_block_text() -> None:
     assert "不要编造" in block
     assert "只依据该证据中的数字作答" in block
     assert "【工件 订单.xlsx / 概览】金额 120" in block
+
+
+def test_list_attachments_render_keeps_every_name() -> None:
+    names = [f"文件{i}.xlsx" for i in range(22)]
+    rendered = module._render_result(
+        "list_attachments",
+        {"ok": True, "attachments": [{"name": name} for name in names]},
+    )
+    assert rendered.startswith("共 22 个：")
+    for name in names:
+        assert name in rendered
+

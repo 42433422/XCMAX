@@ -222,6 +222,17 @@ def _render_result(tool: str, result: dict[str, Any]) -> str:
             lines = [" | ".join(str(cell) for cell in row) for row in rows if isinstance(row, list)]
             if lines:
                 return "\n".join(lines)[:SECTION_LIMIT]
+    if tool == "list_attachments":
+        # 只保留文件名与总数：截断整段 JSON 会让模型只看到前几个附件，
+        # 进而漏掉用户实际要导入的文件。
+        names = [
+            str(item.get("name") or "")
+            for item in result.get("attachments") or []
+            if isinstance(item, dict)
+        ]
+        names = [name for name in names if name]
+        if names:
+            return f"共 {len(names)} 个：" + "、".join(names)
     return _compact(result, SECTION_LIMIT)
 
 

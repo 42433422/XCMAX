@@ -11,6 +11,7 @@ import hashlib
 import io
 import os
 import time
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +76,32 @@ def _owned_upload(file_path: str, context: dict[str, Any]) -> dict[str, str]:
             "storage_path": str(row.storage_path or ""),
             "suffix": str(row.suffix or ""),
         }
+
+
+_IMPORT_WINDOW_MINUTES = 30
+
+
+def _recent_upload_ids(runtime_context: dict[str, Any]) -> list[str]:
+    """本轮（最近一段时间）上传的 ELT 文件；用户说「导入」时用它替代模型枚举。"""
+    try:
+        actor = _bound_actor(runtime_context)
+        cutoff = utc_now_naive() - timedelta(minutes=_IMPORT_WINDOW_MINUTES)
+        with get_db() as db:
+            rows = (
+                db.query(EltUpload.id)
+                .filter(
+                    EltUpload.owner_user_id == actor.id,
+                    EltUpload.tenant_id == tenant_id_for_write(),
+                    EltUpload.created_at >= cutoff,
+                    EltUpload.expires_at > utc_now_naive(),
+                )
+                .order_by(EltUpload.created_at.asc())
+                .limit(_MAX_BATCH_IMPORTS)
+                .all()
+            )
+    except RECOVERABLE_ERRORS:
+        return []
+    return [str(row[0]) for row in rows]
 
 
 def _wait(service, run_id: str, owner_id: int, *, pending: set[str], timeout: float) -> dict:
@@ -942,7 +969,20 @@ def _registered_router_elt_import(
     payload = dict(params or {})
     if action == "preview":
         paths = _split_paths(payload.get("file_paths"))
+        if not paths and not str(payload.get("file_path") or "").strip():
+            # 用户说「导入」但模型只看到被截断的附件清单时，按本轮上传的全部文件预演，
+            # 不让模型枚举决定导入范围。
+            recent = _recent_upload_ids(runtime_context)
+            if len(recent) > 1:
+                return _preview_batch(recent, payload, runtime_context)
         if paths:
+            # 模型只看到被截断的附件清单时，会少传文件；用户没有点名具体文件时按本轮全部上传预演。
+            if runtime_context.get("chat_approval_mode") == "auto" and not _mentions_file(
+                user_message, paths
+            ):
+                recent = _recent_upload_ids(runtime_context)
+                if len(recent) > len(paths):
+                    paths = recent
             return _preview_batch(paths, payload, runtime_context)
         if not str(payload.get("file_path") or "").strip():
             return {
@@ -966,6 +1006,15 @@ def _registered_router_elt_import(
             return _execute({**payload, "run_id": ids[0]}, runtime_context)
         return _execute(payload, runtime_context)
     return {"success": False, "message": f"未知的 ELT 导入操作：{action}"}
+
+
+def _mentions_file(message: str, paths: list[str]) -> bool:
+    """用户是否在消息里点名了某个文件；没点名时按本轮全部上传处理。"""
+    text = str(message or "")
+    return any(
+        Path(str(path)).stem.strip() and Path(str(path)).stem.strip() in text
+        for path in paths
+    )
 
 
 def _split_paths(value: object) -> list[str]:
@@ -993,7 +1042,7 @@ def _split_run_ids(value: object) -> list[str]:
     return [part.strip() for part in parts if part.strip()]
 
 
-_MAX_BATCH_IMPORTS = 20
+_MAX_BATCH_IMPORTS = 50
 
 
 def _single_params(payload: dict) -> dict:
@@ -1025,6 +1074,25 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
     )
     if truncated:
         message += f"（一次最多 {_MAX_BATCH_IMPORTS} 个，其余请分批）"
+    # 对话自动审批模式下，预演已可执行的批次直接入库，避免「只预演却回复导入完成」。
+    executable_ids = [
+        str((item.get("data") or {}).get("run_id") or "")
+        for item in ready
+        if (item.get("data") or {}).get("executable") is True
+    ]
+    executable_ids = [run_id for run_id in executable_ids if run_id]
+    execution: dict[str, Any] = {}
+    if (
+        executable_ids
+        and runtime_context.get("chat_approval_mode") == "auto"
+        and payload.get("auto_execute") is not False
+    ):
+        execution = _execute_batch(
+            executable_ids,
+            {**base, "accept_suggested": True},
+            runtime_context,
+        )
+        message += f"；已自动入库 {execution.get('done_count', 0)} 个"
     return {
         "success": bool(ready),
         "batch": True,
@@ -1034,6 +1102,7 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
         "truncated": truncated,
         "message": message,
         "run_ids": run_ids,
+        "execution": execution,
         # 与单文件预演保持同一形状：编排引用 {{preview.data.run_id}} 也能取到值。
         "data": {
             "run_id": ",".join(run_ids),
@@ -1042,6 +1111,7 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
             "ready_count": len(ready),
             "needs_decision_count": len(needs_decision),
             "executable": bool(run_ids) and not needs_decision,
+            "executed_count": int(execution.get("done_count") or 0),
         },
         "results": items,
     }
