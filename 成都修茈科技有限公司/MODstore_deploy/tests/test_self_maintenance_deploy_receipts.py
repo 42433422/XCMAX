@@ -40,9 +40,7 @@ ARTIFACT_SHA = "b" * 64
 
 
 def test_loop_runner_deployment_receipts_are_disabled_by_default(monkeypatch) -> None:
-    monkeypatch.delenv(
-        "MODSTORE_SELF_MAINTENANCE_DEPLOY_RECEIPTS_ENABLED", raising=False
-    )
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_DEPLOY_RECEIPTS_ENABLED", raising=False)
 
     result = _maintenance_deployment._run_deploy_receipts_after_merge(
         run_id="run-disabled",
@@ -61,9 +59,7 @@ def test_deployment_receipt_callback_requires_exact_shared_token(monkeypatch) ->
     assert _deployment_receipt_token_valid(None, None) is False
 
 
-def test_git_is_ancestor_fetches_missing_exact_commit_before_compare(
-    tmp_path, monkeypatch
-) -> None:
+def test_git_is_ancestor_fetches_missing_exact_commit_before_compare(tmp_path, monkeypatch) -> None:
     ancestor = "c" * 40
     descendant = "d" * 40
     calls: list[list[str]] = []
@@ -103,9 +99,7 @@ def test_git_is_ancestor_fetches_missing_exact_commit_before_compare(
     ]
 
 
-def test_only_verified_production_receipt_credits_release_officer(
-    tmp_path, monkeypatch
-) -> None:
+def test_only_verified_production_receipt_credits_release_officer(tmp_path, monkeypatch) -> None:
     models._engine = None
     models._SessionFactory = None
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "deploy-receipt.sqlite"))
@@ -133,9 +127,7 @@ def test_only_verified_production_receipt_credits_release_officer(
         "workflow_run_id": "98765",
     }
     assert _maintenance_deployment._record_verified_deploy_employee_metric(base) is True
-    assert (
-        _maintenance_deployment._record_verified_deploy_employee_metric(base) is False
-    )
+    assert _maintenance_deployment._record_verified_deploy_employee_metric(base) is False
     assert (
         _maintenance_deployment._record_verified_deploy_employee_metric(
             {**base, "environment": "staging", "workflow_run_id": "98766"}
@@ -146,9 +138,7 @@ def test_only_verified_production_receipt_credits_release_officer(
     with sf() as session:
         rows = (
             session.query(models.EmployeeExecutionMetric)
-            .filter(
-                models.EmployeeExecutionMetric.employee_id == "deploy-release-officer"
-            )
+            .filter(models.EmployeeExecutionMetric.employee_id == "deploy-release-officer")
             .all()
         )
     assert len(rows) == 1
@@ -237,9 +227,7 @@ class FakeGateway:
     health_artifact: str = ARTIFACT_SHA
     dispatches: list[str] = field(default_factory=list)
 
-    def dispatch(
-        self, *, environment: str, merge_sha: str, action_id: str
-    ) -> DispatchReceipt:
+    def dispatch(self, *, environment: str, merge_sha: str, action_id: str) -> DispatchReceipt:
         self.dispatches.append(environment)
         return DispatchReceipt(
             workflow_run_id=f"workflow-{environment}",
@@ -371,9 +359,7 @@ def _pending(run_id: str, branch_head_sha: str) -> dict:
     }
 
 
-def test_completed_workflow_records_exact_merge_dispatch_and_verified_identity() -> (
-    None
-):
+def test_completed_workflow_records_exact_merge_dispatch_and_verified_identity() -> None:
     events: list[dict] = []
     branch_head = "c" * 40
 
