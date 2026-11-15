@@ -630,9 +630,9 @@ def _registered_router_elt_import(
         }
     payload = dict(params or {})
     if action == "preview":
-        paths = payload.get("file_paths")
-        if isinstance(paths, list) and paths:
-            return _preview_batch([str(item) for item in paths if str(item).strip()], payload, runtime_context)
+        paths = _split_paths(payload.get("file_paths"))
+        if paths:
+            return _preview_batch(paths, payload, runtime_context)
         if not str(payload.get("file_path") or "").strip():
             return {
                 "success": False,
@@ -648,12 +648,7 @@ def _registered_router_elt_import(
                 "message": str(err),
             }
     if action == "execute":
-        run_ids = payload.get("run_ids")
-        ids = (
-            [str(item) for item in run_ids if str(item).strip()]
-            if isinstance(run_ids, list) and run_ids
-            else _split_run_ids(payload.get("run_id"))
-        )
+        ids = _split_run_ids(payload.get("run_ids")) or _split_run_ids(payload.get("run_id"))
         if len(ids) > 1:
             return _execute_batch(ids, payload, runtime_context)
         if ids:
@@ -662,15 +657,29 @@ def _registered_router_elt_import(
     return {"success": False, "message": f"未知的 ELT 导入操作：{action}"}
 
 
+def _split_paths(value: object) -> list[str]:
+    """file_paths 可能是数组，也可能是被包成数组的逗号分隔文件名串。"""
+    import re
+
+    raw = [str(item) for item in value] if isinstance(value, (list, tuple)) else []
+    parts: list[str] = []
+    for item in raw:
+        parts.extend(re.split(r"[,;，；\n]+", item))
+    return [part.strip() for part in parts if part.strip()]
+
+
 def _split_run_ids(value: object) -> list[str]:
-    """单个 run_id 也可能写成逗号/空白分隔的多个编号，统一按整批处理。"""
+    """run_id 可能写成单个编号、逗号分隔字符串，或被包成只含一个字符串的数组。"""
     import re
 
     if isinstance(value, (list, tuple)):
         raw = [str(item) for item in value]
     else:
-        raw = re.split(r"[,;，；\s]+", str(value or ""))
-    return [item.strip() for item in raw if item and item.strip()]
+        raw = [str(value or "")]
+    parts: list[str] = []
+    for item in raw:
+        parts.extend(re.split(r"[,;，；\s]+", item))
+    return [part.strip() for part in parts if part.strip()]
 
 
 _MAX_BATCH_IMPORTS = 20

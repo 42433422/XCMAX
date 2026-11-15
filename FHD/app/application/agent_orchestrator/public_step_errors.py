@@ -14,6 +14,12 @@ _USER_FACING_CODES = frozenset(
         "tool_permission_denied",
         # 让用户看到「需要平台管理员权限」，而不是笼统的「详细信息已记录」。
         "employee_host_admin_required",
+        # ELT 的消息由本项目产出，直接告诉用户是编号失效、结构过旧还是缺文件。
+        "ELT_NOT_FOUND",
+        "ELT_SCHEMA_OUTDATED",
+        "elt_file_path_required",
+        "elt_preview_not_ready",
+        "elt_center_disabled",
     }
 )
 _INVENTORY_GUIDANCE = {

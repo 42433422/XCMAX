@@ -11,7 +11,11 @@ class EltError(RuntimeError):
 
 class EltNotFound(EltError):
     def __init__(self, resource: str):
-        super().__init__("ELT_NOT_FOUND", f"{resource}不存在或无权访问", status_code=404)
+        super().__init__(
+            "ELT_NOT_FOUND",
+            f"{resource}不存在或无权访问；预演编号可能已过期或不属于当前账号，请重新预演后再执行。",
+            status_code=404,
+        )
 
 
 class EltConflict(EltError):

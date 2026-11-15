@@ -637,7 +637,7 @@ def test_r02_marking_an_empty_preview_as_a_row_is_rejected(preview_store, monkey
             sys.executable,
             "-m",
             "pytest",
-            "tests/test_application/test_etl_preview_task_boundaries.py::test_empty_preview_is_not_confirmable",
+            "tests/test_application/test_elt_preview_task_boundaries.py::test_empty_preview_is_not_confirmable",
             "-q",
             "-o",
             "addopts=",

@@ -67,6 +67,33 @@ def test_split_run_ids_accepts_separators():
     assert tools_workflow_elt._split_run_ids("") == []
 
 
+def test_split_run_ids_flattens_single_wrapped_joined_string():
+    """规划把 {{preview.data.run_id}} 包进数组时，不能整串当成一个编号。"""
+    assert tools_workflow_elt._split_run_ids(["a,b,c"]) == ["a", "b", "c"]
+    assert tools_workflow_elt._split_run_ids(["a", "b,c"]) == ["a", "b", "c"]
+
+
+def test_execute_route_flattens_wrapped_run_ids(monkeypatch):
+    executed: list[str] = []
+    monkeypatch.setattr(
+        tools_workflow_elt,
+        "_execute",
+        lambda params, _context: executed.append(params["run_id"]) or {"success": True},
+    )
+    monkeypatch.setattr(tools_workflow_elt, "_elt_enabled", lambda: True)
+    out = tools_workflow_elt._registered_router_elt_import(
+        "execute", {"run_ids": ["a-1,b-2"]}, {}, "enterprise", "导入"
+    )
+    assert out["success"] is True
+    assert executed == ["a-1", "b-2"]
+
+
+def test_split_paths_flattens_single_wrapped_joined_string():
+    assert tools_workflow_elt._split_paths(["a.xlsx,b.xlsx"]) == ["a.xlsx", "b.xlsx"]
+    assert tools_workflow_elt._split_paths(["a.xlsx"]) == ["a.xlsx"]
+    assert tools_workflow_elt._split_paths("a.xlsx") == []
+
+
 def test_reference_resolution_feeds_array_validation(monkeypatch):
     """规划把 {{preview.data.run_id}} 写进 run_ids 时，解析后能通过类型校验。"""
     from app.application.agent_orchestrator.param_references import resolve_references
