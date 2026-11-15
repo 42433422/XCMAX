@@ -11,7 +11,8 @@ Plus the underlying ``_check_*`` helpers with mocked dependencies.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -182,7 +183,7 @@ class TestCapabilities:
                 return_value={"status": "healthy", "engines": {}},
             ),
             patch(
-                "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer"
+                "app.domain.shared_services.unified_intent_recognizer.get_unified_intent_recognizer"
             ) as g,
         ):
             rec = MagicMock()
@@ -207,7 +208,7 @@ class TestCapabilities:
                 return_value={"status": "healthy"},
             ),
             patch(
-                "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer",
+                "app.domain.shared_services.unified_intent_recognizer.get_unified_intent_recognizer",
                 side_effect=RuntimeError("boot fail"),
             ),
         ):
@@ -228,7 +229,7 @@ class TestCapabilities:
                 return_value={"status": "healthy"},
             ),
             patch(
-                "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer"
+                "app.domain.shared_services.unified_intent_recognizer.get_unified_intent_recognizer"
             ) as g,
         ):
             rec = MagicMock()
@@ -292,7 +293,7 @@ class TestCheckHelpers:
         from app.fastapi_routes.health_k8s import _check_ai_service
 
         with patch(
-            "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer"
+            "app.domain.shared_services.unified_intent_recognizer.get_unified_intent_recognizer"
         ) as g:
             rec = MagicMock()
             rec.is_ready.return_value = True
@@ -301,3 +302,36 @@ class TestCheckHelpers:
             out = _check_ai_service()
         assert out["status"] == "healthy"
         assert out["engines"] == {"error": "unavailable"}
+
+
+@pytest.mark.parametrize("loaded", [True, False])
+def test_ai_probe_preserves_legacy_loader_contract(loaded: bool) -> None:
+    from app.fastapi_routes.health_k8s import _check_ai_service
+
+    loader = Mock(return_value=loaded)
+    recognizer = SimpleNamespace(load=loader)
+    with patch(
+        "app.domain.shared_services.unified_intent_recognizer.get_unified_intent_recognizer",
+        return_value=recognizer,
+    ):
+        result = _check_ai_service()
+    assert result == {
+        "status": "healthy" if loaded else "degraded",
+        "model_loaded": loaded,
+        "engines": {},
+    }
+    loader.assert_called_once_with()
+
+
+@pytest.mark.parametrize("loader", [None, False])
+def test_ai_probe_without_a_callable_loader_never_claims_readiness(loader: object) -> None:
+    from app.fastapi_routes.health_k8s import _check_ai_service
+
+    reload_engine = Mock(side_effect=AssertionError("a health probe must not reload engines"))
+    recognizer = SimpleNamespace(load=loader, reload=reload_engine)
+    with patch(
+        "app.domain.shared_services.unified_intent_recognizer.get_unified_intent_recognizer",
+        return_value=recognizer,
+    ):
+        assert _check_ai_service() == {"status": "degraded", "model_loaded": False, "engines": {}}
+    reload_engine.assert_not_called()

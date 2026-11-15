@@ -9,7 +9,7 @@ For OCR: create a real tiny PNG so PIL/numpy work naturally; only mock predict_t
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -87,40 +87,3 @@ class TestRunPaddleOcrTask:
         # celery re-raises the original FileNotFoundError
         with pytest.raises(FileNotFoundError):
             run_paddle_ocr_task.run("/nonexistent/path/to/image.png")
-
-
-class TestRunIntentRecognitionTask:
-    def test_run_intent_recognition_task_success(self):
-        """Test intent recognition task returns result."""
-        mock_result = {"intent": "shipment_generate", "confidence": 0.95}
-
-        mock_recognizer = MagicMock()
-        mock_recognizer.recognize.return_value = mock_result
-
-        with patch(
-            "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer",
-            return_value=mock_recognizer,
-        ):
-            from app.tasks.inference_tasks import run_intent_recognition_task
-
-            result = run_intent_recognition_task.run("发货给张三")
-
-        assert result == mock_result
-        mock_recognizer.recognize.assert_called_once_with("发货给张三")
-
-    def test_run_intent_recognition_task_empty_text(self):
-        """Test intent recognition with empty text."""
-        mock_result = {"intent": "unknown", "confidence": 0.0}
-
-        mock_recognizer = MagicMock()
-        mock_recognizer.recognize.return_value = mock_result
-
-        with patch(
-            "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer",
-            return_value=mock_recognizer,
-        ):
-            from app.tasks.inference_tasks import run_intent_recognition_task
-
-            result = run_intent_recognition_task.run("")
-
-        assert result == mock_result

@@ -40,10 +40,6 @@ def _mock_intent_stack(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_rec = MagicMock()
     mock_rec.recognize.return_value = []
     monkeypatch.setattr(
-        "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer",
-        lambda: mock_rec,
-    )
-    monkeypatch.setattr(
         "app.domain.shared_services.unified_intent_recognizer.get_unified_intent_recognizer",
         lambda: mock_rec,
     )

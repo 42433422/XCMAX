@@ -453,6 +453,21 @@ class UnifiedIntentRecognizer:
 
         return results.get("rule", {})
 
+    def is_ready(self) -> bool:
+        """就绪探针：规则层在初始化后始终可用。"""
+        return bool(getattr(self, "_initialized", False))
+
+    def get_engine_status(self) -> dict[str, Any]:
+        """返回各子识别器加载状态，供健康与诊断端点使用。"""
+        return {
+            "rule": {"loaded": self._rule_engine is not None},
+            "distilled": {"loaded": self._distilled_recognizer is not None},
+            "bert": {"loaded": self._bert_recognizer is not None},
+            "deepseek": {"loaded": self._deepseek_recognizer is not None},
+            "rasa": {"loaded": self._rasa_service is not None},
+            "hybrid": {"loaded": self._hybrid_service is not None},
+        }
+
     def reload(self):
         """重新加载所有识别器"""
         reload_intent_config()
