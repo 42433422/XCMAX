@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.application.agent_orchestrator.compensation import (
     compensation_enabled,
+    execute_authorized_compensation,
     run_compensations,
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
@@ -240,7 +241,8 @@ def _orchestrator_for_compensation():
 
 def test_compensating_delete_rechecks_real_action_allowlist():
     service = _orchestrator_for_compensation()
-    result = service._execute_compensation(
+    result = execute_authorized_compensation(
+        service,
         _run(),
         "products",
         "delete",
@@ -255,7 +257,8 @@ def test_compensating_delete_rechecks_real_action_allowlist():
 def test_original_create_approval_cannot_approve_compensating_delete():
     service = _orchestrator_for_compensation()
     run = _run(metadata={"approval_receipt": {"status": "approved"}})
-    result = service._execute_compensation(
+    result = execute_authorized_compensation(
+        service,
         run,
         "products",
         "delete",
@@ -272,7 +275,8 @@ def test_safe_compensation_obeys_original_cost_budget():
     service = _orchestrator_for_compensation()
     service._step_cost_units = lambda step: 1
     run = _run(metadata={"ai_cost_budget_units": 1, "ai_cost_units_total": 1})
-    result = service._execute_compensation(
+    result = execute_authorized_compensation(
+        service,
         run,
         "products",
         "query",
@@ -299,7 +303,8 @@ def test_safe_compensation_uses_normal_step_boundary_and_stable_identity():
     run = _run()
     run.status, run.error = "failed", "original failure"
     for _ in range(2):
-        result = service._execute_compensation(
+        result = execute_authorized_compensation(
+            service,
             run,
             "products",
             "query",

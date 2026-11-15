@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 from typing import Any, cast
 
 from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
@@ -18,6 +17,7 @@ from app.application.agent_orchestrator.clarification import (
     find_waiting_step,
     pause_for_clarification,
 )
+from app.application.agent_orchestrator.compensation import plan_parallel_enabled
 from app.application.agent_orchestrator.param_references import refuse_unresolved_step
 from app.application.agent_orchestrator.repair_advisor import (
     is_llm_repair_enabled,
@@ -54,12 +54,6 @@ from app.application.workflow.workflow_types import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-
-def _plan_parallel_enabled() -> bool:
-    """只读且幂等的独立节点允许同层并行；写节点仍由读写闸门串行。"""
-    raw = str(os.environ.get("XCAGI_PLAN_PARALLEL") or "").strip().lower()
-    return raw not in {"0", "false", "no", "off"}
 
 
 _INTERNAL_RUN_ERROR = "agent_run_internal_error"
@@ -1321,7 +1315,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     "blocked": [step.node_id for step in run.steps if step.status == "skipped"],
                 },
                 max_retries=0,
-                parallel=_plan_parallel_enabled(),
+                parallel=plan_parallel_enabled(),
             )
         except (ValueError, RuntimeError) as exc:
             run.status, run.error = "blocked", f"计划图校验或执行失败：{exc}"
@@ -1349,19 +1343,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             run.error = run.error or (
                 failed.error if failed else graph_result.message or "workflow graph failed"
             )
-            try:
-                from app.application.agent_orchestrator.compensation import run_compensations
+            from app.application.agent_orchestrator.compensation import apply_failure_compensations
 
-                run_compensations(
-                    run,
-                    plan=plan,
-                    execute=lambda tool_id, action, params: self._execute_compensation(
-                        run, tool_id, action, params, runtime_context=runtime_context
-                    ),
-                    runtime_context=runtime_context,
-                )
-            except RECOVERABLE_ERRORS:
-                logger.warning("失败补偿执行异常", exc_info=True)
+            apply_failure_compensations(self, run, plan=plan, runtime_context=runtime_context)
             budget_event = next(
                 (event for event in reversed(run.events) if event.event_type == "budget.exceeded"),
                 None,
@@ -1566,71 +1550,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
     _params_patch_from_repair = staticmethod(RunRepair.params_patch_from_repair)
 
     _can_auto_execute = staticmethod(RunRepair.can_auto_execute)
-
-    def _execute_compensation(
-        self,
-        run: AgentRun,
-        tool_id: str,
-        action: str,
-        params: dict[str, Any],
-        *,
-        runtime_context: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Undo is a new action, not authority inherited from an approved create."""
-        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
-        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
-
-        concrete = dict(params)
-        concrete.pop("_runtime_context", None)
-        validation = validate_tool_call(tool_id, action, concrete)
-        if not validation.ok or validation.spec is None:
-            return {"success": False, "error_code": "compensation_contract_invalid"}
-        spec = validation.spec
-        context = dict(runtime_context)
-        denial = actor_tool_denial(tool_id, spec.action, context, concrete)
-        if denial is not None:
-            return denial
-        identity = canonical_hash(
-            {"run_id": run.run_id, "tool_id": tool_id, "action": spec.action, "params": concrete}
-        )
-        step = AgentStep(
-            node_id=f"compensation_{identity}",
-            step_id=f"step_compensation_{identity}",
-            tool_id=tool_id,
-            action=spec.action,
-            params=concrete,
-            risk=spec.risk,
-            idempotent=bool(spec.idempotent),
-        )
-        # The original step/plan's approval does not approve a compensating delete.
-        # Never mint approval or call the unguarded business-dispatch facade here.
-        if not self._can_auto_execute(step):
-            return {
-                "success": False,
-                "error_code": "compensation_approval_required",
-                "message": "补偿动作需要单独授权；原业务结果保留，等待人工核对。",
-                "reconciliation_required": True,
-            }
-        budget = budget_exceeded_payload(
-            run, additional_cost_units=self._step_cost_units(step), scope=f"{tool_id}.{action}"
-        )
-        if budget is not None:
-            return {"success": False, "error_code": "budget_exceeded"}
-        previous = next((item for item in run.steps if item.node_id == step.node_id), None)
-        if previous is not None:
-            return dict(
-                previous.output or {"success": False, "error_code": "compensation_incomplete"}
-            )
-        run.steps.append(step)
-        original_status, original_error = run.status, run.error
-        try:
-            # Same billing, cancellation, deadline, idempotency and audit path as
-            # ordinary steps, using a distinct deterministic execution identity.
-            self._execute_step(run, step, runtime_context=context, node_outputs={})
-            return dict(step.output or {"success": False, "error_code": "compensation_incomplete"})
-        finally:
-            run.status, run.error = original_status, original_error
-            self._repo.save(run)
 
     def _execute_step(
         self,

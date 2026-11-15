@@ -148,4 +148,105 @@ def run_compensations(
     return executed
 
 
-__all__ = ["compensation_enabled", "run_compensations"]
+def plan_parallel_enabled() -> bool:
+    """只读且幂等的独立节点允许同层并行；写节点仍由读写闸门与串行调度约束。"""
+    raw = str(os.environ.get("XCAGI_PLAN_PARALLEL") or "").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def execute_authorized_compensation(
+    orchestrator: Any,
+    run: AgentRun,
+    tool_id: str,
+    action: str,
+    params: dict[str, Any],
+    *,
+    runtime_context: dict[str, Any],
+) -> dict[str, Any]:
+    """Undo is a new action, not authority inherited from an approved create."""
+    from app.application.agent_orchestrator.budget import budget_exceeded_payload
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
+
+    concrete = dict(params)
+    concrete.pop("_runtime_context", None)
+    validation = validate_tool_call(tool_id, action, concrete)
+    if not validation.ok or validation.spec is None:
+        return {"success": False, "error_code": "compensation_contract_invalid"}
+    spec = validation.spec
+    context = dict(runtime_context)
+    denial = actor_tool_denial(tool_id, spec.action, context, concrete)
+    if denial is not None:
+        return denial
+    identity = canonical_hash(
+        {"run_id": run.run_id, "tool_id": tool_id, "action": spec.action, "params": concrete}
+    )
+    step = AgentStep(
+        node_id=f"compensation_{identity}",
+        step_id=f"step_compensation_{identity}",
+        tool_id=tool_id,
+        action=spec.action,
+        params=concrete,
+        risk=spec.risk,
+        idempotent=bool(spec.idempotent),
+    )
+    # The original step/plan's approval does not approve a compensating delete.
+    # Never mint approval or call the unguarded business-dispatch facade here.
+    if not orchestrator._can_auto_execute(step):
+        return {
+            "success": False,
+            "error_code": "compensation_approval_required",
+            "message": "补偿动作需要单独授权；原业务结果保留，等待人工核对。",
+            "reconciliation_required": True,
+        }
+    budget = budget_exceeded_payload(
+        run,
+        additional_cost_units=orchestrator._step_cost_units(step),
+        scope=f"{tool_id}.{action}",
+    )
+    if budget is not None:
+        return {"success": False, "error_code": "budget_exceeded"}
+    previous = next((item for item in run.steps if item.node_id == step.node_id), None)
+    if previous is not None:
+        return dict(previous.output or {"success": False, "error_code": "compensation_incomplete"})
+    run.steps.append(step)
+    original_status, original_error = run.status, run.error
+    try:
+        # Same billing, cancellation, deadline, idempotency and audit path as
+        # ordinary steps, using a distinct deterministic execution identity.
+        orchestrator._execute_step(run, step, runtime_context=context, node_outputs={})
+        return dict(step.output or {"success": False, "error_code": "compensation_incomplete"})
+    finally:
+        run.status, run.error = original_status, original_error
+        orchestrator._repo.save(run)
+
+
+def apply_failure_compensations(
+    orchestrator: Any,
+    run: AgentRun,
+    *,
+    plan: PlanGraph | None,
+    runtime_context: dict[str, Any],
+) -> None:
+    try:
+        run_compensations(
+            run,
+            plan=plan,
+            execute=lambda tool_id, action, params: execute_authorized_compensation(
+                orchestrator, run, tool_id, action, params, runtime_context=runtime_context
+            ),
+            runtime_context=runtime_context,
+        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("失败补偿执行异常", exc_info=True)
+
+
+__all__ = [
+    "compensation_enabled",
+    "run_compensations",
+    "plan_parallel_enabled",
+    "execute_authorized_compensation",
+    "apply_failure_compensations",
+]

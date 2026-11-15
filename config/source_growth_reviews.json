@@ -15,14 +15,14 @@
     },
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
-      "base_blob": "20d2379adc81acc88bec8e7a98d040ce9f3f7d16",
-      "head_blob": "b0cf2a51255a783d8a497314fbf6a337475f8f64",
-      "before_lines": 816,
-      "after_lines": 1573,
-      "reason": "Review request only: Durable plan hashing, stable execution identity, approval proof consumption, resume preflight, reconciliation of prior effects, clarification and conditional execution increase the coordinator.",
-      "boundary": "Run lifecycle, frozen-plan authority and guarded continuation only; registered executors still own business effects.",
-      "validation": "Validation scope: Approval/restart, stale-plan and changed-contract denial, concurrency and no-double-write coverage. Full integration CI and human architecture review remain outstanding; this request is not approval.",
-      "follow_up": "Human architecture review must prioritize extracting approval/resume coordination and plan validation; do not normalize this 757-line increase as a size baseline.",
+      "base_blob": "e34158b27b08bd48b051e120b13ab0d461a58068",
+      "head_blob": "61fafdf7444ac3d38594685a8fae48b80baa695e",
+      "before_lines": 1558,
+      "after_lines": 1564,
+      "reason": "Review request only: After moving authorized compensation execution and plan_parallel_enabled out of the coordinator, a residual 6-line increase remains for importing and invoking apply_failure_compensations plus the default-on verified-reader parallel flag at the run boundary.",
+      "boundary": "Coordinator still only owns run lifecycle and failure-compensation dispatch; execute_authorized_compensation and plan_parallel_enabled now live in compensation.py. Registered executors still own business effects. This does not cross independent-deploy boundaries.",
+      "validation": "Local validation: 156 mandatory-plus-related tests including 14 compensation and langgraph runtime/plan-graph contracts; compensation keeps new-action authorization, no inherited create approval, allowlist, budget and stable identity. This request is not approval; exact-head CI remains outstanding.",
+      "follow_up": "Human architecture review should still prioritize further shrinking the coordinator below the 800-line cap; do not treat this 6-line residual as a new size baseline.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {

@@ -47,10 +47,7 @@ class FileEmployeeSupport:
     def _summary(self, data: Any) -> str:
         if isinstance(data, str):
             return data[:4000]
-        try:
-            return json.dumps(data, ensure_ascii=False)[:4000]
-        except TypeError:
-            return str(data)[:4000]
+        return json.dumps(data, ensure_ascii=False, default=str)[:4000]
 
     def _pack_root(self) -> Path:
         return Path(self.module_file).resolve().parents[1]
