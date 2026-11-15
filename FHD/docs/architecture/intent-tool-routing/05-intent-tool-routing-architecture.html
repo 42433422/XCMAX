@@ -151,7 +151,7 @@ footer{border-top:1px solid var(--rule);background:var(--bg2)}
       <span class="tag ok">证据级别 E2</span>
       <span>源码基线 <b>PR #3234（L2 已合）+ #3235–#3237（L3/L4 评审中）</b></span>
       <span>标准 <b>audit_benchmark_ssot 1.0.0</b></span>
-      <span>内部评级 <b>54.0（语义兜底前）</b></span>
+      <span>内部评级 <b>L0–L7 见第 13 节</b></span>
       <span>生成日期 <b>2026-11-15</b></span>
     </div>
   </div>
@@ -790,7 +790,7 @@ footer{border-top:1px solid var(--rule);background:var(--bg2)}
 <footer>
   <div class="foot-inner">
     <b>数据来源</b>：<code>FHD/metrics/intent_benchmark_latest.json</code>、<code>intent_holdout_latest.json</code>、<code>task_benchmark_report.json</code>；语义兜底实测为 2026-11-15 本地跑分（142 例 × 3 轮）；L2 记忆参数取自 <code>dialogue_memory.py</code>、<code>context_window_manager.py</code>、<code>mem0_backend.py</code>、<code>memory_units.py</code>、<code>consolidation.py</code> 与 84 例本地回归（含事实合并与召回 13 例）；L3/L4 指标取自 <code>plan_repair.py</code>、<code>tool_calling.py</code>、<code>mcp/</code>、<code>compensation.py</code>、<code>tool_process.py</code> 与对应 12 / 49 例回归；<code>FHD/config/audit_benchmark_ssot.json</code>；源码基线 <code>PR #3234 + PR #3235–#3237</code>。<br>
-    <b>口径声明</b>：本文为内部证据视图，不构成 <code>external-anchors-v1</code> 正式审计分；正式分需商业锚点同协议实测、E3 与 30 天 E4 窗口。
+    <b>口径声明</b>：本文为内部证据视图，不构成 <code>external-anchors-v1</code> 正式审计分；正式分需商业锚点同协议实测、E3 与 30 天 E4 窗口。历史内部值 54.0（语义兜底前）与 73.3 / 77.1（internal-review-v1）均不换算、不沿用，也不与新协议混算。
   </div>
 </footer>
 
