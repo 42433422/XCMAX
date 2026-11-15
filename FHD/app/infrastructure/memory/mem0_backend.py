@@ -3,7 +3,8 @@
 设计原则：
 - 可选依赖：未安装 mem0ai / qdrant-client 时静默停用，调用方继续走原有记忆链路。
 - 离线可用：嵌入复用本地 ``EmbeddingService``（默认 hash，可切本地模型），不联网、无 torch。
-- 不做 LLM 事实抽取：写入使用 ``infer=False``，只做存储与语义检索，避免额外模型调用。
+- 写入分两段：主链只写原始轮次；后台用规则抽取事实并按 ADD / NOOP / SUPERSEDE 合并。
+- 记忆带有效区间：``valid_from`` / ``valid_to`` / ``superseded_by``，召回时过滤失效项。
 - 数据边界：所有查询强制带 ``user_id`` 过滤，租户/Mod/渠道在应用层再过滤。
 """
 
@@ -12,9 +13,15 @@ from __future__ import annotations
 import logging
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+from app.infrastructure.memory.memory_units import (
+    expiration_iso,
+    iso_at,
+    rank_hits,
+)
 from app.utils.deployment import env_float as _env_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -26,9 +33,13 @@ os.environ.setdefault("MEM0_TELEMETRY", "False")
 _ENV_BACKEND = "XCAGI_LONG_TERM_MEMORY_BACKEND"
 _ENV_MIN_SCORE = "XCAGI_LONG_TERM_MEMORY_MIN_SCORE"
 _ENV_MAX_CHARS = "XCAGI_LONG_TERM_MEMORY_PROMPT_CHARS"
+_ENV_FACT_TTL_DAYS = "XCAGI_LONG_TERM_MEMORY_FACT_TTL_DAYS"
+_ENV_CONSOLIDATION = "XCAGI_MEMORY_CONSOLIDATION"
 
 _BACKEND_VALUES = {"auto", "mem0", "legacy"}
 _DEFAULT_PROMPT_CHARS = 1800
+_DEFAULT_FACT_TTL_DAYS = 365
+_CONSOLIDATION_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="memory-facts")
 
 
 class OfflineLLM:
@@ -84,11 +95,27 @@ def _backend_choice() -> str:
     return raw if raw in _BACKEND_VALUES else "auto"
 
 
-def _expiration_date(days: int = 90) -> str:
-    """mem0 检索默认过滤过期 payload；与既有会话记忆 TTL 保持一致。"""
-    from datetime import date, timedelta
+def _fact_ttl_days() -> int:
+    raw = str(os.environ.get(_ENV_FACT_TTL_DAYS) or "").strip()
+    try:
+        days = int(raw)
+    except ValueError:
+        days = _DEFAULT_FACT_TTL_DAYS
+    return max(30, min(3650, days))
 
-    return (date.today() + timedelta(days=max(1, days))).isoformat()
+
+def _consolidation_enabled() -> bool:
+    raw = str(os.environ.get(_ENV_CONSOLIDATION) or "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _result_id(result: Any) -> str | None:
+    if not isinstance(result, dict):
+        return None
+    rows = result.get("results")
+    if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+        return str(rows[0].get("id") or "") or None
+    return str(result.get("id") or "") or None
 
 
 class Mem0LongTermMemory:
@@ -224,7 +251,11 @@ class Mem0LongTermMemory:
             return False
         content = f"用户：{user_text[:800]}\n回复：{assistant_text[:1200]}".strip()
         payload = {k: v for k, v in (metadata or {}).items() if v not in (None, "")}
-        payload.setdefault("expiration_date", _expiration_date())
+        payload.setdefault("memory_type", "utterance")
+        payload.setdefault("valid_from", iso_at())
+        payload.setdefault("valid_to", "")
+        payload.setdefault("superseded_by", "")
+        payload.setdefault("expiration_date", expiration_iso(90))
         try:
             memory.add(
                 messages=[{"role": "user", "content": content}],
@@ -243,26 +274,12 @@ class Mem0LongTermMemory:
         if memory is None or not user_id or not text:
             return []
         top_k = max(1, min(20, int(limit)))
-        try:
-            try:
-                raw = memory.search(
-                    text,
-                    filters={"user_id": str(user_id)},
-                    top_k=top_k,
-                    threshold=self._min_score,
-                )
-            except TypeError:
-                raw = memory.search(
-                    text, user_id=str(user_id), limit=top_k, threshold=self._min_score
-                )
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("长期记忆检索失败：%s", exc)
-            return []
-        rows = raw.get("results") if isinstance(raw, dict) else raw
+        # 多取候选再重排，给词法与时效留出调整空间。
+        rows = self._search_rows(
+            memory, text, user_id=user_id, limit=min(20, top_k * 3), threshold=self._min_score
+        )
         hits: list[dict[str, Any]] = []
-        for item in rows or []:
-            if not isinstance(item, dict):
-                continue
+        for item in rows:
             content = str(item.get("memory") or item.get("data") or "").strip()
             if not content:
                 continue
@@ -281,7 +298,172 @@ class Mem0LongTermMemory:
                     },
                 }
             )
-        return hits[:top_k]
+        return rank_hits(hits, query=text, limit=top_k)
+
+    # ---------------- 事实合并（冷路径） ----------------
+    def _search_rows(
+        self,
+        memory: Any,
+        text: str,
+        *,
+        user_id: str,
+        limit: int,
+        threshold: float,
+        filters_extra: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        filters = {"user_id": str(user_id), **dict(filters_extra or {})}
+        try:
+            try:
+                raw = memory.search(text, filters=filters, top_k=limit, threshold=threshold)
+            except TypeError:
+                raw = memory.search(text, user_id=str(user_id), limit=limit, threshold=threshold)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("长期记忆检索失败：%s", exc)
+            return []
+        rows = raw.get("results") if isinstance(raw, dict) else raw
+        return [item for item in (rows or []) if isinstance(item, dict)]
+
+    def search_facts(
+        self, user_id: str, fact: dict[str, Any], limit: int = 5
+    ) -> list[dict[str, Any]]:
+        """按事实键找同主题的活跃记忆，供合并决策使用。"""
+        memory = self._active()
+        key = str(fact.get("key") or "").strip()
+        query = str(fact.get("text") or fact.get("value") or key).strip()
+        if memory is None or not user_id or not key or not query:
+            return []
+        rows = self._search_rows(
+            memory,
+            query,
+            user_id=user_id,
+            limit=max(1, min(20, int(limit))),
+            threshold=0.0,
+            filters_extra={"memory_type": "fact"},
+        )
+        hits: list[dict[str, Any]] = []
+        for item in rows:
+            raw_metadata = item.get("metadata")
+            meta: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
+            if str(meta.get("memory_type") or "") != "fact":
+                continue
+            if str(meta.get("fact_key") or "") != key:
+                continue
+            content = str(item.get("memory") or item.get("data") or "").strip()
+            hits.append(
+                {
+                    "chunk_id": str(item.get("id") or ""),
+                    "content": content,
+                    "score": float(item.get("score") or 0.0),
+                    "metadata": meta,
+                }
+            )
+        return hits
+
+    def add_fact(self, user_id: str, fact: dict[str, Any], *, supersedes: str = "") -> str | None:
+        memory = self._active()
+        text = str(fact.get("text") or "").strip()
+        key = str(fact.get("key") or "").strip()
+        if memory is None or not user_id or not text or not key:
+            return None
+        metadata: dict[str, Any] = {
+            "memory_type": "fact",
+            "fact_key": key,
+            "fact_value": str(fact.get("value") or ""),
+            "confidence": float(fact.get("confidence") or 0.7),
+            "valid_from": iso_at(),
+            "valid_to": "",
+            "superseded_by": "",
+            "expiration_date": expiration_iso(_fact_ttl_days()),
+            "source": "long_term_memory",
+        }
+        if supersedes:
+            metadata["supersedes"] = supersedes
+        try:
+            result = memory.add(
+                messages=[{"role": "user", "content": text}],
+                user_id=str(user_id),
+                metadata=metadata,
+                infer=False,
+            )
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("长期记忆事实写入失败：%s", exc)
+            return None
+        return _result_id(result)
+
+    def supersede_fact(
+        self,
+        user_id: str,
+        memory_id: str,
+        *,
+        content: str,
+        new_id: str,
+        today: str,
+    ) -> bool:
+        """把旧事实标记为失效；兼容 mem0 各版本的 text/data 参数名。"""
+        memory = self._active()
+        if memory is None or not memory_id:
+            return False
+        metadata = {"valid_to": today, "superseded_by": new_id or "replacement"}
+        try:
+            try:
+                memory.update(memory_id=memory_id, text=content or "", metadata=metadata)
+            except TypeError:
+                memory.update(memory_id=memory_id, data=content or "", metadata=metadata)
+            return True
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("长期记忆失效标记失败：%s", exc)
+            return False
+
+    def consolidate_facts(
+        self, *, user_id: str, facts: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        from app.infrastructure.memory.consolidation import consolidate
+
+        if not facts or not user_id:
+            return []
+        return consolidate(self, user_id=user_id, facts=facts)
+
+    def forget(
+        self,
+        *,
+        user_id: str,
+        memory_ids: list[str] | None = None,
+        mod_id: str | None = None,
+    ) -> int:
+        """删除治理：按记忆 id、按用户、或按 Mod 清理；失败返回 0。"""
+        memory = self._active()
+        if memory is None or not user_id:
+            return 0
+        if memory_ids:
+            deleted = 0
+            for memory_id in memory_ids:
+                try:
+                    memory.delete(str(memory_id))
+                    deleted += 1
+                except RECOVERABLE_ERRORS as exc:
+                    logger.warning("长期记忆删除失败：%s", exc)
+            return deleted
+        result: Any = {}
+        try:
+            if mod_id:
+                result = memory.delete_all(user_id=str(user_id), mod_id=str(mod_id))
+            else:
+                result = memory.delete_all(user_id=str(user_id))
+        except TypeError:
+            if mod_id:
+                logger.warning("存储不支持按 Mod 删除，已跳过该清理请求")
+                return 0
+            try:
+                result = memory.delete_all(user_id=str(user_id))
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("长期记忆批量删除失败：%s", exc)
+                return 0
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("长期记忆批量删除失败：%s", exc)
+            return 0
+        if isinstance(result, dict):
+            return int(result.get("deleted_count") or result.get("count") or 0)
+        return 0
 
     def close(self) -> None:
         """释放本地向量库句柄；进程退出与测试清理都会调用。"""
@@ -321,11 +503,33 @@ def format_recalled_memories(hits: list[dict[str, Any]], *, max_chars: int | Non
         content = str(hit.get("content") or "").strip().replace("\n", " ")[:400]
         if not content:
             continue
-        line = f"{index}. {content}"
+        metadata = hit.get("metadata")
+        meta: dict[str, Any] = metadata if isinstance(metadata, dict) else {}
+        prefix = "事实：" if str(meta.get("memory_type") or "") == "fact" else ""
+        line = f"{index}. {prefix}{content}"
         if len("\n".join([*lines, line])) > budget:
             break
         lines.append(line)
     return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def schedule_fact_consolidation(*, user_id: str, facts: list[dict[str, Any]]) -> None:
+    """主链只入队，抽取后的事实合并在单线程后台执行。"""
+    if not facts or not user_id or not _consolidation_enabled():
+        return
+    service = get_long_term_memory()
+    if not service.enabled:
+        return
+    _CONSOLIDATION_EXECUTOR.submit(_safe_consolidate, service, user_id, list(facts))
+
+
+def _safe_consolidate(
+    service: Mem0LongTermMemory, user_id: str, facts: list[dict[str, Any]]
+) -> None:
+    try:
+        service.consolidate_facts(user_id=user_id, facts=facts)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("长期记忆事实合并失败：%s", exc)
 
 
 _service: Mem0LongTermMemory | None = None
@@ -357,4 +561,5 @@ __all__ = [
     "format_recalled_memories",
     "get_long_term_memory",
     "reset_long_term_memory_for_tests",
+    "schedule_fact_consolidation",
 ]
