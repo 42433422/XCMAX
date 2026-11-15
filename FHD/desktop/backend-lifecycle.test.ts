@@ -14,6 +14,20 @@ it.each(['stdout', 'stderr'] as const)('packaged %s survives a closed parent pip
   }
 })
 
+it.each(['stdout', 'stderr'] as const)('开发态 %s 写入 EPIPE 时不再抛出', channel => {
+  const pipe = vi.spyOn(process[channel], 'write').mockImplementation(() => {
+    throw new Error('EPIPE')
+  })
+  const log = vi.fn()
+  try {
+    expect(() => relayBackendOutput(channel, Buffer.from('line\n'), false, log)).not.toThrow()
+    expect(pipe).toHaveBeenCalled()
+    expect(log).toHaveBeenCalledWith(`[${channel}] line\n`)
+  } finally {
+    pipe.mockRestore()
+  }
+})
+
 class FakeChild extends EventEmitter implements StoppableChildProcess {
   exitCode: number | null = null
   signalCode: NodeJS.Signals | null = null
