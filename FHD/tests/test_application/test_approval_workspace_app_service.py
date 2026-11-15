@@ -54,6 +54,31 @@ from app.db.models.approval import (
 )
 
 
+def _setup_shared_0():
+    request = Mock()
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_db.query.return_value = mock_query
+    mock_query.filter.return_value = mock_query
+    req = Mock()
+    req.status = ApprovalStatus.PENDING.value
+    req.id = 1
+    return (request, mock_db, mock_query, req)
+
+
+def _setup_shared_1():
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_db.query.return_value = mock_query
+    mock_query.filter.return_value = mock_query
+    mock_query.order_by.return_value = mock_query
+    mock_query.count.return_value = 0
+    mock_query.offset.return_value = mock_query
+    mock_query.limit.return_value = mock_query
+    mock_query.all.return_value = []
+    return (mock_db, mock_query)
+
+
 def _make_db_ctx(mock_db):
     """Create a context manager mock that yields mock_db for ``with get_db() as db:``."""
     ctx = MagicMock()
@@ -642,15 +667,7 @@ class TestCloseRequestIfNeeded:
 
 class TestListRequests:
     def test_list_requests_basic(self):
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.offset.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.all.return_value = []
+        mock_db, mock_query = _setup_shared_1()
 
         with patch(
             "app.application.approval_workspace_app_service.get_db",
@@ -661,15 +678,7 @@ class TestListRequests:
             assert result["data"] == []
 
     def test_list_requests_with_applicant_id(self):
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.offset.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.all.return_value = []
+        mock_db, mock_query = _setup_shared_1()
 
         with patch(
             "app.application.approval_workspace_app_service.get_db",
@@ -679,15 +688,7 @@ class TestListRequests:
             assert result["success"] is True
 
     def test_list_requests_with_status(self):
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.offset.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.all.return_value = []
+        mock_db, mock_query = _setup_shared_1()
 
         with patch(
             "app.application.approval_workspace_app_service.get_db",
@@ -767,15 +768,7 @@ class TestListRequests:
         assert result["data"][0]["current_approvers"] == [1]
 
     def test_list_requests_with_business_type(self):
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.offset.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.all.return_value = []
+        mock_db, mock_query = _setup_shared_1()
 
         with patch(
             "app.application.approval_workspace_app_service.get_db",
@@ -1208,14 +1201,7 @@ class TestApproveRequest:
             assert result.status_code == 403
 
     def test_approve_success(self):
-        request = Mock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        req = Mock()
-        req.status = ApprovalStatus.PENDING.value
-        req.id = 1
+        request, mock_db, mock_query, req = _setup_shared_0()
         req.request_no = "APR001"
         req.flow_id = 1
         req.title = "Test"
@@ -1257,14 +1243,7 @@ class TestApproveRequest:
             mock_db.add.assert_called()
 
     def test_approve_success_resumes_ai_workflow_when_final_approved(self):
-        request = Mock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        req = Mock()
-        req.status = ApprovalStatus.PENDING.value
-        req.id = 1
+        request, mock_db, mock_query, req = _setup_shared_0()
         req.request_no = "req-ai-1"
         req.flow_id = 1
         req.title = "AI 写库审批"
@@ -1394,14 +1373,7 @@ class TestApproveRequest:
     ):
         """恢复器即便返回携带秘密级 recovery_hint 的 node_results，响应与持久化 outcome
         也绝不包含该后端生成文本（recovery_hint 只允许固定安全值或空串）。"""
-        request = Mock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        req = Mock()
-        req.status = ApprovalStatus.PENDING.value
-        req.id = 1
+        request, mock_db, mock_query, req = _setup_shared_0()
         req.request_no = "req-ai-1"
         req.business_type = "workflow_tool"
         req.current_node = None
@@ -1528,14 +1500,7 @@ class TestApproveRequest:
 
     def test_approve_success_rollback_when_workflow_fails(self):
         """工作流恢复上报失败 → 返回 success False，且同事务落为 cancelled 终态（不落已通过、杜绝重放）。"""
-        request = Mock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        req = Mock()
-        req.status = ApprovalStatus.PENDING.value
-        req.id = 1
+        request, mock_db, mock_query, req = _setup_shared_0()
         req.request_no = "req-ai-1"
         req.flow_id = 1
         req.title = "AI 写库审批"
@@ -1729,14 +1694,7 @@ class TestRejectRequest:
             assert result.status_code == 403
 
     def test_reject_success(self):
-        request = Mock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        req = Mock()
-        req.status = ApprovalStatus.PENDING.value
-        req.id = 1
+        request, mock_db, mock_query, req = _setup_shared_0()
         req.request_no = "APR001"
         req.flow_id = 1
         node = Mock()
@@ -1770,14 +1728,7 @@ class TestRejectRequest:
 
     def test_reject_with_opinion_field(self):
         """Reject uses 'opinion' field as reason when 'reason' is absent."""
-        request = Mock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        req = Mock()
-        req.status = ApprovalStatus.PENDING.value
-        req.id = 1
+        request, mock_db, mock_query, req = _setup_shared_0()
         req.request_no = "APR001"
         req.flow_id = 1
         node = Mock()
@@ -1812,14 +1763,7 @@ class TestRejectRequest:
         new=lambda db, req, actor: True,
     )
     def test_reject_ai_workflow_without_current_node_clears_pending_workflow(self):
-        request = Mock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        req = Mock()
-        req.status = ApprovalStatus.PENDING.value
-        req.id = 1
+        request, mock_db, mock_query, req = _setup_shared_0()
         req.request_no = "req-ai-1"
         req.business_type = "workflow_tool"
         req.current_node = None
@@ -1861,14 +1805,7 @@ class TestRejectRequest:
         new=lambda db, req, actor: True,
     )
     def test_reject_expired_ai_workflow_persists_without_execution(self):
-        request = Mock()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        req = Mock()
-        req.status = ApprovalStatus.PENDING.value
-        req.id = 1
+        request, mock_db, mock_query, req = _setup_shared_0()
         req.request_no = "req-ai-expired"
         req.business_type = "workflow_tool"
         req.current_node = None

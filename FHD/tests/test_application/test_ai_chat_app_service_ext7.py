@@ -597,7 +597,12 @@ def test_neuro_failure_does_not_replace_model_or_bypass_attachment_authority(eve
         RuntimeError("internal server error"),
     ],
 )
-def test_model_transport_error_is_fail_closed_without_old_chat_fallback(error):
+@pytest.mark.parametrize("retry_limit,expected_attempts", [(1, 1), (2, 2), (99, 4)])
+def test_model_transport_error_is_fail_closed_without_old_chat_fallback(
+    monkeypatch, error, retry_limit, expected_attempts
+):
+    monkeypatch.setenv("XCAGI_PLAN_MODEL_RETRIES", str(retry_limit))
+    monkeypatch.setattr("app.application.workflow.retry_policy.time.sleep", lambda delay: None)
     from app.application.workflow.planner_llm_gateway import request_planner_completion
 
     provider = MagicMock()
@@ -607,7 +612,10 @@ def test_model_transport_error_is_fail_closed_without_old_chat_fallback(error):
         "app.infrastructure.llm.providers.registry.get_active_provider", return_value=provider
     ):
         result = svc.process_chat("u1", "说明工作方式")
-    provider.chat_completion.assert_awaited_once()
+    if isinstance(error, (ConnectionError, TimeoutError)):
+        assert provider.chat_completion.await_count == expected_attempts
+    else:
+        provider.chat_completion.assert_awaited_once()
     assert result["success"] is False
     assert result["data"]["execution_started"] is False
     assert "TOPSECRET" not in str(result)

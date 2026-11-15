@@ -40,6 +40,23 @@ from scripts.autonomy.types import (
     RiskLevel,
 )
 
+
+def _setup_shared_0(adapter_for_test):
+    adapter_for_test.github_token = "fake-token"
+    adapter_for_test.github_repo = "owner/repo"
+    # 写入一条 audit：restart_service:health_down 成功
+    from scripts.autonomy.types import AuditEntry, Diagnosis
+
+    prev_action = Action(
+        type=ActionType.RESTART_SERVICE,
+        params={"reason": "test"},
+        idempotency_key="restart_service:health_down",
+        max_attempts=1,
+        risk=RiskLevel.MEDIUM,
+    )
+    return (AuditEntry, Diagnosis, prev_action)
+
+
 # --------------------------------------------------------------------------- #
 # 工具函数
 # --------------------------------------------------------------------------- #
@@ -431,18 +448,7 @@ class TestOpenIncidentIssue:
         tmp_audit_dir: Path,
     ) -> None:
         """前置 remediation action 在 audit 中成功 → ok=True, idempotent skip。"""
-        adapter_for_test.github_token = "fake-token"
-        adapter_for_test.github_repo = "owner/repo"
-        # 写入一条 audit：restart_service:health_down 成功
-        from scripts.autonomy.types import AuditEntry, Diagnosis
-
-        prev_action = Action(
-            type=ActionType.RESTART_SERVICE,
-            params={"reason": "test"},
-            idempotency_key="restart_service:health_down",
-            max_attempts=1,
-            risk=RiskLevel.MEDIUM,
-        )
+        AuditEntry, Diagnosis, prev_action = _setup_shared_0(adapter_for_test)
         prev_result = ActionResult(
             action=prev_action,
             ok=True,
@@ -484,18 +490,7 @@ class TestOpenIncidentIssue:
         tmp_audit_dir: Path,
     ) -> None:
         """前置 action 失败 → 创建 issue（_github_api_post mock 返回 issue URL）。"""
-        adapter_for_test.github_token = "fake-token"
-        adapter_for_test.github_repo = "owner/repo"
-        # 写入一条失败 audit
-        from scripts.autonomy.types import AuditEntry, Diagnosis
-
-        prev_action = Action(
-            type=ActionType.RESTART_SERVICE,
-            params={"reason": "test"},
-            idempotency_key="restart_service:health_down",
-            max_attempts=1,
-            risk=RiskLevel.MEDIUM,
-        )
+        AuditEntry, Diagnosis, prev_action = _setup_shared_0(adapter_for_test)
         prev_result = ActionResult(
             action=prev_action,
             ok=False,
@@ -549,18 +544,7 @@ class TestOpenIncidentIssue:
         tmp_audit_dir: Path,
     ) -> None:
         """GitHub Search 命中已有 open issue → ok=True, 24h dedup skip。"""
-        adapter_for_test.github_token = "fake-token"
-        adapter_for_test.github_repo = "owner/repo"
-        # 写入失败 audit（前置 action 失败）
-        from scripts.autonomy.types import AuditEntry, Diagnosis
-
-        prev_action = Action(
-            type=ActionType.RESTART_SERVICE,
-            params={"reason": "test"},
-            idempotency_key="restart_service:health_down",
-            max_attempts=1,
-            risk=RiskLevel.MEDIUM,
-        )
+        AuditEntry, Diagnosis, prev_action = _setup_shared_0(adapter_for_test)
         adapter_for_test.audit(
             AuditEntry(
                 ts="2026-07-18T00:00:00Z",
@@ -599,18 +583,7 @@ class TestOpenIncidentIssue:
         tmp_audit_dir: Path,
     ) -> None:
         """_github_post 返回 _error → ok=False, detail 含错误码。"""
-        adapter_for_test.github_token = "fake-token"
-        adapter_for_test.github_repo = "owner/repo"
-        # 前置失败 audit
-        from scripts.autonomy.types import AuditEntry, Diagnosis
-
-        prev_action = Action(
-            type=ActionType.RESTART_SERVICE,
-            params={"reason": "test"},
-            idempotency_key="restart_service:health_down",
-            max_attempts=1,
-            risk=RiskLevel.MEDIUM,
-        )
+        AuditEntry, Diagnosis, prev_action = _setup_shared_0(adapter_for_test)
         adapter_for_test.audit(
             AuditEntry(
                 ts="2026-07-18T00:00:00Z",

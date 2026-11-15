@@ -24,6 +24,21 @@ from app.infrastructure.persistence.compat_db.product_queries import (
 )
 
 
+def _setup_shared_0():
+    mock_eng = _make_mock_engine()
+    mock_insp = MagicMock()
+    mock_insp.get_table_names.return_value = ["products"]
+    mock_insp.get_columns.return_value = [
+        {"name": "id"},
+        {"name": "model_number"},
+        {"name": "name"},
+    ]
+    # First connect for metadata (succeeds), second for count (fails), third for data
+    mock_conn_meta = _make_mock_conn()
+    mock_conn_count = _make_mock_conn()
+    return (mock_eng, mock_insp, mock_conn_meta, mock_conn_count)
+
+
 def _assert_shared_meta_timeout_invalid_falls_back_to_2000_0(
     self, _shared_literal_0, _shared_literal_1
 ):
@@ -211,17 +226,7 @@ class TestCountQueryBranches:
         )
 
     def test_count_query_failure_returns_none_total(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-        ]
-        # First connect for metadata (succeeds), second for count (fails), third for data
-        mock_conn_meta = _make_mock_conn()
-        mock_conn_count = _make_mock_conn()
+        mock_eng, mock_insp, mock_conn_meta, mock_conn_count = _setup_shared_0()
         mock_conn_count.execute.side_effect = RuntimeError("count failed")
         mock_conn_data = _make_mock_conn()
         mock_eng.connect.side_effect = [mock_conn_meta, mock_conn_count, mock_conn_data]
@@ -260,16 +265,7 @@ class TestDataQueryBranches:
         )
 
     def test_data_query_failure_with_total_none(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-        ]
-        mock_conn_meta = _make_mock_conn()
-        mock_conn_count = _make_mock_conn()
+        mock_eng, mock_insp, mock_conn_meta, mock_conn_count = _setup_shared_0()
         mock_conn_count.execute.side_effect = RuntimeError("count failed")
         mock_conn_data = _make_mock_conn()
         mock_conn_data.execute.side_effect = RuntimeError("data query failed")
@@ -294,16 +290,7 @@ class TestDataQueryBranches:
         assert "超时" in hint or "中断" in hint
 
     def test_data_query_failure_with_total_known(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-        ]
-        mock_conn_meta = _make_mock_conn()
-        mock_conn_count = _make_mock_conn()
+        mock_eng, mock_insp, mock_conn_meta, mock_conn_count = _setup_shared_0()
         count_result = MagicMock()
         count_result.scalar_one.return_value = 42
         mock_conn_count.execute.return_value = count_result
@@ -613,17 +600,7 @@ class TestOrderByCreatedAt:
 
 class TestTotalNoneFallback:
     def test_total_none_falls_back_to_offset_plus_rows(self) -> None:
-        mock_eng = _make_mock_engine()
-        mock_insp = MagicMock()
-        mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.return_value = [
-            {"name": "id"},
-            {"name": "model_number"},
-            {"name": "name"},
-        ]
-        # count query fails → total None; data query returns 2 rows
-        mock_conn_meta = _make_mock_conn()
-        mock_conn_count = _make_mock_conn()
+        mock_eng, mock_insp, mock_conn_meta, mock_conn_count = _setup_shared_0()
         mock_conn_count.execute.side_effect = RuntimeError("count failed")
         mock_conn_data = _make_mock_conn()
         count_result = MagicMock()
