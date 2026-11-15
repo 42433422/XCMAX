@@ -354,6 +354,29 @@ class WorkflowApprovalBridge:
         if run is None:
             return self.failure(request_id, AGENT_RUN_UNAVAILABLE_CODE, agent_run_id=run_id)
         if run.status == "waiting_user":
+            decision_step = next(
+                (step for step in run.steps if step.status == "waiting_user"), None
+            )
+            output = dict(getattr(decision_step, "output", None) or {})
+            if output.get("requires_user_decision"):
+                # 预演需要用户确认目标表/字段，不是审批失败，也不该取消审批。
+                return {
+                    "success": False,
+                    "workflow_executed": False,
+                    "execution_accepted": True,
+                    "waiting_user_decision": True,
+                    "approval_request_id": request_id,
+                    "agent_run_id": run.run_id,
+                    "message": str(
+                        output.get("question")
+                        or output.get("message")
+                        or "需要你确认后才能继续。"
+                    ),
+                    "nodes_executed": len(
+                        [step for step in run.steps if step.status == "completed"]
+                    ),
+                    "nodes_total": len(run.steps),
+                }
             return self._request_next_approval(request_id, workflow, run, approvals, approved)
         if run.status in {"running", "queued", "pending"}:
             # 执行仍在进行：审批已放行，不能把「还在跑」当成失败并取消审批。

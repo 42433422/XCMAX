@@ -173,16 +173,28 @@ class ApprovalDecisions:
                 handed_off = execution_handed_off(workflow_execution)
                 if handed_off:
                     waiting_approval = bool((workflow_execution or {}).get("waiting_approval"))
-                    handoff_message = (
-                        "当前步骤已获批，后续步骤等待审批"
-                        if waiting_approval
-                        else "审批已通过，执行已交给调度器"
+                    waiting_decision = bool(
+                        (workflow_execution or {}).get("waiting_user_decision")
                     )
+                    if waiting_approval:
+                        handoff_message = "当前步骤已获批，后续步骤等待审批"
+                    elif waiting_decision:
+                        handoff_message = str(
+                            (workflow_execution or {}).get("message") or ""
+                        ).strip() or "审批已通过，还需要你确认后才能继续导入。"
+                    else:
+                        handoff_message = "审批已通过，执行已交给调度器"
                     persist_outcome(
                         req,
                         status=req.status,
                         success=False,
-                        code="waiting_approval" if waiting_approval else "queued",
+                        code=(
+                            "waiting_approval"
+                            if waiting_approval
+                            else "waiting_user_decision"
+                            if waiting_decision
+                            else "queued"
+                        ),
                         message=handoff_message,
                         workflow_executed=False,
                     )
@@ -410,12 +422,22 @@ class ApprovalDecisions:
         uncertain = safe_code == "outcome_unknown" and not _execution_success
         if handed_off:
             waiting_approval = bool((workflow_execution or {}).get("waiting_approval"))
-            handoff_message = (
-                "当前步骤已获批，后续步骤等待审批"
+            waiting_decision = bool((workflow_execution or {}).get("waiting_user_decision"))
+            if waiting_approval:
+                handoff_message = "当前步骤已获批，后续步骤等待审批"
+            elif waiting_decision:
+                handoff_message = str((workflow_execution or {}).get("message") or "").strip() or (
+                    "审批已通过，还需要你确认后才能继续导入。"
+                )
+            else:
+                handoff_message = "审批已通过，执行已交给调度器"
+            handoff_code = (
+                "waiting_approval"
                 if waiting_approval
-                else "审批已通过，执行已交给调度器"
+                else "waiting_user_decision"
+                if waiting_decision
+                else "queued"
             )
-            handoff_code = "waiting_approval" if waiting_approval else "queued"
             persist_outcome(
                 req,
                 status=ApprovalStatus.APPROVED.value,
@@ -434,6 +456,7 @@ class ApprovalDecisions:
                 "workflow_executed": False,
                 "nodes_executed": 0,
                 "nodes_total": 1,
+                **({"waiting_user_decision": True} if waiting_decision else {}),
             }
         else:
             persist_outcome(req, **bounded_outcome)

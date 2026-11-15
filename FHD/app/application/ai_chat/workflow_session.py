@@ -661,7 +661,11 @@ class WorkflowSession:
         message = messages[-1] if messages else ""
         run_id = str(getattr(agent_run, "run_id", "") or "")
         accepted = bool(result.get("accepted"))
-        if accepted:
+        waiting_decision = bool(execution.get("waiting_user_decision"))
+        if accepted and waiting_decision:
+            # 自动审批已通过，但预演要求用户确认目标表/字段：如实说明在等什么。
+            text = f"自动审批已通过，但需要你确认后才会写入：{message}"
+        elif accepted:
             text = f"审批已通过，执行已提交。{message}"
         elif success:
             text = f"自动审批已通过并执行完成。{message}"
@@ -687,7 +691,13 @@ class WorkflowSession:
                 text = "\n".join([text, *deliverable_lines])
         reply = _control_reply(
             text,
-            "workflow_done" if success else "workflow_failed",
+            (
+                "workflow_done"
+                if success
+                else "workflow_waiting"
+                if waiting_decision
+                else "workflow_failed"
+            ),
             {
                 "plan_id": str(getattr(plan, "plan_id", "") or ""),
                 "agent_run_id": run_id,
@@ -698,8 +708,14 @@ class WorkflowSession:
                     for artifact in (getattr(agent_run, "artifacts", None) or [])
                 ],
             },
-            success=success,
-            message="自动审批已完成" if success else "自动审批执行未完成",
+            success=success or waiting_decision,
+            message=(
+                "自动审批已完成"
+                if success
+                else "自动审批已通过，等待你确认"
+                if waiting_decision
+                else "自动审批执行未完成"
+            ),
         )[1]
         reply["run_id"] = run_id
         reply["agent_run_id"] = run_id
