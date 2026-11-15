@@ -15,6 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping
 
+from app.utils.scalars import coerce_int as _to_int
+
 _SOURCE_LABELS = {
     "local": "FHD 本地账本",
     "cursor": "Cursor",
@@ -34,13 +36,6 @@ def public_snapshot_path() -> Path:
     if configured:
         return Path(configured).expanduser().resolve()
     return _repo_root() / "成都修茈科技有限公司" / "data" / "platform_made_tokens.json"
-
-
-def _to_int(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
 
 
 def build_public_snapshot(summary: Mapping[str, Any]) -> dict[str, Any]:

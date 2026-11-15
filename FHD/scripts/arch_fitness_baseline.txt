@@ -5,7 +5,7 @@
 [domain->infrastructure] app/domain/shared_services/catalog_client.py:3
 [domain->infrastructure] app/domain/shared_services/catalog_visibility.py:3
 [domain->infrastructure] app/domain/shared_services/contract_lifecycle.py:98
-[domain->infrastructure] app/domain/shared_services/conversation/api.py:50
+[domain->infrastructure] app/domain/shared_services/conversation/api.py:44
 [domain->infrastructure] app/domain/shared_services/conversation/api.py:6
 [domain->infrastructure] app/domain/shared_services/conversation/api_llm.py:50
 [domain->infrastructure] app/domain/shared_services/conversation/api_llm.py:82

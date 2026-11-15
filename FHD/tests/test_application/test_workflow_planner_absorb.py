@@ -18,6 +18,7 @@ from app.application.workflow.workflow_types import (
     validate_plan_graph,
 )
 from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+from tests.pure_builders import customers_registry as _customers_registry
 
 
 def _make_planner() -> LLMWorkflowPlanner:
@@ -25,21 +26,6 @@ def _make_planner() -> LLMWorkflowPlanner:
 
     with patch("app.application.workflow.planner.get_ai_conversation_service"):
         return LLMWorkflowPlanner()
-
-
-def _customers_registry() -> dict:
-    return {
-        "customers": {
-            "actions": {
-                "query": {"risk": "low", "idempotent": True},
-                "delete": {
-                    "risk": "high",
-                    "idempotent": False,
-                    "required_params": ["id"],
-                },
-            }
-        }
-    }
 
 
 def _ambiguous_delete_plan(plan_id: str = "p_delete") -> PlanGraph:

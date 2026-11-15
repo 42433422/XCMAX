@@ -18,6 +18,7 @@ from app.neuro_bus.events.inventory_events import (
     InventoryTransferEvent,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.scalars import coerce_float as _coerce_float
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +55,6 @@ def _resolve_purchase_service_cls():
     from app.domain.shared_services.purchase_service import PurchaseService as _PurchaseService
 
     return _PurchaseService
-
-
-def _coerce_float(value: Any) -> float:
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 async def handle_auto_inbound_requested(event: NeuroEvent) -> dict[str, Any]:
