@@ -90,18 +90,14 @@ describe('ChatInputToolbar', () => {
     expect(wrapper.emitted('trigger-upload')).toBeUndefined()
   })
 
-  it('opens hidden folder input on upload-folder click', async () => {
-    const click = vi.fn()
+  it('only keeps the attachment input so folder upload is not duplicated', () => {
     const wrapper = mountToolbar()
     const inputs = wrapper.findAll('input[type="file"]')
-    expect(inputs.length).toBe(2)
-    expect(inputs[1].attributes('webkitdirectory')).toBeDefined()
-    const folderInput = inputs[1].element as HTMLInputElement
-    folderInput.click = click
-    const folderBtn = wrapper.findAll('.toolbar-btn').find((b) => b.text().includes('chat.uploadFolder'))
-    expect(folderBtn).toBeTruthy()
-    await folderBtn!.trigger('click')
-    expect(click).toHaveBeenCalledTimes(1)
+    expect(inputs.length).toBe(1)
+    expect(inputs[0].attributes('webkitdirectory')).toBeUndefined()
+    expect(wrapper.findAll('.toolbar-btn').some((b) => b.text().includes('chat.uploadFolder'))).toBe(
+      false,
+    )
   })
 
   it('emits register-excel-input on mount', () => {

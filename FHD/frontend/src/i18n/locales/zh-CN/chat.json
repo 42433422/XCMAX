@@ -87,8 +87,6 @@
     "ttsTitle": "开启后 AI 回复将自动语音播报",
     "uploadTitle": "上传 Excel、图片或 PDF",
     "uploadAttachment": "上传附件",
-    "uploadFolder": "上传文件夹",
-    "uploadFolderTitle": "选择文件夹，批量分析其中的 Excel，并上传图片、PDF、TXT、LOG",
     "officeDocking": "解析办公文件",
     "officeDockingBusy": "文件解析中",
     "officeDockingTitle": "读取 Word、Excel、CSV、PDF 或 PPT，并在写入前审核",

@@ -87,8 +87,6 @@
     "ttsTitle": "AI replies will be read aloud when enabled",
     "uploadTitle": "Upload Excel, image, or PDF",
     "uploadAttachment": "Upload attachment",
-    "uploadFolder": "Upload folder",
-    "uploadFolderTitle": "Pick a folder to batch-analyze its Excel files and upload images, PDFs, TXT and LOG",
     "officeDocking": "Parse office file",
     "officeDockingBusy": "Parsing file",
     "officeDockingTitle": "Read Word, Excel, CSV, PDF, or PPT and review before saving",
