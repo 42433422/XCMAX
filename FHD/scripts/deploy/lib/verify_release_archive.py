@@ -10,6 +10,7 @@ import tarfile
 from pathlib import Path, PurePosixPath
 
 FORBIDDEN_PARTS = {
+    "_archive_pre_baseline_2026_06_22",
     ".backups",
     ".test_db_state.json",
     "商标导出",

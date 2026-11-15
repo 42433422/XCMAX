@@ -312,8 +312,6 @@ def test_real_ledger_appender_and_guard_preserve_each_others_rows(env):
 def test_business_reader_keeps_bounded_memory_for_small_requested_window(env):
     import tracemalloc
 
-    from modstore_server.maintenance_loop import store
-
     row = json.dumps({"phase": "complete", "run_id": "real", "payload": "x" * 10000}) + "\n"
     with env.ledger.open("w") as fh:
         for _ in range(1000):

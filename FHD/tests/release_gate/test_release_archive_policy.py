@@ -220,12 +220,18 @@ def test_pack_excludes_runtime_outputs_and_keeps_monitor_code_and_tutorial(tmp_p
     excludes = pack.split("RSYNC_EXCLUDES=(", 1)[1].split("\n)", 1)[0]
     source, target = tmp_path / "source", tmp_path / "target"
     blocked = [
+        "alembic/versions/_archive_pre_baseline_2026_06_22/seed.py",
         "XCAGI/.backups/index.json",
         "XCAGI/.test_db_state.json",
         "XCAGI/监控/window_2.png",
         "app/resources/ai_assistant/商标导出/export.png",
     ]
-    allowed = ["XCAGI/监控/bartender_mapper.py", "templates/admin-vue-dist/tutorial/sample.xlsx"]
+    allowed = [
+        "XCAGI/监控/bartender_mapper.py",
+        "templates/admin-vue-dist/tutorial/sample.xlsx",
+        "alembic/versions/current.py",
+        "config/surface_audit_demo_account.json",
+    ]
     for name in blocked + allowed:
         path = source / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -287,3 +293,14 @@ def test_cvm_watcher_sets_pythonpath_for_release_and_fallback_probes() -> None:
     assert 'WATCHER_ROOT="${DEPLOY_ROOT}"' in watcher
     assert 'WATCHER_ROOT="/opt/xcmax/current/FHD"' in watcher
     assert 'PYTHONPATH="\\$WATCHER_ROOT\\${PYTHONPATH:+:\\$PYTHONPATH}"' in watcher
+
+
+def test_release_archive_rejects_inactive_migration_sources(tmp_path: Path) -> None:
+    archive = tmp_path / "inactive-migrations.tar.gz"
+    _write_archive(
+        archive,
+        [*REQUIRED_RUNTIME_MEMBERS, "./alembic/versions/_archive_pre_baseline_2026_06_22/seed.py"],
+    )
+    result = _verify(archive)
+    assert result.returncode == 1
+    assert "forbidden path component: _archive_pre_baseline_2026_06_22" in result.stderr

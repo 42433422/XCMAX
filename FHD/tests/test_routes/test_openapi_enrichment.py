@@ -11,6 +11,25 @@ from app.fastapi_app.openapi_enrichment import (
 )
 
 
+def _assert_shared_adds_default_tags_0(
+    self, _shared_literal_0, _shared_literal_1, _shared_literal_2
+):
+    schema = {
+        "paths": {
+            _shared_literal_0: {
+                "get": {
+                    "summary": "",
+                    "description": "",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            }
+        }
+    }
+    result = enrich_openapi_schema(schema)
+    op = result["paths"][_shared_literal_1]["get"]
+    assert op["tags"] == [_shared_literal_2]
+
+
 class TestResponseHasSchema:
     def test_no_content_returns_false(self):
         assert _response_has_schema({}) is False
@@ -39,52 +58,15 @@ class TestEnrichOpenapiSchema:
         assert result == {}
 
     def test_adds_default_tags(self):
-        schema = {
-            "paths": {
-                "/api/test": {
-                    "get": {
-                        "summary": "",
-                        "description": "",
-                        "responses": {"200": {"description": "OK"}},
-                    }
-                }
-            }
-        }
-        result = enrich_openapi_schema(schema)
-        op = result["paths"]["/api/test"]["get"]
-        assert op["tags"] == ["xcagi"]
+        return _assert_shared_adds_default_tags_0(self, "/api/test", "/api/test", "xcagi")
 
     def test_metrics_path_gets_monitoring_tag(self):
-        schema = {
-            "paths": {
-                "/metrics": {
-                    "get": {
-                        "summary": "",
-                        "description": "",
-                        "responses": {"200": {"description": "OK"}},
-                    }
-                }
-            }
-        }
-        result = enrich_openapi_schema(schema)
-        op = result["paths"]["/metrics"]["get"]
-        assert op["tags"] == ["monitoring"]
+        return _assert_shared_adds_default_tags_0(self, "/metrics", "/metrics", "monitoring")
 
     def test_neurobus_path_gets_neurobus_tag(self):
-        schema = {
-            "paths": {
-                "/api/neurobus/events": {
-                    "get": {
-                        "summary": "",
-                        "description": "",
-                        "responses": {"200": {"description": "OK"}},
-                    }
-                }
-            }
-        }
-        result = enrich_openapi_schema(schema)
-        op = result["paths"]["/api/neurobus/events"]["get"]
-        assert op["tags"] == ["neurobus"]
+        return _assert_shared_adds_default_tags_0(
+            self, "/api/neurobus/events", "/api/neurobus/events", "neurobus"
+        )
 
     def test_preserves_existing_tags(self):
         schema = {

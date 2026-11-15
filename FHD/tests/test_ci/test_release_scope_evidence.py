@@ -124,8 +124,12 @@ def test_release_gate_reads_installer_files(tmp_path):
     same = tmp_path / "upgrade-snapshot.sqlite"
     _db(same, 1)
     (tmp_path / "upgrade-current.sqlite").write_bytes(same.read_bytes())
-    assert release_gate(tmp_path, sha)[0] == 0
+    assert release_gate(tmp_path, sha)[0] == 1
     assert release_gate(tmp_path, "not-a-sha")[0] == 1
+    wrong = dict(report)
+    swapped = rollup(list(reversed(report["rows"])))
+    assert swapped["scopes"] == rollup(report["rows"])["scopes"]
+    assert wrong["release_pass"] is False
 
 
 def test_same_row_count_with_different_business_fields_is_loss(tmp_path):
@@ -167,3 +171,35 @@ def test_evidence_order_does_not_change_a_blocker():
     ]
     assert rollup(rows)["platforms"]["windows"] == "BLOCKED"
     assert rollup(list(reversed(rows)))["platforms"]["windows"] == "BLOCKED"
+
+
+def test_installer_suffix_and_claimed_sha_do_not_prove_build_identity(tmp_path):
+    (tmp_path / "fake.exe").write_bytes(b"")
+    (tmp_path / "fake.dmg").write_bytes(b"arbitrary bytes")
+    for claimed_sha in ("a" * 40, "b" * 40):
+        code, report = release_gate(tmp_path, claimed_sha)
+        assert code == 1
+        assert report["release_pass"] is False
+        for row in report["rows"]:
+            assert row["status"] == "NOT RUN"
+            assert row["reason"] == "installer_identity_and_source_not_verified"
+            assert row["expected_source_sha"] == claimed_sha
+            assert "source_sha" not in row
+
+
+def test_failed_upgrade_cannot_leave_release_pass_true(tmp_path, monkeypatch):
+    from scripts.dev import check_release_scope_evidence as gate
+
+    monkeypatch.setattr(
+        gate,
+        "rollup",
+        lambda *_args: {
+            "release_pass": True,
+            "scopes": {"windows-installer": "PASS", "macos-installer": "PASS"},
+        },
+    )
+    monkeypatch.setattr(gate, "upgrade_rollback_status", lambda _root: "FAIL")
+    code, report = gate.release_gate(tmp_path, "a" * 40)
+    assert code == 1
+    assert report["release_pass"] is False
+    assert report["upgrade_rollback"] == "FAIL"

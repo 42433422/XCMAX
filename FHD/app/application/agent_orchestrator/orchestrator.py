@@ -604,12 +604,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 return "计划风险或幂等属性与当前工具契约不一致，拒绝续跑"
             if node.tool_id == "clarify" and node.action == "ask":
                 continue
-            denial = (
-                actor_tool_denial(node.tool_id, node.action, context, step.params)
-                if (node.tool_id, node.action) == ("business_db", "read")
-                and step.params.get("entity") == "products"
-                else actor_tool_denial(node.tool_id, node.action, context)
-            )
+            denial = actor_tool_denial(node.tool_id, node.action, context, step.params)
             if denial is not None:
                 return "计划权限复核未通过，拒绝续跑"
         return ""
@@ -994,12 +989,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             if node.tool_id == "clarify" and node.action == "ask":
                 continue
             step = steps_by_node[node.node_id]
-            denial = (
-                actor_tool_denial(node.tool_id, node.action, runtime_context, step.params)
-                if (node.tool_id, node.action) == ("business_db", "read")
-                and step.params.get("entity") == "products"
-                else actor_tool_denial(node.tool_id, node.action, runtime_context)
-            )
+            denial = actor_tool_denial(node.tool_id, node.action, runtime_context, step.params)
             if denial is not None:
                 code = str(denial.get("error_code") or "tool_permission_denied")
                 run.status, run.error = "blocked", str(denial.get("message") or "权限校验失败")
@@ -1247,12 +1237,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
                 stopped_for_interaction = True
                 return {"success": True, "requires_approval": True, "step_id": step.step_id}
-            denial = (
-                actor_tool_denial(tool_id, action, runtime_context, step.params)
-                if (tool_id, action) == ("business_db", "read")
-                and step.params.get("entity") == "products"
-                else actor_tool_denial(tool_id, action, runtime_context)
-            )
+            denial = actor_tool_denial(tool_id, action, runtime_context, step.params)
             if denial is not None:
                 step.status, step.output = "failed", denial
                 step.error = str(denial.get("message") or "tool_permission_denied")

@@ -23,6 +23,42 @@ from app.fastapi_routes.ai_qclaw import router as ai_qclaw_router
 from app.infrastructure.auth.dependencies import require_admin_user
 
 
+def _assert_shared_aiopen_openclaw_chat_attaches_agent_run_0(
+    client,
+    _shared_literal_0,
+    _shared_literal_1,
+    _shared_literal_2,
+    _shared_literal_3,
+    _shared_literal_4,
+    _shared_literal_5,
+):
+    repo = InMemoryAgentRunRepository()
+    with (
+        patch(_shared_literal_3, return_value=({"success": True, "data": {"answer": "pong"}}, 200)),
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+    ):
+        resp = client.post(
+            _shared_literal_4, json={"message": "hello", "user_id": _shared_literal_5}
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    run_id = body["run_id"]
+    assert body["agent_run_id"] == run_id
+    assert body["data"]["run_id"] == run_id
+    assert body["data"]["answer"] == "pong"
+    run = repo.get(run_id)
+    assert run is not None
+    assert run.status == "completed"
+    assert run.user_id == "aiopen-api-key"
+    assert run.intent == "external_openclaw_chat"
+    assert run.metadata["channel"] == _shared_literal_0
+    assert run.metadata["source"] == _shared_literal_1
+    assert run.metadata["runtime_context"]["route"] == _shared_literal_2
+
+
 @pytest.fixture()
 def client(monkeypatch):
     monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
@@ -512,71 +548,27 @@ def test_qclaw_control_and_test_route_attach_agent_runs(monkeypatch):
 
 
 def test_aiopen_openclaw_chat_attaches_agent_run(client):
-    repo = InMemoryAgentRunRepository()
-    with (
-        patch(
-            "app.fastapi_routes.ai_open.openclaw_chat_proxy",
-            return_value=({"success": True, "data": {"answer": "pong"}}, 200),
-        ),
-        patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ),
-    ):
-        resp = client.post(
-            "/api/aiopen/openclaw/chat",
-            json={"message": "hello", "user_id": "aiopen-user"},
-        )
-
-    assert resp.status_code == 200
-    body = resp.json()
-    run_id = body["run_id"]
-    assert body["agent_run_id"] == run_id
-    assert body["data"]["run_id"] == run_id
-    assert body["data"]["answer"] == "pong"
-
-    run = repo.get(run_id)
-    assert run is not None
-    assert run.status == "completed"
-    assert run.user_id == "aiopen-api-key"  # body user_id must not spoof
-    assert run.intent == "external_openclaw_chat"
-    assert run.metadata["channel"] == "aiopen_openclaw"
-    assert run.metadata["source"] == "aiopen"
-    assert run.metadata["runtime_context"]["route"] == "/api/aiopen/openclaw/chat"
+    return _assert_shared_aiopen_openclaw_chat_attaches_agent_run_0(
+        client,
+        "aiopen_openclaw",
+        "aiopen",
+        "/api/aiopen/openclaw/chat",
+        "app.fastapi_routes.ai_open.openclaw_chat_proxy",
+        "/api/aiopen/openclaw/chat",
+        "aiopen-user",
+    )
 
 
 def test_qclaw_openclaw_chat_attaches_agent_run(client):
-    repo = InMemoryAgentRunRepository()
-    with (
-        patch(
-            "app.fastapi_routes.ai_qclaw.openclaw_chat_proxy",
-            return_value=({"success": True, "data": {"answer": "pong"}}, 200),
-        ),
-        patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ),
-    ):
-        resp = client.post(
-            "/api/ai/qclaw/openclaw/chat",
-            json={"message": "hello", "user_id": "qclaw-user"},
-        )
-
-    assert resp.status_code == 200
-    body = resp.json()
-    run_id = body["run_id"]
-    assert body["agent_run_id"] == run_id
-    assert body["data"]["run_id"] == run_id
-    assert body["data"]["answer"] == "pong"
-
-    run = repo.get(run_id)
-    assert run is not None
-    assert run.status == "completed"
-    assert run.user_id == "aiopen-api-key"  # body user_id must not spoof
-    assert run.intent == "external_openclaw_chat"
-    assert run.metadata["channel"] == "qclaw_openclaw"
-    assert run.metadata["source"] == "qclaw"
-    assert run.metadata["runtime_context"]["route"] == "/api/ai/qclaw/openclaw/chat"
+    return _assert_shared_aiopen_openclaw_chat_attaches_agent_run_0(
+        client,
+        "qclaw_openclaw",
+        "qclaw",
+        "/api/ai/qclaw/openclaw/chat",
+        "app.fastapi_routes.ai_qclaw.openclaw_chat_proxy",
+        "/api/ai/qclaw/openclaw/chat",
+        "qclaw-user",
+    )
 
 
 def test_screen_ws_command_roundtrip(client, monkeypatch):

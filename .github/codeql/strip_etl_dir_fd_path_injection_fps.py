@@ -51,8 +51,9 @@ _REVIEWED_FILE_SINKS: dict[str, tuple[str, frozenset[int]]] = {
         frozenset({57, 91}),
     ),
     "FHD/app/application/tools/workflow_spreadsheet_scope.py": (
-        "1fd162490f7aa2870ac676e0219537b6daec6eb4c6a6f608fe0a503c1f65dda4",
-        frozenset({107}),
+        # Re-reviewed: owner+tenant upload lookup only; same TemporaryDirectory basename sink.
+        "27afea5a69fd3218f02d267d580e7e6e86a531b1e3693d85172eb12a9ee5920f",
+        frozenset({146}),
     ),
     "FHD/app/application/shipment_excel_etl_security.py": (
         "aac6bbbf5b9a0433ec5057fdf8d0786ebb8e18c3a5d44599280663bb72c85940",
@@ -190,9 +191,7 @@ def keep_result(result: dict, *, source_root: Path | None = None) -> bool:
         return True
     line = (pl.get("region") or {}).get("startLine")
     root = (
-        source_root
-        if source_root is not None
-        else Path(__file__).resolve().parents[2]
+        source_root if source_root is not None else Path(__file__).resolve().parents[2]
     )
     if type(line) is int:
         if uri == _REVIEWED_URI and line in _reviewed_fd_lines(root):

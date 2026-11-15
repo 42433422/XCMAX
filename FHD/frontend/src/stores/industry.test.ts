@@ -21,6 +21,33 @@ beforeEach(() => {
 })
 
 describe('industry store', () => {
+  it('does not report settled while the parallel current-industry read is pending', async () => {
+    getIndustries.mockResolvedValue({ success: true, data: { industries: [] } })
+    let resolve!: (value: unknown) => void
+    getCurrentIndustry.mockImplementation(() => new Promise(done => { resolve = done }))
+    const store = useIndustryStore()
+    const pending = store.loadFromServer()
+    await Promise.resolve(); await Promise.resolve()
+    expect(store.loading).toBe(true); expect(store.settled).toBe(false)
+    resolve({ success: true, data: { id: '通用' } })
+    await pending
+    expect(store.loading).toBe(false); expect(store.settled).toBe(true)
+  })
+
+  it('resets settled while a subsequent list request is pending', async () => {
+    getIndustries.mockResolvedValueOnce({ success: true, data: { industries: [] } })
+    const store = useIndustryStore()
+    await store.loadIndustries()
+    expect(store.settled).toBe(true)
+    let resolve!: (value: unknown) => void
+    getIndustries.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+    const pending = store.loadIndustries()
+    expect(store.settled).toBe(false)
+    resolve({ success: true, data: { industries: [] } })
+    await pending
+    expect(store.settled).toBe(true)
+  })
+
   it('loadIndustries only loads server industries (no mod manifest merge)', async () => {
     getIndustries.mockResolvedValue({
       success: true,

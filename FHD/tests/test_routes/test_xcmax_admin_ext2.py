@@ -26,6 +26,25 @@ from fastapi.testclient import TestClient
 import app.fastapi_routes.xcmax_admin as admin_routes
 
 
+async def _assert_shared_admin_list_market_users_0(
+    self, client, _shared_literal_0, _shared_literal_1
+):
+    with patch(_shared_literal_0, new=AsyncMock(return_value={"success": True, "data": []})):
+        response = client.get(_shared_literal_1)
+    assert response.status_code == 200
+
+
+async def _assert_shared_ops_dispatch_1(
+    self, client, _shared_literal_0, _shared_literal_1, _shared_literal_2
+):
+    with patch(
+        "app.fastapi_routes.xcmax_admin._market_admin_proxy",
+        new=AsyncMock(return_value={"success": True}),
+    ):
+        response = client.post(_shared_literal_0, json={_shared_literal_1: _shared_literal_2})
+    assert response.status_code == 200
+
+
 @pytest.fixture
 def app_with_router() -> FastAPI:
     app = FastAPI()
@@ -427,30 +446,30 @@ class TestRemoteDutyHealth:
 class TestAdminRouteHandlers:
     @pytest.mark.asyncio
     async def test_admin_list_market_users(self, client: TestClient):
-        with patch(
+        return await _assert_shared_admin_list_market_users_0(
+            self,
+            client,
             "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True, "data": []}),
-        ):
-            response = client.get("/api/xcmax/admin/market/users")
-        assert response.status_code == 200
+            "/api/xcmax/admin/market/users",
+        )
 
     @pytest.mark.asyncio
     async def test_admin_list_assignable_mods(self, client: TestClient):
-        with patch(
+        return await _assert_shared_admin_list_market_users_0(
+            self,
+            client,
             "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True, "data": []}),
-        ):
-            response = client.get("/api/xcmax/admin/market/assignable-mods")
-        assert response.status_code == 200
+            "/api/xcmax/admin/market/assignable-mods",
+        )
 
     @pytest.mark.asyncio
     async def test_admin_list_user_mods(self, client: TestClient):
-        with patch(
+        return await _assert_shared_admin_list_market_users_0(
+            self,
+            client,
             "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True, "data": []}),
-        ):
-            response = client.get("/api/xcmax/admin/market/users/1/mods")
-        assert response.status_code == 200
+            "/api/xcmax/admin/market/users/1/mods",
+        )
 
     @pytest.mark.asyncio
     async def test_admin_bind_user_mod(self, client: TestClient):
@@ -731,21 +750,18 @@ class TestOpsRoutesAdditional:
 
     @pytest.mark.asyncio
     async def test_ops_dispatch(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True}),
-        ):
-            response = client.post("/api/xcmax/ops/dispatch", json={"action": "test"})
-        assert response.status_code == 200
+        return await _assert_shared_ops_dispatch_1(
+            self, client, "/api/xcmax/ops/dispatch", "action", "test"
+        )
 
     @pytest.mark.asyncio
     async def test_ops_jobs_list(self, client: TestClient):
-        with patch(
+        return await _assert_shared_admin_list_market_users_0(
+            self,
+            client,
             "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True, "data": []}),
-        ):
-            response = client.get("/api/xcmax/ops/jobs?limit=10")
-        assert response.status_code == 200
+            "/api/xcmax/ops/jobs?limit=10",
+        )
 
     @pytest.mark.asyncio
     async def test_ops_job_detail_valid(self, client: TestClient):
@@ -1107,12 +1123,12 @@ class TestOpsRoutesAdditional:
 class TestDailyDigestRoutes:
     @pytest.mark.asyncio
     async def test_list_daily_digests(self, client: TestClient):
-        with patch(
+        return await _assert_shared_admin_list_market_users_0(
+            self,
+            client,
             "app.fastapi_routes.xcmax_admin._digest_local_or_proxy",
-            new=AsyncMock(return_value={"success": True, "data": []}),
-        ):
-            response = client.get("/api/xcmax/admin/daily-digests?limit=10&offset=0")
-        assert response.status_code == 200
+            "/api/xcmax/admin/daily-digests?limit=10&offset=0",
+        )
 
     @pytest.mark.asyncio
     async def test_get_daily_digest(self, client: TestClient):
@@ -1125,30 +1141,30 @@ class TestDailyDigestRoutes:
 
     @pytest.mark.asyncio
     async def test_get_daily_digest_artifacts(self, client: TestClient):
-        with patch(
+        return await _assert_shared_admin_list_market_users_0(
+            self,
+            client,
             "app.fastapi_routes.xcmax_admin._digest_local_or_proxy",
-            new=AsyncMock(return_value={"success": True, "data": []}),
-        ):
-            response = client.get("/api/xcmax/admin/daily-digests/1/artifacts")
-        assert response.status_code == 200
+            "/api/xcmax/admin/daily-digests/1/artifacts",
+        )
 
     @pytest.mark.asyncio
     async def test_list_action_items(self, client: TestClient):
-        with patch(
+        return await _assert_shared_admin_list_market_users_0(
+            self,
+            client,
             "app.fastapi_routes.xcmax_admin._digest_local_or_proxy",
-            new=AsyncMock(return_value={"success": True, "data": []}),
-        ):
-            response = client.get("/api/xcmax/admin/action-items?kind=patch&day=2026-06-17")
-        assert response.status_code == 200
+            "/api/xcmax/admin/action-items?kind=patch&day=2026-06-17",
+        )
 
     @pytest.mark.asyncio
     async def test_list_action_items_no_params(self, client: TestClient):
-        with patch(
+        return await _assert_shared_admin_list_market_users_0(
+            self,
+            client,
             "app.fastapi_routes.xcmax_admin._digest_local_or_proxy",
-            new=AsyncMock(return_value={"success": True, "data": []}),
-        ):
-            response = client.get("/api/xcmax/admin/action-items")
-        assert response.status_code == 200
+            "/api/xcmax/admin/action-items",
+        )
 
     @pytest.mark.asyncio
     async def test_action_items_stats(self, client: TestClient):
@@ -1170,27 +1186,15 @@ class TestDailyDigestRoutes:
 
     @pytest.mark.asyncio
     async def test_start_digest_vibe_prep_session(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True}),
-        ):
-            response = client.post(
-                "/api/xcmax/admin/daily-digests/1/vibe-prep/sessions",
-                json={"option": "value"},
-            )
-        assert response.status_code == 200
+        return await _assert_shared_ops_dispatch_1(
+            self, client, "/api/xcmax/admin/daily-digests/1/vibe-prep/sessions", "option", "value"
+        )
 
     @pytest.mark.asyncio
     async def test_start_digest_line_execute(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True}),
-        ):
-            response = client.post(
-                "/api/xcmax/admin/daily-digests/1/line-execute",
-                json={"option": "value"},
-            )
-        assert response.status_code == 200
+        return await _assert_shared_ops_dispatch_1(
+            self, client, "/api/xcmax/admin/daily-digests/1/line-execute", "option", "value"
+        )
 
     @pytest.mark.asyncio
     async def test_get_digest_vibe_prep_session(self, client: TestClient):
@@ -1208,15 +1212,9 @@ class TestDailyDigestRoutes:
 
     @pytest.mark.asyncio
     async def test_start_all_hands_report_session(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True}),
-        ):
-            response = client.post(
-                "/api/xcmax/admin/all-hands-report/sessions",
-                json={"option": "value"},
-            )
-        assert response.status_code == 200
+        return await _assert_shared_ops_dispatch_1(
+            self, client, "/api/xcmax/admin/all-hands-report/sessions", "option", "value"
+        )
 
     @pytest.mark.asyncio
     async def test_get_all_hands_report_session(self, client: TestClient):

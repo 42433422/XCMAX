@@ -16,6 +16,19 @@ from app.domain.shared_services.unified_intent_recognizer import (
 )
 
 
+def _assert_shared_deepseek_normal_profile_other_surface_runs_0(
+    self, fresh_recognizer, _shared_literal_0, _shared_literal_1
+):
+    fresh_recognizer._deepseek_recognizer = MagicMock()
+    ctx = {"tool_execution_profile": _shared_literal_0, "ui_surface": _shared_literal_1}
+    with (
+        patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
+        patch.object(UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None) as mock_ds,
+    ):
+        fresh_recognizer.recognize("msg", context_data=ctx)
+    mock_ds.assert_called_once()
+
+
 @pytest.fixture()
 def fresh_recognizer(monkeypatch: pytest.MonkeyPatch) -> UnifiedIntentRecognizer:
     """Build a recognizer with all sub-engines mocked (no real model loading)."""
@@ -180,55 +193,25 @@ class TestRecognizeMainDeep:
     def test_deepseek_normal_profile_other_surface_runs(
         self, fresh_recognizer: UnifiedIntentRecognizer
     ) -> None:
-        fresh_recognizer._deepseek_recognizer = MagicMock()
-        ctx = {
-            "tool_execution_profile": "normal",
-            "ui_surface": "advanced",
-        }
-        with (
-            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
-            patch.object(
-                UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
-            ) as mock_ds,
-        ):
-            fresh_recognizer.recognize("msg", context_data=ctx)
-        mock_ds.assert_called_once()
+        return _assert_shared_deepseek_normal_profile_other_surface_runs_0(
+            self, fresh_recognizer, "normal", "advanced"
+        )
 
     def test_deepseek_advanced_profile_normal_surface_runs(
         self, fresh_recognizer: UnifiedIntentRecognizer
     ) -> None:
-        fresh_recognizer._deepseek_recognizer = MagicMock()
-        ctx = {
-            "tool_execution_profile": "advanced",
-            "ui_surface": "normal",
-        }
-        with (
-            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
-            patch.object(
-                UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
-            ) as mock_ds,
-        ):
-            fresh_recognizer.recognize("msg", context_data=ctx)
-        mock_ds.assert_called_once()
+        return _assert_shared_deepseek_normal_profile_other_surface_runs_0(
+            self, fresh_recognizer, "advanced", "normal"
+        )
 
     def test_deepseek_empty_profile_strings_treated_as_normal(
         self, fresh_recognizer: UnifiedIntentRecognizer
     ) -> None:
         # Empty strings strip to "" which .lower() == "" != "normal"
         # So skip_unified_deepseek stays False
-        fresh_recognizer._deepseek_recognizer = MagicMock()
-        ctx = {
-            "tool_execution_profile": "",
-            "ui_surface": "",
-        }
-        with (
-            patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
-            patch.object(
-                UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
-            ) as mock_ds,
-        ):
-            fresh_recognizer.recognize("msg", context_data=ctx)
-        mock_ds.assert_called_once()
+        return _assert_shared_deepseek_normal_profile_other_surface_runs_0(
+            self, fresh_recognizer, "", ""
+        )
 
     def test_context_data_not_dict_skips_deepseek_skip_logic(
         self, fresh_recognizer: UnifiedIntentRecognizer
