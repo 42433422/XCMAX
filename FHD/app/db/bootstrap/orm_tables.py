@@ -29,6 +29,7 @@ GroupName = Literal[
     "approval",
     "bridge",
     "persona",
+    "local_file",
 ]
 
 
@@ -102,6 +103,7 @@ def table_group(name: GroupName, orm_table: Callable[[type[Base]], Table]) -> Ta
         ),
         "bridge": (m.ServiceRequest, m.ServiceBridgeConfig),
         "persona": (m.PersonaProfileModel, m.PersonaEventLogModel),
+        "local_file": (m.LocalFileGrant, m.LocalFileDocument),
     }
     operation_names: dict[GroupName, str] = {
         "auth": "ensure_sqlite_auth_bootstrap",
@@ -115,6 +117,7 @@ def table_group(name: GroupName, orm_table: Callable[[type[Base]], Table]) -> Ta
         "conversations": "ensure_ai_conversation_bootstrap",
         "mobile": "ensure_mobile_push_bootstrap",
         "erp": "ensure_erp_bootstrap",
+        "local_file": "ensure_local_file_bootstrap",
     }
     return TableGroup(
         tuple(item if isinstance(item, Table) else orm_table(item) for item in groups[name]),

@@ -308,6 +308,12 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "local_files",
+        lambda: __import__("app.fastapi_routes.local_file_access", fromlist=["router"]).router,
+        priority=12,
+    )
+    _mount(
+        registry,
         "business_bridge",
         lambda: __import__("app.fastapi_routes.business_api", fromlist=["router"]).router,
     )
