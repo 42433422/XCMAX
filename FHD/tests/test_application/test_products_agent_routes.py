@@ -106,9 +106,8 @@ def test_product_compat_mutation_routes_execute_through_agent_orchestrator(
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-    excel_imports.__dict__["_parse_price"] = lambda value: 0.0
-
-    try:
+    original_parse_price = excel_imports._parse_price
+    with patch.object(excel_imports, "_parse_price", lambda value: 0.0):
         with (
             patch(
                 "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
@@ -158,8 +157,7 @@ def test_product_compat_mutation_routes_execute_through_agent_orchestrator(
                 json={"ids": [11, 12]},
                 headers={"X-User-Id": "tenant-a"},
             )
-    finally:
-        excel_imports.__dict__.pop("_parse_price", None)
+    assert excel_imports._parse_price is original_parse_price
 
     assert add_product.status_code == 200
     assert update_product.status_code == 200

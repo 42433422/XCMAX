@@ -273,6 +273,17 @@ class ModelRouter:
         """暴露当前配置（仅供测试与诊断使用）。"""
         return self._config
 
+    def status(self) -> dict[str, Any]:
+        """诊断快照：当前是否启用、默认层级与模型名。"""
+        config = self._config
+        return {
+            "enabled": self.enabled,
+            "default_tier": config.default_tier,
+            "small_model": config.small_model,
+            "large_model": config.large_model,
+            "config_path": self._config_path,
+        }
+
     @staticmethod
     def is_simple_intent(intent: str | None) -> bool:
         """工具方法：判断 intent 是否落在简单 CRUD 白名单。"""

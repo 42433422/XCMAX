@@ -55,7 +55,20 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
         "is_negation_intent": False,
         "is_likely_unclear": False,
         "all_matched_tools": [],
+        "intent_source": "rule",
+        "confidence": 0.0,
     }
+
+    try:
+        from app.domain.conversation.services.chat_tool_intent import looks_like_raw_sql
+
+        if looks_like_raw_sql(msg):
+            result["is_likely_unclear"] = False
+            result["blocked_reason"] = "raw_sql"
+            _intent_cache.set(cache_key, result)
+            return result
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("raw SQL guard skipped: %s", exc)
 
     try:
         basic_intents = _reflex_basic_intents(message)
@@ -86,14 +99,10 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
         # 置信度纪律：透出命中意图的优先级（新增字段，向后兼容；消费方 .get 取值）
         result["matched_priority"] = best.get("priority", 0)
 
-        negated = (
-            is_negation(message, action_keywords=best.get("keywords"))
-            if block_if_negated
-            else False
-        )
+        negated = is_negation(message, action_keywords=best.get("keywords"))
         result["is_negated"] = negated
 
-        if not negated:
+        if not (negated and block_if_negated):
             result["tool_key"] = tool_key
 
         if intent_id == "shipment_generate":
@@ -197,6 +206,46 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
         "intent_hints"
     ]:
         result["intent_hints"].append("upload_file")
+
+    if (
+        not result["is_negated"]
+        and not result["is_negation_intent"]
+        and not result["is_greeting"]
+        and not result["is_goodbye"]
+        and not result["is_help"]
+        and not result["is_confirmation"]
+        and len(msg) >= 2
+    ):
+        try:
+            from app.domain.shared_services.intent_semantic_router import (
+                route_intent,
+                semantic_override_max_priority,
+                semantic_override_threshold,
+            )
+
+            rule_priority = int(result.get("matched_priority") or 0)
+            rule_tool = result["tool_key"]
+            should_try = not rule_tool or rule_priority < semantic_override_max_priority()
+            semantic = route_intent(msg) if should_try else None
+            if semantic is not None:
+                if not rule_tool:
+                    result["primary_intent"] = semantic.intent_id
+                    result["tool_key"] = semantic.tool_key
+                    result["confidence"] = semantic.score
+                    result["intent_source"] = "semantic"
+                elif (
+                    semantic.tool_key != rule_tool
+                    and semantic.score >= semantic_override_threshold()
+                ):
+                    result["primary_intent"] = semantic.intent_id
+                    result["tool_key"] = semantic.tool_key
+                    result["confidence"] = semantic.score
+                    result["intent_source"] = "semantic_override"
+                if result["intent_source"].startswith("semantic"):
+                    if semantic.tool_key not in result["intent_hints"]:
+                        result["intent_hints"].append(semantic.tool_key)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("intent semantic fallback skipped: %s", exc)
 
     result["is_likely_unclear"] = (
         len(msg) <= 4

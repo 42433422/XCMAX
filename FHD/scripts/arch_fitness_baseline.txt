@@ -5,7 +5,7 @@
 [domain->infrastructure] app/domain/shared_services/catalog_client.py:3
 [domain->infrastructure] app/domain/shared_services/catalog_visibility.py:3
 [domain->infrastructure] app/domain/shared_services/contract_lifecycle.py:98
-[domain->infrastructure] app/domain/shared_services/conversation/api.py:50
+[domain->infrastructure] app/domain/shared_services/conversation/api.py:44
 [domain->infrastructure] app/domain/shared_services/conversation/api.py:6
 [domain->infrastructure] app/domain/shared_services/conversation/api_llm.py:50
 [domain->infrastructure] app/domain/shared_services/conversation/api_llm.py:82
@@ -32,7 +32,7 @@
 [domain->infrastructure] app/domain/shared_services/document_templates/crud.py:38
 [domain->infrastructure] app/domain/shared_services/fhd_payment_reconciliation.py:36
 [domain->infrastructure] app/domain/shared_services/intent_confirmation_service.py:392
-[domain->infrastructure] app/domain/shared_services/intent_recognition_pipeline.py:213
+[domain->infrastructure] app/domain/shared_services/intent_recognition_pipeline.py:262
 [domain->infrastructure] app/domain/shared_services/kellai_customer_copilot.py:144
 [domain->infrastructure] app/domain/shared_services/kitten_ai_document/generate.py:12
 [domain->infrastructure] app/domain/shared_services/materials_service.py:19
