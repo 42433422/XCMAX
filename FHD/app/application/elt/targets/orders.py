@@ -475,6 +475,28 @@ class ShipmentAdapter(TargetAdapter):
         db.flush()
         from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 
+        # 预演允许越过指向已删除运单的陈旧指纹；这里是唯一键写入点，必须先清掉
+        # 旧行，否则同一内容会因为 (tenant_key, fingerprint) 唯一约束再次失败。
+        tenant_key = f"tenant:{tenant_id_for_write()}"
+        stale_rows = (
+            db.query(ShipmentEltImportFingerprint)
+            .filter(
+                ShipmentEltImportFingerprint.tenant_key == tenant_key,
+                ShipmentEltImportFingerprint.fingerprint == fingerprint,
+            )
+            .all()
+        )
+        stale_ids = [
+            row.id
+            for row in stale_rows
+            if not self._fingerprint_owner_exists(db, row.shipment_id)
+        ]
+        if stale_ids:
+            db.query(ShipmentEltImportFingerprint).filter(
+                ShipmentEltImportFingerprint.id.in_(stale_ids)
+            ).delete(synchronize_session=False)
+            db.flush()
+
         db.add(
             ShipmentEltImportFingerprint(
                 tenant_key=f"tenant:{tenant_id_for_write()}",

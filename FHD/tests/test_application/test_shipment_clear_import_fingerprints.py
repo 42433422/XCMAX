@@ -120,6 +120,52 @@ def test_stale_fingerprint_does_not_block_reimport(tmp_path, monkeypatch):
     assert decision.action == "new"
 
 
+def test_stale_fingerprint_is_replaced_on_execute(tmp_path, monkeypatch):
+    """执行时同一指纹的旧行仍在：必须先清旧行，否则唯一约束会让整批导入回滚。"""
+    from app.application.elt.targets.orders import ShipmentAdapter
+
+    factory = _setup(tmp_path, monkeypatch)
+    adapter = ShipmentAdapter()
+    data = {
+        "purchase_unit": "澜宇家私",
+        "product_name": "电视柜",
+        "quantity_kg": "1.5",
+        "quantity_tins": 1,
+        "external_order_no": "26-0100051A",
+    }
+    fingerprint = adapter._fingerprint(data, {})
+    with factory() as db, tenant_scope(1):
+        db.add(
+            ShipmentEltImportFingerprint(
+                tenant_key="tenant:1",
+                fingerprint=fingerprint,
+                shipment_id=999,
+                unit_name="澜宇家私",
+                order_number="26-0100051A",
+                source_kind="general_etl",
+            )
+        )
+        db.commit()
+        result = adapter.execute_row(
+            db,
+            data,
+            action="new",
+            match_ref="",
+            allowed_update_fields=set(),
+            context={"run_id": "run-1", "file_name": "澜宇电视柜.xlsx"},
+        )
+        db.commit()
+        record_id = int(result["match_ref"])
+        rows = (
+            db.query(ShipmentEltImportFingerprint)
+            .filter(ShipmentEltImportFingerprint.fingerprint == fingerprint)
+            .all()
+        )
+        assert len(rows) == 1
+        assert int(rows[0].shipment_id) == record_id
+        assert db.get(ShipmentRecord, 999) is None
+
+
 def test_clear_by_unit_removes_only_matching_fingerprints(tmp_path, monkeypatch):
     factory = _setup(tmp_path, monkeypatch)
     _seed(factory, tenant_id=1, unit_name="刘英")
