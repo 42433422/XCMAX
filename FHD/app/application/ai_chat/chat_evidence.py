@@ -46,7 +46,9 @@ def _history_window(messages: list[dict[str, str]]) -> list[dict[str, str]]:
     total = 0
     for item in reversed(messages):
         length = len(str(item.get("content") or ""))
-        if window and (len(window) >= HISTORY_WINDOW_MESSAGES or total + length > HISTORY_WINDOW_CHARS):
+        if window and (
+            len(window) >= HISTORY_WINDOW_MESSAGES or total + length > HISTORY_WINDOW_CHARS
+        ):
             break
         window.append(item)
         total += length

@@ -43,9 +43,7 @@ def test_etl_batch_arrays_truncate_instead_of_rejecting_the_plan():
     params = {"file_paths": [f"f{i}.xlsx" for i in range(60)]}
     validation = validate_tool_call("elt_import", "preview", params)
     assert validation.ok, validation.message
-    planner = validate_tool_call(
-        "elt_import", "preview", params, allow_references_from=set()
-    )
+    planner = validate_tool_call("elt_import", "preview", params, allow_references_from=set())
     assert planner.ok, planner.message
     runs = {"run_ids": [f"r{i}" for i in range(60)]}
     assert validate_tool_call("elt_import", "execute", runs).ok

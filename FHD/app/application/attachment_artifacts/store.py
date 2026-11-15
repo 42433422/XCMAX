@@ -99,7 +99,9 @@ class ArtifactStore:
             return {}
         if not isinstance(data, dict):
             return {}
-        return {str(name): [[str(cell) for cell in row] for row in rows] for name, rows in data.items()}
+        return {
+            str(name): [[str(cell) for cell in row] for row in rows] for name, rows in data.items()
+        }
 
     def list_all(self) -> list[dict[str, Any]]:
         items = list(self._load_index().values())

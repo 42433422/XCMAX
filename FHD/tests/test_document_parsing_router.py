@@ -1,4 +1,5 @@
 """文档解析路由：Docling 可选、按格式分流、失败回退。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,7 +13,9 @@ def _legacy() -> tuple[str, str, dict]:
     return "legacy text", "pdfplumber", {"extension": ".pdf"}
 
 
-def test_docling_used_for_complex_document_when_available(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_docling_used_for_complex_document_when_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     monkeypatch.setenv("XCAGI_DOC_PARSER", "auto")
     monkeypatch.setattr(router, "docling_available", lambda: True)
     monkeypatch.setattr(
@@ -30,7 +33,9 @@ def test_docling_used_for_complex_document_when_available(tmp_path: Path, monkey
 def test_excel_never_routed_to_docling(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("XCAGI_DOC_PARSER", "auto")
     monkeypatch.setattr(router, "docling_available", lambda: True)
-    monkeypatch.setattr(router, "parse_with_docling", lambda path: pytest.fail("should not be called"))
+    monkeypatch.setattr(
+        router, "parse_with_docling", lambda path: pytest.fail("should not be called")
+    )
     path = tmp_path / "a.xlsx"
     path.write_bytes(b"xlsx")
     text, parser, _ = router.parse_document(path, _legacy)
@@ -65,7 +70,9 @@ def test_falls_back_when_docling_raises(tmp_path: Path, monkeypatch: pytest.Monk
 def test_legacy_mode_skips_docling(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("XCAGI_DOC_PARSER", "legacy")
     monkeypatch.setattr(router, "docling_available", lambda: True)
-    monkeypatch.setattr(router, "parse_with_docling", lambda path: pytest.fail("should not be called"))
+    monkeypatch.setattr(
+        router, "parse_with_docling", lambda path: pytest.fail("should not be called")
+    )
     path = tmp_path / "a.pdf"
     path.write_bytes(b"pdf")
     assert router.parse_document(path, _legacy)[1] == "pdfplumber"

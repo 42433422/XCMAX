@@ -149,11 +149,7 @@ def _platform_mimo_audio(
     except RECOVERABLE_ERRORS as exc:
         logger.info("platform MiMo TTS unavailable: %s", type(exc).__name__)
         return None
-    if (
-        resp.status_code != 200
-        or provider not in {"mimo", "edge"}
-        or not mime.startswith("audio/")
-    ):
+    if resp.status_code != 200 or provider not in {"mimo", "edge"} or not mime.startswith("audio/"):
         logger.info(
             "platform TTS rejected: status=%s provider=%s content_type=%s",
             resp.status_code,
@@ -180,10 +176,7 @@ def _platform_mimo_payload(
         return None
     audio = result["audio"]
     return {
-        "audioBase64": (
-            f"data:{result['mime']};base64,"
-            f"{base64.b64encode(audio).decode('ascii')}"
-        ),
+        "audioBase64": (f"data:{result['mime']};base64,{base64.b64encode(audio).decode('ascii')}"),
         "voice": result["voice"],
         "provider": result["provider"],
     }

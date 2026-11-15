@@ -209,7 +209,9 @@ def _slice_region(
         "columns": last_col,
         "title": "" if headerless else _region_title(output.active, header_row, last_col),
         "headers": [
-            str(header).strip() for header in (region.get("headers") or []) if str(header or "").strip()
+            str(header).strip()
+            for header in (region.get("headers") or [])
+            if str(header or "").strip()
         ],
         "customer_name": str(region.get("customer_name") or "").strip(),
     }

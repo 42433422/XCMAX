@@ -92,7 +92,9 @@ _MEL_FILTERS = _build_mel_filterbank(
 )
 
 
-def _power_spectrogram(waveform: np.ndarray, window: np.ndarray, frame_length: int, hop_length: int) -> np.ndarray:
+def _power_spectrogram(
+    waveform: np.ndarray, window: np.ndarray, frame_length: int, hop_length: int
+) -> np.ndarray:
     from numpy.lib.stride_tricks import sliding_window_view
 
     pad = frame_length // 2

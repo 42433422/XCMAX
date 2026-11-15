@@ -294,8 +294,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                     if table is not None:
                         span = range(table.min_col, table.max_col + 1)
                         if any(
-                            value not in (None, "")
-                            and (index + 1) not in span
+                            value not in (None, "") and (index + 1) not in span
                             for index, value in enumerate(row_values)
                         ):
                             use_region = False

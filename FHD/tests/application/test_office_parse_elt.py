@@ -107,9 +107,7 @@ def test_xls_conversion_is_staged_inside_elt_data_root(tmp_path, monkeypatch):
         "app.application.reviewed_excel_legacy.ensure_slice_workbook",
         lambda _raw: (b"PK-converted", {}),
     )
-    monkeypatch.setattr(
-        "app.utils.path_io.path_utils.get_app_data_dir", lambda: app_data
-    )
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: app_data)
 
     converted, cleanup = service._elt_parse_path(source)
 

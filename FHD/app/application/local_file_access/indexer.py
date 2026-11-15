@@ -202,11 +202,15 @@ def _sync_grant(grant_id: int, owner_id: int, tenant: int) -> None:
                     continue
                 digest = _sha256(candidate.path)
                 if state is not None and state.status == "indexed" and state.sha256 == digest:
-                    _touch_document(state.id, owner_id, tenant, candidate.size_bytes, candidate.mtime_ns)
+                    _touch_document(
+                        state.id, owner_id, tenant, candidate.size_bytes, candidate.mtime_ns
+                    )
                     skipped += 1
                     continue
-                document_id = state.document_id if state is not None else _document_id(
-                    grant_id, candidate.relative_path
+                document_id = (
+                    state.document_id
+                    if state is not None
+                    else _document_id(grant_id, candidate.relative_path)
                 )
                 text, parser, parser_meta = extract_text(candidate.path)
                 with tenant_scope(tenant):
@@ -345,9 +349,7 @@ def _upsert_document(
         db.commit()
 
 
-def _record_failure(
-    grant_id: int, owner_id: int, tenant: int, path: str, error: str
-) -> None:
+def _record_failure(grant_id: int, owner_id: int, tenant: int, path: str, error: str) -> None:
     with tenant_scope(tenant), get_db() as db:
         row = (
             db.query(LocalFileDocument)
@@ -439,11 +441,7 @@ def _purge_grant(grant_id: int, owner_id: int, tenant: int) -> None:
         if not deleted:
             continue
         with tenant_scope(tenant), get_db() as db:
-            row = (
-                db.query(LocalFileDocument)
-                .filter(LocalFileDocument.id == int(pk))
-                .first()
-            )
+            row = db.query(LocalFileDocument).filter(LocalFileDocument.id == int(pk)).first()
             if row is not None:
                 db.delete(row)
                 db.commit()

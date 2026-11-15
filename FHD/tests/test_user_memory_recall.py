@@ -95,7 +95,9 @@ def test_search_ranks_and_filters(memory_store: tuple[Any, Path]) -> None:
     fresh = remember(
         "客户要求下周交付蓝色样品", scope="chat", owner_id="alice", importance=0.9, store=store
     )
-    unrelated = remember("仓库温度记录", scope="chat", owner_id="alice", importance=0.1, store=store)
+    unrelated = remember(
+        "仓库温度记录", scope="chat", owner_id="alice", importance=0.1, store=store
+    )
     _age_record(store, "alice", old["id"], days=120, importance=0.2)
     _age_record(store, "alice", unrelated["id"], days=120, importance=0.1)
 
@@ -126,7 +128,9 @@ def test_build_memory_context_truncates(memory_store: tuple[Any, Path]) -> None:
     store, _ = memory_store
     remember("客户喜欢蓝色包装", scope="chat", owner_id="alice", store=store)
 
-    context = build_memory_context("蓝色包装", scope="chat", owner_id="alice", max_chars=10, store=store)
+    context = build_memory_context(
+        "蓝色包装", scope="chat", owner_id="alice", max_chars=10, store=store
+    )
     assert context
     assert len(context) <= 10
 

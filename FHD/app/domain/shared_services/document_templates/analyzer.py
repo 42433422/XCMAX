@@ -424,9 +424,7 @@ def _analyze_csv_template(
         if not headers:
             _cleanup_progress_tracking(task_id)
             _safe_remove(file_path)
-            return _j(
-                {"success": False, "message": "CSV 首行未识别到表头，请补全列名后重试"}, 400
-            )
+            return _j({"success": False, "message": "CSV 首行未识别到表头，请补全列名后重试"}, 400)
 
         fields = [{"label": cell, "value": "", "type": "dynamic"} for cell in headers]
 
@@ -438,9 +436,7 @@ def _analyze_csv_template(
                 {
                     "success": False,
                     "message": "模板缺少必备词条，请补全表头后重试",
-                    "required_terms": _get_template_scope_required_terms().get(
-                        template_scope, []
-                    ),
+                    "required_terms": _get_template_scope_required_terms().get(template_scope, []),
                     "missing_terms": missing_terms,
                 },
                 400,
@@ -448,7 +444,10 @@ def _analyze_csv_template(
 
         body = rows[1:]
         sample_rows = [
-            {header[i] or f"col{i + 1}": (row[i] if i < len(row) else "") for i in range(len(header))}
+            {
+                header[i] or f"col{i + 1}": (row[i] if i < len(row) else "")
+                for i in range(len(header))
+            }
             for row in body[:5]
         ]
 

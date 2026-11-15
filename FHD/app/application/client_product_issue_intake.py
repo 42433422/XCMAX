@@ -77,9 +77,7 @@ def _plain_intake_match(message: str):
     before = (message or "")[: match.start()]
     # 「能不能/能否」只有在没有求助对象时才是用法询问：
     # 「能不能帮我/给我提交个工单」是明确请求，不能被当成在问怎么用。
-    asks_for_help = bool(
-        re.search(r"(?:帮我|给我|替我|帮忙|烦请|麻烦|请你|请帮)", before[-16:])
-    )
+    asks_for_help = bool(re.search(r"(?:帮我|给我|替我|帮忙|烦请|麻烦|请你|请帮)", before[-16:]))
     if re.search(
         r"(?:怎么|如何|哪里|在哪|不要|不用|别|无需|不必|不想|暂不|不是要|已经|已)[^。！？\n]{0,12}$",
         before,

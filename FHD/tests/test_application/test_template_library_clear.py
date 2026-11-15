@@ -13,9 +13,12 @@ def test_hide_templates_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(template_preferences, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(template_preferences, "current_tenant_id", lambda: 1)
 
-    assert template_preferences.hide_templates(
-        ids=["seed:sales-order"], paths=["/opt/templates/标准发货单.xlsx"]
-    ) == 2
+    assert (
+        template_preferences.hide_templates(
+            ids=["seed:sales-order"], paths=["/opt/templates/标准发货单.xlsx"]
+        )
+        == 2
+    )
     assert template_preferences.hidden_template_ids() == {"seed:sales-order"}
     assert template_preferences.hidden_template_paths() == {"/opt/templates/标准发货单.xlsx"}
     # 重复隐藏不重复计数
@@ -23,9 +26,7 @@ def test_hide_templates_roundtrip(tmp_path, monkeypatch):
 
 
 def test_merge_starter_templates_skips_hidden(monkeypatch):
-    monkeypatch.setattr(
-        template_preferences, "hidden_template_ids", lambda: {"seed:sales-order"}
-    )
+    monkeypatch.setattr(template_preferences, "hidden_template_ids", lambda: {"seed:sales-order"})
     rows = merge_starter_templates([])
     assert rows and all(row["id"] != "seed:sales-order" for row in rows)
 
@@ -34,7 +35,11 @@ def test_clear_hides_builtin_templates_instead_of_failing():
     listed = {
         "templates": [
             {"id": "seed:sales-order", "name": "销售订单标准表"},
-            {"id": "fs:标准发货单.xlsx", "name": "标准发货单", "path": "/opt/templates/标准发货单.xlsx"},
+            {
+                "id": "fs:标准发货单.xlsx",
+                "name": "标准发货单",
+                "path": "/opt/templates/标准发货单.xlsx",
+            },
             {"id": "db:7", "name": "自定义模板"},
         ]
     }

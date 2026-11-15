@@ -230,9 +230,12 @@ def propose_import_template(
             "role": "user",
             "content": (
                 f"文件名：{file_name}\n工作表：{sheet_title}\n"
-                f"表头：{' | '.join(head)}\n样例：\n" + "\n".join(sample_lines)
-                + "\n可选目标：\n" + "\n".join(target_lines)
-                + "\n已有候选模板：\n" + ("\n".join(candidate_lines) or "（无）")
+                f"表头：{' | '.join(head)}\n样例：\n"
+                + "\n".join(sample_lines)
+                + "\n可选目标：\n"
+                + "\n".join(target_lines)
+                + "\n已有候选模板：\n"
+                + ("\n".join(candidate_lines) or "（无）")
             ),
         },
     ]

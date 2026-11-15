@@ -1,4 +1,5 @@
 """文档解析路由：按格式选择 Docling 或现有轻量解析器。"""
+
 from __future__ import annotations
 
 import logging

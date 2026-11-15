@@ -129,8 +129,7 @@ def _read_source_records(
         best_score = 0
         for row_idx in range(1, max_row + 1):
             headers = [
-                str(ws.cell(row_idx, col_idx).value).strip()
-                for col_idx in range(1, max_col + 1)
+                str(ws.cell(row_idx, col_idx).value).strip() for col_idx in range(1, max_col + 1)
             ]
             score = sum(1 for h in headers if _canonical_field(h))
             if score > best_score:
@@ -139,7 +138,9 @@ def _read_source_records(
             raise ValueError("源文件未识别到可用表头，请确认数据行包含产品型号/数量等列")
         records: list[dict[str, Any]] = []
         for row_idx in range(best_row + 1, int(ws.max_row or best_row) + 1):
-            values = [ws.cell(row_idx, col_idx).value for col_idx in range(1, len(best_headers) + 1)]
+            values = [
+                ws.cell(row_idx, col_idx).value for col_idx in range(1, len(best_headers) + 1)
+            ]
             if all(v in (None, "") for v in values):
                 continue
             first_text = str(next((v for v in values if v not in (None, "")), "") or "").strip()
@@ -160,7 +161,9 @@ def _read_source_records(
         wb.close()
 
 
-def _resolve_template(template_id: str, template_name: str, tenant_id: int | None) -> dict[str, Any]:
+def _resolve_template(
+    template_id: str, template_name: str, tenant_id: int | None
+) -> dict[str, Any]:
     from app.application import get_template_app_service
     from app.infrastructure.tenant_scope import tenant_scope
 
@@ -181,9 +184,7 @@ def _resolve_template(template_id: str, template_name: str, tenant_id: int | Non
     else:
         wanted_name = _normalize(template_name)
         matched = [
-            t
-            for t in candidates
-            if wanted_name and wanted_name in _normalize(t.get("name"))
+            t for t in candidates if wanted_name and wanted_name in _normalize(t.get("name"))
         ]
     if not matched:
         raise ValueError(
@@ -372,7 +373,11 @@ def _write_rows_into_template(
             cell = ws.cell(row_idx, col_idx)
             if isinstance(cell, MergedCell):
                 value = record.get(label)
-                if col_idx in block_columns and value not in (None, "") and col_idx not in block_values:
+                if (
+                    col_idx in block_columns
+                    and value not in (None, "")
+                    and col_idx not in block_values
+                ):
                     block_values[col_idx] = value
                 continue
             value = record.get(label)

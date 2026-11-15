@@ -113,7 +113,10 @@ def local_file_sync(grant_id: int, request: Request) -> dict[str, Any]:
     if not grant.is_active:
         raise HTTPException(status_code=409, detail="授权已撤销，不能重新同步")
     queued = request_sync(grant_id, owner_id, tenant)
-    return {"success": True, "data": {"queued": queued, **status_snapshot(grant_id, owner_id, tenant)}}
+    return {
+        "success": True,
+        "data": {"queued": queued, **status_snapshot(grant_id, owner_id, tenant)},
+    }
 
 
 @router.get("/grants/{grant_id}")

@@ -219,9 +219,7 @@ def _funasr_text(message: dict[str, Any]) -> str:
     if not isinstance(sents, list):
         return ""
     return "".join(
-        str(item.get("text_seg") or "").replace(" ", "")
-        for item in sents
-        if isinstance(item, dict)
+        str(item.get("text_seg") or "").replace(" ", "") for item in sents if isinstance(item, dict)
     ).strip()
 
 
@@ -683,9 +681,7 @@ async def voice_stream(ws: WebSocket):
         await ws.close()
         return
     try:
-        upstream = await websockets.connect(
-            _funasr_ws_url(token), open_timeout=6, close_timeout=2
-        )
+        upstream = await websockets.connect(_funasr_ws_url(token), open_timeout=6, close_timeout=2)
     except (OSError, TimeoutError, WebSocketException):
         await ws.send_json({"type": "unavailable", "reason": "platform"})
         await ws.close()

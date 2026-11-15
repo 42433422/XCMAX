@@ -918,9 +918,7 @@ _COLUMN_TYPES = frozenset({"string", "number", "integer", "date", "boolean"})
 _COLUMN_ROLES = frozenset({"key", "dimension", "measure", "text", "ignore"})
 
 
-def advise_table_schema(
-    *, headers: list[str], samples: dict[str, list[str]]
-) -> LlmAssistResult:
+def advise_table_schema(*, headers: list[str], samples: dict[str, list[str]]) -> LlmAssistResult:
     """Infer a schema for a table that matches no fixed business target.
 
     The model may only describe the supplied columns; it never invents headers

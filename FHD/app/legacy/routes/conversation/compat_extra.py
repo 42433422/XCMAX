@@ -446,7 +446,9 @@ def conversations_delete_message(
     cid = str(conversation_id or "").strip()
     numeric_user_id = durable_user_id(_xcagi_request_user_id(request, user_id))
     if numeric_user_id is None:
-        return JSONResponse({"success": False, "message": "请先登录后再访问会话。"}, status_code=401)
+        return JSONResponse(
+            {"success": False, "message": "请先登录后再访问会话。"}, status_code=401
+        )
     try:
         deleted = task_conversation_store.delete_messages_from(
             session_id=cid,

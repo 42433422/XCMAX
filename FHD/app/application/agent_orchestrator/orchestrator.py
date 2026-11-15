@@ -687,9 +687,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         from app.application.agent_orchestrator.tool_permission import overlay_resume_context
 
         previous = copy.deepcopy(run)
-        context = overlay_resume_context(
-            run.metadata.get("runtime_context") or {}, runtime_context
-        )
+        context = overlay_resume_context(run.metadata.get("runtime_context") or {}, runtime_context)
         apply_plan_confirmation(run, step_id=waiting_step.step_id, confirmed=confirmed)
         run.metadata["runtime_context"] = context
         apply_ai_budget_metadata(run, context)
@@ -1319,7 +1317,8 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 self._execute_step(run, step, runtime_context=runtime_context, node_outputs=outputs)
                 decision = (
                     step.output.get("question")
-                    if isinstance(step.output, dict) and step.output.get("requires_user_decision") is True
+                    if isinstance(step.output, dict)
+                    and step.output.get("requires_user_decision") is True
                     else ""
                 )
                 if decision:
@@ -1347,7 +1346,11 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     )
                     self._repo.save(run)
                     stopped_for_interaction = True
-                    return {"success": True, "requires_confirmation": True, "question": str(decision)}
+                    return {
+                        "success": True,
+                        "requires_confirmation": True,
+                        "question": str(decision),
+                    }
                 if run.metadata.get("non_retryable"):
                     terminal = _verified_catalog_terminal(run, step)
                     if terminal is None:

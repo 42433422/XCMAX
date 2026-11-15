@@ -70,9 +70,7 @@ class PlannedWorkflowDispatch:
     def _no_write_execution(context: dict[str, Any]) -> dict[str, Any]:
         """规划/模型阶段失败时明确记录：本回合没有产生任何业务写入。"""
         return {
-            "idempotency_key": str(
-                context.get("idempotency_key") or context.get("turn_id") or ""
-            ),
+            "idempotency_key": str(context.get("idempotency_key") or context.get("turn_id") or ""),
             "intent": "chat_turn",
             "committed": False,
             "effect": "none",
@@ -235,9 +233,7 @@ class PlannedWorkflowDispatch:
         )
         if isinstance(plan, PlanGraph):
             node_labels = [f"{node.tool_id}.{node.action}" for node in plan.nodes]
-            publish_stream_note(
-                f"已生成 {len(node_labels)} 步执行计划：" + "、".join(node_labels)
-            )
+            publish_stream_note(f"已生成 {len(node_labels)} 步执行计划：" + "、".join(node_labels))
         if not isinstance(plan, PlanGraph):
             logger.warning("工作流规划器返回无效计划类型: %s", type(plan).__name__)
             # A business-domain request that failed planning must not fall through

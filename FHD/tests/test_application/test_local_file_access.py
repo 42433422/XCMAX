@@ -12,9 +12,7 @@ from app.infrastructure.tenant_scope import tenant_scope
 
 
 def _grant(root, mode="folder"):
-    return SimpleNamespace(
-        id=1, owner_user_id=1, mode=mode, root_path=str(root), is_active=True
-    )
+    return SimpleNamespace(id=1, owner_user_id=1, mode=mode, root_path=str(root), is_active=True)
 
 
 def _write(path, text="hello"):

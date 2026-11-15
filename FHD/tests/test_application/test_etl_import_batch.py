@@ -187,9 +187,7 @@ def test_mentions_file_only_when_user_names_it():
 
 
 def test_preview_batch_caps_at_fifty(monkeypatch):
-    monkeypatch.setattr(
-        tools_workflow_elt, "_preview", lambda params, _context: {"success": True}
-    )
+    monkeypatch.setattr(tools_workflow_elt, "_preview", lambda params, _context: {"success": True})
     out = tools_workflow_elt._preview_batch([f"f{i}.xlsx" for i in range(60)], {}, {})
     assert out["file_count"] == 50
     assert out["truncated"] is True

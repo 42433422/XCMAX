@@ -237,9 +237,7 @@ class RateLimitedProvider:
             admit_model_call(self._inner, kwargs=kwargs)
             return await self._inner.chat_completion(messages, **kwargs)
 
-    async def stream_chat_completion(
-        self, messages: list[dict[str, Any]], **kwargs: Any
-    ):
+    async def stream_chat_completion(self, messages: list[dict[str, Any]], **kwargs: Any):
         stream = getattr(self._inner, "stream_chat_completion", None)
         if stream is None:
             return

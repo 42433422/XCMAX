@@ -77,18 +77,12 @@ export const SHELL_ROUTES: RouteRecordRaw[] = [
     name: 'other-tools',
     redirect: { name: 'workflow-employee-space' },
   },
-  // 流程可视化依赖宿主编制视图，仅管理端构建注入；企业/通用构建整段摇树移除，
-  // 避免平台内部员工名单随产物下发。
-  ...(import.meta.env.VITE_XCMAX_ADMIN_CONSOLE === '1'
-    ? [
-        {
-          path: '/workflow-visualization',
-          name: 'workflow-visualization',
-          component: () => import('../../views/WorkflowVisualizationView.vue'),
-          meta: { title: '流程可视化' },
-        } as RouteRecordRaw,
-      ]
-    : []),
+  {
+    path: '/workflow-visualization',
+    name: 'workflow-visualization',
+    component: () => import('../../views/WorkflowVisualizationView.vue'),
+    meta: { title: '流程可视化' },
+  },
   {
     path: '/workflow-employee-space',
     name: 'workflow-employee-space',

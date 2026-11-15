@@ -77,9 +77,7 @@ async def test_no_artifact_ids_returns_empty(
 async def test_invalid_json_falls_back_to_heuristic(
     monkeypatch: pytest.MonkeyPatch, store: ArtifactStore
 ) -> None:
-    monkeypatch.setattr(
-        module, "chat_completion_openai_format", _fake_llm("抱歉，我无法输出 JSON")
-    )
+    monkeypatch.setattr(module, "chat_completion_openai_format", _fake_llm("抱歉，我无法输出 JSON"))
 
     result = await module.collect_evidence("这个表里有什么", [ARTIFACT_ID], store=store)
     assert len(result["trace"]) >= 1
@@ -136,9 +134,7 @@ async def test_evidence_truncated_to_max_chars(
 ) -> None:
     monkeypatch.setattr(module, "chat_completion_openai_format", _fake_llm("[]"))
 
-    result = await module.collect_evidence(
-        "看看数据", [ARTIFACT_ID], store=store, max_chars=30
-    )
+    result = await module.collect_evidence("看看数据", [ARTIFACT_ID], store=store, max_chars=30)
     assert result["evidence"]
     assert len(result["evidence"]) <= 30
 
@@ -158,9 +154,7 @@ async def test_switch_off_disables_everything(
     assert module.evidence_enabled() is False
 
 
-async def test_memory_hits_prepended(
-    monkeypatch: pytest.MonkeyPatch, store: ArtifactStore
-) -> None:
+async def test_memory_hits_prepended(monkeypatch: pytest.MonkeyPatch, store: ArtifactStore) -> None:
     from app.application.user_memory import retrieve
 
     monkeypatch.setattr(module, "chat_completion_openai_format", _fake_llm("不是 JSON"))
@@ -193,4 +187,3 @@ def test_list_attachments_render_keeps_every_name() -> None:
     assert rendered.startswith("共 22 个：")
     for name in names:
         assert name in rendered
-

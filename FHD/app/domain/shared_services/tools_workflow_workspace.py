@@ -390,10 +390,7 @@ def _registered_router_employee(
         return {
             "success": True,
             "message": f"已发现 {len(employees)} 个员工",
-            "data": [
-                {**item, "employee_id": item["pack_id"]}
-                for item in employees
-            ],
+            "data": [{**item, "employee_id": item["pack_id"]} for item in employees],
             "status": {"registered_tool_count": len(employees)},
         }
     if action not in {"execute", "context"}:

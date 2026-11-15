@@ -30,9 +30,7 @@ def test_preview_returns_run_id_for_execute():
     service = MagicMock()
     service.create_preview.return_value = {"id": "run-1"}
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -49,9 +47,7 @@ def test_preview_returns_run_id_for_execute():
             "app.domain.shared_services.tools_workflow_elt.get_db",
             return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
         ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._wait", return_value=_run()
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._wait", return_value=_run()),
         patch("app.application.elt.service.get_elt_service", return_value=service),
     ):
         result = _registered_router_elt_import(
@@ -74,9 +70,7 @@ def test_preview_reports_pending_mappings():
         }
     )
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -114,9 +108,7 @@ def test_preview_expands_to_all_recent_uploads_in_auto_chat():
         return {"success": True, "file_count": len(paths)}
 
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -149,9 +141,7 @@ def test_preview_keeps_explicit_paths_when_user_names_file():
         return {"success": True, "file_count": len(paths)}
 
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -275,9 +265,7 @@ def test_preview_accept_suggested_unblocks_low_confidence_mappings():
         }
     )
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -320,9 +308,7 @@ def test_preview_ignores_auto_confirmed_mappings():
         }
     )
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -354,9 +340,7 @@ def test_preview_reports_error_rows_as_not_executable():
     service.create_preview.return_value = {"id": "run-1"}
     run = _run(summary={"new": 10, "update": 0, "skip": 0, "error": 1, "executed": 0})
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -376,9 +360,7 @@ def test_preview_reports_error_rows_as_not_executable():
         patch("app.domain.shared_services.tools_workflow_elt._wait", return_value=run),
         patch(
             "app.domain.shared_services.tools_workflow_elt._error_row_details",
-            return_value=[
-                {"sheet": "宗南", "row": 18, "message": "公斤数或桶数至少填写一项"}
-            ],
+            return_value=[{"sheet": "宗南", "row": 18, "message": "公斤数或桶数至少填写一项"}],
         ),
         patch("app.application.elt.service.get_elt_service", return_value=service),
     ):
@@ -401,9 +383,7 @@ def test_preview_accepts_valid_rows_only_by_user_request():
     service.create_preview.return_value = {"id": "run-1"}
     run = _run(summary={"new": 10, "update": 0, "skip": 0, "error": 1, "executed": 0})
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -423,9 +403,7 @@ def test_preview_accepts_valid_rows_only_by_user_request():
         patch("app.domain.shared_services.tools_workflow_elt._wait", return_value=run),
         patch(
             "app.domain.shared_services.tools_workflow_elt._error_row_details",
-            return_value=[
-                {"sheet": "宗南", "row": 18, "message": "公斤数或桶数至少填写一项"}
-            ],
+            return_value=[{"sheet": "宗南", "row": 18, "message": "公斤数或桶数至少填写一项"}],
         ),
         patch("app.application.elt.service.get_elt_service", return_value=service),
     ):
@@ -493,9 +471,7 @@ def test_preview_passes_selected_template_to_create_preview():
     service = MagicMock()
     service.create_preview.return_value = {"id": "run-1"}
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -531,11 +507,11 @@ def test_execute_completes_with_elt_run():
     service = MagicMock()
     service.get_run.return_value = {"id": "run-1", "preview_revision": "a" * 64}
     service.execute.return_value = {"id": "run-1"}
-    run = _run(status="completed", summary={"new": 0, "update": 0, "skip": 0, "error": 0, "executed": 10})
+    run = _run(
+        status="completed", summary={"new": 0, "update": 0, "skip": 0, "error": 0, "executed": 10}
+    )
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -566,9 +542,7 @@ def test_execute_syncs_source_to_knowledge_base():
         summary={"new": 0, "update": 0, "skip": 0, "error": 0, "executed": 10},
     )
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -602,9 +576,7 @@ def test_execute_registers_source_in_template_library():
         summary={"new": 0, "update": 0, "skip": 0, "error": 0, "executed": 10},
     )
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -652,6 +624,7 @@ def test_template_receipt_registers_segmented_region(tmp_path):
             ]
         },
     }
+
     def _extract(_path, *, source_region_id, **_kwargs):
         if source_region_id == "宗南!R3C1:10":
             return {
@@ -673,9 +646,7 @@ def test_template_receipt_registers_segmented_region(tmp_path):
             return_value=MagicMock(__enter__=MagicMock(return_value=db), __exit__=MagicMock()),
         ),
         patch("app.domain.shared_services.tools_workflow_elt.os.path.exists", return_value=True),
-        patch(
-            "app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)
-        ),
+        patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
         patch(
             "app.application.elt.shipment_template_extractor.extract_region_template",
             side_effect=_extract,
@@ -695,15 +666,16 @@ def test_template_receipt_registers_segmented_region(tmp_path):
     assert payload["template_name"] == "宗南家私-发货单版式"
     assert payload["original_file_path"].endswith("seg-1.xlsx")
     assert payload["analyzed_data"]["business_scope"] == "shipmentRecords"
-    assert [field["label"] for field in payload["analyzed_data"]["fields"]] == ["产品型号", "数量/件"]
+    assert [field["label"] for field in payload["analyzed_data"]["fields"]] == [
+        "产品型号",
+        "数量/件",
+    ]
 
 
 def test_template_receipt_skips_run_without_selected_region():
     from app.domain.shared_services.tools_workflow_elt import _template_receipt
 
-    receipt = _template_receipt(
-        {"upload_id": "upload-1", "source_features": {"regions": []}}, 7
-    )
+    receipt = _template_receipt({"upload_id": "upload-1", "source_features": {"regions": []}}, 7)
     assert receipt == {"action": "skip", "reason": "no_region"}
 
 
@@ -718,9 +690,7 @@ def test_template_receipt_skips_same_source_reimport(tmp_path):
     db.query.return_value.filter.return_value.first.return_value = upload
     template_service = MagicMock()
     template_service.get_templates.return_value = {
-        "templates": [
-            {"name": "宗南家私-发货单版式", "source": "db", "template_key": region_key}
-        ]
+        "templates": [{"name": "宗南家私-发货单版式", "source": "db", "template_key": region_key}]
     }
     data = {
         "upload_id": "upload-1",
@@ -737,9 +707,7 @@ def test_template_receipt_skips_same_source_reimport(tmp_path):
             return_value=MagicMock(__enter__=MagicMock(return_value=db), __exit__=MagicMock()),
         ),
         patch("app.domain.shared_services.tools_workflow_elt.os.path.exists", return_value=True),
-        patch(
-            "app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)
-        ),
+        patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
         patch(
             "app.application.elt.shipment_template_extractor.extract_region_template",
             return_value={
@@ -786,9 +754,7 @@ def test_template_receipt_suffixes_name_taken_by_other_file(tmp_path):
             return_value=MagicMock(__enter__=MagicMock(return_value=db), __exit__=MagicMock()),
         ),
         patch("app.domain.shared_services.tools_workflow_elt.os.path.exists", return_value=True),
-        patch(
-            "app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)
-        ),
+        patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
         patch(
             "app.application.elt.shipment_template_extractor.extract_region_template",
             return_value={
@@ -817,9 +783,7 @@ def test_execute_reports_all_duplicate_rows():
         summary={"new": 0, "update": 0, "skip": 3, "error": 0, "executed": 0},
     )
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -862,9 +826,7 @@ def test_execute_writes_linked_customer_products_companion():
         summary={"new": 12, "update": 0, "skip": 1, "error": 0, "executed": 12},
     )
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
@@ -890,18 +852,14 @@ def test_execute_writes_linked_customer_products_companion():
 
 
 def test_execute_requires_run_id():
-    with patch(
-        "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-    ):
+    with patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True):
         result = _registered_router_elt_import("execute", {}, _context(), "normal", "导入")
     assert result["success"] is False
     assert result["error_code"] == "missing_run_id"
 
 
 def test_disabled_outside_enterprise():
-    with patch(
-        "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=False
-    ):
+    with patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=False):
         result = _registered_router_elt_import(
             "preview", {"file_path": "宗南.xlsx"}, _context(), "normal", "导入"
         )
@@ -909,9 +867,7 @@ def test_disabled_outside_enterprise():
 
 
 def test_unknown_action():
-    with patch(
-        "app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True
-    ):
+    with patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True):
         result = _registered_router_elt_import("delete", {}, _context(), "normal", "")
     assert result["success"] is False
 

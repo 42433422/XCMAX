@@ -569,6 +569,7 @@ def reconcile_turn_effect(*, tenant_id: str, idempotency_key: str) -> dict[str, 
     from app.application.employee_runtime.result_verifier import (
         execution_result_requires_reconciliation,
     )
+
     suffix = f":{key}"
     prefix = f"{tenant_id}:" if str(tenant_id or "").strip() else ""
     matched: list[dict[str, Any]] = []
@@ -602,9 +603,15 @@ def reconcile_turn_effect(*, tenant_id: str, idempotency_key: str) -> dict[str, 
             unknown += 1
             continue
         retained = _retained_result(output)
-        if output.get("success") is True and retained is not None and retained.get("success") is True:
+        if (
+            output.get("success") is True
+            and retained is not None
+            and retained.get("success") is True
+        ):
             committed += 1
-        elif output.get("success") is False and not execution_result_requires_reconciliation(output):
+        elif output.get("success") is False and not execution_result_requires_reconciliation(
+            output
+        ):
             failed += 1
         else:
             unknown += 1

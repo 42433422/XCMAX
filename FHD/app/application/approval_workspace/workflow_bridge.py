@@ -368,9 +368,7 @@ class WorkflowApprovalBridge:
                     "approval_request_id": request_id,
                     "agent_run_id": run.run_id,
                     "message": str(
-                        output.get("question")
-                        or output.get("message")
-                        or "需要你确认后才能继续。"
+                        output.get("question") or output.get("message") or "需要你确认后才能继续。"
                     ),
                     "nodes_executed": len(
                         [step for step in run.steps if step.status == "completed"]
@@ -413,14 +411,17 @@ class WorkflowApprovalBridge:
         )
         if not success:
             # 把失败步骤的真实原因带给用户，避免只显示“AI 工作流执行失败”而无法判断是否写入。
-            detail = next(
-                (
-                    str(getattr(step, "error", "") or "").strip()
-                    for step in run.steps
-                    if step.status == "failed" and str(getattr(step, "error", "") or "").strip()
-                ),
-                "",
-            ) or str(getattr(run, "error", "") or "").strip()
+            detail = (
+                next(
+                    (
+                        str(getattr(step, "error", "") or "").strip()
+                        for step in run.steps
+                        if step.status == "failed" and str(getattr(step, "error", "") or "").strip()
+                    ),
+                    "",
+                )
+                or str(getattr(run, "error", "") or "").strip()
+            )
             if detail:
                 message = detail
         return {

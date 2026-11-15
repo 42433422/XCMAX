@@ -105,9 +105,7 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
         }
         # 模型推断出的通用表结构随预演草稿保存，执行时据此复用同一张动态表。
         inferred_schema = (
-            target_detection.get("dynamic_schema")
-            if isinstance(target_detection, dict)
-            else None
+            target_detection.get("dynamic_schema") if isinstance(target_detection, dict) else None
         )
         if isinstance(inferred_schema, dict) and inferred_schema:
             draft["dynamic_schema"] = inferred_schema

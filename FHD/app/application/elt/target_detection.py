@@ -18,7 +18,9 @@ _PRODUCT_RE = re.compile(r"(产品名称|商品名称|货品名称|品名)")
 _QUANTITY_RE = re.compile(r"(数量|桶数|件数|重量|规格)")
 # 客户主数据必须出现明确的名称列；只有「客户」两个字（对账表、材料价目表的列名）
 # 不足以判定为客户表，否则流水表会被当成主数据写出错误客户。
-_CUSTOMER_NAME_HEADER_RE = re.compile(r"(购货单位|购买单位|客户名称|客户全称|客户姓名|单位名称|往来单位)")
+_CUSTOMER_NAME_HEADER_RE = re.compile(
+    r"(购货单位|购买单位|客户名称|客户全称|客户姓名|单位名称|往来单位)"
+)
 # 采购/材料流水：日期 + 厂名 + 品名 + 单价 这类结构，不是客户或产品主数据。
 _PURCHASE_LEDGER_RE = re.compile(r"(厂名|供货单位|供应商|厂商).{0,20}(品名|材料|规格|单价)")
 _ATTENDANCE_RE = re.compile(r"(考勤|上班时间|下班时间|打卡)")
@@ -51,7 +53,11 @@ def _joined(values: Iterable[Any]) -> str:
 def _classify(lines: list[str], *, suffix: str) -> dict[str, Any]:
     text = "\n".join(lines)
     compact = _compact(text)
-    if _DELIVERY_RE.search(compact) and _PRODUCT_RE.search(compact) and _QUANTITY_RE.search(compact):
+    if (
+        _DELIVERY_RE.search(compact)
+        and _PRODUCT_RE.search(compact)
+        and _QUANTITY_RE.search(compact)
+    ):
         return {
             "target_type": "shipment_records",
             "document_type": "delivery_note_workbook",
@@ -173,9 +179,7 @@ _KNOWN_TARGETS = frozenset(_TARGET_PRIORITY) | {"knowledge", "abnormal"}
 def _llm_classification(lines: list[str]) -> dict[str, Any] | None:
     """Ask the advisory model only when deterministic rules are unsure."""
     # 测试默认关闭外部模型调用，避免用例依赖网络；需要覆盖时显式打开。
-    if os.environ.get("PYTEST_CURRENT_TEST") and not os.environ.get(
-        "FHD_ELT_LLM_CLASSIFY_TESTS"
-    ):
+    if os.environ.get("PYTEST_CURRENT_TEST") and not os.environ.get("FHD_ELT_LLM_CLASSIFY_TESTS"):
         return None
     try:
         from app.application.elt.llm_assist import (
@@ -318,9 +322,7 @@ def _infer_dynamic_schema(
     data starts); the model only names the table and each column's meaning and
     type. Nothing is written here — the caller decides the target.
     """
-    if os.environ.get("PYTEST_CURRENT_TEST") and not os.environ.get(
-        "FHD_ELT_LLM_CLASSIFY_TESTS"
-    ):
+    if os.environ.get("PYTEST_CURRENT_TEST") and not os.environ.get("FHD_ELT_LLM_CLASSIFY_TESTS"):
         return None
     try:
         from app.application.elt.llm_assist import advise_table_schema, elt_llm_enabled

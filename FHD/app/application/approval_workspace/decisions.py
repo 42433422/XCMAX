@@ -173,15 +173,14 @@ class ApprovalDecisions:
                 handed_off = execution_handed_off(workflow_execution)
                 if handed_off:
                     waiting_approval = bool((workflow_execution or {}).get("waiting_approval"))
-                    waiting_decision = bool(
-                        (workflow_execution or {}).get("waiting_user_decision")
-                    )
+                    waiting_decision = bool((workflow_execution or {}).get("waiting_user_decision"))
                     if waiting_approval:
                         handoff_message = "当前步骤已获批，后续步骤等待审批"
                     elif waiting_decision:
-                        handoff_message = str(
-                            (workflow_execution or {}).get("message") or ""
-                        ).strip() or "审批已通过，还需要你确认后才能继续导入。"
+                        handoff_message = (
+                            str((workflow_execution or {}).get("message") or "").strip()
+                            or "审批已通过，还需要你确认后才能继续导入。"
+                        )
                     else:
                         handoff_message = "审批已通过，执行已交给调度器"
                     persist_outcome(

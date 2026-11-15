@@ -78,9 +78,7 @@ def test_temporary_and_legacy_xls(tmp_path: Path) -> None:
         parse_file(tmp_path / "旧表.xls")
 
 
-def test_store_save_get_list_delete(
-    store: ArtifactStore, record: ArtifactRecord
-) -> None:
+def test_store_save_get_list_delete(store: ArtifactStore, record: ArtifactRecord) -> None:
     index = json.loads((store.root / "index.json").read_text(encoding="utf-8"))
     assert index["items"][record.id]["sheets"] == 2
     assert index["items"][record.id]["row_count"] == 255
@@ -148,7 +146,9 @@ def test_execute_tool_dispatch(store: ArtifactStore, record: ArtifactRecord) -> 
         "error": "unknown_tool",
     }
     assert tools.execute_tool("list_attachments", {}, store)["attachments"][0]["id"] == record.id
-    assert tools.execute_tool("describe_attachment", {"artifact_id": record.id}, store)["ok"] is True
+    assert (
+        tools.execute_tool("describe_attachment", {"artifact_id": record.id}, store)["ok"] is True
+    )
     assert {item["name"] for item in tools.TOOL_SPECS} == {
         "list_attachments",
         "describe_attachment",

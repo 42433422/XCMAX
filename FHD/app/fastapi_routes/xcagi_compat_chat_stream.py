@@ -236,9 +236,7 @@ def _heartbeats(
             return
         for note in notes.drain():
             note_sequence += 1
-            yield encode(
-                {"type": "thinking", "id": f"think-{note_sequence}", "delta": note}
-            )
+            yield encode({"type": "thinking", "id": f"think-{note_sequence}", "delta": note})
 
     def delta_lines() -> Iterator[bytes]:
         if deltas is None:
@@ -469,7 +467,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         streamed_text = "".join(streamed)
         if streamed_text and not response_text.startswith(streamed_text):
             logger.warning(
-                "chat stream tail mismatch full=%s streamed=%s", len(response_text), len(streamed_text)
+                "chat stream tail mismatch full=%s streamed=%s",
+                len(response_text),
+                len(streamed_text),
             )
         yield from _token_events(sse_event_line, response_text, streamed_text)
     yield sse_event_line({"type": "done", "result": payload})

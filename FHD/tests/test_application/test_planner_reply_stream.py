@@ -24,7 +24,7 @@ def test_reply_prefix_decodes_escapes_across_chunks():
 
 
 def test_consume_reply_stream_publishes_progressive_deltas():
-    parts = ['{"mode":"reply",', '"reply":"你', "好", "世界\"}"]
+    parts = ['{"mode":"reply",', '"reply":"你', "好", '世界"}']
 
     async def stream():
         for part in parts:

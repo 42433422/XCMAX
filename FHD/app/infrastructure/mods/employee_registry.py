@@ -106,13 +106,19 @@ class EmployeeRegistry:
                             if not wf:
                                 # 市场「AI 员工」包通常只声明单个 employee；补一条工位行，
                                 # 否则装完在员工工作台/副窗里永远看不到（办公包由前端规则过滤）。
-                                emp = raw.get("employee") if isinstance(raw.get("employee"), dict) else {}
+                                emp = (
+                                    raw.get("employee")
+                                    if isinstance(raw.get("employee"), dict)
+                                    else {}
+                                )
                                 eid = str(emp.get("id") or "").strip()
                                 if eid:
                                     wf = [
                                         {
                                             "id": eid,
-                                            "label": str(emp.get("label") or raw.get("name") or eid),
+                                            "label": str(
+                                                emp.get("label") or raw.get("name") or eid
+                                            ),
                                         }
                                     ]
                 except (OSError, json.JSONDecodeError):

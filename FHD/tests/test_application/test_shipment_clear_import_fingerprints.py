@@ -183,9 +183,6 @@ def test_clear_by_unit_removes_only_matching_fingerprints(tmp_path, monkeypatch)
 
     assert result["success"] is True
     with factory() as db:
-        left = {
-            row[0]
-            for row in db.query(ShipmentEltImportFingerprint.shipment_id).all()
-        }
+        left = {row[0] for row in db.query(ShipmentEltImportFingerprint.shipment_id).all()}
         assert target_ids.isdisjoint(left)
         assert left  # 另一个客户的指纹保留

@@ -214,7 +214,13 @@ class ApiKeyRegistry:
         if not got:
             return self._deny(_KEY_INVALID, "缺少 X-AIOPEN-Key")
         if env_key and compare_digest(got.encode("utf-8"), env_key.encode("utf-8")):
-            return {"ok": True, "code": "", "message": "", "key_preview": "env:AIOPEN_API_KEY", "env": True}
+            return {
+                "ok": True,
+                "code": "",
+                "message": "",
+                "key_preview": "env:AIOPEN_API_KEY",
+                "env": True,
+            }
         entry = entries.get(got)
         if not isinstance(entry, dict):
             return self._deny(_KEY_INVALID, "X-AIOPEN-Key 无效")

@@ -49,10 +49,7 @@ def _fingerprint(headers: list[str], marker: dict[str, Any] | None = None) -> st
     """
     material = "|".join(headers)
     if marker:
-        material += (
-            f"#sheet={marker.get('sheet') or ''}"
-            f"#table={marker.get('table_id') or ''}"
-        )
+        material += f"#sheet={marker.get('sheet') or ''}#table={marker.get('table_id') or ''}"
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -117,9 +114,7 @@ def _usable_dedupe_keys(
     return usable
 
 
-def _partition_columns(
-    schema_columns: list[Any], headers: list[str]
-) -> list[dict[str, Any]]:
+def _partition_columns(schema_columns: list[Any], headers: list[str]) -> list[dict[str, Any]]:
     """每张分表只保留本表实际出现的列，未推断到语义的列按原始表头登记。"""
     known: dict[str, dict[str, Any]] = {}
     for column in schema_columns:
@@ -202,9 +197,7 @@ def _insert_chunk(db, chunk: list[dict[str, Any]]) -> int:
         from sqlalchemy.dialects.sqlite import insert as dialect_insert
     try:
         result = db.execute(
-            dialect_insert(table).on_conflict_do_nothing(
-                index_elements=["table_id", "row_hash"]
-            ),
+            dialect_insert(table).on_conflict_do_nothing(index_elements=["table_id", "row_hash"]),
             chunk,
         )
         db.commit()
@@ -332,9 +325,7 @@ class DynamicTableAdapter(TargetAdapter):
                     # 没有显式去重键时按来源坐标去重：同一份文件重复导入仍幂等，
                     # 但不会把不同位置、内容相同的业务行误判成重复丢掉。
                     hash_source = (
-                        payload
-                        if part_dedupe
-                        else {**payload, "__source__": "|".join(identity)}
+                        payload if part_dedupe else {**payload, "__source__": "|".join(identity)}
                     )
                     chunk.append(
                         {
@@ -380,12 +371,16 @@ class DynamicTableAdapter(TargetAdapter):
                         "row_count": actual,
                     }
                 )
-            primary = tables[0] if tables else {
-                "table_id": "",
-                "table_name": table_name,
-                "columns": schema.get("columns") or [],
-                "row_count": 0,
-            }
+            primary = (
+                tables[0]
+                if tables
+                else {
+                    "table_id": "",
+                    "table_name": table_name,
+                    "columns": schema.get("columns") or [],
+                    "row_count": 0,
+                }
+            )
             receipt = {
                 "table_id": primary.get("table_id", ""),
                 "table_name": primary.get("table_name", table_name),

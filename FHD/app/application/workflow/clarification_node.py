@@ -29,7 +29,9 @@ def _action_required(node: WorkflowNode, tool_registry: dict[str, Any] | None) -
     return list(_WRITE_REQUIRED_FALLBACK.get((node.tool_id, node.action), []))
 
 
-def _action_required_any(node: WorkflowNode, tool_registry: dict[str, Any] | None) -> list[list[str]]:
+def _action_required_any(
+    node: WorkflowNode, tool_registry: dict[str, Any] | None
+) -> list[list[str]]:
     """``required_any`` 声明「多个字段任选其一」，用于单文件/整批二选一的工具。"""
     meta = tool_registry
     for key in (node.tool_id, "actions", node.action):
@@ -37,11 +39,7 @@ def _action_required_any(node: WorkflowNode, tool_registry: dict[str, Any] | Non
     groups = meta.get("required_any") if isinstance(meta, dict) else None
     if not isinstance(groups, list):
         return []
-    return [
-        [str(item) for item in group]
-        for group in groups
-        if isinstance(group, list) and group
-    ]
+    return [[str(item) for item in group] for group in groups if isinstance(group, list) and group]
 
 
 def _missing_fields(params: dict[str, Any], required: list[str]) -> list[str]:

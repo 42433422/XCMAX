@@ -525,9 +525,7 @@ class SQLAlchemyAgentRunRepository:
             from app.db.models.agent import AgentRunRecord
 
             records = (
-                db.query(AgentRunRecord)
-                .filter(AgentRunRecord.user_id == str(user_id or ""))
-                .all()
+                db.query(AgentRunRecord).filter(AgentRunRecord.user_id == str(user_id or "")).all()
             )
             return [
                 run

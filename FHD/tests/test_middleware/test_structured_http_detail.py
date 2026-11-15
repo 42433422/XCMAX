@@ -24,7 +24,11 @@ def _client(detail) -> TestClient:
 
 
 def test_structured_detail_keeps_code_and_message():
-    body = _client({"code": "ELT_CENTER_DISABLED", "message": "数据对接中心尚未启用"}).get("/boom").json()
+    body = (
+        _client({"code": "ELT_CENTER_DISABLED", "message": "数据对接中心尚未启用"})
+        .get("/boom")
+        .json()
+    )
     assert body["success"] is False
     assert body["error_code"] == "ELT_CENTER_DISABLED"
     assert body["message"] == "数据对接中心尚未启用"
@@ -32,9 +36,11 @@ def test_structured_detail_keeps_code_and_message():
 
 
 def test_nested_message_dict_is_unwrapped():
-    body = _client(
-        {"success": False, "message": {"code": "UNAUTHORIZED", "message": "请先登录"}}
-    ).get("/boom").json()
+    body = (
+        _client({"success": False, "message": {"code": "UNAUTHORIZED", "message": "请先登录"}})
+        .get("/boom")
+        .json()
+    )
     assert body["error_code"] == "UNAUTHORIZED"
     assert body["message"] == "请先登录"
 

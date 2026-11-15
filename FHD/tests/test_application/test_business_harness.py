@@ -109,9 +109,7 @@ def test_terminal_projection_exposes_executed_tool_steps_as_thinking() -> None:
     step.status = "completed"
     step.output = {"success": True, "deleted_documents": 3, "deleted_chunks": 9}
     run.steps = [step]
-    run.final_output = {
-        "node_outputs": {"clear": {"success": True, "message": "已清空知识库"}}
-    }
+    run.final_output = {"node_outputs": {"clear": {"success": True, "message": "已清空知识库"}}}
     conversation = Mock()
     conversation.save_message.return_value = 92
     orchestrator = Mock()

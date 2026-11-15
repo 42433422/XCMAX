@@ -100,7 +100,11 @@ _DENY_STATUS = {
 
 def _denied_response(decision: dict[str, Any]) -> JSONResponse:
     return JSONResponse(
-        {"success": False, "message": decision.get("message") or "AIOPEN Key 不可用", "code": decision.get("code")},
+        {
+            "success": False,
+            "message": decision.get("message") or "AIOPEN Key 不可用",
+            "code": decision.get("code"),
+        },
         status_code=_DENY_STATUS.get(str(decision.get("code")), 403),
     )
 

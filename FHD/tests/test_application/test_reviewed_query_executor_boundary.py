@@ -230,7 +230,11 @@ def test_knowledge_query_answer_uses_model_synthesis_when_available():
 
     class Planner:
         def complete_messages(self, **_kwargs):
-            return {"choices": [{"message": {"content": "白浆加工费按 1 件 1176 元计，折后 940.8 元。"}}]}
+            return {
+                "choices": [
+                    {"message": {"content": "白浆加工费按 1 件 1176 元计，折后 940.8 元。"}}
+                ]
+            }
 
     builder = AIChatWorkflowResponseMixin()
     builder.workflow_planner = Planner()

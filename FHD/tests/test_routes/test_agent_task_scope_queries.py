@@ -71,9 +71,7 @@ def test_scoped_tasks_scans_runs_once_for_the_whole_page(monkeypatch) -> None:
             raise AssertionError("list_tasks 列表不应逐任务重扫运行")
 
     orchestrator = _PagedOrchestrator()
-    result = route_support.scoped_tasks(
-        orchestrator, principal=_principal(), limit=200
-    )
+    result = route_support.scoped_tasks(orchestrator, principal=_principal(), limit=200)
 
     assert len(result) == 150
     assert orchestrator.scope_calls == 1

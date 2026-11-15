@@ -579,9 +579,15 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
         stem = Path(file_name).stem.strip() or Path(storage_path).stem or "ELT 模板"
         template_type = _template_target_type(data)
         service = get_template_app_service()
-        templates = [item for item in (service.get_templates().get("templates") or []) if str(item.get("source") or "") == "db"]
+        templates = [
+            item
+            for item in (service.get_templates().get("templates") or [])
+            if str(item.get("source") or "") == "db"
+        ]
         existing_names = {
-            str(item.get("name") or "").strip(): str(item.get("file_path") or item.get("path") or "")
+            str(item.get("name") or "").strip(): str(
+                item.get("file_path") or item.get("path") or ""
+            )
             for item in templates
         }
         existing_keys = {str(item.get("template_key") or "").strip() for item in templates}
@@ -591,7 +597,9 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
             existing_names.pop(entry["from"], None)
             existing_names[entry["to"]] = ""
         digest = "".join(
-            char for char in str(data.get("file_sha256") or "")[:12].lower() if char in "0123456789abcdef"
+            char
+            for char in str(data.get("file_sha256") or "")[:12].lower()
+            if char in "0123456789abcdef"
         )
         out_dir = (
             Path(get_app_data_dir()).resolve()
@@ -610,7 +618,9 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
             region_key = f"ELT_{hashlib.sha1(region_id.encode()).hexdigest()[:12]}"
             if region_key in existing_keys:
                 continue
-            destination = out_dir / f"{_safe_file_component(stem)}-{region_key[-12:]}-{digest or 'seg'}.xlsx"
+            destination = (
+                out_dir / f"{_safe_file_component(stem)}-{region_key[-12:]}-{digest or 'seg'}.xlsx"
+            )
             try:
                 meta = extract_region_template(
                     storage_path,
@@ -660,7 +670,9 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
                     "analyzed_data": {
                         "category": "excel",
                         "business_scope": _template_scope(region, meta, target_type),
-                        "fields": [{"label": header, "value": "", "type": "dynamic"} for header in headers],
+                        "fields": [
+                            {"label": header, "value": "", "type": "dynamic"} for header in headers
+                        ],
                         "preview_data": {
                             "sample_rows": [],
                             "sheet_name": meta.get("sheet") or "",
@@ -873,8 +885,9 @@ def _read_head_rows(path: str, suffix: str, owner_id: int) -> tuple[str, list[li
             rows: list[list[str]] = []
             with (
                 open_elt_input_file(source, owner_user_id=owner_id) as stream,
-                io.TextIOWrapper(stream, encoding="utf-8-sig", errors="replace", newline="")
-                as handle,
+                io.TextIOWrapper(
+                    stream, encoding="utf-8-sig", errors="replace", newline=""
+                ) as handle,
             ):
                 for index, row in enumerate(csv.reader(handle)):
                     rows.append([str(cell).strip() for cell in row][:60])
@@ -892,7 +905,9 @@ def _read_head_rows(path: str, suffix: str, owner_id: int) -> tuple[str, list[li
                         rows = []
                         for index, values in enumerate(worksheet.iter_rows(values_only=True)):
                             rows.append(
-                                ["" if value is None else str(value).strip() for value in values][:60]
+                                ["" if value is None else str(value).strip() for value in values][
+                                    :60
+                                ]
                             )
                             if index >= 14:
                                 break
@@ -1044,8 +1059,7 @@ def _preview(params: dict, runtime_context: dict) -> dict:
     summary["template_source"] = str(template.get("matched_by") or "")
     summary["template_confidence"] = template.get("match_confidence")
     pending_mappings = [
-        str(item.get("target") or item.get("source") or "字段")
-        for item in _pending_mappings(data)
+        str(item.get("target") or item.get("source") or "字段") for item in _pending_mappings(data)
     ]
     summary["mapping_pending"] = pending_mappings[:8]
     error_rows = int(summary.get("error_rows") or 0)
@@ -1063,7 +1077,9 @@ def _preview(params: dict, runtime_context: dict) -> dict:
     ok = data.get("status") == "preview_ready"
     template_note = ""
     if summary["template_name"]:
-        ai_note = "（AI 识别）" if summary["template_source"] in {"ai", "ai_created", "ai_rank"} else ""
+        ai_note = (
+            "（AI 识别）" if summary["template_source"] in {"ai", "ai_created", "ai_rank"} else ""
+        )
         template_note = f"，已套用导入模板{ai_note}「{summary['template_name']}」"
     if not ok:
         message = f"预演未完成：{data.get('error') or data.get('stage')}"
@@ -1102,7 +1118,11 @@ def _preview(params: dict, runtime_context: dict) -> dict:
         resume_params["accept_suggested"] = True
     # 自动审批档：预演通过后直接入库，避免计划只排了预演就停在 preview_ready，
     # 导致「导入成功但模板库/知识库空白」。
-    if ok and summary["executable"] and str(runtime_context.get("chat_approval_mode") or "") == "auto":
+    if (
+        ok
+        and summary["executable"]
+        and str(runtime_context.get("chat_approval_mode") or "") == "auto"
+    ):
         executed = _execute({"run_id": run_id}, runtime_context)
         if executed.get("success"):
             data = executed.get("data") if isinstance(executed.get("data"), dict) else {}
@@ -1144,7 +1164,9 @@ def _receipt_tenant(data: dict[str, Any]) -> int:
     return int(row[0])
 
 
-def _parallel_receipts(data: dict[str, Any], owner_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
+def _parallel_receipts(
+    data: dict[str, Any], owner_id: int
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """知识库与模板库互不依赖，一次导入内并行写，互不拖累。"""
     from concurrent.futures import ThreadPoolExecutor
 
@@ -1423,8 +1445,7 @@ def _mentions_file(message: str, paths: list[str]) -> bool:
     """用户是否在消息里点名了某个文件；没点名时按本轮全部上传处理。"""
     text = str(message or "")
     return any(
-        Path(str(path)).stem.strip() and Path(str(path)).stem.strip() in text
-        for path in paths
+        Path(str(path)).stem.strip() and Path(str(path)).stem.strip() in text for path in paths
     )
 
 
@@ -1543,10 +1564,7 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
         items.append({"file_path": path, "file_name": label, **out})
     ready = [item for item in items if item.get("success")]
     needs_decision = [item for item in items if item.get("requires_user_decision")]
-    run_ids = [
-        str((item.get("data") or {}).get("run_id") or "")
-        for item in ready
-    ]
+    run_ids = [str((item.get("data") or {}).get("run_id") or "") for item in ready]
     run_ids = [run_id for run_id in run_ids if run_id]
     truncated = len(paths) > len(targets)
     message = (

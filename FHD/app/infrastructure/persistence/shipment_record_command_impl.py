@@ -36,9 +36,7 @@ def _clear_import_fingerprints(db, *, shipment_ids: list[int] | None = None) -> 
         if shipment_ids is not None:
             if not shipment_ids:
                 return 0
-            query = query.filter(
-                ShipmentEltImportFingerprint.shipment_id.in_(shipment_ids)
-            )
+            query = query.filter(ShipmentEltImportFingerprint.shipment_id.in_(shipment_ids))
         return int(query.delete(synchronize_session=False) or 0)
     except RECOVERABLE_ERRORS:
         logger.debug("导入指纹清理不可用，已跳过", exc_info=True)

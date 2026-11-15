@@ -57,7 +57,9 @@ def test_usage_ledger_aggregates_and_persists(tmp_path):
     path = tmp_path / "usage.jsonl"
     ledger = UsageLedger(lambda: path, lambda: 1000.0)
     ledger.record(key_preview="k1", label="a", tool="chat", channel="rest", ok=True, duration_ms=10)
-    ledger.record(key_preview="k1", label="a", tool="api_call", channel="mcp", ok=False, duration_ms=30)
+    ledger.record(
+        key_preview="k1", label="a", tool="api_call", channel="mcp", ok=False, duration_ms=30
+    )
 
     summary = ledger.summary(days=7)
     assert summary["calls"] == 2

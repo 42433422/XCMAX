@@ -740,11 +740,12 @@ class WorkflowSession:
                 "execution": {
                     "committed": bool(success) and executed_nodes > 0,
                     "effect": "none" if wrote_nothing else ("partial" if not success else "write"),
-                    "outcome": "not_executed" if wrote_nothing else ("unknown" if not success else "succeeded"),
+                    "outcome": "not_executed"
+                    if wrote_nothing
+                    else ("unknown" if not success else "succeeded"),
                 },
                 "artifacts": [
-                    artifact.to_dict()
-                    for artifact in (getattr(agent_run, "artifacts", None) or [])
+                    artifact.to_dict() for artifact in (getattr(agent_run, "artifacts", None) or [])
                 ],
             },
             success=success or waiting_decision,

@@ -60,10 +60,7 @@ def test_capture_swallows_store_failure(monkeypatch):
             raise RuntimeError("disk full")
 
     assert (
-        turn_capture.capture_turn(
-            user_message="以后都这样做。", owner_id="u1", store=Boom()
-        )
-        == []
+        turn_capture.capture_turn(user_message="以后都这样做。", owner_id="u1", store=Boom()) == []
     )
 
 

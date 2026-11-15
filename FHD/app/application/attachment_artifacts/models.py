@@ -33,9 +33,7 @@ class SheetInfo:
             name=str(data.get("name") or ""),
             columns=[str(cell) for cell in data.get("columns") or []],
             row_count=int(data.get("row_count") or 0),
-            rows_preview=[
-                [str(cell) for cell in row] for row in data.get("rows_preview") or []
-            ],
+            rows_preview=[[str(cell) for cell in row] for row in data.get("rows_preview") or []],
             truncated=bool(data.get("truncated")),
         )
 

@@ -102,9 +102,7 @@ def test_ticket_resolution_accepts_semantic_product_issue(monkeypatch):
     monkeypatch.setattr(
         intent_pkg,
         "best_intent",
-        lambda text, min_confidence=None: SimpleNamespace(
-            intent="product_issue", confidence=0.8
-        ),
+        lambda text, min_confidence=None: SimpleNamespace(intent="product_issue", confidence=0.8),
     )
     context = {
         "recent_messages": [

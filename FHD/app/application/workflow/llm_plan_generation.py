@@ -159,7 +159,16 @@ def _conversational_turn(message: str, context: dict[str, Any]) -> bool:
     return True
 
 
-_JSON_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f"}
+_JSON_ESCAPES = {
+    "n": "\n",
+    "t": "\t",
+    "r": "\r",
+    '"': '"',
+    "\\": "\\",
+    "/": "/",
+    "b": "\b",
+    "f": "\f",
+}
 
 
 def _reply_prefix(raw: str) -> str | None:
@@ -447,9 +456,7 @@ class LlmPlanGeneration:
             text = json.dumps({"mode": "reply", "reply": streamed}, ensure_ascii=False)
         return {"choices": [{"message": {"content": text}}]}
 
-    def _light_reply(
-        self, plan_id: str, message: str, context: dict[str, Any]
-    ) -> PlanGraph | None:
+    def _light_reply(self, plan_id: str, message: str, context: dict[str, Any]) -> PlanGraph | None:
         """闲聊轮次只带对话必需上下文，避免每轮重发整份工具目录。"""
 
         from app.application.ai_chat.dialogue_memory import recent_conversation_messages
@@ -458,9 +465,7 @@ class LlmPlanGeneration:
             "task": "普通对话：直接回复；需要业务工具时返回 workflow。",
             "rules": list(_LIGHT_RULES),
             "user_message": message,
-            "recent_messages": _model_context_value(
-                recent_conversation_messages(context, limit=6)
-            ),
+            "recent_messages": _model_context_value(recent_conversation_messages(context, limit=6)),
         }
         digest = _memory_digest(context)
         if digest:

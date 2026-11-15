@@ -14,7 +14,9 @@ def _result(data: dict[str, Any], *, degraded: bool = False) -> LlmAssistResult:
 
 def test_suggest_template_name_uses_model_answer(monkeypatch):
     monkeypatch.setattr(
-        template_ai, "_complete", lambda *a, **k: _result({"name": "《材料采购明细》", "confidence": 0.9})
+        template_ai,
+        "_complete",
+        lambda *a, **k: _result({"name": "《材料采购明细》", "confidence": 0.9}),
     )
     name = template_ai.suggest_template_name(
         file_name="2026.10月综合系列.xlsx", sheet_title="Sheet1", target_type="materials"
@@ -33,7 +35,9 @@ def test_suggest_template_name_rejects_placeholder_and_low_confidence(monkeypatc
     monkeypatch.setattr(template_ai, "_complete", lambda *a, **k: _result({"name": "Sheet1-模板"}))
     assert template_ai.suggest_template_name(file_name="a.xlsx") == ""
     monkeypatch.setattr(
-        template_ai, "_complete", lambda *a, **k: _result({"name": "材料采购明细", "confidence": 0.2})
+        template_ai,
+        "_complete",
+        lambda *a, **k: _result({"name": "材料采购明细", "confidence": 0.2}),
     )
     assert template_ai.suggest_template_name(file_name="a.xlsx") == ""
 
@@ -59,9 +63,13 @@ def test_rank_templates_returns_picked_candidate(monkeypatch):
 
 def test_rank_templates_rejects_out_of_range_or_unconfident(monkeypatch):
     candidates = [{"name": "发货单版式"}]
-    monkeypatch.setattr(template_ai, "_complete", lambda *a, **k: _result({"index": 5, "confidence": 0.9}))
+    monkeypatch.setattr(
+        template_ai, "_complete", lambda *a, **k: _result({"index": 5, "confidence": 0.9})
+    )
     assert template_ai.rank_templates(requirement="q", candidates=candidates) is None
-    monkeypatch.setattr(template_ai, "_complete", lambda *a, **k: _result({"index": 0, "confidence": 0.1}))
+    monkeypatch.setattr(
+        template_ai, "_complete", lambda *a, **k: _result({"index": 0, "confidence": 0.1})
+    )
     assert template_ai.rank_templates(requirement="q", candidates=candidates) is None
     monkeypatch.setattr(template_ai, "_complete", lambda *a, **k: _result({}, degraded=True))
     assert template_ai.rank_templates(requirement="q", candidates=candidates) is None
@@ -102,7 +110,9 @@ def test_rename_meaningless_templates_renames_placeholder(monkeypatch):
         [{"source": "db", "db_id": 7, "name": "综合系列-Sheet1", "filename": "a.xlsx"}]
     )
     monkeypatch.setattr(
-        template_ai, "_complete", lambda *a, **k: _result({"name": "材料采购明细", "confidence": 0.9})
+        template_ai,
+        "_complete",
+        lambda *a, **k: _result({"name": "材料采购明细", "confidence": 0.9}),
     )
     renamed = template_ai.rename_meaningless_templates(service)
     assert renamed == [{"id": "7", "from": "综合系列-Sheet1", "to": "材料采购明细"}]

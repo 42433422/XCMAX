@@ -446,6 +446,7 @@ def is_schema_current(data_dir: str | os.PathLike[str] | None = None) -> bool | 
     # 多 head 分支并存时，只要 stamp 在任一 head 上即视为 current，避免启动即崩。
     from alembic.config import Config
     from alembic.script import ScriptDirectory
+
     ini = _resolve_alembic_ini()
     if ini.is_file():
         script = ScriptDirectory.from_config(Config(str(ini)))

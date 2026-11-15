@@ -136,7 +136,9 @@ def test_heartbeats_forward_thinking_notes_and_tool_events():
         return {"ok": True}
 
     sink: dict = {}
-    events = _payloads(list(stream._heartbeats(work, "处理中", sink, ch._sse_event_line, tools, notes)))
+    events = _payloads(
+        list(stream._heartbeats(work, "处理中", sink, ch._sse_event_line, tools, notes))
+    )
     kinds = [event["type"] for event in events]
     assert "thinking" in kinds
     assert "tool_call" in kinds

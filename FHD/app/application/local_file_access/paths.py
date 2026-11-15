@@ -150,11 +150,7 @@ def iter_candidate_files(root: Path, *, limit: int = MAX_FILES_PER_SCAN) -> Iter
     yielded = 0
     real_root = _real(root)
     for dirpath, dirnames, filenames in os.walk(real_root, followlinks=False):
-        dirnames[:] = [
-            name
-            for name in dirnames
-            if not name.startswith(".") or name in {".config"}
-        ]
+        dirnames[:] = [name for name in dirnames if not name.startswith(".") or name in {".config"}]
         for name in filenames:
             path = _real(Path(dirpath) / name)
             if is_denied(path) or path.suffix.lower() not in ALLOWED_SUFFIXES:

@@ -59,7 +59,14 @@ def capture_turn(
     for fact in extract_fact_candidates(user_message, assistant_reply):
         try:
             results.append(
-                remember(fact, scope=scope, owner_id=owner, source="chat_turn", importance=0.6, store=store)
+                remember(
+                    fact,
+                    scope=scope,
+                    owner_id=owner,
+                    source="chat_turn",
+                    importance=0.6,
+                    store=store,
+                )
             )
         except BOUNDARY_ERRORS:
             continue

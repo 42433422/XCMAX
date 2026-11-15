@@ -35,6 +35,18 @@ export default defineConfig({
         find: '@admin-console-inject/views/DutyRosterGraphView.vue',
         replacement: path.resolve(__dirname, './src/views/adminDutyRosterGraphView.stub.vue'),
       },
+      {
+        find: '@admin-console-inject/workflow/DutyRosterWorkflowLoopView.vue',
+        replacement: path.resolve(__dirname, './src/components/workflow/DutyRosterWorkflowLoopView.vue'),
+      },
+      {
+        find: '@admin-console-inject/workflow/SelfEvolutionLoopRuntimePanel.vue',
+        replacement: path.resolve(__dirname, './src/components/workflow/SelfEvolutionLoopRuntimePanel.vue'),
+      },
+      {
+        find: '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue',
+        replacement: path.resolve(__dirname, './src/components/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'),
+      },
       { find: '@', replacement: path.resolve(__dirname, './src') },
       // Real Mod views live outside frontend/src, matching production Vite resolution.
       { find: 'vue-router', replacement: path.resolve(__dirname, 'node_modules/vue-router') },

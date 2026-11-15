@@ -30,6 +30,4 @@ def alias_module(old_name: str, new_name: str, submodules: tuple[str, ...] = ())
         setattr(module, name, value)
     sys.modules[old_name] = module
     for submodule in submodules:
-        sys.modules[f"{old_name}.{submodule}"] = importlib.import_module(
-            f"{new_name}.{submodule}"
-        )
+        sys.modules[f"{old_name}.{submodule}"] = importlib.import_module(f"{new_name}.{submodule}")

@@ -135,9 +135,7 @@ def test_template_preview_list_uses_runtime_tenant(monkeypatch):
     monkeypatch.setattr(
         "app.application.get_template_app_service", lambda: _Service(), raising=False
     )
-    out = module._registered_router_template_preview(
-        "list", {}, {"tenant_id": "1"}, "normal", ""
-    )
+    out = module._registered_router_template_preview("list", {}, {"tenant_id": "1"}, "normal", "")
     assert seen["tenant"] == 1
     assert out["count"] == 1
     assert out["templates"][0]["id"] == "db:46"

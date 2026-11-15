@@ -487,9 +487,7 @@ class ShipmentAdapter(TargetAdapter):
             .all()
         )
         stale_ids = [
-            row.id
-            for row in stale_rows
-            if not self._fingerprint_owner_exists(db, row.shipment_id)
+            row.id for row in stale_rows if not self._fingerprint_owner_exists(db, row.shipment_id)
         ]
         if stale_ids:
             db.query(ShipmentEltImportFingerprint).filter(

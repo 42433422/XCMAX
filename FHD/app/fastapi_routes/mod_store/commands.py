@@ -53,7 +53,9 @@ class LocalCommands:
             if sid:
                 token = (await resolve_valid_market_access_token(sid) or "").strip()
                 if token:
-                    authorization = token if token.lower().startswith("bearer ") else f"Bearer {token}"
+                    authorization = (
+                        token if token.lower().startswith("bearer ") else f"Bearer {token}"
+                    )
         except RECOVERABLE_ERRORS:
             self._logger.warning("mod store install token resolve skipped", exc_info=True)
         # 显式关闭验签仅对市场员工包生效（见 PackageInstaller.from_catalog）；其它制品仍强制验签。
@@ -63,7 +65,9 @@ class LocalCommands:
             if "application/json" in (request.headers.get("content-type") or "").lower():
                 raw_body = await request.json()
                 if isinstance(raw_body, dict) and "verify_signature" in raw_body:
-                    verify_signature = str(raw_body.get("verify_signature")).strip().lower() not in {
+                    verify_signature = str(
+                        raw_body.get("verify_signature")
+                    ).strip().lower() not in {
                         "0",
                         "false",
                         "no",

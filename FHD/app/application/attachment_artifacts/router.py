@@ -129,7 +129,9 @@ async def _ingest(
 
 
 @router.post("/")
-async def upload_attachments(request: Request, files: list[UploadFile] = File(...)) -> dict[str, Any]:
+async def upload_attachments(
+    request: Request, files: list[UploadFile] = File(...)
+) -> dict[str, Any]:
     """批量上传；单文件失败不影响整批。"""
     if not files:
         raise HTTPException(status_code=400, detail="未选择文件")

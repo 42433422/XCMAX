@@ -255,9 +255,7 @@ class TaskConversationStore:
             db.commit()
             return True
 
-    def delete_messages_from(
-        self, *, session_id: str, user_id: int, message_id: int
-    ) -> int:
+    def delete_messages_from(self, *, session_id: str, user_id: int, message_id: int) -> int:
         """撤回一条用户消息及其之后的所有回复；非本会话消息直接拒绝。"""
         with get_db() as db:
             target = (
@@ -288,9 +286,7 @@ class TaskConversationStore:
             )
             if session is not None:
                 remaining = (
-                    db.query(AIConversation)
-                    .filter(AIConversation.session_id == session_id)
-                    .count()
+                    db.query(AIConversation).filter(AIConversation.session_id == session_id).count()
                 )
                 session.message_count = remaining
                 last = (

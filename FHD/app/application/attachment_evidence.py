@@ -136,7 +136,9 @@ def _parse_calls(content: str, limit_calls: int) -> list[dict[str, Any]]:
     return calls
 
 
-async def _plan_calls(message: str, briefs: list[dict[str, Any]], limit_calls: int) -> list[dict[str, Any]]:
+async def _plan_calls(
+    message: str, briefs: list[dict[str, Any]], limit_calls: int
+) -> list[dict[str, Any]]:
     """让模型挑工具；非 JSON、超时或异常一律返回空列表交给启发式兜底。"""
     try:
         payload = await asyncio.wait_for(
