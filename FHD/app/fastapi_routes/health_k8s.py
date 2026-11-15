@@ -50,12 +50,12 @@ def _check_redis() -> dict[str, Any]:
 def _check_ai_service() -> dict[str, Any]:
     """统一意图识别引擎探针。
 
-    历史版本直接 ``recognizer.is_ready()``，而 ``UnifiedIntentRecognizer``
-    最初并未定义该方法。此处改为鸭子类型调用，并回退到 ``load()``。
+    共享版 ``UnifiedIntentRecognizer`` 提供 ``is_ready()`` /
+    ``get_engine_status()``；此处保留鸭子类型调用以兼容旧实现。
     """
 
     try:
-        from app.domain.conversation.unified_intent_recognizer import (
+        from app.domain.shared_services.unified_intent_recognizer import (
             get_unified_intent_recognizer,
         )
 
@@ -64,7 +64,8 @@ def _check_ai_service() -> dict[str, Any]:
         if hasattr(recognizer, "is_ready"):
             ready = bool(recognizer.is_ready())
         else:
-            ready = bool(recognizer.load())
+            loader = getattr(recognizer, "load", None)
+            ready = bool(loader()) if callable(loader) else False
 
         engines: dict[str, Any] = {}
         getter = getattr(recognizer, "get_engine_status", None)
@@ -260,7 +261,7 @@ def capabilities_diagnostics():
     # intent_engines 单独取一份快照，便于前端渲染"哪些引擎已落地"。
     intent_engines: dict[str, Any] = {}
     try:
-        from app.domain.conversation.unified_intent_recognizer import (
+        from app.domain.shared_services.unified_intent_recognizer import (
             get_unified_intent_recognizer,
         )
 
