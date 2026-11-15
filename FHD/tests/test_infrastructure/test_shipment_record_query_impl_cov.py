@@ -23,6 +23,19 @@ from app.infrastructure.persistence.shipment_record_query_impl import (
 )
 
 
+def _setup_shared_0():
+    mock_db = MagicMock()
+    mock_inspector = MagicMock()
+    mock_inspector.get_table_names.return_value = ["shipment_records"]
+    mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
+    mock_q = MagicMock()
+    mock_db.query.return_value = mock_q
+    mock_q.filter.return_value = mock_q
+    mock_q.count.return_value = 0
+    mock_q.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
+    return (mock_db, mock_inspector, mock_q)
+
+
 def _assert_shared_with_unit_name_exact_match_0(self, query, _shared_literal_0):
     mock_db = MagicMock()
     mock_inspector = MagicMock()
@@ -188,15 +201,7 @@ class TestRecordToDict:
 class TestQueryShipmentsAdditional:
     def test_resolve_purchase_unit_returns_none(self, query):
         """When resolve_purchase_unit returns None, query_unit stays as original."""
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-        mock_q = MagicMock()
-        mock_db.query.return_value = mock_q
-        mock_q.filter.return_value = mock_q
-        mock_q.count.return_value = 0
-        mock_q.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
+        mock_db, mock_inspector, mock_q = _setup_shared_0()
 
         with (
             patch(
@@ -219,15 +224,7 @@ class TestQueryShipmentsAdditional:
         mock_q.filter.assert_called()
 
     def test_with_start_date(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-        mock_q = MagicMock()
-        mock_db.query.return_value = mock_q
-        mock_q.filter.return_value = mock_q
-        mock_q.count.return_value = 0
-        mock_q.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
+        mock_db, mock_inspector, mock_q = _setup_shared_0()
 
         with (
             patch(
@@ -249,15 +246,7 @@ class TestQueryShipmentsAdditional:
         assert mock_q.filter.call_count >= 1
 
     def test_with_end_date(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-        mock_q = MagicMock()
-        mock_db.query.return_value = mock_q
-        mock_q.filter.return_value = mock_q
-        mock_q.count.return_value = 0
-        mock_q.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
+        mock_db, mock_inspector, mock_q = _setup_shared_0()
 
         with (
             patch(
@@ -279,15 +268,7 @@ class TestQueryShipmentsAdditional:
         assert mock_q.filter.call_count >= 1
 
     def test_with_both_dates(self, query):
-        mock_db = MagicMock()
-        mock_inspector = MagicMock()
-        mock_inspector.get_table_names.return_value = ["shipment_records"]
-        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
-        mock_q = MagicMock()
-        mock_db.query.return_value = mock_q
-        mock_q.filter.return_value = mock_q
-        mock_q.count.return_value = 0
-        mock_q.order_by.return_value.limit.return_value.offset.return_value.all.return_value = []
+        mock_db, mock_inspector, mock_q = _setup_shared_0()
 
         with (
             patch(

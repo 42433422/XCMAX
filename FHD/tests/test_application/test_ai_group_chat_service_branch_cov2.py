@@ -44,6 +44,26 @@ from tests.pure_builders import department_catalog as fake_departments
 from tests.pure_builders import enterprise_department_catalog as fake_enterprise_departments
 
 
+def _setup_shared_0(tmp_path):
+    svc = make_service(tmp_path)
+    work_order = {
+        "id": "msg1",
+        "user_id": 1,
+        "group_id": "g1",
+        "kind": "work_order",
+        "work_order_id": "wo1",
+        "status": "assigned",
+        "body": "派单",
+        "sender_name": "工作流调度",
+        "sender_id": "ai-group-dispatcher",
+        "role": "ai",
+        "sender_avatar": "",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "payload": {"task": "做任务"},
+    }
+    return (svc, work_order)
+
+
 def _assert_shared_delete_message_wrong_user_0(
     self,
     tmp_path,
@@ -1197,43 +1217,13 @@ class TestAppendWorkAcceptanceIfReadyEdge:
         assert result is None
 
     def test_append_acceptance_no_initial_reports(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        work_order = {
-            "id": "msg1",
-            "user_id": 1,
-            "group_id": "g1",
-            "kind": "work_order",
-            "work_order_id": "wo1",
-            "status": "assigned",
-            "body": "派单",
-            "sender_name": "工作流调度",
-            "sender_id": "ai-group-dispatcher",
-            "role": "ai",
-            "sender_avatar": "",
-            "created_at": "2026-01-01T00:00:00+00:00",
-            "payload": {"task": "做任务"},
-        }
+        svc, work_order = _setup_shared_0(tmp_path)
         svc._append_messages([work_order])
         result = svc._append_work_acceptance_if_ready(user_id=1, group_id="g1", work_order_id="wo1")
         assert result is None
 
     def test_append_acceptance_initial_reports_no_final(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        work_order = {
-            "id": "msg1",
-            "user_id": 1,
-            "group_id": "g1",
-            "kind": "work_order",
-            "work_order_id": "wo1",
-            "status": "assigned",
-            "body": "派单",
-            "sender_name": "工作流调度",
-            "sender_id": "ai-group-dispatcher",
-            "role": "ai",
-            "sender_avatar": "",
-            "created_at": "2026-01-01T00:00:00+00:00",
-            "payload": {"task": "做任务"},
-        }
+        svc, work_order = _setup_shared_0(tmp_path)
         report = {
             "id": "msg2",
             "user_id": 1,
@@ -1254,22 +1244,7 @@ class TestAppendWorkAcceptanceIfReadyEdge:
         assert result is None
 
     def test_append_acceptance_final_reports_not_terminal(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        work_order = {
-            "id": "msg1",
-            "user_id": 1,
-            "group_id": "g1",
-            "kind": "work_order",
-            "work_order_id": "wo1",
-            "status": "assigned",
-            "body": "派单",
-            "sender_name": "工作流调度",
-            "sender_id": "ai-group-dispatcher",
-            "role": "ai",
-            "sender_avatar": "",
-            "created_at": "2026-01-01T00:00:00+00:00",
-            "payload": {"task": "做任务"},
-        }
+        svc, work_order = _setup_shared_0(tmp_path)
         report = {
             "id": "msg2",
             "user_id": 1,
@@ -1362,22 +1337,7 @@ class TestAppendWorkAcceptanceIfReadyEdge:
         assert result["status"] == "completed"
 
     def test_append_acceptance_some_failed(self, tmp_path: Path):
-        svc = make_service(tmp_path)
-        work_order = {
-            "id": "msg1",
-            "user_id": 1,
-            "group_id": "g1",
-            "kind": "work_order",
-            "work_order_id": "wo1",
-            "status": "assigned",
-            "body": "派单",
-            "sender_name": "工作流调度",
-            "sender_id": "ai-group-dispatcher",
-            "role": "ai",
-            "sender_avatar": "",
-            "created_at": "2026-01-01T00:00:00+00:00",
-            "payload": {"task": "做任务"},
-        }
+        svc, work_order = _setup_shared_0(tmp_path)
         report1 = {
             "id": "msg2",
             "user_id": 1,

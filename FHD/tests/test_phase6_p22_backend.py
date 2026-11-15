@@ -20,6 +20,19 @@ from __future__ import annotations
 
 import os
 
+
+def _setup_shared_0():
+    agent = EmployeeAgent("emp-1")
+    pack = {
+        "pack_id": "emp-1",
+        "version": "1.0.0",
+        "manifest": {},
+        "pack_dir": "/tmp/emp-1",
+    }
+    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    return (agent, pack, gate)
+
+
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
 import json
@@ -1520,14 +1533,7 @@ class TestEmployeeAgentBranches:
 
     def test_run_uses_server_workspace_without_mutating_caller_payload(self) -> None:
         """执行采用可信参数 workspace；不修改调用方原始输入。"""
-        agent = EmployeeAgent("emp-1")
-        pack = {
-            "pack_id": "emp-1",
-            "version": "1.0.0",
-            "manifest": {},
-            "pack_dir": "/tmp/emp-1",
-        }
-        gate = {"ok": True, "risk_level": "low", "reason": "low"}
+        agent, pack, gate = _setup_shared_0()
         with (
             patch(
                 "app.application.employee_runtime.agent.load_employee_pack_from_disk",
@@ -1584,14 +1590,7 @@ class TestEmployeeAgentBranches:
 
     def test_run_direct_python_no_file_path_uses_cognition(self) -> None:
         """handler_list=['direct_python'] 但无 file_path → 走 cognition 路径。"""
-        agent = EmployeeAgent("emp-1")
-        pack = {
-            "pack_id": "emp-1",
-            "version": "1.0.0",
-            "manifest": {},
-            "pack_dir": "/tmp/emp-1",
-        }
-        gate = {"ok": True, "risk_level": "low", "reason": "low"}
+        agent, pack, gate = _setup_shared_0()
         reasoning = {"reasoning": "thought", "input": {}}
         with (
             patch(
@@ -1653,14 +1652,7 @@ class TestEmployeeAgentBranches:
 
     def test_run_cognition_error_with_direct_python_does_not_fail(self) -> None:
         """cognition 出错但 handler_list=['direct_python'] → 不走 cognition_failed 路径。"""
-        agent = EmployeeAgent("emp-1")
-        pack = {
-            "pack_id": "emp-1",
-            "version": "1.0.0",
-            "manifest": {},
-            "pack_dir": "/tmp/emp-1",
-        }
-        gate = {"ok": True, "risk_level": "low", "reason": "low"}
+        agent, pack, gate = _setup_shared_0()
         reasoning_err = {"reasoning": "", "error": "llm timeout", "input": {}}
         with (
             patch(
@@ -1720,14 +1712,7 @@ class TestEmployeeAgentBranches:
 
     def test_run_upstream_collaboration_skipped_in_result(self) -> None:
         """upstream 返回 skipped → collaboration_upstream 为 None。"""
-        agent = EmployeeAgent("emp-1")
-        pack = {
-            "pack_id": "emp-1",
-            "version": "1.0.0",
-            "manifest": {},
-            "pack_dir": "/tmp/emp-1",
-        }
-        gate = {"ok": True, "risk_level": "low", "reason": "low"}
+        agent, pack, gate = _setup_shared_0()
         upstream = {"skipped": True, "node_outputs": None}
         with (
             patch(
@@ -1792,14 +1777,7 @@ class TestEmployeeAgentBranches:
 
     def test_run_upstream_collaboration_no_node_outputs_not_injected(self) -> None:
         """upstream 无 node_outputs → 不注入 payload。"""
-        agent = EmployeeAgent("emp-1")
-        pack = {
-            "pack_id": "emp-1",
-            "version": "1.0.0",
-            "manifest": {},
-            "pack_dir": "/tmp/emp-1",
-        }
-        gate = {"ok": True, "risk_level": "low", "reason": "low"}
+        agent, pack, gate = _setup_shared_0()
         upstream = {"plan_id": "p1", "success": True}  # 无 node_outputs
         with (
             patch(
@@ -1864,14 +1842,7 @@ class TestEmployeeAgentBranches:
 
     def test_run_memory_used_true_when_mem_ctx_has_content(self) -> None:
         """mem_ctx 有内容 → memory_used=True。"""
-        agent = EmployeeAgent("emp-1")
-        pack = {
-            "pack_id": "emp-1",
-            "version": "1.0.0",
-            "manifest": {},
-            "pack_dir": "/tmp/emp-1",
-        }
-        gate = {"ok": True, "risk_level": "low", "reason": "low"}
+        agent, pack, gate = _setup_shared_0()
         mem_ctx = MemoryContext(long_term_prompt="记忆内容")
         with (
             patch(

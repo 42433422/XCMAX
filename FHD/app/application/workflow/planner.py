@@ -282,6 +282,7 @@ class LLMWorkflowPlanner:
         context: dict[str, Any] | None = None,
         temperature: float = 0.1,
         max_tokens: int = 1200,
+        **extra: Any,
     ) -> dict[str, Any] | None:
         """Send a bounded model task through this planner's configured provider."""
         completion = (
@@ -294,6 +295,7 @@ class LLMWorkflowPlanner:
             http_client_factory=self._http_client_factory or _get_planner_http_client,
             temperature=temperature,
             max_tokens=max_tokens,
+            **extra,
         )
 
     def _plan_with_llm(

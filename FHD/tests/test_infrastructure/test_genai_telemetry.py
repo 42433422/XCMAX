@@ -7,6 +7,21 @@ import pytest
 from app.infrastructure.llm import genai_telemetry as gt
 
 
+def _setup_shared_0(monkeypatch):
+    monkeypatch.setenv("XCAGI_GENAI_TRACE_SAMPLE_RATE", "0")
+    span = gt.start_genai_span(
+        provider_id="p",
+        model=None,
+        temperature=0.7,
+        max_tokens=1,
+        profile="d",
+        caller=None,
+        tenant_id=None,
+        messages=[],
+    )
+    return span
+
+
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
     for key in list(__import__("os").environ):
@@ -116,48 +131,18 @@ class TestRecordResponse:
 
 class TestSampling:
     def test_error_span_always_recorded(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_GENAI_TRACE_SAMPLE_RATE", "0")
-        span = gt.start_genai_span(
-            provider_id="p",
-            model=None,
-            temperature=0.7,
-            max_tokens=1,
-            profile="d",
-            caller=None,
-            tenant_id=None,
-            messages=[],
-        )
+        span = _setup_shared_0(monkeypatch)
         span.finish("error")
         assert gt.should_record(span) is True
 
     def test_blocked_span_always_recorded(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_GENAI_TRACE_SAMPLE_RATE", "0")
-        span = gt.start_genai_span(
-            provider_id="p",
-            model=None,
-            temperature=0.7,
-            max_tokens=1,
-            profile="d",
-            caller=None,
-            tenant_id=None,
-            messages=[],
-        )
+        span = _setup_shared_0(monkeypatch)
         span.attributes["guardrail.blocked"] = True
         span.finish("ok")
         assert gt.should_record(span) is True
 
     def test_sample_rate_zero_drops_normal_span(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_GENAI_TRACE_SAMPLE_RATE", "0")
-        span = gt.start_genai_span(
-            provider_id="p",
-            model=None,
-            temperature=0.7,
-            max_tokens=1,
-            profile="d",
-            caller=None,
-            tenant_id=None,
-            messages=[],
-        )
+        span = _setup_shared_0(monkeypatch)
         span.finish("ok")
         assert gt.should_record(span) is False
 
