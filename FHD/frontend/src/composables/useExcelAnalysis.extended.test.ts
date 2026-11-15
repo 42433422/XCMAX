@@ -133,24 +133,36 @@ describe('useExcelAnalysis - extended', () => {
     expect(api.excelAnalyzeUploading.value).toBe(false)
   })
 
-  it('analyzes every workbook when a folder supplies several Excel files', async () => {
-    const onAnalyzeDone = vi.fn()
+  it('stores folder workbooks as artifacts instead of analyzing only the first ten', async () => {
     vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
-      text: async () => JSON.stringify({ success: true, fields: [], preview_data: { sheet_name: 'Sheet1' } }),
+      json: async () => ({
+        ok: true,
+        results: [
+          { status: 'ok', artifact: { id: 'artifact-a' } },
+          { status: 'ok', artifact: { id: 'artifact-b' } },
+        ],
+      }),
     } as unknown as Response)
 
+    const onAnalyzeDone = vi.fn()
     const api = useExcelAnalysis(makeMessages(), { onAnalyzeDone })
     const inputs = [
       new File(['a'], 'a.xlsx'),
       new File(['b'], 'b.xlsm'),
+      new File(['lock'], '~$c.xlsx'),
     ]
     const input = { files: inputs, value: '' } as unknown as HTMLInputElement
     await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
 
-    expect(global.fetch).toHaveBeenCalledTimes(2)
-    expect(onAnalyzeDone).toHaveBeenCalledWith({ fileName: 'a.xlsx', success: true })
-    expect(onAnalyzeDone).toHaveBeenCalledWith({ fileName: 'b.xlsm', success: true })
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(String(vi.mocked(global.fetch).mock.calls[0][0])).toContain('/api/attachments')
+    expect(onAnalyzeDone).not.toHaveBeenCalled()
+    expect(addMessage).toHaveBeenCalledWith(
+      '[附件] 已加入 2 个 Excel，已跳过 1 个临时锁文件，可以直接提问；需要具体数字时我会读取对应文件的工作表与行。',
+      'ai',
+      undefined,
+    )
   })
 
   it('splits a mixed folder into Excel analysis and multimodal staging', async () => {

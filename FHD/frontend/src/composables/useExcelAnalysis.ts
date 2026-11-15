@@ -5,14 +5,14 @@ import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { primeCsrfCookie } from '@/api/core'
 import { apiFetch } from '@/utils/apiBase'
 import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
+import { isTemporaryDocument } from '@/utils/documentIntake'
+import { uploadChatArtifacts } from '@/utils/chatArtifactContext'
 
 export type { ExcelAnalysisResult } from '@/types/excel'
 
 /** 多表 xlsx 在服务端 openpyxl 解析可能远超 30s；过短会 Abort 且任务面板卡在「解析工作簿」进度 */
 const EXTRACT_GRID_TIMEOUT_MS = 180_000
 const EXTRACT_GRID_SINGLE_SHEET_TIMEOUT_MS = 90_000
-/** 文件夹批量分析上限，避免整目录扫描时串行请求过多。 */
-const MAX_BATCH_EXCEL_FILES = 10
 
 /**
  * 必须始终用相对路径（与当前页面同源），经 Vite :5001 代理到后端 :5000。
@@ -358,23 +358,21 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
         excelAnalyzeUploading.value = false
       }
     } else {
-      // 文件夹/多选场景：Excel 逐个分析，其余文件交给多模态暂存。
-      const excelFiles = files.filter((f) => /\.(xlsx|xlsm)$/i.test(f.name))
-      const otherFiles = files.filter((f) => !/\.(xlsx|xlsm)$/i.test(f.name))
+      // 文件夹/多选场景：Excel 存成后端工件供按需取数，不再在前端逐个解析。
+      const usable = files.filter((f) => !isTemporaryDocument(f.name))
+      const skippedTemp = files.length - usable.length
+      const excelFiles = usable.filter((f) => /\.(xlsx|xlsm)$/i.test(f.name))
+      const otherFiles = usable.filter((f) => !/\.(xlsx|xlsm)$/i.test(f.name))
       input.value = ''
       if (excelFiles.length) {
-        const batch = excelFiles.slice(0, MAX_BATCH_EXCEL_FILES)
-        if (excelFiles.length > batch.length) {
-          appendChatLine(
-            `[附件] 文件夹内共 ${excelFiles.length} 个 Excel，本次仅分析前 ${batch.length} 个。`,
-            'ai',
-          )
-        }
-        for (const excelFile of batch) {
-          await onExcelAnalyzeFileChange({
-            target: { files: [excelFile], value: '' },
-          } as unknown as Event)
-        }
+        await uploadChatArtifacts(excelFiles)
+        const tempNote = skippedTemp ? `，已跳过 ${skippedTemp} 个临时锁文件` : ''
+        appendChatLine(
+          `[附件] 已加入 ${excelFiles.length} 个 Excel${tempNote}，可以直接提问；需要具体数字时我会读取对应文件的工作表与行。`,
+          'ai',
+        )
+      } else if (skippedTemp) {
+        appendChatLine(`[附件] 已跳过 ${skippedTemp} 个临时锁文件，没有可用的 Excel。`, 'ai')
       }
       if (otherFiles.length && onMultimodalFileChangeCallback) {
         await onMultimodalFileChangeCallback({
