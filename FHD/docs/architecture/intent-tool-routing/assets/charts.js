@@ -42,7 +42,12 @@
       textStyle: { color: ink, fontSize: 12 },
       formatter: function (params) {
         var p = params[0];
-        return p.name + '<br>' + p.value.toFixed(1) + '%';
+        // Keep labels as text even if this static dataset later gains external input.
+        var content = document.createElement('div');
+        content.appendChild(document.createTextNode(p.name));
+        content.appendChild(document.createElement('br'));
+        content.appendChild(document.createTextNode(p.value.toFixed(1) + '%'));
+        return content;
       }
     },
     xAxis: {
