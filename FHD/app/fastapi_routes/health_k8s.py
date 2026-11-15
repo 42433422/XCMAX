@@ -272,12 +272,30 @@ def capabilities_diagnostics():
         logger.exception("diagnostic intent status check failed")
         intent_engines = {"error": _UNAVAILABLE}
 
+    try:
+        from app.domain.shared_services.intent_semantic_router import (
+            semantic_router_status,
+        )
+
+        semantic_status = semantic_router_status()
+    except RECOVERABLE_ERRORS:
+        semantic_status = {"error": _UNAVAILABLE}
+
+    try:
+        from app.infrastructure.llm.model_router import get_model_router
+
+        model_routing = get_model_router().status()
+    except RECOVERABLE_ERRORS:
+        model_routing = {"error": _UNAVAILABLE}
+
     return JSONResponse(
         {
             "timestamp": datetime.now(UTC).isoformat(),
             "rasa": rasa_check,
             "pgvector": pgvector_check,
             "intent_engines": intent_engines,
+            "intent_semantic": semantic_status,
+            "model_routing": model_routing,
             "ai_service": ai_check,
         }
     )

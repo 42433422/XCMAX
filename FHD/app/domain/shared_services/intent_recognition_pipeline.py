@@ -55,6 +55,8 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
         "is_negation_intent": False,
         "is_likely_unclear": False,
         "all_matched_tools": [],
+        "intent_source": "rule",
+        "confidence": 0.0,
     }
 
     try:
@@ -197,6 +199,46 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
         "intent_hints"
     ]:
         result["intent_hints"].append("upload_file")
+
+    if (
+        not result["is_negated"]
+        and not result["is_negation_intent"]
+        and not result["is_greeting"]
+        and not result["is_goodbye"]
+        and not result["is_help"]
+        and not result["is_confirmation"]
+        and len(msg) >= 2
+    ):
+        try:
+            from app.domain.shared_services.intent_semantic_router import (
+                route_intent,
+                semantic_override_max_priority,
+                semantic_override_threshold,
+            )
+
+            rule_priority = int(result.get("matched_priority") or 0)
+            rule_tool = result["tool_key"]
+            should_try = not rule_tool or rule_priority < semantic_override_max_priority()
+            semantic = route_intent(msg) if should_try else None
+            if semantic is not None:
+                if not rule_tool:
+                    result["primary_intent"] = semantic.intent_id
+                    result["tool_key"] = semantic.tool_key
+                    result["confidence"] = semantic.score
+                    result["intent_source"] = "semantic"
+                elif (
+                    semantic.tool_key != rule_tool
+                    and semantic.score >= semantic_override_threshold()
+                ):
+                    result["primary_intent"] = semantic.intent_id
+                    result["tool_key"] = semantic.tool_key
+                    result["confidence"] = semantic.score
+                    result["intent_source"] = "semantic_override"
+                if result["intent_source"].startswith("semantic"):
+                    if semantic.tool_key not in result["intent_hints"]:
+                        result["intent_hints"].append(semantic.tool_key)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("intent semantic fallback skipped: %s", exc)
 
     result["is_likely_unclear"] = (
         len(msg) <= 4
