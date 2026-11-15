@@ -231,40 +231,14 @@ describe('workflowEmployeeScope', () => {
     const stack = buildEnterpriseModStack(basePlan)
     const mods = [
       { id: 'coating-industry', workflow_employees: [] },
-      {
-        id: 'xcagi-core-workflow-employees',
-        workflow_employees: [
-          { id: 'label_print', label: '标签打印' },
-          { id: 'shipment_mgmt', label: '出货管理' },
-        ],
-      },
-      {
-        id: 'xcagi-office-employee-pack-bridge',
-        workflow_employees: [{ id: 'excel_generate', label: 'Excel 生成' }],
-      },
-      {
-        id: 'lan-gate-ai-employee',
-        workflow_employees: [{ id: 'lan_gate', label: '局域网网关' }],
-      },
+      { id: 'xcagi-core-workflow-employees', workflow_employees: [{ id: 'label_print', label: '标签打印' }, { id: 'shipment_mgmt', label: '出货管理' }] },
+      { id: 'xcagi-office-employee-pack-bridge', workflow_employees: [{ id: 'excel_generate', label: 'Excel 生成' }] },
+      { id: 'lan-gate-ai-employee', workflow_employees: [{ id: 'lan_gate', label: '局域网网关' }] },
     ]
-    const harvested = harvestOfficialCarrierEmployeesForStack(mods, stack, [
-      'xcagi-core-workflow-employees',
-      'xcagi-office-employee-pack-bridge',
-      'lan-gate-ai-employee',
-    ])
-    expect(harvested.map((entry) => entry.id).sort()).toEqual([
-      'excel_generate',
-      'label_print',
-      'lan_gate',
-      'shipment_mgmt',
-    ])
-    for (const entry of harvested) {
-      expect(entry.hostModId).toBe('coating-industry')
-      expect(workflowRegistryEntryBelongsToStack(entry, stack)).toBe(true)
-      expect(workflowHostVisibleOnPanorama(entry.hostModId, stack, ['coating-industry'])).toBe(true)
-    }
-    const filtered = filterWorkflowRegistryEntriesForEnterpriseStack(harvested, stack)
-    expect(filtered).toHaveLength(4)
+    const harvested = harvestOfficialCarrierEmployeesForStack(mods, stack, mods.slice(1).map((mod) => mod.id))
+    expect(harvested.map((entry) => entry.id).sort()).toEqual(['excel_generate', 'label_print', 'lan_gate', 'shipment_mgmt'])
+    expect(harvested.every((entry) => entry.hostModId === 'coating-industry' && workflowRegistryEntryBelongsToStack(entry, stack) && workflowHostVisibleOnPanorama(entry.hostModId, stack, ['coating-industry']))).toBe(true)
+    expect(filterWorkflowRegistryEntriesForEnterpriseStack(harvested, stack)).toHaveLength(4)
   })
 
 })

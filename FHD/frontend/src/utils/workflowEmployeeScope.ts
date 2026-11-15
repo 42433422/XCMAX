@@ -16,14 +16,7 @@ export function workflowRegistryEntryBelongsToStack(
 ): boolean {
   const host = String(entry.hostModId || '').trim()
   const carrier = String(entry.carrierModId || entry.hostModId || '').trim()
-  if (
-    host
-    && stack
-    && isCustomPhaseEmployeeCarrierModId(carrier)
-    && modBelongsToEnterpriseStack(host, stack)
-  ) {
-    return true
-  }
+  if (host && stack && isCustomPhaseEmployeeCarrierModId(carrier) && modBelongsToEnterpriseStack(host, stack)) return true
   if (!carrier || isCustomPhaseEmployeeCarrierModId(carrier)) return false
   if (stack) {
     return modBelongsToEnterpriseStack(carrier, stack)
@@ -31,7 +24,6 @@ export function workflowRegistryEntryBelongsToStack(
   return isWorkflowCarrierModId(carrier) || isHostBridgeModId(carrier)
 }
 
-/** 已安装的官方员工载体（核心编制 / 办公包 / 网关）挂到当前企业栈后进入四部门图谱。 */
 export function harvestOfficialCarrierEmployeesForStack(
   mods: ModWithWorkflowEmployees[] | undefined,
   stack: EnterpriseModStack | null,
@@ -44,25 +36,13 @@ export function harvestOfficialCarrierEmployeesForStack(
   for (const mod of mods || []) {
     const packId = String(mod.id || '').trim()
     if (!isCustomPhaseEmployeeCarrierModId(packId)) continue
-    if (entitled.size && !entitlementMatchesMod(packId, entitled) && !modBelongsToEnterpriseStack(packId, stack)) {
-      continue
-    }
-    const employees = Array.isArray(mod.workflow_employees) ? mod.workflow_employees : []
-    for (const item of employees) {
+    if (entitled.size && !entitlementMatchesMod(packId, entitled) && !modBelongsToEnterpriseStack(packId, stack)) continue
+    for (const item of Array.isArray(mod.workflow_employees) ? mod.workflow_employees : []) {
       const record = item && typeof item === 'object' ? item as { id?: string; label?: string; host_mod_id?: string; enterprise_mod_id?: string } : {}
       const id = String(record.id || '').trim()
       if (!id || harvested.some((entry) => entry.id === id)) continue
       const explicit = String(record.host_mod_id || record.enterprise_mod_id || '').trim()
-      const resolvedHost = explicit && modBelongsToEnterpriseStack(explicit, stack) ? explicit : host
-      harvested.push({
-        id,
-        label: String(record.label || '').trim() || id,
-        kind: 'mod_extension',
-        order: 100 + harvested.length,
-        source: 'mod_manifest',
-        carrierModId: packId,
-        hostModId: resolvedHost,
-      })
+      harvested.push({ id, label: String(record.label || '').trim() || id, kind: 'mod_extension', order: 100 + harvested.length, source: 'mod_manifest', carrierModId: packId, hostModId: explicit && modBelongsToEnterpriseStack(explicit, stack) ? explicit : host })
     }
   }
   return harvested
