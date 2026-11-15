@@ -163,3 +163,23 @@ def test_failed_replacement_never_invalidates_existing_fact():
     result = consolidate(store, user_id="alice", facts=[{"key": "budget", "value": "new"}])
     assert result[0]["action"] == "SKIPPED" and result[0]["reason"] == "add_unconfirmed"
     assert writes == []
+
+
+def test_mod_deletion_bounds_continuously_growing_pages_without_widening(service, monkeypatch):
+    backend, store = service
+    pages = []
+    monkeypatch.setattr(mod, "_MAX_MOD_DELETE_PAGES", 2, raising=False)
+
+    def growing_pages(*, filters, top_k=20, show_expired=False):
+        pages.append(filters)
+        if len(pages) > 3:
+            return {"results": []}
+        mid = f"incoming-{len(pages)}"
+        store.rows[mid] = row(mid)
+        return {"results": [store.rows[mid]]}
+
+    monkeypatch.setattr(store, "get_all", growing_pages)
+    assert backend.forget(user_id="alice", mod_id="sales") == 2
+    assert len(pages) == 2
+    assert store.mutations == [("delete", "incoming-1"), ("delete", "incoming-2")]
+    assert set(store.rows) == {"old", "new", "foreign", "other"}

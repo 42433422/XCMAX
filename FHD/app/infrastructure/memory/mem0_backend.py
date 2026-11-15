@@ -42,6 +42,7 @@ _ENV_CONSOLIDATION = "XCAGI_MEMORY_CONSOLIDATION"
 _BACKEND_VALUES = {"auto", "mem0", "legacy"}
 _DEFAULT_PROMPT_CHARS = 1800
 _DEFAULT_FACT_TTL_DAYS = 365
+_MAX_MOD_DELETE_PAGES = 1000
 _CONSOLIDATION_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="memory-facts")
 
 
@@ -506,7 +507,7 @@ class Mem0LongTermMemory:
             # No delete_all fallback may widen a Mod-scoped request to the whole user.
             deleted = 0
             seen: set[str] = set()
-            while True:
+            for _ in range(_MAX_MOD_DELETE_PAGES):
                 try:
                     if "filters" not in inspect.signature(memory.get_all).parameters:
                         return deleted
@@ -529,6 +530,8 @@ class Mem0LongTermMemory:
                     return deleted
                 seen.update(pending)
                 deleted += self._forget_ids(memory, user_id, pending, mod_id)
+            # Return the exact partial count; never widen an exhausted Mod request.
+            return deleted
         try:
             result = memory.delete_all(user_id=str(user_id))
         except RECOVERABLE_ERRORS as exc:
