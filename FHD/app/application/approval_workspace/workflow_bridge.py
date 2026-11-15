@@ -62,6 +62,17 @@ def _batch_absent(node: object, tenant_id: object) -> bool:
         return False
 
 
+def _unknown_tool_outcome(run: object) -> bool:
+    """有步骤以「结果未知」失败时，不能判定为确定失败。"""
+    for step in getattr(run, "steps", []) or []:
+        output = getattr(step, "output", None)
+        if not isinstance(output, dict):
+            continue
+        if output.get("outcome") == "unknown" or output.get("reconciliation_required") is True:
+            return True
+    return False
+
+
 class WorkflowApprovalBridge:
     def __init__(
         self,
@@ -344,7 +355,33 @@ class WorkflowApprovalBridge:
             return self.failure(request_id, AGENT_RUN_UNAVAILABLE_CODE, agent_run_id=run_id)
         if run.status == "waiting_user":
             return self._request_next_approval(request_id, workflow, run, approvals, approved)
+        if run.status in {"running", "queued", "pending"}:
+            # 执行仍在进行：审批已放行，不能把「还在跑」当成失败并取消审批。
+            return {
+                "success": False,
+                "workflow_executed": False,
+                "execution_accepted": True,
+                "approval_request_id": request_id,
+                "agent_run_id": run.run_id,
+                "message": "审批已通过，任务仍在执行中，结果以任务回执为准。",
+            }
         success = run.status == "completed"
+        if not success and _unknown_tool_outcome(run):
+            # 工具超时但结果未知：既不能判成功，也不能当成确定失败取消审批。
+            return {
+                "workflow_executed": False,
+                "approval_request_id": request_id,
+                "agent_run_id": run.run_id,
+                "approved_in_memory": approved,
+                "success": False,
+                "code": "outcome_unknown",
+                "plan_id": str(run.plan_id or ""),
+                "intent": str(run.intent or ""),
+                "message": "工具执行超时，业务结果尚未确认；请先核对原任务，不要重复提交。",
+                "nodes_executed": len([step for step in run.steps if step.status == "completed"]),
+                "nodes_total": len(run.steps),
+                "tool_call_ids": [call.call_id for call in run.tool_calls],
+            }
         code, message = canonical_workflow_outcome(
             success=success,
             code=WORKFLOW_EXECUTION_SUCCESS_CODE

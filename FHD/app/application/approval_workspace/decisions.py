@@ -406,6 +406,8 @@ class ApprovalDecisions:
             req = db.merge(req)
         status_before = req.status
         safe_code, safe_message = bounded_outcome["code"], bounded_outcome["message"]
+        # 工具超时但结果未知：审批放行有效，不能报「执行失败、审批已取消」。
+        uncertain = safe_code == "outcome_unknown" and not _execution_success
         if handed_off:
             waiting_approval = bool((workflow_execution or {}).get("waiting_approval"))
             handoff_message = (
@@ -436,7 +438,7 @@ class ApprovalDecisions:
         else:
             persist_outcome(req, **bounded_outcome)
             req.status = bounded_outcome["status"]
-        if _execution_success or handed_off:
+        if _execution_success or handed_off or uncertain:
             req.approved_at = datetime.now()
             req.approved_by = actor
             req.approved_by_name = approver_name
@@ -512,6 +514,16 @@ class ApprovalDecisions:
                     "accepted": True,
                     "data": data,
                     "message": handoff_message,
+                },
+                status_code=202,
+            )
+        if uncertain:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "accepted": True,
+                    "data": data,
+                    "message": bounded_outcome["message"],
                 },
                 status_code=202,
             )

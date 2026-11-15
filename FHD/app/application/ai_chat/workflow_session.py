@@ -660,11 +660,13 @@ class WorkflowSession:
         )
         message = messages[-1] if messages else ""
         run_id = str(getattr(agent_run, "run_id", "") or "")
-        text = (
-            f"自动审批已通过并执行完成。{message}"
-            if success
-            else f"自动审批未完成执行：{message or '请到任务中核对结果'}"
-        )
+        accepted = bool(result.get("accepted"))
+        if accepted:
+            text = f"审批已通过，执行已提交。{message}"
+        elif success:
+            text = f"自动审批已通过并执行完成。{message}"
+        else:
+            text = f"自动审批未完成执行：{message or '请到任务中核对结果'}"
         # 自动审批在同一轮返回，必须把节点产物（如生成的 Excel）与下载链接写回回复，
         # 否则用户只能看到「执行完成」，拿不到真实文件。
         if success and run_id:
