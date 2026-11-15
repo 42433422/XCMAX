@@ -13,6 +13,9 @@ develop-eggs/
 dist/
 # 语义意图 ONNX 模型由 scripts/dev/fetch_intent_model.py 生成，不入库（约 91MB）
 models/
+# app/db/models 是 ORM 模型源码目录（不是 ONNX 模型产物），必须可入库
+!app/db/models/
+!app/db/models/local_file.py
 downloads/
 eggs/
 .eggs/
