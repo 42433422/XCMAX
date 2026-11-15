@@ -4,7 +4,20 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    false,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.db_base import Base
@@ -95,11 +108,32 @@ class InventoryTransaction(TenantScopedMixin, Base):
             "COALESCE(delivered_quantity, 0) <= COALESCE(ordered_quantity, 0)",
             name="ck_inventory_transactions_delivered_not_exceed_ordered",
         ),
+        Index(
+            "uq_inventory_out_business_ref",
+            "tenant_id",
+            "product_id",
+            "transaction_type",
+            "reference_type",
+            "reference_id",
+            unique=True,
+            sqlite_where=text(
+                "document_posting IS TRUE AND transaction_type = 'out' AND reference_type IS NOT NULL "
+                "AND reference_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "document_posting IS TRUE AND transaction_type = 'out' AND reference_type IS NOT NULL "
+                "AND reference_id IS NOT NULL"
+            ),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ledger_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("inventory_ledger.id"))
     transaction_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Only new document-level postings claim this key; legacy/fulfillment rows remain valid.
+    document_posting: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
     location_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("storage_locations.id"))

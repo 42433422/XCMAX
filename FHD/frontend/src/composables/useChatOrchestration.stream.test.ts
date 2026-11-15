@@ -21,6 +21,7 @@ const {
   attachBusinessResultToLastAiMessage,
   attachAgentRunTraceToLastAiMessage,
   queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, getRun, continueRun, cancelRun, streamMode, modState,
+  approvalGetMyRequests, approvalApprove,
 } = vi.hoisted(() => ({
   handleChatRequiresToken: vi.fn(),
   applyPlainTextToMessageIndex: vi.fn(),
@@ -38,6 +39,7 @@ const {
   queueVoice: vi.fn(), addMessage: vi.fn(), addAndSaveMessage: vi.fn().mockResolvedValue(undefined), previewMeta: vi.fn(), searchProducts: vi.fn(), observeTool: vi.fn(),
   streamMode: { enabled: true, realShipment: false }, modState: { activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() },
   getRun: vi.fn(), continueRun: vi.fn(), cancelRun: vi.fn(),
+  approvalGetMyRequests: vi.fn(), approvalApprove: vi.fn(),
 }))
 
 vi.mock('./useChatMessages', async () => {
@@ -235,6 +237,9 @@ vi.mock('@/api/chat', () => ({
 vi.mock('@/api/shipment', () => ({ shipmentApi: { getProductMetaForPreview: previewMeta, fetchNextOrderNumber: vi.fn() } }))
 vi.mock('@/api/products', () => ({ default: { searchProducts } }))
 vi.mock('@/api/agentRuns', () => ({ default: { observeTool, getRun, continueRun, cancelRun } }))
+vi.mock('@/api/approval', () => ({
+  approvalApi: { getMyRequests: approvalGetMyRequests, approve: approvalApprove },
+}))
 vi.mock('@/utils/chatSseStream', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/chatSseStream')>()
   return {
@@ -655,6 +660,39 @@ describe('useChatOrchestration stream', () => {
       expect(test.first.status).toBe('confirmed')
       expect(test.second.status).toBe('pending')
     } finally { test.wrapper.unmount() }
+  })
+
+  it('falls back to plan confirmation when a plan-level card has no approval grant', async () => {
+    getRun.mockResolvedValue({ success: true, data: { run_id: 'run-A', status: 'waiting_user' } })
+    requestChatByModeWithTimeout.mockResolvedValue({ success: true, response: '完成', data: { action: 'workflow_done', data: { plan_id: 'plan-A' } } })
+    const test = approvalHost()
+    try {
+      await test.api.confirmWorkflowFromCard('card-A')
+      expect(getRun).toHaveBeenCalledWith('run-A')
+      expect(requestChatByModeWithTimeout).toHaveBeenCalledWith('确认', 90_000, { expectedWorkflowPlanId: 'plan-A' }, expect.objectContaining({ sessionId: 's' }))
+      expect(test.first.status).toBe('confirmed')
+    } finally { test.wrapper.unmount() }
+  })
+
+  it('auto mode approves the created workflow request after plan confirmation', async () => {
+    const { useApprovalMode } = await import('./useApprovalMode')
+    const mode = useApprovalMode()
+    mode.setEnabled(true)
+    mode.setMode('auto')
+    getRun.mockResolvedValue({ success: true, data: { run_id: 'run-A', status: 'waiting_user' } })
+    requestChatByModeWithTimeout.mockResolvedValue({ success: true, response: '已提交审批请求', data: { action: 'approval_pending', data: { plan_id: 'plan-A', approval_request_ids: ['req-1'] } } })
+    approvalGetMyRequests.mockResolvedValue({ success: true, data: { requests: [{ id: 41, request_no: 'req-1', status: 'pending', applicant_id: 1, business_type: 'workflow_tool' }] } })
+    approvalApprove.mockResolvedValue({ success: true, data: { id: 41, request_no: 'req-1', status: 'approved' } })
+    const test = approvalHost()
+    try {
+      await test.api.confirmWorkflowFromCard('card-A')
+      expect(approvalGetMyRequests).toHaveBeenCalledWith(1)
+      expect(approvalApprove).toHaveBeenCalledWith(41, 1, expect.stringContaining('自动审批模式'))
+    } finally {
+      mode.setEnabled(false)
+      mode.setMode('manual')
+      test.wrapper.unmount()
+    }
   })
 
   it('cancellation is bound to the clicked card and waits for cancelled status', async () => {

@@ -37,6 +37,72 @@ from app.fastapi_routes.im_routes import (
 from app.utils.operational_errors import BOUNDARY_ERRORS
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
+
+def _assert_shared_invoke_recoverable_error_500_0(
+    self, client, _shared_literal_0, _shared_literal_1
+):
+    with (
+        patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
+        patch("app.fastapi_routes.im_routes._is_admin_customer_service_session", return_value=True),
+        patch(_shared_literal_0) as mock_svc_cls,
+    ):
+        mock_db = MagicMock()
+        mock_db_cls.return_value = mock_db
+        mock_svc = MagicMock()
+        mock_svc.invoke.side_effect = RuntimeError("db error")
+        mock_svc_cls.return_value = mock_svc
+        resp = client.post(_shared_literal_1, json={"message": "hi"})
+    assert resp.status_code == 500
+
+
+def _assert_shared_invoke_value_error_400_1(
+    self, client, _shared_literal_0, _shared_literal_1, _shared_literal_2
+):
+    with (
+        patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
+        patch("app.fastapi_routes.im_routes._is_admin_customer_service_session", return_value=True),
+        patch(_shared_literal_0) as mock_svc_cls,
+    ):
+        mock_db = MagicMock()
+        mock_db_cls.return_value = mock_db
+        mock_svc = MagicMock()
+        mock_svc.invoke.side_effect = ValueError(_shared_literal_1)
+        mock_svc_cls.return_value = mock_svc
+        resp = client.post(_shared_literal_2, json={"message": "hi"})
+    assert resp.status_code == 400
+
+
+def _assert_shared_list_messages_recoverable_error_500_2(
+    self, client, _shared_literal_0, _shared_literal_1
+):
+    with (
+        patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
+        patch("app.fastapi_routes.im_routes._is_admin_customer_service_session", return_value=True),
+        patch(_shared_literal_0) as mock_svc_cls,
+    ):
+        mock_db = MagicMock()
+        mock_db_cls.return_value = mock_db
+        mock_svc = MagicMock()
+        mock_svc.list_messages.side_effect = RuntimeError("db error")
+        mock_svc_cls.return_value = mock_svc
+        resp = client.get(_shared_literal_1)
+    assert resp.status_code == 500
+
+
+def _assert_shared_account_kind_not_admin_returns_false_3(
+    self, _shared_literal_0, _shared_literal_1, _shared_literal_2
+):
+    request = MagicMock()
+    db = MagicMock()
+    row = MagicMock()
+    row.account_kind = _shared_literal_0
+    row.market_is_admin = _shared_literal_1
+    db.query.return_value.filter.return_value.first.return_value = row
+    with patch("app.infrastructure.auth.dependencies.session_id_from_request", return_value="sid"):
+        result = _is_admin_customer_service_session(request, db)
+    assert result is _shared_literal_2
+
+
 # ---------------------------------------------------------------------------
 # autouse fixture: reset schema state
 # ---------------------------------------------------------------------------
@@ -98,46 +164,15 @@ class TestIsAdminCustomerServiceSession:
         assert result is False
 
     def test_account_kind_not_admin_returns_false(self) -> None:
-        request = MagicMock()
-        db = MagicMock()
-        row = MagicMock()
-        row.account_kind = "enterprise"
-        row.market_is_admin = True
-        db.query.return_value.filter.return_value.first.return_value = row
-        with patch(
-            "app.infrastructure.auth.dependencies.session_id_from_request",
-            return_value="sid",
-        ):
-            result = _is_admin_customer_service_session(request, db)
-        assert result is False
+        return _assert_shared_account_kind_not_admin_returns_false_3(
+            self, "enterprise", True, False
+        )
 
     def test_market_is_admin_false_returns_false(self) -> None:
-        request = MagicMock()
-        db = MagicMock()
-        row = MagicMock()
-        row.account_kind = "admin"
-        row.market_is_admin = False
-        db.query.return_value.filter.return_value.first.return_value = row
-        with patch(
-            "app.infrastructure.auth.dependencies.session_id_from_request",
-            return_value="sid",
-        ):
-            result = _is_admin_customer_service_session(request, db)
-        assert result is False
+        return _assert_shared_account_kind_not_admin_returns_false_3(self, "admin", False, False)
 
     def test_account_kind_empty_string_returns_false(self) -> None:
-        request = MagicMock()
-        db = MagicMock()
-        row = MagicMock()
-        row.account_kind = ""
-        row.market_is_admin = True
-        db.query.return_value.filter.return_value.first.return_value = row
-        with patch(
-            "app.infrastructure.auth.dependencies.session_id_from_request",
-            return_value="sid",
-        ):
-            result = _is_admin_customer_service_session(request, db)
-        assert result is False
+        return _assert_shared_account_kind_not_admin_returns_false_3(self, "", True, False)
 
     def test_account_kind_none_returns_false(self) -> None:
         request = MagicMock()
@@ -154,18 +189,7 @@ class TestIsAdminCustomerServiceSession:
         assert result is False
 
     def test_all_conditions_met_returns_true(self) -> None:
-        request = MagicMock()
-        db = MagicMock()
-        row = MagicMock()
-        row.account_kind = "admin"
-        row.market_is_admin = True
-        db.query.return_value.filter.return_value.first.return_value = row
-        with patch(
-            "app.infrastructure.auth.dependencies.session_id_from_request",
-            return_value="sid",
-        ):
-            result = _is_admin_customer_service_session(request, db)
-        assert result is True
+        return _assert_shared_account_kind_not_admin_returns_false_3(self, "admin", True, True)
 
     def test_exception_returns_false(self) -> None:
         request = MagicMock()
@@ -981,21 +1005,12 @@ class TestClaudeSuperEmployeeRoutes:
         assert resp.status_code == 403
 
     def test_list_messages_recoverable_error_500(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=True,
-            ),
-            patch("app.fastapi_routes.im_routes.ClaudeSuperEmployeeService") as mock_svc_cls,
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            mock_svc = MagicMock()
-            mock_svc.list_messages.side_effect = RuntimeError("db error")
-            mock_svc_cls.return_value = mock_svc
-            resp = client.get("/api/admin/claude-super-employee/messages")
-        assert resp.status_code == 500
+        return _assert_shared_list_messages_recoverable_error_500_2(
+            self,
+            client,
+            "app.fastapi_routes.im_routes.ClaudeSuperEmployeeService",
+            "/api/admin/claude-super-employee/messages",
+        )
 
     def test_invoke_admin(self, client: TestClient) -> None:
         with (
@@ -1069,44 +1084,21 @@ class TestClaudeSuperEmployeeRoutes:
         )
 
     def test_invoke_value_error_400(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=True,
-            ),
-            patch("app.fastapi_routes.im_routes.ClaudeSuperEmployeeService") as mock_svc_cls,
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            mock_svc = MagicMock()
-            mock_svc.invoke.side_effect = ValueError("invalid input")
-            mock_svc_cls.return_value = mock_svc
-            resp = client.post(
-                "/api/admin/claude-super-employee/messages",
-                json={"message": "hi"},
-            )
-        assert resp.status_code == 400
+        return _assert_shared_invoke_value_error_400_1(
+            self,
+            client,
+            "app.fastapi_routes.im_routes.ClaudeSuperEmployeeService",
+            "invalid input",
+            "/api/admin/claude-super-employee/messages",
+        )
 
     def test_invoke_recoverable_error_500(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=True,
-            ),
-            patch("app.fastapi_routes.im_routes.ClaudeSuperEmployeeService") as mock_svc_cls,
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            mock_svc = MagicMock()
-            mock_svc.invoke.side_effect = RuntimeError("db error")
-            mock_svc_cls.return_value = mock_svc
-            resp = client.post(
-                "/api/admin/claude-super-employee/messages",
-                json={"message": "hi"},
-            )
-        assert resp.status_code == 500
+        return _assert_shared_invoke_recoverable_error_500_0(
+            self,
+            client,
+            "app.fastapi_routes.im_routes.ClaudeSuperEmployeeService",
+            "/api/admin/claude-super-employee/messages",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1166,61 +1158,29 @@ class TestCursorSuperEmployeeRoutes:
         assert resp.status_code == 200
 
     def test_invoke_value_error_400(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=True,
-            ),
-            patch("app.fastapi_routes.im_routes.CursorSuperEmployeeService") as mock_svc_cls,
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            mock_svc = MagicMock()
-            mock_svc.invoke.side_effect = ValueError("bad")
-            mock_svc_cls.return_value = mock_svc
-            resp = client.post(
-                "/api/admin/cursor-super-employee/messages",
-                json={"message": "hi"},
-            )
-        assert resp.status_code == 400
+        return _assert_shared_invoke_value_error_400_1(
+            self,
+            client,
+            "app.fastapi_routes.im_routes.CursorSuperEmployeeService",
+            "bad",
+            "/api/admin/cursor-super-employee/messages",
+        )
 
     def test_invoke_recoverable_error_500(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=True,
-            ),
-            patch("app.fastapi_routes.im_routes.CursorSuperEmployeeService") as mock_svc_cls,
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            mock_svc = MagicMock()
-            mock_svc.invoke.side_effect = RuntimeError("db error")
-            mock_svc_cls.return_value = mock_svc
-            resp = client.post(
-                "/api/admin/cursor-super-employee/messages",
-                json={"message": "hi"},
-            )
-        assert resp.status_code == 500
+        return _assert_shared_invoke_recoverable_error_500_0(
+            self,
+            client,
+            "app.fastapi_routes.im_routes.CursorSuperEmployeeService",
+            "/api/admin/cursor-super-employee/messages",
+        )
 
     def test_list_messages_recoverable_error_500(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=True,
-            ),
-            patch("app.fastapi_routes.im_routes.CursorSuperEmployeeService") as mock_svc_cls,
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            mock_svc = MagicMock()
-            mock_svc.list_messages.side_effect = RuntimeError("db error")
-            mock_svc_cls.return_value = mock_svc
-            resp = client.get("/api/admin/cursor-super-employee/messages")
-        assert resp.status_code == 500
+        return _assert_shared_list_messages_recoverable_error_500_2(
+            self,
+            client,
+            "app.fastapi_routes.im_routes.CursorSuperEmployeeService",
+            "/api/admin/cursor-super-employee/messages",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1255,61 +1215,29 @@ class TestCodexSuperEmployeeAdditional:
         )
 
     def test_invoke_value_error_400(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=True,
-            ),
-            patch("app.fastapi_routes.im_routes.CodexSuperEmployeeService") as mock_svc_cls,
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            mock_svc = MagicMock()
-            mock_svc.invoke.side_effect = ValueError("bad")
-            mock_svc_cls.return_value = mock_svc
-            resp = client.post(
-                "/api/admin/codex-super-employee/messages",
-                json={"message": "hi"},
-            )
-        assert resp.status_code == 400
+        return _assert_shared_invoke_value_error_400_1(
+            self,
+            client,
+            "app.fastapi_routes.im_routes.CodexSuperEmployeeService",
+            "bad",
+            "/api/admin/codex-super-employee/messages",
+        )
 
     def test_invoke_recoverable_error_500(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=True,
-            ),
-            patch("app.fastapi_routes.im_routes.CodexSuperEmployeeService") as mock_svc_cls,
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            mock_svc = MagicMock()
-            mock_svc.invoke.side_effect = RuntimeError("db error")
-            mock_svc_cls.return_value = mock_svc
-            resp = client.post(
-                "/api/admin/codex-super-employee/messages",
-                json={"message": "hi"},
-            )
-        assert resp.status_code == 500
+        return _assert_shared_invoke_recoverable_error_500_0(
+            self,
+            client,
+            "app.fastapi_routes.im_routes.CodexSuperEmployeeService",
+            "/api/admin/codex-super-employee/messages",
+        )
 
     def test_list_messages_recoverable_error_500(self, client: TestClient) -> None:
-        with (
-            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
-            patch(
-                "app.fastapi_routes.im_routes._is_admin_customer_service_session",
-                return_value=True,
-            ),
-            patch("app.fastapi_routes.im_routes.CodexSuperEmployeeService") as mock_svc_cls,
-        ):
-            mock_db = MagicMock()
-            mock_db_cls.return_value = mock_db
-            mock_svc = MagicMock()
-            mock_svc.list_messages.side_effect = RuntimeError("db error")
-            mock_svc_cls.return_value = mock_svc
-            resp = client.get("/api/admin/codex-super-employee/messages")
-        assert resp.status_code == 500
+        return _assert_shared_list_messages_recoverable_error_500_2(
+            self,
+            client,
+            "app.fastapi_routes.im_routes.CodexSuperEmployeeService",
+            "/api/admin/codex-super-employee/messages",
+        )
 
 
 # ---------------------------------------------------------------------------

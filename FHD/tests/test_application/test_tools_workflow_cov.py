@@ -14,6 +14,28 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
+
+def _assert_shared_json_string_args_parsed_0(self, _shared_literal_0):
+    with (
+        patch(
+            "app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False, create=True
+        ),
+        patch(
+            "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+            return_value=(None, None),
+            create=True,
+        ),
+        patch(
+            "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
+            return_value=None,
+            create=True,
+        ),
+    ):
+        result = self._call("excel_chart_recommend", _shared_literal_0)
+    data = json.loads(result)
+    assert "suggestions" in data
+
+
 # ---------------------------------------------------------------------------
 # _parse_excel_header_row_1based
 # ---------------------------------------------------------------------------
@@ -217,48 +239,10 @@ class TestExecuteWorkflowTool:
         return execute_workflow_tool(name, args, workspace_root, db_write_token=db_write_token)
 
     def test_json_string_args_parsed(self):
-        with (
-            patch(
-                "app.mod_sdk.employee_tool_registry.is_employee_tool",
-                return_value=False,
-                create=True,
-            ),
-            patch(
-                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
-                return_value=(None, None),
-                create=True,
-            ),
-            patch(
-                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
-                return_value=None,
-                create=True,
-            ),
-        ):
-            result = self._call("excel_chart_recommend", '{"file_path": "x.xlsx"}')
-        data = json.loads(result)
-        assert "suggestions" in data
+        return _assert_shared_json_string_args_parsed_0(self, '{"file_path": "x.xlsx"}')
 
     def test_malformed_json_string_defaults_to_empty(self):
-        with (
-            patch(
-                "app.mod_sdk.employee_tool_registry.is_employee_tool",
-                return_value=False,
-                create=True,
-            ),
-            patch(
-                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
-                return_value=(None, None),
-                create=True,
-            ),
-            patch(
-                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
-                return_value=None,
-                create=True,
-            ),
-        ):
-            result = self._call("excel_chart_recommend", "{not valid")
-        data = json.loads(result)
-        assert "suggestions" in data
+        return _assert_shared_json_string_args_parsed_0(self, "{not valid")
 
     def test_employee_tool_dispatched(self):
         with (

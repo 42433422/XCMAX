@@ -1,17 +1,17 @@
 import type { Page, Route } from '@playwright/test'
 
 /** Synthetic account only; no installed backend, customer account, or customer files. */
-export async function installStartupReadinessMocks(page: Page) {
+export async function installStartupReadinessMocks(page: Page, desktop = true) {
   const calls = new Map<string, number>()
   const handlers = new Map<string, (route: Route, call: number) => Promise<void>>()
   let userId = 1
   const profile = () => ({ account_kind: 'personal', local_user_id: userId,
     user: { id: userId, username: `startup-test-${userId}`, role: 'user' }, permissions: [] })
-  await page.addInitScript(() => {
-    Object.assign(window, { xcagiDesktop: {} })
+  await page.addInitScript(desktop => {
+    if (desktop) Object.assign(window, { xcagiDesktop: {} })
     localStorage.setItem('xcagi_product_flow_completed', '1')
     localStorage.setItem('xcagi_product_flow_host_ack', '1')
-  })
+  }, desktop)
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname
     // Vite also serves /src/api/*.ts; never replace source modules with JSON.

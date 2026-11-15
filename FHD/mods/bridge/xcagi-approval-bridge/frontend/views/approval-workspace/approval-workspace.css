@@ -3,7 +3,9 @@
 .approval-workspace-view {
   padding: 24px;
   background: #f5f7fa;
-  min-height: 100vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .view-header {

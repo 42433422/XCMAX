@@ -30,6 +30,22 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from starlette.testclient import TestClient
 
+
+def _assert_shared_activate_false_string_0(self, _shared_literal_0):
+    with patch.object(
+        _mod,
+        "_install_from_catalog",
+        AsyncMock(return_value=_mod.ModStoreInstallResult(success=True, message="ok")),
+    ) as mock_install:
+        with _make_client() as client:
+            resp = client.post(
+                "/install", json={"pkg_id": "m1", "version": "1.0", "activate": _shared_literal_0}
+            )
+    assert resp.status_code == 200
+    args, kwargs = mock_install.call_args
+    assert kwargs.get("activate") is False
+
+
 # ---------------------------------------------------------------------------
 # Module-level stubs: inject thin fake modules so the import chain works
 # even when heavy infrastructure is absent.
@@ -1111,48 +1127,15 @@ class TestInstallRouteActivateFlag:
 
     def test_activate_false_string(self):
         """Branch: activate='false' → activate=False."""
-        with patch.object(
-            _mod,
-            "_install_from_catalog",
-            AsyncMock(return_value=_mod.ModStoreInstallResult(success=True, message="ok")),
-        ) as mock_install:
-            with _make_client() as client:
-                resp = client.post(
-                    "/install", json={"pkg_id": "m1", "version": "1.0", "activate": "false"}
-                )
-        assert resp.status_code == 200
-        args, kwargs = mock_install.call_args
-        assert kwargs.get("activate") is False
+        return _assert_shared_activate_false_string_0(self, "false")
 
     def test_activate_zero_string(self):
         """Branch: activate='0' → activate=False."""
-        with patch.object(
-            _mod,
-            "_install_from_catalog",
-            AsyncMock(return_value=_mod.ModStoreInstallResult(success=True, message="ok")),
-        ) as mock_install:
-            with _make_client() as client:
-                resp = client.post(
-                    "/install", json={"pkg_id": "m1", "version": "1.0", "activate": "0"}
-                )
-        assert resp.status_code == 200
-        args, kwargs = mock_install.call_args
-        assert kwargs.get("activate") is False
+        return _assert_shared_activate_false_string_0(self, "0")
 
     def test_activate_no_string(self):
         """Branch: activate='no' → activate=False."""
-        with patch.object(
-            _mod,
-            "_install_from_catalog",
-            AsyncMock(return_value=_mod.ModStoreInstallResult(success=True, message="ok")),
-        ) as mock_install:
-            with _make_client() as client:
-                resp = client.post(
-                    "/install", json={"pkg_id": "m1", "version": "1.0", "activate": "no"}
-                )
-        assert resp.status_code == 200
-        args, kwargs = mock_install.call_args
-        assert kwargs.get("activate") is False
+        return _assert_shared_activate_false_string_0(self, "no")
 
     def test_activate_true_default(self):
         """Branch: activate not specified → default True."""

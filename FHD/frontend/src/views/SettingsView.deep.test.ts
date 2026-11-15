@@ -1,8 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import SettingsView from './SettingsView.vue'
+
+const knownSession = vi.hoisted(() => vi.fn(() => true))
+vi.mock('@/utils/authSessionCache', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/utils/authSessionCache')>(),
+  hasKnownEnterpriseSession: knownSession,
+}))
 
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, data: {} }) }),
@@ -24,18 +30,13 @@ vi.mock('@/stores/mods', async () => {
   return {
     useModsStore: () => {
       const mods = ref([])
-      const activeModId = ref('')
-      const clientModsUiOff = ref(false)
-      const loadError = ref('')
-      const isLoaded = ref(true)
-      const modRoutes = ref([])
       return {
         mods,
-        activeModId,
-        clientModsUiOff,
-        loadError,
-        isLoaded,
-        modRoutes,
+        activeModId: ref(''),
+        clientModsUiOff: ref(false),
+        loadError: ref(''),
+        isLoaded: ref(true),
+        modRoutes: ref([]),
         modsForUi: mods,
       }
     },
@@ -50,7 +51,10 @@ vi.mock('@/stores/accountProfile', () => ({
   }),
 }))
 
+enableAutoUnmount(afterEach)
+
 const globalStubs = {
+  MobilePairingQrCard: true, // Its request/timer lifecycle has its own component tests.
   RouterLink: true,
   ElButton: { template: '<button><slot /></button>' },
   ElInput: { template: '<input />' },
@@ -67,40 +71,47 @@ const globalStubs = {
   ElTag: { template: '<span><slot /></span>' },
 }
 
-const i18nMock = {
-  install(app: { config: { globalProperties: Record<string, unknown> } }) {
-    app.config.globalProperties.$t = (k: string) => k
-  },
-}
-
-function mountSettings() {
+async function mountSettings() {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/settings', component: SettingsView }],
   })
-  return router.push('/settings').then(() =>
-    router.isReady().then(() =>
-      mount(SettingsView, {
-        global: {
-          plugins: [router, i18nMock],
-          stubs: globalStubs,
-          mocks: { $t: (k: string) => k },
-        },
-      }),
-    ),
-  )
+  await router.push('/settings')
+  await router.isReady()
+  const wrapper = mount(SettingsView, {
+    global: { plugins: [router], stubs: globalStubs },
+  })
+  await flushPromises()
+  return wrapper
 }
 
 describe('SettingsView deep', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    knownSession.mockReturnValue(true)
+    // api/core uses fetch, not apiFetch. Resolve its reads before jsdom teardown
+    // instead of leaving real failed requests and retry timers behind.
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+      success: true, data: {}, preferences: { assistantName: 'Settings test', aiMode: 'online' },
+    }), { headers: { 'Content-Type': 'application/json' } })))
   })
+
+  afterEach(() => vi.unstubAllGlobals())
 
   it('mounts and renders settings content', async () => {
     const wrapper = await mountSettings()
     expect(wrapper.exists()).toBe(true)
     expect(wrapper.find('#view-settings').exists()).toBe(true)
+    expect(localStorage.getItem('assistantName')).toBe('Settings test')
+  })
+
+  it('does not fetch preferences before a known login', async () => {
+    knownSession.mockReturnValue(false)
+    await mountSettings()
+    const requests = vi.mocked(fetch).mock.calls.map(([url]) => String(url))
+    expect(requests.some((url) => url.includes('/api/preferences'))).toBe(false)
+    expect(localStorage.getItem('assistantName')).toBeNull()
   })
 
   it('contains settings profile section', async () => {

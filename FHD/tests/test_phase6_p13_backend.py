@@ -21,6 +21,27 @@ from __future__ import annotations
 
 import os
 
+
+def _assert_shared_llm_empty_content_returns_none_0(self, _shared_literal_0):
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"choices": [{"message": {"content": _shared_literal_0}}]}
+    with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
+        mock_svc = Mock()
+        mock_svc.api_key = "key"
+        mock_svc.api_url = "http://fake"
+        mock_svc.model = "m"
+        mock_svc.get_context.return_value = None
+        mock_get.return_value = mock_svc
+        planner = LLMWorkflowPlanner()
+        with patch(
+            "app.application.workflow.planner.request_planner_completion",
+            return_value=mock_response.json() if mock_response.status_code < 400 else None,
+        ):
+            result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
+            assert result is None
+
+
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
 import json
@@ -820,42 +841,10 @@ class TestLLMWorkflowPlannerPlanWithLLM:
                 assert result is None
 
     def test_llm_empty_content_returns_none(self) -> None:
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"choices": [{"message": {"content": ""}}]}
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
-            mock_svc = Mock()
-            mock_svc.api_key = "key"
-            mock_svc.api_url = "http://fake"
-            mock_svc.model = "m"
-            mock_svc.get_context.return_value = None
-            mock_get.return_value = mock_svc
-            planner = LLMWorkflowPlanner()
-            with patch(
-                "app.application.workflow.planner.request_planner_completion",
-                return_value=mock_response.json() if mock_response.status_code < 400 else None,
-            ):
-                result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
-                assert result is None
+        return _assert_shared_llm_empty_content_returns_none_0(self, "")
 
     def test_llm_invalid_json_returns_none(self) -> None:
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"choices": [{"message": {"content": "not json{"}}]}
-        with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
-            mock_svc = Mock()
-            mock_svc.api_key = "key"
-            mock_svc.api_url = "http://fake"
-            mock_svc.model = "m"
-            mock_svc.get_context.return_value = None
-            mock_get.return_value = mock_svc
-            planner = LLMWorkflowPlanner()
-            with patch(
-                "app.application.workflow.planner.request_planner_completion",
-                return_value=mock_response.json() if mock_response.status_code < 400 else None,
-            ):
-                result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
-                assert result is None
+        return _assert_shared_llm_empty_content_returns_none_0(self, "not json{")
 
     def test_llm_valid_plan(self) -> None:
         mock_response = Mock()

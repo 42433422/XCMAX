@@ -435,7 +435,7 @@ domains:
     owner: release
     enabled: true
     # 发布候选制品与必跑范围。BLOCKED 和 NOT RUN 不能记成通过。
-    ssot: FHD/scripts/dev/check_release_scope_evidence.py
+    ssot: FHD/config/release_scope_evidence.json
     derived: []
     mode: lint
     check: python scripts/dev/check_release_scope_evidence.py --self-check
