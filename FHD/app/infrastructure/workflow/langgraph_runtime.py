@@ -103,7 +103,16 @@ class _ReadersWriterGate:
 
     @staticmethod
     def is_reader(node: WorkflowNode) -> bool:
-        return bool(node.idempotent) and node.risk == "low"
+        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+        spec = get_tool_action_spec(node.tool_id, node.action)
+        return (
+            node.idempotent is True
+            and node.risk == "low"
+            and spec is not None
+            and spec.idempotent is True
+            and spec.risk == "low"
+        )
 
     def _is_exclusive(self, node: WorkflowNode) -> bool:
         if not self._parallel:
