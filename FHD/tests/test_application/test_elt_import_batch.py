@@ -67,6 +67,29 @@ def test_split_run_ids_accepts_separators():
     assert tools_workflow_elt._split_run_ids("") == []
 
 
+def test_reference_resolution_feeds_array_validation(monkeypatch):
+    """规划把 {{preview.data.run_id}} 写进 run_ids 时，解析后能通过类型校验。"""
+    from app.application.agent_orchestrator.param_references import resolve_references
+    from app.application.agent_orchestrator.tool_spec import validate_schema_object
+
+    monkeypatch.setattr(
+        tools_workflow_elt,
+        "_preview",
+        lambda params, _context: {"success": True, "data": {"run_id": f"r-{params['file_path']}"}},
+    )
+    out = tools_workflow_elt._preview_batch(["a.xlsx", "b.xlsx"], {}, {})
+    problems: list[str] = []
+    params = resolve_references({"run_ids": "{{preview.data.run_id}}"}, {"preview": out}, problems)
+    assert problems == []
+    schema = {
+        "type": "object",
+        "properties": {"run_ids": {"type": "array", "items": {"type": "string"}}},
+    }
+    ok, message = validate_schema_object(schema, params)
+    assert ok, message
+    assert params["run_ids"] == ["r-a.xlsx", "r-b.xlsx"]
+
+
 def test_preview_batch_caps_at_twenty(monkeypatch):
     monkeypatch.setattr(
         tools_workflow_elt, "_preview", lambda params, _context: {"success": True}
