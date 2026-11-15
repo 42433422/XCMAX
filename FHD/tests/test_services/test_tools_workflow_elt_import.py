@@ -175,6 +175,73 @@ def test_preview_keeps_explicit_paths_when_user_names_file():
     assert captured == [["温总.xlsx"]]
 
 
+def test_batch_progress_notes_include_file_name_and_counts():
+    from app.domain.shared_services import tools_workflow_elt as elt
+
+    notes: list[str] = []
+    with patch(
+        "app.infrastructure.chat_stream_lifetime.publish_stream_note",
+        side_effect=notes.append,
+    ):
+        elt._batch_progress_note("预演", 2, 5, "客户清单.xlsx")
+        elt._batch_result_note(
+            "预演",
+            "客户清单.xlsx",
+            {
+                "success": True,
+                "data": {
+                    "total_rows": 10,
+                    "new_rows": 8,
+                    "update_rows": 1,
+                    "skip_rows": 1,
+                    "error_rows": 0,
+                },
+            },
+        )
+        elt._batch_result_note("预演", "坏文件.xlsx", {"success": False, "message": "无法解析"})
+    assert notes[0] == "正在预演 2/5：客户清单.xlsx"
+    assert "「客户清单.xlsx」预演完成" in notes[1]
+    assert "新增 8" in notes[1]
+    assert notes[2] == "「坏文件.xlsx」预演失败：无法解析"
+
+
+def test_preview_batch_publishes_progress_and_result_per_file():
+    from app.domain.shared_services import tools_workflow_elt as elt
+
+    notes: list[str] = []
+
+    def fake_preview(params, _context):
+        if params["file_path"] == "a.xlsx":
+            return {
+                "success": True,
+                "data": {
+                    "run_id": "run-a",
+                    "total_rows": 2,
+                    "new_rows": 2,
+                    "update_rows": 0,
+                    "skip_rows": 0,
+                    "error_rows": 0,
+                },
+            }
+        return {"success": False, "message": "无法解析"}
+
+    with (
+        patch.object(elt, "_preview", side_effect=fake_preview),
+        patch.object(elt, "_upload_label", side_effect=lambda path, _ctx: path),
+        patch(
+            "app.infrastructure.chat_stream_lifetime.publish_stream_note",
+            side_effect=notes.append,
+        ),
+    ):
+        result = elt._preview_batch(["a.xlsx", "b.xlsx"], {}, {})
+    assert notes[0] == "正在预演 1/2：a.xlsx"
+    assert notes[1].startswith("「a.xlsx」预演完成")
+    assert notes[2] == "正在预演 2/2：b.xlsx"
+    assert notes[3] == "「b.xlsx」预演失败：无法解析"
+    assert result["run_ids"] == ["run-a"]
+    assert result["results"][0]["file_name"] == "a.xlsx"
+
+
 def test_preview_accept_suggested_unblocks_low_confidence_mappings():
     service = MagicMock()
     service.create_preview.return_value = {"id": "run-1"}

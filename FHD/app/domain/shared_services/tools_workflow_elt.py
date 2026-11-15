@@ -75,6 +75,7 @@ def _owned_upload(file_path: str, context: dict[str, Any]) -> dict[str, str]:
             "id": str(row.id),
             "storage_path": str(row.storage_path or ""),
             "suffix": str(row.suffix or ""),
+            "file_name": str(row.file_name or ""),
         }
 
 
@@ -102,6 +103,60 @@ def _recent_upload_ids(runtime_context: dict[str, Any]) -> list[str]:
     except RECOVERABLE_ERRORS:
         return []
     return [str(row[0]) for row in rows]
+
+
+def _publish_note(text: str) -> None:
+    """把逐文件进度推给对话流；没有流式上下文时静默忽略。"""
+    from app.infrastructure.chat_stream_lifetime import publish_stream_note
+
+    publish_stream_note(text)
+
+
+def _upload_label(path: str, runtime_context: dict[str, Any]) -> str:
+    """批次进度里用的可读文件名；查不到时退回路径名。"""
+    try:
+        name = str(_owned_upload(path, runtime_context).get("file_name") or "").strip()
+    except RECOVERABLE_ERRORS:
+        name = ""
+    return name or Path(str(path)).name or str(path)
+
+
+def _run_label(run_id: str, runtime_context: dict[str, Any]) -> str:
+    """执行阶段按预演编号反查文件名，用于逐文件进度提示。"""
+    from app.db.models.elt import EltRun, EltUpload
+
+    try:
+        actor = _bound_actor(runtime_context)
+        with get_db() as db:
+            row = (
+                db.query(EltUpload.file_name)
+                .join(EltRun, EltRun.upload_id == EltUpload.id)
+                .filter(EltRun.id == run_id, EltRun.owner_user_id == actor.id)
+                .first()
+            )
+    except RECOVERABLE_ERRORS:
+        return run_id
+    name = str(row[0]) if row else ""
+    return name or run_id
+
+
+def _batch_progress_note(action: str, index: int, total: int, label: str) -> None:
+    _publish_note(f"正在{action} {index}/{total}：{label}")
+
+
+def _batch_result_note(action: str, label: str, out: dict[str, Any]) -> None:
+    data = out.get("data") if isinstance(out.get("data"), dict) else {}
+    if out.get("success"):
+        if action == "预演":
+            _publish_note(
+                f"「{label}」预演完成：共 {data.get('total_rows', 0)} 行，"
+                f"新增 {data.get('new_rows', 0)}、更新 {data.get('update_rows', 0)}、"
+                f"跳过 {data.get('skip_rows', 0)}、错误 {data.get('error_rows', 0)}"
+            )
+        else:
+            _publish_note(f"「{label}」导入完成：写入 {data.get('executed_rows', 0)} 行")
+    else:
+        _publish_note(f"「{label}」{action}失败：{out.get('message') or '未知原因'}")
 
 
 def _wait(service, run_id: str, owner_id: int, *, pending: set[str], timeout: float) -> dict:
@@ -1054,12 +1109,16 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
     targets = paths[:_MAX_BATCH_IMPORTS]
     base = _single_params(payload)
     items: list[dict] = []
-    for path in targets:
+    total = len(targets)
+    for index, path in enumerate(targets, start=1):
+        label = _upload_label(path, runtime_context)
+        _batch_progress_note("预演", index, total, label)
         try:
             out = _preview({**base, "file_path": path}, runtime_context)
         except PermissionError as err:
             out = {"success": False, "error_code": "spreadsheet_access_denied", "message": str(err)}
-        items.append({"file_path": path, **out})
+        _batch_result_note("预演", label, out)
+        items.append({"file_path": path, "file_name": label, **out})
     ready = [item for item in items if item.get("success")]
     needs_decision = [item for item in items if item.get("requires_user_decision")]
     run_ids = [
@@ -1122,9 +1181,13 @@ def _execute_batch(run_ids: list[str], payload: dict, runtime_context: dict) -> 
     targets = run_ids[:_MAX_BATCH_IMPORTS]
     base = _single_params(payload)
     items: list[dict] = []
-    for run_id in targets:
+    total = len(targets)
+    for index, run_id in enumerate(targets, start=1):
+        label = _run_label(run_id, runtime_context)
+        _batch_progress_note("导入", index, total, label)
         out = _execute({**base, "run_id": run_id}, runtime_context)
-        items.append({"run_id": run_id, **out})
+        _batch_result_note("导入", label, out)
+        items.append({"run_id": run_id, "file_name": label, **out})
     done = [item for item in items if item.get("success")]
     message = f"批量导入：{len(items)} 个预演，完成 {len(done)}，失败 {len(items) - len(done)}"
     if len(run_ids) > len(targets):
