@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from collections.abc import Callable
 from typing import Any, cast
 
 import httpx
 
+from app.infrastructure.observability.metrics import observe_plan_generation
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -201,11 +203,19 @@ class LLMWorkflowPlanner:
         # synthesize an executable replacement when the model output is missing.
         from app.infrastructure.modstore_transport import MarketModelError
 
+        started = time.perf_counter()
         try:
             planned = self._plan_with_llm(plan_id, user_id, message, registry_for_plan, context)
         except MarketModelError as exc:
             context["planning_failure_reason"] = str(exc)
             planned = None
+            observe_plan_generation(
+                outcome="failure", duration_ms=(time.perf_counter() - started) * 1000
+            )
+        else:
+            observe_plan_generation(
+                outcome="success", duration_ms=(time.perf_counter() - started) * 1000
+            )
         # 统一 Agent Runtime 接缝：把 pre-plan 记忆召回落上计划元数据，
         # 供编排器转成 run.memory_references（主链路可观测闭合）。
         recall_meta = {

@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ from app.infrastructure.memory.memory_units import (
     iso_at,
     rank_hits,
 )
+from app.infrastructure.observability.metrics import observe_memory_recall
 from app.utils.deployment import env_float as _env_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -274,6 +276,7 @@ class Mem0LongTermMemory:
         if memory is None or not user_id or not text:
             return []
         top_k = max(1, min(20, int(limit)))
+        started = time.perf_counter()
         # 多取候选再重排，给词法与时效留出调整空间。
         rows = self._search_rows(
             memory, text, user_id=user_id, limit=min(20, top_k * 3), threshold=self._min_score
@@ -298,7 +301,12 @@ class Mem0LongTermMemory:
                     },
                 }
             )
-        return rank_hits(hits, query=text, limit=top_k)
+        ranked = rank_hits(hits, query=text, limit=top_k)
+        observe_memory_recall(
+            outcome="hit" if ranked else "empty",
+            duration_ms=(time.perf_counter() - started) * 1000,
+        )
+        return ranked
 
     # ---------------- 事实合并（冷路径） ----------------
     def _search_rows(

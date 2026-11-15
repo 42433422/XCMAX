@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from app.infrastructure.memory.memory_units import is_active, normalize_value, today_iso
+from app.infrastructure.observability.metrics import observe_memory_consolidation
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -98,6 +99,8 @@ def consolidate(
             except RECOVERABLE_ERRORS:
                 record["supersede_failed"] = True
         results.append(record)
+    for record in results:
+        observe_memory_consolidation(str(record.get("action") or "SKIPPED"))
     return results
 
 
