@@ -11,6 +11,7 @@ from app.domain.task_lifecycle.results import (
     execution_result_states,
     execution_result_wait_reason,
 )
+from app.utils import scalars as _scalars
 
 from .run_models import RunStatus
 
@@ -125,20 +126,6 @@ def _iter_payload_dicts(payload: dict[str, Any], *, max_depth: int = 3) -> Itera
                 stack.append((nested, depth + 1))
 
 
-def _coerce_trace_int(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _coerce_trace_float(value: Any) -> float:
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        return 0.0
-
-
 def _attach_run_id(payload: dict[str, Any], run_id: str) -> dict[str, Any]:
     payload["run_id"] = run_id
     payload["agent_run_id"] = run_id
@@ -149,3 +136,8 @@ def _attach_run_id(payload: dict[str, Any], run_id: str) -> dict[str, Any]:
     else:
         payload["data"] = {"run_id": run_id, "agent_run_id": run_id}
     return payload
+
+
+_coerce_trace_int = _scalars.coerce_int
+
+_coerce_trace_float = _scalars.coerce_float

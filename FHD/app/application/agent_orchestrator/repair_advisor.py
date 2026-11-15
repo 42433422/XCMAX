@@ -16,6 +16,8 @@ from app.infrastructure.llm.providers.credentials import (
     resolve_default_openai_provider,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.scalars import coerce_float as _coerce_float
+from app.utils.scalars import coerce_int as _coerce_int
 
 
 def is_llm_repair_enabled(
@@ -291,17 +293,3 @@ def _coerce_positive_int(value: Any) -> int:
     except (TypeError, ValueError):
         return 0
     return max(parsed, 0)
-
-
-def _coerce_int(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _coerce_float(value: Any) -> float:
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        return 0.0

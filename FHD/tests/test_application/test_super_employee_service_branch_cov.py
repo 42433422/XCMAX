@@ -51,6 +51,8 @@ from app.application.super_employee_service import (
     _utc_now,
 )
 from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY, CapabilityGrant, ExecutionScope
+from tests.pure_builders import error_runner as _error_runner
+from tests.pure_builders import super_employee_request as _make_request
 
 # ─────────────────────────── helpers ────────────────────────────
 
@@ -67,13 +69,6 @@ def _null_runner(cmd, **kw):
 def _stdout_runner(stdout: str, returncode: int = 0):
     def _run(cmd, **kw):
         return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr="")
-
-    return _run
-
-
-def _error_runner(exc):
-    def _run(cmd, **kw):
-        raise exc
 
     return _run
 
@@ -114,27 +109,6 @@ def _mock_http_client(
     elif request_resp is not None:
         client.request.return_value = request_resp
     return client
-
-
-def _make_request(request_id: str = "req-1", **overrides) -> dict:
-    base = {
-        "request_id": request_id,
-        "created_at": "2026-01-01T00:00:00+00:00",
-        "source": "xcagi_admin_im",
-        "employee_id": "codex-super-employee",
-        "employee_name": "超级员工-Codex",
-        "mode": "code",
-        "device_scope": "all_devices",
-        "target_devices": ["all"],
-        "user_id": 1,
-        "title": "test task",
-        "task": "test task",
-        "prompt": "test task",
-        "workspace_root": "",
-        "raw_context": {},
-    }
-    base.update(overrides)
-    return base
 
 
 def _run_agen(agen):

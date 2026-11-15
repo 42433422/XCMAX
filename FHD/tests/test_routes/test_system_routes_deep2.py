@@ -36,25 +36,7 @@ from app.fastapi_routes.system_routes import (
     get_workflow_employee_catalog,
     router,
 )
-
-
-def _make_profile(
-    *,
-    name: str = "涂料",
-    units: dict | None = None,
-    quantity_fields: dict | None = None,
-    product_fields: dict | None = None,
-    order_types: dict | None = None,
-    print_config: dict | None = None,
-) -> SimpleNamespace:
-    return SimpleNamespace(
-        name=name,
-        units=units or {"桶": {"abbr": "t"}},
-        quantity_fields=quantity_fields or {"primary_field": "tins"},
-        product_fields=product_fields or {"name": "name"},
-        order_types=order_types or {"shipment": "发货单"},
-        print_config=print_config or {"template": "default"},
-    )
+from tests.pure_builders import tenant_profile as _make_profile
 
 
 @pytest.fixture
