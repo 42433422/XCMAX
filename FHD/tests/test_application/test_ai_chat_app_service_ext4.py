@@ -166,7 +166,7 @@ class TestResolveUnitPriceColumn:
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def _model_plan(payload, message="查询产品", source="normal"):
+def _model_plan(payload, message="查询产品", source="normal", *, expected_model_calls=1):
     import json
 
     from app.application.workflow.planner import LLMWorkflowPlanner
@@ -177,7 +177,13 @@ def _model_plan(payload, message="查询产品", source="normal"):
         ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
     )
     plan = planner.plan("test", message, get_workflow_tool_registry(), {"source": source})
-    completion.assert_called_once()
+    if expected_model_calls == 1:
+        completion.assert_called_once()
+    else:
+        assert completion.call_count == expected_model_calls
+        for attempt in completion.call_args_list[1:]:
+            assert attempt.kwargs["temperature"] == 0.0
+            assert attempt.kwargs["max_tokens"] == 1200
     return plan
 
 
@@ -232,9 +238,12 @@ def test_model_structured_tools_use_same_registered_plan_for_every_source(
         ("shipment_orders", "generate", {"unit_name": "公司A"}),
     ],
 )
-def test_unknown_or_incomplete_business_plan_cannot_dispatch(tool, action, params):
+def test_unknown_or_incomplete_business_plan_cannot_dispatch(monkeypatch, tool, action, params):
+    monkeypatch.setenv("XCAGI_PLAN_REPAIR_MAX", "2")
+    unauthorized = tool == "unknown_tool" or action == "unknown_action"
     plan = _model_plan(
-        {"intent": "业务", "nodes": [{"tool_id": tool, "action": action, "params": params}]}
+        {"intent": "业务", "nodes": [{"tool_id": tool, "action": action, "params": params}]},
+        expected_model_calls=3 if unauthorized else 1,
     )
     if tool == "unknown_tool" or action == "unknown_action":
         assert plan.metadata.get("planning_rejected") is True
@@ -294,3 +303,25 @@ def test_current_business_queries_read_real_rows_and_require_permission(
     rejected = AgentToolExecutor().execute(step, runtime_context=denied.context)
     assert rejected["success"] is False
     assert rejected["error_code"] == "tool_permission_denied"
+
+
+@pytest.mark.parametrize("repair_limit,expected_calls", [(0, 1), (1, 2), (2, 3), (3, 4), (99, 4)])
+@pytest.mark.parametrize(
+    "tool,action", [("unknown_tool", "execute"), ("products", "unknown_action")]
+)
+def test_persistent_unauthorized_plan_repair_is_bounded_and_never_dispatches(
+    monkeypatch, repair_limit, expected_calls, tool, action
+):
+    from app.application.tools.workflow_tools import dispatch as tools_workflow
+
+    monkeypatch.setenv("XCAGI_PLAN_REPAIR_MAX", str(repair_limit))
+    dispatch = Mock(side_effect=AssertionError("Invalid plans must never execute business tools"))
+    monkeypatch.setattr(tools_workflow, "execute_registered_workflow_tool", dispatch)
+    plan = _model_plan(
+        {"intent": "业务", "nodes": [{"tool_id": tool, "action": action, "params": {}}]},
+        expected_model_calls=expected_calls,
+    )
+    assert plan.metadata["planning_rejected"] is True
+    assert plan.nodes
+    assert all((node.tool_id, node.action) == ("clarify", "ask") for node in plan.nodes)
+    dispatch.assert_not_called()
