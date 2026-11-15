@@ -1,0 +1,4 @@
+{
+  "required_scopes": ["windows-installer", "macos-installer", "upgrade-rollback"],
+  "blocked_statuses": ["BLOCKED", "NOT RUN", "FAIL"]
+}

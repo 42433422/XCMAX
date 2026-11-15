@@ -375,3 +375,78 @@ class TestResolveActor:
         with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None):
             result = _resolve_actor(mock_request)
         assert result is None
+
+
+def test_other_tenant_cannot_change_a_persisted_approval(tmp_path):
+    from contextlib import contextmanager
+
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application import approval_workspace_app_service as service
+    from app.db.db_base import Base
+    from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRequest
+    from app.db.models.user import User
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'approvals.db'}")
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine)
+    try:
+        with sessions() as db:
+            db.add(User(id=41, username="reviewer", password="test", tenant_id=7, is_active=True))
+            db.add(ApprovalFlow(id=1, flow_key="tenant-gate", flow_name="Tenant gate"))
+            db.commit()
+            db.add(
+                ApprovalFlowNode(
+                    id=1,
+                    flow_id=1,
+                    node_name="Review",
+                    node_order=1,
+                    approver_type="user",
+                    approver_ids="[41]",
+                )
+            )
+            for request_id, tenant_id in ((7, 7), (8, 8)):
+                db.add(
+                    ApprovalRequest(
+                        id=request_id,
+                        tenant_id=tenant_id,
+                        request_no=f"APR-tenant-{tenant_id}",
+                        flow_id=1,
+                        business_type="manual",
+                        business_data="{}",
+                        applicant_id=41,
+                        title=f"tenant {tenant_id}",
+                        status="pending",
+                        current_node_id=1,
+                        current_node_order=1,
+                    )
+                )
+            db.commit()
+
+        @contextmanager
+        def database_context():
+            with sessions() as db:
+                yield db
+
+        with (
+            patch.object(service, "get_db", side_effect=database_context),
+            patch.object(service, "_resolve_actor", return_value=41),
+            patch.object(service, "notify_mobile_user"),
+        ):
+            with tenant_scope(7):
+                denied = service.approve_request(8, Mock(), body={"opinion": "跨租户"})
+            assert getattr(denied, "status_code", None) == 404
+            with sessions() as db:
+                statuses = dict(db.execute(text("select id, status from approval_requests")).all())
+            assert statuses == {7: "pending", 8: "pending"}
+            with tenant_scope(7):
+                allowed = service.approve_request(7, Mock(), body={"opinion": "本租户"})
+            assert allowed["success"] is True
+            with sessions() as db:
+                statuses = dict(db.execute(text("select id, status from approval_requests")).all())
+            assert statuses[8] == "pending"
+            assert statuses[7] == "approved"
+    finally:
+        engine.dispose()
