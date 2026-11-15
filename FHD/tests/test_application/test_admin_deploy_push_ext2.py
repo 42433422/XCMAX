@@ -34,6 +34,42 @@ from app.domain.app_pure.admin_deploy_push import (
 )
 
 
+async def _assert_shared_execute_success_0(
+    self, monkeypatch, _case_value_0, _case_value_1, _case_value_2
+):
+    monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
+    monkeypatch.setattr(adp, "_JOBS", {})
+    opts = {
+        "include_backend": True,
+        "include_frontend": _case_value_0,
+        "skip_pack": _case_value_1,
+        "channel": "stable",
+    }
+    job = DeployJob(job_id=_case_value_2, options=opts, steps=_build_steps(opts))
+
+    async def fake_run_step(job, step, cmd, *, cwd=None, env=None):
+        step.status = "done"
+        step.started_at = time.time()
+        step.finished_at = time.time()
+
+    with (
+        patch("app.domain.app_pure.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+        patch(
+            "app.domain.app_pure.admin_deploy_push.check_deploy_updates",
+            return_value={
+                "admin_local": {"git_sha": "abc123"},
+                "update_hub": {"git_sha": "abc123"},
+            },
+        ),
+        patch(
+            "app.domain.app_pure.admin_deploy_push._run_shell_step",
+            new=AsyncMock(side_effect=fake_run_step),
+        ),
+    ):
+        await _execute_deploy_job(job)
+    assert job.status == "done"
+
+
 def _consume_scheduled_coroutine(coro):
     coro.close()
     return Mock()
@@ -387,42 +423,7 @@ class TestRunShellStepExtended:
 class TestExecuteDeployJobExtended:
     async def test_execute_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Reset state
-        monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
-        monkeypatch.setattr(adp, "_JOBS", {})
-
-        opts = {
-            "include_backend": True,
-            "include_frontend": True,
-            "skip_pack": False,
-            "channel": "stable",
-        }
-        job = DeployJob(
-            job_id="exec1",
-            options=opts,
-            steps=_build_steps(opts),
-        )
-
-        async def fake_run_step(job, step, cmd, *, cwd=None, env=None):
-            step.status = "done"
-            step.started_at = time.time()
-            step.finished_at = time.time()
-
-        with (
-            patch("app.domain.app_pure.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
-            patch(
-                "app.domain.app_pure.admin_deploy_push.check_deploy_updates",
-                return_value={
-                    "admin_local": {"git_sha": "abc123"},
-                    "update_hub": {"git_sha": "abc123"},
-                },
-            ),
-            patch(
-                "app.domain.app_pure.admin_deploy_push._run_shell_step",
-                new=AsyncMock(side_effect=fake_run_step),
-            ),
-        ):
-            await _execute_deploy_job(job)
-        assert job.status == "done"
+        return await _assert_shared_execute_success_0(self, monkeypatch, True, False, "exec1")
 
     async def test_execute_with_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
@@ -472,42 +473,7 @@ class TestExecuteDeployJobExtended:
         assert "pack failed" in job.error
 
     async def test_execute_skip_pack(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
-        monkeypatch.setattr(adp, "_JOBS", {})
-
-        opts = {
-            "include_backend": True,
-            "include_frontend": False,
-            "skip_pack": True,
-            "channel": "stable",
-        }
-        job = DeployJob(
-            job_id="exec3",
-            options=opts,
-            steps=_build_steps(opts),
-        )
-
-        async def fake_run_step(job, step, cmd, *, cwd=None, env=None):
-            step.status = "done"
-            step.started_at = time.time()
-            step.finished_at = time.time()
-
-        with (
-            patch("app.domain.app_pure.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
-            patch(
-                "app.domain.app_pure.admin_deploy_push.check_deploy_updates",
-                return_value={
-                    "admin_local": {"git_sha": "abc123"},
-                    "update_hub": {"git_sha": "abc123"},
-                },
-            ),
-            patch(
-                "app.domain.app_pure.admin_deploy_push._run_shell_step",
-                new=AsyncMock(side_effect=fake_run_step),
-            ),
-        ):
-            await _execute_deploy_job(job)
-        assert job.status == "done"
+        return await _assert_shared_execute_success_0(self, monkeypatch, False, True, "exec3")
 
     async def test_execute_verify_mismatch(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)

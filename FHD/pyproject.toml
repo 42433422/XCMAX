@@ -58,6 +58,8 @@ server-api = [
     "pgvector>=0.2.5",
     # 长期记忆（mem0 OSS，Apache-2.0；离线本地向量，不依赖 torch）
     "mem0ai==2.2.1",
+    # 计划修复：容忍模型 JSON 的尾逗号/截断（MIT，纯 Python）
+    "json-repair==0.64.9",
     "pandas>=2.0.0",
     "numpy>=1.24.0",
     "xlrd>=2.0.1",
