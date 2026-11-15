@@ -106,6 +106,12 @@ def _register_with_guard(tools: dict[str, Any]) -> None:
                 description=str(meta.get("description") or ""),
                 actions=dict(meta.get("actions") or {}),
             )
+        try:
+            from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_cache
+
+            invalidate_tool_specs_cache()
+        except (ImportError, OSError):
+            pass
     except BOUNDARY_ERRORS as exc:  # 风险策略注册失败时宁可停用外部工具
         logger.warning("MCP 工具未接入风险策略，已跳过：%s", exc)
         raise

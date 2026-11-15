@@ -212,12 +212,6 @@ class RiskPolicyCatalog:
         for name, spec in actions.items():
             if isinstance(spec, dict):
                 existing.setdefault(str(name), copy.deepcopy(spec))
-        try:
-            from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_cache
-
-            invalidate_tool_specs_cache()
-        except (ImportError, OSError):
-            pass
 
     def get_action_spec(self, tool_id: str, operation: str) -> dict[str, Any] | None:
         tool = (self.registry.get("tools") or {}).get(str(tool_id))

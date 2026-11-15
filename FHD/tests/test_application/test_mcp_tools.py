@@ -174,10 +174,10 @@ def test_workflow_registry_merges_external_tools(monkeypatch) -> None:
     [("", True), ("1", True), ("0", False), ("off", False), ("false", False)],
 )
 def test_plan_parallel_switch(monkeypatch, value, expected) -> None:
-    from app.application.agent_orchestrator.orchestrator import _plan_parallel_enabled
+    from app.application.agent_orchestrator.compensation import plan_parallel_enabled
 
     monkeypatch.setenv("XCAGI_PLAN_PARALLEL", value)
-    assert _plan_parallel_enabled() is expected
+    assert plan_parallel_enabled() is expected
 
 
 @pytest.mark.asyncio
