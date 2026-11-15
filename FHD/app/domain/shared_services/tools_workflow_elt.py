@@ -144,6 +144,27 @@ def _batch_progress_note(action: str, index: int, total: int, label: str) -> Non
     _publish_note(f"正在{action} {index}/{total}：{label}")
 
 
+_RESERVED_SECONDS = 3.0
+_MIN_WAIT_SECONDS = 5.0
+
+
+def _remaining_budget(runtime_context: dict[str, Any]) -> float | None:
+    """按本轮工具调用剩余预算收口，避免把「还在跑」判成结果未知。"""
+    deadline = (runtime_context or {}).get("deadline_monotonic")
+    if isinstance(deadline, (int, float)):
+        return float(deadline) - time.monotonic() - _RESERVED_SECONDS
+    return None
+
+
+def _wait_timeout(params: dict[str, Any], runtime_context: dict[str, Any], cap: float) -> float:
+    declared = params.get("_wait_timeout")
+    limit = float(declared) if isinstance(declared, (int, float)) and declared > 0 else cap
+    remaining = _remaining_budget(runtime_context)
+    if remaining is None:
+        return min(limit, cap)
+    return max(0.0, min(limit, cap, remaining))
+
+
 def _batch_result_note(action: str, label: str, out: dict[str, Any]) -> None:
     data = out.get("data") if isinstance(out.get("data"), dict) else {}
     if out.get("success"):
@@ -853,7 +874,7 @@ def _preview(params: dict, runtime_context: dict) -> dict:
         run_id,
         actor.id,
         pending=PREVIEW_PENDING,
-        timeout=PREVIEW_TIMEOUT_SECONDS,
+        timeout=_wait_timeout(params, runtime_context, PREVIEW_TIMEOUT_SECONDS),
     )
     summary = _summary(data)
     if not summary.get("target_type"):
@@ -966,7 +987,7 @@ def _execute(params: dict, runtime_context: dict) -> dict:
         run_id,
         actor.id,
         pending=EXECUTION_PENDING,
-        timeout=EXECUTION_TIMEOUT_SECONDS,
+        timeout=_wait_timeout(params, runtime_context, EXECUTION_TIMEOUT_SECONDS),
     )
     summary = _summary(data)
     ok = data.get("status") == "completed"
@@ -1110,7 +1131,14 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
     base = _single_params(payload)
     items: list[dict] = []
     total = len(targets)
+    processed = 0
     for index, path in enumerate(targets, start=1):
+        remaining = _remaining_budget(runtime_context)
+        if remaining is not None and remaining <= _MIN_WAIT_SECONDS:
+            # 本轮预算不足：保留已完成结果，剩余文件下一轮继续，不能报成未知超时。
+            deferred = total - index + 1
+            _publish_note(f"本轮时间不足，剩余 {deferred} 个文件将在下一轮继续导入")
+            break
         label = _upload_label(path, runtime_context)
         _batch_progress_note("预演", index, total, label)
         try:
@@ -1118,6 +1146,7 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
         except PermissionError as err:
             out = {"success": False, "error_code": "spreadsheet_access_denied", "message": str(err)}
         _batch_result_note("预演", label, out)
+        processed += 1
         items.append({"file_path": path, "file_name": label, **out})
     ready = [item for item in items if item.get("success")]
     needs_decision = [item for item in items if item.get("requires_user_decision")]
@@ -1133,6 +1162,9 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
     )
     if truncated:
         message += f"（一次最多 {_MAX_BATCH_IMPORTS} 个，其余请分批）"
+    deferred_count = total - processed
+    if deferred_count:
+        message += f"；剩余 {deferred_count} 个文件超出本轮时间预算，请回复「继续导入」"
     # 对话自动审批模式下，预演已可执行的批次直接入库，避免「只预演却回复导入完成」。
     executable_ids = [
         str((item.get("data") or {}).get("run_id") or "")
@@ -1182,16 +1214,26 @@ def _execute_batch(run_ids: list[str], payload: dict, runtime_context: dict) -> 
     base = _single_params(payload)
     items: list[dict] = []
     total = len(targets)
+    processed = 0
     for index, run_id in enumerate(targets, start=1):
+        remaining = _remaining_budget(runtime_context)
+        if remaining is not None and remaining <= _MIN_WAIT_SECONDS:
+            deferred = total - index + 1
+            _publish_note(f"本轮时间不足，剩余 {deferred} 个文件将在下一轮继续导入")
+            break
         label = _run_label(run_id, runtime_context)
         _batch_progress_note("导入", index, total, label)
         out = _execute({**base, "run_id": run_id}, runtime_context)
         _batch_result_note("导入", label, out)
+        processed += 1
         items.append({"run_id": run_id, "file_name": label, **out})
     done = [item for item in items if item.get("success")]
     message = f"批量导入：{len(items)} 个预演，完成 {len(done)}，失败 {len(items) - len(done)}"
     if len(run_ids) > len(targets):
         message += f"（一次最多 {_MAX_BATCH_IMPORTS} 个，其余请分批）"
+    deferred_count = total - processed
+    if deferred_count:
+        message += f"；剩余 {deferred_count} 个预演超出本轮时间预算，请回复「继续导入」"
     return {
         "success": bool(done),
         "batch": True,

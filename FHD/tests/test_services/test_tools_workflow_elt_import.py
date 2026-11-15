@@ -175,6 +175,27 @@ def test_preview_keeps_explicit_paths_when_user_names_file():
     assert captured == [["温总.xlsx"]]
 
 
+def test_batch_preview_stops_before_budget_is_exhausted():
+    import time as _time
+
+    from app.domain.shared_services import tools_workflow_elt as elt
+
+    notes: list[str] = []
+    with (
+        patch.object(elt, "_preview") as preview,
+        patch(
+            "app.infrastructure.chat_stream_lifetime.publish_stream_note",
+            side_effect=notes.append,
+        ),
+    ):
+        result = elt._preview_batch(
+            ["a.xlsx", "b.xlsx", "c.xlsx"], {}, {"deadline_monotonic": _time.monotonic() - 1}
+        )
+    preview.assert_not_called()
+    assert "继续导入" in result["message"]
+    assert notes and "剩余 3 个文件" in notes[0]
+
+
 def test_batch_progress_notes_include_file_name_and_counts():
     from app.domain.shared_services import tools_workflow_elt as elt
 
