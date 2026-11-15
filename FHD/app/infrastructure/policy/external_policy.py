@@ -12,10 +12,13 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 from typing import Any
 
 import httpx
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,7 @@ def policy_timeout() -> float:
         value = float(raw)
     except ValueError:
         return DEFAULT_TIMEOUT_SECONDS
-    return value if value > 0 else DEFAULT_TIMEOUT_SECONDS
+    return value if math.isfinite(value) and value > 0 else DEFAULT_TIMEOUT_SECONDS
 
 
 def policy_fail_mode() -> str:
@@ -67,7 +70,7 @@ def safe_context(context: dict[str, Any] | None) -> dict[str, Any]:
 
 def _degrade(exc: Exception) -> dict[str, Any] | None:
     mode = policy_fail_mode()
-    logger.warning("外置策略评估失败（fail_mode=%s）：%s", mode, exc)
+    logger.warning("外置策略评估失败（fail_mode=%s）：%s", mode, type(exc).__name__)
     if mode == FAIL_MODE_CLOSED:
         return {"allow": False, "require_approval": False, "reason": _UNAVAILABLE_REASON}
     return None
@@ -101,7 +104,9 @@ def evaluate_external_policy(*, actions: list[dict], context: dict) -> dict[str,
         response = httpx.post(url, json=payload, headers=headers, timeout=policy_timeout())
         response.raise_for_status()
         return _parse_result(response.json())
-    except Exception as exc:  # noqa: BLE001 - 外置策略失败必须降级，不能中断风险门
+    except (
+        BOUNDARY_ERRORS
+    ) as exc:  # Isolate this optional HTTP policy adapter, never internal risk decisions.
         return _degrade(exc)
 
 

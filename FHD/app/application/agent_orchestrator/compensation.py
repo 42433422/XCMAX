@@ -124,7 +124,7 @@ def run_compensations(
         if not action:
             continue
         params = _compensation_params(compensate, dict(step.params or {}), step.output)
-        params.setdefault("_runtime_context", dict(runtime_context or {}))
+        params["_runtime_context"] = dict(runtime_context or {})
         record: dict[str, Any] = {
             "node_id": step.node_id,
             "tool_id": tool_id,
@@ -132,7 +132,9 @@ def run_compensations(
         }
         try:
             result = execute(tool_id, action, params)
-            record["success"] = bool((result or {}).get("success", True))
+            record["success"] = (result or {}).get("success") is True
+            record["error_code"] = str((result or {}).get("error_code") or "")
+            record["reconciliation_required"] = bool((result or {}).get("reconciliation_required"))
             record["message"] = str((result or {}).get("message") or "")[:200]
         except RECOVERABLE_ERRORS as exc:
             logger.warning("补偿执行失败：%s.%s %s", tool_id, action, exc)

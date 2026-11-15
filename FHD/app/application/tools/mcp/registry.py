@@ -28,17 +28,6 @@ _CACHE_LOCK = threading.Lock()
 _CACHE: dict[str, Any] = {"at": 0.0, "tools": {}, "servers": {}}
 
 _SLUG = re.compile(r"[^A-Za-z0-9_]+")
-_READ_ONLY_ACTIONS = (
-    "get",
-    "list",
-    "search",
-    "query",
-    "read",
-    "fetch",
-    "describe",
-    "find",
-    "show",
-)
 
 
 def _slug(value: str) -> str:
@@ -50,11 +39,9 @@ def tool_id_for(server_name: str) -> str:
     return f"mcp__{_slug(server_name)}"
 
 
-def _is_read_only(info: McpToolInfo) -> bool:
-    if info.read_only:
-        return True
-    name = info.name.lower()
-    return any(name == prefix or name.startswith(f"{prefix}_") for prefix in _READ_ONLY_ACTIONS)
+def _is_read_only(info: McpToolInfo, config: McpServerConfig) -> bool:
+    # Names and remote annotations are untrusted capability claims, not authorization.
+    return info.name in config.read_only_tools and info.read_only is True
 
 
 _RESOURCE_ACTION_SPECS: dict[str, dict[str, Any]] = {
@@ -89,8 +76,8 @@ _RESOURCE_ACTION_SPECS: dict[str, dict[str, Any]] = {
 }
 
 
-def _action_spec(info: McpToolInfo) -> dict[str, Any]:
-    read_only = _is_read_only(info)
+def _action_spec(info: McpToolInfo, config: McpServerConfig) -> dict[str, Any]:
+    read_only = _is_read_only(info, config)
     schema = info.input_schema if isinstance(info.input_schema, dict) else {}
     required = schema.get("required")
     required_params = (
@@ -136,7 +123,9 @@ def _discover() -> tuple[dict[str, Any], dict[str, McpServerConfig]]:
         if not infos:
             continue
         tool_id = tool_id_for(config.name)
-        actions = {info.name: _action_spec(info) for info in infos}
+        if tool_id in servers:
+            raise ValueError(f"Ambiguous MCP server identity: {config.name}")
+        actions = {info.name: _action_spec(info, config) for info in infos}
         for name in RESOURCE_ACTIONS:
             actions.setdefault(name, dict(_RESOURCE_ACTION_SPECS[name]))
         tools[tool_id] = {
@@ -183,17 +172,20 @@ def call_mcp_tool(
     tool_id: str, action: str, params: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """执行外部 MCP 工具；未发现或已过期时返回明确错误。"""
+    if not mcp_enabled():
+        return {"success": False, "message": "外部 MCP 工具已停用"}
     try:
-        _tools, servers = _snapshot()
+        tools, servers = _snapshot()
     except BOUNDARY_ERRORS as exc:
         return {"success": False, "message": f"外部工具不可用：{exc}"}
     config = servers.get(str(tool_id))
-    if config is None:
-        return {"success": False, "message": f"外部工具未注册：{tool_id}"}
+    if config is None or str(action) not in tools.get(str(tool_id), {}).get("actions", {}):
+        return {"success": False, "message": f"外部工具或动作未注册：{tool_id}.{action}"}
     arguments = {
         key: value for key, value in dict(params or {}).items() if not str(key).startswith("_")
     }
-    return call_tool(config, str(action), arguments)
+    spec = tools[str(tool_id)]["actions"][str(action)]
+    return call_tool(config, str(action), arguments, retry_safe=spec.get("idempotent") is True)
 
 
 def reset_mcp_cache_for_tests() -> None:

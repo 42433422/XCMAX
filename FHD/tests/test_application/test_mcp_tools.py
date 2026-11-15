@@ -58,7 +58,9 @@ def test_merge_registers_read_and_write_actions(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         mcp_registry,
         "load_server_configs",
-        lambda *a, **k: [mcp_config.McpServerConfig(name="demo", command="x")],
+        lambda *a, **k: [
+            mcp_config.McpServerConfig(name="demo", command="x", read_only_tools=("search_notes",))
+        ],
     )
     monkeypatch.setattr(
         mcp_registry,
@@ -120,7 +122,7 @@ def test_call_mcp_tool_strips_internal_params(monkeypatch) -> None:
     )
     captured: dict = {}
 
-    def fake_call(config, tool_name, arguments):
+    def fake_call(config, tool_name, arguments, *, retry_safe=False):
         captured.update(server=config.name, tool=tool_name, arguments=arguments)
         return {"success": True, "content": "ok"}
 
@@ -294,3 +296,121 @@ def test_reader_gate_caps_concurrency(monkeypatch) -> None:
     monkeypatch.setenv("XCAGI_PLAN_PARALLEL_MAX", "1")
     gate = _ReadersWriterGate(parallel=True)
     assert gate._max_readers == 1
+
+
+@pytest.mark.parametrize(
+    "name,hint", [("get_and_delete", False), ("list_secrets", True), ("query", True)]
+)
+def test_remote_name_and_hint_alone_never_grant_readonly_authority(name, hint):
+    info = McpToolInfo(name=name, description="", input_schema={}, read_only=hint)
+    spec = mcp_registry._action_spec(info, mcp_config.McpServerConfig(name="demo", command="x"))
+    assert spec["risk"] == "high" and spec["idempotent"] is False
+    assert spec["requires_write_approval"] is True
+
+
+def test_local_allowlist_does_not_override_explicit_remote_write_declaration():
+    info = McpToolInfo(name="read", description="", input_schema={}, read_only=False)
+    config = mcp_config.McpServerConfig(name="demo", command="x", read_only_tools=("read",))
+    assert mcp_registry._action_spec(info, config)["requires_write_approval"] is True
+
+
+def test_slug_collision_fails_closed_without_replacing_internal_tools(monkeypatch):
+    configs = [mcp_config.McpServerConfig(name=n, command="x") for n in ("a-b", "a_b")]
+    monkeypatch.setattr(mcp_registry, "load_server_configs", lambda: configs)
+    monkeypatch.setattr(
+        mcp_registry,
+        "list_tools",
+        lambda _: [McpToolInfo(name="read", description="", input_schema={}, read_only=True)],
+    )
+    original = {"customers": {"actions": {"query": {}}}}
+    assert mcp_registry.merge_mcp_tools(original) == original
+    assert mcp_registry._CACHE["servers"] == {}
+
+
+def test_disabled_or_unregistered_calls_never_reach_transport(monkeypatch):
+    calls = []
+    config = mcp_config.McpServerConfig(name="demo", command="x")
+    monkeypatch.setattr(
+        mcp_registry,
+        "_snapshot",
+        lambda: ({"mcp__demo": {"actions": {"known": {}}}}, {"mcp__demo": config}),
+    )
+    monkeypatch.setattr(mcp_registry, "call_tool", lambda *a: calls.append(a))
+    assert mcp_registry.call_mcp_tool("mcp__demo", "unknown")["success"] is False
+    monkeypatch.setenv("XCAGI_MCP_ENABLED", "0")
+    assert mcp_registry.call_mcp_tool("mcp__demo", "known")["success"] is False
+    assert calls == []
+
+
+@pytest.mark.parametrize("safe,expected", [(False, 1), (True, 2)])
+def test_only_trusted_reads_may_reconnect_after_unknown_transport_outcome(
+    monkeypatch, safe, expected
+):
+    from app.infrastructure.mcp import client
+
+    calls = []
+
+    def fail(factory, timeout):
+        calls.append("possibly committed")
+        raise client.McpClientError("connection dropped after send")
+
+    monkeypatch.setattr(client, "_sync", fail)
+    monkeypatch.setattr(client.time, "sleep", lambda _: None)
+    result = client.call_tool(
+        mcp_config.McpServerConfig(name="demo", command="x"), "write", {}, retry_safe=safe
+    )
+    assert len(calls) == expected and result["success"] is False
+    if not safe:
+        assert result["outcome"] == "unknown" and result["retryable"] is False
+        assert result["reconciliation_required"] is True
+
+
+def test_oauth_scope_and_rotated_secret_do_not_share_token_cache(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.infrastructure.mcp import client
+
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs["data"])
+        return SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"access_token": f"t{len(calls)}", "expires_in": 1},
+        )
+
+    monkeypatch.setattr("httpx.post", post)
+    client._TOKEN_CACHE.clear()
+
+    def config(scope, secret="s1"):
+        return mcp_config.McpServerConfig(
+            name="demo",
+            command="x",
+            auth={
+                "token_url": "https://example.invalid/token",
+                "client_id": "same",
+                "client_secret": secret,
+                "scope": scope,
+            },
+        )
+
+    assert client._oauth_header(config("alice")) != client._oauth_header(config("bob"))
+    assert client._oauth_header(config("alice", "s2")) != client._oauth_header(config("alice"))
+    assert len(calls) == 3
+    assert all(expiry <= client.time.time() + 1 for _, expiry in client._TOKEN_CACHE.values())
+    client._TOKEN_CACHE.clear()
+
+
+def test_internal_serialization_error_is_never_retried():
+    from app.infrastructure.mcp.client import _serialize
+
+    calls = []
+
+    class Broken:
+        def model_dump(self, mode="json"):
+            calls.append(mode)
+            raise TypeError("internal serialization bug")
+
+    with pytest.raises(TypeError, match="internal serialization bug"):
+        _serialize(Broken())
+    assert calls == ["json"]

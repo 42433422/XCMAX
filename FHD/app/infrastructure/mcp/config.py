@@ -48,6 +48,9 @@ class McpServerConfig:
     headers: dict[str, str] = field(default_factory=dict)
     auth: dict[str, str] = field(default_factory=dict)
     timeout_seconds: float = _DEFAULT_TIMEOUT
+    # Local operator trust, never inferred from a remote name/readOnlyHint.
+    # Keep empty unless exact action names have been reviewed as side-effect free.
+    read_only_tools: tuple[str, ...] = ()
 
 
 def mcp_enabled() -> bool:
@@ -110,6 +113,11 @@ def _server_config(name: str, raw: object) -> McpServerConfig | None:
         headers=headers,
         auth=auth,
         timeout_seconds=max(1.0, min(120.0, timeout)),
+        read_only_tools=tuple(
+            item for item in raw.get("read_only_tools", []) if isinstance(item, str) and item
+        )
+        if isinstance(raw.get("read_only_tools"), list)
+        else (),
     )
 
 

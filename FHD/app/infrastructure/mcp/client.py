@@ -7,8 +7,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import inspect
 import json
 import logging
+import math
 import threading
 import time
 from collections.abc import Awaitable, Callable
@@ -18,7 +21,7 @@ from dataclasses import dataclass
 from typing import Any, Coroutine, TypeVar
 
 from app.infrastructure.mcp.config import McpServerConfig
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +55,12 @@ class McpClientError(RuntimeError):
 def _sync(coro_factory: Callable[[], Coroutine[Any, Any, T]], timeout: float) -> T:
     """在独立线程运行协程，避免与请求所在事件循环互相阻塞。"""
 
+    async def bounded() -> T:
+        async with asyncio.timeout(timeout):
+            return await coro_factory()
+
     def run() -> T:
-        return asyncio.run(coro_factory())
+        return asyncio.run(bounded())
 
     future = _EXECUTOR.submit(run)
     try:
@@ -68,7 +75,7 @@ def _oauth_header(config: McpServerConfig) -> dict[str, str]:
     auth = dict(config.auth or {})
     if not auth:
         return {}
-    key = f"{auth.get('token_url')}|{auth.get('client_id')}"
+    key = hashlib.sha256(json.dumps(auth, sort_keys=True).encode()).hexdigest()
     now = time.time()
     with _TOKEN_LOCK:
         cached = _TOKEN_CACHE.get(key)
@@ -91,15 +98,16 @@ def _oauth_header(config: McpServerConfig) -> dict[str, str]:
         payload = response.json()
     except RECOVERABLE_ERRORS as exc:
         raise McpClientError("MCP 授权服务器不可用") from exc
-    token = str((payload or {}).get("access_token") or "")
-    if not token:
+    token = payload.get("access_token") if isinstance(payload, dict) else None
+    if not isinstance(token, str) or not token.strip():
         raise McpClientError("MCP 授权服务器未返回 access_token")
     try:
-        expires = float((payload or {}).get("expires_in") or 300)
+        expires = float(payload.get("expires_in", 300))
     except (TypeError, ValueError):
         expires = 300.0
-    with _TOKEN_LOCK:
-        _TOKEN_CACHE[key] = (token, now + max(30.0, expires - 30.0))
+    if math.isfinite(expires) and expires > 0:
+        with _TOKEN_LOCK:
+            _TOKEN_CACHE[key] = (token, now + max(0.0, expires - min(30.0, expires / 10)))
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -188,10 +196,10 @@ def list_tools(config: McpServerConfig) -> list[McpToolInfo]:
 def _serialize(value: Any) -> str:
     dump = getattr(value, "model_dump", None)
     if callable(dump):
-        try:
-            return json.dumps(dump(mode="json"), ensure_ascii=False)
-        except TypeError:
-            return json.dumps(dump(), ensure_ascii=False, default=str)
+        params = inspect.signature(dump).parameters
+        return json.dumps(
+            dump(mode="json") if "mode" in params else dump(), ensure_ascii=False, default=str
+        )
     return json.dumps(value, ensure_ascii=False, default=str)
 
 
@@ -227,15 +235,18 @@ async def _run_synthetic(session: Any, action: str, arguments: dict[str, Any]) -
     )
 
 
-def _run_with_reconnect(factory: Callable[[], Coroutine[Any, Any, T]], timeout: float) -> T:
+def _run_with_reconnect(
+    factory: Callable[[], Coroutine[Any, Any, T]], timeout: float, *, retry_safe: bool = False
+) -> T:
     """短连接失败后重连一次，覆盖子进程启动抖动与瞬时断线。"""
     last: Exception | None = None
-    for attempt in range(2):
+    attempts = 2 if retry_safe else 1
+    for attempt in range(attempts):
         try:
             return _sync(factory, timeout)
         except (McpClientError, OSError, ConnectionError, TimeoutError) as exc:
             last = exc
-            if attempt == 0:
+            if attempt + 1 < attempts:
                 time.sleep(0.2)
     raise last if last is not None else McpClientError("MCP 调用失败")
 
@@ -244,8 +255,20 @@ def call_tool(
     config: McpServerConfig,
     tool_name: str,
     arguments: dict[str, Any],
+    *,
+    retry_safe: bool = False,
 ) -> dict[str, Any]:
     """调用外部 MCP 工具，返回统一工具结果。"""
+    safe_read = retry_safe or tool_name in RESOURCE_ACTIONS
+    uncertain = (
+        {}
+        if safe_read
+        else {
+            "outcome": "unknown",
+            "retryable": False,
+            "reconciliation_required": True,
+        }
+    )
     try:
         if tool_name in RESOURCE_ACTIONS:
             result = _run_with_reconnect(
@@ -253,6 +276,7 @@ def call_tool(
                     config, lambda session: _run_synthetic(session, tool_name, arguments or {})
                 ),
                 config.timeout_seconds,
+                retry_safe=safe_read,
             )
         else:
             result = _run_with_reconnect(
@@ -260,21 +284,25 @@ def call_tool(
                     config, lambda session: session.call_tool(tool_name, arguments or {})
                 ),
                 config.timeout_seconds,
+                retry_safe=safe_read,
             )
-    except McpClientError as exc:
-        return {"success": False, "error_code": "mcp_unavailable", "message": str(exc)}
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("MCP 工具 %s.%s 调用失败：%s", config.name, tool_name, exc)
-        return {"success": False, "error_code": "mcp_call_failed", "message": "MCP 工具调用失败"}
-    text = _result_text(result)
-    is_error = bool(getattr(result, "isError", False))
+        text = _result_text(result)
+        is_error = bool(getattr(result, "isError", False))
+    except BOUNDARY_ERRORS as exc:  # The external SDK is an isolated plugin boundary.
+        logger.warning("MCP 工具 %s.%s 调用失败：%s", config.name, tool_name, type(exc).__name__)
+        return {
+            "success": False,
+            "error_code": "mcp_call_failed",
+            "message": "MCP 工具调用失败",
+            **uncertain,
+        }
     return {
         "success": not is_error,
         "tool": tool_name,
         "server": config.name,
         "content": text,
         "message": text if is_error else "",
-        **({"error_code": "mcp_tool_error"} if is_error else {}),
+        **({"error_code": "mcp_tool_error", **uncertain} if is_error else {}),
     }
 
 

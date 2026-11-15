@@ -3,9 +3,14 @@
     "example-filesystem": {
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp/xcagi-mcp"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/tmp/xcagi-mcp"
+      ],
       "env": {},
-      "timeout_seconds": 20
+      "timeout_seconds": 20,
+      "read_only_tools": []
     },
     "example-remote": {
       "transport": "http",
@@ -20,7 +25,8 @@
         "client_secret": "REPLACE_ME",
         "scope": "mcp.read"
       },
-      "timeout_seconds": 20
+      "timeout_seconds": 20,
+      "read_only_tools": []
     }
   }
 }
