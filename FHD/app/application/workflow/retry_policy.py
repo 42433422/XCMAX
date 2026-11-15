@@ -11,15 +11,23 @@ import os
 import random
 import time
 from collections.abc import Callable
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TypeVar
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 _ENV_MODEL_RETRIES = "XCAGI_PLAN_MODEL_RETRIES"
-_RETRYABLE = (OSError, ConnectionError, TimeoutError)
+_RETRYABLE = (OSError, httpx.NetworkError, httpx.TimeoutException, httpx.RemoteProtocolError)
+_TRANSPORT_RETRY_SCOPE: ContextVar[bool] = ContextVar("planner_transport_retry", default=False)
+
+
+def retry_manages_transport_error(error: Exception) -> bool:
+    return _TRANSPORT_RETRY_SCOPE.get() and isinstance(error, _RETRYABLE)
 
 
 @dataclass(frozen=True)
@@ -33,7 +41,9 @@ class RetryPolicy:
         """第 ``attempt`` 次重试（从 1 开始）前的等待秒数。"""
         raw = self.base_delay * (2 ** max(0, int(attempt) - 1))
         bounded = min(self.max_delay, raw)
-        return float(max(0.0, bounded + random.uniform(0, self.jitter)))
+        return float(
+            max(0.0, min(self.max_delay, bounded + random.uniform(0, max(0.0, self.jitter))))
+        )
 
 
 def planner_retry_policy() -> RetryPolicy:
@@ -51,19 +61,28 @@ def call_with_retry(
     retry_on: tuple[type[Exception], ...] = _RETRYABLE,
 ) -> T:
     """同步执行 ``fn``，可重试异常按策略退避；最后一次异常原样抛出。"""
-    attempts = max(1, int(policy.max_attempts))
-    for attempt in range(1, attempts + 1):
-        try:
-            return fn()
-        except retry_on as exc:
-            if attempt >= attempts:
-                raise
-            delay = policy.delay_for(attempt)
-            logger.warning(
-                "模型调用失败，%0.2fs 后重试（%s/%s）：%s", delay, attempt, attempts, exc
-            )
-            time.sleep(delay)
-    raise RuntimeError("重试策略未执行")
+    attempts = max(1, min(4, int(policy.max_attempts)))
+    token = _TRANSPORT_RETRY_SCOPE.set(True)
+    try:
+        for attempt in range(1, attempts + 1):
+            try:
+                return fn()
+            except retry_on as exc:
+                # An explicit retry tuple may narrow, never broaden, the safe set.
+                if not isinstance(exc, _RETRYABLE) or attempt >= attempts:
+                    raise
+                delay = policy.delay_for(attempt)
+                logger.warning(
+                    "模型调用失败，%0.2fs 后重试（%s/%s）：%s",
+                    delay,
+                    attempt,
+                    attempts,
+                    type(exc).__name__,
+                )
+                time.sleep(delay)
+        raise RuntimeError("重试策略未执行")
+    finally:
+        _TRANSPORT_RETRY_SCOPE.reset(token)
 
 
 __all__ = ["RetryPolicy", "call_with_retry", "planner_retry_policy"]

@@ -66,6 +66,13 @@ def request_planner_completion(
                 )
             )
     except RECOVERABLE_ERRORS as exc:
+        from .retry_policy import retry_manages_transport_error
+        from .tool_calling import unsupported_tool_parameter
+
+        if retry_manages_transport_error(exc) or (
+            extra and isinstance(exc, TypeError) and unsupported_tool_parameter(exc)
+        ):
+            raise
         from app.infrastructure.llm.model_admission import (
             ModelCircuitOpenError,
             ModelConcurrencyLimitError,

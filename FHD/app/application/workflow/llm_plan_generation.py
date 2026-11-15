@@ -324,6 +324,7 @@ class LlmPlanGeneration:
                 build_function_tools,
                 plan_from_tool_calls,
                 tool_calls_enabled,
+                unsupported_tool_parameter,
             )
 
             native_tools: list[dict[str, Any]] = []
@@ -347,15 +348,18 @@ class LlmPlanGeneration:
                     ),
                     policy=policy,
                 )
-            except TypeError:
-                if not extra:
+            except TypeError as exc:
+                if not extra or not unsupported_tool_parameter(exc):
                     raise
                 # 兼容不接受额外参数的旧 completion 实现（含测试替身）。
-                response_data = self.completion(
-                    ai_service=self.conversation,
-                    context=context,
-                    messages=messages,
-                    http_client_factory=self.http_client,
+                response_data = call_with_retry(
+                    lambda: self.completion(
+                        ai_service=self.conversation,
+                        context=context,
+                        messages=messages,
+                        http_client_factory=self.http_client,
+                    ),
+                    policy=policy,
                 )
             if response_data is None:
                 return None

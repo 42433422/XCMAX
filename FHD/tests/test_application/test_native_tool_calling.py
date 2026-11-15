@@ -136,3 +136,109 @@ def test_generate_falls_back_when_completion_rejects_tools(monkeypatch) -> None:
     assert plan.metadata["response_mode"] == "reply"
     assert len(calls) == 2
     assert "tools" in calls[0] and "tools" not in calls[1]
+
+
+@pytest.mark.parametrize("arguments", ["", "[]", "null", "{broken", None, {"price": float("nan")}])
+def test_invalid_arguments_never_become_an_empty_business_filter(arguments):
+    _, lookup = build_function_tools(_registry())
+    call = _tool_call("products__query", {})
+    call["function"]["arguments"] = arguments
+    assert (
+        plan_from_tool_calls(_payload(call), plan_id="p1", message="x", context=None, lookup=lookup)
+        is None
+    )
+
+
+@pytest.mark.parametrize("bad", [None, {}, {"type": "not-function", "function": {}}])
+def test_a_bad_native_call_rejects_the_entire_batch(bad):
+    _, lookup = build_function_tools(_registry())
+    valid = _tool_call("products__query", {"keyword": "门"})
+    assert (
+        plan_from_tool_calls(
+            _payload(valid, bad), plan_id="p1", message="x", context=None, lookup=lookup
+        )
+        is None
+    )
+
+
+def test_oversized_or_replayed_native_batch_is_not_partially_executed():
+    _, lookup = build_function_tools(_registry())
+    for calls in [
+        [_tool_call("products__query", {}, str(i)) for i in range(13)],
+        [_tool_call("products__query", {}, "duplicate") for _ in range(2)],
+    ]:
+        assert (
+            plan_from_tool_calls(
+                _payload(*calls), plan_id="p1", message="x", context=None, lookup=lookup
+            )
+            is None
+        )
+
+
+@pytest.mark.parametrize(
+    "left, right",
+    [
+        (("x.y", "query"), ("x_y", "query")),
+        (("a__b", "c"), ("a", "b__c")),
+        (("x" * 70, "read"), ("x" * 69 + "y", "read")),
+        (("中文甲", "query"), ("中文乙", "query")),
+    ],
+)
+def test_function_names_do_not_alias_distinct_authorized_actions(left, right):
+    import re
+
+    assert function_name(*left) != function_name(*right)
+    assert re.fullmatch(r"[A-Za-z0-9_-]{1,64}", function_name(*left))
+    assert function_name(*left) == function_name(*left)
+
+
+def test_even_an_unexpected_name_collision_is_rejected(monkeypatch):
+    monkeypatch.setattr("app.application.workflow.tool_calling.function_name", lambda *args: "same")
+    registry = _registry()
+    registry["products"]["actions"]["export"] = {"risk": "low", "idempotent": True}
+    with pytest.raises(ValueError, match="冲突"):
+        build_function_tools(registry)
+
+
+def test_internal_type_error_does_not_charge_a_second_completion():
+    calls = []
+
+    class Conversation:
+        def get_context(self, user_id):
+            return None
+
+    def completion(**kwargs):
+        calls.append(kwargs)
+        raise TypeError("internal parsing bug")
+
+    generator = LlmPlanGeneration(Conversation(), completion, lambda: None)
+    assert generator.generate("p1", "u1", "查门", _registry(), {}) is None
+    assert len(calls) == 1
+
+
+def test_default_gateway_legacy_provider_signature_really_falls_back(monkeypatch):
+    from app.application.workflow.planner_llm_gateway import request_planner_completion
+
+    calls = []
+
+    class Conversation:
+        def get_context(self, user_id):
+            return None
+
+    class Provider:
+        async def chat_completion(self, *, messages, temperature, max_tokens):
+            calls.append(messages)
+            return {"choices": [{"message": {"content": '{"mode":"reply","reply":"好的"}'}}]}
+
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **kwargs: Provider()
+    )
+    monkeypatch.setattr(
+        "app.application.workflow.planner_llm_gateway._meter_planner_completion",
+        lambda *args, **kwargs: None,
+    )
+    generator = LlmPlanGeneration(Conversation(), request_planner_completion, lambda: None)
+    plan = generator.generate("p1", "u1", "你好", _registry(), {})
+    assert plan is not None
+    assert plan.metadata["response_mode"] == "reply"
+    assert len(calls) == 1

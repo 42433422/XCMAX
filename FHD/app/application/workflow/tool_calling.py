@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -33,7 +34,19 @@ def _slug(value: str) -> str:
 
 
 def function_name(tool_id: str, action: str) -> str:
-    return f"{_slug(tool_id)}__{_slug(action)}"[:64]
+    raw = f"{_slug(tool_id)}__{_slug(action)}"
+    if (
+        len(raw) <= 64
+        and _slug(tool_id) == tool_id
+        and _slug(action) == action
+        and "__" not in tool_id
+        and "__" not in action
+    ):
+        return raw
+    digest = hashlib.sha256(json.dumps([tool_id, action], ensure_ascii=False).encode()).hexdigest()[
+        :12
+    ]
+    return f"{raw[:51]}_{digest}"
 
 
 def build_function_tools(
@@ -53,6 +66,8 @@ def build_function_tools(
             if not action_name:
                 continue
             name = function_name(tool_id, action_name)
+            if name in lookup and lookup[name] != (tool_id, action_name):
+                raise ValueError("原生工具函数名冲突，拒绝含糊映射")
             schema = action.get("input_schema")
             parameters = (
                 schema
@@ -73,17 +88,16 @@ def build_function_tools(
     return tools, lookup
 
 
-def _parse_arguments(raw: Any) -> dict[str, Any]:
-    if isinstance(raw, dict):
-        return raw
-    text = str(raw or "").strip()
-    if not text:
-        return {}
+def _parse_arguments(raw: Any) -> dict[str, Any] | None:
+    """Invalid or non-finite arguments must never turn into an empty write filter."""
     try:
-        parsed = json.loads(text)
-    except (json.JSONDecodeError, ValueError):
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
+        parsed = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(parsed, dict):
+            return None
+        json.dumps(parsed, allow_nan=False)
+        return parsed
+    except (ValueError, TypeError):
+        return None
 
 
 def plan_from_tool_calls(
@@ -104,19 +118,28 @@ def plan_from_tool_calls(
     if not isinstance(message_obj, dict):
         return None
     calls = message_obj.get("tool_calls")
-    if not isinstance(calls, list) or not calls:
+    if not isinstance(calls, list) or not calls or len(calls) > _MAX_NATIVE_CALLS:
         return None
 
     nodes: list[WorkflowNode] = []
-    for index, call in enumerate(calls[:_MAX_NATIVE_CALLS], start=1):
-        if not isinstance(call, dict):
-            continue
+    seen_call_ids: set[str] = set()
+    for index, call in enumerate(calls, start=1):
+        if not isinstance(call, dict) or call.get("type") != "function":
+            return None
+        call_id = call.get("id")
+        if call_id is not None:
+            if not isinstance(call_id, str) or not call_id.strip() or call_id in seen_call_ids:
+                return None
+            seen_call_ids.add(call_id)
         function = call.get("function")
         if not isinstance(function, dict):
-            continue
+            return None
         target = lookup.get(str(function.get("name") or ""))
         if target is None:
             logger.warning("原生工具调用未匹配到已授权动作，回退文本计划")
+            return None
+        params = _parse_arguments(function.get("arguments"))
+        if params is None:
             return None
         tool_id, action = target
         nodes.append(
@@ -124,9 +147,9 @@ def plan_from_tool_calls(
                 node_id=f"call_{index}",
                 tool_id=tool_id,
                 action=action,
-                params=_parse_arguments(function.get("arguments")),
+                params=params,
                 risk="low",
-                idempotent=True,
+                idempotent=False,
                 description="模型原生工具调用",
             )
         )
@@ -154,3 +177,9 @@ __all__ = [
     "plan_from_tool_calls",
     "tool_calls_enabled",
 ]
+
+
+def unsupported_tool_parameter(error: TypeError) -> bool:
+    return bool(
+        re.search(r"""unexpected keyword argument ['"](?:tools|tool_choice)['"]""", str(error))
+    )
