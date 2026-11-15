@@ -1397,8 +1397,10 @@ class TestInit:
 
     def test_init_creates_storage_directory(self, tmp_path: Path):
         root = tmp_path / "newroot"
-        AiGroupChatService(storage_root=root)
-        assert (root / "ai_group_chat").exists()
+        svc = AiGroupChatService(storage_root=root)
+        # 租户上下文存在时数据落在 <base>/tenants/<id>/ai_group_chat；断言实际仓库根即可。
+        assert svc._storage.root.exists()
+        assert svc._storage.root.name == "ai_group_chat"
 
 
 # ---------------------------------------------------------------------------

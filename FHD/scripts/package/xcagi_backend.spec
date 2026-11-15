@@ -55,6 +55,8 @@ for item in [
     # modules alone leave the sibling JSON missing and return 500.
     "app/application/agent_orchestrator/tool_spec_data/input_schemas.json",
     "app/application/agent_orchestrator/tool_spec_data/output_schemas.json",
+    # 意图语义兜底模型（可选；缺失时运行时自动降级为纯规则）。
+    "assets/models/fastembed",
 ]:
     datas.extend(add_data(item))
 
@@ -129,6 +131,11 @@ for module in [
 hiddenimports.extend(
     [
         "app.fastapi_routes.platform_shell_routes",
+        # 意图语义兜底：懒加载，PyInstaller 静态分析可能漏掉编码器与路由子包。
+        "semantic_router",
+        "semantic_router.encoders",
+        "semantic_router.routers",
+        "fastembed",
         # Office employee vendor packages are loaded at runtime from mods, so
         # PyInstaller cannot discover this bridge from static imports alone.
         "app.application.office_plaintext_generate",

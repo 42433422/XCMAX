@@ -53,7 +53,7 @@ afterEach(() => {
 })
 
 describe('sidebar chat ordering through real menu mapping and persisted layout', () => {
-  it('maps the actual planner manifest to the top despite a cached business-first order', () => {
+  it('suppresses the redundant planner manifest entry and keeps host chat first', () => {
     useModsStore().mods = [{
       id: plannerManifest.id,
       menu_overrides: plannerManifest.frontend.menu_overrides,
@@ -62,7 +62,9 @@ describe('sidebar chat ordering through real menu mapping and persisted layout',
     expect(useModRoutes().modMenuItems.value.find((item) => item.key === plannerChat.id)?.path).toBe('/mod/xcagi-planner-bridge/chat')
     localStorage.setItem('xcagi.sidebar.menuOrder', JSON.stringify([...businessKeys, plannerChat.id]))
     const nav = useVisibleNavItems()
-    expect(nav.menuItems.value[0]).toMatchObject({ key: plannerChat.id, path: plannerChat.path })
+    // 企业版完整侧栏不再挂重复的 planner 入口，宿主「智能对话」保持在顶部。
+    expect(nav.menuItems.value[0]).toMatchObject({ key: 'chat' })
+    expect(nav.menuItems.value.some((item) => item.key === plannerChat.id)).toBe(false)
     expect(subset(nav.menuItems.value)).toEqual(businessKeys)
     expect(nav.menuItems.value.some((item) => item.key.includes('brain'))).toBe(false)
   })

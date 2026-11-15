@@ -47,10 +47,12 @@ from pathlib import Path
 # 允许留在根命名空间的 cross_cutting 白名单（模块 basename，不含 .py）。
 CROSS_CUTTING = {
     "ai_helpers",
+    "async_runtime",
     "decorators",
     "deployment",
     "distillation_paths",
     "error_handling",
+    "http_tls",
     "json_safe",
     "metrics",
     "no_email",

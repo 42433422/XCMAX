@@ -20,6 +20,9 @@ from modstore_server.autonomy_scheduler import (  # noqa: E402
 def _disable_real_memory_reconciliation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(tmp_path / "ledger.jsonl"))
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "memory.json"))
+    monkeypatch.setenv(
+        "MODSTORE_AUTONOMOUS_UNCERTAINTY_QUEUE", str(tmp_path / "uncertainty_queue.jsonl")
+    )
     monkeypatch.setattr(
         "modstore_server.autonomy_scheduler._reconcile_completed_loop_memory_safely",
         lambda: None,
@@ -207,7 +210,7 @@ def test_pending_remediation_prioritizes_incident_lineage(
     }
 
 
-def test_pending_remediation_keeps_exhausted_failed_step_explicitly_blocked(
+def test_pending_remediation_hands_off_exhausted_failed_step(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -235,10 +238,10 @@ def test_pending_remediation_keeps_exhausted_failed_step_explicitly_blocked(
         "modstore_server.self_maintenance_loop_runner.ledger_path",
         lambda: tmp_path / "ledger.jsonl",
     )
-    from modstore_server.autonomy_scheduler import RemediationBlocked
 
-    with pytest.raises(RemediationBlocked, match="retry_limit"):
-        run_pending_automated_remediation()
+    result = run_pending_automated_remediation()
+    assert result["scheduler_status"] == "deferred"
+    assert memory["open_items"] == []
 
 
 def test_pending_remediation_resumes_without_force(

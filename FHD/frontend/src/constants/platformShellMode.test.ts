@@ -52,13 +52,14 @@ describe('platformShellMode', () => {
       expect(isGenericEditionBuild()).toBe(true)
     })
 
-    it('bootstrap sets shell mode in localStorage', () => {
+    it('bootstrap clears shell mode in localStorage', () => {
       vi.stubEnv('VITE_XCAGI_EDITION', 'generic')
       vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
       vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
+      localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
       bootstrapGenericEditionDefaults()
-      expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-      expect(isPlatformShellModeEnabled()).toBe(true)
+      expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
+      expect(isPlatformShellModeEnabled()).toBe(false)
     })
 
     it('bootstrap respects user opt-out', () => {
@@ -69,14 +70,15 @@ describe('platformShellMode', () => {
       expect(isPlatformShellModeEnabled()).toBe(false)
     })
 
-    it('enterprise SKU keeps shell mode when built as generic host', () => {
+    it('enterprise SKU stays off the shell even when edition env is generic', () => {
       vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', 'enterprise')
       vi.stubEnv('VITE_XCAGI_EDITION', 'generic')
       vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
+      localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
       bootstrapEditionDefaults()
       bootstrapEnterpriseShellDefaults()
-      expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
-      expect(isPlatformShellModeEnabled()).toBe(true)
+      expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
+      expect(isPlatformShellModeEnabled()).toBe(false)
     })
 
     it('enterprise SKU disables shell only for full host builds', () => {
@@ -100,14 +102,15 @@ describe('platformShellMode', () => {
       vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
       vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
       expect(isMinimalEditionBuild()).toBe(true)
-      expect(isPlatformShellModeEnabled()).toBe(true)
+      expect(isPlatformShellModeEnabled()).toBe(false)
     })
 
-    it('bootstrapMinimal sets shell mode', () => {
+    it('bootstrapMinimal clears shell mode', () => {
       vi.stubEnv('VITE_XCAGI_EDITION', 'minimal')
       vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
+      localStorage.setItem(LS_PLATFORM_SHELL_MODE, '1')
       bootstrapMinimalEditionDefaults()
-      expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
+      expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
     })
   })
 

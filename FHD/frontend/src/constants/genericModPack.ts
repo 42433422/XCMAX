@@ -119,38 +119,7 @@ function isSandboxSidebarMode(): boolean {
 }
 
 function isPlatformShellSidebarMode(): boolean {
-  const sku = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '')
-    .trim()
-    .toLowerCase()
-  const edition = readBuildEdition()
-  if (sku === 'enterprise' && edition === 'full') return false
-  if (typeof window !== 'undefined') {
-    try {
-      const q = new URLSearchParams(window.location.search)
-      if (q.has('shell')) return true
-      if (q.has('full')) return false
-    } catch {
-      /* ignore */
-    }
-  }
-  if (typeof localStorage !== 'undefined') {
-    try {
-      const stored = localStorage.getItem('xcagi_platform_shell_mode')
-      if (stored === '0') return false
-      if (stored === '1') return true
-    } catch {
-      /* ignore */
-    }
-  }
-  const env = String(import.meta.env.VITE_XCAGI_PLATFORM_SHELL || '')
-    .trim()
-    .toLowerCase()
-  if (env === '1' || env === 'true' || env === 'yes') return true
-  if (edition === 'minimal' || edition === 'generic') return true
-  const def = String(import.meta.env.VITE_XCAGI_DEFAULT_PLATFORM_SHELL || '')
-    .trim()
-    .toLowerCase()
-  return def === '1' || def === 'true' || def === 'yes'
+  return false
 }
 
 /** 企业完整侧栏：流程可视化等由宿主页承担，不重复挂 Mod 入口 */

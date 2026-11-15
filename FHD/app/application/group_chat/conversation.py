@@ -18,7 +18,7 @@ from app.application.group_chat.protocols import (
     MessageStore,
     ProgressSources,
 )
-from app.application.group_chat.storage import GroupChatRepository
+from app.application.group_chat.storage import GroupChatRepository, group_row_visible
 
 
 class GroupConversation:
@@ -151,6 +151,7 @@ class GroupConversation:
             for r in self.messages.read()
             if int(r.get("user_id") or 0) == int(user_id)
             and str(r.get("group_id")) == str(group_id)
+            and group_row_visible(r)
         ]
         return rows[-max(1, min(int(limit), 300)) :]
 
@@ -166,6 +167,7 @@ class GroupConversation:
                 for r in rows
                 if int(r.get("user_id") or 0) == int(user_id)
                 and str(r.get("group_id")) == str(group_id)
+                and group_row_visible(r)
                 and (str(r.get("id")) == msg_id)
             ),
             None,
@@ -181,6 +183,7 @@ class GroupConversation:
                 if not (
                     int(r.get("user_id") or 0) == int(user_id)
                     and str(r.get("group_id")) == str(group_id)
+                    and group_row_visible(r)
                     and str(r.get("id")) == msg_id
                 )
             ]

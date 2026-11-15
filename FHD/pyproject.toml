@@ -23,6 +23,11 @@ xcagi-brain = "app.cli.brain:main"
 doc-parsing = [
     "docling>=2.0.0",
 ]
+# 意图语义兜底：FastEmbed 走 ONNX，不依赖 torch；未安装时自动降级为纯规则。
+intent-semantic = [
+    "semantic-router>=1.1,<2",
+    "fastembed>=0.7",
+]
 server-api = [
     "fastapi>=0.136.1",
     "uvicorn[standard]>=0.27.0",

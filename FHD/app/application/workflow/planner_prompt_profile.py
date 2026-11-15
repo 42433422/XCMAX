@@ -124,6 +124,7 @@ _EMPLOYEE_TOOL_EXACT = frozenset(
 _DOCUMENT_TOOL_PREFIXES = (
     "excel_",
     "elt_import",
+    "import_excel_",
     "generate_office_document",
     "template_preview",
     "pdf-",

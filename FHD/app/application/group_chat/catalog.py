@@ -13,7 +13,7 @@ from app.application.group_chat.employee_registry import (
 )
 from app.application.group_chat.projections import ChatProjection
 from app.application.group_chat.protocols import DirectoryActions, GroupStore, MessageStore
-from app.application.group_chat.storage import GroupChatRepository
+from app.application.group_chat.storage import GroupChatRepository, group_row_visible
 
 
 class GroupCatalog:
@@ -293,8 +293,14 @@ class GroupCatalog:
     def delete_group(self, *, user_id: int, group_id: str) -> dict[str, Any]:
         groups = self.groups.all()
         key = int(user_id), str(group_id)
-        remaining = [g for g in groups if GroupChatRepository.group_key(g) != key]
-        if len(remaining) == len(groups):
+        remaining: list[dict[str, Any]] = []
+        deleted = False
+        for group in groups:
+            if GroupChatRepository.group_key(group) == key and group_row_visible(group):
+                deleted = True
+                continue
+            remaining.append(group)
+        if not deleted:
             raise ValueError("群不存在")
         self.groups.rewrite(remaining)
         return {"deleted": True, "id": str(group_id)}

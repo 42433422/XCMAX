@@ -25,7 +25,10 @@ import { findDeepLinkArg } from './desktop-navigation'
 import { warmPersistedDesktopSessionCookieStore } from './session-cookie-warmup'
 import {
   startBackend,
+  startBackendHealthWatchdog,
+  setBackendHealthNotifier,
   stopBackend,
+  stopBackendHealthWatchdog,
   triggerRollbackSafe,
   waitForPostUpdateStartupStability,
   writeBackendLog,
@@ -137,6 +140,7 @@ function bootstrap(): void {
 
     app.on('before-quit', () => {
       app.isQuitting = true
+      stopBackendHealthWatchdog()
       noteShutdown('before-quit')
     })
 
@@ -262,6 +266,9 @@ function bootstrap(): void {
         await createWindow()
         updateSplashProgress(12, '正在连接本地服务…')
         await startBackend()
+        // 后端就绪后开始常驻健康看门狗：进程还在但接口失联时原地重启。
+        setBackendHealthNotifier(state => broadcastToRenderer('xcagi:backend-health', { state, at: Date.now() }))
+        startBackendHealthWatchdog()
         if (!desktopRuntime.backendProcess) {
           // 端口被占或后端可执行文件缺失，startBackend 已弹错误框
           // 如果是更新后首次启动，触发回滚

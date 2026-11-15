@@ -76,7 +76,9 @@ def test_configure_edition_defaults_desktop(monkeypatch):
     monkeypatch.delenv("XCAGI_GENERIC_EDITION", raising=False)
     monkeypatch.delenv("XCAGI_EDITION", raising=False)
     configure_edition_defaults(desktop=True)
-    assert resolve_edition() == "generic"
+    assert resolve_edition() == "full"
+    assert os.environ.get("XCAGI_GENERIC_EDITION") in (None, "")
+    assert os.environ.get("XCAGI_PLATFORM_SHELL") in (None, "")
 
 
 def test_seed_refreshes_stale_existing_and_archives_it(tmp_path, monkeypatch):

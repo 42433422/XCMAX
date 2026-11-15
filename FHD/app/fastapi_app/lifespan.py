@@ -111,6 +111,39 @@ def _stop_agent_tasks(app: FastAPI) -> None:
     del app.state.agent_task_dispatcher
 
 
+def _log_ai_capability_status() -> None:
+    """启动时暴露模型路由与语义兜底配置，避免“有引擎没点火”无人察觉。"""
+    try:
+        from app.infrastructure.llm.model_router import get_model_router
+
+        status = get_model_router().status()
+        logger.info(
+            "model routing: enabled=%s default=%s small=%s large=%s",
+            status.get("enabled"),
+            status.get("default_tier"),
+            status.get("small_model"),
+            status.get("large_model"),
+        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("model routing status unavailable", exc_info=True)
+
+    try:
+        from app.domain.shared_services.intent_semantic_router import (
+            semantic_router_status,
+        )
+
+        semantic = semantic_router_status()
+        logger.info(
+            "intent semantic fallback: enabled=%s model=%s threshold=%s override=%s",
+            semantic.get("enabled"),
+            semantic.get("model"),
+            semantic.get("threshold"),
+            semantic.get("override_threshold"),
+        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("intent semantic status unavailable", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 应用生命周期管理"""
@@ -138,6 +171,8 @@ async def lifespan(app: FastAPI):
     )
 
     mark_startup("lifespan_db_done")
+
+    _log_ai_capability_status()
 
     _start_agent_tasks(app)
 
