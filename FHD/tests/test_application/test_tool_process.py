@@ -521,6 +521,11 @@ def test_worker_result_file_contains_only_public_route_identity(tmp_path, monkey
     client, route, _ = _route_receipt_client()
     monkeypatch.setattr(tool_process.os, "setsid", lambda: None, raising=False)
     monkeypatch.setattr(routing, "restore_worker_llm_client", lambda _: (client, "xiaomi/flash"))
+    try:
+        import resource
+    except ImportError:
+        resource = None
+    cpu_before = resource.getrlimit(resource.RLIMIT_CPU) if resource else None
     payload = json.dumps(
         {
             "step": _step(
@@ -543,6 +548,8 @@ def test_worker_result_file_contains_only_public_route_identity(tmp_path, monkey
     encoded = (tmp_path / "result").read_text()
     assert json.loads(encoded)["llm_route_metadata"] == route
     assert "private-token" not in encoded and "private-mask" not in encoded
+    if resource is not None:
+        assert resource.getrlimit(resource.RLIMIT_CPU) == cpu_before
 
 
 def test_finance_writes_restore_the_task_tenant():

@@ -153,7 +153,11 @@ def _worker(
             logging.getLogger(__name__).warning(
                 "tool worker env scrub skipped: %s", type(exc).__name__
             )
-    _apply_resource_limits()
+    # 资源硬限制只属于 spawn 出的工具子进程。在原进程内调用
+    # _worker（测试或误入父进程）时若施加 RLIMIT_CPU，累计 CPU
+    # 已超过工具预算就会立即 SIGXCPU 杀死调用方。
+    if multiprocessing.parent_process() is not None:
+        _apply_resource_limits()
 
     if os.name != "nt":
         os.setsid()
