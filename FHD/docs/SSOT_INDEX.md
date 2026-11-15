@@ -57,6 +57,14 @@
 | capability-center（产品能力中心） | [../成都修茈科技有限公司/data/capabilities/catalog.json](../成都修茈科技有限公司/data/capabilities/catalog.json) | 官网公开能力证据库唯一事实源（域→模块→功能+证据路径）；No Evidence, No Claim 降级引擎；生成页面见 `成都修茈科技有限公司/capabilities/` |
 | product-lines（三产品线控制面） | [PRODUCT_LINES_STATUS.md](PRODUCT_LINES_STATUS.md) | 三产品线版本/发布状态/能力/成熟度单一事实来源（自动生成；声明式输入 [../config/product_lines.yaml](../config/product_lines.yaml)，不含任何数字） |
 
+## 架构证据视图（非 SSOT）
+
+> 供评审查看的架构与指标视图，不是唯一事实源；与代码冲突时以代码与上表 SSOT 为准。
+
+| 视图 | 文件 | 说明 |
+|------|------|------|
+| DOMAIN 05 意图与工具路由 | [architecture/intent-tool-routing/05-intent-tool-routing-architecture.html](architecture/intent-tool-routing/05-intent-tool-routing-architecture.html) | 全链路 14 步、L0–L7 指标与 L2 记忆事实化；证据级别 E2，含离线图表资源 |
+
 ## 机器注册表（ssot.yaml）
 
 > 与 `FHD/config/ssot.yaml` 的 **enabled 域** 一一对应；由 `scripts/dev/ssot_registry_crosscheck.py` 互校验（CI blocking）。
