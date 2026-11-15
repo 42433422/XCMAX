@@ -43,7 +43,68 @@ def normalize_product_float_query(raw: str) -> str:
     return text
 
 
+def _chunk_source(chunk: dict[str, Any]) -> str:
+    """知识片段的可读来源（文件名），不要把 hybrid/vector 这类检索方式当来源。"""
+    metadata = chunk.get("metadata")
+    meta_source = metadata.get("source") if isinstance(metadata, dict) else ""
+    return str(chunk.get("source_url") or meta_source or "").strip()
+
+
 class AIChatWorkflowResponseMixin:
+    def _knowledge_answer(self, step, user_message: str) -> str:
+        """把知识库检索结果整理成对用户的答复，而不是只回一行「成功」。
+
+        优先用模型按 TODO 的「根据检索结果作答」综合证据；模型不可用时退回确定性摘录。
+        """
+        output = getattr(step, "output", None)
+        out = output if isinstance(output, dict) else {}
+        chunks = [
+            chunk
+            for chunk in (out.get("chunks") or [])
+            if isinstance(chunk, dict) and str(chunk.get("text") or "").strip()
+        ]
+        deterministic = str(out.get("answer") or "").strip()
+        sources = sorted({_chunk_source(chunk) for chunk in chunks} - {""})
+        question = str(user_message or out.get("query") or "").strip()
+        answer = self._synthesize_knowledge_answer(question, chunks) or deterministic
+        if not answer:
+            return ""
+        if sources:
+            answer = f"{answer}\n\n来源：{'、'.join(sources[:3])}"
+        return answer
+
+    def _synthesize_knowledge_answer(self, question: str, chunks: list[dict[str, Any]]) -> str:
+        if not question or not chunks:
+            return ""
+        complete = getattr(getattr(self, "workflow_planner", None), "complete_messages", None)
+        if not callable(complete):
+            return ""
+        evidence = "\n\n".join(
+            f"[{index}] {str(chunk.get('text') or '').strip()[:800]}"
+            for index, chunk in enumerate(chunks[:5], start=1)
+        )
+        try:
+            data = complete(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是企业知识库助手。只依据给出的资料回答，资料不足就直说没有找到，"
+                            "不要编造。金额、数量、日期要写清并按资料原文标注来源行。回答不超过 5 句话。"
+                        ),
+                    },
+                    {"role": "user", "content": f"问题：{question}\n\n资料：\n{evidence}"},
+                ],
+                context={},
+                temperature=0.0,
+                max_tokens=400,
+            )
+        except Exception:  # noqa: BLE001 - 模型不可用时退回确定性摘录
+            return ""
+        choices = (data or {}).get("choices") if isinstance(data, dict) else None
+        message = (choices or [{}])[0].get("message") if isinstance(choices, list) else None
+        return str((message or {}).get("content") or "").strip()
+
     def _build_workflow_thinking_steps(self, plan, decision_reason: str) -> str:
         tool_labels = {
             "business_db": "业务数据",
@@ -191,6 +252,13 @@ class AIChatWorkflowResponseMixin:
             step = steps[0]
             if (step.status, step.tool_id, step.action) == ("completed", "customers", "query"):
                 response_text = _customer_query_summary(step.output) or response_text
+            elif (step.status, step.tool_id, step.action) == (
+                "completed",
+                "dataset_rag",
+                "query",
+            ):
+                # TODO 最后一步是「根据检索结果作答」，不能只回一行「成功」。
+                response_text = self._knowledge_answer(step, user_message) or response_text
         payload: dict[str, Any] = {
             "success": success,
             "message": "处理完成" if success else "处理失败",
@@ -406,6 +474,14 @@ class AIChatWorkflowResponseMixin:
                 suffix = f": {message}" if message else ""
                 line = f"- {item.node_id}: 成功（员工 {employee_id}{suffix}）"
             return [line, f"    · 结果预览: {preview}"] if preview else [line]
+
+        if item.tool_id == "dataset_rag":
+            chunks = out.get("chunks") if isinstance(out.get("chunks"), list) else []
+            answer = str(out.get("answer") or "").strip()
+            line = f"- {item.node_id}: 成功（知识库检索到 {len(chunks)} 条相关记录）"
+            if answer:
+                return [line, f"    · 检索答复: {answer[:500]}"]
+            return [line]
 
         if item.tool_id == "business_db":
             entity = str(node_params.get("entity") or out.get("entity") or "-").strip()
