@@ -104,16 +104,24 @@ def _registered_router_document_template(
         )
     elif action == "clear":
         from app.application import get_template_app_service
+        from app.infrastructure.templates.template_preferences import hide_templates
         from app.legacy.routes.document_templates_compat import run_archive_template_delete
 
         listed = get_template_app_service().get_templates() or {}
         rows = listed.get("templates") if isinstance(listed, dict) else None
         deleted = skipped = 0
         base_dir = str(runtime_context.get("template_base_dir") or "") or None
+        starter_ids: list[str] = []
+        builtin_paths: list[str] = []
         for item in rows or []:
             if not isinstance(item, dict):
                 continue
             template_id = str(item.get("id") or "").strip()
+            if not template_id:
+                continue
+            if template_id.startswith("seed:"):
+                starter_ids.append(template_id)
+                continue
             if not (
                 template_id.startswith("fs:")
                 or template_id.startswith("db:")
@@ -126,13 +134,28 @@ def _registered_router_document_template(
             )
             if item_status == 200 and item_data.get("success"):
                 deleted += 1
-            else:
-                skipped += 1
+                continue
+            # 安装目录里的内置表格不能删字节；改为按租户隐藏，保证列表真的被清空。
+            installed_path = str(item.get("path") or item.get("file_path") or "").strip()
+            if item_status == 403 and installed_path:
+                builtin_paths.append(installed_path)
+                continue
+            skipped += 1
+        hidden = hide_templates(ids=starter_ids, paths=builtin_paths)
+        if deleted or hidden:
+            message = f"已清理 {deleted} 个自定义模板，隐藏 {hidden} 个内置模板"
+        elif skipped:
+            message = f"模板库未能清理：{skipped} 个模板不支持删除"
+        else:
+            message = "模板库已经是空的"
+        if skipped and (deleted or hidden):
+            message += f"，{skipped} 个未能清理"
         data, status_code = (
             {
-                "success": True,
-                "message": f"已清空 {deleted} 个模板",
+                "success": not skipped or bool(deleted or hidden),
+                "message": message,
                 "deleted_templates": deleted,
+                "hidden_templates": hidden,
                 "skipped_templates": skipped,
             },
             200,

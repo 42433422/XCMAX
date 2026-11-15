@@ -303,7 +303,25 @@ class FileSystemTemplateStore(TemplateStorePort):
                 continue
             seen.add(key)
             deduped.append(tpl)
-        return deduped
+        return self._without_hidden_paths(deduped)
+
+    @staticmethod
+    def _without_hidden_paths(templates: list[dict]) -> list[dict]:
+        """内置/安装资源支持按租户隐藏，避免「清理后仍显示」。"""
+        from app.infrastructure.templates.template_preferences import hidden_template_paths
+
+        hidden = hidden_template_paths()
+        if not hidden:
+            return templates
+        runtime = get_app_data_dir()
+        hidden_keys = {template_path_key(path, runtime_root=runtime) for path in hidden}
+        kept: list[dict] = []
+        for tpl in templates:
+            path = str(tpl.get("path") or "").strip()
+            if path and template_path_key(path, runtime_root=runtime) in hidden_keys:
+                continue
+            kept.append(tpl)
+        return kept
 
     def list_by_type(self, template_type: str, active_only: bool = True) -> list[dict]:
         db_templates = [t for t in self._db_templates() if t.get("template_type") == template_type]
