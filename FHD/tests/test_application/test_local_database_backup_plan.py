@@ -44,7 +44,9 @@ def test_non_create_wordings_are_not_executable_backups(message, kind):
 def test_planner_admits_original_phrases_without_model(message):
     plan = _planner().plan(user_id="u-67", message=message, tool_registry={})
     assert plan.intent == "system_maintenance_backup_database"
-    assert [(n.tool_id, n.action) for n in plan.nodes] == [("system_maintenance", "backup_database")]
+    assert [(n.tool_id, n.action) for n in plan.nodes] == [
+        ("system_maintenance", "backup_database")
+    ]
     assert plan.nodes[0].params == {}
     assert plan.metadata.get("planning_source") == "deterministic_command"
     assert plan.metadata.get("planning_rejected") is not True
@@ -112,8 +114,16 @@ def test_official_backup_keeps_existing_approval_contract():
     from resources.config.risk_actions_loader import get_action_approval
 
     svc = ApprovalService()
-    backup = WorkflowNode(node_id="b", tool_id="system_maintenance", action="backup_database", params={}, risk="medium")
-    restore = WorkflowNode(node_id="r", tool_id="system_maintenance", action="restore_database", params={}, risk="high")
+    backup = WorkflowNode(
+        node_id="b",
+        tool_id="system_maintenance",
+        action="backup_database",
+        params={},
+        risk="medium",
+    )
+    restore = WorkflowNode(
+        node_id="r", tool_id="system_maintenance", action="restore_database", params={}, risk="high"
+    )
     assert get_action_approval("system_maintenance", "backup_database") != "always"
     assert svc.check_node_requires_approval(backup) is False
     assert get_action_approval("system_maintenance", "restore_database") == "always"

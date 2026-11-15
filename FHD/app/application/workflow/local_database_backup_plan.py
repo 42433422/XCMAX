@@ -13,7 +13,9 @@ _RESTORE_OR_DELETE = re.compile(r"恢复|还原|删除")
 _VIEW = re.compile(r"查看|查询|列出|有哪些")
 _DEST = re.compile(r"到\s*(U\s*盘|优盘|usb|硬盘|网盘|外置)", re.I)
 _NEGATE = re.compile(r"不要|别再|禁止|取消备份")
-_UNSUPPORTED = "当前只支持创建本机数据库备份，不能把备份直接写到指定外部位置。请改口为创建本机备份。"
+_UNSUPPORTED = (
+    "当前只支持创建本机数据库备份，不能把备份直接写到指定外部位置。请改口为创建本机备份。"
+)
 _NEGATED = "已按你的要求，不会创建数据库备份。"
 
 
@@ -41,13 +43,25 @@ def local_database_backup_plan(message: str, plan_id: str) -> PlanGraph | None:
         return PlanGraph(
             plan_id=plan_id,
             intent="system_maintenance_backup_database",
-            metadata={"planning_rejected": True, "rejection_reason": reason, "planning_source": "deterministic_command"},
+            metadata={
+                "planning_rejected": True,
+                "rejection_reason": reason,
+                "planning_source": "deterministic_command",
+            },
         )
     return PlanGraph(
         plan_id=plan_id,
         intent="system_maintenance_backup_database",
         todo_steps=["创建一次本机数据库备份"],
-        nodes=[WorkflowNode(node_id="backup_database", tool_id="system_maintenance", action="backup_database", params={}, risk="medium")],
+        nodes=[
+            WorkflowNode(
+                node_id="backup_database",
+                tool_id="system_maintenance",
+                action="backup_database",
+                params={},
+                risk="medium",
+            )
+        ],
         metadata={"planning_source": "deterministic_command"},
         risk_level="medium",
     )
