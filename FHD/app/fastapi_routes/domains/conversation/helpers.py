@@ -287,7 +287,7 @@ from app.fastapi_routes.domains.conversation.reply_helpers import (
 )
 
 _EXCEL_PATH_PATTERN = re.compile(
-    r"@?([^\s'\"<>]+?\.(?:xlsx|xlsm|xls))(?=$|[\s,，。.!！?？])",
+    r"@?([^\s'\"<>、，,;；:：]+?\.(?:xlsx|xlsm|xls))(?=$|[\s,，。.!！?？、;；])",
     re.IGNORECASE,
 )
 

@@ -795,8 +795,8 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "file_paths": {
                 "type": "array",
                 "items": {"type": "string"},
-                "maxItems": 20,
-                "description": "整批文件（最多 20 个），与 file_path 二选一",
+                "maxItems": 50,
+                "description": "整批文件（最多 50 个），与 file_path 二选一",
             },
             "valid_rows_only": {"type": "boolean"},
             "accept_suggested": {
@@ -812,8 +812,8 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "run_ids": {
                 "type": "array",
                 "items": {"type": "string"},
-                "maxItems": 20,
-                "description": "整批预演编号（最多 20 个），与 run_id 二选一",
+                "maxItems": 50,
+                "description": "整批预演编号（最多 50 个），与 run_id 二选一",
             },
             "valid_rows_only": {"type": "boolean"},
             "accept_suggested": {

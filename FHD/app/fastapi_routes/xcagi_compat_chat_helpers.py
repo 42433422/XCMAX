@@ -187,7 +187,7 @@ from app.fastapi_routes.xcagi_compat_chat_models import (
 )
 
 _EXCEL_PATH_PATTERN = re.compile(
-    r"@?([^\s'\"<>]+?\.(?:xlsx|xlsm|xls))(?=$|[\s,，。.!！?？])",
+    r"@?([^\s'\"<>、，,;；:：]+?\.(?:xlsx|xlsm|xls))(?=$|[\s,，。.!！?？、;；])",
     re.IGNORECASE,
 )
 
