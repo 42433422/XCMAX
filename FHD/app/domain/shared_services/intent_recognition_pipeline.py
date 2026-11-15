@@ -60,6 +60,17 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
     }
 
     try:
+        from app.domain.conversation.services.chat_tool_intent import looks_like_raw_sql
+
+        if looks_like_raw_sql(msg):
+            result["is_likely_unclear"] = False
+            result["blocked_reason"] = "raw_sql"
+            _intent_cache.set(cache_key, result)
+            return result
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("raw SQL guard skipped: %s", exc)
+
+    try:
         basic_intents = _reflex_basic_intents(message)
     except RECOVERABLE_ERRORS as exc:
         logger.warning("reflex basic intents skipped: %s", exc)
@@ -88,14 +99,10 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
         # 置信度纪律：透出命中意图的优先级（新增字段，向后兼容；消费方 .get 取值）
         result["matched_priority"] = best.get("priority", 0)
 
-        negated = (
-            is_negation(message, action_keywords=best.get("keywords"))
-            if block_if_negated
-            else False
-        )
+        negated = is_negation(message, action_keywords=best.get("keywords"))
         result["is_negated"] = negated
 
-        if not negated:
+        if not (negated and block_if_negated):
             result["tool_key"] = tool_key
 
         if intent_id == "shipment_generate":

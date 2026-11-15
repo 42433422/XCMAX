@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -84,6 +86,22 @@ def semantic_override_max_priority() -> int:
 
 def semantic_model_name() -> str:
     return (os.environ.get(_ENV_MODEL, "") or "").strip() or _DEFAULT_MODEL
+
+
+def _resolve_model_dir() -> str:
+    """优先环境变量，其次随包资源，最后交给 FastEmbed 默认缓存。"""
+    explicit = (os.environ.get(_ENV_MODEL_DIR, "") or "").strip()
+    if explicit:
+        return explicit
+
+    candidates: list[Path] = []
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        candidates.append(Path(sys._MEIPASS) / "assets" / "models" / "fastembed")
+    candidates.append(Path(__file__).resolve().parents[3] / "assets" / "models" / "fastembed")
+    for candidate in candidates:
+        if candidate.is_dir():
+            return str(candidate)
+    return ""
 
 
 _lock = threading.Lock()
@@ -166,8 +184,10 @@ def _build_router() -> tuple[Any, dict[str, str]]:
         raise RuntimeError("intent config produced no semantic routes")
 
     model_kwargs: dict[str, Any] = {"name": semantic_model_name()}
-    cache_dir = (os.environ.get(_ENV_MODEL_DIR, "") or "").strip()
+    cache_dir = _resolve_model_dir()
     if cache_dir:
+        # 随包模型已就绪时禁止联网探测，保证离线可用。
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
         model_kwargs["cache_dir"] = cache_dir
     encoder = FastEmbedEncoder(**model_kwargs)
 

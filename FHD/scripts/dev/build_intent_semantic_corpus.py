@@ -15,6 +15,37 @@ ROOT = Path(__file__).resolve().parents[2]
 GOLDEN = ROOT / "tests" / "benchmarks" / "intent_golden_set.json"
 OUTPUT = ROOT / "resources" / "config" / "intent_semantic_utterances.yaml"
 
+# 人工维护的业务表达：回归集未覆盖、但线上高频的口语说法。
+CURATED: dict[str, list[str]] = {
+    "shipment_generate": [
+        "给客户安排发货",
+        "给客户备货",
+        "备货发出去",
+        "这批货今天必须发出去",
+        "安排出库发货",
+        "货配齐了出个单",
+        "出个单给客户",
+        "照惯例开单",
+        "单子先开了再叫车",
+        "通知仓库发货",
+        "物流来提货了",
+        "按老规矩开一张送货单",
+    ],
+    "price_list": [
+        "给客户报个价",
+        "现在的价位是多少",
+        "最新价格列一下",
+        "做个报价单",
+        "价格表发我一份",
+    ],
+    "customer_export": [
+        "客户名单做成表格",
+        "把客户资料导出来",
+        "客户表拉个清单",
+        "导出单位名单",
+    ],
+}
+
 
 def collect() -> dict[str, list[str]]:
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
@@ -27,6 +58,11 @@ def collect() -> dict[str, list[str]]:
         bucket = corpus.setdefault(tool_key, [])
         if text not in bucket:
             bucket.append(text)
+    for tool_key, texts in CURATED.items():
+        bucket = corpus.setdefault(tool_key, [])
+        for text in texts:
+            if text not in bucket:
+                bucket.append(text)
     return {key: sorted(values) for key, values in sorted(corpus.items())}
 
 

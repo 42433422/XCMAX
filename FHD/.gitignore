@@ -325,3 +325,6 @@ frontend/coverage*
 frontend/test-results/
 frontend/playwright-report/
 *.tsbuildinfo
+
+# 意图语义兜底模型：构建时用 scripts/dev/fetch_intent_semantic_model.py 下载，不入库
+assets/models/fastembed/
