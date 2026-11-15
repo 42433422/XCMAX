@@ -143,7 +143,7 @@ def prepare_chat_evidence(
             if long_term_summary:
                 summaries.append(long_term_summary)
             rag = get_user_memory_rag_app_service()
-            hits = []
+            hits: list[dict[str, Any]] = []
             if not long_term_hits:
                 hits = (
                     rag.query(user_id=memory_user_id, query_text=message, top_k=3).get("hits") or []

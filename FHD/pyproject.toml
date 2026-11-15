@@ -261,6 +261,7 @@ module = [
     "google.*",
     "jsonschema.*",
     "keyring.*",
+    "mem0.*",
     "onnxruntime.*",
     "paddleocr.*",
     "pandas.*",

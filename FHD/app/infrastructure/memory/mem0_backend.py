@@ -250,12 +250,17 @@ class Mem0LongTermMemory:
             return []
         top_k = max(1, min(20, int(limit)))
         try:
-            raw = memory.search(
-                text,
-                filters={"user_id": str(user_id)},
-                top_k=top_k,
-                threshold=self._min_score,
-            )
+            try:
+                raw = memory.search(
+                    text,
+                    filters={"user_id": str(user_id)},
+                    top_k=top_k,
+                    threshold=self._min_score,
+                )
+            except TypeError:
+                raw = memory.search(
+                    text, user_id=str(user_id), limit=top_k, threshold=self._min_score
+                )
         except RECOVERABLE_ERRORS as exc:
             logger.warning("长期记忆检索失败：%s", exc)
             return []
@@ -267,7 +272,8 @@ class Mem0LongTermMemory:
             content = str(item.get("memory") or item.get("data") or "").strip()
             if not content:
                 continue
-            stored = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+            raw_metadata = item.get("metadata")
+            stored: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
             hits.append(
                 {
                     "chunk_id": str(item.get("id") or ""),

@@ -8,7 +8,7 @@ import os
 import re
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -297,7 +297,7 @@ def _model_messages(
     return messages
 
 
-def _turns_fingerprint(turns: list[Mapping[str, Any]]) -> str:
+def _turns_fingerprint(turns: Sequence[Mapping[str, Any]]) -> str:
     payload = [
         [str(item.get("turn_id") or ""), item.get("role"), str(item.get("at") or "")]
         for item in turns
