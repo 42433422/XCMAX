@@ -13,19 +13,19 @@
 
   var rows = [
     { name: '域外（out_of_scope）', value: 100.0 },
-    { name: '库存', value: 100.0 },
-    { name: '微信', value: 100.0 },
-    { name: '拒绝', value: 90.9 },
     { name: '打印', value: 90.0 },
-    { name: '产品', value: 90.0 },
-    { name: '销售', value: 90.0 },
+    { name: '微信', value: 90.0 },
     { name: '客户', value: 80.0 },
-    { name: '发货', value: 80.0 },
-    { name: '报表', value: 80.0 },
-    { name: '系统', value: 80.0 },
+    { name: '库存', value: 80.0 },
     { name: '数据', value: 70.0 },
     { name: '问候', value: 70.0 },
-    { name: '财务', value: 70.0 }
+    { name: '拒绝', value: 63.6 },
+    { name: '发货', value: 50.0 },
+    { name: '报表', value: 50.0 },
+    { name: '系统', value: 50.0 },
+    { name: '财务', value: 40.0 },
+    { name: '产品', value: 40.0 },
+    { name: '销售', value: 40.0 }
   ];
 
   var chart = echarts.init(host, null, { renderer: 'svg' });
@@ -79,12 +79,12 @@
         symbol: 'none',
         lineStyle: { color: accent2, type: 'dashed', width: 1.2 },
         label: {
-          formatter: '总体 86.6%',
+          formatter: '总体 65.5%',
           color: accent2,
           fontSize: 11,
           position: 'insideEndTop'
         },
-        data: [{ xAxis: 86.6 }]
+        data: [{ xAxis: 65.49 }]
       }
     }]
   });

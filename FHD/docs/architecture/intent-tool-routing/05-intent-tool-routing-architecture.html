@@ -425,7 +425,7 @@ footer{border-top:1px solid var(--rule);background:var(--bg2)}
 
       <div class="callout warn">
         <div class="ct">关键事实</div>
-        加入语义兜底后，独立留出集从 65.49% 升到 <b>86.6%</b>（142 例 × 3 轮，轮间一致率 100%），超过 85% 目标。剩余最低域为 70%，继续提升需要按域语料，而不是继续调全局阈值。
+        仓库内可复现的留出集为 <b>65.49%</b>（142 例 × 3 轮，轮间一致率 100%，core 80% / semantic 58.76%）。语义兜底后曾有一次本地跑分 86.6%，但结果未落盘、不可复现，本页不作为证据引用。
       </div>
     </section>
 
@@ -559,13 +559,13 @@ footer{border-top:1px solid var(--rule);background:var(--bg2)}
       <p class="sec-note">全部数字来自仓库内 metrics 文件与本地实跑，均标注采集时间与源码 SHA。</p>
       <div class="metrics">
         <div class="metric good"><div class="v">82.2<small>%</small></div><div class="l">规则基准 semantic 层（60/73）</div></div>
-        <div class="metric mid"><div class="v">86.6<small>%</small></div><div class="l">语义兜底后留出集（原 65.5%）</div></div>
+        <div class="metric mid"><div class="v">65.5<small>%</small></div><div class="l">仓库可复现留出集（core 80% / semantic 58.8%）</div></div>
         <div class="metric mid"><div class="v">63.6<small>%</small></div><div class="l">任务成功率 22 例 pass^1</div></div>
         <div class="metric good"><div class="v">467</div><div class="l">审批相关用例本地通过</div></div>
       </div>
 
       <figure class="chart-figure">
-        <figcaption>图 1 · 语义兜底后留出集 14 个业务域准确率（142 例 × 3 轮，虚线为总体 86.6%）</figcaption>
+        <figcaption>图 1 · 仓库可复现留出集 14 个业务域准确率（142 例 × 3 轮，虚线为总体 65.5%）</figcaption>
         <div id="chart-holdout"></div>
       </figure>
 
@@ -575,9 +575,9 @@ footer{border-top:1px solid var(--rule);background:var(--bg2)}
           <tbody>
             <tr><td>规则基准 core</td><td>24 / 24</td><td>2026-10-10</td><td>固定句式完全可控</td></tr>
             <tr><td>规则基准 semantic</td><td>60 / 73（82.2%）</td><td>2026-10-10</td><td>半自由表达可接受</td></tr>
-            <tr><td>留出集总体</td><td>86.6%（142 例 × 3 轮）</td><td>2026-11-15</td><td>语义兜底后；原规则基线 65.49%</td></tr>
-            <tr><td>留出集 core / semantic</td><td>93.33% / 83.51%</td><td>2026-11-15</td><td>语义层仍是主要失分点</td></tr>
-            <tr><td>最低域</td><td>data / greeting / finance 70%</td><td>2026-11-15</td><td>均已达到 70% 下限</td></tr>
+            <tr><td>留出集总体</td><td>65.49%（142 例 × 3 轮）</td><td>2026-09-09</td><td>仓库文件可复现；语义兜底后 86.6% 未落盘</td></tr>
+            <tr><td>留出集 core / semantic</td><td>80.00% / 58.76%</td><td>2026-09-09</td><td>语义层仍是主要失分点</td></tr>
+            <tr><td>最低域</td><td>finance / products / sales 40%</td><td>2026-09-09</td><td>均低于 70% 下限</td></tr>
             <tr><td>任务基准 pass^1</td><td>63.64%（22 例，1 次）</td><td>2026-11-09</td><td>端到端仍会产生错误动作</td></tr>
             <tr><td>失败任务</td><td>8 例</td><td>2026-11-09</td><td>重复澄清、否定未闭环、租户缺失、超时阻塞、单据内容不符</td></tr>
           </tbody>
@@ -700,7 +700,7 @@ footer{border-top:1px solid var(--rule);background:var(--bg2)}
 
       <div class="metrics">
         <div class="metric mid"><div class="v">L0<small> C-</small></div><div class="l">模型与推理 · 仅接入与重试口径</div></div>
-        <div class="metric good"><div class="v">L1<small> B+</small></div><div class="l">理解与意图 · 留出集 86.6%</div></div>
+        <div class="metric mid"><div class="v">L1<small> B-</small></div><div class="l">理解与意图 · 可复现留出集 65.5%</div></div>
         <div class="metric mid"><div class="v">L2<small> B-</small></div><div class="l">知识与记忆 · 事实合并 + 84 例回归</div></div>
         <div class="metric mid"><div class="v">L3<small> B-</small></div><div class="l">规划与决策 · 有界修复闭环</div></div>
         <div class="metric mid"><div class="v">L4<small> B-</small></div><div class="l">工具与执行 · MCP / 并行 / 补偿</div></div>
@@ -718,9 +718,9 @@ footer{border-top:1px solid var(--rule);background:var(--bg2)}
             <tr><td>首 token 延迟 P50 / P95</td><td>未采集</td><td>—</td><td>需接入 OTel GenAI span 聚合</td></tr>
             <tr><td>单次请求推理成本</td><td>未采集</td><td>—</td><td>需按模型 + token 计费台账</td></tr>
 
-            <tr><td rowspan="4"><b>L1</b><br>理解与意图</td><td>留出集意图准确率</td><td>86.6%（142 例 × 3 轮）</td><td>E2 实测</td><td>目标 ≥ 90%</td></tr>
+            <tr><td rowspan="4"><b>L1</b><br>理解与意图</td><td>留出集意图准确率</td><td>65.49%（142 例 × 3 轮，仓库文件可复现）</td><td>E2 实测</td><td>目标 ≥ 90%；语义兜底 86.6% 未落盘</td></tr>
             <tr><td>规则基准 semantic</td><td>82.2%（60/73）</td><td>E2 实测</td><td>按域补语料</td></tr>
-            <tr><td>最低业务域</td><td>70%（data / greeting / finance）</td><td>E2 实测</td><td>目标 ≥ 80%</td></tr>
+            <tr><td>最低业务域</td><td>40%（finance / products / sales）</td><td>E2 实测</td><td>目标 ≥ 80%</td></tr>
             <tr><td>任务基准 pass^1</td><td>63.64%（22 例 × 1 次）</td><td>E2 实测</td><td>协议要求 ≥30 例 × 3 轮</td></tr>
 
             <tr><td rowspan="6"><b>L2</b><br>知识与记忆</td><td>事实合并决策</td><td>ADD / NOOP / SUPERSEDE；7 类规则抽取；单轮 ≤5 条</td><td>E2 单测 13 例</td><td>需真实对话回放验证抽取覆盖</td></tr>
@@ -789,7 +789,7 @@ footer{border-top:1px solid var(--rule);background:var(--bg2)}
 
 <footer>
   <div class="foot-inner">
-    <b>数据来源</b>：<code>FHD/metrics/intent_benchmark_latest.json</code>、<code>intent_holdout_latest.json</code>、<code>task_benchmark_report.json</code>；语义兜底实测为 2026-11-15 本地跑分（142 例 × 3 轮）；L2 记忆参数取自 <code>dialogue_memory.py</code>、<code>context_window_manager.py</code>、<code>mem0_backend.py</code>、<code>memory_units.py</code>、<code>consolidation.py</code> 与 84 例本地回归（含事实合并与召回 13 例）；L3/L4 指标取自 <code>plan_repair.py</code>、<code>tool_calling.py</code>、<code>mcp/</code>、<code>compensation.py</code>、<code>tool_process.py</code> 与对应 12 / 49 例回归；<code>FHD/config/audit_benchmark_ssot.json</code>；源码基线 <code>PR #3234 + PR #3235–#3237</code>。<br>
+    <b>数据来源</b>：<code>FHD/metrics/intent_benchmark_latest.json</code>、<code>intent_holdout_latest.json</code>、<code>task_benchmark_report.json</code>；留出集取自 <code>intent_holdout_latest.json</code>（2026-09-09，142 例 × 3 轮，总体 65.49%，dataset_sha256 与 source_sha 均记录）；语义兜底后的 86.6% 未落盘，不作为证据；L2 记忆参数取自 <code>dialogue_memory.py</code>、<code>context_window_manager.py</code>、<code>mem0_backend.py</code>、<code>memory_units.py</code>、<code>consolidation.py</code> 与 84 例本地回归（含事实合并与召回 13 例）；L3/L4 指标取自 <code>plan_repair.py</code>、<code>tool_calling.py</code>、<code>mcp/</code>、<code>compensation.py</code>、<code>tool_process.py</code> 与对应 12 / 49 例回归；<code>FHD/config/audit_benchmark_ssot.json</code>；源码基线 <code>PR #3234 + PR #3235–#3237</code>。<br>
     <b>口径声明</b>：本文为内部证据视图，不构成 <code>external-anchors-v1</code> 正式审计分；正式分需商业锚点同协议实测、E3 与 30 天 E4 窗口。历史内部值 54.0（语义兜底前）与 73.3 / 77.1（internal-review-v1）均不换算、不沿用，也不与新协议混算。
   </div>
 </footer>
