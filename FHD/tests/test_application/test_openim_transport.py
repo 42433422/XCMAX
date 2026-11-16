@@ -203,3 +203,59 @@ def test_transport_session_never_publishes_after_owner_rejection(monkeypatch):
     )
     with pytest.raises(ValueError, match="群不存在"):
         message_transport.session(SimpleNamespace(get_messages=denied), 8, "group")
+
+
+@pytest.mark.parametrize("scan", ["members", "history"])
+@pytest.mark.parametrize("limit", ["pages", "time", "none"])
+def test_remote_scans_complete_before_mutating(tmp_path, monkeypatch, scan, limit):
+    """Repeated full pages or a slow final page must never authorize partial sync."""
+    calls = []
+    clock = [0.0]
+    monkeypatch.setattr(openim, "_MAX_SCAN_PAGES", 2)
+    monkeypatch.setattr(openim.time, "monotonic", lambda: clock[0])
+    with tenant_scope(1):
+        if scan == "history":
+            bridge, remote, _ = setup_bridge(tmp_path, monkeypatch)
+            path, key = "/msg/search_msg", "chatLogs"
+            row = {"chatLog": {"content": json.dumps({"data": json.dumps({"id": "other"})})}}
+            run = lambda: bridge.sync(7, "group")
+        else:
+            remote = Remote()
+            monkeypatch.setattr(openim, "_client", lambda *args: remote)
+            bridge = openim.OpenIMGroups(None)
+            path, key = "/group/get_group_member_list", "members"
+            row = {"userID": "obsolete"}
+            run = lambda: bridge.ensure_group({"id": "group", "user_id": 7, "name": "test"})
+        original_call = remote.call
+
+        def call(endpoint, body):
+            calls.append((endpoint, body))
+            if endpoint == "/user/get_users_info":
+                return {"usersInfo": [{"userID": bridge.identity(7, "u")}]}
+            if endpoint == "/group/get_groups_info":
+                return {"groupInfos": [{"groupID": "existing"}]}
+            if endpoint == path:
+                page = body["pagination"]["pageNumber"]
+                if limit == "time" and page == 2:
+                    clock[0] += openim._SCAN_SECONDS
+                return {key: [row] * 100 if page == 1 or limit == "pages" else []}
+            if endpoint in {"/group/invite_user_to_group", "/group/kick_group"}:
+                return {}
+            return original_call(endpoint, body)
+
+        remote.call = call
+        if limit == "none":
+            run()
+            assert [
+                body["pagination"]["pageNumber"] for endpoint, body in calls if endpoint == path
+            ] == [1, 2]
+            assert any(endpoint in {"/msg/send_msg", "/group/kick_group"} for endpoint, _ in calls)
+        else:
+            with pytest.raises(openim.OpenIMError, match="分页核对超出限制"):
+                run()
+            assert sum(endpoint == path for endpoint, _ in calls) == 2
+            assert not any(
+                endpoint in {"/group/invite_user_to_group", "/group/kick_group", "/msg/send_msg"}
+                for endpoint, _ in calls
+            )
+            assert not (tmp_path / "openim-publication.sqlite3").exists()

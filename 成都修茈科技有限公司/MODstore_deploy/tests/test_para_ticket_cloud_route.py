@@ -41,6 +41,7 @@ CANNOT_HANDLE = {"logs_tail": [{"content": "CANNOT_HANDLE"}]}
 
 def test_only_same_github_job_can_become_the_worker(monkeypatch):
     from datetime import UTC, datetime
+
     from modstore_server.para_github_runner import device_matches
 
     monkeypatch.setenv("MODSTORE_PARA_GITHUB_DEVICE_ID", "dedicated-worker")
@@ -72,8 +73,8 @@ def test_only_same_github_job_can_become_the_worker(monkeypatch):
 
 
 def test_github_credentials_never_fall_back_to_mac_or_guest(monkeypatch):
-    from modstore_server.maintenance_loop import para_auth
     from modstore_server import cred_vault
+    from modstore_server.maintenance_loop import para_auth
 
     monkeypatch.setenv("MODSTORE_PARA_GITHUB_API_BASE", "https://para.example.test")
     monkeypatch.setattr(

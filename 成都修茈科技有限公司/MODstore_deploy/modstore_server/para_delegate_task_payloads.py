@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import importlib
 import json
+import os
 import re
-from hashlib import sha256
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from hashlib import sha256
 from typing import Any
 
 from modstore_server.dot_ticket_dispatch import DoltIncidentContractError
@@ -26,15 +28,16 @@ class PreparedTaskGroup:
     blocked: dict[str, Any] | None = None
 
 
-def _facade():
-    return importlib.import_module("modstore_server.para_delegate_handler")
-
-
-def _build_request(*, task: str, input_data: dict[str, Any], employee_id: str) -> dict[str, Any]:
-    input_data = {**input_data, **_facade()._customer_ticket_cloud_route(input_data)}
-    from modstore_server.customer_ticket_triage import para_triage_hook
-
-    input_data = para_triage_hook(input_data, employee_id=employee_id)
+def build_request(
+    *,
+    task: str,
+    input_data: dict[str, Any],
+    employee_id: str,
+    workspace_root: str,
+    mode: str,
+    report_only: bool,
+) -> dict[str, Any]:
+    """Build a task from already routed policy decisions, without a handler back-reference."""
     budget = {}
     if input_data.get("_trusted_incident_team_execution") is True:
         from modstore_server.incident_model_router import route_for_incident
@@ -53,27 +56,18 @@ def _build_request(*, task: str, input_data: dict[str, Any], employee_id: str) -
         if not re.fullmatch(r"[0-9a-f]{32}", attempt):
             raise ValueError("GitHub employee attempt identity is invalid")
         title = f"[xcmax:{sha256(request_key.encode()).hexdigest()[:32]}:{attempt}] {employee_id}"
-    workspace_root = (
-        "" if input_data.get("github_workspace") else _facade()._project_root(input_data)
-    )
-    mode = _facade()._mode_for_employee(employee_id, input_data)
-    report_only = _facade()._coerce_bool(
-        input_data.get("report_only"), mode in {"review", "verify"}
-    )
     branch = (
         str(
             input_data.get("branch")
             or input_data.get("base_branch")
-            or _facade().os.environ.get("MODSTORE_PARA_BRANCH")
+            or os.environ.get("MODSTORE_PARA_BRANCH")
             or "main"
         ).strip()
         or "main"
     )
     return {
         "request_id": str(
-            input_data.get("request_id")
-            or input_data.get("attempt_id")
-            or _facade().uuid.uuid4().hex
+            input_data.get("request_id") or input_data.get("attempt_id") or uuid.uuid4().hex
         ),
         "execution_identity": {
             key: input_data.get(key)
@@ -86,7 +80,7 @@ def _build_request(*, task: str, input_data: dict[str, Any], employee_id: str) -
                 "role",
             )
         },
-        "created_at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "source": "modstore_employee_loop",
         "execution_budget": budget,
         "codex_model_candidates": budget.get("codex_model_candidates")
@@ -100,11 +94,11 @@ def _build_request(*, task: str, input_data: dict[str, Any], employee_id: str) -
         "prompt": str(input_data.get("prompt") or task or ""),
         "workspace_root": workspace_root,
         "repo_url": str(
-            input_data.get("repo_url") or _facade().os.environ.get("MODSTORE_PARA_REPO_URL") or ""
+            input_data.get("repo_url") or os.environ.get("MODSTORE_PARA_REPO_URL") or ""
         ),
         "branch": branch,
         "device_id": str(
-            input_data.get("device_id") or _facade().os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""
+            input_data.get("device_id") or os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""
         ),
         "tool_name": str(input_data.get("tool_name") or input_data.get("dev_tool") or ""),
         "depends_on": (
@@ -194,20 +188,26 @@ def _independent_check_plan(req):
 
 def validated_check_units(
     req: dict[str, Any],
+    check_plan: Callable[
+        [dict[str, Any]], tuple[list[dict[str, Any]], str]
+    ] = _independent_check_plan,
 ) -> tuple[list[dict[str, Any]], str, dict[str, Any] | None]:
-    from modstore_server.para_delegate_handler import _independent_check_plan
 
     try:
-        units, revision = _independent_check_plan(req) if not req.get("para_task_id") else ([], "")
+        units, revision = check_plan(req) if not req.get("para_task_id") else ([], "")
         return units, revision, None
     except (ValueError, TypeError) as exc:
         return [], "", _blocked(None, "", "blocked_independent_checks", str(exc))
 
 
-def task_payload_options(req: dict[str, Any], units: list[dict[str, Any]]) -> dict[str, Any]:
+def task_payload_options(
+    req: dict[str, Any],
+    units: list[dict[str, Any]],
+    *,
+    max_attempts: int,
+    coerce_bool: Callable[[Any, bool], bool],
+) -> dict[str, Any]:
     """Resolve request options at the existing pre-I/O boundary."""
-    h = importlib.import_module("modstore_server.para_delegate_handler")
-    max_attempts = h._resolve_max_attempts(req)
     mode = str(req.get("mode") or "").strip().lower()
     auto_merge = bool(req.get("auto_merge")) and not units
     if (
@@ -215,9 +215,9 @@ def task_payload_options(req: dict[str, Any], units: list[dict[str, Any]]) -> di
         and mode in {"verify", "review", "report"}
         and not bool(req.get("report_only"))
     ):
-        auto_merge = h._coerce_bool(req.get("auto_merge_on_complete"), False)
+        auto_merge = coerce_bool(req.get("auto_merge_on_complete"), False)
     workspace_path = str(
-        req.get("workspace_path") or h.os.environ.get("MODSTORE_PARA_WORKSPACE_PATH") or ""
+        req.get("workspace_path") or os.environ.get("MODSTORE_PARA_WORKSPACE_PATH") or ""
     ).strip()
     return {
         "max_attempts": max_attempts,
@@ -254,15 +254,17 @@ def prepare_task_group(
     grant: Any,
     group: PreparedTaskGroup,
     transform: PayloadTransform,
+    normalize_tool: Callable[[str], str],
+    multi_device_prompt: Callable[[str, dict[str, Any], int, int], str],
+    subtask_title: Callable[[dict[str, Any], int, int], str],
+    insert_context: Callable[[str, str], str],
 ) -> None:
     """Build every child and fail the whole group before any caller can POST."""
-    h = importlib.import_module("modstore_server.para_delegate_handler")
     raw = req.get("raw_input") or {}
     if raw.get("_incident_continuation") and not units:
         devices = devices[:1]  # A repair has one writer.
     if units and any(
-        h._normalize_tool_name(str(device.get("_selected_tool") or "")) == "dolt"
-        for device in devices
+        normalize_tool(str(device.get("_selected_tool") or "")) == "dolt" for device in devices
     ):
         # The dot ticket wrapper replaces prompts and cannot preserve unit scope.
         group.blocked = _blocked(
@@ -289,16 +291,16 @@ def prepare_task_group(
         payload: dict[str, object] = {
             "device_id": device_id,
             "title": str(req.get("title") or "MODstore loop task").strip(),
-            "prompt": h._multi_device_prompt(base_prompt, device, index, total),
+            "prompt": multi_device_prompt(base_prompt, device, index, total),
             "branch": branch,
-            "subtask_title": h._para_subtask_title(req, index, total),
+            "subtask_title": subtask_title(req, index, total),
             "report_only": bool(req.get("report_only")),
             "max_attempts": options["max_attempts"],
         }
         if unit:
             payload.update(
                 subtask_title=f"check:{unit['unit_id']} {unit.get('title') or ''}"[:240],
-                prompt=h.insert_before_loop_context(
+                prompt=insert_context(
                     base_prompt,
                     "独立只读检查 "
                     + unit["unit_id"]
@@ -324,7 +326,7 @@ def prepare_task_group(
         if task_id:
             payload["task_id"] = task_id
         try:
-            payload = transform(req, payload, h._normalize_tool_name(selected_tool))
+            payload = transform(req, payload, normalize_tool(selected_tool))
         except DoltIncidentContractError as exc:
             group.blocked = _blocked(
                 grant,

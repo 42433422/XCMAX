@@ -5,8 +5,12 @@ vi.mock('vue-advanced-chat', () => ({ register: () => {
   if (!customElements.get('vue-advanced-chat')) customElements.define('vue-advanced-chat', class extends HTMLElement {
     constructor() {
       super()
-      this.attachShadow({ mode: 'open' }).innerHTML = ['room-header-info', 'room-options', 'room-header-avatar', 'messages-empty']
-        .map(name => `<slot name="${name}"></slot>`).join('')
+      const shadow = this.attachShadow({ mode: 'open' })
+      for (const name of ['room-header-info', 'room-options', 'room-header-avatar', 'messages-empty']) {
+        const slot = document.createElement('slot')
+        slot.name = name
+        shadow.append(slot)
+      }
     }
   })
 } }))

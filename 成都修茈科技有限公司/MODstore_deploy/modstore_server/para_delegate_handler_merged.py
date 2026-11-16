@@ -17,7 +17,7 @@ from modstore_server.dot_ticket_dispatch import prepare_dolt_ticket_payload
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.para_delegate_task_payloads import (
     PreparedTaskGroup,
-    _build_request as _build_request,
+    build_request,
     _independent_check_plan as _independent_check_plan,
     prepare_task_group,
     task_payload_options,
@@ -123,6 +123,24 @@ def _mode_for_employee(employee_id: str, input_data: _facade().Dict[str, _facade
     if employee_id == "deploy-release-officer":
         return "merge_release"
     return "code"
+
+
+def _build_request(*, task: str, input_data: dict[str, Any], employee_id: str) -> dict[str, Any]:
+    from modstore_server.customer_ticket_triage import para_triage_hook
+
+    h = _facade()
+    routed = para_triage_hook(
+        {**input_data, **h._customer_ticket_cloud_route(input_data)}, employee_id=employee_id
+    )
+    mode = h._mode_for_employee(employee_id, routed)
+    return build_request(
+        task=task,
+        input_data=routed,
+        employee_id=employee_id,
+        workspace_root="" if routed.get("github_workspace") else h._project_root(routed),
+        mode=mode,
+        report_only=h._coerce_bool(routed.get("report_only"), mode in {"review", "verify"}),
+    )
 
 
 def _public_request(
@@ -1143,7 +1161,9 @@ def _post_para_api_once(
     req: _facade().Dict[str, _facade().Any],
 ) -> _facade().Dict[str, _facade().Any]:
     h = _facade()
-    units, check_revision, blocked = validated_check_units(req)
+    units, check_revision, blocked = validated_check_units(
+        req, check_plan=h._independent_check_plan
+    )
     if blocked is not None:
         return blocked
     if (req.get("raw_input") or {}).get("github_workspace"):
@@ -1179,7 +1199,9 @@ def _post_para_api_once(
             )
     base_prompt = h._build_para_prompt(req)
     payload_group = PreparedTaskGroup()
-    options = task_payload_options(req, units)
+    options = task_payload_options(
+        req, units, max_attempts=h._resolve_max_attempts(req), coerce_bool=h._coerce_bool
+    )
     task_id = str(req.get("para_task_id") or "").strip()
     submission_started = False
     dispatched: list = []
@@ -1255,6 +1277,10 @@ def _post_para_api_once(
                 grant=grant,
                 group=payload_group,
                 transform=h.prepare_dolt_ticket_payload,
+                normalize_tool=h._normalize_tool_name,
+                multi_device_prompt=h._multi_device_prompt,
+                subtask_title=h._para_subtask_title,
+                insert_context=h.insert_before_loop_context,
             )
             if payload_group.blocked is not None:
                 return payload_group.blocked
