@@ -102,14 +102,14 @@ export default defineConfig(({ mode }) => {
           replacement: path.resolve(__dirname, '../mods/bridge/xcagi-customer-service-bridge/frontend'),
         },
         { find: 'vue-router', replacement: path.resolve(__dirname, 'node_modules/vue-router') },
-        // 模板库原件预览：mod 内动态 import 须指向包入口文件，Windows 读目录别名报 Access is denied。
+        // 模板库原件预览：lib/index.js 由 postinstall 生成，CI --ignore-scripts 下缺失；直指随包发布的 Vue3 入口。
         {
           find: '@vue-office/docx',
-          replacement: path.resolve(__dirname, 'node_modules/@vue-office/docx/lib/index.js'),
+          replacement: path.resolve(__dirname, 'node_modules/@vue-office/docx/lib/v3/index.js'),
         },
         {
           find: '@vue-office/pptx',
-          replacement: path.resolve(__dirname, 'node_modules/@vue-office/pptx/lib/index.js'),
+          replacement: path.resolve(__dirname, 'node_modules/@vue-office/pptx/lib/v3/index.js'),
         },
         { find: 'pinia', replacement: path.resolve(__dirname, 'node_modules/pinia') },
         { find: 'element-plus', replacement: path.resolve(__dirname, 'node_modules/element-plus') },
