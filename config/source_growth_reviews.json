@@ -304,9 +304,9 @@
     "FHD/app/application/elt/llm_assist.py": {
       "base_file": "FHD/app/application/elt/llm_assist.py",
       "base_blob": "0a6aafdcf05a7c690c75a05c40dcc98f8e7e8cbe",
-      "head_blob": "7b2e11adc476d25417e08068ced03fd6c389d394",
+      "head_blob": "d0455c9a7667cf9d5ce8636d235863a37b02a160",
       "before_lines": 933,
-      "after_lines": 1208,
+      "after_lines": 1211,
       "reason": "Review request only: Unify ELT model resolution with the chat provider registry while retaining tenant-session fallback, and add bounded AI target classification and schema inference for files without fixed targets.",
       "boundary": "Provider failover shares the original deadline and retries only ELT_LLM_UNAVAILABLE; both advisors return bounded data without write authority and restrict schema columns and dedupe keys to supplied headers.",
       "validation": "Requires test_etl_dynamic_table.py and test_etl_llm_targets_branch_cov.py regressions plus target-enum rejection, header sanitization and registry-to-market failover cases.",
@@ -491,6 +491,18 @@
       "boundary": "The mapper assumes three header rows, six rows per employee, fixed BP through CH summary columns and at most two entries per band, while openpyxl does not calculate formula caches.",
       "validation": "Requires mapper golden-workbook regressions for merged-style preservation, numeral normalization, side-summary formulas, monthly links and block totals.",
       "follow_up": "Recalculate generated workbooks in Excel or LibreOffice and compare monthly totals after detail edits, especially for templates whose geometry differs from fixed constants.",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/workflow/llm_plan_generation.py": {
+      "base_file": "FHD/app/application/workflow/llm_plan_generation.py",
+      "base_blob": "d915e94c13e26879ea717c903098ebc659d06a76",
+      "head_blob": "8d8553a463bbb888abf78bc9ee68d484770fadba",
+      "before_lines": 564,
+      "after_lines": 801,
+      "reason": "Review request only: Light conversational turns now use the shared retry policy and fail closed after transport retries, avoiding a second full planning call.",
+      "boundary": "Only the light-reply model call is wrapped; only transport-class failures raise the unavailable sentinel, and all other errors still propagate unchanged.",
+      "validation": "Requires test_ai_chat_app_service_ext7 transport-error regressions and test_llm_ops_tools light-turn coverage; this request is not architecture approval.",
+      "follow_up": "Confirm the retry budget matches the full-plan path once the planner retry policy is consolidated.",
       "review_owner": "@42433422"
     }
   }
