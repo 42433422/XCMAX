@@ -266,6 +266,9 @@
     <div v-show="activeTab === 'automation-policy'" class="page-content admin-tab-panel">
       <AutomationPolicyPanel />
     </div>
+    <div v-if="activeTab === 'implementation-goals'" class="page-content admin-tab-panel">
+      <ImplementationGoalsPanel />
+    </div>
     <AdminDeployUpdateModal v-model="deployModalOpen" @done="handleDeployDone" />
   </div>
 </template>
@@ -286,6 +289,7 @@ import XCmaxAdminAutonomyTab from '@/components/admin/XCmaxAdminAutonomyTab.vue'
 import XCmaxAdminOrdersTab from '@/components/admin/XCmaxAdminOrdersTab.vue'
 import AdminReleaseStatusCard from '../components/admin/AdminReleaseStatusCard.vue'
 import AutomationPolicyPanel from '@/components/admin/AutomationPolicyPanel.vue'
+import ImplementationGoalsPanel from '@/components/admin/ImplementationGoalsPanel.vue'
 import AdminDeployUpdateModal from '@host/components/admin/AdminDeployUpdateModal.vue'
 import { useXcmaxOverview } from './xcmaxAdmin/useXcmaxOverview'
 import { useXcmaxSync } from './xcmaxAdmin/useXcmaxSync'
@@ -298,6 +302,7 @@ const adminTabs = [
   { id: 'infra', label: '基础设施' },
   { id: 'duty', label: '编制与调度' },
   { id: 'automation-policy', label: '自动化方针' },
+  { id: 'implementation-goals', label: '实现目标' },
 ]
 const route = useRoute()
 const activeTab = ref('overview')

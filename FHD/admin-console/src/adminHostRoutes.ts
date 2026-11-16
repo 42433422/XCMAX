@@ -46,6 +46,11 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     redirect: { name: 'xcmax-admin', query: { tab: 'automation-policy' } },
   },
   {
+    path: '/implementation-goals',
+    name: 'implementation-goals',
+    redirect: { name: 'xcmax-admin', query: { tab: 'implementation-goals' } },
+  },
+  {
     path: '/duty-time-architecture',
     name: 'duty-time-architecture',
     redirect: { name: 'xcmax-admin', query: { tab: 'overview' } },

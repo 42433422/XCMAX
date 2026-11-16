@@ -7,6 +7,7 @@ const ADMIN_PAGES = [
   '/delivery-center',
   '/founder-autonomy',
   '/automation-policy',
+  '/implementation-goals',
   '/duty-roster-graph',
   '/server-functions',
   '/autonomy-approval-hub',
@@ -72,6 +73,16 @@ async function installAdminDisplayMocks(page: Page) {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ success: true, data: { sku: 'generic' } }),
+      })
+      return
+    }
+    if (path.endsWith('/api/xcmax/admin/action-items')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, day: '2026-11-17', items: Array.from({ length: 12 }, (_, index) => ({
+          id: index + 1, text: `布局测试目标 ${index + 1}`, status: 'open', priority: 'P1', line: 'P-S', employee_label: '测试员工',
+        })) }),
       })
       return
     }
