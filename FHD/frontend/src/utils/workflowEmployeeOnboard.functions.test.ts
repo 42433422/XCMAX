@@ -8,6 +8,7 @@ vi.mock('@/api/modStore', () => ({
 vi.mock('@/stores/mods', () => ({
   useModsStore: vi.fn(() => ({
     modsForUi: [],
+    modsForWorkflowUi: [],
     refresh: vi.fn().mockResolvedValue(undefined),
   })),
 }))
@@ -15,6 +16,10 @@ vi.mock('@/stores/mods', () => ({
 vi.mock('@/stores/workflowAiEmployees', () => ({
   useWorkflowAiEmployeesStore: vi.fn(() => ({
     refreshRegistry: vi.fn().mockResolvedValue(undefined),
+    hydrateFromMods: vi.fn(),
+    pruneOrphanWorkflowEmployeeToggles: vi.fn(),
+    loadRegistry: vi.fn().mockResolvedValue(undefined),
+    registryEntries: [],
     assignHostMod: vi.fn(),
     enableEmployees: vi.fn(() => []),
   })),

@@ -173,6 +173,14 @@ export default defineConfig(() => ({
         find: '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue',
         replacement: path.join(hostSrc, 'components/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'),
       },
+      {
+        find: /^@vue-office\/docx$/,
+        replacement: path.join(hostRoot, 'node_modules/@vue-office/docx'),
+      },
+      {
+        find: /^@vue-office\/pptx$/,
+        replacement: path.join(hostRoot, 'node_modules/@vue-office/pptx'),
+      },
       { find: '@host', replacement: hostSrc },
       { find: '@', replacement: hostSrc },
       { find: '@amin', replacement: path.resolve(hostRoot, '../AMIN') },

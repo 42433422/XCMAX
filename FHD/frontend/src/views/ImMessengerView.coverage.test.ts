@@ -90,6 +90,12 @@ const imMocks = vi.hoisted(() => ({
 
 vi.mock('@/api/im', () => imMocks)
 
+const employeeDirectoryMocks = vi.hoisted(() => ({
+  fetchEmployeeDirectory: vi.fn(),
+}))
+
+vi.mock('@/api/employeeDirectory', () => employeeDirectoryMocks)
+
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
 }))
@@ -191,6 +197,9 @@ function resetMocks() {
   imMocks.updateCsInboxMode.mockReset()
   imMocks.updateCsInboxMode.mockResolvedValue({ cs_mode: 'human', cs_status: 'human_active' })
 
+  employeeDirectoryMocks.fetchEmployeeDirectory.mockReset()
+  employeeDirectoryMocks.fetchEmployeeDirectory.mockResolvedValue([])
+
   authMocks.getCurrentUser.mockReset()
   authMocks.getCurrentUser.mockResolvedValue({ data: { user: { id: 1 } } })
 
@@ -284,11 +293,21 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   // ===== 2. 会话列表与空状态 =====
 
-  it('会话列表为空且无企业专属联系人时仍展示精选 AI 员工', async () => {
+  it('会话列表为空且无企业专属联系人时仍展示目录中的 AI 员工', async () => {
     imMocks.fetchImConversations.mockResolvedValue([])
     imMocks.fetchImContacts.mockResolvedValue([normalContact])
+    employeeDirectoryMocks.fetchEmployeeDirectory.mockResolvedValue(
+      ['用户客服员工', '受理分派员工', '意图分析员工', '流程自动化员工', '文档生成员工', '质量校验员工', '企业采纳员工'].map(
+        (label, index) => ({
+          pack_id: index === 0 ? 'user-customer-service-officer' : `employee-${index}`,
+          label,
+          department: '企业服务',
+          description: '',
+        }),
+      ),
+    )
     const wrapper = await mountView()
-    // 普通联系人不会固定展示，但企业版精选 AI 员工仍是信息页的可用入口。
+    // 普通联系人不会固定展示，可用 AI 员工统一来自员工目录。
     expect(wrapper.findAll('.im-conv-item:not(.im-conv-item--pinned)')).toHaveLength(0)
     expect(wrapper.findAll('.im-conv-item--pinned')).toHaveLength(7)
     expect(wrapper.text()).toContain('用户客服员工')

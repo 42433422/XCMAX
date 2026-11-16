@@ -47,6 +47,14 @@ export default defineConfig({
         find: '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue',
         replacement: path.resolve(__dirname, './src/components/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'),
       },
+      {
+        find: /^@vue-office\/docx$/,
+        replacement: path.resolve(__dirname, './node_modules/@vue-office/docx'),
+      },
+      {
+        find: /^@vue-office\/pptx$/,
+        replacement: path.resolve(__dirname, './node_modules/@vue-office/pptx'),
+      },
       { find: '@', replacement: path.resolve(__dirname, './src') },
       // Real Mod views live outside frontend/src, matching production Vite resolution.
       { find: 'vue-router', replacement: path.resolve(__dirname, 'node_modules/vue-router') },

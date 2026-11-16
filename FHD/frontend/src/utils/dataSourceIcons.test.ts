@@ -15,8 +15,8 @@ describe('dataSourceIcons', () => {
   })
 
   it('falls back to the monochrome svg glyph', () => {
-    expect(dataSourceHasArtIcon('foxmail')).toBe(false)
-    const markup = dataSourceIconMarkup('foxmail')
+    expect(dataSourceHasArtIcon('__missing_icon__')).toBe(false)
+    const markup = dataSourceIconMarkup('__missing_icon__')
     if (markup) {
       expect(markup).toContain('<svg')
     } else {

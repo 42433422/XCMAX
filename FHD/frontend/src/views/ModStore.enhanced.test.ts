@@ -94,6 +94,8 @@ vi.mock('@/constants/officeEmployeePack', () => ({
   isOfficeEmployeePkg: () => false,
   OFFICE_AUX_PACK_1_COLLECTION: 'office_aux',
   OFFICE_EMPLOYEE_COLLECTION: 'office_employee',
+  OFFICE_EMPLOYEE_PKG_IDS: ['office-employee-a', 'office-employee-b'],
+  OFFICE_AUX_PACK_1_PKG_IDS: ['office-aux-a'],
 }))
 
 vi.mock('@/composables/useTutorialCatalog', () => ({
