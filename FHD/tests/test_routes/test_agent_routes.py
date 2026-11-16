@@ -1585,11 +1585,14 @@ def test_exported_spreadsheet_download_checks_owner_and_file_content(tmp_path, m
     assert _client().get(artifact.uri).status_code == 410
 
 
-def test_generated_shipment_download_contains_real_business_cells(tmp_path, monkeypatch):
+@pytest.mark.parametrize("registered_template", [False, True])
+def test_generated_shipment_download_contains_real_business_cells(
+    tmp_path, monkeypatch, registered_template
+):
     from io import BytesIO
 
-    from openpyxl import load_workbook
-    from sqlalchemy import create_engine
+    from openpyxl import Workbook, load_workbook
+    from sqlalchemy import create_engine, text
     from sqlalchemy.orm import sessionmaker
 
     import app.di.registry as _di_registry
@@ -1604,6 +1607,26 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
     engine = create_engine(f"sqlite:///{tmp_path / 'shipment.db'}")
     Base.metadata.create_all(engine)
+    from app.db.init_db import init_template_tables
+
+    init_template_tables(str(tmp_path / "shipment.db"))
+    if registered_template:
+        template = tmp_path / "registered-shipment.xlsx"
+        book = Workbook()
+        book.active.title = "发货单"
+        book.active["K1"] = "synthetic registered template identity"
+        book.active["G3"] = "数量/KG"
+        book.save(template)
+        book.close()
+        with engine.begin() as db:
+            db.execute(
+                text(
+                    "INSERT INTO templates (id, template_key, template_name, template_type, "
+                    "original_file_path, tenant_id, is_active) "
+                    "VALUES (1, 'registered-shipment', 'registered', '发货单', :path, 1, 1)"
+                ),
+                {"path": str(template)},
+            )
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr("app.db.session.SessionLocal", factory)
     monkeypatch.setattr("app.db.SessionLocal", factory)
@@ -1622,6 +1645,7 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
                 "generate",
                 {
                     "unit_name": "下载测试客户",
+                    **({"template_id": "db:1"} if registered_template else {}),
                     "products": [
                         {"model_number": "9803", "quantity_tins": 3, "tin_spec": 12},
                     ],
@@ -1639,10 +1663,16 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
             try:
                 sheet = workbook["发货单"]
                 assert "下载测试客户" in sheet["A2"].value
+                data_row = 4 if registered_template else 5
+                assert sheet["K1"].value == (
+                    "synthetic registered template identity" if registered_template else None
+                )
                 assert [
-                    sheet[cell].value for cell in ["A4", "D4", "E4", "F4", "G4", "H4", "I4"]
+                    sheet[f"{column}{data_row}"].value
+                    for column in ["A", "D", "E", "F", "G", "H", "I"]
                 ] == ["9803", "下载测试产品", 3, 12, 36, 25, 900]
-                assert [sheet[cell].value for cell in ["E15", "G15", "D16"]] == [3, 36, 900]
+                totals = ["E15", "G15", "D16"] if registered_template else ["E6", "G6", "D7"]
+                assert [sheet[cell].value for cell in totals] == [3, 36, 900]
             finally:
                 workbook.close()
             assert _client("another-user").get(run.artifacts[0].uri).status_code in {403, 404}
