@@ -482,12 +482,27 @@ class LlmPlanGeneration:
         ]
         response = self._stream_reply(messages, context)
         if response is None:
-            response = self.completion(
-                ai_service=self.conversation,
-                context=context,
-                messages=messages,
-                http_client_factory=self.http_client,
+            from app.application.workflow.retry_policy import (
+                call_with_retry,
+                is_transport_error,
+                planner_retry_policy,
             )
+
+            try:
+                response = call_with_retry(
+                    lambda: self.completion(
+                        ai_service=self.conversation,
+                        context=context,
+                        messages=messages,
+                        http_client_factory=self.http_client,
+                    ),
+                    policy=planner_retry_policy(),
+                )
+            except RECOVERABLE_ERRORS as exc:
+                # 传输类错误重试耗尽：轻量轮次已失败，不再重复打完整规划，交由上层 fail-closed。
+                if not is_transport_error(exc):
+                    raise
+                raise _LightReplyUnavailable from exc
         if response is None:
             # 模型调用本身失败：轻量轮次已经花掉一次调用，不再重复打一次完整规划。
             raise _LightReplyUnavailable

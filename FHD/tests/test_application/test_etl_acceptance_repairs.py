@@ -222,8 +222,15 @@ def test_unknown_and_similar_templates_are_not_forced(tmp_path, monkeypatch):
     sheet["F5"] = "=1+1"
     book.save(similar)
     book.close()
-    assert detect_elt_target(unknown)["target_type"] == "abnormal"
-    assert detect_elt_target(similar)["target_type"] == "abnormal"
+    # AI-first：未知模板不再判死为 abnormal，而是按表头落到 schema 可扩展的通用表，
+    # 但仍不得被强行归入客户/产品主数据。
+    assert detect_elt_target(unknown)["target_type"] == "dynamic_table"
+    assert detect_elt_target(similar)["target_type"] == "dynamic_table"
+    assert detect_elt_target(unknown)["target_type"] not in {
+        "customers",
+        "customer_products",
+        "products",
+    }
     review = classify_review_workbook(inspect_workbook(similar.read_bytes()))[0]
     ranges = [region["range"] for region in review["regions"]]
     assert ranges == ["A1:F5", "A7:F10"]
@@ -453,4 +460,6 @@ def test_bare_customer_column_without_name_header_is_not_a_customer_table(tmp_pa
     book.save(sheet_path)
     book.close()
 
-    assert detect_elt_target(sheet_path)["target_type"] == "abnormal"
+    # 「客户」只是订单行里的普通列，不能据此把整表当客户主数据；按通用表落库。
+    assert detect_elt_target(sheet_path)["target_type"] == "dynamic_table"
+    assert detect_elt_target(sheet_path)["target_type"] != "customers"

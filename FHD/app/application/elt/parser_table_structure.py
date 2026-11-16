@@ -112,10 +112,9 @@ def plan_rows(segmentation: SheetSegmentation | None, header_row: int) -> RowPla
     return plan
 
 
-def table_values(values: tuple, table: SegmentedTable, plan: RowPlan, width: int) -> tuple:
-    """Shift a side-by-side sibling onto the detected header's column positions."""
-    offset = table.min_col - min(t.min_col for t in plan.tables)
-    return tuple(values[offset : offset + width])
+def table_values(values: tuple, table: SegmentedTable) -> tuple:
+    """Slice one block's own absolute columns so its header labels line up."""
+    return tuple(values[table.min_col - 1 : table.max_col])
 
 
 __all__ = ["RowPlan", "load_sheet_segmentations", "plan_rows", "structured_layout", "table_values"]

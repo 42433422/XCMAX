@@ -230,6 +230,10 @@ def _escalate(
         if detected.get("sheet_name"):
             classified["sheet_name"] = detected["sheet_name"]
         return classified
+    # 已明确判定「不是主数据」的配方/台账不再走动态建表兜底：保留原始判定与原因，
+    # 交给人工改选目标，避免把流水表静默落成通用表。
+    if str(detected.get("reason") or "") in _NO_LLM_ESCALATION_REASONS:
+        return detected
     dynamic = _infer_dynamic_schema(row_sets or [])
     if dynamic is not None:
         return _dynamic_result(detected, dynamic, "ai_schema")

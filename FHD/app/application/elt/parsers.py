@@ -249,6 +249,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                     blank_rows.append(located)
                     continue
                 slices: list[tuple[SegmentedTable | None, tuple[Any, ...]]]
+                tables: list[SegmentedTable] = []
                 if plan is not None:
                     tables = plan.tables_by_row.get(row_number)
                     if not tables:
@@ -270,10 +271,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                                 }
                             )
                         continue
-                    slices = [
-                        (table, table_values(row_values, table, plan, len(headers)))
-                        for table in tables
-                    ]
+                    slices = [(table, table_values(row_values, table)) for table in tables]
                 elif is_repeated_header(row_values, layout.headers):
                     repeated_rows.append(located)
                     continue
@@ -286,15 +284,20 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                 else:
                     slices = [(None, row_values)]
                 fallback_emitted = False
+                # 同一行可能同时落在多个并排区块里，它们各自都是合法表格。
+                block_cols: set[int] = set()
+                for item in tables:
+                    block_cols.update(range(item.min_col, item.max_col + 1))
                 for table, values in slices:
                     # 区块只有在自己范围内承载整行数据时才用区块表头；
                     # 材料台账这类宽表会被切出一个很窄的区块，硬用区块表头会把
                     # 几十列压成「备注/已付款」两列。此时回退到整表表头。
+                    # 落在同一行其它并排区块里的值不算「整行数据」，否则并排表会被
+                    # 误判为宽表而只产出一块。
                     use_region = table is not None
                     if table is not None:
-                        span = range(table.min_col, table.max_col + 1)
                         if any(
-                            value not in (None, "") and (index + 1) not in span
+                            value not in (None, "") and (index + 1) not in block_cols
                             for index, value in enumerate(row_values)
                         ):
                             use_region = False
@@ -318,11 +321,9 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                             f"文件超过 {max_rows} 行限制",
                             status_code=413,
                         )
-                    offset = (
-                        table.min_col - min(t.min_col for t in plan.tables)
-                        if use_region and table is not None and plan is not None
-                        else 0
-                    )
+                    # 区块表头对应的是区块自己的起始列，列号必须回到工作表绝对列，
+                    # 否则并排区块会共用第一块的列号。
+                    offset = table.min_col - 1 if use_region and table is not None else 0
                     provenance = {
                         "sheet": worksheet.title,
                         "row": row_number,

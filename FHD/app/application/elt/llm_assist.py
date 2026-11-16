@@ -142,10 +142,23 @@ def _software_llm_candidates(
 ) -> list[tuple[Any | None, Any | None]]:
     """模型入口的唯一解析：按顺序给出可尝试的 provider。
 
-    ELT 不再自己判定「哪条路可用」。统一 registry 排第一，与对话链路同源；
-    租户会话 token 只作为没有 registry 配置时的兜底，避免它一存在就独占入口。
+    当前 owner 的租户会话 token 必须排第一：它是本次导入唯一归属的凭据，
+    registry/app 级 provider 只在该 owner 没有 token 时兜底。否则某个账号的
+    预览请求会被记到另一账号的模型额度上。
     """
     candidates: list[tuple[Any | None, Any | None]] = []
+    try:
+        from app.application.elt.llm_session_provider import current_owner_market_provider
+
+        market_provider = current_owner_market_provider(
+            timeout_seconds=(
+                elt_llm_timeout_seconds() if timeout_seconds is None else timeout_seconds
+            )
+        )
+        if market_provider is not None:
+            candidates.append((None, market_provider))
+    except RECOVERABLE_ERRORS:
+        pass
     try:
         from app.domain.shared_services.ai_conversation_service import (
             get_ai_conversation_service,
@@ -157,18 +170,6 @@ def _software_llm_candidates(
             candidates.append((service, None))
         elif get_active_provider(profile="elt") is not None:
             candidates.append((None, None))
-    except RECOVERABLE_ERRORS:
-        pass
-    try:
-        from app.application.elt.llm_session_provider import current_owner_market_provider
-
-        market_provider = current_owner_market_provider(
-            timeout_seconds=(
-                elt_llm_timeout_seconds() if timeout_seconds is None else timeout_seconds
-            )
-        )
-        if market_provider is not None:
-            candidates.append((None, market_provider))
     except RECOVERABLE_ERRORS:
         pass
     return candidates
@@ -263,8 +264,10 @@ def _complete(
         auditor = _CALL_AUDITOR.get()
         call_id: str | None = None
         attempts: list[tuple[Any | None, Any | None]] = [(first_service, first_provider)]
-        # 统一入口里 registry 在前、租户 token 兜底；首个失败后仍可试其余候选。
-        attempts.extend(_software_llm_candidates(remaining)[1:])
+        if first_provider is None:
+            # 只有 registry/app 级候选才允许在失败后继续试下一个。owner 会话凭据
+            # 失败即降级：改用别的 provider 会把本次导入记到另一账号的额度上。
+            attempts.extend(_software_llm_candidates(remaining)[1:])
         try:
             from app.application.reviewed_excel_audit import call_key
 

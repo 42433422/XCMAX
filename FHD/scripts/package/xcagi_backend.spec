@@ -142,6 +142,8 @@ hiddenimports.extend(
         "app.mod_sdk.deliverable_status",
         "app.mod_sdk.desktop_deliverable",
         "app.mod_sdk.platform_shell",
+        # 业务单据挂载按需 importlib 引入附件路由，PyInstaller 静态图看不到。
+        "app.application.attachment_artifacts.router",
         "app.mod_sdk.decoupling_progress",
         "app.mod_sdk.edition_policy",
         "app.mod_sdk.edition_bootstrap",
