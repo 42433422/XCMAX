@@ -208,7 +208,7 @@ def test_second_rollback_never_runs_adapter_or_overwrites_the_first_result(store
 
 
 def _migration():
-    path = Path(__file__).parents[2] / "alembic/versions/2026_09_05_elt_operation_lease.py"
+    path = Path(__file__).parents[2] / "alembic/versions/2026_09_05_etl_operation_lease.py"
     spec = importlib.util.spec_from_file_location("elt_operation_lease_migration", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

@@ -37,6 +37,7 @@ def existing_permissions(user) -> list[str]:
     """Use current durable role membership, including for platform administrators."""
     from app.application.tenant_rbac_policy import (
         TENANT_PERMISSION_CODES,
+        canonical_permission_code,
         is_tenant_role,
         role_belongs_to_user,
     )
@@ -49,7 +50,11 @@ def existing_permissions(user) -> list[str]:
         if current is None or not current.is_active:
             raise RuntimeError("guarded authentication account is unavailable")
         role = db.query(Role).filter(Role.name == current.role).first()
-        codes = [permission.code for permission in role.permissions] if role else []
+        codes = (
+            [canonical_permission_code(permission.code) for permission in role.permissions]
+            if role
+            else []
+        )
         if is_tenant_role(current.role):
             return (
                 [code for code in codes if code in TENANT_PERMISSION_CODES]

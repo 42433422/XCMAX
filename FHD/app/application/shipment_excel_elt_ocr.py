@@ -86,15 +86,7 @@ def text_blocks_to_grid(
     return [row for row in grid if any(str(cell).strip() for cell in row)]
 
 
-def grid_to_workbook_path(
-    grid: list[list[str]],
-    *,
-    output_path: str | Path | None = None,
-    sheet_name: str = "OCR",
-    meta_lines: list[str] | None = None,
-) -> Path:
-    from openpyxl import Workbook
-
+def _workbook_output_path(output_path: str | Path | None) -> Path:
     if output_path:
         raw_output_path = output_path
     else:
@@ -105,7 +97,19 @@ def grid_to_workbook_path(
         descriptor, temp_name = tempfile.mkstemp(prefix="elt_ocr_", suffix=".xlsx", dir=temp_root)
         os.close(descriptor)
         raw_output_path = Path(temp_name)
-    path = elt_security.resolve_elt_output_path(raw_output_path)
+    return elt_security.resolve_elt_output_path(raw_output_path)
+
+
+def grid_to_workbook_path(
+    grid: list[list[str]],
+    *,
+    output_path: str | Path | None = None,
+    sheet_name: str = "OCR",
+    meta_lines: list[str] | None = None,
+) -> Path:
+    from openpyxl import Workbook
+
+    path = _workbook_output_path(output_path)
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -121,6 +125,52 @@ def grid_to_workbook_path(
         for col, value in enumerate(row, start=1):
             ws.cell(row_idx, col, value)
         row_idx += 1
+    with elt_security.open_elt_output_file(path) as output_file:
+        wb.save(output_file)
+    wb.close()
+    return path
+
+
+def tables_to_workbook_path(
+    tables: list[Any],
+    *,
+    output_path: str | Path | None = None,
+    sheet_name: str = "OCR",
+    meta_lines: list[str] | None = None,
+) -> Path:
+    """Write each recognized table to its own sheet and keep merge ranges."""
+    from openpyxl import Workbook
+
+    path = _workbook_output_path(output_path)
+    base_name = (sheet_name or "OCR")[:28]
+    wb = Workbook()
+    default_sheet = wb.active
+    assert default_sheet is not None
+    wb.remove(default_sheet)
+    for index, table in enumerate(tables, start=1):
+        ws = wb.create_sheet(f"{base_name}_{index}"[:31])
+        row_idx = 1
+        lines = meta_lines if index == 1 and meta_lines is not None else table.meta_lines
+        for line in lines or []:
+            text = str(line or "").strip()
+            if not text:
+                continue
+            ws.cell(row_idx, 1, text)
+            row_idx += 1
+        grid_start = row_idx
+        for row in table.grid:
+            for col, value in enumerate(row, start=1):
+                ws.cell(row_idx, col, value)
+            row_idx += 1
+        for min_row, min_col, max_row, max_col in table.merges:
+            ws.merge_cells(
+                start_row=grid_start + min_row - 1,
+                start_column=min_col,
+                end_row=grid_start + max_row - 1,
+                end_column=max_col,
+            )
+    if not wb.worksheets:
+        wb.create_sheet(base_name or "OCR")
     with elt_security.open_elt_output_file(path) as output_file:
         wb.save(output_file)
     wb.close()
@@ -326,6 +376,7 @@ def parse_ocr_document(
 
 __all__ = [
     "grid_to_workbook_path",
+    "tables_to_workbook_path",
     "is_ocr_source",
     "ocr_source_to_workbook",
     "parse_ocr_document",
